@@ -76,8 +76,9 @@ Thumbs.db
 # =============================================
 # Project Specific
 # =============================================
-backend/data/*.db
-backend/data/*.db-journal
+# 开发数据库已提交到版本库，用于新机器快速启动测试
+# backend/data/*.db
+# backend/data/*.db-journal
 *.sqlite
 *.sqlite3
 

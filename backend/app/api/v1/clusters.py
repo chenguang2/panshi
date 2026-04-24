@@ -5,11 +5,12 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
-    UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema
+    UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema,
+    NodeCreate, NodeUpdate, NodeResponse, NodeListResponse
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -63,7 +64,20 @@ async def list_my_clusters(
     result = await db.execute(query)
     clusters = result.scalars().all()
 
-    return ClusterListResponse(total=total, items=[ClusterResponse.model_validate(c) for c in clusters])
+    items = []
+    for c in clusters:
+        cluster_resp = ClusterResponse.model_validate(c)
+        node_result = await db.execute(select(func.count(), func.sum(Node.status == 1)).select_from(Node).where(Node.cluster_id == c.id))
+        node_row = node_result.one_or_none()
+        cluster_resp.node_count = node_row[0] or 0
+        cluster_resp.healthy_node_count = node_row[1] or 0
+        upstream_result = await db.execute(select(func.count()).select_from(Upstream).where(Upstream.cluster_id == c.id))
+        cluster_resp.upstream_count = upstream_result.scalar() or 0
+        route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
+        cluster_resp.route_count = route_result.scalar() or 0
+        items.append(cluster_resp)
+
+    return ClusterListResponse(total=total, items=items)
 
 
 @router.get("", response_model=ClusterListResponse)
@@ -76,16 +90,29 @@ async def list_clusters(
     query = select(Cluster)
     if keyword:
         query = query.where(Cluster.name.contains(keyword) | Cluster.display_name.contains(keyword))
-    
+
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    
+
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     clusters = result.scalars().all()
-    
-    return ClusterListResponse(total=total, items=[ClusterResponse.model_validate(c) for c in clusters])
+
+    items = []
+    for c in clusters:
+        cluster_resp = ClusterResponse.model_validate(c)
+        node_result = await db.execute(select(func.count(), func.sum(Node.status == 1)).select_from(Node).where(Node.cluster_id == c.id))
+        node_row = node_result.one_or_none()
+        cluster_resp.node_count = node_row[0] or 0
+        cluster_resp.healthy_node_count = node_row[1] or 0
+        upstream_result = await db.execute(select(func.count()).select_from(Upstream).where(Upstream.cluster_id == c.id))
+        cluster_resp.upstream_count = upstream_result.scalar() or 0
+        route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
+        cluster_resp.route_count = route_result.scalar() or 0
+        items.append(cluster_resp)
+
+    return ClusterListResponse(total=total, items=items)
 
 
 @router.post("", response_model=ClusterResponse, status_code=status.HTTP_201_CREATED)
@@ -94,6 +121,10 @@ async def create_cluster(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    result = await db.execute(select(Cluster).where(Cluster.name == cluster.name))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="集群名称已存在")
+
     db_cluster = Cluster(**cluster.model_dump(), creator_id=current_user.id)
     db.add(db_cluster)
     await db.commit()
@@ -116,10 +147,15 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: Asy
     cluster = result.scalar_one_or_none()
     if not cluster:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
-    
+
+    if cluster_update.name is not None:
+        existing = await db.execute(select(Cluster).where(Cluster.name == cluster_update.name, Cluster.id != cluster_id))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="集群名称已存在")
+
     for key, value in cluster_update.model_dump(exclude_unset=True).items():
         setattr(cluster, key, value)
-    
+
     await db.commit()
     await db.refresh(cluster)
     return ClusterResponse.model_validate(cluster)
@@ -210,7 +246,86 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
     upstream = result.scalar_one_or_none()
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
-    
+
     await db.delete(upstream)
     await db.commit()
     return {"message": "上游服务已删除"}
+
+
+@router.get("/{cluster_id}/nodes", response_model=NodeListResponse)
+async def list_nodes(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+
+    query = select(Node).where(Node.cluster_id == cluster_id)
+    result = await db.execute(query)
+    nodes = result.scalars().all()
+    return NodeListResponse(total=len(nodes), items=[NodeResponse.model_validate(n) for n in nodes])
+
+
+@router.post("/{cluster_id}/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
+async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+
+    db_node = Node(cluster_id=cluster_id, **node.model_dump(exclude={"cluster_id"}))
+    db.add(db_node)
+    await db.commit()
+    await db.refresh(db_node)
+    return NodeResponse.model_validate(db_node)
+
+
+@router.put("/{cluster_id}/nodes/{node_id}", response_model=NodeResponse)
+async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+
+    for key, value in node_update.model_dump(exclude_unset=True).items():
+        setattr(node, key, value)
+
+    await db.commit()
+    await db.refresh(node)
+    return NodeResponse.model_validate(node)
+
+
+@router.delete("/{cluster_id}/nodes/{node_id}")
+async def delete_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+
+    await db.delete(node)
+    await db.commit()
+    return {"message": "节点已删除"}
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/start")
+async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+    return {"status": "ok", "message": "节点已启动"}
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/stop")
+async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+    return {"status": "ok", "message": "节点已停止"}
+
+
+@router.get("/{cluster_id}/nodes/{node_id}/status")
+async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+    return {"status": "ok", "node_status": node.status, "message": "状态查询成功"}

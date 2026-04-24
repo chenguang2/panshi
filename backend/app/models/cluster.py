@@ -10,8 +10,8 @@ class Cluster(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     display_name = Column(String(200), nullable=True)
-    admin_url = Column(String(500), nullable=False)
-    admin_key = Column(String(255), nullable=False)
+    admin_url = Column(String(500), nullable=True)
+    admin_key = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     status = Column(Integer, nullable=False, default=1)
     creator_id = Column(Integer, nullable=True)
@@ -64,5 +64,18 @@ class RoutePlugin(Base):
     route_id = Column(Integer, ForeignKey("ps_route.id", ondelete="CASCADE"), nullable=False)
     plugin_name = Column(String(50), nullable=False)
     config = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Node(Base):
+    __tablename__ = "ps_node"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    ip = Column(String(50), nullable=False)
+    service_port = Column(Integer, nullable=False, default=80)
+    management_port = Column(Integer, nullable=False, default=9180)
+    status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

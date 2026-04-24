@@ -16,9 +16,21 @@ export interface Cluster {
   id: number
   name: string
   display_name?: string
-  admin_url: string
-  admin_key: string
   description?: string
+  status: number
+  created_at?: string
+  node_count: number
+  healthy_node_count: number
+  upstream_count: number
+  route_count: number
+}
+
+export interface Node {
+  id: number
+  cluster_id: number
+  ip: string
+  service_port: number
+  management_port: number
   status: number
   created_at?: string
 }

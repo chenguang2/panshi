@@ -11,6 +11,6 @@ test.describe('Upstream CRUD', () => {
 
   test('should display clusters page', async ({ page }) => {
     await page.click('text=集群管理');
-    await expect(page.locator('.ant-table').first()).toBeVisible();
+    await expect(page.locator('.cluster-card').first()).toBeVisible();
   });
 });
