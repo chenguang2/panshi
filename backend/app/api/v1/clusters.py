@@ -1,16 +1,69 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.security import decode_access_token
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin
+from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
+
+
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未认证")
+
+    try:
+        if authorization.startswith("Bearer "):
+            token = authorization[7:]
+        else:
+            token = authorization
+
+        payload = decode_access_token(token)
+        if payload is None:
+            raise HTTPException(status_code=401, detail="未认证")
+
+        user_id = int(payload.get("sub"))
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+
+        return user
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="未认证")
+
+
+@router.get("/my", response_model=ClusterListResponse)
+async def list_my_clusters(
+    page: int = 1,
+    page_size: int = 100,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    query = select(Cluster).where(Cluster.creator_id == current_user.id)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    clusters = result.scalars().all()
+
+    return ClusterListResponse(total=total, items=[ClusterResponse.model_validate(c) for c in clusters])
 
 
 @router.get("", response_model=ClusterListResponse)
@@ -36,8 +89,12 @@ async def list_clusters(
 
 
 @router.post("", response_model=ClusterResponse, status_code=status.HTTP_201_CREATED)
-async def create_cluster(cluster: ClusterCreate, db: AsyncSession = Depends(get_db)):
-    db_cluster = Cluster(**cluster.model_dump())
+async def create_cluster(
+    cluster: ClusterCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    db_cluster = Cluster(**cluster.model_dump(), creator_id=current_user.id)
     db.add(db_cluster)
     await db.commit()
     await db.refresh(db_cluster)

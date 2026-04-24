@@ -1,13 +1,86 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
+
+
+async def get_current_admin_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未认证")
+
+    try:
+        if authorization.startswith("Bearer "):
+            token = authorization[7:]
+        else:
+            token = authorization
+
+        payload = decode_access_token(token)
+        if payload is None:
+            raise HTTPException(status_code=401, detail="未认证")
+
+        user_id = int(payload.get("sub"))
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+
+        if user.role != "admin":
+            raise HTTPException(status_code=403, detail="需要管理员权限")
+
+        return user
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="未认证")
+
+
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="未认证")
+
+    try:
+        if authorization.startswith("Bearer "):
+            token = authorization[7:]
+        else:
+            token = authorization
+
+        payload = decode_access_token(token)
+        if payload is None:
+            raise HTTPException(status_code=401, detail="未认证")
+
+        user_id = int(payload.get("sub"))
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(status_code=401, detail="用户不存在")
+
+        return user
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="未认证")
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    return UserResponse.model_validate(current_user)
 
 
 @router.get("", response_model=UserListResponse)
@@ -16,32 +89,37 @@ async def list_users(
     role: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
 ):
     query = select(User)
-    
+
     if keyword:
         query = query.where(User.username.contains(keyword))
     if role:
         query = query.where(User.role == role)
-    
+
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    
+
     query = query.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
     users = result.scalars().all()
-    
+
     return UserListResponse(total=total, items=[UserResponse.model_validate(u) for u in users])
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+async def create_user(
+    user: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     existing = await db.execute(select(User).where(User.username == user.username))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
-    
+
     from app.core.security import hash_password
     db_user = User(
         username=user.username,
@@ -56,7 +134,11 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -65,41 +147,58 @@ async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = Depends(get_db)):
+async def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    
+
     if user_update.role is not None:
         user.role = user_update.role
     if user_update.status is not None:
         user.status = user_update.status
-    
+
     await db.commit()
     await db.refresh(user)
     return UserResponse.model_validate(user)
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    
+
+    if user.role == "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能删除管理员用户")
+
     await db.delete(user)
     await db.commit()
     return {"message": "用户已删除"}
 
 
 @router.put("/{user_id}/password")
-async def reset_password(user_id: int, request: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+async def reset_password(
+    user_id: int,
+    request: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    
+
     from app.core.security import hash_password
     user.password_hash = hash_password(request.new_password)
     await db.commit()
@@ -107,7 +206,11 @@ async def reset_password(user_id: int, request: PasswordResetRequest, db: AsyncS
 
 
 @router.get("/{user_id}/clusters")
-async def get_user_clusters(user_id: int, db: AsyncSession = Depends(get_db)):
+async def get_user_clusters(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     from app.models.cluster import UserCluster
     result = await db.execute(select(UserCluster).where(UserCluster.user_id == user_id))
     clusters = result.scalars().all()
@@ -115,16 +218,21 @@ async def get_user_clusters(user_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{user_id}/clusters")
-async def assign_clusters(user_id: int, request: ClusterAssignRequest, db: AsyncSession = Depends(get_db)):
+async def assign_clusters(
+    user_id: int,
+    request: ClusterAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
     from app.models.cluster import UserCluster
     result = await db.execute(select(User).where(User.id == user_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    
+
     await db.execute(UserCluster.__table__.delete().where(UserCluster.user_id == user_id))
-    
+
     for cluster_id in request.cluster_ids:
         db.add(UserCluster(user_id=user_id, cluster_id=cluster_id))
-    
+
     await db.commit()
     return {"message": "Clusters assigned"}

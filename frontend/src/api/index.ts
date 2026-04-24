@@ -29,7 +29,7 @@ api.interceptors.response.use(
     return response
   },
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       message.error('Authentication failed, please login again')

@@ -5,21 +5,36 @@
       <a-button type="primary" @click="showAddModal">添加集群</a-button>
     </div>
 
-    <a-table :dataSource="clusters" :columns="columns" :loading="loading" :pagination="pagination">
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'status'">
-          <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
-        </template>
-        <template v-if="column.key === 'action'">
-          <a-space>
-            <a-button size="small" type="primary" @click="testConnection(record)">测试</a-button>
-            <a-button size="small" @click="viewDetail(record)">详情</a-button>
-            <a-button size="small" @click="editCluster(record)">编辑</a-button>
-            <a-button size="small" type="danger" @click="deleteCluster(record)">删除</a-button>
-          </a-space>
-        </template>
-      </template>
-    </a-table>
+    <a-row :gutter="[16, 16]" class="cluster-grid">
+      <a-col :xs="24" :sm="12" :md="8" :lg="8" :xl="6" v-for="cluster in clusters" :key="cluster.id">
+        <a-card :bordered="true" class="cluster-card" hoverable>
+          <template #title>
+            <div class="card-title">
+              <CloudOutlined />
+              <span>{{ cluster.display_name || cluster.name }}</span>
+            </div>
+          </template>
+          <template #extra>
+            <a-badge :status="cluster.status === 1 ? 'success' : 'error'" :text="cluster.status === 1 ? '健康' : '离线'" />
+          </template>
+          <div class="card-content">
+            <p class="cluster-name">名称: {{ cluster.name }}</p>
+            <p class="cluster-url">{{ cluster.admin_url }}</p>
+            <p v-if="cluster.description" class="cluster-desc">{{ cluster.description }}</p>
+          </div>
+          <div class="card-actions">
+            <a-button size="small" type="primary" @click="testConnection(cluster)">测试</a-button>
+            <a-button size="small" @click="viewDetail(cluster)">详情</a-button>
+            <a-button size="small" @click="editCluster(cluster)">编辑</a-button>
+            <a-button size="small" type="danger" @click="deleteCluster(cluster)">删除</a-button>
+          </div>
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <div v-if="clusters.length === 0 && !loading" class="empty-state">
+      <a-empty description="暂无集群" />
+    </div>
 
     <a-modal v-model:open="modalVisible" :title="editingCluster ? '编辑集群' : '添加集群'" width="600px" @ok="handleSubmit">
       <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
@@ -53,15 +68,20 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
+import { CloudOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
-const pagination = reactive({ current: 1, pageSize: 20, total: 0 })
+const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
+
+const isAdmin = () => authStore.user?.role === 'admin'
 
 const form = reactive({
   name: '',
@@ -72,19 +92,11 @@ const form = reactive({
   status: 1
 })
 
-const columns = [
-  { title: 'ID', dataIndex: 'id', key: 'id' },
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: '显示名称', dataIndex: 'display_name', key: 'display_name' },
-  { title: '管理地址', dataIndex: 'admin_url', key: 'admin_url' },
-  { title: '状态', key: 'status' },
-  { title: '操作', key: 'action' }
-]
-
 const loadClusters = async () => {
   loading.value = true
   try {
-    const res = await api.get('/clusters', { params: { page: pagination.current, page_size: pagination.pageSize } })
+    const endpoint = isAdmin() ? '/clusters' : '/clusters/my'
+    const res = await api.get(endpoint, { params: { page: pagination.current, page_size: pagination.pageSize } })
     clusters.value = res.data.items
     pagination.total = res.data.total
   } catch (error) {
@@ -96,12 +108,14 @@ const loadClusters = async () => {
 
 const showAddModal = () => {
   editingCluster.value = null
-  form.name = ''
-  form.display_name = ''
-  form.admin_url = ''
-  form.admin_key = ''
-  form.description = ''
-  form.status = 1
+  Object.assign(form, {
+    name: '',
+    display_name: '',
+    admin_url: '',
+    admin_key: '',
+    description: '',
+    status: 1
+  })
   modalVisible.value = true
 }
 
@@ -155,7 +169,13 @@ const deleteCluster = async (cluster: Cluster) => {
   }
 }
 
-onMounted(loadClusters)
+onMounted(() => {
+  const storedUser = localStorage.getItem('user')
+  if (storedUser && !authStore.user) {
+    authStore.user = JSON.parse(storedUser)
+  }
+  loadClusters()
+})
 </script>
 
 <style scoped>
@@ -172,5 +192,64 @@ onMounted(loadClusters)
 
 .header-actions h2 {
   margin: 0;
+}
+
+.cluster-grid {
+  margin-top: 16px;
+}
+
+.cluster-card {
+  height: 100%;
+}
+
+.cluster-card :deep(.ant-card-head) {
+  min-height: 48px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.card-title :deep(.anticon) {
+  font-size: 18px;
+  color: #1890ff;
+}
+
+.card-content {
+  margin-bottom: 12px;
+}
+
+.card-content p {
+  margin-bottom: 4px;
+  color: #666;
+  font-size: 13px;
+}
+
+.cluster-name {
+  font-weight: 500;
+  color: #333 !important;
+}
+
+.cluster-url {
+  word-break: break-all;
+}
+
+.cluster-desc {
+  color: #999 !important;
+  font-size: 12px !important;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.empty-state {
+  padding: 48px 0;
+  text-align: center;
 }
 </style>

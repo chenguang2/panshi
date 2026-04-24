@@ -84,10 +84,12 @@ const loadDictTypes = async () => {
 
 const showAddTypeModal = () => {
   editingType.value = null
-  form.code = ''
-  form.name = ''
-  form.description = ''
-  form.status = 1
+  Object.assign(form, {
+    code: '',
+    name: '',
+    description: '',
+    status: 1
+  })
   modalVisible.value = true
 }
 

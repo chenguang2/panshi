@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+from datetime import datetime
 
 
 class ClusterBase(BaseModel):
@@ -26,6 +27,13 @@ class ClusterUpdate(BaseModel):
 class ClusterResponse(ClusterBase):
     id: int
     created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
     class Config:
         from_attributes = True
@@ -61,6 +69,13 @@ class UpstreamResponse(UpstreamBase):
     id: int
     cluster_id: int
     created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
     class Config:
         from_attributes = True

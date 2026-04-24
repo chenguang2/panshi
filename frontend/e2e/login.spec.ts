@@ -10,16 +10,16 @@ test.describe('Login Flow', () => {
 
   test('should login with valid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input#username', 'admin');
-    await page.fill('input#password', 'panshi123');
+    await page.fill('#username', 'admin');
+    await page.fill('#password', 'panshi123');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
 
   test('should show error with invalid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input#username', 'admin');
-    await page.fill('input#password', 'wrongpassword');
+    await page.fill('#username', 'admin');
+    await page.fill('#password', 'wrongpassword');
     await page.click('button[type="submit"]');
     await page.waitForTimeout(1000);
     await expect(page.locator('.ant-message')).toBeVisible();

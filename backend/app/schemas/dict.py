@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+from datetime import datetime
 
 
 class DictTypeBase(BaseModel):
@@ -22,6 +23,13 @@ class DictTypeUpdate(BaseModel):
 class DictTypeResponse(DictTypeBase):
     id: int
     created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
     class Config:
         from_attributes = True
@@ -50,6 +58,13 @@ class DictDataResponse(DictDataBase):
     type_id: int
     created_at: Optional[str] = None
 
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
     class Config:
         from_attributes = True
 
@@ -64,6 +79,13 @@ class AuditLogResponse(BaseModel):
     detail: Optional[str] = None
     ip_address: Optional[str] = None
     created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
     class Config:
         from_attributes = True

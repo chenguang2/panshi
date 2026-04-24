@@ -4,10 +4,10 @@
       <h2>磐石管理后台</h2>
       <a-form :model="form" @finish="handleLogin">
         <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }]">
-          <a-input v-model:value="form.username" placeholder="用户名" size="large" />
+          <a-input id="username" v-model:value="form.username" placeholder="用户名" size="large" />
         </a-form-item>
         <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }]">
-          <a-input-password v-model:value="form.password" placeholder="密码" size="large" />
+          <a-input-password id="password" v-model:value="form.password" placeholder="密码" size="large" />
         </a-form-item>
         <a-form-item>
           <a-button type="primary" html-type="submit" size="large" block :loading="loading">

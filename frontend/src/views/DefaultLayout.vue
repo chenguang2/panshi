@@ -12,17 +12,19 @@
           <DashboardOutlined />
           <span>仪表盘</span>
         </a-menu-item>
-        <a-menu-item key="users" @click="router.push('/users')">
-          <UserOutlined />
-          <span>用户管理</span>
-        </a-menu-item>
+        <a-sub-menu v-if="isAdmin" key="system" title="系统管理">
+          <a-menu-item key="users" @click="router.push('/users')">
+            <UserOutlined />
+            <span>用户管理</span>
+          </a-menu-item>
+          <a-menu-item key="dictionaries" @click="router.push('/dictionaries')">
+            <BookOutlined />
+            <span>字典管理</span>
+          </a-menu-item>
+        </a-sub-menu>
         <a-menu-item key="clusters" @click="router.push('/clusters')">
           <CloudOutlined />
           <span>集群管理</span>
-        </a-menu-item>
-        <a-menu-item key="dictionaries" @click="router.push('/dictionaries')">
-          <BookOutlined />
-          <span>字典管理</span>
         </a-menu-item>
       </a-menu>
       <div class="header-right">
@@ -47,20 +49,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
   DashboardOutlined,
   UserOutlined,
   CloudOutlined,
-  BookOutlined
+  BookOutlined,
+  SettingOutlined
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const selectedKeys = ref(['dashboard'])
+
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 
 onMounted(() => {
   const storedUser = localStorage.getItem('user')

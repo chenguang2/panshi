@@ -14,6 +14,7 @@ class Cluster(Base):
     admin_key = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     status = Column(Integer, nullable=False, default=1)
+    creator_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

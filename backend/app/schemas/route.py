@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
+from datetime import datetime
 
 
 class RouteBase(BaseModel):
@@ -31,6 +32,13 @@ class RouteResponse(RouteBase):
     cluster_id: int
     upstream_id: Optional[int] = None
     created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
     class Config:
         from_attributes = True
