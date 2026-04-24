@@ -1,0 +1,14 @@
+[Unit]
+Description=Panshi Admin Frontend
+After=network.target nginx.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/panshi/frontend
+ExecStart=/usr/bin/nginx -g "daemon off;" -c /opt/panshi/frontend/nginx.conf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Panshi Admin Backend
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/panshi/backend
+Environment="PATH=/opt/panshi/backend/venv/bin"
+Environment="DATABASE_URL=postgresql://panshi:panshi123@localhost:5432/panshi"
+Environment="JWT_SECRET_KEY=your-production-secret-key"
+ExecStart=/opt/panshi/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

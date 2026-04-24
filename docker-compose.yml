@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: panshi-postgres
+    environment:
+      POSTGRES_USER: panshi
+      POSTGRES_PASSWORD: panshi123
+      POSTGRES_DB: panshi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - panshi-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: panshi-backend
+    environment:
+      DATABASE_URL: postgresql://panshi:panshi123@postgres:5432/panshi
+      JWT_SECRET_KEY: production-secret-key-change-me
+      JWT_EXPIRE_MINUTES: 1440
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    networks:
+      - panshi-network
+    volumes:
+      - ./backend/data:/app/data
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: panshi-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - panshi-network
+
+networks:
+  panshi-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

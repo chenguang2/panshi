@@ -1,0 +1,2204 @@
+openapi: 3.1.0
+info:
+  title: Panshi API
+  description: |
+    Panshi - Multi-Cluster Gateway Management Platform
+
+    ## Overview
+    Panshi is a web management platform for managing multiple gateway clusters.
+    Configuration is stored locally and synchronized to clusters via Admin API.
+
+    ## Core Features
+    - **User Management**: Authentication, authorization, password management
+    - **Cluster Management**: Multi-cluster support with user-cluster assignment
+    - **Upstream Management**: Target node configuration per cluster
+    - **Route Management**: Route configuration with plugin support
+    - **Plugin Configuration**: Built-in plugin parameter management
+    - **Config History**: Change tracking and rollback support
+    - **Dictionary Management**: System-level enum values
+
+    ## Authentication
+    JWT Bearer token authentication. Include in header:
+    `Authorization: Bearer <token>`
+
+    ## Error Codes
+    - 400: Bad Request - Invalid parameters
+    - 401: Unauthorized - Invalid or missing token
+    - 403: Forbidden - Insufficient permissions
+    - 404: Not Found - Resource not exists
+    - 409: Conflict - Resource conflict
+    - 500: Internal Server Error
+
+  version: 1.0.0
+  contact:
+    name: Panshi Support
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Development Server
+  - url: ${ENV_API_BASE_URL}
+    description: Production Server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Authentication endpoints
+  - name: Users
+    description: User management endpoints
+  - name: Clusters
+    description: Cluster management endpoints
+  - name: Upstreams
+    description: Upstream management endpoints
+  - name: Routes
+    description: Route management endpoints
+  - name: Plugins
+    description: Plugin configuration endpoints
+  - name: Dictionaries
+    description: Dictionary management endpoints
+
+paths:
+  # ============================================================
+  # Authentication APIs
+  # ============================================================
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: User login
+      description: Authenticate user and return JWT token
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: User logout
+      description: Invalidate current JWT token
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      description: Returns current authenticated user info
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/password:
+    put:
+      tags: [Auth]
+      summary: Change own password
+      description: Current user changes their own password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================
+  # User Management APIs
+  # ============================================================
+  /admin/users:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Get paginated list of all users (admin only)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: keyword
+          in: query
+          schema:
+            type: string
+          description: Search by username
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, user]
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Users]
+      summary: Create user
+      description: Create a new user (admin only)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      operationId: getUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Users]
+      summary: Update user
+      description: Update user info (admin only)
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Users]
+      summary: Delete user
+      description: Delete a user (admin only, cannot delete self)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{id}/password:
+    put:
+      tags: [Users]
+      summary: Reset user password
+      description: Admin resets a user's password (admin only)
+      operationId: resetUserPassword
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users/{id}/clusters:
+    get:
+      tags: [Users]
+      summary: Get user's assigned clusters
+      description: Get clusters assigned to a specific user
+      operationId: getUserClusters
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Assigned clusters list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      tags: [Users]
+      summary: Assign clusters to user
+      description: Replace user's cluster assignments (admin only)
+      operationId: assignUserClusters
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cluster_ids
+              properties:
+                cluster_ids:
+                  type: array
+                  items:
+                    type: integer
+                  description: List of cluster IDs to assign
+      responses:
+        '200':
+          description: Clusters assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================
+  # Cluster Management APIs
+  # ============================================================
+  /clusters:
+    get:
+      tags: [Clusters]
+      summary: List clusters
+      description: Get clusters accessible to current user
+      operationId: listClusters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [1, 0]
+      responses:
+        '200':
+          description: Cluster list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterListResponse'
+
+    post:
+      tags: [Clusters]
+      summary: Create cluster
+      description: Create a new cluster (admin only)
+      operationId: createCluster
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClusterRequest'
+      responses:
+        '201':
+          description: Cluster created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /clusters/{id}:
+    get:
+      tags: [Clusters]
+      summary: Get cluster details
+      operationId: getCluster
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      responses:
+        '200':
+          description: Cluster details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Clusters]
+      summary: Update cluster
+      operationId: updateCluster
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClusterRequest'
+      responses:
+        '200':
+          description: Cluster updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Clusters]
+      summary: Delete cluster
+      description: Delete a cluster and all associated resources (admin only)
+      operationId: deleteCluster
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      responses:
+        '200':
+          description: Cluster deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clusters/{id}/test:
+    post:
+      tags: [Clusters]
+      summary: Test cluster connection
+      description: Test connectivity to cluster Admin API
+      operationId: testClusterConnection
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      responses:
+        '200':
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  latency_ms:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clusters/{id}/sync:
+    post:
+      tags: [Clusters]
+      summary: Sync all config to cluster
+      description: Synchronize all local configuration to target cluster
+      operationId: syncCluster
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  synced:
+                    type: object
+                    properties:
+                      upstreams:
+                        type: integer
+                      routes:
+                        type: integer
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                        id:
+                          type: integer
+                        error:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================
+  # Upstream Management APIs
+  # ============================================================
+  /clusters/{cluster_id}/upstreams:
+    get:
+      tags: [Upstreams]
+      summary: List upstreams
+      description: Get upstreams for a specific cluster
+      operationId: listUpstreams
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Upstream list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Upstreams]
+      summary: Create upstream
+      operationId: createUpstream
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUpstreamRequest'
+      responses:
+        '201':
+          description: Upstream created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /clusters/{cluster_id}/upstreams/{id}:
+    get:
+      tags: [Upstreams]
+      summary: Get upstream details
+      operationId: getUpstream
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/UpstreamId'
+      responses:
+        '200':
+          description: Upstream details with targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Upstreams]
+      summary: Update upstream
+      operationId: updateUpstream
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/UpstreamId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUpstreamRequest'
+      responses:
+        '200':
+          description: Upstream updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Upstreams]
+      summary: Delete upstream
+      description: Delete upstream (fails if routes are using it)
+      operationId: deleteUpstream
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/UpstreamId'
+      responses:
+        '200':
+          description: Upstream deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Upstream is in use by routes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # Route Management APIs
+  # ============================================================
+  /clusters/{cluster_id}/routes:
+    get:
+      tags: [Routes]
+      summary: List routes
+      description: Get routes for a specific cluster
+      operationId: listRoutes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: upstream_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Route list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Routes]
+      summary: Create route
+      operationId: createRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRouteRequest'
+      responses:
+        '201':
+          description: Route created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /clusters/{cluster_id}/routes/{id}:
+    get:
+      tags: [Routes]
+      summary: Get route details
+      operationId: getRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      responses:
+        '200':
+          description: Route details with plugins
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Routes]
+      summary: Update route
+      operationId: updateRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRouteRequest'
+      responses:
+        '200':
+          description: Route updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Routes]
+      summary: Delete route
+      operationId: deleteRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      responses:
+        '200':
+          description: Route deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /clusters/{cluster_id}/routes/{id}/publish:
+    post:
+      tags: [Routes]
+      summary: Publish single route
+      description: Synchronize single route configuration to cluster
+      operationId: publishRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      responses:
+        '200':
+          description: Route published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  published_at:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: Failed to sync to cluster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /clusters/{cluster_id}/routes/publish:
+    post:
+      tags: [Routes]
+      summary: Publish all routes
+      description: Synchronize all routes of the cluster
+      operationId: publishAllRoutes
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+      responses:
+        '200':
+          description: All routes published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  total:
+                    type: integer
+                  published:
+                    type: integer
+                  failed:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncFailedItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /clusters/{cluster_id}/routes/{id}/history:
+    get:
+      tags: [Routes]
+      summary: Get route version history
+      description: Get change history of a specific route
+      operationId: getRouteHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Route history list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /clusters/{cluster_id}/routes/{id}/rollback:
+    post:
+      tags: [Routes]
+      summary: Rollback route to previous version
+      description: Restore route to a specific historical version
+      operationId: rollbackRoute
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - audit_log_id
+              properties:
+                audit_log_id:
+                  type: integer
+                  description: Target audit log ID to rollback to
+      responses:
+        '200':
+          description: Route rolled back successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================
+  # Plugin Configuration APIs
+  # ============================================================
+  /plugins/builtin:
+    get:
+      tags: [Plugins]
+      summary: List built-in plugins
+      description: Get list of all available built-in plugins
+      operationId: listBuiltinPlugins
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Built-in plugins list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BuiltinPlugin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /clusters/{cluster_id}/routes/{route_id}/plugins:
+    get:
+      tags: [Plugins]
+      summary: Get route plugins
+      description: Get plugin configurations for a specific route
+      operationId: getRoutePlugins
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      responses:
+        '200':
+          description: Route plugins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoutePlugin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Plugins]
+      summary: Update route plugins
+      description: Update plugin configurations for a route (dual-mode: form or json)
+      operationId: updateRoutePlugins
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ClusterId'
+        - $ref: '#/components/parameters/RouteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plugins
+              properties:
+                plugins:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/RoutePluginUpdate'
+      responses:
+        '200':
+          description: Plugins updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoutePlugin'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================
+  # Dictionary Management APIs
+  # ============================================================
+  /dict/types:
+    get:
+      tags: [Dictionaries]
+      summary: List dictionary types
+      operationId: listDictTypes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dictionary types list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictType'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Dictionaries]
+      summary: Create dictionary type
+      operationId: createDictType
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDictTypeRequest'
+      responses:
+        '201':
+          description: Dictionary type created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictType'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Dictionary code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /dict/types/{id}:
+    put:
+      tags: [Dictionaries]
+      summary: Update dictionary type
+      operationId: updateDictType
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDictTypeRequest'
+      responses:
+        '200':
+          description: Dictionary type updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictType'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Dictionaries]
+      summary: Delete dictionary type
+      operationId: deleteDictType
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dictionary type deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /dict/datas:
+    get:
+      tags: [Dictionaries]
+      summary: List all dictionary data
+      operationId: listDictDatas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type_code
+          in: query
+          schema:
+            type: string
+          description: Filter by dictionary type code
+      responses:
+        '200':
+          description: Dictionary data list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictData'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Dictionaries]
+      summary: Create dictionary data
+      operationId: createDictData
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDictDataRequest'
+      responses:
+        '201':
+          description: Dictionary data created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /dict/datas/{id}:
+    put:
+      tags: [Dictionaries]
+      summary: Update dictionary data
+      operationId: updateDictData
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDictDataRequest'
+      responses:
+        '200':
+          description: Dictionary data updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Dictionaries]
+      summary: Delete dictionary data
+      operationId: deleteDictData
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dictionary data deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /dict/datas/{code}:
+    get:
+      tags: [Dictionaries]
+      summary: Get dictionary data by code
+      description: Get dictionary data items by type code
+      operationId: getDictDataByCode
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dictionary data by code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    $ref: '#/components/schemas/DictType'
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DictData'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+# ============================================================
+# Components
+# ============================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login API
+
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: User ID
+
+    ClusterId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Cluster ID
+
+    UpstreamId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Upstream ID
+
+    RouteId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Route ID
+
+  responses:
+    BadRequest:
+      description: Invalid parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # ============================================================
+    # Common Schemas
+    # ============================================================
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation successful
+
+    PaginationMeta:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+
+    # ============================================================
+    # Auth Schemas
+    # ============================================================
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token expiry in seconds
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - old_password
+        - new_password
+      properties:
+        old_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 6
+          maxLength: 100
+
+    # ============================================================
+    # User Schemas
+    # ============================================================
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+        status:
+          type: string
+          enum: [1, 0]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/UserResponse'
+        - type: object
+          properties:
+            assigned_clusters:
+              type: array
+              items:
+                type: integer
+              description: List of assigned cluster IDs
+
+    UserListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserResponse'
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 6
+          maxLength: 100
+        role:
+          type: string
+          enum: [admin, user]
+        status:
+          type: string
+          enum: [1, 0]
+          default: "1"
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [admin, user]
+        status:
+          type: string
+          enum: [1, 0]
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - new_password
+      properties:
+        new_password:
+          type: string
+          minLength: 6
+          maxLength: 100
+
+    # ============================================================
+    # Cluster Schemas
+    # ============================================================
+    ClusterResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          maxLength: 100
+        admin_url:
+          type: string
+          description: Admin API URL (e.g. http://192.168.1.100:9180)
+        description:
+          type: string
+        status:
+          type: string
+          enum: [1, 0]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ClusterDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ClusterResponse'
+        - type: object
+          properties:
+            upstream_count:
+              type: integer
+            route_count:
+              type: integer
+            last_sync_at:
+              type: string
+              format: date-time
+
+    ClusterListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterResponse'
+
+    CreateClusterRequest:
+      type: object
+      required:
+        - name
+        - admin_url
+        - admin_key
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        admin_url:
+          type: string
+          format: uri
+          description: Gateway Admin API base URL
+        admin_key:
+          type: string
+          description: Gateway Admin API key
+        description:
+          type: string
+          maxLength: 500
+
+    UpdateClusterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        admin_url:
+          type: string
+          format: uri
+        admin_key:
+          type: string
+        description:
+          type: string
+          maxLength: 500
+        status:
+          type: string
+          enum: [1, 0]
+
+    SyncFailedItem:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [upstream, route]
+        id:
+          type: integer
+        name:
+          type: string
+        error:
+          type: string
+
+    # ============================================================
+    # Upstream Schemas
+    # ============================================================
+    UpstreamTarget:
+      type: object
+      required:
+        - host
+        - port
+      properties:
+        id:
+          type: integer
+        host:
+          type: string
+          description: Target host or IP
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        weight:
+          type: integer
+          default: 100
+          minimum: 0
+          description: Load weight
+        priority:
+          type: integer
+          default: 0
+          description: Priority for backup targets
+
+    UpstreamResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        cluster_id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [roundrobin, chash, leastconn]
+          default: roundrobin
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UpstreamDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/UpstreamResponse'
+        - type: object
+          properties:
+            targets:
+              type: array
+              items:
+                $ref: '#/components/schemas/UpstreamTarget'
+            route_count:
+              type: integer
+
+    UpstreamListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpstreamResponse'
+
+    CreateUpstreamRequest:
+      type: object
+      required:
+        - name
+        - type
+        - targets
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        type:
+          type: string
+          enum: [roundrobin, chash, leastconn]
+        description:
+          type: string
+          maxLength: 500
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/UpstreamTarget'
+
+    UpdateUpstreamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        type:
+          type: string
+          enum: [roundrobin, chash, leastconn]
+        description:
+          type: string
+          maxLength: 500
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/UpstreamTarget'
+
+    # ============================================================
+    # Route Schemas
+    # ============================================================
+    RouteResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        cluster_id:
+          type: integer
+        name:
+          type: string
+        uri:
+          type: string
+          description: Route URI pattern (e.g. /api/users/*)
+        methods:
+          type: array
+          items:
+            type: string
+          description: Allowed HTTP methods
+        upstream_id:
+          type: integer
+        priority:
+          type: integer
+          default: 0
+        status:
+          type: string
+          enum: [1, 0]
+        version:
+          type: integer
+          default: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RouteDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/RouteResponse'
+        - type: object
+          properties:
+            upstream:
+              $ref: '#/components/schemas/UpstreamResponse'
+            plugins:
+              type: array
+              items:
+                $ref: '#/components/schemas/RoutePlugin'
+
+    RouteListResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteResponse'
+
+    CreateRouteRequest:
+      type: object
+      required:
+        - name
+        - uri
+        - upstream_id
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        uri:
+          type: string
+          description: Route URI pattern
+        methods:
+          type: array
+          items:
+            type: string
+            enum: [GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS]
+          description: Allowed HTTP methods
+        upstream_id:
+          type: integer
+        priority:
+          type: integer
+          default: 0
+        status:
+          type: string
+          enum: [1, 0]
+          default: "1"
+
+    UpdateRouteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        uri:
+          type: string
+        methods:
+          type: array
+          items:
+            type: string
+            enum: [GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS]
+        upstream_id:
+          type: integer
+        priority:
+          type: integer
+        status:
+          type: string
+          enum: [1, 0]
+
+    # ============================================================
+    # Plugin Schemas
+    # ============================================================
+    BuiltinPlugin:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Plugin name (e.g. rate-limit)
+        description:
+          type: string
+        schema:
+          type: object
+          description: JSON Schema for plugin configuration
+        form_schema:
+          type: object
+          description: Form field definitions for UI
+
+    RoutePlugin:
+      type: object
+      properties:
+        id:
+          type: integer
+        route_id:
+          type: integer
+        plugin_name:
+          type: string
+        plugin_config:
+          type: object
+          description: Plugin configuration in JSON format
+        enabled:
+          type: string
+          enum: [1, 0]
+
+    RoutePluginUpdate:
+      type: object
+      required:
+        - plugin_name
+      properties:
+        plugin_name:
+          type: string
+        plugin_config:
+          type: object
+          description: Plugin configuration
+        enabled:
+          type: string
+          enum: [1, 0]
+          default: "1"
+
+    # ============================================================
+    # Dictionary Schemas
+    # ============================================================
+    DictType:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+          description: Unique code for lookup
+        status:
+          type: string
+          enum: [1, 0]
+        remark:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DictData:
+      type: object
+      properties:
+        id:
+          type: integer
+        type_id:
+          type: integer
+        label:
+          type: string
+        value:
+          type: string
+        sort:
+          type: integer
+          default: 0
+        status:
+          type: string
+          enum: [1, 0]
+
+    CreateDictTypeRequest:
+      type: object
+      required:
+        - name
+        - code
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        code:
+          type: string
+          maxLength: 100
+        remark:
+          type: string
+          maxLength: 500
+
+    UpdateDictTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        remark:
+          type: string
+          maxLength: 500
+        status:
+          type: string
+          enum: [1, 0]
+
+    CreateDictDataRequest:
+      type: object
+      required:
+        - type_id
+        - label
+        - value
+      properties:
+        type_id:
+          type: integer
+        label:
+          type: string
+          maxLength: 100
+        value:
+          type: string
+          maxLength: 100
+        sort:
+          type: integer
+          default: 0
+        status:
+          type: string
+          enum: [1, 0]
+          default: "1"
+
+    UpdateDictDataRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          maxLength: 100
+        value:
+          type: string
+          maxLength: 100
+        sort:
+          type: integer
+        status:
+          type: string
+          enum: [1, 0]
+
+    # ============================================================
+    # Audit Log Schema
+    # ============================================================
+    AuditLogResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        username:
+          type: string
+        action:
+          type: string
+          enum: [CREATE, UPDATE, DELETE, PUBLISH]
+        resource_type:
+          type: string
+          enum: [cluster, upstream, route]
+        resource_id:
+          type: integer
+        resource_name:
+          type: string
+        old_value:
+          type: string
+          description: JSON string of old value
+        new_value:
+          type: string
+          description: JSON string of new value
+        created_at:
+          type: string
+          format: date-time
