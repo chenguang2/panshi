@@ -40,7 +40,7 @@ async def list_users(
 async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(select(User).where(User.username == user.username))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
     
     from app.core.security import hash_password
     db_user = User(
@@ -60,7 +60,7 @@ async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return UserResponse.model_validate(user)
 
 
@@ -69,7 +69,7 @@ async def update_user(user_id: int, user_update: UserUpdate, db: AsyncSession = 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     
     if user_update.role is not None:
         user.role = user_update.role
@@ -86,11 +86,11 @@ async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     
     await db.delete(user)
     await db.commit()
-    return {"message": "User deleted"}
+    return {"message": "用户已删除"}
 
 
 @router.put("/{user_id}/password")
@@ -98,12 +98,12 @@ async def reset_password(user_id: int, request: PasswordResetRequest, db: AsyncS
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     
     from app.core.security import hash_password
     user.password_hash = hash_password(request.new_password)
     await db.commit()
-    return {"message": "Password reset successful"}
+    return {"message": "密码重置成功"}
 
 
 @router.get("/{user_id}/clusters")
@@ -119,7 +119,7 @@ async def assign_clusters(user_id: int, request: ClusterAssignRequest, db: Async
     from app.models.cluster import UserCluster
     result = await db.execute(select(User).where(User.id == user_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     
     await db.execute(UserCluster.__table__.delete().where(UserCluster.user_id == user_id))
     

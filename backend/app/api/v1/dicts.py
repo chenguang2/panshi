@@ -33,7 +33,7 @@ async def update_dict_type(type_id: int, dtype_update: DictTypeUpdate, db: Async
     result = await db.execute(select(SysDictType).where(SysDictType.id == type_id))
     dtype = result.scalar_one_or_none()
     if not dtype:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DictType not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="字典类型不存在")
     
     for key, value in dtype_update.model_dump(exclude_unset=True).items():
         setattr(dtype, key, value)
@@ -48,11 +48,11 @@ async def delete_dict_type(type_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(SysDictType).where(SysDictType.id == type_id))
     dtype = result.scalar_one_or_none()
     if not dtype:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DictType not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="字典类型不存在")
     
     await db.delete(dtype)
     await db.commit()
-    return {"message": "DictType deleted"}
+    return {"message": "字典类型已删除"}
 
 
 @router.get("/types/{type_id}/datas", response_model=dict)
@@ -78,7 +78,7 @@ async def update_dict_data(data_id: int, data_update: DictDataUpdate, db: AsyncS
     result = await db.execute(select(SysDictData).where(SysDictData.id == data_id))
     data = result.scalar_one_or_none()
     if not data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DictData not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="字典数据不存在")
     
     for key, value in data_update.model_dump(exclude_unset=True).items():
         setattr(data, key, value)
@@ -93,11 +93,11 @@ async def delete_dict_data(data_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(SysDictData).where(SysDictData.id == data_id))
     data = result.scalar_one_or_none()
     if not data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DictData not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="字典数据不存在")
     
     await db.delete(data)
     await db.commit()
-    return {"message": "DictData deleted"}
+    return {"message": "字典数据已删除"}
 
 
 @router.get("/datas/{code}", response_model=dict)
@@ -105,7 +105,7 @@ async def get_dict_data_by_code(code: str, db: AsyncSession = Depends(get_db)):
     type_result = await db.execute(select(SysDictType).where(SysDictType.code == code))
     dtype = type_result.scalar_one_or_none()
     if not dtype:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DictType not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="字典类型不存在")
     
     result = await db.execute(
         select(SysDictData).where(SysDictData.type_id == dtype.id, SysDictData.status == 1).order_by(SysDictData.sort)

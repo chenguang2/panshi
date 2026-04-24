@@ -1,34 +1,34 @@
 <template>
   <div class="upstream-list">
     <div class="header-actions">
-      <a-button type="primary" @click="showAddModal">Add Upstream</a-button>
+      <a-button type="primary" @click="showAddModal">添加上游</a-button>
     </div>
 
     <a-table :dataSource="upstreams" :columns="columns" :loading="loading">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <a-space>
-            <a-button size="small" @click="editUpstream(record)">Edit</a-button>
-            <a-button size="small" type="danger" @click="deleteUpstream(record)">Delete</a-button>
+            <a-button size="small" @click="editUpstream(record)">编辑</a-button>
+            <a-button size="small" type="danger" @click="deleteUpstream(record)">删除</a-button>
           </a-space>
         </template>
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalVisible" :title="editingUpstream ? 'Edit Upstream' : 'Add Upstream'" @ok="handleSubmit">
+    <a-modal v-model:open="modalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" @ok="handleSubmit">
       <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="Name" name="name">
+        <a-form-item label="名称" name="name">
           <a-input v-model:value="form.name" />
         </a-form-item>
-        <a-form-item label="Load Balance" name="load_balance">
+        <a-form-item label="负载均衡" name="load_balance">
           <a-select v-model:value="form.load_balance">
-            <a-select-option value="roundrobin">Round Robin</a-select-option>
-            <a-select-option value="weightedroundrobin">Weighted Round Robin</a-select-option>
-            <a-select-option value="iphash">IP Hash</a-select-option>
-            <a-select-option value="leastconn">Least Connections</a-select-option>
+            <a-select-option value="roundrobin">轮询</a-select-option>
+            <a-select-option value="weightedroundrobin">加权轮询</a-select-option>
+            <a-select-option value="iphash">IP哈希</a-select-option>
+            <a-select-option value="leastconn">最少连接</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="Description" name="description">
+        <a-form-item label="描述" name="description">
           <a-input v-model:value="form.description" />
         </a-form-item>
       </a-form>
@@ -56,10 +56,10 @@ const form = reactive({
 
 const columns = [
   { title: 'ID', dataIndex: 'id', key: 'id' },
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Load Balance', dataIndex: 'load_balance', key: 'load_balance' },
-  { title: 'Description', dataIndex: 'description', key: 'description' },
-  { title: 'Action', key: 'action' }
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
+  { title: '描述', dataIndex: 'description', key: 'description' },
+  { title: '操作', key: 'action' }
 ]
 
 const loadUpstreams = async () => {
@@ -68,7 +68,7 @@ const loadUpstreams = async () => {
     const res = await api.get(`/clusters/${props.clusterId}/upstreams`)
     upstreams.value = res.data.items
   } catch (error) {
-    message.error('Failed to load upstreams')
+    message.error('加载上游列表失败')
   } finally {
     loading.value = false
   }
@@ -94,25 +94,25 @@ const handleSubmit = async () => {
   try {
     if (editingUpstream.value) {
       await api.put(`/clusters/${props.clusterId}/upstreams/${editingUpstream.value.id}`, form)
-      message.success('Upstream updated')
+      message.success('上游已更新')
     } else {
       await api.post(`/clusters/${props.clusterId}/upstreams`, form)
-      message.success('Upstream created')
+      message.success('上游已创建')
     }
     modalVisible.value = false
     loadUpstreams()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Operation failed')
+    message.error(error.response?.data?.detail || '操作失败')
   }
 }
 
 const deleteUpstream = async (upstream: any) => {
   try {
     await api.delete(`/clusters/${props.clusterId}/upstreams/${upstream.id}`)
-    message.success('Upstream deleted')
+    message.success('上游已删除')
     loadUpstreams()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Failed to delete upstream')
+    message.error(error.response?.data?.detail || '删除上游失败')
   }
 }
 

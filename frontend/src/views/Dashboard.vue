@@ -1,37 +1,37 @@
 <template>
   <div class="dashboard">
-    <h2>Dashboard</h2>
+    <h2>仪表盘</h2>
     <a-row :gutter="16" class="stats-row">
       <a-col :span="6">
         <a-card>
-          <a-statistic title="Total Clusters" :value="stats.clusters" />
+          <a-statistic title="集群总数" :value="stats.clusters" />
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card>
-          <a-statistic title="Total Upstreams" :value="stats.upstreams" />
+          <a-statistic title="上游总数" :value="stats.upstreams" />
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card>
-          <a-statistic title="Total Routes" :value="stats.routes" />
+          <a-statistic title="路由总数" :value="stats.routes" />
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card>
-          <a-statistic title="Total Users" :value="stats.users" />
+          <a-statistic title="用户总数" :value="stats.users" />
         </a-card>
       </a-col>
     </a-row>
 
     <a-row :gutter="16" class="content-row">
       <a-col :span="12">
-        <a-card title="Recent Routes" class="recent-card">
+        <a-card title="最近路由" class="recent-card">
           <a-table :dataSource="recentRoutes" :columns="routeColumns" :pagination="false" size="small">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'status'">
                 <a-tag :color="record.status === 1 ? 'green' : 'red'">
-                  {{ record.status === 1 ? 'Active' : 'Inactive' }}
+                  {{ record.status === 1 ? '正常' : '禁用' }}
                 </a-tag>
               </template>
             </template>
@@ -39,11 +39,11 @@
         </a-card>
       </a-col>
       <a-col :span="12">
-        <a-card title="Cluster Status" class="cluster-card">
+        <a-card title="集群状态" class="cluster-card">
           <a-table :dataSource="clusterStatus" :columns="clusterColumns" :pagination="false" size="small">
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'status'">
-                <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? 'Healthy' : 'Offline'" />
+                <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
               </template>
             </template>
           </a-table>
@@ -68,15 +68,15 @@ const recentRoutes = ref<any[]>([])
 const clusterStatus = ref<any[]>([])
 
 const routeColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
+  { title: '名称', dataIndex: 'name', key: 'name' },
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
-  { title: 'Status', key: 'status' }
+  { title: '状态', key: 'status' }
 ]
 
 const clusterColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Display Name', dataIndex: 'display_name', key: 'display_name' },
-  { title: 'Status', key: 'status' }
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '显示名称', dataIndex: 'display_name', key: 'display_name' },
+  { title: '状态', key: 'status' }
 ]
 
 onMounted(async () => {
@@ -89,7 +89,7 @@ onMounted(async () => {
     stats.value.users = userRes.data.total
     clusterStatus.value = clusterRes.data.items
   } catch (error) {
-    console.error('Failed to load dashboard data', error)
+    console.error('加载仪表盘数据失败', error)
   }
 })
 </script>

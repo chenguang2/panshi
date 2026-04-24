@@ -1,45 +1,45 @@
 <template>
   <div class="user-list">
     <div class="header-actions">
-      <h2>User Management</h2>
-      <a-button type="primary" @click="showAddModal">Add User</a-button>
+      <h2>用户管理</h2>
+      <a-button type="primary" @click="showAddModal">添加用户</a-button>
     </div>
 
     <a-table :dataSource="users" :columns="columns" :loading="loading" :pagination="pagination">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
           <a-tag :color="record.status === 1 ? 'green' : 'red'">
-            {{ record.status === 1 ? 'Active' : 'Inactive' }}
+            {{ record.status === 1 ? '正常' : '禁用' }}
           </a-tag>
         </template>
         <template v-if="column.key === 'action'">
           <a-space>
-            <a-button size="small" @click="editUser(record)">Edit</a-button>
-            <a-button size="small" type="primary" @click="resetPassword(record)">Reset Password</a-button>
-            <a-button size="small" type="danger" @click="deleteUser(record)">Delete</a-button>
+            <a-button size="small" @click="editUser(record)">编辑</a-button>
+            <a-button size="small" type="primary" @click="resetPassword(record)">重置密码</a-button>
+            <a-button size="small" type="danger" @click="deleteUser(record)">删除</a-button>
           </a-space>
         </template>
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalVisible" :title="editingUser ? 'Edit User' : 'Add User'" @ok="handleSubmit">
+    <a-modal v-model:open="modalVisible" :title="editingUser ? '编辑用户' : '添加用户'" @ok="handleSubmit">
       <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="Username" name="username">
+        <a-form-item label="用户名" name="username">
           <a-input v-model:value="form.username" :disabled="!!editingUser" />
         </a-form-item>
-        <a-form-item v-if="!editingUser" label="Password" name="password">
+        <a-form-item v-if="!editingUser" label="密码" name="password">
           <a-input-password v-model:value="form.password" />
         </a-form-item>
-        <a-form-item label="Role" name="role">
+        <a-form-item label="角色" name="role">
           <a-select v-model:value="form.role">
-            <a-select-option value="admin">Admin</a-select-option>
-            <a-select-option value="user">User</a-select-option>
+            <a-select-option value="admin">管理员</a-select-option>
+            <a-select-option value="user">普通用户</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="Status" name="status">
+        <a-form-item label="状态" name="status">
           <a-select v-model:value="form.status">
-            <a-select-option :value="1">Active</a-select-option>
-            <a-select-option :value="0">Inactive</a-select-option>
+            <a-select-option :value="1">正常</a-select-option>
+            <a-select-option :value="0">禁用</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -68,11 +68,11 @@ const form = reactive({
 
 const columns = [
   { title: 'ID', dataIndex: 'id', key: 'id' },
-  { title: 'Username', dataIndex: 'username', key: 'username' },
-  { title: 'Role', dataIndex: 'role', key: 'role' },
-  { title: 'Status', key: 'status' },
-  { title: 'Created', dataIndex: 'created_at', key: 'created_at' },
-  { title: 'Action', key: 'action' }
+  { title: '用户名', dataIndex: 'username', key: 'username' },
+  { title: '角色', dataIndex: 'role', key: 'role' },
+  { title: '状态', key: 'status' },
+  { title: '创建时间', dataIndex: 'created_at', key: 'created_at' },
+  { title: '操作', key: 'action' }
 ]
 
 const loadUsers = async () => {
@@ -82,7 +82,7 @@ const loadUsers = async () => {
     users.value = res.data.items
     pagination.total = res.data.total
   } catch (error) {
-    message.error('Failed to load users')
+    message.error('加载用户列表失败')
   } finally {
     loading.value = false
   }
@@ -109,26 +109,26 @@ const handleSubmit = async () => {
   try {
     if (editingUser.value) {
       await api.put(`/admin/users/${editingUser.value.id}`, { role: form.role, status: form.status })
-      message.success('User updated')
+      message.success('用户已更新')
     } else {
       await api.post('/admin/users', form)
-      message.success('User created')
+      message.success('用户已创建')
     }
     modalVisible.value = false
     loadUsers()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Operation failed')
+    message.error(error.response?.data?.detail || '操作失败')
   }
 }
 
 const resetPassword = async (user: User) => {
-  const password = prompt('Enter new password:')
+  const password = prompt('请输入新密码：')
   if (password) {
     try {
       await api.put(`/admin/users/${user.id}/password`, { new_password: password })
-      message.success('Password reset')
+      message.success('密码已重置')
     } catch (error) {
-      message.error('Failed to reset password')
+      message.error('重置密码失败')
     }
   }
 }
@@ -136,10 +136,10 @@ const resetPassword = async (user: User) => {
 const deleteUser = async (user: User) => {
   try {
     await api.delete(`/admin/users/${user.id}`)
-    message.success('User deleted')
+    message.success('用户已删除')
     loadUsers()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Failed to delete user')
+    message.error(error.response?.data?.detail || '删除用户失败')
   }
 }
 

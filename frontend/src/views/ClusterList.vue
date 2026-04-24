@@ -1,47 +1,47 @@
 <template>
   <div class="cluster-list">
     <div class="header-actions">
-      <h2>Cluster Management</h2>
-      <a-button type="primary" @click="showAddModal">Add Cluster</a-button>
+      <h2>集群管理</h2>
+      <a-button type="primary" @click="showAddModal">添加集群</a-button>
     </div>
 
     <a-table :dataSource="clusters" :columns="columns" :loading="loading" :pagination="pagination">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
-          <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? 'Healthy' : 'Offline'" />
+          <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
         </template>
         <template v-if="column.key === 'action'">
           <a-space>
-            <a-button size="small" type="primary" @click="testConnection(record)">Test</a-button>
-            <a-button size="small" @click="viewDetail(record)">Detail</a-button>
-            <a-button size="small" @click="editCluster(record)">Edit</a-button>
-            <a-button size="small" type="danger" @click="deleteCluster(record)">Delete</a-button>
+            <a-button size="small" type="primary" @click="testConnection(record)">测试</a-button>
+            <a-button size="small" @click="viewDetail(record)">详情</a-button>
+            <a-button size="small" @click="editCluster(record)">编辑</a-button>
+            <a-button size="small" type="danger" @click="deleteCluster(record)">删除</a-button>
           </a-space>
         </template>
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalVisible" :title="editingCluster ? 'Edit Cluster' : 'Add Cluster'" width="600px" @ok="handleSubmit">
+    <a-modal v-model:open="modalVisible" :title="editingCluster ? '编辑集群' : '添加集群'" width="600px" @ok="handleSubmit">
       <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="Name" name="name">
+        <a-form-item label="名称" name="name">
           <a-input v-model:value="form.name" />
         </a-form-item>
-        <a-form-item label="Display Name" name="display_name">
+        <a-form-item label="显示名称" name="display_name">
           <a-input v-model:value="form.display_name" />
         </a-form-item>
-        <a-form-item label="Admin URL" name="admin_url">
+        <a-form-item label="管理地址" name="admin_url">
           <a-input v-model:value="form.admin_url" placeholder="http://apisix:9180" />
         </a-form-item>
-        <a-form-item label="Admin Key" name="admin_key">
+        <a-form-item label="管理密钥" name="admin_key">
           <a-input-password v-model:value="form.admin_key" />
         </a-form-item>
-        <a-form-item label="Description" name="description">
+        <a-form-item label="描述" name="description">
           <a-textarea v-model:value="form.description" :rows="3" />
         </a-form-item>
-        <a-form-item label="Status" name="status">
+        <a-form-item label="状态" name="status">
           <a-select v-model:value="form.status">
-            <a-select-option :value="1">Active</a-select-option>
-            <a-select-option :value="0">Inactive</a-select-option>
+            <a-select-option :value="1">正常</a-select-option>
+            <a-select-option :value="0">禁用</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -74,11 +74,11 @@ const form = reactive({
 
 const columns = [
   { title: 'ID', dataIndex: 'id', key: 'id' },
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Display Name', dataIndex: 'display_name', key: 'display_name' },
-  { title: 'Admin URL', dataIndex: 'admin_url', key: 'admin_url' },
-  { title: 'Status', key: 'status' },
-  { title: 'Action', key: 'action' }
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '显示名称', dataIndex: 'display_name', key: 'display_name' },
+  { title: '管理地址', dataIndex: 'admin_url', key: 'admin_url' },
+  { title: '状态', key: 'status' },
+  { title: '操作', key: 'action' }
 ]
 
 const loadClusters = async () => {
@@ -88,7 +88,7 @@ const loadClusters = async () => {
     clusters.value = res.data.items
     pagination.total = res.data.total
   } catch (error) {
-    message.error('Failed to load clusters')
+    message.error('加载集群列表失败')
   } finally {
     loading.value = false
   }
@@ -120,24 +120,24 @@ const handleSubmit = async () => {
   try {
     if (editingCluster.value) {
       await api.put(`/clusters/${editingCluster.value.id}`, form)
-      message.success('Cluster updated')
+      message.success('集群已更新')
     } else {
       await api.post('/clusters', form)
-      message.success('Cluster created')
+      message.success('集群已创建')
     }
     modalVisible.value = false
     loadClusters()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Operation failed')
+    message.error(error.response?.data?.detail || '操作失败')
   }
 }
 
 const testConnection = async (cluster: Cluster) => {
   try {
     await api.post(`/clusters/${cluster.id}/test`)
-    message.success('Connection successful')
+    message.success('连接成功')
   } catch (error) {
-    message.error('Connection failed')
+    message.error('连接失败')
   }
 }
 
@@ -148,10 +148,10 @@ const viewDetail = (cluster: Cluster) => {
 const deleteCluster = async (cluster: Cluster) => {
   try {
     await api.delete(`/clusters/${cluster.id}`)
-    message.success('Cluster deleted')
+    message.success('集群已删除')
     loadClusters()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Failed to delete cluster')
+    message.error(error.response?.data?.detail || '删除集群失败')
   }
 }
 

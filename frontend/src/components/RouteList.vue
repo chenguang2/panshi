@@ -1,36 +1,36 @@
 <template>
   <div class="route-list">
     <div class="header-actions">
-      <a-button type="primary" @click="showAddModal">Add Route</a-button>
+      <a-button type="primary" @click="showAddModal">添加路由</a-button>
     </div>
 
     <a-table :dataSource="routes" :columns="columns" :loading="loading">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
           <a-tag :color="record.status === 1 ? 'green' : 'red'">
-            {{ record.status === 1 ? 'Active' : 'Inactive' }}
+            {{ record.status === 1 ? '启用' : '禁用' }}
           </a-tag>
         </template>
         <template v-if="column.key === 'action'">
           <a-space>
-            <a-button size="small" @click="publishRoute(record)">Publish</a-button>
-            <a-button size="small" @click="viewHistory(record)">History</a-button>
-            <a-button size="small" @click="editRoute(record)">Edit</a-button>
-            <a-button size="small" type="danger" @click="deleteRoute(record)">Delete</a-button>
+            <a-button size="small" @click="publishRoute(record)">发布</a-button>
+            <a-button size="small" @click="viewHistory(record)">历史</a-button>
+            <a-button size="small" @click="editRoute(record)">编辑</a-button>
+            <a-button size="small" type="danger" @click="deleteRoute(record)">删除</a-button>
           </a-space>
         </template>
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalVisible" :title="editingRoute ? 'Edit Route' : 'Add Route'" width="600px" @ok="handleSubmit">
+    <a-modal v-model:open="modalVisible" :title="editingRoute ? '编辑路由' : '添加路由'" width="600px" @ok="handleSubmit">
       <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="Name" name="name">
+        <a-form-item label="名称" name="name">
           <a-input v-model:value="form.name" />
         </a-form-item>
         <a-form-item label="URI" name="uri">
           <a-input v-model:value="form.uri" placeholder="/api/*" />
         </a-form-item>
-        <a-form-item label="Methods" name="methods">
+        <a-form-item label="请求方法" name="methods">
           <a-select v-model:value="form.methods" mode="multiple">
             <a-select-option value="GET">GET</a-select-option>
             <a-select-option value="POST">POST</a-select-option>
@@ -38,21 +38,21 @@
             <a-select-option value="DELETE">DELETE</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="Upstream" name="upstream_id">
-          <a-select v-model:value="form.upstream_id" allow-clear placeholder="Select upstream">
+        <a-form-item label="上游服务" name="upstream_id">
+          <a-select v-model:value="form.upstream_id" allow-clear placeholder="请选择上游服务">
             <a-select-option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="Priority" name="priority">
+        <a-form-item label="优先级" name="priority">
           <a-input-number v-model:value="form.priority" :min="0" />
         </a-form-item>
-        <a-form-item label="Description" name="description">
+        <a-form-item label="描述" name="description">
           <a-textarea v-model:value="form.description" :rows="2" />
         </a-form-item>
-        <a-form-item label="Status" name="status">
+        <a-form-item label="状态" name="status">
           <a-select v-model:value="form.status">
-            <a-select-option :value="1">Active</a-select-option>
-            <a-select-option :value="0">Inactive</a-select-option>
+            <a-select-option :value="1">启用</a-select-option>
+            <a-select-option :value="0">禁用</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -85,11 +85,11 @@ const form = reactive({
 
 const columns = [
   { title: 'ID', dataIndex: 'id', key: 'id' },
-  { title: 'Name', dataIndex: 'name', key: 'name' },
+  { title: '名称', dataIndex: 'name', key: 'name' },
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
-  { title: 'Methods', dataIndex: 'methods', key: 'methods' },
-  { title: 'Status', key: 'status' },
-  { title: 'Action', key: 'action' }
+  { title: '请求方法', dataIndex: 'methods', key: 'methods' },
+  { title: '状态', key: 'status' },
+  { title: '操作', key: 'action' }
 ]
 
 const loadRoutes = async () => {
@@ -98,7 +98,7 @@ const loadRoutes = async () => {
     const res = await api.get(`/clusters/${props.clusterId}/routes`)
     routes.value = res.data.items
   } catch (error) {
-    message.error('Failed to load routes')
+    message.error('加载路由列表失败')
   } finally {
     loading.value = false
   }
@@ -109,7 +109,7 @@ const loadUpstreams = async () => {
     const res = await api.get(`/clusters/${props.clusterId}/upstreams`)
     upstreams.value = res.data.items
   } catch (error) {
-    console.error('Failed to load upstreams', error)
+    console.error('加载上游服务失败', error)
   }
 }
 
@@ -142,38 +142,38 @@ const handleSubmit = async () => {
     const payload = { ...form, methods: form.methods.join(',') }
     if (editingRoute.value) {
       await api.put(`/clusters/${props.clusterId}/routes/${editingRoute.value.id}`, payload)
-      message.success('Route updated')
+      message.success('路由已更新')
     } else {
       await api.post(`/clusters/${props.clusterId}/routes`, payload)
-      message.success('Route created')
+      message.success('路由已创建')
     }
     modalVisible.value = false
     loadRoutes()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Operation failed')
+    message.error(error.response?.data?.detail || '操作失败')
   }
 }
 
 const publishRoute = async (route: any) => {
   try {
     await api.post(`/clusters/${props.clusterId}/routes/${route.id}/publish`)
-    message.success('Route published')
+    message.success('路由已发布')
   } catch (error) {
-    message.error('Failed to publish route')
+    message.error('发布路由失败')
   }
 }
 
 const viewHistory = (_route: any) => {
-  message.info('Route history - feature in progress')
+  message.info('路由历史功能开发中')
 }
 
 const deleteRoute = async (route: any) => {
   try {
     await api.delete(`/clusters/${props.clusterId}/routes/${route.id}`)
-    message.success('Route deleted')
+    message.success('路由已删除')
     loadRoutes()
   } catch (error: any) {
-    message.error(error.response?.data?.detail || 'Failed to delete route')
+    message.error(error.response?.data?.detail || '删除路由失败')
   }
 }
 

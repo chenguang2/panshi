@@ -1,12 +1,12 @@
 <template>
   <div class="cluster-detail">
-    <a-page-header :title="cluster?.name || 'Cluster'" @back="() => router.push('/clusters')" />
+    <a-page-header :title="cluster?.name || '集群'" @back="() => router.push('/clusters')" />
 
     <a-tabs v-model:activeKey="activeTab">
-      <a-tab-pane key="upstreams" tab="Upstreams">
+      <a-tab-pane key="upstreams" tab="上游">
         <UpstreamList :cluster-id="clusterId" />
       </a-tab-pane>
-      <a-tab-pane key="routes" tab="Routes">
+      <a-tab-pane key="routes" tab="路由">
         <RouteList :cluster-id="clusterId" />
       </a-tab-pane>
     </a-tabs>
@@ -32,7 +32,7 @@ const loadCluster = async () => {
     const res = await api.get(`/clusters/${clusterId}`)
     cluster.value = res.data
   } catch (error) {
-    message.error('Failed to load cluster')
+    message.error('加载集群信息失败')
   }
 }
 

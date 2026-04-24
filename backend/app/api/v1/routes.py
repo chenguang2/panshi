@@ -45,7 +45,7 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     return RouteResponse.model_validate(route)
 
 
@@ -54,7 +54,7 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     
     for key, value in route_update.model_dump(exclude_unset=True).items():
         setattr(route, key, value)
@@ -81,11 +81,11 @@ async def delete_route(cluster_id: int, route_id: int, db: AsyncSession = Depend
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     
     await db.delete(route)
     await db.commit()
-    return {"message": "Route deleted"}
+    return {"message": "路由已删除"}
 
 
 @router.post("/{route_id}/publish")
@@ -93,9 +93,9 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     
-    return {"status": "ok", "message": f"Route {route_id} published successfully"}
+    return {"status": "ok", "message": f"路由 {route_id} 发布成功"}
 
 
 @router.post("/publish")
@@ -104,7 +104,7 @@ async def publish_all_routes(cluster_id: int, db: AsyncSession = Depends(get_db)
     result = await db.execute(query)
     routes = result.scalars().all()
     
-    return {"status": "ok", "message": f"{len(routes)} routes published successfully"}
+    return {"status": "ok", "message": f"{len(routes)} 条路由发布成功"}
 
 
 @router.get("/{route_id}/plugins")
@@ -118,7 +118,7 @@ async def get_route_plugins(cluster_id: int, route_id: int, db: AsyncSession = D
 async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUpdateRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
     
@@ -127,7 +127,7 @@ async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUp
         db.add(db_plugin)
     
     await db.commit()
-    return {"message": "Plugins updated"}
+    return {"message": "插件配置已更新"}
 
 
 @router.get("/{route_id}/history")
@@ -147,6 +147,6 @@ async def rollback_route(cluster_id: int, route_id: int, version: int = None, db
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
     
-    return {"status": "ok", "message": f"Route {route_id} rolled back successfully"}
+    return {"status": "ok", "message": f"路由 {route_id} 回滚成功"}

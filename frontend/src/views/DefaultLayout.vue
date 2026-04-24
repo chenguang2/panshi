@@ -1,23 +1,23 @@
 <template>
   <a-layout class="default-layout">
     <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible class="layout-sider">
-      <div class="logo">Panshi</div>
+      <div class="logo">盘石</div>
       <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline">
         <a-menu-item key="dashboard" @click="router.push('/')">
           <DashboardOutlined />
-          <span>Dashboard</span>
+          <span>仪表盘</span>
         </a-menu-item>
         <a-menu-item key="users" @click="router.push('/users')">
           <UserOutlined />
-          <span>Users</span>
+          <span>用户管理</span>
         </a-menu-item>
         <a-menu-item key="clusters" @click="router.push('/clusters')">
           <CloudOutlined />
-          <span>Clusters</span>
+          <span>集群管理</span>
         </a-menu-item>
         <a-menu-item key="dictionaries" @click="router.push('/dictionaries')">
           <BookOutlined />
-          <span>Dictionaries</span>
+          <span>字典管理</span>
         </a-menu-item>
       </a-menu>
     </a-layout-sider>
@@ -34,7 +34,7 @@
             </a-space>
             <template #overlay>
               <a-menu>
-                <a-menu-item @click="handleLogout">Logout</a-menu-item>
+                <a-menu-item @click="handleLogout">退出登录</a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
@@ -76,7 +76,7 @@ onMounted(() => {
 
 const handleLogout = async () => {
   await authStore.logout()
-  message.success('Logged out')
+  message.success('已退出登录')
   router.push('/login')
 }
 </script>

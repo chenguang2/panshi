@@ -49,7 +49,7 @@ async def get_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cluster not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
     return ClusterResponse.model_validate(cluster)
 
 
@@ -58,7 +58,7 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: Asy
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cluster not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
     
     for key, value in cluster_update.model_dump(exclude_unset=True).items():
         setattr(cluster, key, value)
@@ -73,11 +73,11 @@ async def delete_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cluster not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
     
     await db.delete(cluster)
     await db.commit()
-    return {"message": "Cluster deleted"}
+    return {"message": "集群已删除"}
 
 
 @router.post("/{cluster_id}/test")
@@ -85,9 +85,9 @@ async def test_connection(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cluster not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
     
-    return {"status": "ok", "message": "Connection successful"}
+    return {"status": "ok", "message": "连接测试成功"}
 
 
 @router.post("/{cluster_id}/sync")
@@ -95,9 +95,9 @@ async def sync_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cluster not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
     
-    return {"status": "ok", "message": "Sync successful"}
+    return {"status": "ok", "message": "同步成功"}
 
 
 @router.get("/{cluster_id}/upstreams", response_model=dict)
@@ -122,7 +122,7 @@ async def get_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Dep
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upstream not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
     
     targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
     targets = targets_result.scalars().all()
@@ -137,7 +137,7 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upstream not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
     
     for key, value in upstream_update.model_dump(exclude_unset=True).items():
         setattr(upstream, key, value)
@@ -152,8 +152,8 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upstream not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
     
     await db.delete(upstream)
     await db.commit()
-    return {"message": "Upstream deleted"}
+    return {"message": "上游服务已删除"}
