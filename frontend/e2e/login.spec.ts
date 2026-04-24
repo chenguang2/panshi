@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Login Flow', () => {
-  test('should display login page', async ({ page }) => {
+  test('should display login page with Chinese text', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('.login-card h2')).toContainText('Panshi Admin');
+    await expect(page.locator('.login-card h2')).toContainText('磐石管理后台');
     await expect(page.locator('input#username')).toBeVisible();
     await expect(page.locator('input#password')).toBeVisible();
   });

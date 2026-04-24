@@ -1,7 +1,7 @@
 <template>
   <div class="login-container">
     <a-card class="login-card">
-      <h2>盘石管理后台</h2>
+      <h2>磐石管理后台</h2>
       <a-form :model="form" @finish="handleLogin">
         <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }]">
           <a-input v-model:value="form.username" placeholder="用户名" size="large" />

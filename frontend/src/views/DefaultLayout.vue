@@ -1,8 +1,13 @@
 <template>
   <a-layout class="default-layout">
-    <a-layout-sider v-model:collapsed="collapsed" :trigger="null" collapsible class="layout-sider">
-      <div class="logo">盘石</div>
-      <a-menu v-model:selectedKeys="selectedKeys" theme="dark" mode="inline">
+    <a-layout-header class="layout-header">
+      <div class="logo">磐石</div>
+      <a-menu
+        v-model:selectedKeys="selectedKeys"
+        theme="light"
+        mode="horizontal"
+        class="top-menu"
+      >
         <a-menu-item key="dashboard" @click="router.push('/')">
           <DashboardOutlined />
           <span>仪表盘</span>
@@ -20,31 +25,24 @@
           <span>字典管理</span>
         </a-menu-item>
       </a-menu>
-    </a-layout-sider>
+      <div class="header-right">
+        <a-dropdown>
+          <a-space>
+            <UserOutlined />
+            <span>{{ authStore.user?.username }}</span>
+          </a-space>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item @click="handleLogout">退出登录</a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
+      </div>
+    </a-layout-header>
 
-    <a-layout>
-      <a-layout-header class="layout-header">
-        <MenuFoldOutlined v-if="!collapsed" @click="collapsed = !collapsed" class="trigger" />
-        <MenuUnfoldOutlined v-else @click="collapsed = !collapsed" class="trigger" />
-        <div class="header-right">
-          <a-dropdown>
-            <a-space>
-              <UserOutlined />
-              <span>{{ authStore.user?.username }}</span>
-            </a-space>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="handleLogout">退出登录</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </div>
-      </a-layout-header>
-
-      <a-layout-content class="layout-content">
-        <router-view />
-      </a-layout-content>
-    </a-layout>
+    <a-layout-content class="layout-content">
+      <router-view />
+    </a-layout-content>
   </a-layout>
 </template>
 
@@ -53,8 +51,6 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   DashboardOutlined,
   UserOutlined,
   CloudOutlined,
@@ -64,7 +60,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const collapsed = ref(false)
 const selectedKeys = ref(['dashboard'])
 
 onMounted(() => {
@@ -86,36 +81,33 @@ const handleLogout = async () => {
   min-height: 100vh;
 }
 
-.layout-sider {
-  background: #001529;
+.layout-header {
+  background: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .logo {
   height: 32px;
-  margin: 16px;
-  color: white;
+  margin-right: 32px;
+  color: #1890ff;
   font-size: 18px;
   font-weight: bold;
-  text-align: center;
+  line-height: 32px;
 }
 
-.layout-header {
-  background: #fff;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-}
-
-.trigger {
-  font-size: 18px;
-  cursor: pointer;
+.top-menu {
+  flex: 1;
+  line-height: 56px;
+  border-bottom: none;
 }
 
 .header-right {
   display: flex;
   align-items: center;
+  margin-left: auto;
 }
 
 .layout-content {

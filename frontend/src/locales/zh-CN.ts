@@ -37,7 +37,7 @@ export const zhCN = {
     dictionaries: '字典管理',
   },
   login: {
-    title: '盘石管理后台',
+    title: '磐石管理后台',
     username: '用户名',
     password: '密码',
     loginButton: '登录',
@@ -47,7 +47,7 @@ export const zhCN = {
   },
   dashboard: {
     title: '仪表盘',
-    welcome: '欢迎使用盘石管理后台',
+    welcome: '欢迎使用磐石管理后台',
     totalUsers: '用户总数',
     totalClusters: '集群总数',
     totalRoutes: '路由总数',
