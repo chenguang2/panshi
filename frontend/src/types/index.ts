@@ -23,6 +23,16 @@ export interface Cluster {
   healthy_node_count: number
   upstream_count: number
   route_count: number
+  activeTab?: string
+  nodes?: Node[]
+  nodesLoading?: boolean
+  upstreams?: Upstream[]
+  upstreamsLoading?: boolean
+  routes?: Route[]
+  routesLoading?: boolean
+  selectedNode?: Node | null
+  selectedUpstream?: Upstream | null
+  selectedRoute?: Route | null
 }
 
 export interface Node {
@@ -35,6 +45,14 @@ export interface Node {
   created_at?: string
 }
 
+export interface UpstreamTarget {
+  id?: number
+  upstream_id?: number
+  target: string
+  weight: number
+  status?: number
+}
+
 export interface Upstream {
   id: number
   cluster_id: number
@@ -42,6 +60,7 @@ export interface Upstream {
   load_balance: string
   description?: string
   created_at?: string
+  targets?: UpstreamTarget[]
 }
 
 export interface Route {
@@ -55,4 +74,15 @@ export interface Route {
   status: number
   description?: string
   created_at?: string
+}
+
+export interface Plugin {
+  name: string
+  description: string
+  schema: Record<string, any>
+}
+
+export interface RoutePlugin {
+  plugin_name: string
+  config: string
 }

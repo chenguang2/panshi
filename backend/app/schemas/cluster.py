@@ -81,18 +81,22 @@ class UpstreamBase(BaseModel):
 
 
 class UpstreamCreate(UpstreamBase):
-    cluster_id: int
+    targets: Optional[List[UpstreamTargetSchema]] = None
 
 
 class UpstreamUpdate(BaseModel):
     name: Optional[str] = None
     load_balance: Optional[str] = None
     description: Optional[str] = None
+    targets: Optional[List[UpstreamTargetSchema]] = None
 
 
 class UpstreamTargetSchema(BaseModel):
     target: str = Field(..., max_length=255)
     weight: int = Field(default=100, ge=1, le=1000)
+
+    class Config:
+        from_attributes = True
 
 
 class UpstreamResponse(UpstreamBase):

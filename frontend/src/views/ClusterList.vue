@@ -6,12 +6,15 @@
     </div>
 
     <a-row :gutter="[16, 16]" class="cluster-grid">
-      <a-col :xs="24" :sm="12" :md="8" :lg="8" :xl="6" v-for="cluster in clusters" :key="cluster.id">
+      <a-col :span="24" v-for="cluster in clusters" :key="cluster.id">
         <a-card :bordered="true" class="cluster-card" hoverable>
           <template #title>
             <div class="card-title">
               <CloudOutlined />
-              <span class="cluster-title-name">{{ cluster.display_name || cluster.name }}</span>
+              <span class="cluster-title-name">
+                {{ cluster.display_name || cluster.name }}
+                <span class="cluster-name-hint" v-if="cluster.display_name">({{ cluster.name }})</span>
+              </span>
               <a-badge :status="cluster.status === 1 ? 'success' : 'error'" :text="cluster.status === 1 ? '健康' : '离线'" />
             </div>
           </template>
@@ -20,7 +23,7 @@
               <a-button size="small" type="primary" @click="testConnection(cluster)">测试</a-button>
               <a-button size="small" @click="viewDetail(cluster)">详情</a-button>
               <a-button size="small" @click="editCluster(cluster)">编辑</a-button>
-              <a-button size="small" type="danger" @click="deleteCluster(cluster)">删除</a-button>
+              <a-button size="small" danger @click="deleteCluster(cluster)">删除</a-button>
             </div>
           </template>
           <div class="card-stats">
@@ -34,13 +37,61 @@
               <GatewayOutlined /> 路由: {{ cluster.route_count }}
             </span>
           </div>
-          <a-tabs v-model:activeKey="cluster.activeTab" size="small" class="cluster-tabs">
-            <a-tab-pane key="info" tab="信息"></a-tab-pane>
+          <a-tabs v-model:activeKey="cluster.activeTab" size="small" class="cluster-tabs" @tabClick="(key: string) => handleTabClick(cluster, key)">
             <a-tab-pane key="nodes" tab="IP管理"></a-tab-pane>
+            <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
+            <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
           </a-tabs>
-          <div v-if="cluster.activeTab === 'info'" class="tab-content">
-            <p v-if="cluster.description" class="cluster-desc">{{ cluster.description }}</p>
-            <p v-else class="no-desc">暂无描述</p>
+          <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
+            <div class="node-actions">
+              <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
+              <a-button size="small" @click="editUpstream(cluster)" :disabled="!cluster.selectedUpstream">编辑上游</a-button>
+              <a-button size="small" danger :disabled="!cluster.selectedUpstream" @click="deleteUpstream(cluster)">删除上游</a-button>
+            </div>
+            <a-table
+              :columns="upstreamColumns"
+              :data-source="cluster.upstreams || []"
+              :pagination="false"
+              :loading="cluster.upstreamsLoading"
+              :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (keys: any, rows: any) => selectUpstream(cluster, rows[0]) }"
+              size="small"
+              row-key="id"
+              class="node-table"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'actions'">
+                  <a-button size="small" @click="editUpstreamByRecord(cluster, record)">编辑</a-button>
+                  <a-button size="small" danger @click="deleteUpstreamByRecord(cluster, record)">删除</a-button>
+                </template>
+              </template>
+            </a-table>
+          </div>
+          <div v-else-if="cluster.activeTab === 'routes'" class="tab-content">
+            <div class="node-actions">
+              <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
+              <a-button size="small" @click="editRoute(cluster)" :disabled="!cluster.selectedRoute">编辑路由</a-button>
+              <a-button size="small" danger :disabled="!cluster.selectedRoute" @click="deleteRoute(cluster)">删除路由</a-button>
+            </div>
+            <a-table
+              :columns="routeColumns"
+              :data-source="cluster.routes || []"
+              :pagination="false"
+              :loading="cluster.routesLoading"
+              :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (keys: any, rows: any) => selectRoute(cluster, rows[0]) }"
+              size="small"
+              row-key="id"
+              class="node-table"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'status'">
+                  <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '正常' : '禁用'" />
+                </template>
+                <template v-if="column.key === 'actions'">
+                  <a-button size="small" @click="editRouteByRecord(cluster, record)">编辑</a-button>
+                  <a-button size="small" danger @click="deleteRouteByRecord(cluster, record)">删除</a-button>
+                </template>
+              </template>
+            </a-table>
           </div>
           <div v-else class="tab-content node-tab">
             <div class="node-actions">
@@ -117,17 +168,112 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="650px" @ok="handleUpstreamSubmit">
+      <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name">
+          <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
+        </a-form-item>
+        <a-form-item label="负载均衡" name="load_balance">
+          <a-select v-model:value="upstreamForm.load_balance">
+            <a-select-option value="roundrobin">轮询</a-select-option>
+            <a-select-option value="least_conn">最少连接</a-select-option>
+            <a-select-option value="ip_hash">IP哈希</a-select-option>
+            <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="描述" name="description">
+          <a-textarea v-model:value="upstreamForm.description" :rows="2" />
+        </a-form-item>
+        <a-form-item label="节点列表">
+          <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'ip'">
+                <a-input v-model:value="record.ip" placeholder="IP地址" />
+              </template>
+              <template v-else-if="column.key === 'port'">
+                <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
+              </template>
+              <template v-else-if="column.key === 'weight'">
+                <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
+              </template>
+              <template v-else-if="column.key === 'action'">
+                <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
+              </template>
+            </template>
+          </a-table>
+          <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
+            <PlusOutlined /> 添加节点
+          </a-button>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="routeModalVisible" :title="editingRoute ? '编辑路由' : '添加路由'" width="700px" @ok="handleRouteSubmit">
+      <a-form :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name">
+          <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
+        </a-form-item>
+        <a-form-item label="URI" name="uri">
+          <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
+        </a-form-item>
+        <a-form-item label="请求方法" name="methods">
+          <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法">
+            <a-select-option value="GET">GET</a-select-option>
+            <a-select-option value="POST">POST</a-select-option>
+            <a-select-option value="PUT">PUT</a-select-option>
+            <a-select-option value="DELETE">DELETE</a-select-option>
+            <a-select-option value="PATCH">PATCH</a-select-option>
+            <a-select-option value="HEAD">HEAD</a-select-option>
+            <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="上游" name="upstream_id">
+          <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
+            <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="优先级" name="priority">
+          <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
+        </a-form-item>
+        <a-form-item label="状态" name="status">
+          <a-select v-model:value="routeForm.status">
+            <a-select-option :value="1">正常</a-select-option>
+            <a-select-option :value="0">禁用</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="描述" name="description">
+          <a-textarea v-model:value="routeForm.description" :rows="2" />
+        </a-form-item>
+        <a-form-item label="插件配置" name="plugins">
+          <DraggablePluginGrid
+            v-model="routeForm.plugins"
+            :plugins="availablePlugins"
+            @edit="handleEditPlugin"
+          />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <PluginEditorDrawer
+      v-model:open="pluginDrawerVisible"
+      :plugin="editingPlugin"
+      :plugin-info="editingPluginInfo"
+      @save="handleSavePlugin"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined } from '@ant-design/icons-vue'
+import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
-import type { Cluster, Node } from '@/types'
+import type { Cluster, Node, Upstream, Route, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import DraggablePluginGrid from '@/components/DraggablePluginGrid.vue'
+import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -135,11 +281,20 @@ const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const modalVisible = ref(false)
 const nodeModalVisible = ref(false)
+const upstreamModalVisible = ref(false)
+const routeModalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
 const editingNode = ref<Node | null>(null)
+const editingUpstream = ref<Upstream | null>(null)
+const editingRoute = ref<Route | null>(null)
 const currentClusterId = ref<number | null>(null)
+const currentUpstreamId = ref<number | null>(null)
+const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const nameError = ref('')
+const pluginDrawerVisible = ref(false)
+const editingPlugin = ref<RoutePlugin | null>(null)
+const editingPluginIndex = ref<number>(-1)
 
 const nodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip' },
@@ -147,6 +302,28 @@ const nodeColumns = [
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port' },
   { title: '状态', key: 'status' },
   { title: '操作', key: 'actions', width: 280 }
+]
+
+const upstreamColumns = [
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
+  { title: '描述', dataIndex: 'description', key: 'description' },
+  { title: '操作', key: 'actions', width: 180 }
+]
+
+const targetColumns = [
+  { title: 'IP地址', key: 'ip', width: 200 },
+  { title: '端口', key: 'port', width: 120 },
+  { title: '权重', key: 'weight', width: 100 },
+  { title: '操作', key: 'action', width: 80 }
+]
+
+const routeColumns = [
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: 'URI', dataIndex: 'uri', key: 'uri' },
+  { title: '方法', dataIndex: 'methods', key: 'methods' },
+  { title: '状态', key: 'status' },
+  { title: '操作', key: 'actions', width: 180 }
 ]
 
 const isAdmin = () => authStore.user?.role === 'admin'
@@ -180,6 +357,50 @@ const nodeForm = reactive({
   status: 1
 })
 
+const upstreamForm = reactive({
+  name: '',
+  load_balance: 'roundrobin',
+  description: '',
+  targets: [] as { key: number, ip: string, port: number, weight: number }[]
+})
+
+let upstreamTargetKey = 0
+
+const routeForm = reactive({
+  name: '',
+  uri: '',
+  methods: [] as string[],
+  priority: 0,
+  status: 1,
+  upstream_id: undefined as number | undefined,
+  description: '',
+  plugins: [] as RoutePlugin[]
+})
+
+const availablePlugins = ref<Plugin[]>([])
+
+const editingPluginInfo = computed(() => {
+  if (!editingPlugin.value) return null
+  return availablePlugins.value.find(p => p.name === editingPlugin.value?.plugin_name) || null
+})
+
+const handleEditPlugin = (plugin: RoutePlugin, index: number) => {
+  editingPlugin.value = plugin
+  editingPluginIndex.value = index
+  pluginDrawerVisible.value = true
+}
+
+const handleSavePlugin = (config: string) => {
+  if (editingPlugin.value && editingPluginIndex.value >= 0) {
+    routeForm.plugins[editingPluginIndex.value] = {
+      plugin_name: editingPlugin.value.plugin_name,
+      config
+    }
+  }
+  editingPlugin.value = null
+  editingPluginIndex.value = -1
+}
+
 const loadClusters = async () => {
   loading.value = true
   try {
@@ -187,16 +408,69 @@ const loadClusters = async () => {
     const res = await api.get(endpoint, { params: { page: pagination.current, page_size: pagination.pageSize } })
     clusters.value = res.data.items.map((c: Cluster) => ({
       ...c,
-      activeTab: 'info',
+      activeTab: 'nodes',
       nodes: [],
       nodesLoading: false,
-      selectedNode: null
+      upstreams: null,
+      upstreamsLoading: false,
+      routes: null,
+      routesLoading: false,
+      selectedNode: null,
+      selectedUpstream: null,
+      selectedRoute: null
     }))
     pagination.total = res.data.total
+    for (const cluster of clusters.value) {
+      loadNodes(cluster)
+      loadUpstreams(cluster)
+    }
   } catch (error) {
     message.error('加载集群列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+const getClusterUpstreams = () => {
+  const cluster = clusters.value.find(c => c.id === currentClusterId.value)
+  return cluster?.upstreams || []
+}
+
+const loadUpstreams = async (cluster: Cluster) => {
+  if (cluster.upstreams === null || cluster.upstreams.length === 0) {
+    cluster.upstreamsLoading = true
+    try {
+      const res = await api.get(`/clusters/${cluster.id}/upstreams`)
+      cluster.upstreams = res.data.items
+    } catch (error) {
+      message.error('加载上游列表失败')
+    } finally {
+      cluster.upstreamsLoading = false
+    }
+  }
+}
+
+const loadRoutes = async (cluster: Cluster) => {
+  if (cluster.routes === null || cluster.routes.length === 0) {
+    cluster.routesLoading = true
+    try {
+      const res = await api.get(`/clusters/${cluster.id}/routes`)
+      cluster.routes = res.data.items
+    } catch (error) {
+      message.error('加载路由列表失败')
+    } finally {
+      cluster.routesLoading = false
+    }
+  }
+}
+
+const handleTabClick = async (cluster: Cluster, key: string) => {
+  if (key === 'upstreams') {
+    await loadUpstreams(cluster)
+  } else if (key === 'routes') {
+    await loadRoutes(cluster)
+  } else if (key === 'nodes') {
+    await loadNodes(cluster)
   }
 }
 
@@ -216,6 +490,14 @@ const loadNodes = async (cluster: Cluster) => {
 
 const selectNode = (cluster: Cluster, node: Node | undefined) => {
   cluster.selectedNode = node || null
+}
+
+const selectUpstream = (cluster: Cluster, upstream: Upstream | undefined) => {
+  cluster.selectedUpstream = upstream || null
+}
+
+const selectRoute = (cluster: Cluster, route: Route | undefined) => {
+  cluster.selectedRoute = route || null
 }
 
 const showAddModal = () => {
@@ -402,6 +684,272 @@ const queryNodeStatus = async (node: Node) => {
   }
 }
 
+// 上游相关方法
+const addUpstreamTarget = () => {
+  const lastTarget = upstreamForm.targets[upstreamForm.targets.length - 1]
+  const newTarget = {
+    key: ++upstreamTargetKey,
+    ip: lastTarget ? lastTarget.ip : '',
+    port: lastTarget ? lastTarget.port : 80,
+    weight: lastTarget ? lastTarget.weight : 100
+  }
+  upstreamForm.targets.push(newTarget)
+}
+
+const removeUpstreamTarget = (index: number) => {
+  upstreamForm.targets.splice(index, 1)
+}
+
+const showAddUpstreamModal = async (cluster: Cluster) => {
+  await loadUpstreams(cluster)
+  editingUpstream.value = null
+  currentClusterId.value = cluster.id
+  upstreamForm.name = ''
+  upstreamForm.load_balance = 'roundrobin'
+  upstreamForm.description = ''
+  upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
+  upstreamModalVisible.value = true
+}
+
+const editUpstream = (cluster: Cluster) => {
+  if (!cluster.selectedUpstream) {
+    message.warning('请先选择一个上游')
+    return
+  }
+  editUpstreamByRecord(cluster, cluster.selectedUpstream)
+}
+
+const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
+  editingUpstream.value = upstream
+  currentClusterId.value = cluster.id
+  upstreamForm.name = upstream.name
+  upstreamForm.load_balance = upstream.load_balance
+  upstreamForm.description = upstream.description || ''
+  if (upstream.targets && upstream.targets.length > 0) {
+    upstreamForm.targets = upstream.targets.map((t) => {
+      const [ip, port] = t.target.split(':')
+      return {
+        key: ++upstreamTargetKey,
+        ip: ip || '',
+        port: port ? parseInt(port) : 80,
+        weight: t.weight
+      }
+    })
+  } else {
+    upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
+  }
+  upstreamModalVisible.value = true
+}
+
+const handleUpstreamSubmit = async () => {
+  if (!currentClusterId.value) return
+  if (!upstreamForm.name) {
+    message.error('请输入上游名称')
+    return
+  }
+  if (upstreamForm.targets.length === 0 || !upstreamForm.targets[0].ip) {
+    message.error('请至少添加一个节点')
+    return
+  }
+  try {
+    const submitData = {
+      name: upstreamForm.name,
+      load_balance: upstreamForm.load_balance,
+      description: upstreamForm.description,
+      targets: upstreamForm.targets.map(t => ({
+        target: `${t.ip}:${t.port}`,
+        weight: t.weight
+      }))
+    }
+    if (editingUpstream.value) {
+      await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
+      message.success('上游已更新')
+    } else {
+      await api.post(`/clusters/${currentClusterId.value}/upstreams`, submitData)
+      message.success('上游已添加')
+    }
+    upstreamModalVisible.value = false
+    const c = clusters.value.find(c => c.id === currentClusterId.value)
+    if (c) {
+      const res = await api.get(`/clusters/${c.id}/upstreams`)
+      c.upstreams = res.data.items
+    }
+  } catch (error: any) {
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '操作失败')
+  }
+}
+
+const deleteUpstream = async (cluster: Cluster) => {
+  if (!cluster.selectedUpstream) {
+    message.warning('请先选择一个上游')
+    return
+  }
+  await deleteUpstreamByRecord(cluster, cluster.selectedUpstream)
+}
+
+const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
+  if (!cluster.routes || cluster.routes.length === 0) {
+    await loadRoutes(cluster)
+  }
+  const linkedRoutes = cluster.routes.filter((r: Route) => r.upstream_id === upstream.id)
+  if (linkedRoutes.length > 0) {
+    const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
+    message.error(`该上游已被路由 "${routeNames}" 引用，请先删除这些路由`)
+    return
+  }
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除上游"${upstream.name}"吗？此操作不可撤销。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`)
+        message.success('上游已删除')
+        const res = await api.get(`/clusters/${cluster.id}/upstreams`)
+        cluster.upstreams = res.data.items
+        cluster.selectedUpstream = null
+      } catch (error: any) {
+        const detail = error.response?.data?.detail
+        message.error(typeof detail === 'string' ? detail : '删除上游失败')
+      }
+    }
+  })
+}
+
+// 路由相关方法
+const loadAvailablePlugins = async () => {
+  try {
+    const res = await api.get('/plugins/builtin')
+    availablePlugins.value = res.data.plugins || []
+  } catch (error) {
+    console.error('加载插件列表失败', error)
+  }
+}
+
+const showAddRouteModal = async (cluster: Cluster) => {
+  await loadRoutes(cluster)
+  await loadAvailablePlugins()
+  editingRoute.value = null
+  currentClusterId.value = cluster.id
+  Object.assign(routeForm, {
+    name: '',
+    uri: '',
+    methods: [],
+    priority: 0,
+    status: 1,
+    upstream_id: undefined,
+    description: '',
+    plugins: []
+  })
+  routeModalVisible.value = true
+}
+
+const editRoute = (cluster: Cluster) => {
+  if (!cluster.selectedRoute) {
+    message.warning('请先选择一个路由')
+    return
+  }
+  editRouteByRecord(cluster, cluster.selectedRoute)
+}
+
+const editRouteByRecord = async (cluster: Cluster, route: Route) => {
+  await loadRoutes(cluster)
+  await loadAvailablePlugins()
+  editingRoute.value = route
+  currentClusterId.value = cluster.id
+  routeForm.name = route.name
+  routeForm.uri = route.uri
+  routeForm.methods = route.methods ? route.methods.split(',') : []
+  routeForm.priority = route.priority
+  routeForm.status = route.status
+  routeForm.upstream_id = route.upstream_id
+  routeForm.description = route.description || ''
+  routeForm.plugins = []
+
+  if (cluster.routes) {
+    const routeData = cluster.routes.find((r: Route) => r.id === route.id)
+    if (routeData) {
+      try {
+        const res = await api.get(`/clusters/${cluster.id}/routes/${route.id}/plugins`)
+        routeForm.plugins = res.data.plugins || []
+      } catch {}
+    }
+  }
+  routeModalVisible.value = true
+}
+
+const handleRouteSubmit = async () => {
+  if (!currentClusterId.value) return
+  try {
+    const payload = {
+      name: routeForm.name,
+      uri: routeForm.uri,
+      methods: Array.isArray(routeForm.methods) ? routeForm.methods.join(',') : routeForm.methods,
+      priority: routeForm.priority,
+      status: routeForm.status,
+      upstream_id: routeForm.upstream_id,
+      description: routeForm.description
+    }
+    let routeId: number
+    if (editingRoute.value) {
+      const res = await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)
+      routeId = editingRoute.value.id
+      message.success('路由已更新')
+    } else {
+      const res = await api.post(`/clusters/${currentClusterId.value}/routes`, payload)
+      routeId = res.data.id
+      message.success('路由已添加')
+    }
+
+    await api.put(`/clusters/${currentClusterId.value}/routes/${routeId}/plugins`, {
+      plugins: routeForm.plugins
+    })
+
+    routeModalVisible.value = false
+    const c = clusters.value.find(c => c.id === currentClusterId.value)
+    if (c) {
+      const res = await api.get(`/clusters/${c.id}/routes`)
+      c.routes = res.data.items
+    }
+  } catch (error: any) {
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '操作失败')
+  }
+}
+
+const deleteRoute = (cluster: Cluster) => {
+  if (!cluster.selectedRoute) {
+    message.warning('请先选择一个路由')
+    return
+  }
+  deleteRouteByRecord(cluster, cluster.selectedRoute)
+}
+
+const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除路由"${route.name}"吗？此操作不可撤销。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await api.delete(`/clusters/${cluster.id}/routes/${route.id}`)
+        message.success('路由已删除')
+        const res = await api.get(`/clusters/${cluster.id}/routes`)
+        cluster.routes = res.data.items
+        cluster.selectedRoute = null
+      } catch (error: any) {
+        const detail = error.response?.data?.detail
+        message.error(typeof detail === 'string' ? detail : '删除路由失败')
+      }
+    }
+  })
+}
+
 onMounted(() => {
   const storedUser = localStorage.getItem('user')
   if (storedUser && !authStore.user) {
@@ -433,6 +981,7 @@ onMounted(() => {
 
 .cluster-card {
   height: 100%;
+  width: 100%;
 }
 
 .cluster-card :deep(.ant-card-head) {
@@ -446,23 +995,37 @@ onMounted(() => {
 .card-title {
   display: flex;
   align-items: center;
-  gap: 8px;
   font-weight: 500;
+  width: 100%;
 }
 
 .card-title :deep(.anticon) {
   font-size: 18px;
   color: #1890ff;
+  margin-right: 8px;
 }
 
 .cluster-title-name {
-  flex: 1;
+  text-align: left;
+}
+
+.cluster-name-hint {
+  color: #999;
+  font-weight: normal;
+  font-size: 12px;
+  margin-left: 8px;
 }
 
 .title-actions {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+.title-actions :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .card-stats {

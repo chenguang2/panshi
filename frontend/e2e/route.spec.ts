@@ -25,4 +25,20 @@ test.describe('Route CRUD', () => {
       console.log('No cluster data - test skipped');
     }
   });
+
+  test('should disable routes tab when upstream is empty', async ({ page }) => {
+    await page.click('text=集群管理');
+    await page.waitForTimeout(1000);
+    const hasDetail = await page.locator('text=详情').isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasDetail) {
+      console.log('No cluster data - test skipped');
+      return;
+    }
+    await page.click('text=详情');
+    await page.waitForTimeout(500);
+
+    const routesTab = page.locator('.ant-tabs-tab').filter({ hasText: '路由' });
+    const isDisabled = await routesTab.getAttribute('aria-disabled');
+    expect(isDisabled).toBe('true');
+  });
 });

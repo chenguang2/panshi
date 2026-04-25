@@ -21,7 +21,7 @@ async def list_routes(cluster_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = Depends(get_db)):
-    db_route = Route(cluster_id=cluster_id, **route.model_dump(exclude={"cluster_id"}))
+    db_route = Route(cluster_id=cluster_id, **route.model_dump())
     db.add(db_route)
     await db.commit()
     await db.refresh(db_route)
@@ -111,7 +111,7 @@ async def publish_all_routes(cluster_id: int, db: AsyncSession = Depends(get_db)
 async def get_route_plugins(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
     plugins = result.scalars().all()
-    return {"plugins": [{"name": p.plugin_name, "config": p.config} for p in plugins]}
+    return {"plugins": [{"plugin_name": p.plugin_name, "config": p.config} for p in plugins]}
 
 
 @router.put("/{route_id}/plugins")

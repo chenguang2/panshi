@@ -13,7 +13,6 @@ class RouteBase(BaseModel):
 
 
 class RouteCreate(RouteBase):
-    cluster_id: int
     upstream_id: Optional[int] = None
 
 

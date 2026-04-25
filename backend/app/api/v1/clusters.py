@@ -198,16 +198,40 @@ async def list_upstreams(cluster_id: int, db: AsyncSession = Depends(get_db)):
     query = select(Upstream).where(Upstream.cluster_id == cluster_id)
     result = await db.execute(query)
     upstreams = result.scalars().all()
-    return {"total": len(upstreams), "items": [UpstreamResponse.model_validate(u) for u in upstreams]}
+
+    items = []
+    for u in upstreams:
+        targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == u.id))
+        targets = targets_result.scalars().all()
+        response = UpstreamWithTargets.model_validate(u)
+        response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+        items.append(response)
+
+    return {"total": len(upstreams), "items": items}
 
 
-@router.post("/{cluster_id}/upstreams", response_model=UpstreamResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{cluster_id}/upstreams", response_model=UpstreamWithTargets, status_code=status.HTTP_201_CREATED)
 async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSession = Depends(get_db)):
-    db_upstream = Upstream(cluster_id=cluster_id, **upstream.model_dump(exclude={"cluster_id"}))
+    upstream_data = upstream.model_dump(exclude={"targets"})
+    db_upstream = Upstream(cluster_id=cluster_id, **upstream_data)
     db.add(db_upstream)
     await db.commit()
     await db.refresh(db_upstream)
-    return UpstreamResponse.model_validate(db_upstream)
+
+    if upstream.targets:
+        for target_data in upstream.targets:
+            if isinstance(target_data, UpstreamTargetSchema):
+                db_target = UpstreamTarget(upstream_id=db_upstream.id, target=target_data.target, weight=target_data.weight)
+            else:
+                db_target = UpstreamTarget(upstream_id=db_upstream.id, **target_data)
+            db.add(db_target)
+        await db.commit()
+
+    targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == db_upstream.id))
+    targets = targets_result.scalars().all()
+    response = UpstreamWithTargets.model_validate(db_upstream)
+    response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+    return response
 
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
@@ -225,19 +249,35 @@ async def get_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Dep
     return response
 
 
-@router.put("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamResponse)
+@router.put("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
 async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: UpstreamUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
-    
-    for key, value in upstream_update.model_dump(exclude_unset=True).items():
+
+    update_data = upstream_update.model_dump(exclude_unset=True, exclude={"targets"})
+    for key, value in update_data.items():
         setattr(upstream, key, value)
-    
+
+    if upstream_update.targets is not None:
+        targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
+        existing_targets = targets_result.scalars().all()
+        for t in existing_targets:
+            await db.delete(t)
+
+        for target_data in upstream_update.targets:
+            db_target = UpstreamTarget(upstream_id=upstream_id, **target_data.model_dump())
+            db.add(db_target)
+
     await db.commit()
     await db.refresh(upstream)
-    return UpstreamResponse.model_validate(upstream)
+
+    targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
+    targets = targets_result.scalars().all()
+    response = UpstreamWithTargets.model_validate(upstream)
+    response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+    return response
 
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}")
