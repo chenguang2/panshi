@@ -47,6 +47,9 @@
               <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
               <a-button size="small" @click="editUpstream(cluster)" :disabled="!cluster.selectedUpstream">编辑上游</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedUpstream" @click="deleteUpstream(cluster)">删除上游</a-button>
+              <a-divider type="vertical" />
+              <a-button size="small" @click="publishUpstream(cluster)" :disabled="!cluster.selectedUpstream">发布</a-button>
+              <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!cluster.selectedUpstream">版本管理</a-button>
             </div>
             <a-table
               :columns="upstreamColumns"
@@ -62,6 +65,9 @@
                 <template v-if="column.key === 'actions'">
                   <a-button size="small" @click="editUpstreamByRecord(cluster, record)">编辑</a-button>
                   <a-button size="small" danger @click="deleteUpstreamByRecord(cluster, record)">删除</a-button>
+                  <a-divider type="vertical" />
+                  <a-button size="small" @click="publishUpstreamByRecord(cluster, record)">发布</a-button>
+                  <a-button size="small" @click="openUpstreamVersionManagementByRecord(cluster, record)">版本管理</a-button>
                 </template>
               </template>
             </a-table>
@@ -71,6 +77,9 @@
               <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
               <a-button size="small" @click="editRoute(cluster)" :disabled="!cluster.selectedRoute">编辑路由</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedRoute" @click="deleteRoute(cluster)">删除路由</a-button>
+              <a-divider type="vertical" />
+              <a-button size="small" @click="publishRoute(cluster)" :disabled="!cluster.selectedRoute">发布</a-button>
+              <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!cluster.selectedRoute">版本管理</a-button>
             </div>
             <a-table
               :columns="routeColumns"
@@ -89,6 +98,9 @@
                 <template v-if="column.key === 'actions'">
                   <a-button size="small" @click="editRouteByRecord(cluster, record)">编辑</a-button>
                   <a-button size="small" danger @click="deleteRouteByRecord(cluster, record)">删除</a-button>
+                  <a-divider type="vertical" />
+                  <a-button size="small" @click="publishRouteByRecord(cluster, record)">发布</a-button>
+                  <a-button size="small" @click="openRouteVersionManagementByRecord(cluster, record)">版本管理</a-button>
                 </template>
               </template>
             </a-table>
@@ -261,6 +273,14 @@
       :plugin-info="editingPluginInfo"
       @save="handleSavePlugin"
     />
+
+    <VersionManagementModal
+      v-model:open="versionModalVisible"
+      :resource-type="versionModalType"
+      :resource-id="versionModalResourceId"
+      :cluster-id="versionModalClusterId"
+      :resource-name="versionModalResourceName"
+    />
   </div>
 </template>
 
@@ -274,6 +294,7 @@ import type { Cluster, Node, Upstream, Route, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import DraggablePluginGrid from '@/components/DraggablePluginGrid.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
+import VersionManagementModal from '@/components/VersionManagementModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -295,6 +316,11 @@ const nameError = ref('')
 const pluginDrawerVisible = ref(false)
 const editingPlugin = ref<RoutePlugin | null>(null)
 const editingPluginIndex = ref<number>(-1)
+const versionModalVisible = ref(false)
+const versionModalType = ref<'upstream' | 'route'>('upstream')
+const versionModalResourceId = ref<number | null>(null)
+const versionModalClusterId = ref<number | null>(null)
+const versionModalResourceName = ref('')
 
 const nodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip' },
@@ -308,7 +334,7 @@ const upstreamColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
   { title: '描述', dataIndex: 'description', key: 'description' },
-  { title: '操作', key: 'actions', width: 180 }
+  { title: '操作', key: 'actions', width: 280 }
 ]
 
 const targetColumns = [
@@ -323,7 +349,7 @@ const routeColumns = [
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
   { title: '方法', dataIndex: 'methods', key: 'methods' },
   { title: '状态', key: 'status' },
-  { title: '操作', key: 'actions', width: 180 }
+  { title: '操作', key: 'actions', width: 280 }
 ]
 
 const isAdmin = () => authStore.user?.role === 'admin'
@@ -948,6 +974,90 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
       }
     }
   })
+}
+
+const publishUpstream = async (cluster: Cluster) => {
+  if (!cluster.selectedUpstream) {
+    message.warning('请先选择一个上游')
+    return
+  }
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream.id}/publish`)
+    message.success(res.data.message || '发布成功')
+  } catch (error: any) {
+    message.error(error.response?.data?.detail || '发布失败')
+  }
+}
+
+const openUpstreamVersionManagement = (cluster: Cluster) => {
+  if (!cluster.selectedUpstream) {
+    message.warning('请先选择一个上游')
+    return
+  }
+  versionModalType.value = 'upstream'
+  versionModalResourceId.value = cluster.selectedUpstream.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = cluster.selectedUpstream.name
+  versionModalVisible.value = true
+}
+
+const publishRoute = async (cluster: Cluster) => {
+  if (!cluster.selectedRoute) {
+    message.warning('请先选择一个路由')
+    return
+  }
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute.id}/publish`)
+    message.success(res.data.message || '发布成功')
+  } catch (error: any) {
+    message.error(error.response?.data?.detail || '发布失败')
+  }
+}
+
+const openRouteVersionManagement = (cluster: Cluster) => {
+  if (!cluster.selectedRoute) {
+    message.warning('请先选择一个路由')
+    return
+  }
+  versionModalType.value = 'route'
+  versionModalResourceId.value = cluster.selectedRoute.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = cluster.selectedRoute.name
+  versionModalVisible.value = true
+}
+
+const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`)
+    message.success(res.data.message || '发布成功')
+  } catch (error: any) {
+    message.error(error.response?.data?.detail || '发布失败')
+  }
+}
+
+const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstream) => {
+  versionModalType.value = 'upstream'
+  versionModalResourceId.value = record.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = record.name
+  versionModalVisible.value = true
+}
+
+const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`)
+    message.success(res.data.message || '发布成功')
+  } catch (error: any) {
+    message.error(error.response?.data?.detail || '发布失败')
+  }
+}
+
+const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => {
+  versionModalType.value = 'route'
+  versionModalResourceId.value = record.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = record.name
+  versionModalVisible.value = true
 }
 
 onMounted(() => {

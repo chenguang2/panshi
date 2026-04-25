@@ -2,15 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
+import json
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema,
-    NodeCreate, NodeUpdate, NodeResponse, NodeListResponse
+    NodeCreate, NodeUpdate, NodeResponse, NodeListResponse, ConfigVersionResponse, ConfigVersionListResponse
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -369,3 +370,102 @@ async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depe
     if not node:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
     return {"status": "ok", "node_status": node.status, "message": "状态查询成功"}
+
+
+@router.post("/{cluster_id}/upstreams/{upstream_id}/publish")
+async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
+    upstream = result.scalar_one_or_none()
+    if not upstream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == "upstream",
+            ConfigVersion.resource_id == upstream_id
+        )
+    )
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
+
+    targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
+    targets = targets_result.scalars().all()
+
+    config_data = {
+        "id": upstream.id,
+        "name": upstream.name,
+        "load_balance": upstream.load_balance,
+        "targets": [{"target": t.target, "weight": t.weight} for t in targets]
+    }
+
+    config_version = ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type="upstream",
+        resource_id=upstream_id,
+        version=new_version,
+        config=json.dumps(config_data)
+    )
+    db.add(config_version)
+    upstream.current_version = new_version
+    await db.commit()
+
+    return {"status": "ok", "message": f"上游 {upstream.name} 发布成功", "version": new_version}
+
+
+@router.get("/{cluster_id}/upstreams/{upstream_id}/history", response_model=ConfigVersionListResponse)
+async def get_upstream_history(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
+    upstream = result.scalar_one_or_none()
+    if not upstream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+
+    query = select(ConfigVersion).where(
+        ConfigVersion.resource_type == "upstream",
+        ConfigVersion.resource_id == upstream_id
+    ).order_by(ConfigVersion.version.desc())
+
+    result = await db.execute(query)
+    versions = result.scalars().all()
+    return ConfigVersionListResponse(
+        total=len(versions),
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=upstream.current_version
+    )
+
+
+@router.post("/{cluster_id}/upstreams/{upstream_id}/rollback/{version}")
+async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db: AsyncSession = Depends(get_db)):
+    upstream_result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
+    upstream = upstream_result.scalar_one_or_none()
+    if not upstream:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.resource_type == "upstream",
+        ConfigVersion.resource_id == upstream_id,
+        ConfigVersion.version == version
+    ))
+    config_version = result.scalar_one_or_none()
+    if not config_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+
+    upstream.current_version = version
+    await db.commit()
+
+    return {"status": "ok", "message": f"上游已切换到版本 v{version}", "version": version}
+
+
+@router.delete("/{cluster_id}/upstreams/{upstream_id}/history/{history_id}")
+async def delete_upstream_history(cluster_id: int, upstream_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.id == history_id,
+        ConfigVersion.resource_type == "upstream",
+        ConfigVersion.resource_id == upstream_id
+    ))
+    config_version = result.scalar_one_or_none()
+    if not config_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+
+    await db.delete(config_version)
+    await db.commit()
+    return {"status": "ok", "message": "历史版本已删除"}

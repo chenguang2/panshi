@@ -156,3 +156,30 @@ class NodeResponse(NodeBase):
 class NodeListResponse(BaseModel):
     total: int
     items: List[NodeResponse]
+
+
+class ConfigVersionResponse(BaseModel):
+    id: int
+    cluster_id: int
+    resource_type: str
+    resource_id: int
+    version: int
+    config: str
+    created_at: Optional[str] = None
+    created_by: str
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+class ConfigVersionListResponse(BaseModel):
+    total: int
+    items: List[ConfigVersionResponse]
+    current_version: Optional[int] = None

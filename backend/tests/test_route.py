@@ -1,5 +1,5 @@
 import pytest
-from app.models.cluster import Route, RoutePlugin
+from app.models.cluster import Route, RoutePlugin, ConfigVersion
 from sqlalchemy import select
 
 async def test_create_route(test_db):
@@ -102,3 +102,41 @@ async def test_route_with_multiple_plugins_crud(test_db):
     result = await test_db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route.id))
     remaining = result.scalars().all()
     assert len(remaining) == 0
+
+async def test_config_version_save(test_db):
+    config_version = ConfigVersion(
+        cluster_id=1,
+        resource_type="route",
+        resource_id=1,
+        version=1,
+        config='{"name": "test-route", "uri": "/api/*"}'
+    )
+    test_db.add(config_version)
+    await test_db.commit()
+    await test_db.refresh(config_version)
+
+    assert config_version.id is not None
+    assert config_version.version == 1
+    assert config_version.resource_type == "route"
+
+async def test_config_version_multiple_versions(test_db):
+    versions = [
+        ConfigVersion(cluster_id=1, resource_type="route", resource_id=1, version=1, config='{"v": 1}'),
+        ConfigVersion(cluster_id=1, resource_type="route", resource_id=1, version=2, config='{"v": 2}'),
+        ConfigVersion(cluster_id=1, resource_type="route", resource_id=1, version=3, config='{"v": 3}'),
+    ]
+    for v in versions:
+        test_db.add(v)
+    await test_db.commit()
+
+    result = await test_db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.resource_type == "route",
+            ConfigVersion.resource_id == 1
+        ).order_by(ConfigVersion.version.desc())
+    )
+    saved = result.scalars().all()
+    assert len(saved) == 3
+    assert saved[0].version == 3
+    assert saved[1].version == 2
+    assert saved[2].version == 1

@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List
+import json
 
 from app.core.database import get_db
-from app.models.cluster import Route, RoutePlugin
+from app.models.cluster import Route, RoutePlugin, ConfigVersion
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
+from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
@@ -94,8 +96,41 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-    
-    return {"status": "ok", "message": f"路由 {route_id} 发布成功"}
+
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == "route",
+            ConfigVersion.resource_id == route_id
+        )
+    )
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
+
+    plugins_result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
+    plugins = plugins_result.scalars().all()
+
+    config_data = {
+        "id": route.id,
+        "name": route.name,
+        "uri": route.uri,
+        "methods": route.methods,
+        "priority": route.priority,
+        "upstream_id": route.upstream_id,
+        "plugins": [{"plugin_name": p.plugin_name, "config": p.config} for p in plugins]
+    }
+
+    config_version = ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type="route",
+        resource_id=route_id,
+        version=new_version,
+        config=json.dumps(config_data)
+    )
+    db.add(config_version)
+    route.current_version = new_version
+    await db.commit()
+
+    return {"status": "ok", "message": f"路由 {route.name} 发布成功", "version": new_version}
 
 
 @router.post("/publish")
@@ -132,21 +167,58 @@ async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUp
 
 @router.get("/{route_id}/history")
 async def get_route_history(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(AuditLog).where(
-            AuditLog.resource == "route",
-            AuditLog.resource_id == route_id
-        ).order_by(AuditLog.created_at.desc())
-    )
-    logs = result.scalars().all()
-    return {"items": [{"id": log.id, "action": log.action, "detail": log.detail, "created_at": str(log.created_at)} for log in logs]}
-
-
-@router.post("/{route_id}/rollback")
-async def rollback_route(cluster_id: int, route_id: int, version: int = None, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-    
-    return {"status": "ok", "message": f"路由 {route_id} 回滚成功"}
+
+    query = select(ConfigVersion).where(
+        ConfigVersion.resource_type == "route",
+        ConfigVersion.resource_id == route_id
+    ).order_by(ConfigVersion.version.desc())
+
+    result = await db.execute(query)
+    versions = result.scalars().all()
+    return ConfigVersionListResponse(
+        total=len(versions),
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=route.current_version
+    )
+
+
+@router.post("/{route_id}/rollback/{version}")
+async def rollback_route(cluster_id: int, route_id: int, version: int, db: AsyncSession = Depends(get_db)):
+    route_result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
+    route = route_result.scalar_one_or_none()
+    if not route:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.resource_type == "route",
+        ConfigVersion.resource_id == route_id,
+        ConfigVersion.version == version
+    ))
+    config_version = result.scalar_one_or_none()
+    if not config_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+
+    route.current_version = version
+    await db.commit()
+
+    return {"status": "ok", "message": f"路由已切换到版本 v{version}", "version": version}
+
+
+@router.delete("/{route_id}/history/{history_id}")
+async def delete_route_history(cluster_id: int, route_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.id == history_id,
+        ConfigVersion.resource_type == "route",
+        ConfigVersion.resource_id == route_id
+    ))
+    config_version = result.scalar_one_or_none()
+    if not config_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+
+    await db.delete(config_version)
+    await db.commit()
+    return {"status": "ok", "message": "历史版本已删除"}

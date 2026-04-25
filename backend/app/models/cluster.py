@@ -27,6 +27,7 @@ class Upstream(Base):
     name = Column(String(100), nullable=False)
     load_balance = Column(String(20), nullable=False, default="roundrobin")
     description = Column(Text, nullable=True)
+    current_version = Column(Integer, nullable=True)  # 当前发布的版本号
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -53,6 +54,7 @@ class Route(Base):
     priority = Column(Integer, nullable=False, default=0)
     status = Column(Integer, nullable=False, default=1)
     description = Column(Text, nullable=True)
+    current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -79,3 +81,16 @@ class Node(Base):
     status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ConfigVersion(Base):
+    __tablename__ = "ps_config_version"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    resource_type = Column(String(20), nullable=False)  # "route" or "upstream"
+    resource_id = Column(Integer, nullable=False)
+    version = Column(Integer, nullable=False)
+    config = Column(Text, nullable=False)  # JSON format
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(50), default="system")
