@@ -15,30 +15,25 @@
                 {{ cluster.display_name || cluster.name }}
                 <span class="cluster-name-hint" v-if="cluster.display_name">({{ cluster.name }})</span>
               </span>
-              <a-badge :status="cluster.status === 1 ? 'success' : 'error'" :text="cluster.status === 1 ? '健康' : '离线'" />
+              <span class="stat-item-inline">
+                <TeamOutlined /> 节点: {{ cluster.healthy_node_count }}/{{ cluster.node_count }}
+              </span>
+              <span class="stat-item-inline">
+                <CloudServerOutlined /> 上游: {{ cluster.upstream_count }}
+              </span>
+              <span class="stat-item-inline">
+                <GatewayOutlined /> 路由: {{ cluster.route_count }}
+              </span>
             </div>
           </template>
           <template #extra>
             <div class="title-actions">
-              <a-button size="small" type="primary" @click="testConnection(cluster)">测试</a-button>
-              <a-button size="small" @click="viewDetail(cluster)">详情</a-button>
               <a-button size="small" @click="editCluster(cluster)">编辑</a-button>
               <a-button size="small" danger @click="deleteCluster(cluster)">删除</a-button>
             </div>
           </template>
-          <div class="card-stats">
-            <span class="stat-item">
-              <TeamOutlined /> 节点: {{ cluster.healthy_node_count }}/{{ cluster.node_count }}
-            </span>
-            <span class="stat-item">
-              <CloudServerOutlined /> 上游: {{ cluster.upstream_count }}
-            </span>
-            <span class="stat-item">
-              <GatewayOutlined /> 路由: {{ cluster.route_count }}
-            </span>
-          </div>
           <a-tabs v-model:activeKey="cluster.activeTab" size="small" class="cluster-tabs" @tabClick="(key: string) => handleTabClick(cluster, key)">
-            <a-tab-pane key="nodes" tab="IP管理"></a-tab-pane>
+            <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
           </a-tabs>
@@ -75,6 +70,7 @@
           <div v-else-if="cluster.activeTab === 'routes'" class="tab-content">
             <div class="node-actions">
               <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
+              <a-button size="small" @click="copyRoute(cluster)" :disabled="!cluster.selectedRoute">复制路由</a-button>
               <a-button size="small" @click="editRoute(cluster)" :disabled="!cluster.selectedRoute">编辑路由</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedRoute" @click="deleteRoute(cluster)">删除路由</a-button>
               <a-divider type="vertical" />
@@ -96,11 +92,12 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '正常' : '禁用'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <a-button size="small" @click="editRouteByRecord(cluster, record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteRouteByRecord(cluster, record)">删除</a-button>
-                  <a-divider type="vertical" />
                   <a-button size="small" @click="publishRouteByRecord(cluster, record)">发布</a-button>
                   <a-button size="small" @click="openRouteVersionManagementByRecord(cluster, record)">版本管理</a-button>
+                  <a-divider type="vertical" />
+                  <a-button size="small" @click="copyRouteByRecord(cluster, record)">复制</a-button>
+                  <a-button size="small" @click="editRouteByRecord(cluster, record)">编辑</a-button>
+                  <a-button size="small" danger @click="deleteRouteByRecord(cluster, record)">删除</a-button>
                 </template>
               </template>
             </a-table>
@@ -221,7 +218,7 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="routeModalVisible" :title="editingRoute ? '编辑路由' : '添加路由'" width="700px" @ok="handleRouteSubmit">
+    <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="700px" @ok="handleRouteSubmit">
       <a-form :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
         <a-form-item label="名称" name="name">
           <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
@@ -308,6 +305,7 @@ const editingCluster = ref<Cluster | null>(null)
 const editingNode = ref<Node | null>(null)
 const editingUpstream = ref<Upstream | null>(null)
 const editingRoute = ref<Route | null>(null)
+const copyingRoute = ref(false)
 const currentClusterId = ref<number | null>(null)
 const currentUpstreamId = ref<number | null>(null)
 const currentRouteId = ref<number | null>(null)
@@ -349,7 +347,7 @@ const routeColumns = [
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
   { title: '方法', dataIndex: 'methods', key: 'methods' },
   { title: '状态', key: 'status' },
-  { title: '操作', key: 'actions', width: 280 }
+  { title: '操作', key: 'actions', width: 340 }
 ]
 
 const isAdmin = () => authStore.user?.role === 'admin'
@@ -639,6 +637,7 @@ const handleNodeSubmit = async () => {
     if (cluster) {
       const res = await api.get(`/clusters/${cluster.id}/nodes`)
       cluster.nodes = res.data.items
+      cluster.node_count = cluster.nodes.length
     }
     loadClusters()
   } catch (error: any) {
@@ -664,6 +663,7 @@ const deleteNode = (cluster: Cluster) => {
         message.success('节点已删除')
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items
+        cluster.node_count = cluster.nodes.length
         cluster.selectedNode = null
         loadClusters()
       } catch (error: any) {
@@ -799,6 +799,7 @@ const handleUpstreamSubmit = async () => {
     if (c) {
       const res = await api.get(`/clusters/${c.id}/upstreams`)
       c.upstreams = res.data.items
+      c.upstream_count = c.upstreams.length
     }
   } catch (error: any) {
     const detail = error.response?.data?.detail
@@ -836,6 +837,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
         message.success('上游已删除')
         const res = await api.get(`/clusters/${cluster.id}/upstreams`)
         cluster.upstreams = res.data.items
+        cluster.upstream_count = cluster.upstreams.length
         cluster.selectedUpstream = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
@@ -859,6 +861,7 @@ const showAddRouteModal = async (cluster: Cluster) => {
   await loadRoutes(cluster)
   await loadAvailablePlugins()
   editingRoute.value = null
+  copyingRoute.value = false
   currentClusterId.value = cluster.id
   Object.assign(routeForm, {
     name: '',
@@ -887,6 +890,41 @@ const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   editingRoute.value = route
   currentClusterId.value = cluster.id
   routeForm.name = route.name
+  routeForm.uri = route.uri
+  routeForm.methods = route.methods ? route.methods.split(',') : []
+  routeForm.priority = route.priority
+  routeForm.status = route.status
+  routeForm.upstream_id = route.upstream_id
+  routeForm.description = route.description || ''
+  routeForm.plugins = []
+
+  if (cluster.routes) {
+    const routeData = cluster.routes.find((r: Route) => r.id === route.id)
+    if (routeData) {
+      try {
+        const res = await api.get(`/clusters/${cluster.id}/routes/${route.id}/plugins`)
+        routeForm.plugins = res.data.plugins || []
+      } catch {}
+    }
+  }
+  routeModalVisible.value = true
+}
+
+const copyRoute = (cluster: Cluster) => {
+  if (!cluster.selectedRoute) {
+    message.warning('请先选择一个路由')
+    return
+  }
+  copyRouteByRecord(cluster, cluster.selectedRoute)
+}
+
+const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
+  await loadRoutes(cluster)
+  await loadAvailablePlugins()
+  editingRoute.value = null  // 标记为新增
+  copyingRoute.value = true
+  currentClusterId.value = cluster.id
+  routeForm.name = `复制_${route.name}`
   routeForm.uri = route.uri
   routeForm.methods = route.methods ? route.methods.split(',') : []
   routeForm.priority = route.priority
@@ -939,6 +977,7 @@ const handleRouteSubmit = async () => {
     if (c) {
       const res = await api.get(`/clusters/${c.id}/routes`)
       c.routes = res.data.items
+      c.route_count = c.routes.length
     }
   } catch (error: any) {
     const detail = error.response?.data?.detail
@@ -967,6 +1006,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
         message.success('路由已删除')
         const res = await api.get(`/clusters/${cluster.id}/routes`)
         cluster.routes = res.data.items
+        cluster.route_count = cluster.routes.length
         cluster.selectedRoute = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
@@ -1155,6 +1195,19 @@ onMounted(() => {
 }
 
 .stat-item :deep(.anticon) {
+  color: #1890ff;
+}
+
+.stat-item-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 16px;
+  font-size: 13px;
+  color: #666;
+}
+
+.stat-item-inline :deep(.anticon) {
   color: #1890ff;
 }
 

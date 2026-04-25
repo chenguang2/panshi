@@ -70,6 +70,7 @@ const clusterStatus = ref<any[]>([])
 const routeColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
   { title: '状态', key: 'status' }
 ]
 
@@ -81,13 +82,14 @@ const clusterColumns = [
 
 onMounted(async () => {
   try {
-    const [clusterRes, userRes] = await Promise.all([
-      api.get('/clusters'),
-      api.get('/admin/users')
+    const [statsRes, recentRoutesRes, clusterRes] = await Promise.all([
+      api.get('/dashboard/stats'),
+      api.get('/dashboard/recent-routes'),
+      api.get('/clusters')
     ])
-    stats.value.clusters = clusterRes.data.total
-    stats.value.users = userRes.data.total
-    clusterStatus.value = clusterRes.data.items
+    stats.value = statsRes.data
+    recentRoutes.value = recentRoutesRes.data.items || []
+    clusterStatus.value = clusterRes.data.items || []
   } catch (error) {
     console.error('加载仪表盘数据失败', error)
   }
