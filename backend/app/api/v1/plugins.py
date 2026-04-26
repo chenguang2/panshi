@@ -28,10 +28,49 @@ BUILTIN_PLUGINS = [
     },
     {
         "name": "proxy-rewrite",
-        "description": "Rewrite upstream request URI and headers",
+        "description": "Rewrite upstream request URI, headers, host and scheme",
         "schema": {
-            "uri": {"type": "string"},
-            "headers": {"type": "object"}
+            "uri": {
+                "type": "string",
+                "description": "New URI for upstream, supports NGINX variables"
+            },
+            "regex_uri": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Regex URI pattern and replacement, e.g. ['^/old/(.*)', '/new/$1']"
+            },
+            "headers": {
+                "type": "object",
+                "description": "Header operations",
+                "properties": {
+                    "set": {
+                        "type": "object",
+                        "description": "Headers to set/overwrite"
+                    },
+                    "add": {
+                        "type": "object",
+                        "description": "Headers to add/append"
+                    },
+                    "remove": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Headers to remove"
+                    }
+                }
+            },
+            "host": {
+                "type": "string",
+                "description": "Upstream host to rewrite"
+            },
+            "scheme": {
+                "type": "string",
+                "enum": ["http", "https"],
+                "description": "Upstream scheme (http or https)"
+            },
+            "use_real_request_uri_unsafe": {
+                "type": "boolean",
+                "description": "Use raw URI without normalization (unsafe)"
+            }
         }
     },
     {

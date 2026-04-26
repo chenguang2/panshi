@@ -67,12 +67,13 @@
                 <a-tag v-if="selectedVersionData.version === currentVersion" color="green" size="small">当前</a-tag>
               </span>
               <a-space>
+                <a-button size="small" @click="copyConfig">复制JSON</a-button>
                 <a-button size="small" type="primary" @click="handleRepublish">切换到此版本</a-button>
                 <a-button size="small" danger @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</a-button>
               </a-space>
             </div>
             <div class="detail-config">
-              <pre>{{ JSON.stringify(JSON.parse(selectedVersionData.config), null, 2) }}</pre>
+              <textarea readonly class="json-textarea">{{ formattedConfig }}</textarea>
             </div>
           </div>
 
@@ -126,6 +127,24 @@ const selectedVersionData = computed(() => {
   if (selectedVersion.value === null) return null
   return versions.value.find(v => v.version === selectedVersion.value)
 })
+
+const formattedConfig = computed(() => {
+  if (!selectedVersionData.value) return ''
+  try {
+    return JSON.stringify(JSON.parse(selectedVersionData.value.config), null, 2)
+  } catch {
+    return selectedVersionData.value.config
+  }
+})
+
+const copyConfig = async () => {
+  try {
+    await navigator.clipboard.writeText(formattedConfig.value)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败')
+  }
+}
 
 watch(() => props.open, async (newVal) => {
   if (newVal && props.resourceId && props.clusterId) {
@@ -519,6 +538,21 @@ const handleClose = () => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.json-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 350px;
+  border: none;
+  background: transparent;
+  resize: none;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  outline: none;
 }
 
 .diff-container {

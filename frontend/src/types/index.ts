@@ -74,6 +74,10 @@ export interface Route {
   status: number
   description?: string
   created_at?: string
+  hosts?: string
+  remote_addrs?: string
+  vars?: [string, string, string][]
+  advanced_match_enabled?: boolean
 }
 
 export interface Plugin {

@@ -18,16 +18,40 @@ async def list_routes(cluster_id: int, db: AsyncSession = Depends(get_db)):
     query = select(Route).where(Route.cluster_id == cluster_id)
     result = await db.execute(query)
     routes = result.scalars().all()
-    return RouteListResponse(total=len(routes), items=[RouteResponse.model_validate(r) for r in routes])
+
+    items = []
+    for r in routes:
+        route_dict = {
+            "id": r.id,
+            "cluster_id": r.cluster_id,
+            "name": r.name,
+            "uri": r.uri,
+            "methods": r.methods,
+            "priority": r.priority,
+            "status": r.status,
+            "description": r.description,
+            "upstream_id": r.upstream_id,
+            "hosts": r.hosts,
+            "remote_addrs": r.remote_addrs,
+            "vars": json.loads(r.vars) if r.vars else None,
+            "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        }
+        items.append(RouteResponse.model_validate(route_dict))
+
+    return RouteListResponse(total=len(items), items=items)
 
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
 async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = Depends(get_db)):
-    db_route = Route(cluster_id=cluster_id, **route.model_dump())
+    route_data = route.model_dump()
+    if route_data.get('vars') is not None:
+        route_data['vars'] = json.dumps(route_data['vars'])
+    db_route = Route(cluster_id=cluster_id, **route_data)
     db.add(db_route)
     await db.commit()
     await db.refresh(db_route)
-    
+
     audit = AuditLog(
         user_id=None,
         username="system",
@@ -38,8 +62,23 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
     )
     db.add(audit)
     await db.commit()
-    
-    return RouteResponse.model_validate(db_route)
+
+    return RouteResponse(
+        id=db_route.id,
+        cluster_id=db_route.cluster_id,
+        name=db_route.name,
+        uri=db_route.uri,
+        methods=db_route.methods,
+        priority=db_route.priority,
+        status=db_route.status,
+        description=db_route.description,
+        upstream_id=db_route.upstream_id,
+        hosts=db_route.hosts,
+        remote_addrs=db_route.remote_addrs,
+        vars=json.loads(db_route.vars) if db_route.vars else None,
+        advanced_match_enabled=bool(db_route.advanced_match_enabled) if db_route.advanced_match_enabled else False,
+        created_at=db_route.created_at.isoformat() if db_route.created_at else None
+    )
 
 
 @router.get("/{route_id}", response_model=RouteResponse)
@@ -48,7 +87,23 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-    return RouteResponse.model_validate(route)
+
+    return RouteResponse(
+        id=route.id,
+        cluster_id=route.cluster_id,
+        name=route.name,
+        uri=route.uri,
+        methods=route.methods,
+        priority=route.priority,
+        status=route.status,
+        description=route.description,
+        upstream_id=route.upstream_id,
+        hosts=route.hosts,
+        remote_addrs=route.remote_addrs,
+        vars=json.loads(route.vars) if route.vars else None,
+        advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
+        created_at=route.created_at.isoformat() if route.created_at else None
+    )
 
 
 @router.put("/{route_id}", response_model=RouteResponse)
@@ -57,13 +112,20 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-    
-    for key, value in route_update.model_dump(exclude_unset=True).items():
+
+    update_data = route_update.model_dump(exclude_unset=True)
+    if 'vars' in update_data:
+        if update_data['vars'] is not None:
+            update_data['vars'] = json.dumps(update_data['vars'])
+        else:
+            update_data['vars'] = None
+
+    for key, value in update_data.items():
         setattr(route, key, value)
     
     await db.commit()
     await db.refresh(route)
-    
+
     audit = AuditLog(
         user_id=None,
         username="system",
@@ -74,8 +136,23 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
     )
     db.add(audit)
     await db.commit()
-    
-    return RouteResponse.model_validate(route)
+
+    return RouteResponse(
+        id=route.id,
+        cluster_id=route.cluster_id,
+        name=route.name,
+        uri=route.uri,
+        methods=route.methods,
+        priority=route.priority,
+        status=route.status,
+        description=route.description,
+        upstream_id=route.upstream_id,
+        hosts=route.hosts,
+        remote_addrs=route.remote_addrs,
+        vars=json.loads(route.vars) if route.vars else None,
+        advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
+        created_at=route.created_at.isoformat() if route.created_at else None
+    )
 
 
 @router.delete("/{route_id}")
@@ -116,6 +193,9 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         "methods": route.methods,
         "priority": route.priority,
         "upstream_id": route.upstream_id,
+        "hosts": route.hosts,
+        "remote_addrs": route.remote_addrs,
+        "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
         "plugins": [{"plugin_name": p.plugin_name, "config": p.config} for p in plugins]
     }
 

@@ -15,6 +15,7 @@
           <a-space>
             <a-button size="small" @click="publishRoute(record)">发布</a-button>
             <a-button size="small" @click="viewHistory(record)">历史</a-button>
+            <a-button size="small" @click="viewJsonRoute(record)">JSON</a-button>
             <a-button size="small" @click="editRoute(record)">编辑</a-button>
             <a-button size="small" type="danger" @click="deleteRoute(record)">删除</a-button>
           </a-space>
@@ -57,6 +58,15 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal v-model:open="jsonModalVisible" title="路由JSON视图" width="700px" :footer="null">
+      <div class="json-view-container">
+        <div class="json-header">
+          <a-button type="primary" @click="copyRouteJson">复制JSON</a-button>
+        </div>
+        <textarea readonly class="json-textarea">{{ routeJson }}</textarea>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -72,6 +82,8 @@ const upstreams = ref<any[]>([])
 const loading = ref(false)
 const modalVisible = ref(false)
 const editingRoute = ref<any>(null)
+const jsonModalVisible = ref(false)
+const routeJson = ref('')
 
 const form = reactive({
   name: '',
@@ -167,6 +179,25 @@ const viewHistory = (_route: any) => {
   message.info('路由历史功能开发中')
 }
 
+const viewJsonRoute = async (route: any) => {
+  try {
+    const res = await api.get(`/clusters/${props.clusterId}/routes/${route.id}`)
+    routeJson.value = JSON.stringify(res.data, null, 2)
+    jsonModalVisible.value = true
+  } catch (error) {
+    message.error('获取路由详情失败')
+  }
+}
+
+const copyRouteJson = async () => {
+  try {
+    await navigator.clipboard.writeText(routeJson.value)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
 const deleteRoute = async (route: any) => {
   try {
     await api.delete(`/clusters/${props.clusterId}/routes/${route.id}`)
@@ -190,5 +221,32 @@ onMounted(() => {
 
 .header-actions {
   margin-bottom: 16px;
+}
+
+.json-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.json-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.json-textarea {
+  width: 100%;
+  height: 400px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 12px;
+  background: #fafafa;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  resize: none;
+  outline: none;
 }
 </style>

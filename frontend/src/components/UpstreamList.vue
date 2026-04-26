@@ -8,6 +8,7 @@
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'action'">
           <a-space>
+            <a-button size="small" @click="viewJsonUpstream(record)">JSON</a-button>
             <a-button size="small" @click="editUpstream(record)">编辑</a-button>
             <a-button size="small" type="danger" @click="deleteUpstream(record)">删除</a-button>
           </a-space>
@@ -33,6 +34,15 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <a-modal v-model:open="jsonModalVisible" title="上游JSON视图" width="700px" :footer="null">
+      <div class="json-view-container">
+        <div class="json-header">
+          <a-button type="primary" @click="copyUpstreamJson">复制JSON</a-button>
+        </div>
+        <textarea readonly class="json-textarea">{{ upstreamJson }}</textarea>
+      </div>
+    </a-modal>
   </div>
 </template>
 
@@ -47,6 +57,8 @@ const upstreams = ref<any[]>([])
 const loading = ref(false)
 const modalVisible = ref(false)
 const editingUpstream = ref<any>(null)
+const jsonModalVisible = ref(false)
+const upstreamJson = ref('')
 
 const form = reactive({
   name: '',
@@ -106,6 +118,25 @@ const handleSubmit = async () => {
   }
 }
 
+const viewJsonUpstream = async (upstream: any) => {
+  try {
+    const res = await api.get(`/clusters/${props.clusterId}/upstreams/${upstream.id}`)
+    upstreamJson.value = JSON.stringify(res.data, null, 2)
+    jsonModalVisible.value = true
+  } catch (error) {
+    message.error('获取上游详情失败')
+  }
+}
+
+const copyUpstreamJson = async () => {
+  try {
+    await navigator.clipboard.writeText(upstreamJson.value)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
 const deleteUpstream = async (upstream: any) => {
   try {
     await api.delete(`/clusters/${props.clusterId}/upstreams/${upstream.id}`)
@@ -126,5 +157,32 @@ onMounted(loadUpstreams)
 
 .header-actions {
   margin-bottom: 16px;
+}
+
+.json-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.json-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.json-textarea {
+  width: 100%;
+  height: 400px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 12px;
+  background: #fafafa;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  resize: none;
+  outline: none;
 }
 </style>

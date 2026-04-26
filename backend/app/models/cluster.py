@@ -55,6 +55,10 @@ class Route(Base):
     status = Column(Integer, nullable=False, default=1)
     description = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)
+    hosts = Column(String(500), nullable=True)
+    remote_addrs = Column(String(500), nullable=True)
+    vars = Column(Text, nullable=True)
+    advanced_match_enabled = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

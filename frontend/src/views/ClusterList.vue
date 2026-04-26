@@ -76,9 +76,21 @@
               <a-divider type="vertical" />
               <a-button size="small" @click="publishRoute(cluster)" :disabled="!cluster.selectedRoute">发布</a-button>
               <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!cluster.selectedRoute">版本管理</a-button>
+              <a-divider type="vertical" />
+              <a-popover v-model:open="routeColumnPopoverVisible" trigger="click" placement="bottomRight">
+                <template #title>选择显示列</template>
+                <template #content>
+                  <a-checkbox-group v-model:value="routeColumnsSelected">
+                    <div v-for="col in allRouteColumns.filter(c => c.key !== 'actions')" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
+                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </a-checkbox-group>
+                </template>
+                <a-button size="small">列配置</a-button>
+              </a-popover>
             </div>
             <a-table
-              :columns="routeColumns"
+              :columns="visibleRouteColumns"
               :data-source="cluster.routes || []"
               :pagination="false"
               :loading="cluster.routesLoading"
@@ -88,6 +100,14 @@
               class="node-table"
             >
               <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'upstream_id'">
+                  {{ getUpstreamName(cluster, record.upstream_id) }}
+                </template>
+                <template v-if="column.key === 'advanced_match_enabled'">
+                  <a-tag :color="record.advanced_match_enabled ? 'green' : 'default'">
+                    {{ record.advanced_match_enabled ? '是' : '否' }}
+                  </a-tag>
+                </template>
                 <template v-if="column.key === 'status'">
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '正常' : '禁用'" />
                 </template>
@@ -219,14 +239,14 @@
     </a-modal>
 
     <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="700px" @ok="handleRouteSubmit">
-      <a-form :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name">
+      <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
           <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
         </a-form-item>
-        <a-form-item label="URI" name="uri">
+        <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
           <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
         </a-form-item>
-        <a-form-item label="请求方法" name="methods">
+        <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
           <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法">
             <a-select-option value="GET">GET</a-select-option>
             <a-select-option value="POST">POST</a-select-option>
@@ -237,15 +257,15 @@
             <a-select-option value="OPTIONS">OPTIONS</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="上游" name="upstream_id">
+        <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
           <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
             <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="优先级" name="priority">
+        <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
           <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
           <a-select v-model:value="routeForm.status">
             <a-select-option :value="1">正常</a-select-option>
             <a-select-option :value="0">禁用</a-select-option>
@@ -254,6 +274,13 @@
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="routeForm.description" :rows="2" />
         </a-form-item>
+        <a-form-item label="高级匹配" name="advancedMatch">
+          <a-switch v-model:checked="routeForm.advancedMatchEnabled" />
+        </a-form-item>
+        <RouteAdvancedMatch
+          v-if="routeForm.advancedMatchEnabled"
+          v-model="routeForm.advancedMatch"
+        />
         <a-form-item label="插件配置" name="plugins">
           <DraggablePluginGrid
             v-model="routeForm.plugins"
@@ -292,6 +319,7 @@ import { useAuthStore } from '@/stores/auth'
 import DraggablePluginGrid from '@/components/DraggablePluginGrid.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -342,13 +370,25 @@ const targetColumns = [
   { title: '操作', key: 'action', width: 80 }
 ]
 
-const routeColumns = [
+const allRouteColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: 'URI', dataIndex: 'uri', key: 'uri' },
   { title: '方法', dataIndex: 'methods', key: 'methods' },
+  { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id' },
+  { title: '优先级', dataIndex: 'priority', key: 'priority' },
   { title: '状态', key: 'status' },
+  { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled' },
+  { title: '描述', dataIndex: 'description', key: 'description' },
   { title: '操作', key: 'actions', width: 340 }
 ]
+
+const routeColumnPopoverVisible = ref(false)
+const routeColumnsSelected = ref(['name', 'uri', 'methods', 'upstream_id', 'priority', 'status'])
+
+const visibleRouteColumns = computed(() => {
+  const selected = new Set(routeColumnsSelected.value)
+  return allRouteColumns.filter(col => selected.has(col.key))
+})
 
 const isAdmin = () => authStore.user?.role === 'admin'
 
@@ -398,8 +438,14 @@ const routeForm = reactive({
   status: 1,
   upstream_id: undefined as number | undefined,
   description: '',
+  advancedMatchEnabled: false,
+  advancedMatch: {
+    vars: [] as [string, string, string][]
+  },
   plugins: [] as RoutePlugin[]
 })
+
+const routeFormRef = ref()
 
 const availablePlugins = ref<Plugin[]>([])
 
@@ -458,6 +504,12 @@ const loadClusters = async () => {
 const getClusterUpstreams = () => {
   const cluster = clusters.value.find(c => c.id === currentClusterId.value)
   return cluster?.upstreams || []
+}
+
+const getUpstreamName = (cluster: Cluster, upstreamId: number | null) => {
+  if (!upstreamId || !cluster.upstreams) return '-'
+  const upstream = cluster.upstreams.find((u: Upstream) => u.id === upstreamId)
+  return upstream?.name || '-'
 }
 
 const loadUpstreams = async (cluster: Cluster) => {
@@ -871,6 +923,8 @@ const showAddRouteModal = async (cluster: Cluster) => {
     status: 1,
     upstream_id: undefined,
     description: '',
+    advancedMatchEnabled: false,
+    advancedMatch: { vars: [] },
     plugins: []
   })
   routeModalVisible.value = true
@@ -896,6 +950,8 @@ const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   routeForm.status = route.status
   routeForm.upstream_id = route.upstream_id
   routeForm.description = route.description || ''
+  routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
+  routeForm.advancedMatch = { vars: route.vars || [] }
   routeForm.plugins = []
 
   if (cluster.routes) {
@@ -931,6 +987,8 @@ const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
   routeForm.status = route.status
   routeForm.upstream_id = route.upstream_id
   routeForm.description = route.description || ''
+  routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
+  routeForm.advancedMatch = { vars: route.vars || [] }
   routeForm.plugins = []
 
   if (cluster.routes) {
@@ -948,15 +1006,24 @@ const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
 const handleRouteSubmit = async () => {
   if (!currentClusterId.value) return
   try {
-    const payload = {
+    await routeFormRef.value.validate()
+    const payload: Record<string, any> = {
       name: routeForm.name,
       uri: routeForm.uri,
       methods: Array.isArray(routeForm.methods) ? routeForm.methods.join(',') : routeForm.methods,
-      priority: routeForm.priority,
+      priority: routeForm.priority || 0,
       status: routeForm.status,
       upstream_id: routeForm.upstream_id,
-      description: routeForm.description
+      description: routeForm.description,
+      advanced_match_enabled: routeForm.advancedMatchEnabled
     }
+
+    if (routeForm.advancedMatchEnabled) {
+      payload.vars = routeForm.advancedMatch?.vars || []
+    } else {
+      payload.vars = []
+    }
+
     let routeId: number
     if (editingRoute.value) {
       const res = await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)

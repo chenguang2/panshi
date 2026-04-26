@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -10,6 +10,11 @@ class RouteBase(BaseModel):
     priority: int = Field(default=0)
     status: int = Field(default=1)
     description: Optional[str] = None
+    # 高级匹配字段
+    hosts: Optional[str] = Field(default=None, description="请求 Host 匹配，多个用逗号分隔")
+    remote_addrs: Optional[str] = Field(default=None, description="客户端 IP 地址，多个用逗号分隔")
+    vars: Optional[List[List[Any]]] = Field(default=None, description='条件匹配表达式 [["var", "op", "val"], ...]')
+    advanced_match_enabled: Optional[bool] = Field(default=False, description="是否启用高级匹配")
 
 
 class RouteCreate(RouteBase):
@@ -24,6 +29,10 @@ class RouteUpdate(BaseModel):
     status: Optional[int] = None
     upstream_id: Optional[int] = None
     description: Optional[str] = None
+    hosts: Optional[str] = None
+    remote_addrs: Optional[str] = None
+    vars: Optional[List[List[Any]]] = None
+    advanced_match_enabled: Optional[bool] = None
 
 
 class RouteResponse(RouteBase):
@@ -37,6 +46,19 @@ class RouteResponse(RouteBase):
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
             return v.isoformat()
+        return v
+
+    @field_validator('vars', mode='before')
+    @classmethod
+    def convert_vars(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except:
+                return None
         return v
 
     class Config:
