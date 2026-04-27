@@ -332,57 +332,73 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="700px" @ok="handleRouteSubmit">
-      <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
-          <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
-        </a-form-item>
-        <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
-          <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
-        </a-form-item>
-        <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-          <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法">
-            <a-select-option value="GET">GET</a-select-option>
-            <a-select-option value="POST">POST</a-select-option>
-            <a-select-option value="PUT">PUT</a-select-option>
-            <a-select-option value="DELETE">DELETE</a-select-option>
-            <a-select-option value="PATCH">PATCH</a-select-option>
-            <a-select-option value="HEAD">HEAD</a-select-option>
-            <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
-          <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
-            <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
-          <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-          <a-select v-model:value="routeForm.status">
-            <a-select-option :value="1">正常</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="routeForm.description" :rows="2" />
-        </a-form-item>
-        <a-form-item label="高级匹配" name="advancedMatch">
-          <a-switch v-model:checked="routeForm.advancedMatchEnabled" />
-        </a-form-item>
-        <RouteAdvancedMatch
-          v-if="routeForm.advancedMatchEnabled"
-          v-model="routeForm.advancedMatch"
-        />
-        <a-form-item label="插件配置" name="plugins">
+    <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="800px" @ok="handleRouteSubmit">
+      <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
+        <a-tab-pane key="basic" tab="基础配置">
+          <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
+              <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
+            </a-form-item>
+            <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
+              <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
+            </a-form-item>
+            <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
+              <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法">
+                <a-select-option value="GET">GET</a-select-option>
+                <a-select-option value="POST">POST</a-select-option>
+                <a-select-option value="PUT">PUT</a-select-option>
+                <a-select-option value="DELETE">DELETE</a-select-option>
+                <a-select-option value="PATCH">PATCH</a-select-option>
+                <a-select-option value="HEAD">HEAD</a-select-option>
+                <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
+              <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
+                <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
+              <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
+            </a-form-item>
+            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+              <a-select v-model:value="routeForm.status">
+                <a-select-option :value="1">正常</a-select-option>
+                <a-select-option :value="0">禁用</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="描述" name="description">
+              <a-textarea v-model:value="routeForm.description" :rows="2" />
+            </a-form-item>
+            <a-form-item label="高级匹配" name="advancedMatch">
+              <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
+              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级匹配"页配置请求条件</span>
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+
+        <a-tab-pane key="advanced" tab="高级匹配">
+          <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
+            <RouteAdvancedMatch
+              :enabled="routeForm.advancedMatchEnabled"
+              :model-value="{ vars: routeForm.advancedMatch.vars }"
+              @update:model-value="(val: any) => { routeForm.advancedMatch.vars = val.vars || []; }"
+            />
+          </div>
+          <div v-else class="advanced-disabled-hint">
+            <WarningOutlined style="color: #faad14; margin-right: 8px;" />
+            高级匹配未启用，请在"基础配置"中开启
+          </div>
+        </a-tab-pane>
+
+        <a-tab-pane key="plugins" tab="插件管理">
           <DraggablePluginGrid
             v-model="routeForm.plugins"
             :plugins="availablePlugins"
             @edit="handleEditPlugin"
           />
-        </a-form-item>
-      </a-form>
+        </a-tab-pane>
+      </a-tabs>
     </a-modal>
 
     <PluginEditorDrawer
@@ -406,7 +422,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -423,6 +439,7 @@ const modalVisible = ref(false)
 const nodeModalVisible = ref(false)
 const upstreamModalVisible = ref(false)
 const routeModalVisible = ref(false)
+const routeModalActiveTab = ref('basic')
 const editingCluster = ref<Cluster | null>(null)
 const editingNode = ref<Node | null>(null)
 const editingUpstream = ref<Upstream | null>(null)
@@ -1194,6 +1211,7 @@ const showAddRouteModal = async (cluster: Cluster) => {
     advancedMatch: { vars: [] },
     plugins: []
   })
+  routeModalActiveTab.value = 'basic'
   routeModalVisible.value = true
 }
 
@@ -1220,6 +1238,7 @@ const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
   routeForm.advancedMatch = { vars: route.vars || [] }
   routeForm.plugins = []
+  routeModalActiveTab.value = 'basic'
 
   if (cluster.routes) {
     const routeData = cluster.routes.find((r: Route) => r.id === route.id)
@@ -1257,6 +1276,7 @@ const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
   routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
   routeForm.advancedMatch = { vars: route.vars || [] }
   routeForm.plugins = []
+  routeModalActiveTab.value = 'basic'
 
   if (cluster.routes) {
     const routeData = cluster.routes.find((r: Route) => r.id === route.id)
