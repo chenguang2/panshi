@@ -25,9 +25,11 @@ class Upstream(Base):
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
-    load_balance = Column(String(20), nullable=False, default="roundrobin")
+    load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
     description = Column(Text, nullable=True)
-    current_version = Column(Integer, nullable=True)  # 当前发布的版本号
+    hash_location = Column(String(20), nullable=True)  # header, cookie, vars
+    hash_key = Column(String(100), nullable=True)
+    current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -76,8 +76,10 @@ class ClusterListResponse(BaseModel):
 
 class UpstreamBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    load_balance: str = Field(default="roundrobin")
+    load_balance: str = Field(default="weighted_roundrobin")
     description: Optional[str] = None
+    hash_location: Optional[str] = None
+    hash_key: Optional[str] = None
 
 
 class UpstreamCreate(UpstreamBase):
@@ -88,6 +90,8 @@ class UpstreamUpdate(BaseModel):
     name: Optional[str] = None
     load_balance: Optional[str] = None
     description: Optional[str] = None
+    hash_location: Optional[str] = None
+    hash_key: Optional[str] = None
     targets: Optional[List[UpstreamTargetSchema]] = None
 
 
