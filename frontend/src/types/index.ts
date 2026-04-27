@@ -12,6 +12,24 @@ export interface LoginResponse {
   user: User
 }
 
+export interface RoutePagination {
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface UpstreamPagination {
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface NodePagination {
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface Cluster {
   id: number
   name: string
@@ -26,10 +44,25 @@ export interface Cluster {
   activeTab?: string
   nodes?: Node[]
   nodesLoading?: boolean
+  nodesPagination?: NodePagination
+  nodesSearch?: string
+  nodesSearchField?: string
+  nodesSortBy?: string
+  nodesSortOrder?: 'asc' | 'desc'
   upstreams?: Upstream[]
   upstreamsLoading?: boolean
+  upstreamsPagination?: UpstreamPagination
+  upstreamsSearch?: string
+  upstreamsSearchField?: string
+  upstreamsSortBy?: string
+  upstreamsSortOrder?: 'asc' | 'desc'
   routes?: Route[]
   routesLoading?: boolean
+  routesPagination?: RoutePagination
+  routesSearch?: string
+  routesSearchField?: string
+  routesSortBy?: string
+  routesSortOrder?: 'asc' | 'desc'
   selectedNode?: Node | null
   selectedUpstream?: Upstream | null
   selectedRoute?: Route | null

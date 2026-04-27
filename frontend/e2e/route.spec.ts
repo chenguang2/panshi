@@ -175,4 +175,130 @@ test.describe('Route CRUD', () => {
     const count = await checkboxes.count();
     expect(count).toBeGreaterThan(0);
   });
+
+  test('should show pagination in route table', async ({ page }) => {
+    await page.click('text=集群管理');
+    await page.waitForTimeout(1000);
+    const hasCluster = await page.locator('text=详情').isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasCluster) {
+      console.log('No cluster data - test skipped');
+      return;
+    }
+    await page.click('text=详情');
+    await page.waitForTimeout(500);
+
+    const upstreamTab = page.locator('.ant-tabs-tab').filter({ hasText: '上游' });
+    const upstreamDisabled = await upstreamTab.getAttribute('aria-disabled');
+    if (upstreamDisabled === 'true') {
+      console.log('No upstream - test skipped');
+      return;
+    }
+
+    await upstreamTab.click();
+    await page.waitForTimeout(500);
+
+    const hasUpstream = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasUpstream) {
+      console.log('No upstream data - test skipped');
+      return;
+    }
+
+    await page.locator('.ant-tabs-tab').filter({ hasText: '路由' }).click();
+    await page.waitForTimeout(500);
+
+    const hasRoute = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasRoute) {
+      console.log('No route data - test skipped');
+      return;
+    }
+
+    const pagination = page.locator('.ant-pagination');
+    await expect(pagination).toBeVisible();
+
+    const pageSizeSelect = page.locator('.ant-pagination-options-size-changer').locator('.ant-select-selector');
+    await expect(pageSizeSelect).toBeVisible();
+  });
+
+  test('should show search input in route table', async ({ page }) => {
+    await page.click('text=集群管理');
+    await page.waitForTimeout(1000);
+    const hasCluster = await page.locator('text=详情').isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasCluster) {
+      console.log('No cluster data - test skipped');
+      return;
+    }
+    await page.click('text=详情');
+    await page.waitForTimeout(500);
+
+    const upstreamTab = page.locator('.ant-tabs-tab').filter({ hasText: '上游' });
+    const upstreamDisabled = await upstreamTab.getAttribute('aria-disabled');
+    if (upstreamDisabled === 'true') {
+      console.log('No upstream - test skipped');
+      return;
+    }
+
+    await upstreamTab.click();
+    await page.waitForTimeout(500);
+
+    const hasUpstream = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasUpstream) {
+      console.log('No upstream data - test skipped');
+      return;
+    }
+
+    await page.locator('.ant-tabs-tab').filter({ hasText: '路由' }).click();
+    await page.waitForTimeout(500);
+
+    const hasRoute = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasRoute) {
+      console.log('No route data - test skipped');
+      return;
+    }
+
+    const searchInput = page.locator('.ant-input-search');
+    await expect(searchInput).toBeVisible();
+
+    const fieldSelect = page.locator('.ant-select').filter({ hasText: '搜索字段' });
+    await expect(fieldSelect).toBeVisible();
+  });
+
+  test('should show sortable columns in route table', async ({ page }) => {
+    await page.click('text=集群管理');
+    await page.waitForTimeout(1000);
+    const hasCluster = await page.locator('text=详情').isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasCluster) {
+      console.log('No cluster data - test skipped');
+      return;
+    }
+    await page.click('text=详情');
+    await page.waitForTimeout(500);
+
+    const upstreamTab = page.locator('.ant-tabs-tab').filter({ hasText: '上游' });
+    const upstreamDisabled = await upstreamTab.getAttribute('aria-disabled');
+    if (upstreamDisabled === 'true') {
+      console.log('No upstream - test skipped');
+      return;
+    }
+
+    await upstreamTab.click();
+    await page.waitForTimeout(500);
+
+    const hasUpstream = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasUpstream) {
+      console.log('No upstream data - test skipped');
+      return;
+    }
+
+    await page.locator('.ant-tabs-tab').filter({ hasText: '路由' }).click();
+    await page.waitForTimeout(500);
+
+    const hasRoute = await page.locator('.ant-table-tbody tr').first().isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasRoute) {
+      console.log('No route data - test skipped');
+      return;
+    }
+
+    const sortableHeader = page.locator('.ant-table-column-sorter').first();
+    await expect(sortableHeader).toBeVisible();
+  });
 });

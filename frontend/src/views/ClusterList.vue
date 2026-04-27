@@ -46,15 +46,44 @@
               <a-button size="small" @click="publishUpstream(cluster)" :disabled="!cluster.selectedUpstream">发布</a-button>
               <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!cluster.selectedUpstream">版本管理</a-button>
             </div>
+            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+              <a-input-search
+                v-model:value="cluster.upstreamsSearch"
+                placeholder="搜索上游"
+                style="width: 200px;"
+                @search="() => { cluster.upstreamsPagination!.page = 1; loadUpstreams(cluster) }"
+                allow-clear
+              />
+              <a-select
+                v-model:value="cluster.upstreamsSearchField"
+                placeholder="搜索字段"
+                style="width: 120px;"
+                allow-clear
+              >
+                <a-select-option value="">全部</a-select-option>
+                <a-select-option value="name">名称</a-select-option>
+                <a-select-option value="description">描述</a-select-option>
+              </a-select>
+            </div>
             <a-table
               :columns="upstreamColumns"
               :data-source="cluster.upstreams || []"
-              :pagination="false"
+              :pagination="{
+                current: cluster.upstreamsPagination?.page,
+                pageSize: cluster.upstreamsPagination?.pageSize,
+                total: cluster.upstreamsPagination?.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `共 ${total} 条`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showQuickJumper: true
+              }"
               :loading="cluster.upstreamsLoading"
-              :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (keys: any, rows: any) => selectUpstream(cluster, rows[0]) }"
+              :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (_keys: any, rows: any) => selectUpstream(cluster, rows[0]) }"
+              :showSorterTooltip="false"
               size="small"
               row-key="id"
               class="node-table"
+              @change="(pag: any, _filters: any, sorter: any) => handleUpstreamTableChange(cluster, pag, sorter)"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'actions'">
@@ -96,15 +125,44 @@
                 <a-button size="small">列配置</a-button>
               </a-popover>
             </div>
+            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+              <a-input-search
+                v-model:value="cluster.routesSearch"
+                placeholder="搜索路由"
+                style="width: 200px;"
+                @search="() => { cluster.routesPagination!.page = 1; loadRoutes(cluster) }"
+                allow-clear
+              />
+              <a-select
+                v-model:value="cluster.routesSearchField"
+                placeholder="搜索字段"
+                style="width: 120px;"
+                allow-clear
+              >
+                <a-select-option value="">全部</a-select-option>
+                <a-select-option value="name">名称</a-select-option>
+                <a-select-option value="uri">URI</a-select-option>
+              </a-select>
+            </div>
             <a-table
               :columns="visibleRouteColumns"
               :data-source="cluster.routes || []"
-              :pagination="false"
+              :pagination="{
+                current: cluster.routesPagination?.page,
+                pageSize: cluster.routesPagination?.pageSize,
+                total: cluster.routesPagination?.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `共 ${total} 条`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showQuickJumper: true
+              }"
               :loading="cluster.routesLoading"
-              :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (keys: any, rows: any) => selectRoute(cluster, rows[rows.length - 1]) }"
+              :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (_keys: any, rows: any) => selectRoute(cluster, rows[rows.length - 1]) }"
+              :showSorterTooltip="false"
               size="small"
               row-key="id"
               class="node-table"
+              @change="(pag: any, _filters: any, sorter: any) => handleRouteTableChange(cluster, pag, sorter)"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'upstream_id'">
@@ -135,15 +193,44 @@
               <a-button size="small" @click="editNode(cluster)" :disabled="!cluster.selectedNode">编辑节点</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedNode" @click="deleteNode(cluster)">删除节点</a-button>
             </div>
+            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+              <a-input-search
+                v-model:value="cluster.nodesSearch"
+                placeholder="搜索节点"
+                style="width: 200px;"
+                @search="() => { cluster.nodesPagination!.page = 1; loadNodes(cluster) }"
+                allow-clear
+              />
+              <a-select
+                v-model:value="cluster.nodesSearchField"
+                placeholder="搜索字段"
+                style="width: 120px;"
+                allow-clear
+              >
+                <a-select-option value="">全部</a-select-option>
+                <a-select-option value="name">名称</a-select-option>
+                <a-select-option value="ip">IP</a-select-option>
+              </a-select>
+            </div>
             <a-table
               :columns="nodeColumns"
               :data-source="cluster.nodes || []"
-              :pagination="false"
-              :row-selection="{ selectedRowKeys: cluster.selectedNode ? [cluster.selectedNode.id] : [], onChange: (keys: any, rows: any) => selectNode(cluster, rows[0]) }"
+              :pagination="{
+                current: cluster.nodesPagination?.page,
+                pageSize: cluster.nodesPagination?.pageSize,
+                total: cluster.nodesPagination?.total,
+                showSizeChanger: true,
+                showTotal: (total: number) => `共 ${total} 条`,
+                pageSizeOptions: ['10', '20', '50', '100'],
+                showQuickJumper: true
+              }"
+              :row-selection="{ selectedRowKeys: cluster.selectedNode ? [cluster.selectedNode.id] : [], onChange: (_keys: any, rows: any) => selectNode(cluster, rows[0]) }"
               :loading="cluster.nodesLoading"
+              :showSorterTooltip="false"
               size="small"
               row-key="id"
               class="node-table"
+              @change="(pag: any, _filters: any, sorter: any) => handleNodeTableChange(cluster, pag, sorter)"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'status'">
@@ -356,17 +443,17 @@ const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
 
 const nodeColumns = [
-  { title: 'IP', dataIndex: 'ip', key: 'ip' },
-  { title: '服务端口', dataIndex: 'service_port', key: 'service_port' },
-  { title: '管理端口', dataIndex: 'management_port', key: 'management_port' },
-  { title: '状态', key: 'status' },
+  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
+  { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
+  { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
+  { title: '状态', key: 'status', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
 
 const upstreamColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
-  { title: '描述', dataIndex: 'description', key: 'description' },
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true },
+  { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
 
@@ -378,12 +465,12 @@ const targetColumns = [
 ]
 
 const allRouteColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: 'URI', dataIndex: 'uri', key: 'uri' },
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
+  { title: 'URI', dataIndex: 'uri', key: 'uri', sorter: true },
   { title: '方法', dataIndex: 'methods', key: 'methods' },
   { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id' },
-  { title: '优先级', dataIndex: 'priority', key: 'priority' },
-  { title: '状态', key: 'status' },
+  { title: '优先级', dataIndex: 'priority', key: 'priority', sorter: true },
+  { title: '状态', key: 'status', sorter: true },
   { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled' },
   { title: '描述', dataIndex: 'description', key: 'description' },
   { title: '操作', key: 'actions', width: 340 }
@@ -497,10 +584,25 @@ const loadClusters = async () => {
       activeTab: 'nodes',
       nodes: [],
       nodesLoading: false,
+      nodesPagination: { total: 0, page: 1, pageSize: 20 },
+      nodesSearch: '',
+      nodesSearchField: '',
+      nodesSortBy: '',
+      nodesSortOrder: 'asc' as 'asc' | 'desc',
       upstreams: null,
       upstreamsLoading: false,
+      upstreamsPagination: { total: 0, page: 1, pageSize: 20 },
+      upstreamsSearch: '',
+      upstreamsSearchField: '',
+      upstreamsSortBy: '',
+      upstreamsSortOrder: 'asc' as 'asc' | 'desc',
       routes: null,
       routesLoading: false,
+      routesPagination: { total: 0, page: 1, pageSize: 20 },
+      routesSearch: '',
+      routesSearchField: '',
+      routesSortBy: '',
+      routesSortOrder: 'asc' as 'asc' | 'desc',
       selectedNode: null,
       selectedUpstream: null,
       selectedRoute: null
@@ -554,30 +656,64 @@ const handleRouteAction = (cluster: Cluster, record: Route, action: string) => {
 }
 
 const loadUpstreams = async (cluster: Cluster) => {
-  if (cluster.upstreams === null || cluster.upstreams.length === 0) {
-    cluster.upstreamsLoading = true
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/upstreams`)
-      cluster.upstreams = res.data.items
-    } catch (error) {
-      message.error('加载上游列表失败')
-    } finally {
-      cluster.upstreamsLoading = false
+  cluster.upstreamsLoading = true
+  try {
+    const params: Record<string, any> = {
+      page: cluster.upstreamsPagination?.page || 1,
+      page_size: cluster.upstreamsPagination?.pageSize || 20
     }
+    if (cluster.upstreamsSearch) {
+      params.search = cluster.upstreamsSearch
+      if (cluster.upstreamsSearchField) {
+        params.search_field = cluster.upstreamsSearchField
+      }
+    }
+    if (cluster.upstreamsSortBy) {
+      params.sort_by = cluster.upstreamsSortBy
+      params.sort_order = cluster.upstreamsSortOrder
+    }
+    const res = await api.get(`/clusters/${cluster.id}/upstreams`, { params })
+    cluster.upstreams = res.data.items
+    cluster.upstreamsPagination = {
+      total: res.data.total,
+      page: res.data.page,
+      pageSize: res.data.page_size
+    }
+  } catch (error) {
+    message.error('加载上游列表失败')
+  } finally {
+    cluster.upstreamsLoading = false
   }
 }
 
 const loadRoutes = async (cluster: Cluster) => {
-  if (cluster.routes === null || cluster.routes.length === 0) {
-    cluster.routesLoading = true
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/routes`)
-      cluster.routes = res.data.items
-    } catch (error) {
-      message.error('加载路由列表失败')
-    } finally {
-      cluster.routesLoading = false
+  cluster.routesLoading = true
+  try {
+    const params: Record<string, any> = {
+      page: cluster.routesPagination?.page || 1,
+      page_size: cluster.routesPagination?.pageSize || 20
     }
+    if (cluster.routesSearch) {
+      params.search = cluster.routesSearch
+      if (cluster.routesSearchField) {
+        params.search_field = cluster.routesSearchField
+      }
+    }
+    if (cluster.routesSortBy) {
+      params.sort_by = cluster.routesSortBy
+      params.sort_order = cluster.routesSortOrder
+    }
+    const res = await api.get(`/clusters/${cluster.id}/routes`, { params })
+    cluster.routes = res.data.items
+    cluster.routesPagination = {
+      total: res.data.total,
+      page: res.data.page,
+      pageSize: res.data.page_size
+    }
+  } catch (error) {
+    message.error('加载路由列表失败')
+  } finally {
+    cluster.routesLoading = false
   }
 }
 
@@ -591,17 +727,99 @@ const handleTabClick = async (cluster: Cluster, key: string) => {
   }
 }
 
-const loadNodes = async (cluster: Cluster) => {
-  if (!cluster.nodes || cluster.nodes.length === 0) {
-    cluster.nodesLoading = true
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/nodes`)
-      cluster.nodes = res.data.items
-    } catch (error) {
-      message.error('加载节点列表失败')
-    } finally {
-      cluster.nodesLoading = false
+const handleRouteTableChange = (cluster: Cluster, pag: any, sorter: any) => {
+  if (cluster.routesPagination) {
+    cluster.routesPagination.page = pag.current
+    cluster.routesPagination.pageSize = pag.pageSize
+  }
+  if (sorter && sorter.field) {
+    const fieldMap: Record<string, string> = {
+      name: 'name',
+      uri: 'uri',
+      priority: 'priority',
+      status: 'status',
+      created_at: 'created_at'
     }
+    cluster.routesSortBy = fieldMap[sorter.field] || sorter.field
+    cluster.routesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+  } else {
+    cluster.routesSortBy = ''
+    cluster.routesSortOrder = 'asc'
+  }
+  loadRoutes(cluster)
+}
+
+const handleUpstreamTableChange = (cluster: Cluster, pag: any, sorter: any) => {
+  if (cluster.upstreamsPagination) {
+    cluster.upstreamsPagination.page = pag.current
+    cluster.upstreamsPagination.pageSize = pag.pageSize
+  }
+  if (sorter && sorter.field) {
+    const fieldMap: Record<string, string> = {
+      name: 'name',
+      load_balance: 'load_balance',
+      description: 'description',
+      created_at: 'created_at'
+    }
+    cluster.upstreamsSortBy = fieldMap[sorter.field] || sorter.field
+    cluster.upstreamsSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+  } else {
+    cluster.upstreamsSortBy = ''
+    cluster.upstreamsSortOrder = 'asc'
+  }
+  loadUpstreams(cluster)
+}
+
+const handleNodeTableChange = (cluster: Cluster, pag: any, sorter: any) => {
+  if (cluster.nodesPagination) {
+    cluster.nodesPagination.page = pag.current
+    cluster.nodesPagination.pageSize = pag.pageSize
+  }
+  if (sorter && sorter.field) {
+    const fieldMap: Record<string, string> = {
+      ip: 'ip',
+      service_port: 'service_port',
+      management_port: 'management_port',
+      status: 'status',
+      created_at: 'created_at'
+    }
+    cluster.nodesSortBy = fieldMap[sorter.field] || sorter.field
+    cluster.nodesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+  } else {
+    cluster.nodesSortBy = ''
+    cluster.nodesSortOrder = 'asc'
+  }
+  loadNodes(cluster)
+}
+
+const loadNodes = async (cluster: Cluster) => {
+  cluster.nodesLoading = true
+  try {
+    const params: Record<string, any> = {
+      page: cluster.nodesPagination?.page || 1,
+      page_size: cluster.nodesPagination?.pageSize || 20
+    }
+    if (cluster.nodesSearch) {
+      params.search = cluster.nodesSearch
+      if (cluster.nodesSearchField) {
+        params.search_field = cluster.nodesSearchField
+      }
+    }
+    if (cluster.nodesSortBy) {
+      params.sort_by = cluster.nodesSortBy
+      params.sort_order = cluster.nodesSortOrder
+    }
+    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params })
+    cluster.nodes = res.data.items
+    cluster.nodesPagination = {
+      total: res.data.total,
+      page: res.data.page,
+      pageSize: res.data.page_size
+    }
+  } catch (error) {
+    message.error('加载节点列表失败')
+  } finally {
+    cluster.nodesLoading = false
   }
 }
 

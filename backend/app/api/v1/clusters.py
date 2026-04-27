@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from typing import Optional
 import json
 
@@ -194,9 +194,49 @@ async def sync_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
     return {"status": "ok", "message": "同步成功"}
 
 
+UPSTREAM_ALLOWED_SORT_FIELDS = {"name", "load_balance", "description", "created_at"}
+UPSTREAM_ALLOWED_SEARCH_FIELDS = {"name", "description"}
+
+
 @router.get("/{cluster_id}/upstreams", response_model=dict)
-async def list_upstreams(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def list_upstreams(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    search: Optional[str] = None,
+    search_field: Optional[str] = None
+):
     query = select(Upstream).where(Upstream.cluster_id == cluster_id)
+
+    if search:
+        search_pattern = f"%{search}%"
+        if search_field and search_field in UPSTREAM_ALLOWED_SEARCH_FIELDS:
+            search_col = getattr(Upstream, search_field)
+            query = query.where(search_col.ilike(search_pattern))
+        else:
+            conditions = [
+                getattr(Upstream, field).ilike(search_pattern)
+                for field in UPSTREAM_ALLOWED_SEARCH_FIELDS
+                if hasattr(Upstream, field)
+            ]
+            query = query.where(or_(*conditions))
+
+    if sort_by and sort_by in UPSTREAM_ALLOWED_SORT_FIELDS:
+        sort_column = getattr(Upstream, sort_by)
+        if sort_order == "desc":
+            sort_column = sort_column.desc()
+        query = query.order_by(sort_column)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+
     result = await db.execute(query)
     upstreams = result.scalars().all()
 
@@ -208,7 +248,7 @@ async def list_upstreams(cluster_id: int, db: AsyncSession = Depends(get_db)):
         response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
         items.append(response)
 
-    return {"total": len(upstreams), "items": items}
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
 @router.post("/{cluster_id}/upstreams", response_model=UpstreamWithTargets, status_code=status.HTTP_201_CREATED)
@@ -293,16 +333,56 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
     return {"message": "上游服务已删除"}
 
 
-@router.get("/{cluster_id}/nodes", response_model=NodeListResponse)
-async def list_nodes(cluster_id: int, db: AsyncSession = Depends(get_db)):
+NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}
+NODE_ALLOWED_SEARCH_FIELDS = {"name", "ip"}
+
+
+@router.get("/{cluster_id}/nodes", response_model=dict)
+async def list_nodes(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    search: Optional[str] = None,
+    search_field: Optional[str] = None
+):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
 
     query = select(Node).where(Node.cluster_id == cluster_id)
+
+    if search:
+        search_pattern = f"%{search}%"
+        if search_field and search_field in NODE_ALLOWED_SEARCH_FIELDS:
+            search_col = getattr(Node, search_field)
+            query = query.where(search_col.ilike(search_pattern))
+        else:
+            conditions = [
+                getattr(Node, field).ilike(search_pattern)
+                for field in NODE_ALLOWED_SEARCH_FIELDS
+                if hasattr(Node, field)
+            ]
+            query = query.where(or_(*conditions))
+
+    if sort_by and sort_by in NODE_ALLOWED_SORT_FIELDS:
+        sort_column = getattr(Node, sort_by)
+        if sort_order == "desc":
+            sort_column = sort_column.desc()
+        query = query.order_by(sort_column)
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+
     result = await db.execute(query)
     nodes = result.scalars().all()
-    return NodeListResponse(total=len(nodes), items=[NodeResponse.model_validate(n) for n in nodes])
+    return {"total": total, "page": page, "page_size": page_size, "items": [NodeResponse.model_validate(n) for n in nodes]}
 
 
 @router.post("/{cluster_id}/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)

@@ -67,6 +67,8 @@ class RouteResponse(RouteBase):
 
 class RouteListResponse(BaseModel):
     total: int
+    page: int = 1
+    page_size: int = 20
     items: List[RouteResponse]
 
 

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from typing import List
+from sqlalchemy import select, func, or_, and_
+from typing import List, Optional
 import json
 
 from app.core.database import get_db
@@ -12,34 +12,86 @@ from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
+# Allowed sort fields
+ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
+# Allowed search fields
+ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
+
+
+def route_to_response(r: Route) -> RouteResponse:
+    """Convert Route model to RouteResponse"""
+    route_dict = {
+        "id": r.id,
+        "cluster_id": r.cluster_id,
+        "name": r.name,
+        "uri": r.uri,
+        "methods": r.methods,
+        "priority": r.priority,
+        "status": r.status,
+        "description": r.description,
+        "upstream_id": r.upstream_id,
+        "hosts": r.hosts,
+        "remote_addrs": r.remote_addrs,
+        "vars": json.loads(r.vars) if r.vars else None,
+        "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
+        "created_at": r.created_at.isoformat() if r.created_at else None
+    }
+    return RouteResponse.model_validate(route_dict)
+
 
 @router.get("", response_model=RouteListResponse)
-async def list_routes(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def list_routes(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    sort_by: Optional[str] = Query(None, description=f"Sort field. Allowed: {', '.join(ALLOWED_SORT_FIELDS)}"),
+    sort_order: Optional[str] = Query("asc", pattern="^(asc|desc)$", description="Sort order: asc or desc"),
+    search: Optional[str] = Query(None, description="Search keyword"),
+    search_field: Optional[str] = Query(None, description=f"Search field. Allowed: {', '.join(ALLOWED_SEARCH_FIELDS)} or omit for all")
+):
+    # Base query
     query = select(Route).where(Route.cluster_id == cluster_id)
+
+    # Search filter
+    if search:
+        search_pattern = f"%{search}%"
+        if search_field and search_field in ALLOWED_SEARCH_FIELDS:
+            # Column-specific search
+            search_col = getattr(Route, search_field)
+            query = query.where(search_col.ilike(search_pattern))
+        else:
+            # Global search across all text fields
+            conditions = [
+                getattr(Route, field).ilike(search_pattern)
+                for field in ALLOWED_SEARCH_FIELDS
+                if hasattr(Route, field)
+            ]
+            query = query.where(or_(*conditions))
+
+    # Sorting
+    if sort_by and sort_by in ALLOWED_SORT_FIELDS:
+        sort_column = getattr(Route, sort_by)
+        if sort_order == "desc":
+            sort_column = sort_column.desc()
+        query = query.order_by(sort_column)
+
+    # Get total count before pagination
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Pagination
+    offset = (page - 1) * page_size
+    query = query.offset(offset).limit(page_size)
+
+    # Execute query
     result = await db.execute(query)
     routes = result.scalars().all()
 
-    items = []
-    for r in routes:
-        route_dict = {
-            "id": r.id,
-            "cluster_id": r.cluster_id,
-            "name": r.name,
-            "uri": r.uri,
-            "methods": r.methods,
-            "priority": r.priority,
-            "status": r.status,
-            "description": r.description,
-            "upstream_id": r.upstream_id,
-            "hosts": r.hosts,
-            "remote_addrs": r.remote_addrs,
-            "vars": json.loads(r.vars) if r.vars else None,
-            "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
-            "created_at": r.created_at.isoformat() if r.created_at else None
-        }
-        items.append(RouteResponse.model_validate(route_dict))
+    items = [route_to_response(r) for r in routes]
 
-    return RouteListResponse(total=len(items), items=items)
+    return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
 
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
