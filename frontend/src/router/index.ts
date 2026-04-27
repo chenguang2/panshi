@@ -27,11 +27,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ClusterList.vue')
       },
       {
-        path: 'clusters/:id',
-        name: 'ClusterDetail',
-        component: () => import('@/views/ClusterDetail.vue')
-      },
-      {
         path: 'dictionaries',
         name: 'Dictionaries',
         component: () => import('@/views/DictTypeList.vue')
