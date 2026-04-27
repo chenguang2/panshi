@@ -340,10 +340,8 @@
         </a-form-item>
         <a-form-item label="负载均衡" name="load_balance">
           <a-select v-model:value="upstreamForm.load_balance">
-            <a-select-option value="roundrobin">轮询</a-select-option>
-            <a-select-option value="least_conn">最少连接</a-select-option>
-            <a-select-option value="ip_hash">IP哈希</a-select-option>
             <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
+            <a-select-option value="consistent_hash">一致性哈希</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="描述" name="description">
@@ -407,8 +405,18 @@
                 <a-select-option :value="1">正常</a-select-option>
                 <a-select-option :value="0">禁用</a-select-option>
               </a-select>
-            </a-form-item>
-            <a-form-item label="描述" name="description">
+</a-form-item>
+        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location">
+          <a-select v-model:value="upstreamForm.hash_location">
+            <a-select-option value="header">header</a-select-option>
+            <a-select-option value="cookie">cookie</a-select-option>
+            <a-select-option value="vars">vars</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="Key" name="hash_key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
+          <a-input v-model:value="upstreamForm.hash_key" placeholder="请输入哈希 Key" />
+        </a-form-item>
+        <a-form-item label="描述" name="description">
               <a-textarea v-model:value="routeForm.description" :rows="2" />
             </a-form-item>
             <a-form-item label="高级匹配" name="advancedMatch">
@@ -460,7 +468,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
@@ -633,9 +641,19 @@ const nodeForm = reactive({
 
 const upstreamForm = reactive({
   name: '',
-  load_balance: 'roundrobin',
+  load_balance: 'weighted_roundrobin',
   description: '',
-  targets: [] as { key: number, ip: string, port: number, weight: number }[]
+  targets: [] as { key: number, ip: string, port: number, weight: number }[],
+  hash_location: 'vars',
+  hash_key: ''
+})
+
+// Reset hash_location when switching away from consistent_hash
+watch(() => upstreamForm.load_balance, (newVal) => {
+  if (newVal !== 'consistent_hash') {
+    upstreamForm.hash_location = 'vars'
+    upstreamForm.hash_key = ''
+  }
 })
 
 let upstreamTargetKey = 0
@@ -1198,9 +1216,11 @@ const showAddUpstreamModal = async (cluster: Cluster) => {
   editingUpstream.value = null
   currentClusterId.value = cluster.id
   upstreamForm.name = ''
-  upstreamForm.load_balance = 'roundrobin'
+  upstreamForm.load_balance = 'weighted_roundrobin'
   upstreamForm.description = ''
   upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
+  upstreamForm.hash_location = 'vars'
+  upstreamForm.hash_key = ''
   upstreamModalVisible.value = true
 }
 
@@ -1218,6 +1238,8 @@ const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   upstreamForm.name = upstream.name
   upstreamForm.load_balance = upstream.load_balance
   upstreamForm.description = upstream.description || ''
+  upstreamForm.hash_location = (upstream as any).hash_location || 'vars'
+  upstreamForm.hash_key = (upstream as any).hash_key || ''
   if (upstream.targets && upstream.targets.length > 0) {
     upstreamForm.targets = upstream.targets.map((t) => {
       const [ip, port] = t.target.split(':')
@@ -1252,7 +1274,11 @@ const handleUpstreamSubmit = async () => {
       targets: upstreamForm.targets.map(t => ({
         target: `${t.ip}:${t.port}`,
         weight: t.weight
-      }))
+      })),
+      ...(upstreamForm.load_balance === 'consistent_hash' && {
+        hash_location: upstreamForm.hash_location,
+        hash_key: upstreamForm.hash_key
+      })
     }
     if (editingUpstream.value) {
       await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
