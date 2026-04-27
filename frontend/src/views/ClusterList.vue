@@ -81,8 +81,15 @@
                 <template #title>选择显示列</template>
                 <template #content>
                   <a-checkbox-group v-model:value="routeColumnsSelected">
-                    <div v-for="col in allRouteColumns.filter(c => c.key !== 'actions')" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
+                    <div v-for="col in allRouteColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
                       <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </a-checkbox-group>
+                  <a-divider style="margin: 12px 0;" />
+                  <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
+                  <a-checkbox-group v-model:value="routeActionsSelected">
+                    <div v-for="btn in allActionButtons" :key="btn.key" style="min-width: 120px; margin-bottom: 8px;">
+                      <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
                     </div>
                   </a-checkbox-group>
                 </template>
@@ -94,7 +101,7 @@
               :data-source="cluster.routes || []"
               :pagination="false"
               :loading="cluster.routesLoading"
-              :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (keys: any, rows: any) => selectRoute(cluster, rows[0]) }"
+              :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (keys: any, rows: any) => selectRoute(cluster, rows[rows.length - 1]) }"
               size="small"
               row-key="id"
               class="node-table"
@@ -112,12 +119,12 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '正常' : '禁用'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <a-button size="small" @click="publishRouteByRecord(cluster, record)">发布</a-button>
-                  <a-button size="small" @click="openRouteVersionManagementByRecord(cluster, record)">版本管理</a-button>
-                  <a-divider type="vertical" />
-                  <a-button size="small" @click="copyRouteByRecord(cluster, record)">复制</a-button>
-                  <a-button size="small" @click="editRouteByRecord(cluster, record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteRouteByRecord(cluster, record)">删除</a-button>
+                  <template v-for="btnKey in routeActionsSelected" :key="btnKey">
+                    <a-divider type="vertical" v-if="btnKey === 'publish'" />
+                    <a-button size="small" @click="handleRouteAction(cluster, record, btnKey)">
+                      {{ getActionButtonTitle(btnKey) }}
+                    </a-button>
+                  </template>
                 </template>
               </template>
             </a-table>
@@ -383,7 +390,16 @@ const allRouteColumns = [
 ]
 
 const routeColumnPopoverVisible = ref(false)
-const routeColumnsSelected = ref(['name', 'uri', 'methods', 'upstream_id', 'priority', 'status'])
+const routeColumnsSelected = ref(['name', 'uri', 'priority', 'actions'])
+
+const allActionButtons = [
+  { key: 'publish', title: '发布' },
+  { key: 'version', title: '版本管理' },
+  { key: 'copy', title: '复制' },
+  { key: 'edit', title: '编辑' },
+  { key: 'delete', title: '删除' }
+]
+const routeActionsSelected = ref(['copy', 'edit', 'delete', 'publish', 'version'])
 
 const visibleRouteColumns = computed(() => {
   const selected = new Set(routeColumnsSelected.value)
@@ -510,6 +526,31 @@ const getUpstreamName = (cluster: Cluster, upstreamId: number | null) => {
   if (!upstreamId || !cluster.upstreams) return '-'
   const upstream = cluster.upstreams.find((u: Upstream) => u.id === upstreamId)
   return upstream?.name || '-'
+}
+
+const getActionButtonTitle = (key: string) => {
+  const btn = allActionButtons.find(b => b.key === key)
+  return btn?.title || key
+}
+
+const handleRouteAction = (cluster: Cluster, record: Route, action: string) => {
+  switch (action) {
+    case 'publish':
+      publishRouteByRecord(cluster, record)
+      break
+    case 'version':
+      openRouteVersionManagementByRecord(cluster, record)
+      break
+    case 'copy':
+      copyRouteByRecord(cluster, record)
+      break
+    case 'edit':
+      editRouteByRecord(cluster, record)
+      break
+    case 'delete':
+      deleteRouteByRecord(cluster, record)
+      break
+  }
 }
 
 const loadUpstreams = async (cluster: Cluster) => {
@@ -718,10 +759,18 @@ const deleteNode = (cluster: Cluster) => {
         cluster.node_count = cluster.nodes.length
         cluster.selectedNode = null
         loadClusters()
-      } catch (error: any) {
-        const detail = error.response?.data?.detail
-        message.error(typeof detail === 'string' ? detail : '删除节点失败')
-      }
+} catch (error: any) {
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string') {
+      message.error(detail)
+    } else if (Array.isArray(detail)) {
+      message.error(detail.map((d: any) => d.msg || JSON.stringify(d)).join('; '))
+    } else if (error.response?.data?.message) {
+      message.error(error.response.data.message)
+    } else {
+      message.error('操作失败')
+    }
+  }
     }
   })
 }
@@ -1047,9 +1096,43 @@ const handleRouteSubmit = async () => {
       c.route_count = c.routes.length
     }
   } catch (error: any) {
+    // 检查是否是表单验证错误（validate 抛出的是 Error 对象，没有 response 属性）
+    if (error.errorFields) {
+      // 表单验证错误，Ant Design Form 会提供 errorFields
+      const firstError = error.errorFields?.[0]
+      if (firstError?.name) {
+        const fieldName = getFieldName(firstError.name[0])
+        message.error(`请填写必填字段: ${fieldName}`)
+      } else {
+        message.error('请检查表单填写是否完整')
+      }
+      return
+    }
+    // API 错误
     const detail = error.response?.data?.detail
-    message.error(typeof detail === 'string' ? detail : '操作失败')
+    if (typeof detail === 'string') {
+      message.error(detail)
+    } else if (Array.isArray(detail)) {
+      message.error(detail.map((d: any) => d.msg || JSON.stringify(d)).join('; '))
+    } else if (error.response?.data?.message) {
+      message.error(error.response.data.message)
+    } else {
+      message.error('操作失败')
+    }
   }
+}
+
+// 获取字段中文名称
+const getFieldName = (name: string): string => {
+  const nameMap: Record<string, string> = {
+    name: '名称',
+    uri: 'URI',
+    methods: '请求方法',
+    upstream_id: '上游',
+    priority: '优先级',
+    status: '状态'
+  }
+  return nameMap[name] || name
 }
 
 const deleteRoute = (cluster: Cluster) => {
