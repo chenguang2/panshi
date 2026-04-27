@@ -2,8 +2,10 @@
 
 ## 项目架构
 
-**产品名**：磐石Admin（不要写成"盘石"）
-**端口**：后端 9000，前端 9100（docker-compose.yml 中后端是 8000）
+- **产品名**：磐石Admin（不要写成"盘石"）
+- **端口**：后端 9000（dev），前端 9100（docker-compose 中后端 8000）
+- **后端入口**：`app.main:app`（不是根目录的 `main:app`）
+- **数据库**：开发用 SQLite（`backend/data/panshi.db`），生产用 PostgreSQL
 
 ## 启动命令
 
@@ -15,15 +17,14 @@ cd backend && mkdir -p data && uv run uvicorn app.main:app --reload --port 9000
 cd frontend && npm install && npm run dev
 
 # 测试
-cd backend && uv run pytest                    # 后端单元测试
-cd frontend && npx playwright test             # 前端 E2E 测试
+cd backend && uv run pytest                              # 后端单元测试
+cd frontend && npx playwright test                        # 前端 E2E 测试
 ```
 
 ## 关键配置
 
 - **前端代理**：`vite.config.ts` 将 `/api` 请求转发到 `localhost:9000`
-- **Playwright**：baseURL 是 `http://localhost:9100`，自动启动前端 dev server
-- **数据库**：开发用 SQLite（`backend/data/panshi.db`），生产用 PostgreSQL
+- **Playwright**：baseURL `http://localhost:9100`，自动启动前端 dev server
 - **环境变量**：使用 `.env.development` 和 `.env.production`，不要提交真实密钥
 
 ## 代码约定
@@ -40,12 +41,12 @@ cd frontend && npx playwright test             # 前端 E2E 测试
 
 ## Git 注意事项
 
-- `.gitignore` 排除：`.venv/`、`node_modules/`、`*.db`、`.env*`（除 `.env.example`）
-- `uv.lock` 在 `.gitignore` 中，不应提交
+- **不要提交**：`uv.lock` 应该被提交（用于可重现构建），`.venv/`、`node_modules/`、`*.db`、`.env*`（除 `.env.example`）
 - `package-lock.json` 未被忽略，可能因平台不同
 
 ## 快速检查清单
 
 1. 修改产品名 → 确认是"磐石"不是"盘石"
 2. 修改 UI → 确认 input 有 `id="username"` 和 `id="password"`
-3. 新增依赖 → 更新 `pyproject.toml`（后端）或 `package.json`（前端）
+3. 新增后端依赖 → 更新 `pyproject.toml`
+4. 新增前端依赖 → 更新 `frontend/package.json`
