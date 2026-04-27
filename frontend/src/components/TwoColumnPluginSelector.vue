@@ -37,16 +37,21 @@
               <div
                 v-for="plugin in group.plugins"
                 :key="plugin.name"
-                class="plugin-item"
-                :class="{ disabled: isPluginSelected(plugin.name) }"
-                @click="handleAddPlugin(plugin)"
               >
-                <div class="plugin-item-info">
-                  <span class="plugin-item-name">{{ plugin.name }}</span>
-                  <span class="plugin-item-desc">{{ plugin.description }}</span>
-                </div>
-                <PlusOutlined v-if="!isPluginSelected(plugin.name)" class="add-icon" />
-                <CheckOutlined v-else class="check-icon" />
+                <a-tooltip :title="plugin.description" placement="top" :auto-adjust-overflow="true">
+                  <div
+                    class="plugin-item"
+                    :class="{ disabled: isPluginSelected(plugin.name) }"
+                    @click="handleAddPlugin(plugin)"
+                  >
+                    <div class="plugin-item-info">
+                      <span class="plugin-item-name">{{ plugin.name }}</span>
+                      <span class="plugin-item-desc">{{ plugin.description }}</span>
+                    </div>
+                    <PlusOutlined v-if="!isPluginSelected(plugin.name)" class="add-icon" />
+                    <CheckOutlined v-else class="check-icon" />
+                  </div>
+                </a-tooltip>
               </div>
             </div>
           </div>
@@ -74,14 +79,15 @@
             v-for="(plugin, index) in selectedPlugins"
             :key="plugin.plugin_name + index"
             class="selected-item"
-            :class="{ dragging: draggedIndex === index }"
+            :class="{ dragging: draggedIndex === index, removing: removingIndex === index }"
             draggable="true"
+            @click="handleRemoveWithAnimation(index)"
             @dragstart="handleDragStart(index)"
             @dragover.prevent="handleDragOver(index)"
             @drop="handleDrop(index)"
             @dragend="handleDragEnd"
           >
-            <div class="drag-handle">
+            <div class="drag-handle" @click.stop>
               <DragOutlined />
             </div>
 
@@ -120,9 +126,10 @@ import {
   DragOutlined,
   EditOutlined,
   DeleteOutlined,
-  InboxOutlined
+  InboxOutlined,
+  QuestionCircleOutlined
 } from '@ant-design/icons-vue'
-import { Empty } from 'ant-design-vue'
+import { Empty, Tooltip as ATooltip } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
 
 interface PluginGroup {
@@ -143,6 +150,7 @@ const emit = defineEmits<{
 
 const searchText = ref('')
 const draggedIndex = ref<number | null>(null)
+const removingIndex = ref<number | null>(null)
 
 // 插件分类配置
 const categoryConfig: Record<string, { label: string; order: number }> = {
@@ -243,6 +251,19 @@ const handleAddPlugin = (plugin: Plugin) => {
 
 const handleRemove = (index: number) => {
   selectedPlugins.value = props.modelValue.filter((_, i) => i !== index)
+}
+
+const handleRemoveWithAnimation = (index: number) => {
+  // Ignore if dragging or already removing
+  if (draggedIndex.value !== null || removingIndex.value !== null) return
+
+  removingIndex.value = index
+  setTimeout(() => {
+    const newList = props.modelValue.filter((_, i) => i !== index)
+    selectedPlugins.value = newList
+    emit('update:modelValue', newList)
+    removingIndex.value = null
+  }, 300)
 }
 
 const handleSearch = () => {
@@ -504,8 +525,18 @@ const getPluginCategory = (name: string): string => {
 }
 
 .selected-item:hover {
-  border-color: #1890ff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: #ff4d4f;
+  box-shadow: 0 2px 8px rgba(255, 77, 79, 0.15);
+}
+
+.selected-item.removing {
+  animation: remove-flash 300ms ease-out forwards;
+}
+
+@keyframes remove-flash {
+  0% { background-color: #fff; }
+  50% { background-color: #fff1f0; border-color: #ff4d4f; }
+  100% { background-color: transparent; border-color: transparent; }
 }
 
 .selected-item.dragging {

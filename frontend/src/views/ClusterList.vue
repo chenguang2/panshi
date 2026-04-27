@@ -344,6 +344,16 @@
             <a-select-option value="consistent_hash">一致性哈希</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location">
+          <a-select v-model:value="upstreamForm.hash_location">
+            <a-select-option value="header">header</a-select-option>
+            <a-select-option value="cookie">cookie</a-select-option>
+            <a-select-option value="vars">vars</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="Key" name="hash_key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
+          <a-input v-model:value="upstreamForm.hash_key" placeholder="请输入哈希 Key" />
+        </a-form-item>
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="upstreamForm.description" :rows="2" />
         </a-form-item>
@@ -406,16 +416,6 @@
                 <a-select-option :value="0">禁用</a-select-option>
               </a-select>
 </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location">
-          <a-select v-model:value="upstreamForm.hash_location">
-            <a-select-option value="header">header</a-select-option>
-            <a-select-option value="cookie">cookie</a-select-option>
-            <a-select-option value="vars">vars</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="Key" name="hash_key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-          <a-input v-model:value="upstreamForm.hash_key" placeholder="请输入哈希 Key" />
-        </a-form-item>
         <a-form-item label="描述" name="description">
               <a-textarea v-model:value="routeForm.description" :rows="2" />
             </a-form-item>
@@ -441,21 +441,13 @@
         </a-tab-pane>
 
         <a-tab-pane key="plugins" tab="插件管理">
-          <DraggablePluginGrid
+          <PluginSelector
             v-model="routeForm.plugins"
             :plugins="availablePlugins"
-            @edit="handleEditPlugin"
           />
         </a-tab-pane>
       </a-tabs>
     </a-modal>
-
-    <PluginEditorDrawer
-      v-model:open="pluginDrawerVisible"
-      :plugin="editingPlugin"
-      :plugin-info="editingPluginInfo"
-      @save="handleSavePlugin"
-    />
 
     <VersionManagementModal
       v-model:open="versionModalVisible"
@@ -475,8 +467,7 @@ import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, Plus
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import DraggablePluginGrid from '@/components/DraggablePluginGrid.vue'
-import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
+import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 
@@ -499,9 +490,6 @@ const currentUpstreamId = ref<number | null>(null)
 const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const nameError = ref('')
-const pluginDrawerVisible = ref(false)
-const editingPlugin = ref<RoutePlugin | null>(null)
-const editingPluginIndex = ref<number>(-1)
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
@@ -676,28 +664,6 @@ const routeForm = reactive({
 const routeFormRef = ref()
 
 const availablePlugins = ref<Plugin[]>([])
-
-const editingPluginInfo = computed(() => {
-  if (!editingPlugin.value) return null
-  return availablePlugins.value.find(p => p.name === editingPlugin.value?.plugin_name) || null
-})
-
-const handleEditPlugin = (plugin: RoutePlugin, index: number) => {
-  editingPlugin.value = plugin
-  editingPluginIndex.value = index
-  pluginDrawerVisible.value = true
-}
-
-const handleSavePlugin = (config: string) => {
-  if (editingPlugin.value && editingPluginIndex.value >= 0) {
-    routeForm.plugins[editingPluginIndex.value] = {
-      plugin_name: editingPlugin.value.plugin_name,
-      config
-    }
-  }
-  editingPlugin.value = null
-  editingPluginIndex.value = -1
-}
 
 const loadClusters = async () => {
   loading.value = true

@@ -1,91 +1,102 @@
 <template>
   <div class="plugin-selector">
-    <a-input v-model:value="searchText" placeholder="搜索插件..." allow-clear class="plugin-search" />
-    <a-tabs v-model:activeKey="viewMode" class="plugin-view-tabs">
-      <a-tab-pane key="form" tab="表单" />
-      <a-tab-pane key="json" tab="JSON" />
-    </a-tabs>
+    <!-- 搜索 -->
+    <a-input-search
+      v-model:value="searchText"
+      placeholder="搜索插件..."
+      allow-clear
+      class="plugin-search"
+    />
 
-    <div class="plugin-panels" v-if="viewMode === 'form'">
-      <div class="plugin-list-panel">
-        <div class="panel-title">可用插件</div>
-        <div class="plugin-list">
+    <div class="two-columns">
+      <!-- 左侧：分类树 + 网格 -->
+      <div class="category-panel">
+        <div
+          v-for="category in filteredCategories"
+          :key="category.key"
+          class="category-group"
+        >
+          <!-- 分类标题 -->
           <div
-            v-for="plugin in filteredPlugins"
-            :key="plugin.name"
-            class="plugin-item"
-            :class="{ disabled: selectedPlugins.some(p => p.name === plugin.name) }"
-            @click="addPlugin(plugin)"
+            class="category-header"
+            @click="toggleCategory(category.key)"
           >
-            <div class="plugin-name">{{ plugin.name }}</div>
-            <div class="plugin-desc">{{ plugin.description }}</div>
+            <DownOutlined v-if="expanded[category.key]" />
+            <RightOutlined v-else />
+            <span class="category-label">{{ category.label }}</span>
+            <span class="category-count">({{ category.plugins.length }})</span>
           </div>
+
+          <!-- 分类下的插件网格 -->
+          <div v-if="expanded[category.key]" class="plugin-grid">
+            <div
+              v-for="plugin in category.plugins"
+              :key="plugin.name"
+            >
+              <a-tooltip :title="plugin.description" placement="top" :auto-adjust-overflow="true">
+                <div
+                  class="plugin-card"
+                  :class="{ selected: isSelected(plugin), disabled: isSelected(plugin) }"
+                  @click="togglePlugin(plugin)"
+                >
+                  <CheckCircleFilled v-if="isSelected(plugin)" class="check-icon" />
+                  <div class="plugin-name">{{ plugin.name }}</div>
+                  <div class="plugin-desc">{{ plugin.description }}</div>
+                </div>
+              </a-tooltip>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="filteredCategories.length === 0" class="empty-hint">
+          未找到匹配的插件
         </div>
       </div>
 
-      <div class="plugin-config-panel">
-        <div class="panel-title">已选插件 ({{ selectedPlugins.length }})</div>
+      <!-- 右侧：已选插件列表 -->
+      <div class="selected-panel">
+        <div class="selected-header">
+          <span>已选插件 ({{ selectedPlugins.length }})</span>
+        </div>
         <div class="selected-list" v-if="selectedPlugins.length > 0">
-          <div v-for="(plugin, index) in selectedPlugins" :key="plugin.name" class="selected-plugin">
-            <div class="selected-header" @click="togglePluginExpand(plugin.name)">
-              <span class="selected-name">{{ plugin.name }}</span>
-              <CloseOutlined @click.stop="removePlugin(plugin.name)" />
+          <div
+            v-for="(plugin, index) in selectedPlugins"
+            :key="plugin.plugin_name + index"
+            class="selected-item"
+            :class="{ removing: removingIndex === index }"
+          >
+            <div class="selected-info">
+              <span class="selected-name">{{ plugin.plugin_name }}</span>
+              <span v-if="hasConfig(plugin)" class="config-badge">已配置</span>
             </div>
-            <div v-if="expandedPlugins[plugin.name]" class="selected-config">
-              <div v-for="(schema, key) in plugin.schema" :key="key" class="config-field">
-                <a-form layout="vertical" size="small">
-                  <a-form-item :label="key">
-                    <a-input
-                      v-if="schema.type === 'string'"
-                      v-model:value="plugin.config[key]"
-                      placeholder="请输入"
-                    />
-                    <a-input-number
-                      v-else-if="schema.type === 'number'"
-                      v-model:value="plugin.config[key]"
-                      style="width: 100%"
-                    />
-                    <a-switch
-                      v-else-if="schema.type === 'boolean'"
-                      v-model:checked="plugin.config[key]"
-                    />
-                    <a-textarea
-                      v-else-if="schema.type === 'array'"
-                      v-model:value="plugin.config[key]"
-                      :rows="2"
-                      placeholder="逗号分隔"
-                    />
-                    <a-input
-                      v-else
-                      v-model:value="plugin.config[key]"
-                      placeholder="请输入"
-                    />
-                  </a-form-item>
-                </a-form>
-              </div>
+            <div class="selected-actions" @click.stop>
+              <EditOutlined @click="handleEdit(plugin, index)" />
+              <DeleteOutlined @click="confirmRemove(plugin.plugin_name, index)" />
             </div>
           </div>
         </div>
-        <div v-else class="empty-hint">点击左侧插件添加到路由</div>
+        <div v-else class="empty-hint">
+          点击左侧插件添加到路由
+        </div>
       </div>
     </div>
 
-    <div class="plugin-json-panel" v-else>
-      <a-textarea
-        v-model:value="jsonValue"
-        :rows="12"
-        placeholder="插件配置 JSON"
-        @blur="syncFromJson"
-      />
-      <div v-if="jsonError" class="json-error">{{ jsonError }}</div>
-    </div>
+    <!-- 配置抽屉 -->
+    <PluginEditorDrawer
+      v-model:open="drawerVisible"
+      :plugin="editingPlugin"
+      :plugin-info="editingPluginInfo"
+      @save="handleSavePlugin"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { CloseOutlined } from '@ant-design/icons-vue'
+import { DownOutlined, RightOutlined, EditOutlined, DeleteOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
+import { Tooltip as ATooltip, Modal } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
+import PluginEditorDrawer from './PluginEditorDrawer.vue'
 
 const props = defineProps<{
   modelValue: RoutePlugin[]
@@ -94,95 +105,213 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [plugins: RoutePlugin[]]
+  'edit': [plugin: RoutePlugin, index: number]
 }>()
 
+// 插件分类定义
+const CATEGORIES = [
+  {
+    key: 'limit',
+    label: '限流',
+    plugins: ['limit-req', 'limit-conn', 'limit-count']
+  },
+  {
+    key: 'auth',
+    label: '认证',
+    plugins: ['key-auth', 'jwt-auth', 'basic-auth']
+  },
+  {
+    key: 'transform',
+    label: '转换',
+    plugins: ['proxy-rewrite', 'cors', 'response-rewrite']
+  }
+]
+
+// 状态
 const searchText = ref('')
-const viewMode = ref<'form' | 'json'>('form')
-const jsonValue = ref('')
-const jsonError = ref('')
-const expandedPlugins = reactive<Record<string, boolean>>({})
-
+const expanded = reactive<Record<string, boolean>>({
+  limit: true,
+  auth: true,
+  transform: true
+})
 const selectedPlugins = ref<(RoutePlugin & { schema: Record<string, any> })[]>([])
+const drawerVisible = ref(false)
+const editingPlugin = ref<RoutePlugin | null>(null)
+const editingPluginIndex = ref(-1)
+const removingIndex = ref<number | null>(null)
 
+// 初始化展开状态
+const initExpanded = () => {
+  CATEGORIES.forEach(cat => {
+    expanded[cat.key] = true
+  })
+}
+initExpanded()
+
+// 监听 props.modelValue 变化
 watch(() => props.modelValue, (newVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
     selectedPlugins.value = newVal.map(p => {
-      const pluginInfo = props.plugins.find(pl => pl.name === p.name)
+      const pluginInfo = props.plugins.find(pl => pl.name === p.plugin_name)
       let config: Record<string, any> = {}
       try {
         config = JSON.parse(p.config || '{}')
       } catch {}
       return {
-        name: p.name,
-        config,
+        plugin_name: p.plugin_name,
+        config: config,
         schema: pluginInfo?.schema || {}
       }
     })
-    jsonValue.value = JSON.stringify(newVal, null, 2)
   }
 }, { immediate: true, deep: true })
 
-const filteredPlugins = computed(() => {
-  if (!searchText.value) return props.plugins
-  const search = searchText.value.toLowerCase()
-  return props.plugins.filter(p =>
-    p.name.toLowerCase().includes(search) ||
-    p.description.toLowerCase().includes(search)
-  )
+// 过滤后的分类
+const filteredCategories = computed(() => {
+  const search = searchText.value.toLowerCase().trim()
+
+  return CATEGORIES.map(category => {
+    let plugins = props.plugins.filter(p => category.plugins.includes(p.name))
+
+    if (search) {
+      plugins = plugins.filter(p =>
+        p.name.toLowerCase().includes(search) ||
+        p.description.toLowerCase().includes(search)
+      )
+    }
+
+    return {
+      ...category,
+      plugins
+    }
+  }).filter(category => category.plugins.length > 0)
 })
 
+// 检查插件是否已选
+const isSelected = (plugin: Plugin) => {
+  return selectedPlugins.value.some(p => p.plugin_name === plugin.name)
+}
+
+// 检查插件是否有配置
+const hasConfig = (plugin: RoutePlugin & { config: Record<string, any> }) => {
+  try {
+    const cfg = typeof plugin.config === 'string' ? JSON.parse(plugin.config) : plugin.config
+    return Object.keys(cfg).length > 0
+  } catch {
+    return false
+  }
+}
+
+// 切换分类展开状态
+const toggleCategory = (key: string) => {
+  expanded[key] = !expanded[key]
+}
+
+// 切换插件选中状态
+const togglePlugin = (plugin: Plugin) => {
+  if (isSelected(plugin)) {
+    // 已选中，弹出确认框
+    Modal.confirm({
+      title: '确认移除',
+      content: `确定要移除插件「${plugin.name}」吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: () => {
+        const index = selectedPlugins.value.findIndex(p => p.plugin_name === plugin.name)
+        if (index !== -1) {
+          removePlugin(index)
+        }
+      }
+    })
+  } else {
+    // 未选中，添加插件
+    addPlugin(plugin)
+  }
+}
+
+// 添加插件
 const addPlugin = (plugin: Plugin) => {
-  if (selectedPlugins.value.some(p => p.name === plugin.name)) return
   const newPlugin: RoutePlugin & { schema: Record<string, any> } = {
-    name: plugin.name,
+    plugin_name: plugin.name,
     config: {},
     schema: plugin.schema
   }
+
   selectedPlugins.value.push(newPlugin)
-  expandedPlugins[plugin.name] = true
   emitUpdate()
-}
 
-const removePlugin = (name: string) => {
-  selectedPlugins.value = selectedPlugins.value.filter(p => p.name !== name)
-  delete expandedPlugins[name]
-  emitUpdate()
-}
-
-const togglePluginExpand = (name: string) => {
-  expandedPlugins[name] = !expandedPlugins[name]
-}
-
-const syncFromJson = () => {
-  try {
-    const parsed = JSON.parse(jsonValue.value)
-    if (Array.isArray(parsed)) {
-      selectedPlugins.value = parsed.map(p => {
-        const pluginInfo = props.plugins.find(pl => pl.name === p.name)
-        let config: Record<string, any> = {}
-        try {
-          config = JSON.parse(p.config || '{}')
-        } catch {}
-        return {
-          name: p.name,
-          config,
-          schema: pluginInfo?.schema || {}
-        }
-      })
-      jsonError.value = ''
-    }
-  } catch (e: any) {
-    jsonError.value = 'JSON 格式错误'
+  // 自动打开编辑抽屉
+  editingPluginIndex.value = selectedPlugins.value.length - 1
+  editingPlugin.value = {
+    plugin_name: newPlugin.plugin_name,
+    config: '{}'
   }
-  emitUpdate()
+  drawerVisible.value = true
 }
 
+// 确认移除插件
+const confirmRemove = (pluginName: string, index: number) => {
+  Modal.confirm({
+    title: '确认移除',
+    content: `确定要移除插件「${pluginName}」吗？`,
+    okText: '确定',
+    cancelText: '取消',
+    onOk: () => {
+      removePlugin(index)
+    }
+  })
+}
+
+// 移除插件（带动画）
+const removePlugin = (index: number) => {
+  if (removingIndex.value !== null) return // 防止重复触发
+
+  removingIndex.value = index
+  setTimeout(() => {
+    const newList = props.modelValue.filter((_, i) => i !== index)
+    selectedPlugins.value = selectedPlugins.value.filter((_, i) => i !== index)
+    emitUpdate()
+    removingIndex.value = null
+  }, 300)
+}
+
+// 编辑插件
+const handleEdit = (plugin: RoutePlugin & { config: Record<string, any>; schema: Record<string, any> }, index: number) => {
+  editingPluginIndex.value = index
+  editingPlugin.value = {
+    plugin_name: plugin.plugin_name,
+    config: typeof plugin.config === 'string' ? plugin.config : JSON.stringify(plugin.config)
+  }
+  drawerVisible.value = true
+}
+
+// 获取插件信息
+const editingPluginInfo = computed(() => {
+  if (!editingPlugin.value) return null
+  return props.plugins.find(p => p.name === editingPlugin.value?.plugin_name) || null
+})
+
+// 保存插件配置
+const handleSavePlugin = (config: string) => {
+  if (editingPluginIndex.value >= 0 && editingPlugin.value) {
+    selectedPlugins.value[editingPluginIndex.value] = {
+      plugin_name: editingPlugin.value.plugin_name,
+      config: config,
+      schema: editingPluginInfo.value?.schema || {}
+    }
+    emitUpdate()
+  }
+  editingPlugin.value = null
+  editingPluginIndex.value = -1
+  drawerVisible.value = false
+}
+
+// 触发更新
 const emitUpdate = () => {
   const plugins: RoutePlugin[] = selectedPlugins.value.map(p => ({
-    name: p.name,
-    config: JSON.stringify(p.config)
+    plugin_name: p.plugin_name,
+    config: typeof p.config === 'string' ? p.config : JSON.stringify(p.config)
   }))
-  jsonValue.value = JSON.stringify(plugins, null, 2)
   emit('update:modelValue', plugins)
 }
 </script>
@@ -190,128 +319,196 @@ const emitUpdate = () => {
 <style scoped>
 .plugin-selector {
   border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 16px;
   background: #fafafa;
 }
 
 .plugin-search {
-  margin-bottom: 8px;
+  margin-bottom: 16px;
 }
 
-.plugin-view-tabs {
-  margin-bottom: 12px;
-}
-
-.plugin-panels {
+.two-columns {
   display: flex;
-  gap: 12px;
-  min-height: 200px;
+  gap: 16px;
+  min-height: 280px;
 }
 
-.plugin-list-panel {
+.category-panel {
+  flex: 1.5;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fff;
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.selected-panel {
   flex: 1;
   border: 1px solid #e8e8e8;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #fff;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-.plugin-config-panel {
-  flex: 1;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
-  background: #fff;
-  overflow: hidden;
+.category-group {
+  border-bottom: 1px solid #f0f0f0;
 }
 
-.panel-title {
-  padding: 8px 12px;
-  background: #f5f5f5;
+.category-group:last-child {
+  border-bottom: none;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: #fafafa;
+  transition: background 0.2s;
+}
+
+.category-header:hover {
+  background: #e6f7ff;
+}
+
+.category-label {
   font-weight: 500;
-  border-bottom: 1px solid #e8e8e8;
+  color: #333;
 }
 
-.plugin-list {
-  height: 180px;
+.category-count {
+  color: #999;
+  font-size: 12px;
+}
+
+.plugin-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+}
+
+.plugin-card {
+  position: relative;
+  width: 130px;
+  padding: 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+}
+
+.plugin-card:hover:not(.disabled) {
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.plugin-card.selected {
+  border-color: #52c41a;
+  background: #f6ffed;
+}
+
+.plugin-card.disabled {
+  cursor: not-allowed;
+}
+
+.check-icon {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  color: #52c41a;
+}
+
+.plugin-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1890ff;
+  margin-bottom: 4px;
+}
+
+.plugin-desc {
+  font-size: 11px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-header {
+  padding: 10px 12px;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  font-weight: 500;
+}
+
+.selected-list {
+  flex: 1;
   overflow-y: auto;
 }
 
-.plugin-item {
-  padding: 8px 12px;
-  cursor: pointer;
+.selected-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
   border-bottom: 1px solid #f0f0f0;
   transition: background 0.2s;
 }
 
-.plugin-item:hover:not(.disabled) {
-  background: #e6f7ff;
+.selected-item:hover {
+  background: #f5f5f5;
 }
 
-.plugin-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.selected-item.removing {
+  animation: remove-flash 300ms ease-out forwards;
 }
 
-.plugin-name {
-  font-weight: 500;
-  color: #1890ff;
+@keyframes remove-flash {
+  0% { background-color: #fafafa; }
+  50% { background-color: #fff1f0; border-color: #ff4d4f; }
+  100% { background-color: transparent; border-color: transparent; }
 }
 
-.plugin-desc {
-  font-size: 12px;
-  color: #999;
-  margin-top: 2px;
-}
-
-.selected-list {
-  height: 180px;
-  overflow-y: auto;
-}
-
-.selected-plugin {
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.selected-header {
+.selected-info {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  cursor: pointer;
-  background: #f9f9f9;
-}
-
-.selected-header:hover {
-  background: #f0f0f0;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .selected-name {
   font-weight: 500;
+  color: #333;
+}
+
+.config-badge {
+  font-size: 11px;
   color: #52c41a;
 }
 
-.selected-config {
-  padding: 8px 12px;
+.selected-actions {
+  display: flex;
+  gap: 8px;
 }
 
-.config-field {
-  margin-bottom: 8px;
+.selected-actions :deep(.anticon) {
+  cursor: pointer;
+  color: #999;
+  font-size: 14px;
+}
+
+.selected-actions :deep(.anticon:hover) {
+  color: #1890ff;
 }
 
 .empty-hint {
   padding: 40px 12px;
   text-align: center;
   color: #999;
-}
-
-.plugin-json-panel {
-  position: relative;
-}
-
-.json-error {
-  color: #ff4d4f;
-  font-size: 12px;
-  margin-top: 4px;
+  font-size: 13px;
 }
 </style>
