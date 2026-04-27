@@ -45,19 +45,38 @@
               <a-divider type="vertical" />
               <a-button size="small" @click="publishUpstream(cluster)" :disabled="!cluster.selectedUpstream">发布</a-button>
               <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!cluster.selectedUpstream">版本管理</a-button>
+              <a-divider type="vertical" />
+              <a-popover v-model:open="upstreamColumnPopoverVisible" trigger="click" placement="bottomRight">
+                <template #title>选择显示列</template>
+                <template #content>
+                  <a-checkbox-group v-model:value="upstreamColumnsSelected">
+                    <div v-for="col in allUpstreamColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
+                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </a-checkbox-group>
+                  <a-divider style="margin: 12px 0;" />
+                  <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
+                  <a-checkbox-group v-model:value="upstreamActionsSelected">
+                    <div v-for="btn in allUpstreamActionButtons" :key="btn.key" style="min-width: 120px; margin-bottom: 8px;">
+                      <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
+                    </div>
+                  </a-checkbox-group>
+                </template>
+                <a-button size="small">列配置</a-button>
+              </a-popover>
             </div>
-            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+            <div v-if="upstreamSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
               <a-input-search
                 v-model:value="cluster.upstreamsSearch"
                 placeholder="搜索上游"
-                style="width: 200px;"
+                style="width: 150px;"
                 @search="() => { cluster.upstreamsPagination!.page = 1; loadUpstreams(cluster) }"
                 allow-clear
               />
               <a-select
                 v-model:value="cluster.upstreamsSearchField"
-                placeholder="搜索字段"
-                style="width: 120px;"
+                placeholder="字段"
+                style="width: 100px;"
                 allow-clear
               >
                 <a-select-option value="">全部</a-select-option>
@@ -66,7 +85,7 @@
               </a-select>
             </div>
             <a-table
-              :columns="upstreamColumns"
+              :columns="visibleUpstreamColumns"
               :data-source="cluster.upstreams || []"
               :pagination="{
                 current: cluster.upstreamsPagination?.page,
@@ -87,11 +106,12 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'actions'">
-                  <a-button size="small" @click="editUpstreamByRecord(cluster, record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteUpstreamByRecord(cluster, record)">删除</a-button>
-                  <a-divider type="vertical" />
-                  <a-button size="small" @click="publishUpstreamByRecord(cluster, record)">发布</a-button>
-                  <a-button size="small" @click="openUpstreamVersionManagementByRecord(cluster, record)">版本管理</a-button>
+                  <template v-for="btnKey in upstreamActionsSelected" :key="btnKey">
+                    <a-divider type="vertical" v-if="btnKey === 'publish'" />
+                    <a-button size="small" @click="handleUpstreamAction(cluster, record, btnKey)">
+                      {{ getUpstreamActionButtonTitle(btnKey) }}
+                    </a-button>
+                  </template>
                 </template>
               </template>
             </a-table>
@@ -121,22 +141,25 @@
                       <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
                     </div>
                   </a-checkbox-group>
+                  <a-divider style="margin: 12px 0;" />
+                  <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
+                  <a-checkbox v-model:checked="routeSearchVisible">显示搜索框</a-checkbox>
                 </template>
                 <a-button size="small">列配置</a-button>
               </a-popover>
             </div>
-            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+            <div v-if="routeSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
               <a-input-search
                 v-model:value="cluster.routesSearch"
                 placeholder="搜索路由"
-                style="width: 200px;"
+                style="width: 150px;"
                 @search="() => { cluster.routesPagination!.page = 1; loadRoutes(cluster) }"
                 allow-clear
               />
               <a-select
                 v-model:value="cluster.routesSearchField"
-                placeholder="搜索字段"
-                style="width: 120px;"
+                placeholder="字段"
+                style="width: 100px;"
                 allow-clear
               >
                 <a-select-option value="">全部</a-select-option>
@@ -192,19 +215,35 @@
               <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
               <a-button size="small" @click="editNode(cluster)" :disabled="!cluster.selectedNode">编辑节点</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedNode" @click="deleteNode(cluster)">删除节点</a-button>
+              <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
+                <template #content>
+                  <div style="width: 200px;">
+                    <div style="font-weight: 500; margin-bottom: 8px;">列选择</div>
+                    <a-checkbox-group v-model:value="nodeColumnsSelected">
+                      <div v-for="col in allNodeColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
+                        <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                      </div>
+                    </a-checkbox-group>
+                    <a-divider style="margin: 12px 0;" />
+                    <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
+                    <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
+                  </div>
+                </template>
+                <a-button size="small">列配置</a-button>
+              </a-popover>
             </div>
-            <div style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
+            <div v-if="nodeSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
               <a-input-search
                 v-model:value="cluster.nodesSearch"
                 placeholder="搜索节点"
-                style="width: 200px;"
+                style="width: 150px;"
                 @search="() => { cluster.nodesPagination!.page = 1; loadNodes(cluster) }"
                 allow-clear
               />
               <a-select
                 v-model:value="cluster.nodesSearchField"
-                placeholder="搜索字段"
-                style="width: 120px;"
+                placeholder="字段"
+                style="width: 100px;"
                 allow-clear
               >
                 <a-select-option value="">全部</a-select-option>
@@ -213,7 +252,7 @@
               </a-select>
             </div>
             <a-table
-              :columns="nodeColumns"
+              :columns="visibleNodeColumns"
               :data-source="cluster.nodes || []"
               :pagination="{
                 current: cluster.nodesPagination?.page,
@@ -237,9 +276,11 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <a-button size="small" @click="startNode(record)">启动</a-button>
-                  <a-button size="small" @click="stopNode(record)">停止</a-button>
-                  <a-button size="small" @click="queryNodeStatus(record)">状态查询</a-button>
+                  <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
+                    <a-button size="small" @click="handleNodeAction(record, btnKey)">
+                      {{ getNodeActionButtonTitle(btnKey) }}
+                    </a-button>
+                  </template>
                 </template>
               </template>
             </a-table>
@@ -467,7 +508,22 @@ const nodeColumns = [
   { title: '操作', key: 'actions', width: 280 }
 ]
 
+const allNodeColumns = [
+  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
+  { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
+  { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
+  { title: '状态', key: 'status', sorter: true },
+  { title: '操作', key: 'actions', width: 280 }
+]
+
 const upstreamColumns = [
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true },
+  { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
+  { title: '操作', key: 'actions', width: 280 }
+]
+
+const allUpstreamColumns = [
   { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
   { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true },
   { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
@@ -495,6 +551,7 @@ const allRouteColumns = [
 
 const routeColumnPopoverVisible = ref(false)
 const routeColumnsSelected = ref(['name', 'uri', 'priority', 'actions'])
+const routeSearchVisible = ref(true)
 
 const allActionButtons = [
   { key: 'publish', title: '发布' },
@@ -508,6 +565,39 @@ const routeActionsSelected = ref(['copy', 'edit', 'delete', 'publish', 'version'
 const visibleRouteColumns = computed(() => {
   const selected = new Set(routeColumnsSelected.value)
   return allRouteColumns.filter(col => selected.has(col.key))
+})
+
+const upstreamColumnPopoverVisible = ref(false)
+const upstreamColumnsSelected = ref(['name', 'load_balance', 'description', 'actions'])
+const upstreamSearchVisible = ref(true)
+
+const allUpstreamActionButtons = [
+  { key: 'edit', title: '编辑' },
+  { key: 'delete', title: '删除' },
+  { key: 'publish', title: '发布' },
+  { key: 'version', title: '版本管理' }
+]
+const upstreamActionsSelected = ref(['edit', 'delete', 'publish', 'version'])
+
+const visibleUpstreamColumns = computed(() => {
+  const selected = new Set(upstreamColumnsSelected.value)
+  return allUpstreamColumns.filter(col => selected.has(col.key))
+})
+
+const nodeColumnPopoverVisible = ref(false)
+const nodeColumnsSelected = ref(['ip', 'service_port', 'management_port', 'status', 'actions'])
+const nodeSearchVisible = ref(true)
+
+const allNodeActionButtons = [
+  { key: 'start', title: '启动' },
+  { key: 'stop', title: '停止' },
+  { key: 'status', title: '状态查询' }
+]
+const nodeActionsSelected = ref(['start', 'stop', 'status'])
+
+const visibleNodeColumns = computed(() => {
+  const selected = new Set(nodeColumnsSelected.value)
+  return allNodeColumns.filter(col => selected.has(col.key))
 })
 
 const isAdmin = () => authStore.user?.role === 'admin'
@@ -668,6 +758,47 @@ const handleRouteAction = (cluster: Cluster, record: Route, action: string) => {
       break
     case 'delete':
       deleteRouteByRecord(cluster, record)
+      break
+  }
+}
+
+const getUpstreamActionButtonTitle = (key: string) => {
+  const btn = allUpstreamActionButtons.find(b => b.key === key)
+  return btn?.title || key
+}
+
+const handleUpstreamAction = (cluster: Cluster, record: Upstream, action: string) => {
+  switch (action) {
+    case 'publish':
+      publishUpstreamByRecord(cluster, record)
+      break
+    case 'version':
+      openUpstreamVersionManagementByRecord(cluster, record)
+      break
+    case 'edit':
+      editUpstreamByRecord(cluster, record)
+      break
+    case 'delete':
+      deleteUpstreamByRecord(cluster, record)
+      break
+  }
+}
+
+const getNodeActionButtonTitle = (key: string) => {
+  const btn = allNodeActionButtons.find(b => b.key === key)
+  return btn?.title || key
+}
+
+const handleNodeAction = (record: Node, action: string) => {
+  switch (action) {
+    case 'start':
+      startNode(record)
+      break
+    case 'stop':
+      stopNode(record)
+      break
+    case 'status':
+      queryNodeStatus(record)
       break
   }
 }
