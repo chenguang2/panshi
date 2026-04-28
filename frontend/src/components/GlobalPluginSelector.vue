@@ -1,0 +1,399 @@
+<template>
+  <div class="global-plugin-selector">
+    <div class="search-wrapper">
+      <a-input-search
+        v-model:value="searchText"
+        placeholder="搜索插件..."
+        allow-clear
+        class="plugin-search"
+      />
+    </div>
+
+    <div class="plugin-panels">
+      <div class="panel available-panel">
+        <div class="panel-header">
+          <span>可用插件</span>
+          <span class="plugin-count">({{ availablePlugins.length }})</span>
+        </div>
+        <div class="plugin-list">
+          <div
+            v-for="plugin in availablePlugins"
+            :key="plugin.name"
+            class="plugin-item"
+          >
+            <div class="plugin-info">
+              <div class="plugin-name">{{ plugin.name }}</div>
+              <div class="plugin-desc">{{ plugin.description }}</div>
+            </div>
+            <a-button size="small" @click="addPlugin(plugin)">+ 添加</a-button>
+          </div>
+          <div v-if="availablePlugins.length === 0" class="empty-hint">
+            未找到可配置的插件
+          </div>
+        </div>
+      </div>
+
+      <div class="panel configured-panel">
+        <div class="panel-header">
+          <span>已配置插件</span>
+          <span class="plugin-count">({{ configuredPlugins.length }})</span>
+        </div>
+        <div class="plugin-list">
+          <div
+            v-for="item in configuredPlugins"
+            :key="item.id"
+            class="plugin-item configured"
+          >
+            <div class="plugin-info">
+              <div class="plugin-name">
+                {{ item.plugin_name }}
+                <a-tag v-if="item.is_published" color="green" size="small">已发布</a-tag>
+                <a-tag v-else color="orange" size="small">未发布</a-tag>
+              </div>
+              <div class="plugin-meta">
+                v{{ item.version }} · {{ formatDate(item.updated_at) }}
+              </div>
+            </div>
+            <div class="plugin-actions">
+              <a-button size="small" @click="viewPlugin(item)">查看</a-button>
+              <a-button size="small" @click="editPlugin(item)">编辑</a-button>
+              <a-button size="small" danger @click="deletePlugin(item)">删除</a-button>
+              <a-divider type="vertical" />
+              <a-button size="small" @click="publishPlugin(item)" :disabled="item.is_published">发布</a-button>
+              <a-button size="small" @click="openVersionManagement(item)">版本</a-button>
+            </div>
+          </div>
+          <div v-if="configuredPlugins.length === 0" class="empty-hint">
+            点击左侧"添加"按钮配置插件
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <a-drawer
+      v-model:open="viewDrawerVisible"
+      :title="`查看插件 - ${viewingPlugin?.plugin_name}`"
+      width="600"
+      @close="viewDrawerVisible = false"
+    >
+      <div v-if="viewingPlugin" class="plugin-detail">
+        <a-descriptions :column="1" bordered>
+          <a-descriptions-item label="插件名称">{{ viewingPlugin.plugin_name }}</a-descriptions-item>
+          <a-descriptions-item label="版本">v{{ viewingPlugin.version }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag v-if="viewingPlugin.is_published" color="green">已发布</a-tag>
+            <a-tag v-else color="orange">未发布</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="创建时间">{{ formatDate(viewingPlugin.created_at) }}</a-descriptions-item>
+          <a-descriptions-item label="更新时间">{{ formatDate(viewingPlugin.updated_at) }}</a-descriptions-item>
+        </a-descriptions>
+
+        <a-divider>配置内容</a-divider>
+        <pre class="config-preview">{{ JSON.stringify(viewingPlugin.metadata, null, 2) }}</pre>
+      </div>
+    </a-drawer>
+
+    <PluginEditorDrawer
+      v-model:open="editorDrawerVisible"
+      :plugin="editingPlugin"
+      :plugin-info="editingPluginInfo"
+      @save="handleSavePlugin"
+    />
+
+    <VersionManagementModal
+      v-model:open="versionModalVisible"
+      resource-type="plugin_metadata"
+      :resource-id="null"
+      :cluster-id="clusterId"
+      :resource-name="versionModalPluginName"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { message } from 'ant-design-vue'
+import api from '@/api'
+import PluginEditorDrawer from './PluginEditorDrawer.vue'
+import VersionManagementModal from './VersionManagementModal.vue'
+
+interface Plugin {
+  name: string
+  description: string
+  category?: string
+  enable_metadata?: boolean
+  schema: Record<string, any>
+}
+
+interface ConfiguredPlugin {
+  id: number
+  cluster_id: number
+  plugin_name: string
+  metadata: Record<string, any>
+  version: number
+  is_published: boolean
+  created_at: string
+  updated_at: string
+}
+
+const props = defineProps<{
+  clusterId: number
+}>()
+
+const searchText = ref('')
+const allPlugins = ref<Plugin[]>([])
+const configuredPlugins = ref<ConfiguredPlugin[]>([])
+
+const editingPluginName = ref<string>('')
+
+const viewDrawerVisible = ref(false)
+const viewingPlugin = ref<ConfiguredPlugin | null>(null)
+
+const editorDrawerVisible = ref(false)
+const editingPlugin = ref<any>(null)
+const editingPluginInfo = ref<Plugin | null>(null)
+
+const versionModalVisible = ref(false)
+const versionModalPluginName = ref('')
+
+const availablePlugins = computed(() => {
+  const search = searchText.value.toLowerCase().trim()
+  const configuredNames = new Set(configuredPlugins.value.map(p => p.plugin_name))
+
+  return allPlugins.value
+    .filter(p => p.enable_metadata === true && !configuredNames.has(p.name))
+    .filter(p => {
+      if (!search) return true
+      return p.name.toLowerCase().includes(search) || p.description.toLowerCase().includes(search)
+    })
+})
+
+const loadPlugins = async () => {
+  try {
+    const res = await api.get('/plugins/builtin')
+    allPlugins.value = res.data.plugins || []
+  } catch (error) {
+    console.error('加载插件列表失败', error)
+  }
+}
+
+const loadConfiguredPlugins = async () => {
+  if (!props.clusterId) return
+  try {
+    const res = await api.get(`/clusters/${props.clusterId}/plugin-metadata`)
+    configuredPlugins.value = (res.data.items || []).map((item: any) => ({
+      ...item,
+      is_published: item.is_published
+    }))
+  } catch (error) {
+    console.error('加载已配置插件失败', error)
+  }
+}
+
+const addPlugin = async (plugin: Plugin) => {
+  try {
+    await api.post(`/clusters/${props.clusterId}/plugin-metadata?plugin_name=${plugin.name}`)
+    message.success(`已添加插件 ${plugin.name}`)
+    await loadConfiguredPlugins()
+  } catch (error: any) {
+    if (error.response?.status === 400) {
+      message.warning('该插件已配置')
+    } else {
+      message.error('添加插件失败')
+    }
+  }
+}
+
+const viewPlugin = (item: ConfiguredPlugin) => {
+  viewingPlugin.value = item
+  viewDrawerVisible.value = true
+}
+
+const editPlugin = (item: ConfiguredPlugin) => {
+  const pluginInfo = allPlugins.value.find(p => p.name === item.plugin_name)
+  editingPluginName.value = item.plugin_name
+  editingPlugin.value = {
+    plugin_name: item.plugin_name,
+    config: JSON.stringify(item.metadata, null, 2)
+  }
+  editingPluginInfo.value = pluginInfo || null
+  editorDrawerVisible.value = true
+}
+
+const handleSavePlugin = async (config: string) => {
+  try {
+    const metadata = typeof config === 'string' ? JSON.parse(config) : config
+    await api.put(`/clusters/${props.clusterId}/plugin-metadata/${editingPluginName.value}`, metadata)
+    message.success('保存成功')
+    editorDrawerVisible.value = false
+    await loadConfiguredPlugins()
+  } catch (error) {
+    message.error('保存失败')
+    throw error
+  }
+}
+
+const deletePlugin = async (item: ConfiguredPlugin) => {
+  try {
+    await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`)
+    message.success(`已删除插件 ${item.plugin_name}`)
+    await Promise.all([loadPlugins(), loadConfiguredPlugins()])
+  } catch (error) {
+    message.error('删除失败')
+  }
+}
+
+const publishPlugin = async (item: ConfiguredPlugin) => {
+  try {
+    await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`)
+    message.success(`已发布插件 ${item.plugin_name}`)
+    await loadConfiguredPlugins()
+  } catch (error) {
+    message.error('发布失败')
+  }
+}
+
+const openVersionManagement = (item: ConfiguredPlugin) => {
+  versionModalPluginName.value = item.plugin_name
+  versionModalVisible.value = true
+}
+
+const formatDate = (dateStr: string | null) => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+
+watch(() => props.clusterId, () => {
+  if (props.clusterId) {
+    loadPlugins()
+    loadConfiguredPlugins()
+  }
+}, { immediate: true })
+</script>
+
+<style scoped>
+.global-plugin-selector {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.search-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.plugin-search {
+  width: 100%;
+  max-width: 400px;
+}
+
+.plugin-panels {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.available-panel {
+  flex: 0 0 320px;
+}
+
+.configured-panel {
+  flex: 1;
+}
+
+.panel-header {
+  font-weight: 500;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.plugin-count {
+  color: #999;
+  font-weight: normal;
+  margin-left: 4px;
+}
+
+.plugin-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.plugin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.plugin-item:hover {
+  border-color: #1890ff;
+  background: #fafafa;
+}
+
+.plugin-item.configured {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.plugin-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.plugin-desc {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.plugin-meta {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.plugin-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.empty-hint {
+  text-align: center;
+  color: #999;
+  padding: 32px;
+}
+
+.config-preview {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+</style>
