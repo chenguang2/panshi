@@ -36,6 +36,7 @@
             <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
+            <a-tab-pane key="globalPlugins" tab="全局插件"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
@@ -209,6 +210,9 @@
                 </template>
               </template>
             </a-table>
+          </div>
+          <div v-else-if="cluster.activeTab === 'globalPlugins'" class="tab-content">
+            <GlobalPluginSelector :cluster-id="cluster.id" />
           </div>
           <div v-else class="tab-content node-tab">
             <div class="node-actions">
@@ -470,6 +474,7 @@ import { useAuthStore } from '@/stores/auth'
 import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
+import GlobalPluginSelector from '@/components/GlobalPluginSelector.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -1349,29 +1354,33 @@ const editRoute = (cluster: Cluster) => {
 const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   await loadRoutes(cluster)
   await loadAvailablePlugins()
-  editingRoute.value = route
+  
+  // 从刷新后的数据中获取最新路由信息，而不是使用旧的 route 参数
+  const routeData = cluster.routes?.find((r: Route) => r.id === route.id)
+  if (!routeData) {
+    message.warning('路由不存在')
+    return
+  }
+  
+  editingRoute.value = routeData
   currentClusterId.value = cluster.id
-  routeForm.name = route.name
-  routeForm.uri = route.uri
-  routeForm.methods = route.methods ? route.methods.split(',') : []
-  routeForm.priority = route.priority
-  routeForm.status = route.status
-  routeForm.upstream_id = route.upstream_id
-  routeForm.description = route.description || ''
-  routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
-  routeForm.advancedMatch = { vars: route.vars || [] }
+  routeForm.name = routeData.name
+  routeForm.uri = routeData.uri
+  routeForm.methods = routeData.methods ? routeData.methods.split(',') : []
+  routeForm.priority = routeData.priority
+  routeForm.status = routeData.status
+  routeForm.upstream_id = routeData.upstream_id
+  routeForm.description = routeData.description || ''
+  routeForm.advancedMatchEnabled = routeData.advanced_match_enabled || false
+  // 使用新对象避免引用问题
+  routeForm.advancedMatch = { vars: [...(routeData.vars || [])] }
   routeForm.plugins = []
   routeModalActiveTab.value = 'basic'
 
-  if (cluster.routes) {
-    const routeData = cluster.routes.find((r: Route) => r.id === route.id)
-    if (routeData) {
-      try {
-        const res = await api.get(`/clusters/${cluster.id}/routes/${route.id}/plugins`)
-        routeForm.plugins = res.data.plugins || []
-      } catch {}
-    }
-  }
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/routes/${routeData.id}/plugins`)
+    routeForm.plugins = res.data.plugins || []
+  } catch {}
   routeModalVisible.value = true
 }
 
@@ -1386,30 +1395,30 @@ const copyRoute = (cluster: Cluster) => {
 const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
   await loadRoutes(cluster)
   await loadAvailablePlugins()
-  editingRoute.value = null  // 标记为新增
+  
+  // 从刷新后的数据中获取最新路由信息
+  const routeData = cluster.routes?.find((r: Route) => r.id === route.id)
+  const sourceRoute = routeData || route
+  
+  editingRoute.value = null
   copyingRoute.value = true
   currentClusterId.value = cluster.id
-  routeForm.name = `复制_${route.name}`
-  routeForm.uri = route.uri
-  routeForm.methods = route.methods ? route.methods.split(',') : []
-  routeForm.priority = route.priority
-  routeForm.status = route.status
-  routeForm.upstream_id = route.upstream_id
-  routeForm.description = route.description || ''
-  routeForm.advancedMatchEnabled = route.advanced_match_enabled || false
-  routeForm.advancedMatch = { vars: route.vars || [] }
+  routeForm.name = `复制_${sourceRoute.name}`
+  routeForm.uri = sourceRoute.uri
+  routeForm.methods = sourceRoute.methods ? sourceRoute.methods.split(',') : []
+  routeForm.priority = sourceRoute.priority
+  routeForm.status = sourceRoute.status
+  routeForm.upstream_id = sourceRoute.upstream_id
+  routeForm.description = sourceRoute.description || ''
+  routeForm.advancedMatchEnabled = sourceRoute.advanced_match_enabled || false
+  routeForm.advancedMatch = { vars: sourceRoute.vars || [] }
   routeForm.plugins = []
   routeModalActiveTab.value = 'basic'
 
-  if (cluster.routes) {
-    const routeData = cluster.routes.find((r: Route) => r.id === route.id)
-    if (routeData) {
-      try {
-        const res = await api.get(`/clusters/${cluster.id}/routes/${route.id}/plugins`)
-        routeForm.plugins = res.data.plugins || []
-      } catch {}
-    }
-  }
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/routes/${sourceRoute.id}/plugins`)
+    routeForm.plugins = res.data.plugins || []
+  } catch {}
   routeModalVisible.value = true
 }
 

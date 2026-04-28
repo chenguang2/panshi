@@ -26,7 +26,19 @@ async def test_login_invalid_credentials_chinese():
 async def test_user_not_found_returns_chinese():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.get("/api/v1/admin/users/99999")
+        # First login to get admin token
+        login_response = await ac.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "panshi123"}
+        )
+        assert login_response.status_code == 200
+        token = login_response.json()["access_token"]
+
+        # Then test user not found
+        response = await ac.get(
+            "/api/v1/admin/users/99999",
+            headers={"Authorization": f"Bearer {token}"}
+        )
         assert response.status_code == 404
         assert response.json()["detail"] == "用户不存在"
 

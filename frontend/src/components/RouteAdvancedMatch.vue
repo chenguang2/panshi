@@ -9,45 +9,38 @@
             <DeleteOutlined class="delete-rule" @click="removeRule(index)" />
           </div>
           <div class="rule-body">
-            <a-select v-model="rule.type" style="width: 110px" @change="handleTypeChange(rule)">
+            <a-select :value="rule.type" style="width: 120px" @change="(val: string) => { rule.type = val as MatchRule['type']; handleTypeChange(rule); }">
               <a-select-option value="header">请求头</a-select-option>
               <a-select-option value="query">查询参数</a-select-option>
+              <a-select-option value="postarg">POST参数</a-select-option>
               <a-select-option value="cookie">Cookie</a-select-option>
-              <a-select-option value="ip">客户端IP</a-select-option>
+              <a-select-option value="builtin">内置参数</a-select-option>
             </a-select>
 
             <a-input
-              v-if="rule.type !== 'ip'"
-              v-model="rule.key"
+              :value="rule.key"
               :placeholder="getKeyPlaceholder(rule.type)"
-              style="width: 140px"
+              style="width: 160px"
+              @update:value="(val: string) => { rule.key = val; }"
             />
 
-            <a-select v-model="rule.operator" style="width: 100px">
+            <a-select :value="rule.operator" style="width: 130px" @change="(val: string) => { rule.operator = val as MatchOperator; }">
               <a-select-option value="==">等于</a-select-option>
               <a-select-option value="!=">不等于</a-select-option>
-              <a-select-option value="~~">包含</a-select-option>
-              <a-select-option value="!~">不包含</a-select-option>
-              <a-select-option value="~*">正则匹配</a-select-option>
+              <a-select-option value=">">大于</a-select-option>
+              <a-select-option value="<">小于</a-select-option>
+              <a-select-option value="~~">正则匹配</a-select-option>
+              <a-select-option value="~*">大小写敏感正则</a-select-option>
+              <a-select-option value="IN">包含</a-select-option>
+              <a-select-option value="NOT IN">不包含</a-select-option>
             </a-select>
 
             <a-input
-              v-if="rule.type !== 'ip'"
-              v-model="rule.value"
+              :value="rule.value"
               placeholder="匹配值"
               style="flex: 1"
+              @update:value="(val: string) => { rule.value = val; }"
             />
-            <a-input
-              v-else
-              v-model="rule.value"
-              placeholder="IP 或 CIDR，如 192.168.1.0/24"
-              style="flex: 1"
-            />
-
-            <a-select v-if="rule.type === 'ip'" v-model="rule.matchType" style="width: 80px">
-              <a-select-option value="addr">等于</a-select-option>
-              <a-select-option value="range">在范围内</a-select-option>
-            </a-select>
           </div>
         </div>
 
@@ -74,11 +67,18 @@
             <span class="hint-desc">匹配 API 版本</span>
           </div>
           <div class="hint-item">
-            <span class="hint-type">客户端IP</span>
-            <span>192.168.1.0/24</span>
-            <span class="hint-op">在范围内</span>
-            <span>-</span>
-            <span class="hint-desc">内网 IP 访问</span>
+            <span class="hint-type">POST参数</span>
+            <span>user_id</span>
+            <span class="hint-op">大于</span>
+            <span>100</span>
+            <span class="hint-desc">匹配 POST body 参数</span>
+          </div>
+          <div class="hint-item">
+            <span class="hint-type">内置参数</span>
+            <span>uri</span>
+            <span class="hint-op">正则匹配</span>
+            <span>/api/v\d+</span>
+            <span class="hint-desc">匹配 URI 路径</span>
           </div>
         </div>
       </div>
@@ -87,16 +87,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, triggerRef } from 'vue'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons-vue'
-
-export interface MatchRule {
-  type: 'header' | 'query' | 'cookie' | 'ip'
-  key: string
-  operator: string
-  value: string
-  matchType?: string
-}
+import type { MatchRule, MatchOperator } from '../types'
 
 const props = defineProps<{
   enabled: boolean
@@ -110,12 +103,16 @@ const emit = defineEmits<{
 }>()
 
 const rules = ref<MatchRule[]>([])
+let isInitializing = true
+let isUserModifying = false
 
 const getKeyPlaceholder = (type: string): string => {
   switch (type) {
     case 'header': return 'header 名称'
     case 'query': return '参数名称'
+    case 'postarg': return 'POST 参数名称'
     case 'cookie': return 'cookie 名称'
+    case 'builtin': return '内置参数名称'
     default: return ''
   }
 }
@@ -123,61 +120,74 @@ const getKeyPlaceholder = (type: string): string => {
 const buildVarsFromRules = (): [string, string, string][] => {
   const varsList: [string, string, string][] = []
   for (const rule of rules.value) {
-    if (rule.type === 'ip') {
-      if (rule.matchType === 'range') {
-        varsList.push(['remote_addr', 'IN', rule.value])
-      } else {
-        varsList.push(['remote_addr', '==', rule.value])
-      }
-    } else if (rule.type === 'header') {
+    if (!rule.key) continue
+    if (!rule.value) continue
+
+    if (rule.type === 'header') {
       varsList.push([`http_${rule.key.toLowerCase().replace(/-/g, '_')}`, rule.operator, rule.value])
     } else if (rule.type === 'query') {
       varsList.push([`arg_${rule.key}`, rule.operator, rule.value])
+    } else if (rule.type === 'postarg') {
+      varsList.push([`postarg_${rule.key}`, rule.operator, rule.value])
     } else if (rule.type === 'cookie') {
       varsList.push([`cookie_${rule.key}`, rule.operator, rule.value])
+    } else if (rule.type === 'builtin') {
+      varsList.push([rule.key, rule.operator, rule.value])
     }
   }
   return varsList
 }
 
 const parseRulesFromVars = (varsList: [string, string, string][] | undefined) => {
-  rules.value = []
-  if (!varsList) return
+  rules.value.splice(0, rules.value.length)
+
+  if (!varsList) {
+    triggerRef(rules)
+    return
+  }
 
   for (const v of varsList) {
     const [varName, operator, value] = v
 
-    if (varName === 'remote_addr') {
-      rules.value.push({
-        type: 'ip',
-        key: '',
-        operator: operator === 'IN' ? 'range' : '==',
-        value: value,
-        matchType: operator === 'IN' ? 'range' : 'addr'
-      })
-    } else if (varName.startsWith('http_')) {
+    if (varName.startsWith('http_') || varName === 'http_host') {
+      const key = varName === 'http_host' ? 'host' : varName.replace('http_', '').replace(/_/g, '-')
       rules.value.push({
         type: 'header',
-        key: varName.replace('http_', '').replace(/_/g, '-'),
-        operator,
+        key: key,
+        operator: operator as MatchOperator,
         value
       })
     } else if (varName.startsWith('arg_')) {
       rules.value.push({
         type: 'query',
         key: varName.replace('arg_', ''),
-        operator,
+        operator: operator as MatchOperator,
+        value
+      })
+    } else if (varName.startsWith('postarg_')) {
+      rules.value.push({
+        type: 'postarg',
+        key: varName.replace('postarg_', ''),
+        operator: operator as MatchOperator,
         value
       })
     } else if (varName.startsWith('cookie_')) {
       rules.value.push({
         type: 'cookie',
         key: varName.replace('cookie_', ''),
-        operator,
+        operator: operator as MatchOperator,
+        value
+      })
+    } else {
+      rules.value.push({
+        type: 'builtin',
+        key: varName,
+        operator: operator as MatchOperator,
         value
       })
     }
   }
+  triggerRef(rules)
 }
 
 const handleTypeChange = (rule: MatchRule) => {
@@ -187,30 +197,79 @@ const handleTypeChange = (rule: MatchRule) => {
 }
 
 const addRule = () => {
-  rules.value.push({
+  isUserModifying = true
+  const newRule: MatchRule = {
     type: 'header',
     key: '',
     operator: '==',
     value: ''
-  })
+  }
+  rules.value.push(newRule)
+  triggerRef(rules)
+
+  setTimeout(() => {
+    isUserModifying = false
+    triggerRef(rules)
+  }, 100)
 }
 
 const removeRule = (index: number) => {
+  isUserModifying = true
   rules.value.splice(index, 1)
+  triggerRef(rules)
+
+  setTimeout(() => {
+    isUserModifying = false
+    triggerRef(rules)
+  }, 100)
 }
 
 const syncVars = () => {
+  if (isInitializing || isUserModifying) {
+    return
+  }
+
   const vars = buildVarsFromRules()
+
+  if (rules.value.length === 0) {
+    return
+  }
+
   emit('update:modelValue', { vars })
 }
 
-watch(rules, syncVars, { deep: true })
+watch(rules, syncVars, { deep: true, flush: 'post' })
 
 watch(() => props.modelValue, (val) => {
-  if (!val || !val.vars) {
-    rules.value = []
+  if (isUserModifying) {
     return
   }
+
+  if (!val || !val.vars || val.vars.length === 0) {
+    if (rules.value.length > 0 && !isInitializing) {
+      return
+    }
+    if (rules.value.length > 0) {
+      rules.value = []
+      triggerRef(rules)
+    }
+    isInitializing = false
+    return
+  }
+
+  if (isInitializing) {
+    parseRulesFromVars(val.vars)
+    isInitializing = false
+    return
+  }
+
+  const newVarsJson = JSON.stringify(val.vars)
+  const currentVarsJson = JSON.stringify(buildVarsFromRules())
+
+  if (newVarsJson === currentVarsJson) {
+    return
+  }
+
   parseRulesFromVars(val.vars)
 }, { immediate: true })
 </script>

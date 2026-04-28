@@ -113,6 +113,17 @@ export interface Route {
   advanced_match_enabled?: boolean
 }
 
+export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'
+
+export type MatchOperator = '==' | '!=' | '>' | '<' | '~~' | '~*' | 'IN' | 'NOT IN'
+
+export interface MatchRule {
+  type: MatchRuleType
+  key: string
+  operator: MatchOperator
+  value: string
+}
+
 export interface Plugin {
   name: string
   description: string

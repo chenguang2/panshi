@@ -94,9 +94,33 @@ class ConfigVersion(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
-    resource_type = Column(String(20), nullable=False)  # "route" or "upstream"
+    resource_type = Column(String(20), nullable=False)
     resource_id = Column(Integer, nullable=False)
     version = Column(Integer, nullable=False)
-    config = Column(Text, nullable=False)  # JSON format
+    config = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(String(50), default="system")
+
+
+class ClusterPluginMetadata(Base):
+    __tablename__ = "ps_cluster_plugin_metadata"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    plugin_name = Column(String(50), nullable=False)
+    config_data = Column(Text, nullable=False, default="{}")
+    version = Column(Integer, nullable=False, default=1)
+    is_published = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PluginMetadataVersion(Base):
+    __tablename__ = "ps_plugin_metadata_version"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cluster_plugin_metadata_id = Column(Integer, ForeignKey("ps_cluster_plugin_metadata.id", ondelete="CASCADE"), nullable=False)
+    config_data = Column(Text, nullable=False)
+    version = Column(Integer, nullable=False)
+    action = Column(String(20), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
