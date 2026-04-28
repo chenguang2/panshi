@@ -50,18 +50,28 @@
               <a-popover v-model:open="upstreamColumnPopoverVisible" trigger="click" placement="bottomRight">
                 <template #title>选择显示列</template>
                 <template #content>
-                  <a-checkbox-group v-model:value="upstreamColumnsSelected">
-                    <div v-for="col in allUpstreamColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
-                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                    </div>
-                  </a-checkbox-group>
-                  <a-divider style="margin: 12px 0;" />
-                  <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
-                  <a-checkbox-group v-model:value="upstreamActionsSelected">
-                    <div v-for="btn in allUpstreamActionButtons" :key="btn.key" style="min-width: 120px; margin-bottom: 8px;">
-                      <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
-                    </div>
-                  </a-checkbox-group>
+                  <div style="min-width: 400px;">
+                    <div style="font-weight: 500; margin-bottom: 8px;">列选择</div>
+                    <a-checkbox-group v-model:value="upstreamColumnsSelected">
+                      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <div v-for="col in allUpstreamColumns" :key="col.key" style="margin-bottom: 4px;">
+                          <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                        </div>
+                      </div>
+                    </a-checkbox-group>
+                    <a-divider style="margin: 12px 0;" />
+                    <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
+                    <a-checkbox-group v-model:value="upstreamActionsSelected">
+                      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <div v-for="btn in allUpstreamActionButtons" :key="btn.key" style="margin-bottom: 4px;">
+                          <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
+                        </div>
+                      </div>
+                    </a-checkbox-group>
+                    <a-divider style="margin: 12px 0;" />
+                    <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
+                    <a-checkbox v-model:checked="upstreamSearchVisible">显示搜索框</a-checkbox>
+                  </div>
                 </template>
                 <a-button size="small">列配置</a-button>
               </a-popover>
@@ -98,7 +108,7 @@
                 showQuickJumper: true
               }"
               :loading="cluster.upstreamsLoading"
-              :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (_keys: any, rows: any) => selectUpstream(cluster, rows[0]) }"
+              :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (_keys: any, rows: any) => selectUpstream(cluster, rows[rows.length - 1]) }"
               :showSorterTooltip="false"
               size="small"
               row-key="id"
@@ -219,13 +229,29 @@
               <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
               <a-button size="small" @click="editNode(cluster)" :disabled="!cluster.selectedNode">编辑节点</a-button>
               <a-button size="small" danger :disabled="!cluster.selectedNode" @click="deleteNode(cluster)">删除节点</a-button>
+              <a-divider type="vertical" />
+              <a-button size="small" @click="startNode(cluster.selectedNode!)" :disabled="!cluster.selectedNode">启动</a-button>
+              <a-button size="small" @click="stopNode(cluster.selectedNode!)" :disabled="!cluster.selectedNode">停止</a-button>
+              <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
+              <a-divider type="vertical" />
               <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
                 <template #content>
-                  <div style="width: 200px;">
+                  <div style="min-width: 400px;">
                     <div style="font-weight: 500; margin-bottom: 8px;">列选择</div>
                     <a-checkbox-group v-model:value="nodeColumnsSelected">
-                      <div v-for="col in allNodeColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
-                        <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <div v-for="col in allNodeColumns" :key="col.key" style="margin-bottom: 4px;">
+                          <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                        </div>
+                      </div>
+                    </a-checkbox-group>
+                    <a-divider style="margin: 12px 0;" />
+                    <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
+                    <a-checkbox-group v-model:value="nodeActionsSelected">
+                      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <div v-for="btn in allNodeActionButtons" :key="btn.key" style="margin-bottom: 4px;">
+                          <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
+                        </div>
                       </div>
                     </a-checkbox-group>
                     <a-divider style="margin: 12px 0;" />
@@ -267,7 +293,7 @@
                 pageSizeOptions: ['10', '20', '50', '100'],
                 showQuickJumper: true
               }"
-              :row-selection="{ selectedRowKeys: cluster.selectedNode ? [cluster.selectedNode.id] : [], onChange: (_keys: any, rows: any) => selectNode(cluster, rows[0]) }"
+              :row-selection="{ selectedRowKeys: cluster.selectedNode ? [cluster.selectedNode.id] : [], onChange: (_keys: any, rows: any) => selectNode(cluster, rows[rows.length - 1]) }"
               :loading="cluster.nodesLoading"
               :showSorterTooltip="false"
               size="small"
@@ -280,8 +306,14 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
-                    <a-button size="small" @click="handleNodeAction(record, btnKey)">
+                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['edit', 'delete'].includes(a))" :key="btnKey">
+                    <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
+                      {{ getNodeActionButtonTitle(btnKey) }}
+                    </a-button>
+                  </template>
+                  <a-divider type="vertical" v-if="nodeActionsSelected.some(a => ['edit', 'delete'].includes(a)) && nodeActionsSelected.some(a => ['start', 'stop', 'status'].includes(a))" />
+                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['start', 'stop', 'status'].includes(a))" :key="btnKey">
+                    <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
                       {{ getNodeActionButtonTitle(btnKey) }}
                     </a-button>
                   </template>
@@ -318,17 +350,17 @@
     </a-modal>
 
     <a-modal v-model:open="nodeModalVisible" :title="editingNode ? '编辑节点' : '添加节点'" width="500px" @ok="handleNodeSubmit">
-      <a-form :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="IP" name="ip">
+      <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
           <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
         </a-form-item>
-        <a-form-item label="服务端口" name="service_port">
+        <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
           <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
         </a-form-item>
-        <a-form-item label="管理端口" name="management_port">
+        <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
           <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
           <a-select v-model:value="nodeForm.status">
             <a-select-option :value="1">正常</a-select-option>
             <a-select-option :value="0">禁用</a-select-option>
@@ -338,21 +370,21 @@
     </a-modal>
 
     <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="650px" @ok="handleUpstreamSubmit">
-      <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name">
+      <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
           <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
         </a-form-item>
-        <a-form-item label="负载均衡" name="load_balance">
+        <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
           <a-select v-model:value="upstreamForm.load_balance">
             <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
             <a-select-option value="consistent_hash">一致性哈希</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location">
+        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location" :rules="[{ required: true, message: '请选择哈希位置' }]">
           <a-select v-model:value="upstreamForm.hash_location">
-            <a-select-option value="header">header</a-select-option>
-            <a-select-option value="cookie">cookie</a-select-option>
-            <a-select-option value="vars">vars</a-select-option>
+            <a-select-option value="header">HTTP请求头</a-select-option>
+            <a-select-option value="cookie">Cookie</a-select-option>
+            <a-select-option value="vars">内置变量</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="Key" name="hash_key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
@@ -361,17 +393,20 @@
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="upstreamForm.description" :rows="2" />
         </a-form-item>
-        <a-form-item label="节点列表">
+        <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
           <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'ip'">
                 <a-input v-model:value="record.ip" placeholder="IP地址" />
+                <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
               </template>
               <template v-else-if="column.key === 'port'">
                 <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
+                <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
               </template>
               <template v-else-if="column.key === 'weight'">
                 <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
+                <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
               </template>
               <template v-else-if="column.key === 'action'">
                 <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
@@ -469,7 +504,7 @@ import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
-import type { Cluster, Node, Upstream, Route, Plugin } from '@/types'
+import type { Cluster, Node, Upstream, Route, Plugin, RoutePlugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -519,14 +554,14 @@ const allNodeColumns = [
 
 const upstreamColumns = [
   { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
-  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true, customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text) },
   { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
 
 const allUpstreamColumns = [
   { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
-  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true, customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text) },
   { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
@@ -590,6 +625,8 @@ const nodeColumnsSelected = ref(['ip', 'service_port', 'management_port', 'statu
 const nodeSearchVisible = ref(true)
 
 const allNodeActionButtons = [
+  { key: 'edit', title: '编辑' },
+  { key: 'delete', title: '删除' },
   { key: 'start', title: '启动' },
   { key: 'stop', title: '停止' },
   { key: 'status', title: '状态查询' }
@@ -604,6 +641,31 @@ const visibleNodeColumns = computed(() => {
 const isAdmin = () => authStore.user?.role === 'admin'
 
 const NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+
+// IP 地址校验正则
+const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
+
+const getLoadBalanceLabel = (value: string): string => {
+  const labels: Record<string, string> = {
+    weighted_roundrobin: '加权轮询',
+    consistent_hash: '一致性哈希'
+  }
+  return labels[value] || value
+}
+
+const validateIP = (_rule: any, value: string, callback: (error?: string) => void) => {
+  if (!value) {
+    callback('请输入IP地址')
+    return
+  }
+  if (!IP_PATTERN.test(value)) {
+    callback('请输入合法的IP地址')
+    return
+  }
+  callback()
+}
 
 const validateName = () => {
   if (!form.name) {
@@ -667,6 +729,9 @@ const routeForm = reactive({
 })
 
 const routeFormRef = ref()
+const nodeFormRef = ref()
+const upstreamFormRef = ref()
+const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
 
 const availablePlugins = ref<Plugin[]>([])
 
@@ -778,8 +843,14 @@ const getNodeActionButtonTitle = (key: string) => {
   return btn?.title || key
 }
 
-const handleNodeAction = (record: Node, action: string) => {
+const handleNodeAction = (cluster: Cluster, record: Node, action: string) => {
   switch (action) {
+    case 'edit':
+      editNode(cluster)
+      break
+    case 'delete':
+      deleteNode(cluster)
+      break
     case 'start':
       startNode(record)
       break
@@ -1073,6 +1144,11 @@ const editNode = (cluster: Cluster) => {
 const handleNodeSubmit = async () => {
   if (!currentClusterId.value) return
   try {
+    await nodeFormRef.value.validate()
+  } catch {
+    return
+  }
+  try {
     if (editingNode.value) {
       await api.put(`/clusters/${currentClusterId.value}/nodes/${editingNode.value.id}`, nodeForm)
       message.success('节点已更新')
@@ -1192,6 +1268,7 @@ const showAddUpstreamModal = async (cluster: Cluster) => {
   upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
   upstreamForm.hash_location = 'vars'
   upstreamForm.hash_key = ''
+  targetValidation.value = {}
   upstreamModalVisible.value = true
 }
 
@@ -1224,19 +1301,48 @@ const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   } else {
     upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
   }
+  targetValidation.value = {}
   upstreamModalVisible.value = true
+}
+
+const validateTargets = () => {
+  targetValidation.value = {}
+  let valid = true
+  upstreamForm.targets.forEach((t, i) => {
+    const errors: Record<string, string> = {}
+    if (!t.ip) {
+      errors.ip = 'IP不能为空'
+      valid = false
+    } else if (!isValidIP(t.ip)) {
+      errors.ip = 'IP不合法'
+      valid = false
+    }
+    if (!t.port || t.port < 1 || t.port > 65535) {
+      errors.port = '端口不合法'
+      valid = false
+    }
+    if (!t.weight || t.weight < 1 || t.weight > 100) {
+      errors.weight = '权重不合法'
+      valid = false
+    }
+    targetValidation.value[`${i}`] = errors
+  })
+  return valid
 }
 
 const handleUpstreamSubmit = async () => {
   if (!currentClusterId.value) return
-  if (!upstreamForm.name) {
-    message.error('请输入上游名称')
+  try {
+    await upstreamFormRef.value.validate()
+  } catch {
     return
   }
-  if (upstreamForm.targets.length === 0 || !upstreamForm.targets[0].ip) {
-    message.error('请至少添加一个节点')
+
+  // Validate targets array
+  if (!validateTargets()) {
     return
   }
+
   try {
     const submitData = {
       name: upstreamForm.name,
