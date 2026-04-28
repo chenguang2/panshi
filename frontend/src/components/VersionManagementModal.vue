@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
-    :title="`版本管理 - ${resourceType === 'upstream' ? '上游' : '路由'}: ${resourceName}`"
+    :title="`版本管理 - ${resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : '插件'}: ${resourceName}`"
     width="1000px"
     @ok="handleClose"
   >
@@ -101,7 +101,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -147,13 +147,33 @@ const copyConfig = async () => {
 }
 
 watch(() => props.open, async (newVal) => {
-  if (newVal && props.resourceId && props.clusterId) {
+  if (newVal && props.clusterId && (props.resourceId || (props.resourceType === 'plugin_metadata' && props.resourceName))) {
     await loadHistory()
   }
 })
 
 const loadHistory = async () => {
-  if (!props.clusterId || !props.resourceId) return
+  if (!props.clusterId) return
+  if (props.resourceType === 'plugin_metadata') {
+    if (!props.resourceName) return
+    loading.value = true
+    try {
+      const res = await api.get(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/versions`)
+      versions.value = res.data.items || []
+      currentVersion.value = res.data.current_version || null
+      if (versions.value.length > 0) {
+        selectedVersion.value = versions.value[0].version
+      }
+      selectedVersions.value = []
+      compareMode.value = false
+    } catch (error) {
+      message.error('加载历史版本失败')
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+  if (!props.resourceId) return
   loading.value = true
   try {
     const endpoint = props.resourceType === 'upstream'
@@ -358,7 +378,19 @@ const formatDate = (dateStr: string) => {
 }
 
 const handleRepublish = async () => {
-  if (!props.clusterId || !props.resourceId || !selectedVersion.value) return
+  if (!selectedVersion.value) return
+  if (props.resourceType === 'plugin_metadata') {
+    if (!props.clusterId || !props.resourceName) return
+    try {
+      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`)
+      message.success('已切换到版本 v' + selectedVersion.value)
+      await loadHistory()
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '切换失败')
+    }
+    return
+  }
+  if (!props.clusterId || !props.resourceId) return
   try {
     const endpoint = props.resourceType === 'upstream'
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
