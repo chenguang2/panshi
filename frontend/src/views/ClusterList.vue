@@ -360,6 +360,9 @@
         <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
           <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
         </a-form-item>
+        <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
+          <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
+        </a-form-item>
         <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
           <a-select v-model:value="nodeForm.status">
             <a-select-option :value="1">正常</a-select-option>
@@ -541,6 +544,7 @@ const nodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
+  { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
   { title: '状态', key: 'status', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
@@ -549,6 +553,7 @@ const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
+  { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
   { title: '状态', key: 'status', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
@@ -692,6 +697,7 @@ const nodeForm = reactive({
   ip: '',
   service_port: 80,
   management_port: 9180,
+  edge_path: '',
   status: 1
 })
 
@@ -1123,6 +1129,7 @@ const showAddNodeModal = async (cluster: Cluster) => {
     ip: '',
     service_port: 80,
     management_port: 9180,
+    edge_path: '',
     status: 1
   })
   nodeModalVisible.value = true
@@ -1138,6 +1145,7 @@ const editNode = (cluster: Cluster) => {
   nodeForm.ip = cluster.selectedNode.ip
   nodeForm.service_port = cluster.selectedNode.service_port
   nodeForm.management_port = cluster.selectedNode.management_port
+  nodeForm.edge_path = cluster.selectedNode.edge_path
   nodeForm.status = cluster.selectedNode.status
   nodeModalVisible.value = true
 }

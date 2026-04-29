@@ -127,7 +127,15 @@ class NodeBase(BaseModel):
     ip: str = Field(..., max_length=50)
     service_port: int = Field(default=80, ge=1, le=65535)
     management_port: int = Field(default=9180, ge=1, le=65535)
+    edge_path: str = Field(..., max_length=255)
     status: int = Field(default=1)
+
+    @field_validator('edge_path')
+    @classmethod
+    def validate_edge_path(cls, v: str) -> str:
+        if not v.startswith('/'):
+            raise ValueError('Edge路径必须以 / 开头')
+        return v
 
 
 class NodeCreate(NodeBase):
@@ -138,7 +146,15 @@ class NodeUpdate(BaseModel):
     ip: Optional[str] = Field(None, max_length=50)
     service_port: Optional[int] = Field(None, ge=1, le=65535)
     management_port: Optional[int] = Field(None, ge=1, le=65535)
+    edge_path: Optional[str] = Field(None, max_length=255)
     status: Optional[int] = None
+
+    @field_validator('edge_path')
+    @classmethod
+    def validate_edge_path(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.startswith('/'):
+            raise ValueError('Edge路径必须以 / 开头')
+        return v
 
 
 class NodeResponse(NodeBase):

@@ -84,6 +84,7 @@ class Node(Base):
     ip = Column(String(50), nullable=False)
     service_port = Column(Integer, nullable=False, default=80)
     management_port = Column(Integer, nullable=False, default=9180)
+    edge_path = Column(String(255), nullable=False)
     status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
