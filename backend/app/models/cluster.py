@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, Column
+from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, Column, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -117,6 +117,9 @@ class ClusterPluginMetadata(Base):
 
 class PluginMetadataVersion(Base):
     __tablename__ = "ps_plugin_metadata_version"
+    __table_args__ = (
+        UniqueConstraint('cluster_plugin_metadata_id', 'version', name='uix_plugin_version'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     cluster_plugin_metadata_id = Column(Integer, ForeignKey("ps_cluster_plugin_metadata.id", ondelete="CASCADE"), nullable=False)

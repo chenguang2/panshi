@@ -69,16 +69,6 @@ async def create_plugin_metadata(
     await db.commit()
     await db.refresh(db_item)
 
-    # 记录版本历史
-    version_record = PluginMetadataVersion(
-        cluster_plugin_metadata_id=db_item.id,
-        config_data="{}",
-        version=1,
-        action="create"
-    )
-    db.add(version_record)
-    await db.commit()
-
     return {
         "id": db_item.id,
         "cluster_id": db_item.cluster_id,
@@ -96,7 +86,7 @@ async def update_plugin_metadata(
     metadata: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """更新插件的 metadata"""
+    """更新插件的 metadata（不产生版本记录）"""
     result = await db.execute(
         select(ClusterPluginMetadata).where(
             ClusterPluginMetadata.cluster_id == cluster_id,
@@ -107,20 +97,8 @@ async def update_plugin_metadata(
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    new_version = db_item.version + 1
-
-    # 记录版本历史
-    version_record = PluginMetadataVersion(
-        cluster_plugin_metadata_id=db_item.id,
-        config_data=json.dumps(metadata),
-        version=new_version,
-        action="update"
-    )
-    db.add(version_record)
-
-    # 更新配置
+    # 更新配置，但不增加版本号（版本只在发布时增加）
     db_item.config_data = json.dumps(metadata)
-    db_item.version = new_version
     db_item.is_published = 0  # 标记为未发布
 
     await db.commit()
@@ -191,10 +169,34 @@ async def publish_plugin_metadata(
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
+    # 获取已有版本记录，计算新版本号
+    versions_result = await db.execute(
+        select(PluginMetadataVersion).where(
+            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id
+        ).order_by(PluginMetadataVersion.version.desc())
+    )
+    existing_versions = versions_result.scalars().all()
+    max_version = existing_versions[0].version if existing_versions else 0
+
+    if not existing_versions:
+        new_version = 1
+    else:
+        new_version = max_version + 1
+
+    version_record = PluginMetadataVersion(
+        cluster_plugin_metadata_id=db_item.id,
+        config_data=db_item.config_data,
+        version=new_version,
+        action="publish"
+    )
+    db.add(version_record)
+
+    db_item.version = new_version
     db_item.is_published = 1
     await db.commit()
+    await db.refresh(db_item)
 
-    return {"message": f"插件 {plugin_name} 已发布"}
+    return {"message": f"插件 {plugin_name} 已发布", "version": new_version}
 
 
 @router.get("/{plugin_name}/versions")
@@ -245,7 +247,7 @@ async def rollback_plugin_metadata(
     version: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """回滚插件 metadata 到指定版本"""
+    """回滚插件 metadata 到指定版本（不发布）"""
     result = await db.execute(
         select(ClusterPluginMetadata).where(
             ClusterPluginMetadata.cluster_id == cluster_id,
@@ -256,7 +258,6 @@ async def rollback_plugin_metadata(
     if not db_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    # 获取目标版本
     target_result = await db.execute(
         select(PluginMetadataVersion).where(
             PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
@@ -267,16 +268,6 @@ async def rollback_plugin_metadata(
     if not target_version:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
 
-    # 记录版本历史
-    new_version_record = PluginMetadataVersion(
-        cluster_plugin_metadata_id=db_item.id,
-        config_data=target_version.config_data,
-        version=version,
-        action="update"
-    )
-    db.add(new_version_record)
-
-    # 更新当前配置（version 使用目标版本的号）
     db_item.config_data = target_version.config_data
     db_item.version = version
     db_item.is_published = 0
@@ -288,3 +279,75 @@ async def rollback_plugin_metadata(
         "message": f"插件 {plugin_name} 已回滚到版本 v{version}",
         "version": version
     }
+
+
+@router.post("/{plugin_name}/switch-version/{version}")
+async def switch_version_and_publish(
+    cluster_id: int,
+    plugin_name: str,
+    version: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """切换到指定版本并发布（不生成新版本记录）"""
+    result = await db.execute(
+        select(ClusterPluginMetadata).where(
+            ClusterPluginMetadata.cluster_id == cluster_id,
+            ClusterPluginMetadata.plugin_name == plugin_name
+        )
+    )
+    db_item = result.scalar_one_or_none()
+    if not db_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+
+    target_result = await db.execute(
+        select(PluginMetadataVersion).where(
+            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
+            PluginMetadataVersion.version == version
+        )
+    )
+    target_version = target_result.scalar_one_or_none()
+    if not target_version:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
+
+    db_item.config_data = target_version.config_data
+    db_item.version = version
+    db_item.is_published = 1
+
+    await db.commit()
+    await db.refresh(db_item)
+
+    return {
+        "message": f"插件 {plugin_name} 已切换到版本 v{version} 并发布",
+        "version": version
+    }
+
+
+@router.delete("/{plugin_name}/record")
+async def hard_delete_plugin_metadata(
+    cluster_id: int,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """彻底删除插件配置记录（包括所有版本历史）"""
+    result = await db.execute(
+        select(ClusterPluginMetadata).where(
+            ClusterPluginMetadata.cluster_id == cluster_id,
+            ClusterPluginMetadata.plugin_name == plugin_name
+        )
+    )
+    db_item = result.scalar_one_or_none()
+    if not db_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+
+    versions_result = await db.execute(
+        select(PluginMetadataVersion).where(
+            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id
+        )
+    )
+    for v in versions_result.scalars().all():
+        await db.delete(v)
+
+    await db.delete(db_item)
+    await db.commit()
+
+    return {"message": f"插件 {plugin_name} 已彻底删除"}

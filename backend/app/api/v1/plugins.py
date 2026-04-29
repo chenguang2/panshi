@@ -11,6 +11,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "ip-restriction",
         "description": "IP 黑白名单限制",
+        "enable_metadata": True,
         "schema": {
             "whitelist": {
                 "type": "array",
@@ -31,6 +32,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "cors",
         "description": "跨域资源共享（CORS）",
+        "enable_metadata": True,
         "schema": {
             "allow_origins": {
                 "type": "string",
@@ -63,6 +65,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "proxy-rewrite",
         "description": "代理重写（修改请求 URI、Header、Host、协议）",
+        "enable_metadata": True,
         "schema": {
             "uri": {
                 "type": "string",
@@ -126,6 +129,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "limit-req",
         "description": "请求速率限制（令牌桶算法）",
+        "enable_metadata": True,
         "schema": {
             "rate": {
                 "type": "number",
@@ -151,6 +155,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "limit-conn",
         "description": "并发连接数限制",
+        "enable_metadata": True,
         "schema": {
             "conn": {
                 "type": "number",
@@ -176,6 +181,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "limit-count",
         "description": "时间窗口请求数限制",
+        "enable_metadata": True,
         "schema": {
             "count": {
                 "type": "number",
@@ -201,6 +207,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "key-auth",
         "description": "API Key 认证",
+        "enable_metadata": True,
         "schema": {
             "key": {
                 "type": "string",
@@ -213,6 +220,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "jwt-auth",
         "description": "JWT Token 认证",
+        "enable_metadata": True,
         "schema": {
             "secret": {
                 "type": "string",
@@ -232,11 +240,13 @@ BUILTIN_PLUGINS = [
     {
         "name": "basic-auth",
         "description": "Basic Auth 基本认证",
+        "enable_metadata": True,
         "schema": {}
     },
     {
         "name": "response-rewrite",
         "description": "响应体重写（修改状态码、Body、Header）",
+        "enable_metadata": True,
         "schema": {
             "status_code": {
                 "type": "number",

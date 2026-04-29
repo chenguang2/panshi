@@ -94,7 +94,8 @@ import api from '@/api'
 interface ConfigVersion {
   id: number
   version: number
-  config: string
+  metadata: Record<string, any>
+  action?: string
   created_at: string
   created_by?: string
 }
@@ -109,6 +110,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [val: boolean]
+  'edit': [data: { plugin_name: string; config: string }]
+  'version-change': [data: { plugin_name: string; version: number; metadata: Record<string, any> }]
+  'published': [data: { plugin_name: string }]
 }>()
 
 const visible = computed({
@@ -124,27 +128,40 @@ const selectedVersions = ref<number[]>([])
 const currentVersion = ref<number | null>(null)
 
 const selectedVersionData = computed(() => {
-  if (selectedVersion.value === null) return null
-  return versions.value.find(v => v.version === selectedVersion.value)
+  const sv = selectedVersion.value
+  if (sv === null) return null
+  const selected = versions.value.find(v => String(v.version) === String(sv))
+  return selected || null
 })
 
 const formattedConfig = computed(() => {
   if (!selectedVersionData.value) return ''
   try {
-    return JSON.stringify(JSON.parse(selectedVersionData.value.config), null, 2)
+    return JSON.stringify(JSON.parse(selectedVersionData.value.metadata), null, 2)
   } catch {
-    return selectedVersionData.value.config
+    return selectedVersionData.value.metadata || ''
   }
 })
 
 const copyConfig = async () => {
   try {
-    await navigator.clipboard.writeText(formattedConfig.value)
+    const textToCopy = JSON.stringify(selectedVersionData.value.metadata, null, 2)
+    await navigator.clipboard.writeText(textToCopy)
     message.success('已复制到剪贴板')
   } catch {
     message.error('复制失败')
   }
 }
+
+watch(selectedVersion, (newVal) => {
+  if (newVal !== null && selectedVersionData.value && props.resourceType === 'plugin_metadata') {
+    emit('version-change', {
+      plugin_name: props.resourceName,
+      version: selectedVersionData.value.version,
+      metadata: selectedVersionData.value.metadata
+    })
+  }
+})
 
 watch(() => props.open, async (newVal) => {
   if (newVal && props.clusterId && (props.resourceId || (props.resourceType === 'plugin_metadata' && props.resourceName))) {
@@ -161,7 +178,9 @@ const loadHistory = async () => {
       const res = await api.get(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/versions`)
       versions.value = res.data.items || []
       currentVersion.value = res.data.current_version || null
-      if (versions.value.length > 0) {
+      if (currentVersion.value !== null) {
+        selectedVersion.value = currentVersion.value
+      } else if (versions.value.length > 0) {
         selectedVersion.value = versions.value[0].version
       }
       selectedVersions.value = []
@@ -381,16 +400,22 @@ const handleRepublish = async () => {
   if (!selectedVersion.value) return
   if (props.resourceType === 'plugin_metadata') {
     if (!props.clusterId || !props.resourceName) return
+    const versionToSelect = selectedVersion.value
     try {
-      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`)
-      message.success('已切换到版本 v' + selectedVersion.value)
+      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/switch-version/${selectedVersion.value}`)
+      message.success('已切换并发布到版本 v' + selectedVersion.value)
+      emit('published', { plugin_name: props.resourceName })
       await loadHistory()
+      if (versions.value.some(v => v.version === versionToSelect)) {
+        selectedVersion.value = versionToSelect
+      }
     } catch (error: any) {
       message.error(error.response?.data?.detail || '切换失败')
     }
     return
   }
   if (!props.clusterId || !props.resourceId) return
+  const versionToSelect = selectedVersion.value
   try {
     const endpoint = props.resourceType === 'upstream'
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
@@ -398,6 +423,9 @@ const handleRepublish = async () => {
     await api.post(endpoint)
     message.success('已切换到版本 v' + selectedVersion.value)
     await loadHistory()
+    if (versions.value.some(v => v.version === versionToSelect)) {
+      selectedVersion.value = versionToSelect
+    }
   } catch (error: any) {
     message.error(error.response?.data?.detail || '切换失败')
   }
@@ -408,11 +436,17 @@ const handleRepublishSelected = async () => {
   const targetVersion = Math.max(...selectedVersions.value)
   if (!props.clusterId || !props.resourceId) return
   try {
-    const endpoint = props.resourceType === 'upstream'
-      ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${targetVersion}`
-      : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${targetVersion}`
-    await api.post(endpoint)
-    message.success('已切换到版本 v' + targetVersion)
+    if (props.resourceType === 'plugin_metadata') {
+      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/switch-version/${targetVersion}`)
+      emit('published', { plugin_name: props.resourceName })
+      message.success('已切换到版本 v' + targetVersion)
+    } else {
+      const endpoint = props.resourceType === 'upstream'
+        ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${targetVersion}`
+        : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${targetVersion}`
+      await api.post(endpoint)
+      message.success('已切换到版本 v' + targetVersion)
+    }
     await loadHistory()
   } catch (error: any) {
     message.error(error.response?.data?.detail || '切换失败')
@@ -435,6 +469,15 @@ const handleDelete = async () => {
   } catch (error: any) {
     message.error(error.response?.data?.detail || '删除失败')
   }
+}
+
+const handleEdit = () => {
+  if (!selectedVersionData.value || !props.resourceName) return
+  emit('edit', {
+    plugin_name: props.resourceName,
+    config: selectedVersionData.value.metadata
+  })
+  visible.value = false
 }
 
 const handleClose = () => {

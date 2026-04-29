@@ -60,7 +60,7 @@
               <a-button size="small" danger @click="deletePlugin(item)">删除</a-button>
               <a-divider type="vertical" />
               <a-button size="small" @click="publishPlugin(item)" :disabled="item.is_published">发布</a-button>
-              <a-button size="small" @click="openVersionManagement(item)">版本</a-button>
+              <a-button size="small" @click="openVersionManagement(item)">版本管理</a-button>
             </div>
           </div>
           <div v-if="configuredPlugins.length === 0" class="empty-hint">
@@ -106,6 +106,9 @@
       :resource-id="null"
       :cluster-id="clusterId"
       :resource-name="versionModalPluginName"
+      @edit="handleVersionManagementEdit"
+      @version-change="handleVersionChange"
+      @published="handleVersionPublished"
     />
   </div>
 </template>
@@ -233,11 +236,41 @@ const handleSavePlugin = async (config: string) => {
   }
 }
 
+const handleVersionManagementEdit = (data: { plugin_name: string; config: string }) => {
+  const pluginInfo = allPlugins.value.find(p => p.name === data.plugin_name)
+  editingPluginName.value = data.plugin_name
+  editingPlugin.value = {
+    plugin_name: data.plugin_name,
+    config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config, null, 2)
+  }
+  editingPluginInfo.value = pluginInfo || null
+  editorDrawerVisible.value = true
+}
+
+const handleVersionChange = (data: { plugin_name: string; version: number; metadata: Record<string, any> }) => {
+  if (viewingPlugin.value && viewingPlugin.value.plugin_name === data.plugin_name) {
+    viewingPlugin.value = {
+      ...viewingPlugin.value,
+      version: data.version,
+      metadata: data.metadata
+    }
+  }
+  loadConfiguredPlugins()
+}
+
+const handleVersionPublished = async (data: { plugin_name: string }) => {
+  viewingPlugin.value = null
+  await loadConfiguredPlugins()
+}
+
 const deletePlugin = async (item: ConfiguredPlugin) => {
   try {
-    await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`)
+    await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/record`)
     message.success(`已删除插件 ${item.plugin_name}`)
-    await Promise.all([loadPlugins(), loadConfiguredPlugins()])
+    if (viewingPlugin.value?.plugin_name === item.plugin_name) {
+      viewingPlugin.value = null
+    }
+    await Promise.all([loadConfiguredPlugins(), loadPlugins()])
   } catch (error) {
     message.error('删除失败')
   }
@@ -245,11 +278,12 @@ const deletePlugin = async (item: ConfiguredPlugin) => {
 
 const publishPlugin = async (item: ConfiguredPlugin) => {
   try {
-    await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`)
+    const response = await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`)
     message.success(`已发布插件 ${item.plugin_name}`)
     await loadConfiguredPlugins()
-  } catch (error) {
-    message.error('发布失败')
+  } catch (error: any) {
+    const msg = error?.response?.data?.detail || '发布失败'
+    message.error(msg)
   }
 }
 
