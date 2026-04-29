@@ -248,6 +248,7 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         "hosts": route.hosts,
         "remote_addrs": route.remote_addrs,
         "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
+        "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
         "plugins": [{"plugin_name": p.plugin_name, "config": p.config} for p in plugins]
     }
 
@@ -334,7 +335,27 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     if not config_version:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
 
+    config_data = json.loads(config_version.config)
+
+    route.uri = config_data.get("uri", route.uri)
+    route.methods = config_data.get("methods", route.methods)
+    route.priority = config_data.get("priority", route.priority)
+    route.upstream_id = config_data.get("upstream_id", route.upstream_id)
+    route.hosts = config_data.get("hosts", route.hosts)
+    route.remote_addrs = config_data.get("remote_addrs", route.remote_addrs)
+    route.vars = json.dumps(config_data.get("vars")) if config_data.get("vars") else None
+    route.advanced_match_enabled = 1 if config_data.get("advanced_match_enabled") else 0
     route.current_version = version
+
+    await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
+    for p in config_data.get("plugins", []):
+        plugin = RoutePlugin(
+            route_id=route_id,
+            plugin_name=p["plugin_name"],
+            config=p["config"]
+        )
+        db.add(plugin)
+
     await db.commit()
 
     return {"status": "ok", "message": f"路由已切换到版本 v{version}", "version": version}

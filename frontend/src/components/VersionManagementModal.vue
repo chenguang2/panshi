@@ -133,16 +133,26 @@ const selectedVersionData = computed(() => {
 
 const formattedConfig = computed(() => {
   if (!selectedVersionData.value) return ''
+  // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
+  const rawData = selectedVersionData.value.metadata || selectedVersionData.value.config
+  if (!rawData) return ''
   try {
-    return JSON.stringify(JSON.parse(selectedVersionData.value.metadata), null, 2)
+    if (typeof rawData === 'string') {
+      return JSON.stringify(JSON.parse(rawData), null, 2)
+    }
+    return JSON.stringify(rawData, null, 2)
   } catch {
-    return selectedVersionData.value.metadata || ''
+    return typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2)
   }
 })
 
 const copyConfig = async () => {
+  if (!selectedVersionData.value) return
+  // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
+  const rawData = selectedVersionData.value.metadata || selectedVersionData.value.config
+  if (!rawData) return
   try {
-    const textToCopy = JSON.stringify(selectedVersionData.value.metadata, null, 2)
+    const textToCopy = formattedConfig.value
     await navigator.clipboard.writeText(textToCopy)
     message.success('已复制到剪贴板')
   } catch {
@@ -198,7 +208,9 @@ const loadHistory = async () => {
     const res = await api.get(endpoint)
     versions.value = res.data.items || []
     currentVersion.value = res.data.current_version || null
-    if (versions.value.length > 0) {
+    if (currentVersion.value !== null) {
+      selectedVersion.value = currentVersion.value
+    } else if (versions.value.length > 0) {
       selectedVersion.value = versions.value[0].version
     }
     selectedVersions.value = []
@@ -314,9 +326,11 @@ const diffTreeHtml = computed(() => {
   if (!versionA || !versionB) return ''
 
   try {
+    // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
+    const getRawData = (v: any) => v.metadata || v.config
     const parseMetadata = (m: any) => typeof m === 'string' ? JSON.parse(m) : m
-    const objA = sortValue(parseMetadata(versionA.metadata))
-    const objB = sortValue(parseMetadata(versionB.metadata))
+    const objA = sortValue(parseMetadata(getRawData(versionA)))
+    const objB = sortValue(parseMetadata(getRawData(versionB)))
     const diff = computeDiff(objA, objB)
     return renderDiffTree(diff)
   } catch (e) {
@@ -419,7 +433,8 @@ const handleRepublish = async () => {
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
-    message.success('已切换到版本 v' + selectedVersion.value)
+    message.success('已切换并发布到版本 v' + selectedVersion.value)
+    emit('published', { plugin_name: props.resourceName })
     await loadHistory()
     if (versions.value.some(v => v.version === versionToSelect)) {
       selectedVersion.value = versionToSelect
@@ -476,9 +491,11 @@ const handleDelete = async () => {
 
 const handleEdit = () => {
   if (!selectedVersionData.value || !props.resourceName) return
+  // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
+  const rawData = selectedVersionData.value.metadata || selectedVersionData.value.config
   emit('edit', {
     plugin_name: props.resourceName,
-    config: selectedVersionData.value.metadata
+    config: typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2)
   })
   visible.value = false
 }

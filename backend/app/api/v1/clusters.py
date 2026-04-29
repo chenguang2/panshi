@@ -475,6 +475,8 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
         "id": upstream.id,
         "name": upstream.name,
         "load_balance": upstream.load_balance,
+        "hash_location": upstream.hash_location,
+        "hash_key": upstream.hash_key,
         "targets": [{"target": t.target, "weight": t.weight} for t in targets]
     }
 
@@ -529,7 +531,23 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
     if not config_version:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
 
+    config_data = json.loads(config_version.config)
+
+    upstream.load_balance = config_data.get("load_balance", upstream.load_balance)
+    upstream.hash_location = config_data.get("hash_location")
+    upstream.hash_key = config_data.get("hash_key")
     upstream.current_version = version
+
+    await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+
+    for t in config_data.get("targets", []):
+        target = UpstreamTarget(
+            upstream_id=upstream_id,
+            target=t["target"],
+            weight=t["weight"]
+        )
+        db.add(target)
+
     await db.commit()
 
     return {"status": "ok", "message": f"上游已切换到版本 v{version}", "version": version}

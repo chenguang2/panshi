@@ -494,6 +494,7 @@
       :resource-id="versionModalResourceId"
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
+      @published="versionModalOnPublished"
     />
   </div>
 </template>
@@ -1665,6 +1666,15 @@ const openUpstreamVersionManagement = (cluster: Cluster) => {
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = cluster.selectedUpstream.name
   versionModalVisible.value = true
+}
+
+const versionModalOnPublished = async () => {
+  if (versionModalType.value !== 'upstream') return
+  const cluster = clusters.value.find(c => c.id === versionModalClusterId.value)
+  if (!cluster) return
+
+  // 刷新上游列表，确保显示最新版本
+  await loadUpstreams(cluster)
 }
 
 const publishRoute = async (cluster: Cluster) => {
