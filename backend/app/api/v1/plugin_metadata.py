@@ -351,3 +351,40 @@ async def hard_delete_plugin_metadata(
     await db.commit()
 
     return {"message": f"插件 {plugin_name} 已彻底删除"}
+
+
+@router.delete("/{plugin_name}/versions/{version}")
+async def delete_plugin_metadata_version(
+    cluster_id: int,
+    plugin_name: str,
+    version: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """删除插件的特定版本记录"""
+    result = await db.execute(
+        select(ClusterPluginMetadata).where(
+            ClusterPluginMetadata.cluster_id == cluster_id,
+            ClusterPluginMetadata.plugin_name == plugin_name
+        )
+    )
+    db_item = result.scalar_one_or_none()
+    if not db_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+
+    version_result = await db.execute(
+        select(PluginMetadataVersion).where(
+            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
+            PluginMetadataVersion.version == version
+        )
+    )
+    version_record = version_result.scalar_one_or_none()
+    if not version_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
+
+    if db_item.version == version:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法删除当前版本")
+
+    await db.delete(version_record)
+    await db.commit()
+
+    return {"message": f"版本 v{version} 已删除"}

@@ -592,4 +592,95 @@ test.describe('Global Plugins', () => {
 
     await page.locator('.ant-modal button:has-text("关 闭")').click();
   });
+
+  test('should compare two versions in diff mode without error', async ({ page }) => {
+    await page.click('text=集群管理');
+    await page.waitForTimeout(1000);
+
+    const clusterCard = page.locator('.cluster-card').first();
+    const globalPluginsTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '全局插件' });
+    await globalPluginsTab.click();
+    await page.waitForTimeout(1000);
+
+    // Find a configured plugin with versions
+    let configuredItem = page.locator('.plugin-list').nth(1).locator('.plugin-item').filter({ hasText: 'basic-auth' });
+    if (await configuredItem.count() === 0) {
+      configuredItem = page.locator('.plugin-list').nth(1).locator('.plugin-item').first();
+    }
+
+    const itemVisible = await configuredItem.isVisible({ timeout: 1000 }).catch(() => false);
+    if (!itemVisible) {
+      return;
+    }
+
+    // Publish to create a version
+    const publishBtn = configuredItem.locator('button').nth(2);
+    if (await publishBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await publishBtn.click();
+      await page.waitForTimeout(3000);
+    }
+
+    // Open version management
+    const vmBtn = configuredItem.locator('button:has-text("版本管理")');
+    await vmBtn.click();
+    await page.waitForTimeout(1000);
+
+    // Check if we have at least 2 versions (may need to create another)
+    const versionItems = page.locator('.version-item');
+    let versionCount = await versionItems.count();
+
+    if (versionCount < 2) {
+      // Close modal, edit and publish to create another version
+      await page.locator('.ant-modal button:has-text("关 闭")').click();
+      await page.waitForTimeout(500);
+
+      const editBtn = configuredItem.locator('button').nth(1);
+      await editBtn.click();
+      await page.waitForTimeout(1500);
+
+      const textarea = page.locator('.ant-drawer textarea').first();
+      await textarea.fill('{"key": "value2"}');
+      const saveBtn = page.locator('.ant-drawer button:has-text("保 存")');
+      await saveBtn.click();
+      await page.waitForTimeout(2000);
+
+      const publishBtn2 = configuredItem.locator('button').nth(2);
+      await publishBtn2.click();
+      await page.waitForTimeout(3000);
+
+      // Reopen version management
+      const vmBtn2 = configuredItem.locator('button:has-text("版本管理")');
+      await vmBtn2.click();
+      await page.waitForTimeout(1000);
+
+      versionCount = await versionItems.count();
+    }
+
+    if (versionCount < 2) {
+      // Skip if still not enough versions
+      await page.locator('.ant-modal button:has-text("关 闭")').click();
+      return;
+    }
+
+    // Enable compare mode
+    const compareCheckbox = page.locator('.panel-header .ant-checkbox-wrapper');
+    await compareCheckbox.click();
+    await page.waitForTimeout(500);
+
+    // Select two versions
+    const firstVersion = versionItems.first();
+    const secondVersion = versionItems.nth(1);
+    await firstVersion.locator('.ant-radio').click();
+    await secondVersion.locator('.ant-radio').click();
+    await page.waitForTimeout(500);
+
+    // Check diff view is shown (should NOT show "解析配置失败")
+    const diffContainer = page.locator('.diff-container');
+    await expect(diffContainer).toBeVisible({ timeout: 3000 });
+
+    const diffContent = await page.locator('.diff-tree').innerHTML();
+    expect(diffContent).not.toContain('解析配置失败');
+
+    await page.locator('.ant-modal button:has-text("关 闭")').click();
+  });
 });

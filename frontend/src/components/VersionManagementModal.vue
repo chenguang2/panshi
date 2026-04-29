@@ -51,9 +51,6 @@
           <div v-if="compareMode && selectedVersions.length === 2" class="diff-view">
             <div class="diff-header">
               <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
-              <a-space>
-                <a-button size="small" type="primary" @click="handleRepublishSelected">切换到 v{{ selectedVersions[1] }}</a-button>
-              </a-space>
             </div>
             <div class="diff-container">
               <div class="diff-tree" v-html="diffTreeHtml"></div>
@@ -317,8 +314,9 @@ const diffTreeHtml = computed(() => {
   if (!versionA || !versionB) return ''
 
   try {
-    const objA = sortValue(JSON.parse(versionA.config))
-    const objB = sortValue(JSON.parse(versionB.config))
+    const parseMetadata = (m: any) => typeof m === 'string' ? JSON.parse(m) : m
+    const objA = sortValue(parseMetadata(versionA.metadata))
+    const objB = sortValue(parseMetadata(versionB.metadata))
     const diff = computeDiff(objA, objB)
     return renderDiffTree(diff)
   } catch (e) {
@@ -454,16 +452,21 @@ const handleRepublishSelected = async () => {
 }
 
 const handleDelete = async () => {
-  if (!props.clusterId || !props.resourceId || !selectedVersionData.value) return
+  if (!props.clusterId || !selectedVersionData.value) return
   if (selectedVersionData.value.version === currentVersion.value) {
     message.warning('无法删除当前版本')
     return
   }
   try {
-    const endpoint = props.resourceType === 'upstream'
-      ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
-    await api.delete(endpoint)
+    if (props.resourceType === 'plugin_metadata') {
+      await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/versions/${selectedVersionData.value.version}`)
+    } else {
+      if (!props.resourceId) return
+      const endpoint = props.resourceType === 'upstream'
+        ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
+        : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
+      await api.delete(endpoint)
+    }
     message.success('历史版本已删除')
     await loadHistory()
   } catch (error: any) {
