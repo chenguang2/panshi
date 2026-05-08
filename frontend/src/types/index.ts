@@ -88,6 +88,7 @@ export interface UpstreamTarget {
 
 export interface Upstream {
   id: number
+  edge_uuid: string
   cluster_id: number
   name: string
   load_balance: string
@@ -98,6 +99,7 @@ export interface Upstream {
 
 export interface Route {
   id: number
+  edge_uuid: string
   cluster_id: number
   upstream_id?: number
   name: string

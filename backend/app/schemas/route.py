@@ -37,6 +37,7 @@ class RouteUpdate(BaseModel):
 
 class RouteResponse(RouteBase):
     id: int
+    edge_uuid: str
     cluster_id: int
     upstream_id: Optional[int] = None
     created_at: Optional[str] = None

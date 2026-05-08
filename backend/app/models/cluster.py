@@ -1,6 +1,7 @@
 from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, Column, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
+import uuid
 from app.core.database import Base
 
 
@@ -23,6 +24,7 @@ class Upstream(Base):
     __tablename__ = "ps_upstream"
 
     id = Column(Integer, primary_key=True, index=True)
+    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
@@ -48,6 +50,7 @@ class Route(Base):
     __tablename__ = "ps_route"
 
     id = Column(Integer, primary_key=True, index=True)
+    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     upstream_id = Column(Integer, ForeignKey("ps_upstream.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(100), nullable=False)

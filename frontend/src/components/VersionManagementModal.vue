@@ -1,7 +1,7 @@
 <template>
   <a-modal
     v-model:open="visible"
-    :title="`版本管理 - ${resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : '插件'}: ${resourceName}`"
+    :title="`版本管理 - ${resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : '插件'}: ${resourceName}` + (edgeUuid ? ` (${edgeUuid})` : '')"
     width="1000px"
     @ok="handleClose"
   >
@@ -103,6 +103,7 @@ const props = defineProps<{
   resourceId: number | null
   clusterId: number | null
   resourceName: string
+  edgeUuid?: string
 }>()
 
 const emit = defineEmits<{
@@ -116,6 +117,8 @@ const visible = computed({
   get: () => props.open,
   set: (val) => emit('update:open', val)
 })
+
+const edgeUuid = computed(() => props.edgeUuid || '')
 
 const loading = ref(false)
 const versions = ref<ConfigVersion[]>([])

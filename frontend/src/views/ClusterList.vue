@@ -497,13 +497,14 @@
       :resource-id="versionModalResourceId"
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
+      :edge-uuid="versionModalEdgeUuid"
       @published="versionModalOnPublished"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
@@ -539,6 +540,7 @@ const versionModalType = ref<'upstream' | 'route'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
 const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
+const versionModalEdgeUuid = ref('')
 
 const nodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
@@ -1656,12 +1658,70 @@ const publishUpstream = async (cluster: Cluster) => {
     message.warning('请先选择一个上游')
     return
   }
+
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+
+  const modal = Modal.info({
+    title: `发布上游: ${cluster.selectedUpstream.name}`,
+    width: 600,
+    content: '',
+    okText: '确定',
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({
+      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+      )
+    })
+  }
+
+  addLog(`开始发布上游: ${cluster.selectedUpstream.name}`)
+  updateContent()
+
   try {
     const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream.id}/publish`)
-    message.success(res.data.message || '发布成功')
+    const data = res.data
+
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    updateContent()
+
+    if (data.status === 'ok') {
+      addLog('')
+      addLog('✅ 发布成功!')
+      modal.update({ okText: '确定' })
+    } else if (data.status === 'partial') {
+      addLog('')
+      addLog('⚠️ 部分成功')
+    } else {
+      addLog('')
+      addLog('❌ 发布失败')
+    }
+
   } catch (error: any) {
-    message.error(error.response?.data?.detail || '发布失败')
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
   }
+
+  updateContent()
 }
 
 const openUpstreamVersionManagement = (cluster: Cluster) => {
@@ -1673,6 +1733,7 @@ const openUpstreamVersionManagement = (cluster: Cluster) => {
   versionModalResourceId.value = cluster.selectedUpstream.id
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = cluster.selectedUpstream.name
+  versionModalEdgeUuid.value = cluster.selectedUpstream.edge_uuid || ''
   versionModalVisible.value = true
 }
 
@@ -1707,16 +1768,73 @@ const openRouteVersionManagement = (cluster: Cluster) => {
   versionModalResourceId.value = cluster.selectedRoute.id
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = cluster.selectedRoute.name
+  versionModalEdgeUuid.value = cluster.selectedRoute.edge_uuid || ''
   versionModalVisible.value = true
 }
 
 const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+
+  const modal = Modal.info({
+    title: `发布上游: ${record.name}`,
+    width: 600,
+    content: '',
+    okText: '确定',
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({
+      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+      )
+    })
+  }
+
+  addLog(`开始发布上游: ${record.name}`)
+  updateContent()
+
   try {
     const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`)
-    message.success(res.data.message || '发布成功')
+    const data = res.data
+
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    updateContent()
+
+    if (data.status === 'ok') {
+      addLog('')
+      addLog('✅ 发布成功!')
+      modal.update({ okText: '确定' })
+    } else if (data.status === 'partial') {
+      addLog('')
+      addLog('⚠️ 部分成功')
+    } else {
+      addLog('')
+      addLog('❌ 发布失败')
+    }
   } catch (error: any) {
-    message.error(error.response?.data?.detail || '发布失败')
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
   }
+
+  updateContent()
 }
 
 const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstream) => {
@@ -1724,6 +1842,7 @@ const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstrea
   versionModalResourceId.value = record.id
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = record.name
+  versionModalEdgeUuid.value = record.edge_uuid || ''
   versionModalVisible.value = true
 }
 
@@ -1741,6 +1860,7 @@ const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => 
   versionModalResourceId.value = record.id
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = record.name
+  versionModalEdgeUuid.value = record.edge_uuid || ''
   versionModalVisible.value = true
 }
 

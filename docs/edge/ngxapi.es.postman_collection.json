@@ -1,0 +1,1454 @@
+{
+	"info": {
+		"_postman_id": "3d69024a-58d4-48c3-b2b9-ecf56d67529c",
+		"name": "ngxapi.es",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "7439469"
+	},
+	"item": [
+		{
+			"name": "/ngxapi/admin/upstreams",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/upstreams",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"type\":\"roundrobin\",\n    \"nodes\":{\n        \"127.0.0.1:1980\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/upstreams/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams/431253674958783373",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams",
+						"431253674958783373"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/upstreams/id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"type\":\"roundrobin\",\n    \"nodes\":{\n        \"127.0.0.1:1980\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams/1001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams",
+						"1001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/upstreams/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams/00be4add130b4fb08f17c7011666ec43",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams",
+						"00be4add130b4fb08f17c7011666ec43"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/upstreams/id Copy",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"nodes\": {\n        \"127.0.0.1:1981\": 1\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/upstreams/1001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"upstreams",
+						"1001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"plugins\": {\n        \"basic-auth\": {\n            \"disable\": false\n        }\n    },\n    \"name\": \"S-811X-test\",\n    \"upstream_id\": \"431253674958783373\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services/2001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services",
+						"2001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services/id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"plugins\": {\n        \"basic-auth\": {\n            \"disable\": false\n        }\n    },\n    \"name\": \"S-811X-test\",\n    \"upstream_id\": \"431253674958783373\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services/2001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services",
+						"2001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services/2001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services",
+						"2001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/services/id",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"plugins\": {\n        \"basic-auth\":null\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/services/2001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"services",
+						"2001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routers",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routes",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"uri\": \"/hello2\",\n    \"upstream\": {\n        \"nodes\": {\n            \"127.0.0.1:8111\": 1\n        },\n        \"type\": \"roundrobin\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routers/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes/3001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes",
+						"3001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routes/id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"uri\": \"/hello1\",\n    \"upstream\": {\n        \"nodes\": {\n            \"127.0.0.1:8111\": 1\n        },\n        \"type\": \"roundrobin\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes/3001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes",
+						"3001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routes/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes/3001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes",
+						"3001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/routes/id",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"uri\": \"/hello1\",\n    \"upstream\": {\n        \"nodes\": {\n            \"127.0.0.1:8112\": 1\n        },\n        \"type\": \"roundrobin\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/routes/3001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"routes",
+						"3001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/consumers",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/consumers",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"consumers"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/consumers/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/consumers/CAtest1",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"consumers",
+						"CAtest1"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/consumers",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"CAtest1\",\n    \"plugins\": {\n        \"basic-auth\": {\n            \"password\": \"test\",\n            \"disable\": false,\n            \"username\": \"test1\"\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/consumers",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"consumers"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/consumers/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/consumers/CAtest1",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"consumers",
+						"CAtest1"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/plugin_configs",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/plugin_configs",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"plugin_configs"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/plugin_configs/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/plugin_configs/5001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"plugin_configs",
+						"5001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/plugin_configs/id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"desc\": \"test\",\n    \"plugins\": {\n        \"ip-restriction\": {\n            \"whitelist\": [\n                \"127.0.0.0/24\",\n                \"192.168.3.36\"\n            ]\n        },\n        \"limit-count\": {\n            \"count\": 2,\n            \"time_window\": 10,\n            \"rejected_code\": 503\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/plugin_configs/5001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"plugin_configs",
+						"5001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/plugin_configs/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/plugin_configs/5001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"plugin_configs",
+						"5001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/plugin_configs/id",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"desc\": \"test1\",\n    \"plugins\": {\n        \"ip-restriction\": {\n            \"whitelist\": [\n                \"127.0.0.0/24\",\n                \"192.0.0.0/24\"\n            ]\n        },\n        \"limit-count\": {\n            \"count\": 3,\n            \"time_window\": 10,\n            \"rejected_code\": 403\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/plugin_configs/5001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"plugin_configs",
+						"5001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/global_rules",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/global_rules",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"global_rules"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/global_rules/id",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/global_rules/6001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"global_rules",
+						"6001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/global_rules/id",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"desc\": \"test-limit\",\n    \"plugins\": {\n        \"ip-restriction\": {\n            \"whitelist\": [\n                \"127.0.0.0/24\",\n                \"192.168.3.6\"\n            ],\n            \"message\": \"Your IP address is not allowed.6001\"\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/global_rules/6001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"global_rules",
+						"6001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/global_rules/id",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/global_rules/6002",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"global_rules",
+						"6002"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/ngxapi/admin/global_rules/id",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "X-API-KEY",
+						"value": "f9357106bff442f89d4de7169c37c61e",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"plugins\": {\n        \"ip-restriction\": {\n            \"disable\": true\n        },\n        \"limit-count\": {\n            \"disable\": true\n        }\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://192.168.100.233:9990/ngxapi/admin/global_rules/6001",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9990",
+					"path": [
+						"ngxapi",
+						"admin",
+						"global_rules",
+						"6001"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/hello",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://192.168.100.233:9980/hello",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9980",
+					"path": [
+						"hello"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/proxy/v1",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://192.168.100.233:9980/proxy/v1/xx/123?a=2",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9980",
+					"path": [
+						"proxy",
+						"v1",
+						"xx",
+						"123"
+					],
+					"query": [
+						{
+							"key": "a",
+							"value": "2"
+						},
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "/proxy/v2",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "username",
+							"value": "test",
+							"type": "string"
+						},
+						{
+							"key": "password",
+							"value": "test",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://192.168.100.233:9980/proxy/v2/xx/123",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"100",
+						"233"
+					],
+					"port": "9980",
+					"path": [
+						"proxy",
+						"v2",
+						"xx",
+						"123"
+					],
+					"query": [
+						{
+							"key": "",
+							"value": "",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

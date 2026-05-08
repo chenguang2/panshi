@@ -454,10 +454,16 @@ async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depe
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/publish")
 async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    from app.services.edge_logger import get_edge_logger
+
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
 
     version_result = await db.execute(
         select(func.max(ConfigVersion.version)).where(
@@ -473,6 +479,7 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
 
     config_data = {
         "id": upstream.id,
+        "edge_uuid": upstream.edge_uuid,
         "name": upstream.name,
         "load_balance": upstream.load_balance,
         "hash_location": upstream.hash_location,
@@ -491,7 +498,133 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
     upstream.current_version = new_version
     await db.commit()
 
-    return {"status": "ok", "message": f"上游 {upstream.name} 发布成功", "version": new_version}
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+
+    if not active_nodes:
+        return {"status": "error", "message": f"上游 {upstream.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
+
+    edge_logger = get_edge_logger()
+    edge_data = EdgeClient.convert_upstream_to_edge_format(
+        upstream_id, upstream.name, upstream.load_balance,
+        [{"target": t.target, "weight": t.weight} for t in targets]
+    )
+
+    results = []
+    success_count = 0
+    fail_count = 0
+
+    for node in active_nodes:
+        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+
+        try:
+            sync_db = db
+            client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
+
+            import base64
+            import json as json_module
+            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
+
+            response = client.update_upstream(upstream.edge_uuid, edge_data)
+
+            edge_logger.log_edge_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id,
+                upstream_name=upstream.name,
+                method="PUT",
+                path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
+                request_body=edge_data,
+                encrypted_body=encrypted,
+                response_status=201,
+                response_body=response,
+                status="SUCCESS"
+            )
+
+            node_result["status"] = "success"
+            node_result["response"] = response
+            success_count += 1
+
+        except EdgeConnectionError as e:
+            edge_logger.log_edge_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id,
+                upstream_name=upstream.name,
+                method="POST",
+                path="/edge/admin/upstreams",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=None,
+                response_body=None,
+                status="FAILED",
+                error=str(e)
+            )
+            node_result["status"] = "failed"
+            node_result["error"] = str(e)
+            fail_count += 1
+
+        except EdgeAPIError as e:
+            edge_logger.log_edge_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id,
+                upstream_name=upstream.name,
+                method="PUT",
+                path=f"/edge/admin/upstreams/{upstream_id}",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=e.status_code,
+                response_body=e.response_body,
+                status="FAILED",
+                error=e.message
+            )
+            node_result["status"] = "failed"
+            node_result["error"] = f"API error {e.status_code}: {e.message}"
+            fail_count += 1
+
+        except Exception as e:
+            edge_logger.log_edge_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id,
+                upstream_name=upstream.name,
+                method="PUT",
+                path=f"/edge/admin/upstreams/{upstream_id}",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=None,
+                response_body=None,
+                status="FAILED",
+                error=str(e)
+            )
+            node_result["status"] = "failed"
+            node_result["error"] = str(e)
+            fail_count += 1
+
+        results.append(node_result)
+
+    if fail_count == 0:
+        return {
+            "status": "ok",
+            "message": f"上游 {upstream.name} 发布成功，已同步到 {success_count} 个节点",
+            "version": new_version,
+            "results": results
+        }
+    elif success_count == 0:
+        return {
+            "status": "error",
+            "message": f"上游 {upstream.name} 发布失败：无法连接到任何 edge 节点",
+            "version": new_version,
+            "results": results
+        }
+    else:
+        return {
+            "status": "partial",
+            "message": f"上游 {upstream.name} 发布完成，{success_count}/{success_count + fail_count} 节点同步成功",
+            "version": new_version,
+            "results": results
+        }
 
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}/history", response_model=ConfigVersionListResponse)

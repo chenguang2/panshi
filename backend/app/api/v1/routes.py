@@ -22,6 +22,7 @@ def route_to_response(r: Route) -> RouteResponse:
     """Convert Route model to RouteResponse"""
     route_dict = {
         "id": r.id,
+        "edge_uuid": r.edge_uuid,
         "cluster_id": r.cluster_id,
         "name": r.name,
         "uri": r.uri,
@@ -117,6 +118,7 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
 
     return RouteResponse(
         id=db_route.id,
+        edge_uuid=db_route.edge_uuid,
         cluster_id=db_route.cluster_id,
         name=db_route.name,
         uri=db_route.uri,
@@ -142,6 +144,7 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
 
     return RouteResponse(
         id=route.id,
+        edge_uuid=route.edge_uuid,
         cluster_id=route.cluster_id,
         name=route.name,
         uri=route.uri,
@@ -191,6 +194,7 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
     return RouteResponse(
         id=route.id,
+        edge_uuid=route.edge_uuid,
         cluster_id=route.cluster_id,
         name=route.name,
         uri=route.uri,
@@ -240,6 +244,7 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
 
     config_data = {
         "id": route.id,
+        "edge_uuid": route.edge_uuid,
         "name": route.name,
         "uri": route.uri,
         "methods": route.methods,

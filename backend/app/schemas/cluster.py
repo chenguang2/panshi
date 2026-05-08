@@ -105,6 +105,7 @@ class UpstreamUpdate(BaseModel):
 
 class UpstreamResponse(UpstreamBase):
     id: int
+    edge_uuid: str
     cluster_id: int
     created_at: Optional[str] = None
 
