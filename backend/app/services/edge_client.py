@@ -117,7 +117,8 @@ class EdgeClient:
             Decrypted raw bytes
         """
         try:
-            encrypted = base64.b64decode(data)
+            padded = data + '=' * ((4 - len(data) % 4) % 4)
+            encrypted = base64.urlsafe_b64decode(padded)
             cipher = Cipher(
                 algorithms.SM4(self.SM4_KEY),
                 modes.ECB(),
@@ -203,7 +204,10 @@ class EdgeClient:
             decrypted = self._decrypt(response.text)
             return json.loads(decrypted)
         except EdgeEncryptionError:
-            return {"raw_response": response.text}
+            try:
+                return json.loads(response.text)
+            except json.JSONDecodeError:
+                return {"raw_response": response.text}
 
     # Upstream API methods
 
@@ -270,3 +274,165 @@ class EdgeClient:
             "name": name,
             "nodes": edge_nodes,
         }
+
+    # Route API methods
+
+    def update_route(self, edge_uuid: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Update an existing route by edge_uuid."""
+        return self._request("PUT", f"/edge/admin/routes/{edge_uuid}", data)
+
+    def delete_route(self, edge_uuid: str) -> dict[str, Any]:
+        """Delete a route by edge_uuid."""
+        return self._request("DELETE", f"/edge/admin/routes/{edge_uuid}")
+
+    @staticmethod
+    def convert_route_to_edge_format(
+        edge_uuid: str,
+        name: str,
+        uri: str,
+        methods: str | None,
+        hosts: str | None,
+        upstream_edge_uuid: str | None,
+        priority: int,
+        vars_json: str | None,
+        plugins: list[dict] | None
+    ) -> dict[str, Any]:
+        """Convert local route format to edge API format."""
+        edge_route = {
+            "name": name,
+            "uri": uri,
+        }
+
+        if methods:
+            edge_route["methods"] = methods.split(",") if isinstance(methods, str) else methods
+
+        if hosts:
+            edge_route["hosts"] = hosts.split(",") if isinstance(hosts, str) else hosts
+
+        if upstream_edge_uuid:
+            edge_route["upstream_id"] = upstream_edge_uuid
+
+        if priority:
+            edge_route["priority"] = priority
+
+        if vars_json:
+            try:
+                edge_route["vars"] = json.loads(vars_json)
+            except json.JSONDecodeError:
+                pass
+
+        if plugins:
+            edge_plugins = {}
+            for p in plugins:
+                plugin_name = getattr(p, 'plugin_name', None) or p.get('plugin_name') if isinstance(p, dict) else None
+                plugin_config = getattr(p, 'config', None) or p.get('config') if isinstance(p, dict) else None
+                if plugin_name:
+                    try:
+                        edge_plugins[plugin_name] = json.loads(plugin_config) if isinstance(plugin_config, str) else (plugin_config or {})
+                    except (json.JSONDecodeError, TypeError):
+                        edge_plugins[plugin_name] = {}
+            if edge_plugins:
+                edge_route["plugins"] = edge_plugins
+
+        return edge_route
+
+    def _parse_node_list(self, response: dict[str, Any]) -> list[dict[str, Any]]:
+        """Parse edge admin list response to extract nodes array."""
+        node = response.get("node", {})
+        if node.get("dir"):
+            nodes = node.get("nodes", [])
+            # Handle empty dict {} returned when no routes exist
+            if isinstance(nodes, dict):
+                return [] if not nodes else [nodes]
+            return nodes if isinstance(nodes, list) else []
+        return [node] if node else []
+
+    def list_routes(self) -> list[dict[str, Any]]:
+        """List all routes from edge server."""
+        response = self._request("GET", "/edge/admin/routes")
+        return self._parse_node_list(response)
+
+    def get_route(self, route_id: str) -> dict[str, Any] | None:
+        """Get a single route by ID."""
+        return self._request("GET", f"/edge/admin/routes/{route_id}")
+
+    def create_route(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new route on edge server."""
+        return self._request("POST", "/edge/admin/routes", data)
+
+    def list_plugins(self) -> list[dict[str, Any]]:
+        """List all plugins from edge server."""
+        response = self._request("GET", "/edge/admin/plugins")
+        return self._parse_node_list(response)
+
+    def list_global_rules(self) -> list[dict[str, Any]]:
+        """List all global rules from edge server."""
+        response = self._request("GET", "/edge/admin/global_rules")
+        return self._parse_node_list(response)
+
+    def get_global_rule(self, rule_id: str) -> dict[str, Any]:
+        """Get a single global rule by ID."""
+        return self._request("GET", f"/edge/admin/global_rules/{rule_id}")
+
+    def create_global_rule(self, rule_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Create or update a global rule (PUT)."""
+        return self._request("PUT", f"/edge/admin/global_rules/{rule_id}", data)
+
+    def update_global_rule(self, rule_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a global rule (PATCH)."""
+        return self._request("PATCH", f"/edge/admin/global_rules/{rule_id}", data)
+
+    def delete_global_rule(self, rule_id: str) -> dict[str, Any]:
+        """Delete a global rule."""
+        return self._request("DELETE", f"/edge/admin/global_rules/{rule_id}")
+
+    # Plugin Configs API methods
+
+    def list_plugin_configs(self) -> list[dict[str, Any]]:
+        """List all plugin configs from edge server."""
+        response = self._request("GET", "/edge/admin/plugin_configs")
+        return self._parse_node_list(response)
+
+    def get_plugin_config(self, config_id: str) -> dict[str, Any]:
+        """Get a single plugin config by ID."""
+        return self._request("GET", f"/edge/admin/plugin_configs/{config_id}")
+
+    def create_plugin_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Create or update a plugin config (PUT)."""
+        return self._request("PUT", f"/edge/admin/plugin_configs/{config_id}", data)
+
+    def update_plugin_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Update a plugin config (PATCH)."""
+        return self._request("PATCH", f"/edge/admin/plugin_configs/{config_id}", data)
+
+    def delete_plugin_config(self, config_id: str) -> dict[str, Any]:
+        """Delete a plugin config."""
+        return self._request("DELETE", f"/edge/admin/plugin_configs/{config_id}")
+
+    def list_plugin_metadata(self) -> list[dict[str, Any]]:
+        """List all plugin metadata from edge server."""
+        response = self._request("GET", "/edge/admin/plugin_metadata")
+        return self._parse_node_list(response)
+
+    def get_plugin_metadata(self, plugin_name: str) -> dict[str, Any]:
+        """Get plugin metadata by plugin name."""
+        return self._request("GET", f"/edge/admin/plugin_metadata/{plugin_name}")
+
+    def create_plugin_metadata(self, plugin_name: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Create or update plugin metadata (PUT)."""
+        return self._request("PUT", f"/edge/admin/plugin_metadata/{plugin_name}", data)
+
+    def delete_plugin_metadata(self, plugin_name: str) -> dict[str, Any]:
+        """Delete plugin metadata."""
+        return self._request("DELETE", f"/edge/admin/plugin_metadata/{plugin_name}")
+
+    def reload_plugins(self) -> dict[str, Any]:
+        """Reload plugins on edge server."""
+        return self._request("PUT", "/edge/admin/plugins/reload", {})
+
+    def list_available_plugins(self) -> list[str]:
+        """List available plugin names from edge server."""
+        response = self._request("GET", "/edge/admin/plugins/list")
+        if isinstance(response, list):
+            return response
+        return []

@@ -30,6 +30,11 @@ const routes: RouteRecordRaw[] = [
         path: 'dictionaries',
         name: 'Dictionaries',
         component: () => import('@/views/DictTypeList.vue')
+      },
+      {
+        path: 'edge-client',
+        name: 'EdgeClient',
+        component: () => import('@/views/EdgeClient.vue')
       }
     ]
   }

@@ -6,7 +6,8 @@ from typing import Any
 
 class EdgeLogger:
     LOG_DIR = "logs/edge"
-    LOG_FILE = "logs/edge/upstream.log"
+    UPSTREAM_LOG_FILE = "logs/edge/upstream.log"
+    ROUTE_LOG_FILE = "logs/edge/route.log"
 
     def __init__(self):
         os.makedirs(self.LOG_DIR, exist_ok=True)
@@ -30,6 +31,10 @@ class EdgeLogger:
             return decrypted[:-padding_length].decode('utf-8')
         except Exception:
             return None
+
+    def _write_log(self, log_file: str, log_entry: list[str]) -> None:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write("\n".join(log_entry) + "\n")
 
     def log_edge_operation(
         self,
@@ -81,8 +86,59 @@ class EdgeLogger:
         log_entry.append(f"Status: {status}")
         log_entry.append("---")
 
-        with open(self.LOG_FILE, "a", encoding="utf-8") as f:
-            f.write("\n".join(log_entry) + "\n")
+        self._write_log(self.UPSTREAM_LOG_FILE, log_entry)
+
+    def log_route_operation(
+        self,
+        cluster_id: int,
+        cluster_name: str,
+        route_id: int,
+        route_name: str,
+        method: str,
+        path: str,
+        request_body: dict[str, Any] | None,
+        encrypted_body: str | None,
+        response_status: int | None,
+        response_body: dict[str, Any] | None,
+        status: str,
+        error: str | None = None
+    ) -> None:
+        import os as os_module
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
+
+        log_entry = [
+            f"[{timestamp}]",
+            f"Cluster:{cluster_name} (ID:{cluster_id})",
+            f"Route:{route_name} (ID:{route_id})",
+            f"Request: {method} {path}",
+        ]
+
+        if request_body:
+            log_entry.append(f"Request Body: {request_body}")
+        if encrypted_body:
+            log_entry.append(f"Encrypted: {encrypted_body}")
+        if response_status:
+            log_entry.append(f"Response: {response_status}")
+
+        if response_body:
+            if 'raw_response' in response_body:
+                decrypted = self._try_decrypt(response_body['raw_response'], sm4_key)
+                if decrypted:
+                    log_entry.append(f"Response Body (decrypted): {decrypted}")
+                else:
+                    log_entry.append(f"Response Body: (encrypted, decryption failed)")
+            else:
+                log_entry.append(f"Response Body: {response_body}")
+
+        if error:
+            log_entry.append(f"Error: {error}")
+
+        log_entry.append(f"Status: {status}")
+        log_entry.append("---")
+
+        self._write_log(self.ROUTE_LOG_FILE, log_entry)
 
 
 _edge_logger: EdgeLogger | None = None

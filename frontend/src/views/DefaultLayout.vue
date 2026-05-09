@@ -26,6 +26,10 @@
           <CloudOutlined />
           <span>集群管理</span>
         </a-menu-item>
+        <a-menu-item key="edge-client" @click="router.push('/edge-client')">
+          <SettingOutlined />
+          <span>边缘节点</span>
+        </a-menu-item>
       </a-menu>
       <div class="header-right">
         <a-dropdown>

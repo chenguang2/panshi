@@ -1751,12 +1751,70 @@ const publishRoute = async (cluster: Cluster) => {
     message.warning('请先选择一个路由')
     return
   }
+
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+
+  const modal = Modal.info({
+    title: `发布路由: ${cluster.selectedRoute.name}`,
+    width: 600,
+    content: '',
+    okText: '确定',
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({
+      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+      )
+    })
+  }
+
+  addLog(`开始发布路由: ${cluster.selectedRoute.name}`)
+  updateContent()
+
   try {
     const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute.id}/publish`)
-    message.success(res.data.message || '发布成功')
+    const data = res.data
+
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    updateContent()
+
+    if (data.status === 'ok') {
+      addLog('')
+      addLog('✅ 发布成功!')
+      modal.update({ okText: '确定' })
+    } else if (data.status === 'partial') {
+      addLog('')
+      addLog('⚠️ 部分成功')
+    } else {
+      addLog('')
+      addLog('❌ 发布失败')
+    }
+
   } catch (error: any) {
-    message.error(error.response?.data?.detail || '发布失败')
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
   }
+
+  updateContent()
 }
 
 const openRouteVersionManagement = (cluster: Cluster) => {
@@ -1847,12 +1905,68 @@ const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstrea
 }
 
 const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+
+  const modal = Modal.info({
+    title: `发布路由: ${record.name}`,
+    width: 600,
+    content: '',
+    okText: '确定',
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({
+      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+      )
+    })
+  }
+
+  addLog(`开始发布路由: ${record.name}`)
+  updateContent()
+
   try {
     const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`)
-    message.success(res.data.message || '发布成功')
+    const data = res.data
+
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    updateContent()
+
+    if (data.status === 'ok') {
+      addLog('')
+      addLog('✅ 发布成功!')
+      modal.update({ okText: '确定' })
+    } else if (data.status === 'partial') {
+      addLog('')
+      addLog('⚠️ 部分成功')
+    } else {
+      addLog('')
+      addLog('❌ 发布失败')
+    }
   } catch (error: any) {
-    message.error(error.response?.data?.detail || '发布失败')
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
   }
+
+  updateContent()
 }
 
 const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => {
