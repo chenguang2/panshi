@@ -123,7 +123,7 @@ const CATEGORIES = [
   {
     key: 'transform',
     label: '转换',
-    plugins: ['proxy-rewrite', 'cors', 'response-rewrite']
+    plugins: ['proxy_rewrite', 'cors', 'response_rewrite']
   }
 ]
 

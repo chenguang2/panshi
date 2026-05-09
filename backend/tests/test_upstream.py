@@ -1,6 +1,33 @@
 import pytest
+import json
+from httpx import AsyncClient, ASGITransport
+from app.main import app
 from app.models.cluster import Upstream, UpstreamTarget
 from app.schemas.cluster import UpstreamCreate, UpstreamUpdate, UpstreamTargetSchema
+
+
+DEFAULT_CHECKS = {
+    "passive": {"type": "http"},
+    "active": {
+        "type": "http",
+        "unhealthy": {
+            "timeouts": 3,
+            "tcp_failures": 2,
+            "interval": 1,
+            "http_statuses": [429, 500, 501, 502, 503, 504, 505],
+            "http_failures": 5
+        },
+        "https_verify_certificate": True,
+        "http_path": "/",
+        "concurrency": 10,
+        "healthy": {
+            "http_statuses": [200, 302, 403, 404],
+            "successes": 2,
+            "interval": 0
+        },
+        "timeout": 1
+    }
+}
 
 
 class TestUpstreamTargetSchema:
@@ -125,3 +152,130 @@ async def test_create_upstream_target(test_db):
     assert target.id is not None
     assert target.target == "127.0.0.1:8080"
     assert target.weight == 100
+
+
+class TestUpstreamChecksAPI:
+    """Test upstream API endpoints with checks field (health check config)."""
+
+    async def test_create_upstream_with_checks(self):
+        """Test creating upstream with checks dict - should store as JSON string in DB."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "panshi123"}
+            )
+            token = response.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = await client.post(
+                "/api/v1/clusters/1/upstreams",
+                headers=headers,
+                json={
+                    "name": "test-checks-upstream",
+                    "load_balance": "weighted_roundrobin",
+                    "checks": DEFAULT_CHECKS,
+                    "targets": [{"target": "192.168.1.10:8080", "weight": 100}]
+                }
+            )
+            assert response.status_code == 201, f"Failed: {response.text}"
+            data = response.json()
+            assert data["name"] == "test-checks-upstream"
+            assert data["checks"] is not None
+            assert data["checks"]["passive"]["type"] == "http"
+            assert data["checks"]["active"]["type"] == "http"
+
+    async def test_create_upstream_without_checks(self):
+        """Test creating upstream without checks - checks should be None."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "panshi123"}
+            )
+            token = response.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = await client.post(
+                "/api/v1/clusters/1/upstreams",
+                headers=headers,
+                json={
+                    "name": "test-no-checks-upstream",
+                    "load_balance": "weighted_roundrobin",
+                    "targets": [{"target": "192.168.1.10:8080", "weight": 100}]
+                }
+            )
+            assert response.status_code == 201, f"Failed: {response.text}"
+            data = response.json()
+            assert data["checks"] is None
+
+    async def test_update_upstream_add_checks(self):
+        """Test adding checks to existing upstream via update."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "panshi123"}
+            )
+            token = response.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = await client.post(
+                "/api/v1/clusters/1/upstreams",
+                headers=headers,
+                json={
+                    "name": "test-update-checks-upstream",
+                    "load_balance": "weighted_roundrobin",
+                    "targets": [{"target": "192.168.1.10:8080", "weight": 100}]
+                }
+            )
+            assert response.status_code == 201
+            upstream_id = response.json()["id"]
+
+            response = await client.put(
+                f"/api/v1/clusters/1/upstreams/{upstream_id}",
+                headers=headers,
+                json={"checks": DEFAULT_CHECKS}
+            )
+            assert response.status_code == 200, f"Failed: {response.text}"
+            data = response.json()
+            assert data["checks"] is not None
+            assert data["checks"]["passive"]["type"] == "http"
+            assert data["checks"]["active"]["healthy"]["http_statuses"] == [200, 302, 403, 404]
+
+    async def test_update_upstream_modify_checks(self):
+        """Test modifying existing checks via update."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/auth/login",
+                json={"username": "admin", "password": "panshi123"}
+            )
+            token = response.json()["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            response = await client.post(
+                "/api/v1/clusters/1/upstreams",
+                headers=headers,
+                json={
+                    "name": "test-modify-checks-upstream",
+                    "load_balance": "weighted_roundrobin",
+                    "checks": DEFAULT_CHECKS,
+                    "targets": [{"target": "192.168.1.10:8080", "weight": 100}]
+                }
+            )
+            assert response.status_code == 201
+            upstream_id = response.json()["id"]
+
+            modified_checks = DEFAULT_CHECKS.copy()
+            modified_checks["active"]["http_path"] = "/health"
+
+            response = await client.put(
+                f"/api/v1/clusters/1/upstreams/{upstream_id}",
+                headers=headers,
+                json={"checks": modified_checks}
+            )
+            assert response.status_code == 200, f"Failed: {response.text}"
+            data = response.json()
+            assert data["checks"]["active"]["http_path"] == "/health"
+            assert data["checks"]["active"]["healthy"]["http_statuses"] == [200, 302, 403, 404]

@@ -709,7 +709,8 @@ const upstreamForm = reactive({
   description: '',
   targets: [] as { key: number, ip: string, port: number, weight: number }[],
   hash_location: 'vars',
-  hash_key: ''
+  hash_key: '',
+  checks: null as Record<string, any> | null
 })
 
 // Reset hash_location when switching away from consistent_hash
@@ -1279,6 +1280,30 @@ const showAddUpstreamModal = async (cluster: Cluster) => {
   upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
   upstreamForm.hash_location = 'vars'
   upstreamForm.hash_key = ''
+  upstreamForm.checks = {
+    "passive": {
+      "type": "http"
+    },
+    "active": {
+      "type": "http",
+      "unhealthy": {
+        "timeouts": 3,
+        "tcp_failures": 2,
+        "interval": 1,
+        "http_statuses": [429, 500, 501, 502, 503, 504, 505],
+        "http_failures": 5
+      },
+      "https_verify_certificate": true,
+      "http_path": "/",
+      "concurrency": 10,
+      "healthy": {
+        "http_statuses": [200, 302, 403, 404],
+        "successes": 2,
+        "interval": 0
+      },
+      "timeout": 1
+    }
+  }
   targetValidation.value = {}
   upstreamModalVisible.value = true
 }
@@ -1355,7 +1380,7 @@ const handleUpstreamSubmit = async () => {
   }
 
   try {
-    const submitData = {
+    const submitData: Record<string, any> = {
       name: upstreamForm.name,
       load_balance: upstreamForm.load_balance,
       description: upstreamForm.description,
@@ -1367,6 +1392,9 @@ const handleUpstreamSubmit = async () => {
         hash_location: upstreamForm.hash_location,
         hash_key: upstreamForm.hash_key
       })
+    }
+    if (upstreamForm.checks) {
+      submitData.checks = upstreamForm.checks
     }
     if (editingUpstream.value) {
       await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
@@ -1497,7 +1525,11 @@ const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   try {
     const res = await api.get(`/clusters/${cluster.id}/routes/${routeData.id}/plugins`)
     routeForm.plugins = res.data.plugins || []
-  } catch {}
+  } catch (error) {
+    console.error('加载路由插件失败:', error)
+    message.error('加载路由插件失败，请重试')
+    routeForm.plugins = []
+  }
   routeModalVisible.value = true
 }
 
@@ -1535,7 +1567,11 @@ const copyRouteByRecord = async (cluster: Cluster, route: Route) => {
   try {
     const res = await api.get(`/clusters/${cluster.id}/routes/${sourceRoute.id}/plugins`)
     routeForm.plugins = res.data.plugins || []
-  } catch {}
+  } catch (error) {
+    console.error('加载路由插件失败:', error)
+    message.error('加载路由插件失败，请重试')
+    routeForm.plugins = []
+  }
   routeModalVisible.value = true
 }
 

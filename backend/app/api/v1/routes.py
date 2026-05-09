@@ -252,6 +252,15 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         if upstream:
             upstream_edge_uuid = upstream.edge_uuid
 
+    plugins_edge_format = {}
+    for p in plugins:
+        plugin_name = p.plugin_name
+        plugin_config = p.config
+        try:
+            plugins_edge_format[plugin_name] = json.loads(plugin_config) if isinstance(plugin_config, str) else (plugin_config or {})
+        except (json.JSONDecodeError, TypeError):
+            plugins_edge_format[plugin_name] = {}
+
     config_data = {
         "id": route.id,
         "edge_uuid": route.edge_uuid,
@@ -259,13 +268,14 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         "uri": route.uri,
         "methods": route.methods,
         "priority": route.priority,
+        "status": route.status,
         "upstream_id": route.upstream_id,
         "upstream_edge_uuid": upstream_edge_uuid,
         "hosts": route.hosts,
         "remote_addrs": route.remote_addrs,
         "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
         "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
-        "plugins": [{"plugin_name": p.plugin_name, "config": p.config} for p in plugins]
+        "plugins": plugins_edge_format
     }
 
     config_version = ConfigVersion(
@@ -295,7 +305,8 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         upstream_edge_uuid=upstream_edge_uuid,
         priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
-        plugins=plugins
+        plugins=plugins,
+        status=route.status
     )
 
     results = []
@@ -456,6 +467,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     route.uri = config_data.get("uri", route.uri)
     route.methods = config_data.get("methods", route.methods)
     route.priority = config_data.get("priority", route.priority)
+    route.status = config_data.get("status", route.status)
     route.upstream_id = config_data.get("upstream_id", route.upstream_id)
     route.hosts = config_data.get("hosts", route.hosts)
     route.remote_addrs = config_data.get("remote_addrs", route.remote_addrs)
@@ -464,13 +476,23 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     route.current_version = version
 
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
-    for p in config_data.get("plugins", []):
-        plugin = RoutePlugin(
-            route_id=route_id,
-            plugin_name=p["plugin_name"],
-            config=p["config"]
-        )
-        db.add(plugin)
+    plugins_data = config_data.get("plugins", {})
+    if isinstance(plugins_data, dict):
+        for plugin_name, plugin_config in plugins_data.items():
+            plugin = RoutePlugin(
+                route_id=route_id,
+                plugin_name=plugin_name,
+                config=json.dumps(plugin_config) if isinstance(plugin_config, dict) else str(plugin_config)
+            )
+            db.add(plugin)
+    elif isinstance(plugins_data, list):
+        for p in plugins_data:
+            plugin = RoutePlugin(
+                route_id=route_id,
+                plugin_name=p.get("plugin_name"),
+                config=p.get("config")
+            )
+            db.add(plugin)
 
     await db.commit()
 
@@ -500,7 +522,8 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
         upstream_edge_uuid=upstream_edge_uuid,
         priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
-        plugins=plugins
+        plugins=plugins,
+        status=route.status
     )
 
     results = []

@@ -31,6 +31,7 @@ class Upstream(Base):
     description = Column(Text, nullable=True)
     hash_location = Column(String(20), nullable=True)  # header, cookie, vars
     hash_key = Column(String(100), nullable=True)
+    checks = Column(Text, nullable=True)  # JSON string for health check config
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

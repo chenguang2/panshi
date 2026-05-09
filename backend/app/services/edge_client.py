@@ -254,7 +254,8 @@ class EdgeClient:
         upstream_id: int,
         name: str,
         load_balance: str,
-        targets: list[dict]
+        targets: list[dict],
+        checks: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         type_mapping = {
             "weighted_roundrobin": "roundrobin",
@@ -269,11 +270,15 @@ class EdgeClient:
         for t in targets:
             edge_nodes[t["target"]] = t.get("weight", 1)
 
-        return {
+        result = {
             "type": upstream_type,
             "name": name,
             "nodes": edge_nodes,
         }
+        if checks:
+            result["checks"] = checks
+
+        return result
 
     # Route API methods
 
@@ -295,12 +300,14 @@ class EdgeClient:
         upstream_edge_uuid: str | None,
         priority: int,
         vars_json: str | None,
-        plugins: list[dict] | None
+        plugins: list[dict] | None,
+        status: int = 1
     ) -> dict[str, Any]:
         """Convert local route format to edge API format."""
         edge_route = {
             "name": name,
             "uri": uri,
+            "status": status,
         }
 
         if methods:
@@ -324,8 +331,12 @@ class EdgeClient:
         if plugins:
             edge_plugins = {}
             for p in plugins:
-                plugin_name = getattr(p, 'plugin_name', None) or p.get('plugin_name') if isinstance(p, dict) else None
-                plugin_config = getattr(p, 'config', None) or p.get('config') if isinstance(p, dict) else None
+                if isinstance(p, dict):
+                    plugin_name = p.get('plugin_name')
+                    plugin_config = p.get('config')
+                else:
+                    plugin_name = getattr(p, 'plugin_name', None)
+                    plugin_config = getattr(p, 'config', None)
                 if plugin_name:
                     try:
                         edge_plugins[plugin_name] = json.loads(plugin_config) if isinstance(plugin_config, str) else (plugin_config or {})

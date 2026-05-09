@@ -1,6 +1,6 @@
 import re
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 NAME_PATTERN = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
@@ -88,6 +88,7 @@ class UpstreamBase(BaseModel):
     description: Optional[str] = None
     hash_location: Optional[str] = None
     hash_key: Optional[str] = None
+    checks: Optional[Dict[str, Any]] = None
 
 
 class UpstreamCreate(UpstreamBase):
@@ -101,6 +102,7 @@ class UpstreamUpdate(BaseModel):
     hash_location: Optional[str] = None
     hash_key: Optional[str] = None
     targets: Optional[List[UpstreamTargetSchema]] = None
+    checks: Optional[Dict[str, Any]] = None
 
 
 class UpstreamResponse(UpstreamBase):
@@ -114,6 +116,14 @@ class UpstreamResponse(UpstreamBase):
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
             return v.isoformat()
+        return v
+
+    @field_validator('checks', mode='before')
+    @classmethod
+    def convert_checks(cls, v):
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
         return v
 
     class Config:
