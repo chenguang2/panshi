@@ -63,7 +63,7 @@ BUILTIN_PLUGINS = [
         }
     },
     {
-        "name": "proxy-rewrite",
+        "name": "proxy_rewrite",
         "description": "代理重写（修改请求 URI、Header、Host、协议）",
         "enable_metadata": True,
         "schema": {
@@ -244,7 +244,7 @@ BUILTIN_PLUGINS = [
         "schema": {}
     },
     {
-        "name": "response-rewrite",
+        "name": "response_rewrite",
         "description": "响应体重写（修改状态码、Body、Header）",
         "enable_metadata": True,
         "schema": {
