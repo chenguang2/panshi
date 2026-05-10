@@ -1,0 +1,78 @@
+security_common_body
+
+
+body检查
+
+
+denylist
+array[string]
+黑名单列表，匹配body中的关键字，命中后拦截用户请求。
+
+maxsize
+integer，默认值，4096
+请求体大小，超过限制大小的不进行匹配
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string，
+拦截后，响应的信息
+
+bypass_hugebody
+boolean，默认值，false
+当设置为 true 时，如果请求体大小超过maxsize时，将绕过检查。
+
+说明：
+如果请求体较大时应避免使用这个规则
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/global_rules/6001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "desc": "security_common",
+    "plugins": {
+        "security_common_body": {
+            "bypass_hugebody": true,
+            "denylist": [
+                "jndi\\:(?:ldap|rmi|iiop|iiopname|corbaname|dns|nis)",
+                "\\.\\./",
+                "\\:\\$",
+                "\\$\\{",
+                "(?:^|\\W)select\\W.+\\W(?:from|limit)\\W",
+                "(?:(union(.*?)select))",
+                "sleep\\((\\s*)(\\d*)(\\s*)\\)",
+                "benchmark\\((.*)\\,(.*)\\)",
+                "base64_decode\\(",
+                "(?:from\\W+information_schema\\W)",
+                "(?:(?:current_)user|database|schema|connection_id)\\s*\\(",
+                "(?:etc\\/\\W*passwd)",
+                "into(\\s+)+(?:dump|out)file\\s*",
+                "group\\s+by.+\\(",
+                "xwork.MethodAccessor",
+                "(?:define|eval|file_get_contents|include|require|require_once|shell_exec|phpinfo|system|passthru|preg_\\w+|execute|echo|print|print_r|var_dump|(fp)open|alert|showmodaldialog)\\(",
+                "xwork\\.MethodAccessor",
+                "(?:gopher|doc|php|glob|file|phar|zlib|ftp|ldap|dict|ogg|data)\\:\\/",
+                "java\\.lang",
+                "\\$_(?:GET|post|cookie|files|session|env|phplib|GLOBALS|SERVER)\\[",
+                "\\<(?:iframe|script|body|img|layer|div|meta|style|base|object|input)",
+                "(?:onmouseover|onerror|onload)\\=",
+                "(?:([\\s'\\\"`´’‘\\(\\)]*?)\\b([\\d\\w]++)([\\s'\\\"`´’‘\\(\\)]*?)(?:(?:=|<=>|r?like|sounds\\s+like|regexp)([\\s'\\\"`´’‘\\(\\)]*?)\\2\\b|(?:!=|<=|>=|<>|<|>|\\^|is\\s+not|not\\s+like|not\\s+regexp)([\\s'\\\"`´’‘\\(\\)]*?)(?!\\2)([\\d\\w]+)\\b))"
+            ]
+        }
+    }
+}'
+
+测试
+curl -L -X POST 'http://127.0.0.1:9980/hello1' --data-raw 'xxx$_GET[xxx'
+
+{"message":"Your request data is not allowed"}
+
+
+
+
+

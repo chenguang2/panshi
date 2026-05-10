@@ -1,0 +1,143 @@
+log_process
+
+将请求信息按指定格式记录到文件中
+
+
+logs
+array[string] 或 strings，默认："logs/process.log"
+日志记录在哪个文件中，一个或多个，如果要自定义日志格式，需要在对应的插件数据中配置
+例："logs/process.log"。
+
+cache_duration
+integer，默认值，1
+是否先缓存，再写入文件日志，0：直接写入文件
+
+include_req_body
+boolean，默认值，false
+标准日志中，是否记录请求体
+
+include_req_body_expr
+array[array]
+标准日志中，在满足该表达式时，才采集请求体，需要开启include_req_body
+
+
+
+插件数据属性：
+logs
+object，键值为url，内容为格式串或数组，默认：{ "logs/process.log" : {"formats":["${req_start_time}", ...]} }
+或 array[object], 例如：[{"file":"logs/process.log", "formats":["${req_start_time}", ...]}]
+需要记录的文件日志，可以配置一个或多个
+logs中，每个元素都是object，属性包括：
+file：string，日志记录的文件名，第一种格式可以省略该项
+formats：string或array[string]，日志文件的格式，例："${remote_addrs},${host},${status}"
+formats_sep：string，如果日志格式使用数组，则使用该字符拼接各项日志
+例："logs/process.log"。
+
+formats_sep
+string，默认：|;
+拼接数组格式的各日志项，logs中如果没有配置formats_sep属性，则使用该属性
+
+
+说明：
+需要先添加插件数据，然后重新加载插件，再添加插件使用
+如果没有添加插件数据，则只有logs/process.log日志文件有效，格式为默认的简单格式
+
+
+日志分页清理功能：
+在配置文件中修改日志的分页，清理，压缩等属性
+plugin_attr:
+  log_rotate:
+    rotate: 6
+    interval: 1h
+    compress: true
+    compress_delay: true
+    logs:
+      logs/error.log:
+        file: logs/error.log
+      logs/process.log:
+        file: logs/process.log
+说明：
+rotate：integer，分页最大保留日志数，0：不分页
+interval：string，分页大小，1mon，1d，1h，分别按月，日，小时保存日志
+compress：boolean，是否压缩日志
+compress_delay：boolean，开启压缩日志后，是否延时进行压缩，开启后会在分页后的10-20分钟之间进行压缩
+logs：需要进行分页的文件列表
+开启分页后，日志文件名将自动添加对应的时间戳，
+如：process.2023022518.log，process.2023022517.log.tar.gz
+
+
+
+
+
+
+事例：
+
+添加插件数据
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/log_process' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "logs": {
+        "logs/process.test.log": {
+            "formats": "${time_iso8601},${remote_addr},${host},${status}"
+        },
+        "logs/process.log": {
+            "formats": [
+                "${req_start_time#time_format,%Y%m%d%H%M%S,%03d}",
+                "${http_x-edge-traceid}",
+                "${username}",
+                "${usernames.isvaild}",
+                "${clientip}",
+                "${deviceid}",
+                "${deviceid_flag_suspicion}",
+                "${http_jsessionid}",
+                "${method}",
+                "${uri}",
+                "${req_args_string#remove_password1#limitn,2048}",
+                "${http_X-Rip}",
+                "${http_referer}",
+                "${req_cookie}",
+                "${req_useragent}",
+                "${http_X-Via}",
+                "${http_X-Cdn-Src-Port}",
+                "${http_X-Client-Ip-City}",
+                "${upstream_response_time#fixdefault,0,0}",
+                "${request_time}",
+                "${status}",
+                "${upstream_addr}",
+                "${plugin_riskinfo}",
+                "${plugin_riskid#fixdefault,,0}"
+            ]
+        }
+    }
+}'
+
+
+重新加载插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw ''
+
+
+添加日志插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "log_process": {
+            "logs": "logs/process.log"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1?username=44dd&test=123a'
+
+
+查看日志文件
+logs/process.log 或 logs/process.xxx.log
+
+
+
+

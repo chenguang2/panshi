@@ -1,0 +1,256 @@
+security_realtimerisk/security_realtimeinfo
+
+
+
+
+
+security_realtimeinfo插件数据属性(与配置属性相同)：
+
+
+redis_dc
+string，
+指定使用redis_conf中配置的其中一组服务器
+
+
+redis_conf
+object，
+配置redis相关属性：
+
+redis_conf.CLUSTER_xxxx
+array
+配置服务器列表，组名为xxxx，可配置一组或多组数据，例：
+"CLUSTER_TEST" : [ [ "10.1.1.1", 6379 ], [ "10.1.1.2", 6379 ] ]
+"CLUSTER_ABCD" : [ [ "10.1.1.1", 6379 ], [ "10.1.1.2", 6379 ] ]
+
+redis_conf.MODE
+string，["redis", "rediscluster"]，默认值，"redis"
+redis类型
+
+redis_conf.AUTH
+string，
+redis密钥
+
+redis_conf.DATABASE
+integer，默认值，0
+redis使用的db
+
+redis_conf.TIMEOUT
+integer，默认值，1，单位s
+连接redis的超时时间
+
+
+说明：
+可以同时配置插件数据属性和配置属性，或者配置其中之一，
+如果都配置了，按优先级 配置属性 > 数据属性，使用优先级较高的属性
+
+
+
+security_realtimerisk插件数据属性
+
+uri
+string
+访问实时引擎的地址
+
+ranks
+object
+配置rank值对应的卡控属性
+
+mirror
+object
+发送到旧实时引擎的相关信息
+
+mirror.uri
+string
+旧实时引擎地址
+
+mirror.path_prefix
+string
+如果mirror.uri未配置，则地址为实时引擎地址加上该前缀
+
+
+security_realtimerisk配置属性
+
+appid
+string
+实时引擎参数
+
+event
+string
+实时引擎参数
+
+channel
+string
+实时引擎参数
+
+args
+object/string
+实时引擎相关参数的获取位置，例：
+userPhoneNo:mobile_no
+userCertNo:id_no
+userEmail:email
+
+params
+object
+实时引擎添加的额外参数，例：
+{
+  "windowNo": "${req_args.windowNo}",
+  "officeNo": "${req_args.officeNo}",
+  "bureauCode": "${req_args.bureauCode}",
+  "runningName": "${req_args.runningName}"
+}
+
+
+mirror
+object
+发送到旧实时引擎的相关参数
+
+mirror.enabled
+string
+是否启用旧实时引擎
+
+mirror.replace
+string
+使用旧实时引擎结果
+
+mirror.appid
+string
+旧实时引擎参数
+
+mirror.event
+string
+旧实时引擎参数
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string
+拦截后，响应的信息
+
+
+
+事例：
+
+添加实时引擎路由
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3101' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/realtimerisk/engine/audit",
+    "plugins": {
+        "proxy_rewrite": {
+            "regex_uri": [
+                "^/realtimerisk/(.*)$",
+                "/$1"
+            ]
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8222": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3102' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/mirror/realtimerisk/rest/portal/1.0/invoke",
+    "plugins": {
+        "proxy_rewrite": {
+            "regex_uri": [
+                "^/mirror/realtimerisk/(.*)$",
+                "/$1"
+            ]
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8222": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+添加插件数据
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/security_realtimeinfo' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "redis_dc": "TEST",
+    "redis_conf": {
+        "CLUSTER_TEST": [
+            ["127.0.0.1",6379]
+        ]
+    }
+}'
+
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/security_realtimerisk' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "traceid_header": "X-EDGE-TraceID",
+    "uri": "/realtimerisk/engine/audit",
+    "ranks": {
+        "rank_0": 0,
+        "rank_1": 1,
+        "rank_2": 2,
+        "rank_3": 3,
+        "rank_4": 4
+    },
+    "mirror": {
+        "uri": "/mirror/realtimerisk/rest/portal/1.0/invoke"
+    }
+}'
+
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3100' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' -H 'Cookie: BIGipServerpool_passport=351076874.50215.0000; JSESSIONID=0A01D951C474614793485679013C89124711235679; RAIL_DEVICEID=f301M6ud0RQBxnBCN0MV-RO9VeI9vgcAcBaLq1y4QdliVt_g3HZSidEK2xu4Dp_HsaBWFTC7TrL-lRUopcdj1lfcO4IscAGa-KoJ6HnZ7MnObUXDP_7YrJQdTPyAzWICc__B-RXTJay0GJC1W0_o77ZSvvIV-9Ku' --data-raw '{
+    "uri": "/test/realtimerisk/*",
+    "plugins": {
+        "security_realtimeinfo": {},
+        "security_realtimerisk": {
+            "appid": "SEARCH_SERVICE",
+            "event": "SEARCH_SERVICE",
+            "channel": "app",
+            "mirror": {
+                "appid": "SEARCH_SERVICE",
+                "event": "SEARCH_SERVICE",
+                "enabled": true
+            }
+        },
+        "pre_process": {},
+        "log_process": {},
+        "traceid": {}
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+添加codis测试数据
+...略
+
+开启测试的实时引擎服务
+curl -L -X POST 'http://127.0.0.1:8222/realtimerisk/engine/audit'
+{
+"bizOutPutParam": {
+"code": 50080005100,
+"message": "success",
+"result": "rank_1"
+},
+"code": "000",
+"extendOutPutParam": {},
+"msg": null,
+"success": true,
+"timestamp": 1623045098,
+"uniqueId": "04023914b3de49c1863bf9a693e59e98"
+}
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/test/realtimerisk/h1?username=a1&test=123a'
+
+结果(日志)
+20230321091557020|;AAABhwG8tNy1XqfBAQAAfzeI-pMAAF59AgACAAAA|;|;GET|;/test/realtimerisk/h1|;username=a1&test=123a|;|;|;PostmanRuntime/7.30.1|;0|;0.005|;403|;|;|;security_realtimerisk[1]|;security_realtimerisk.1.rank_1
+
+rank_0时，正常访问
+20230321093827808|;AAABhwHRUWAy_dkoAQAAfzeI_ZkAAN6DAwABAAAA|;|;GET|;/test/realtimerisk/h1|;username=a1&test=123a|;|;|;PostmanRuntime/7.30.1|;0.015|;0.02|;200|;130|;127.0.0.1:8111|;|;0
+
+
+

@@ -1,0 +1,161 @@
+log_mirror
+
+将请求镜像到指定的服务器上
+
+
+logs
+array[string] 或 strings，默认："http://127.0.0.1:9980/log/test"
+将日志发送到列表指定的url中，可以配置一个或多个，如果需要自定义日志格式，需要在对应的插件数据中配置
+例："http://127.0.0.1:9980/log/test"。
+
+header_name
+string，默认值，X-EDGE-LOG-MIRROR
+镜像请求时，添加的请求头信息
+
+sample_ratio
+number，默认值，1，范围[0.00001, 1]
+镜像请求采样值
+
+include_req_body
+boolean，默认值，false
+镜像请求时，是否包含请求体
+
+include_req_body_expr
+array[array]
+在满足该表达式时，才采集请求体，需要开启include_req_body
+
+
+插件数据属性：
+logs
+object，键值为url地址，内容为相关参数，默认：{ "http://127.0.0.1:9980/log/test" : {"timeout":5, ...]} }
+或 array[object], 例如：[{"uri":"http://127.0.0.1:9980/log/test", "timeout":5, ...]}]
+需要做镜像的请求，可以配置一个或多个
+logs中，每个元素都是object，属性包括：
+timeout：number，超时时间，默认：3，单位：秒
+keepalive_timeout：integer，连接池空闲时间，默认：150，单位：秒
+keepalive_pool：integer，连接池大小，默认：30
+
+retry_max_count
+integer，默认值，0
+请求失败后的重试次数
+
+batch_max_size
+integer，默认值，1000
+批处理数，累计达到指定请求数后，将请求一起发到镜像服务器
+
+batch_duration
+integer，默认值，60，单位：秒
+批处理缓存时间，达到指定时间后，将请求一起发到镜像服务器
+
+
+
+
+说明：
+更新插件数据后，需要重新加载插件使之生效
+如果没有插件数据，镜像请求将使用默念属性发送请求
+
+
+
+
+
+事例：
+
+添加插件数据（可以不添加）
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/log_mirror' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "logs": {
+        "http://127.0.0.1:9980/log/test": {
+          "timeout": 2
+        }
+    },
+    "batch_max_size": 10,
+    "batch_duration": 10
+}'
+
+配置日志格式
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/log_process' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "logs": {
+        "logs/process.mirror.log": {
+            "formats": "${time_iso8601},${remote_addr},${host},${status}"
+        },
+        "logs/process.log": {
+            "formats": [
+                "${req_start_time#time_format,%Y%m%d%H%M%S,%03d}",
+                "${http_x-edge-traceid}",
+                "${username}",
+                "${usernames.isvaild}",
+                "${clientip}",
+                "${deviceid}",
+                "${deviceid_flag_suspicion}",
+                "${http_jsessionid}",
+                "${method}",
+                "${uri}",
+                "${req_args_string}",
+                "${http_X-Rip}",
+                "${http_referer}",
+                "${req_cookie}",
+                "${req_useragent}",
+                "${http_X-Via}",
+                "${http_X-Cdn-Src-Port}",
+                "${http_X-Client-Ip-City}",
+                "${upstream_response_time#fixdefault,0,0}",
+                "${request_time}",
+                "${status}",
+                "${upstream_addr}",
+                "${plugin_riskinfo}",
+                "${plugin_riskid#fixdefault,,0}"
+            ]
+        }
+    }
+}'
+
+重新加载插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw ''
+
+
+新加一个处理镜像请求的路由
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/rut_log_test' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/log/*",
+    "plugins": {
+        "log_process": {
+            "logs": "logs/process.mirror.log"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8114": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+在测试路由上添加镜像插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "log_mirror": {
+            "logs": "http://127.0.0.1:9980/log/test",
+            "include_req_body": true
+        },
+        "log_process": {
+            "logs": "logs/process.log"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1?username=44dd&test=123a'
+
+
+查看日志文件
+logs/process.log, logs/process.mirror.log
+
+
+
+

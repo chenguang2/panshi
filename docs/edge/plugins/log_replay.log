@@ -1,0 +1,136 @@
+log_replay
+
+
+
+在edge.cfg中，配置插件属性：
+plugin_attr:
+  log_replay:
+    delay: 10
+    count: 1
+    timeout: 3
+    logs:
+      logs/process.record.log:
+        #uri: http://127.0.0.1:9988
+        replay:
+          begin: 2023/0/0,12:48:00
+          end: 0/0/0,12:55:00
+        record:
+          begin: 2023/4/12,14:15:00
+          end: 0/0/0,15:27:01
+说明：
+enable：boolean，是否开启回放功能，可以忽略该属性，等同于在插件配置里添加或删除该插件
+delay：integer，每次回放的时间间隔，单位：秒
+count：integer，每次回放发送的请求数，
+timeout：integer，回放中发送请求的超时时间
+logs：需要进行回放的日志列表
+logs.filename内容为回放内容和功能启用的始末时间
+下面字段由日期和时间2部分组成，逗号隔开，时间为24小时制
+日期含年月日，/分隔，值大于零，表示正常的日期，小于等于零，表示相对时间
+replay.begin：年月日为零时，即当年/当月/当天，年月不能小于零，日小于零表示该月最后几日
+replay.end：年月日小于等于零的部分，表示距离replay.begin的时间间隔，
+record.begin：年月日小于等于零的部分，表示距离replay.begin的时间间隔，
+record.end：年月日小于等于零的部分，表示距离record.begin的时间间隔，
+uri: 配置重新转发的地址，不配置使用原请求地址，例，http://127.0.0.1:9988
+上面配置表示:
+2023年每月每日的12:48:00开始执行任务，当天12:55:00结束任务，
+回放的内容为：
+2023/4/12,14:15:00-2023/4/12,15:27:01之间的请求
+另，回放结果会记录在另一个文件中，文件名为原日志文件名后附加.replay
+即：logs/process.record.replay.log，对应logs/process.record.log的回放结果
+
+
+在edge.cfg中，修改回放日志，结果日志的分页，清理，压缩等属性
+plugin_attr:
+  log_rotate:
+    rotate: 6
+    interval: 1h
+    compress: true
+    compress_delay: true
+    logs:
+      logs/error.log:
+        file: logs/error.log
+      logs/process.log:
+        file: logs/process.log
+      logs/process.record.log:
+        compress: false
+      logs/process.record.replay.log:
+        compress: false
+说明：
+上面新加了2项，
+      logs/process.record.log:
+        compress: false
+      logs/process.record.replay.log:
+        compress: false
+一个为回放的日志文件，一个为回放日志的结果文件，二者需要配置不压缩属性
+
+
+
+说明：
+
+
+
+
+事例：
+
+指定需要回放的路由，添加日志插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "log_process": {
+            "logs": ["logs/process.record.log"],
+            "include_req_body": true
+        },
+        "traceid": {}
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+应该使用标准日志格式，不能添加logs/process.record.log的日志格式数据，所以不需要添加插件数据
+
+
+测试数据：
+根据需要，发送该路由对应的一些请求样例，
+
+
+添加或开启回放插件
+plugins:
+  - log_replay
+
+plugin_attr:
+  log_replay:
+    enable: true
+
+指定回放时间及内容，
+plugin_attr:
+  log_replay:
+    enable: true
+    delay: 5
+    count: 3
+    timeout: 3
+    logs:
+      logs/process.record.log:
+        replay:
+          begin: 0/0/0,23:30:00
+          end: 0/0/-1,02:30:00
+        record:
+          begin: 0/0/0,08:30:00
+          end: 0/0/0,15:30:00
+即：每天23:30-次日02:30，回放当天08:30-15:30的请求，每5秒回放3个请求，
+如果请求数较多，指定时间段内没有回放完，回放时间结束后，将停止回放
+
+
+重新加载插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw ''
+
+
+查看日志文件
+logs/process.reocrd.replay.xxxx.log
+
+
+
+

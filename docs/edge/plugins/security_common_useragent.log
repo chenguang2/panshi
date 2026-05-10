@@ -1,0 +1,59 @@
+security_common_useragent
+
+
+
+useragent检查
+
+
+denylist
+array[string]
+黑名单列表，匹配User-Agent中的关键字，命中后拦截用户请求。
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string，
+拦截后，响应的信息
+
+bypass_missing
+boolean，默认值，false
+当设置为 true 时，如果User-Agent请求头不存在或格式有误时，将绕过检查。
+
+说明：
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/global_rules/6001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "desc": "security_common",
+    "plugins": {
+        "security_common_useragent": {
+            "bypass_missing": true,
+            "denylist": [
+                "jndi\\:(?:ldap|rmi|iiop|iiopname|corbaname|dns|nis)",
+                "\\.(?:svn|htaccess|bash_history)",
+                "\\.(?:bak|inc|old|mdb|sql|backup|java|class)$",
+                "(?:vhost|bbs|host|wwwroot|www|site|root|hytop|flashfxp).*\\.rar",
+                "(?:phpmyadmin|jmx-console|otsmobile/console|jmxinvokerservlet)",
+                "\\'",
+                "java\\.lang",
+                "/(?:attachments|upimg|images|css|uploadfiles|html|uploads|templets|static|template|data|inc|forumdata|upload|includes|cache|avatar)/(\\w+)\\.(?:php|jsp)"
+            ]
+        }
+    }
+}'
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/hello1?test' -H 'User-Agent: PostmanRuntime/7.30.0 test.svn'
+
+{"message":"Your request useragent is not allowed"}
+
+
+
+

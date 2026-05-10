@@ -1,0 +1,52 @@
+traceid
+
+
+
+配置属性：
+
+header_name
+string，默认 X-EDGE-TraceID
+traceid写入header中的字段名。
+
+ignore_header
+boolean，默认，false
+如果请求头中已经含有上面字段，是否覆盖
+
+show_resp_header
+boolean，默认，false
+是否将traceid写入响应头中
+
+
+说明：
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw '{
+    "uri": "/hello1",
+    "plugins": {
+        "traceid": {}
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1'
+
+
+查看请求头信息的x-edge-traceid字段
+"x-edge-traceid":"AYl3LPxO0CX1zSQDqMBRZQDztAAAAGX1YgAAAgAAAAAA"
+
+
+
+

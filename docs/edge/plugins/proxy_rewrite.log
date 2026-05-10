@@ -1,0 +1,75 @@
+proxy_rewrite
+
+
+
+
+配置属性:
+
+
+
+
+
+uri
+string
+转发到上游的新 uri 地址。
+
+regex_uri
+array[string]
+转发到上游的新 uri 地址。
+使用正则表达式匹配来自客户端的 uri，如果匹配成功，则使用模板替换转发到上游的 uri，如果没有匹配成功，则将客户端请求的 uri 转发至上游。
+例：[“^/test/(.)/(.)/(.*)”,”/test1/$1-$2-$3”]
+
+headers
+object
+转发到上游的新 headers，可以设置多个。
+
+method
+string
+将路由的请求方法代理为该请求方法。
+例：“POST”
+
+host
+string
+转发到上游的新 host 地址
+
+scheme
+string，默认值，“http”
+转发到上游的新 scheme。
+
+
+说明：
+当同时配置 uri 和 regex_uri 属性时，按优先级 uri > regex_uri，使用优先级高的。
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw '{
+    "uri": "/hello1",
+    "plugins": {
+        "proxy_rewrite": {
+            "uri": "/hello",
+            "headers": {
+                "version": "v1"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1'
+
+
+
+
+
+
+

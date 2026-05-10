@@ -1,0 +1,59 @@
+proxy_mirror
+
+
+
+
+配置属性:
+
+
+
+
+
+host
+string
+指定镜像服务地址，地址中需要包含schema（http/https），不能包含 path 部分
+例：http://127.0.0.1:8000
+
+path
+string
+指定镜像请求的路径。如不指定，当前路径将被使用。
+
+sample_ratio
+number，默认值，1，范围[0.00001, 1]
+镜像请求采样率
+
+
+说明：
+镜像请求的响应结果会被忽略。
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw '{
+    "uri": "/hello1",
+    "plugins": {
+        "proxy_mirror": {
+            "host": "http://127.0.0.1:8121"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1'
+
+
+
+
+
+
+

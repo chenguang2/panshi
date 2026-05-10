@@ -1,0 +1,54 @@
+security_common_uri
+
+
+uri检查
+
+
+
+denylist
+array[string]
+黑名单列表，匹配uri中的关键字，命中后拦截用户请求。
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string，
+拦截后，响应的信息
+
+说明：
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/global_rules/6001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "desc": "security_common",
+    "plugins": {
+        "security_common_uri": {
+            "denylist": [
+                "jndi\\:(?:ldap|rmi|iiop|iiopname|corbaname|dns|nis)",
+                "\\.(?:svn|htaccess|bash_history)",
+                "\\.(?:bak|inc|old|mdb|sql|backup|java|class)$",
+                "(?:vhost|bbs|host|wwwroot|www|site|root|hytop|flashfxp).*\\.rar",
+                "(?:phpmyadmin|jmx-console|otsmobile/console|jmxinvokerservlet)",
+                "\\'",
+                "java\\.lang",
+                "/(?:attachments|upimg|images|css|uploadfiles|html|uploads|templets|static|template|data|inc|forumdata|upload|includes|cache|avatar)/(\\w+)\\.(?:php|jsp)"
+            ]
+        }
+    }
+}'
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/hello1?x.svn'
+
+{"message":"Your request uri is not allowed"}
+
+
+
+

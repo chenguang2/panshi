@@ -1,0 +1,55 @@
+pre_process
+
+
+各业务数据的预处理
+
+配置属性:
+无
+
+说明：
+无需配置属性，需要预先设定好插件配置，直接在需要处理的路由添加插件
+
+
+在配置文件中修改
+plugin_attr:
+  pre_process:
+    worksite: search
+    worksite_id: 1
+    worksite_mask: "12"
+说明：
+worksite：string，业务名称，如：otn，mobile，search，等，
+worksite_id：integer，服务器位置，如：1中心，2中心
+worksite_mask：string，各业务风控参数
+
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "pre_process": {}
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1?username=44dd&test=123a'
+
+
+查看日志文件
+logs/process.log
+
+
+
+

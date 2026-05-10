@@ -1,0 +1,24 @@
+data_center
+
+
+
+
+可以将插件的部分数据属性，写到该插件数据属性里，
+便于集中管理插件的部分数据属性
+
+例：
+
+配置风控插件的数据属性
+/plugin_metedata/security_fengkong
+{  ------1
+    "redis_dc": "TEST1"
+}
+
+/plugin_metedata/data_center
+{  ------2
+    "redis_dc": "TEST3"
+}
+
+风控插件的redis_dc的值，将按照 1、2 的顺序进行获取
+
+

@@ -1,0 +1,75 @@
+security_super_user
+
+
+配置高级用户，指定的用户可以不受其它插件限制，直接访问服务
+
+
+superlist
+array[string]
+高级用户列表，匹配用户是否在列表中，在其中的不再检查指定的安全类插件。
+
+key
+string，
+指定user的来源，如：${arg_username}，
+
+ignore_plugins
+array[string]
+匹配到的高级用户，可以指定哪些插件不用执行，一般用于跳过安全检查，流量限制等插件的校验
+
+
+说明：
+可以同时配置插件数据属性和配置属性，或者配置其中之一，
+如果都配置了，按优先级 配置属性 > 数据属性，使用优先级较高的属性
+指定跳过的插件，只有优先级在此插件之后的才有效。
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1",
+    "plugins": {
+        "security_super_user": {
+            "key": "${arg_username}",
+            "superlist": [
+                "33bb",
+                "44dd"
+            ],
+            "ignore_plugins": [
+                "traffic_limit_count"
+            ]
+        },
+        "traffic_limit_count": {
+            "show_resp_limit_header": true,
+            "limits": [
+                {
+                    "key": "${remote_addr}",
+                    "count": 2,
+                    "window": 5
+                }
+            ],
+            "status": 403,
+            "policy": "local"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/hello1?username=44dd'
+可以不被限制正常访问
+
+curl -L -X GET 'http://127.0.0.1:9980/hello1?username=33cc'
+5秒内访问超过2次后，会被限制访问，返回403
+
+
+
+

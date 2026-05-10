@@ -1,0 +1,61 @@
+auth_basic
+
+
+
+
+Router 端配置属性:
+
+hide_credentials
+bool，默认值，false
+设置为 false 时，将透传给 Upstream。
+设置为 true 时，将清除掉对应的信息，不传递给Upstream。
+
+说明：
+如果header，query都配置了，按优先级 header > query，取优先级较高的
+
+
+Consumer 端配置属性:
+
+username
+string
+为Consumer配置的用户名，用于识别用户身份，这个username应该是不相同的。
+如果多个 Consumer 使用了相同的 username，将会出现请求匹配异常。
+
+password
+string
+用户密码
+
+
+事例：
+
+添加插件auth_basic
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "auth_basic": {}
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+新增consumer
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/consumers' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "username": "CAtest_auth_basic",
+    "plugins": {
+        "auth_basic": {
+            "password": "auth_basic",
+            "username": "auth_basic"
+        }
+    }
+}'
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1' -H 'Authorization: Basic YXV0aF9iYXNpYzphdXRoX2Jhc2lj'
+
+
+
+

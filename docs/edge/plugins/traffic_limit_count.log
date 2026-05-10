@@ -1,0 +1,129 @@
+traffic_limit_count
+
+
+
+
+配置属性:
+
+
+limits
+array[object]
+限制策略，每项都是包含key,count,window属性的对象，如{ "key": "${remote_addr}", "count": 5, "window": 10 }
+window，interger，>0，时间窗口的大小（以秒为单位），超过这个时间就会重置
+count，interger，>0，指定时间窗口内的请求数量阈值
+key，string，用于做请求计数的依据，如：${remote_addr}表示用户ip，${arg_a}表示请求参数中a的值，可以一个或多个组合
+
+
+group
+string，
+对于多个route，如果配置了相同的group，将共享同样的限流计数器
+
+
+policy
+string，["local", "redis"]，默认值，"local"
+计数器存取策略。
+local：计数器以内存方式保存在节点本地。
+redis：计数器保存在 Redis 服务节点上，用于全局限速。
+
+
+redis_conf
+object，
+如果policy配置为redis时，需要添加该项配置，具体包含下面属性：
+
+redis_conf.CLUSTER_DEF
+array
+配置一组服务器列表，组名为DEF，可配置一个或多个节点，如：[ [ "10.1.1.1", 6379 ], [ "10.1.1.2", 6379 ] ]
+
+redis_conf.MODE
+string，["redis", "rediscluster"]，默认值，"redis"
+redis类型
+
+redis_conf.AUTH
+string，
+redis密钥
+
+redis_conf.DATABASE
+integer，默认值，0
+redis使用的db
+
+redis_conf.TIMEOUT
+integer，，默认值，0.05，单位s
+连接redis的超时时间
+
+
+redis_dc
+string，
+如果redis_conf配置了多组服务器，或修改了默认服务器组名(TEST)，需要指定服务器组名
+
+
+bypass_missing_key
+boolean，默认值，true
+当用于做请求计数的依据key，不存在时，是否忽略，设置false时，将按空值进行统计
+
+bypass_error_limit
+boolean，默认值，true
+当执行过程出错，如redis访问异常时，是否忽略，设置false时，会响应500错误
+
+
+show_resp_limit_header
+boolean，默认值，false
+是否在响应头中显示 X-EDGE-LimitCount-Remaining（限制的剩余还可以发送的请求数）。
+
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string，
+拦截后，响应的信息
+
+说明：
+如果allowlist，denylist都配置了，按优先级 allowlist > denylist，依次检查
+
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1",
+    "plugins": {
+        "traffic_limit_count": {
+            "show_resp_limit_header": true,
+            "limits": [
+                {
+                    "key": "${remote_addr}",
+                    "count": 2,
+                    "window": 5
+                }
+            ],
+            "status": 403,
+            "policy": "local",
+            "redis_conf": {
+                "CLUSTER_TEST": [
+                    [
+                        "127.0.0.1",
+                        6379
+                    ]
+                ]
+            }
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/hello1'
+
+5秒内访问超过2次后，将返回403错误
+
+
+

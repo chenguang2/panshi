@@ -1,0 +1,70 @@
+security_restrict_uri
+
+
+url白名单，限制不在指定列表里的请求
+
+
+whitelist
+array[string]
+白名单列表，匹配uri是否在列表中，不在其中的将被拦截。
+
+key
+string，默认：${uri}
+指定uri的来源，如：${operationType}，
+
+bypass_missing_key
+boolean，默认：true
+如果指定的key不存在，是否不进行卡控
+
+bypass_error_key
+boolean，默认：true
+如果指定的key异常，是否不进行卡控
+
+status
+integer，默认值，403
+拦截后，响应的状态码
+
+message
+string，
+拦截后，响应的信息
+
+
+说明：
+
+
+
+
+事例：
+
+添加插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "security_restrict_uri": {
+            "whitelist": [
+                "/hello1/h1",
+                "/hello1/h2"
+            ],
+            "message": "Your request uri is not allowed"
+            "status": 403
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+测试
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1'
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h2?a=33bb'
+正常访问
+
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h3?a=33bb'
+返回403，Your request uri is not allowed
+
+
+
+
