@@ -92,6 +92,7 @@ openspec/changes/*/design.md
 .history/
 prompt*.txt
 prompt-*.txt
+!prompt-1.txt
 
 !docs/**/*.log
 
