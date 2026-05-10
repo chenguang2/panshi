@@ -1,0 +1,1 @@
+- generic [ref=e2]: "{\"plugin_metadata\":[{\"value\":{\"logs\":{\"logs/process.log\":{\"formats\":[\"${req_start_time#time_format,%Y%m%d%H%M%S,%03d}\",\"${clientip}\",\"${cookie_X-EDGE-SESSIONID}\",\"${method}\",\"${uri}\",\"${request_time}\",\"${status}\",\"${upstream_addr}\"]}}},\"modifiedIndex\":0,\"key\":\"/passport/plugin_metadata/log_process\",\"createdIndex\":0}]}"

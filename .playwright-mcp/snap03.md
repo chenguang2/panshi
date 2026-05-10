@@ -1,0 +1,140 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]: 磐石
+    - menu [ref=e6]:
+      - menuitem "dashboard 仪表盘" [ref=e7] [cursor=pointer]:
+        - generic [ref=e8]:
+          - img "dashboard" [ref=e9]:
+            - img [ref=e10]
+          - text: 仪表盘
+      - generic [ref=e12] [cursor=pointer]: 系统管理
+      - menuitem "cloud 集群管理" [ref=e13] [cursor=pointer]:
+        - generic [ref=e14]:
+          - img "cloud" [ref=e15]:
+            - img [ref=e16]
+          - text: 集群管理
+      - menuitem "setting 边缘节点" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]:
+          - img "setting" [ref=e20]:
+            - img [ref=e21]
+          - text: 边缘节点
+      - generic:
+        - generic:
+          - img:
+            - img
+    - generic [ref=e24]:
+      - img "user" [ref=e26]:
+        - img [ref=e27]
+      - generic [ref=e29]: admin
+  - main [ref=e30]:
+    - generic [ref=e31]:
+      - alert [ref=e32]:
+        - img "exclamation-circle" [ref=e33]:
+          - img [ref=e34]
+        - generic [ref=e37]:
+          - generic [ref=e38]: 调试模式
+          - generic [ref=e39]: 此处操作绕过正常同步流程，直接修改边缘节点数据
+        - button "close" [ref=e40] [cursor=pointer]:
+          - img "close" [ref=e41]:
+            - img [ref=e42]
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e48] [cursor=pointer]:
+              - radio "按集群选择" [checked] [ref=e50]
+              - generic [ref=e52]: 按集群选择
+            - generic [ref=e53] [cursor=pointer]:
+              - radio "手动输入" [ref=e55]
+              - generic [ref=e57]: 手动输入
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]:
+              - combobox [ref=e61]
+              - generic [ref=e127]: pc-集群
+            - generic:
+              - img:
+                - img
+          - generic [ref=e62] [cursor=pointer]:
+            - generic [ref=e63]:
+              - combobox [ref=e65]
+              - generic [ref=e128]: 192.168.100.235:11999
+            - generic:
+              - img:
+                - img
+          - button "reload 刷新" [ref=e66] [cursor=pointer]:
+            - img "reload" [ref=e67]:
+              - img [ref=e68]
+            - generic [ref=e70]: 刷新
+        - generic [ref=e71]:
+          - tablist [ref=e72]:
+            - generic [ref=e74]:
+              - tab "上游" [selected] [ref=e76] [cursor=pointer]
+              - tab "路由" [ref=e78] [cursor=pointer]
+              - tab "插件" [ref=e80] [cursor=pointer]
+              - tab "全局规则" [ref=e82] [cursor=pointer]
+              - tab "插件组" [ref=e84] [cursor=pointer]
+          - tabpanel "上游" [ref=e87]:
+            - button "plus 添加上游" [ref=e89] [cursor=pointer]:
+              - img "plus" [ref=e90]:
+                - img [ref=e91]
+              - generic [ref=e94]: 添加上游
+            - table [ref=e101]:
+              - rowgroup [ref=e108]:
+                - row "ID 名称 类型 节点数 操作" [ref=e109]:
+                  - columnheader "ID" [ref=e110]
+                  - columnheader "名称" [ref=e111]
+                  - columnheader "类型" [ref=e112]
+                  - columnheader "节点数" [ref=e113]
+                  - columnheader "操作" [ref=e114]
+              - rowgroup [ref=e115]:
+                - row "4e25477b-5783-4f5a-84e5-2920e79277fb 8114 roundrobin 2 个节点 JSON 编 辑 删 除" [ref=e129]:
+                  - cell "4e25477b-5783-4f5a-84e5-2920e79277fb" [ref=e130]
+                  - cell "8114" [ref=e131]
+                  - cell "roundrobin" [ref=e132]
+                  - cell "2 个节点" [ref=e133]
+                  - cell "JSON 编 辑 删 除" [ref=e134]:
+                    - generic [ref=e135]:
+                      - button "JSON" [ref=e137] [cursor=pointer]:
+                        - generic [ref=e138]: JSON
+                      - button "编 辑" [ref=e140] [cursor=pointer]:
+                        - generic [ref=e141]: 编 辑
+                      - button "删 除" [ref=e143] [cursor=pointer]:
+                        - generic [ref=e144]: 删 除
+                - row "2042050645214035968 - roundrobin 1 个节点 JSON 编 辑 删 除" [ref=e145]:
+                  - cell "2042050645214035968" [ref=e146]
+                  - cell "-" [ref=e147]
+                  - cell "roundrobin" [ref=e148]
+                  - cell "1 个节点" [ref=e149]
+                  - cell "JSON 编 辑 删 除" [ref=e150]:
+                    - generic [ref=e151]:
+                      - button "JSON" [ref=e153] [cursor=pointer]:
+                        - generic [ref=e154]: JSON
+                      - button "编 辑" [ref=e156] [cursor=pointer]:
+                        - generic [ref=e157]: 编 辑
+                      - button "删 除" [ref=e159] [cursor=pointer]:
+                        - generic [ref=e160]: 删 除
+                - row "d4a21d50-ce01-48dc-b521-30c7efe0861d 8115 roundrobin 2 个节点 JSON 编 辑 删 除" [ref=e161]:
+                  - cell "d4a21d50-ce01-48dc-b521-30c7efe0861d" [ref=e162]
+                  - cell "8115" [ref=e163]
+                  - cell "roundrobin" [ref=e164]
+                  - cell "2 个节点" [ref=e165]
+                  - cell "JSON 编 辑 删 除" [ref=e166]:
+                    - generic [ref=e167]:
+                      - button "JSON" [ref=e169] [cursor=pointer]:
+                        - generic [ref=e170]: JSON
+                      - button "编 辑" [ref=e172] [cursor=pointer]:
+                        - generic [ref=e173]: 编 辑
+                      - button "删 除" [ref=e175] [cursor=pointer]:
+                        - generic [ref=e176]: 删 除
+                - row "eb8e5655-152f-4141-998a-20084ff9ce64 235 roundrobin 1 个节点 JSON 编 辑 删 除" [ref=e177]:
+                  - cell "eb8e5655-152f-4141-998a-20084ff9ce64" [ref=e178]
+                  - cell "235" [ref=e179]
+                  - cell "roundrobin" [ref=e180]
+                  - cell "1 个节点" [ref=e181]
+                  - cell "JSON 编 辑 删 除" [ref=e182]:
+                    - generic [ref=e183]:
+                      - button "JSON" [ref=e185] [cursor=pointer]:
+                        - generic [ref=e186]: JSON
+                      - button "编 辑" [ref=e188] [cursor=pointer]:
+                        - generic [ref=e189]: 编 辑
+                      - button "删 除" [ref=e191] [cursor=pointer]:
+                        - generic [ref=e192]: 删 除

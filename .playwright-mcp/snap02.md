@@ -1,0 +1,106 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: 磐石
+      - menu [ref=e6]:
+        - menuitem "dashboard 仪表盘" [ref=e7] [cursor=pointer]:
+          - generic [ref=e8]:
+            - img "dashboard" [ref=e9]:
+              - img [ref=e10]
+            - text: 仪表盘
+        - generic [ref=e12] [cursor=pointer]: 系统管理
+        - menuitem "cloud 集群管理" [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]:
+            - img "cloud" [ref=e15]:
+              - img [ref=e16]
+            - text: 集群管理
+        - menuitem "setting 边缘节点" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]:
+            - img "setting" [ref=e20]:
+              - img [ref=e21]
+            - text: 边缘节点
+        - generic:
+          - generic:
+            - img:
+              - img
+      - generic [ref=e24]:
+        - img "user" [ref=e26]:
+          - img [ref=e27]
+        - generic [ref=e29]: admin
+    - main [ref=e30]:
+      - generic [ref=e31]:
+        - alert [ref=e32]:
+          - img "exclamation-circle" [ref=e33]:
+            - img [ref=e34]
+          - generic [ref=e37]:
+            - generic [ref=e38]: 调试模式
+            - generic [ref=e39]: 此处操作绕过正常同步流程，直接修改边缘节点数据
+          - button "close" [ref=e40] [cursor=pointer]:
+            - img "close" [ref=e41]:
+              - img [ref=e42]
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48] [cursor=pointer]:
+                - radio "按集群选择" [checked] [ref=e50]
+                - generic [ref=e52]: 按集群选择
+              - generic [ref=e53] [cursor=pointer]:
+                - radio "手动输入" [ref=e55]
+                - generic [ref=e57]: 手动输入
+            - generic [ref=e58] [cursor=pointer]:
+              - generic [ref=e59]:
+                - combobox [ref=e61]
+                - generic [ref=e62]: pc-集群
+              - generic:
+                - img:
+                  - img
+            - generic [ref=e63] [cursor=pointer]:
+              - generic [ref=e64]:
+                - combobox [ref=e66]
+                - generic [ref=e67]: 192.168.100.235:11999
+              - generic:
+                - img:
+                  - img
+            - button "reload 刷新" [active] [ref=e68] [cursor=pointer]:
+              - img "reload" [ref=e69]:
+                - img [ref=e70]
+              - generic [ref=e72]: 刷新
+          - generic [ref=e73]:
+            - tablist [ref=e74]:
+              - generic [ref=e76]:
+                - tab "上游" [ref=e78] [cursor=pointer]
+                - tab "路由" [ref=e80] [cursor=pointer]
+                - tab "插件" [ref=e82] [cursor=pointer]
+                - tab "全局规则" [ref=e84] [cursor=pointer]
+                - tab "插件组" [selected] [ref=e86] [cursor=pointer]
+            - tabpanel "插件组" [ref=e89]:
+              - button "plus 添加插件组" [ref=e91] [cursor=pointer]:
+                - img "plus" [ref=e92]:
+                  - img [ref=e93]
+                - generic [ref=e96]: 添加插件组
+              - table [ref=e103]:
+                - rowgroup [ref=e111]:
+                  - row "ID 描述 插件数 Labels Hosts 操作" [ref=e112]:
+                    - columnheader "ID" [ref=e113]
+                    - columnheader "描述" [ref=e114]
+                    - columnheader "插件数" [ref=e115]
+                    - columnheader "Labels" [ref=e116]
+                    - columnheader "Hosts" [ref=e117]
+                    - columnheader "操作" [ref=e118]
+                - rowgroup [ref=e119]:
+                  - row "No data" [ref=e120]:
+                    - cell "No data" [ref=e121]:
+                      - generic [ref=e122]:
+                        - img [ref=e124]
+                        - paragraph [ref=e130]: No data
+  - generic:
+    - generic:
+      - generic:
+        - generic [ref=e132]:
+          - img "close-circle" [ref=e133]:
+            - img [ref=e134]
+          - text: "加载数据失败: Not Found"
+        - generic [ref=e137]:
+          - img "check-circle" [ref=e138]:
+            - img [ref=e139]
+          - text: 已刷新

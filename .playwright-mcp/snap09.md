@@ -1,0 +1,96 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]: 磐石
+    - menu [ref=e6]:
+      - menuitem "dashboard 仪表盘" [ref=e7] [cursor=pointer]:
+        - generic [ref=e8]:
+          - img "dashboard" [ref=e9]:
+            - img [ref=e10]
+          - text: 仪表盘
+      - generic [ref=e12] [cursor=pointer]: 系统管理
+      - menuitem "cloud 集群管理" [ref=e13] [cursor=pointer]:
+        - generic [ref=e14]:
+          - img "cloud" [ref=e15]:
+            - img [ref=e16]
+          - text: 集群管理
+      - menuitem "setting 边缘节点" [ref=e18] [cursor=pointer]:
+        - generic [ref=e19]:
+          - img "setting" [ref=e20]:
+            - img [ref=e21]
+          - text: 边缘节点
+      - generic:
+        - generic:
+          - img:
+            - img
+    - generic [ref=e24]:
+      - img "user" [ref=e26]:
+        - img [ref=e27]
+      - generic [ref=e29]: admin
+  - main [ref=e30]:
+    - generic [ref=e31]:
+      - alert [ref=e32]:
+        - img "exclamation-circle" [ref=e33]:
+          - img [ref=e34]
+        - generic [ref=e37]:
+          - generic [ref=e38]: 调试模式
+          - generic [ref=e39]: 此处操作绕过正常同步流程，直接修改边缘节点数据
+        - button "close" [ref=e40] [cursor=pointer]:
+          - img "close" [ref=e41]:
+            - img [ref=e42]
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - generic [ref=e48] [cursor=pointer]:
+              - radio "按集群选择" [checked] [ref=e50]
+              - generic [ref=e52]: 按集群选择
+            - generic [ref=e53] [cursor=pointer]:
+              - radio "手动输入" [ref=e55]
+              - generic [ref=e57]: 手动输入
+          - generic [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]:
+              - combobox [ref=e61]
+              - generic [ref=e62]: pc-集群
+            - generic:
+              - img:
+                - img
+          - generic [ref=e63] [cursor=pointer]:
+            - generic [ref=e64]:
+              - combobox [ref=e66]
+              - generic [ref=e67]: 192.168.100.235:11999
+            - generic:
+              - img:
+                - img
+          - button "reload 刷新" [ref=e68] [cursor=pointer]:
+            - img "reload" [ref=e69]:
+              - img [ref=e70]
+            - generic [ref=e72]: 刷新
+        - generic [ref=e73]:
+          - tablist [ref=e74]:
+            - generic [ref=e76]:
+              - tab "上游" [ref=e78] [cursor=pointer]
+              - tab "路由" [ref=e80] [cursor=pointer]
+              - tab "插件数据" [active] [selected] [ref=e82] [cursor=pointer]
+              - tab "全局规则" [ref=e84] [cursor=pointer]
+              - tab "插件组" [ref=e86] [cursor=pointer]
+          - tabpanel "插件数据" [ref=e182]:
+            - generic [ref=e183]:
+              - button "plus 添加插件数据" [ref=e184] [cursor=pointer]:
+                - img "plus" [ref=e185]:
+                  - img [ref=e186]
+                - generic [ref=e189]: 添加插件数据
+              - button "reload 重新加载" [ref=e190] [cursor=pointer]:
+                - img "reload" [ref=e191]:
+                  - img [ref=e192]
+                - generic [ref=e194]: 重新加载
+            - table [ref=e201]:
+              - rowgroup [ref=e206]:
+                - row "插件名称 配置 操作" [ref=e207]:
+                  - columnheader "插件名称" [ref=e208]
+                  - columnheader "配置" [ref=e209]
+                  - columnheader "操作" [ref=e210]
+              - rowgroup [ref=e211]:
+                - row "No data" [ref=e212]:
+                  - cell "No data" [ref=e213]:
+                    - generic [ref=e214]:
+                      - img [ref=e216]
+                      - paragraph [ref=e222]: No data
