@@ -6,21 +6,21 @@ cd "$SCRIPT_DIR"
 
 echo "Starting Panshi Admin..."
 
-mkdir -p backend/data
+mkdir -p "$SCRIPT_DIR/../backend/data"
 
 UV_BIN="${HOME}/.local/bin/uv"
 [ ! -f "$UV_BIN" ] && UV_BIN="uv"
 
-BACKEND_LOG="${SCRIPT_DIR}/backend.log"
-FRONTEND_LOG="${SCRIPT_DIR}/frontend.log"
+BACKEND_LOG="${SCRIPT_DIR}/../backend.log"
+FRONTEND_LOG="${SCRIPT_DIR}/../frontend.log"
 
-cd backend && $UV_BIN run uvicorn app.main:app --reload --port 9000 >> "$BACKEND_LOG" 2>&1 &
+cd "$SCRIPT_DIR/../backend" && $UV_BIN run uvicorn app.main:app --reload --port 9000 >> "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 echo "Backend started (PID: $BACKEND_PID)"
 
 sleep 2
 
-cd "$SCRIPT_DIR/frontend" && npm run dev >> "$FRONTEND_LOG" 2>&1 &
+cd "$SCRIPT_DIR/../frontend" && npm run dev >> "$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend started (PID: $FRONTEND_PID)"
 
