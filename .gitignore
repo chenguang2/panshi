@@ -82,6 +82,19 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Browser recording cache
+.playwright-mcp/
+
+# Screenshots
+cluster-*.png
+upstream-tab.png
+
+# Session logs
+session-*.md
+
+# Runtime error output
+backend/uvicorn.err
+
 # OpenSpec (internal cache)
 .openspec/
 
