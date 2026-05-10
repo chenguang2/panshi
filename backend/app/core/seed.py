@@ -23,10 +23,8 @@ SEED_DICTIONARY_DATA = {
         {"label": "OPTIONS", "value": "OPTIONS", "sort": 7},
     ],
     "load_balance": [
-        {"label": "Round Robin", "value": "roundrobin", "sort": 1},
-        {"label": "Weighted Round Robin", "value": "weightedroundrobin", "sort": 2},
-        {"label": "IP Hash", "value": "iphash", "sort": 3},
-        {"label": "Least Connections", "value": "leastconn", "sort": 4},
+        {"label": "加权轮询", "value": "weighted_roundrobin", "sort": 1},
+        {"label": "一致性哈希", "value": "chash", "sort": 2},
     ],
     "plugin_type": [
         {"label": "Authentication", "value": "auth", "sort": 1},

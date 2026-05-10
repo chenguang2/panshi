@@ -255,13 +255,13 @@ class EdgeClient:
         name: str,
         load_balance: str,
         targets: list[dict],
+        hash_on: str | None = None,
+        key: str | None = None,
         checks: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         type_mapping = {
             "weighted_roundrobin": "roundrobin",
             "chash": "chash",
-            "ewma": "ewma",
-            "least_conn": "least_conn",
             "roundrobin": "roundrobin",
         }
         upstream_type = type_mapping.get(load_balance, "roundrobin")
@@ -275,6 +275,9 @@ class EdgeClient:
             "name": name,
             "nodes": edge_nodes,
         }
+        if load_balance == "chash":
+            result["hash_on"] = hash_on or "vars"
+            result["key"] = key or ""
         if checks:
             result["checks"] = checks
 

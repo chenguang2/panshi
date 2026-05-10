@@ -486,8 +486,8 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
         "edge_uuid": upstream.edge_uuid,
         "name": upstream.name,
         "load_balance": upstream.load_balance,
-        "hash_location": upstream.hash_location,
-        "hash_key": upstream.hash_key,
+        "hash_on": upstream.hash_on,
+        "key": upstream.key,
         "targets": [{"target": t.target, "weight": t.weight} for t in targets],
         "checks": json.loads(upstream.checks) if upstream.checks else None
     }
@@ -514,6 +514,8 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
     edge_data = EdgeClient.convert_upstream_to_edge_format(
         upstream_id, upstream.name, upstream.load_balance,
         [{"target": t.target, "weight": t.weight} for t in targets],
+        hash_on=upstream.hash_on,
+        key=upstream.key,
         checks=upstream_checks
     )
 
@@ -674,8 +676,8 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
     config_data = json.loads(config_version.config)
 
     upstream.load_balance = config_data.get("load_balance", upstream.load_balance)
-    upstream.hash_location = config_data.get("hash_location")
-    upstream.hash_key = config_data.get("hash_key")
+    upstream.hash_on = config_data.get("hash_on")
+    upstream.key = config_data.get("key")
     upstream.current_version = version
 
     await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))

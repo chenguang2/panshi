@@ -53,11 +53,13 @@ try {
 
 # 3. Ensure Python 3.11+ is available (project requires >=3.11)
 Write-Host "Checking Python 3.11..."
-$python311Path = "$env:USERPROFILE\AppData\Roaming\uv\python\cpython-3.11.12-windows-x86_64-none\python.exe"
-if (-not (Test-Path $python311Path)) {
+$python311Path = & $uvCmd python find 3.11
+if (-not $python311Path) {
     Write-Host "Installing Python 3.11..."
     & $uvCmd python install 3.11
+    $python311Path = & $uvCmd python find 3.11
 }
+Write-Host "Using Python: $python311Path"
 
 # 4. Create data directory
 $DataDir = Join-Path $ProjectRoot "backend\data"
@@ -81,7 +83,8 @@ Start-Sleep -Seconds 2
 # 6. Start backend with uv run and explicit Python 3.11
 Write-Host "Starting Backend..."
 $backendDir = Join-Path $ProjectRoot "backend"
-Start-Process -FilePath $uvCmd -ArgumentList "run","--python",$python311Path,"uvicorn","app.main:app","--host","127.0.0.1","--port","9000" -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden
+$uvArgs = "run --python `"$python311Path`" uvicorn app.main:app --host 127.0.0.1 --port 9000"
+Start-Process -FilePath $uvCmd -ArgumentList $uvArgs -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 5
 

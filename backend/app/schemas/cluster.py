@@ -86,8 +86,8 @@ class UpstreamBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     load_balance: str = Field(default="weighted_roundrobin")
     description: Optional[str] = None
-    hash_location: Optional[str] = None
-    hash_key: Optional[str] = None
+    hash_on: Optional[str] = None
+    key: Optional[str] = None
     checks: Optional[Dict[str, Any]] = None
 
 
@@ -99,8 +99,8 @@ class UpstreamUpdate(BaseModel):
     name: Optional[str] = None
     load_balance: Optional[str] = None
     description: Optional[str] = None
-    hash_location: Optional[str] = None
-    hash_key: Optional[str] = None
+    hash_on: Optional[str] = None
+    key: Optional[str] = None
     targets: Optional[List[UpstreamTargetSchema]] = None
     checks: Optional[Dict[str, Any]] = None
 

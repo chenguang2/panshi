@@ -380,18 +380,18 @@
         <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
           <a-select v-model:value="upstreamForm.load_balance">
             <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-            <a-select-option value="consistent_hash">一致性哈希</a-select-option>
+            <a-select-option value="chash">一致性哈希</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="哈希位置" name="hash_location" :rules="[{ required: true, message: '请选择哈希位置' }]">
-          <a-select v-model:value="upstreamForm.hash_location">
+        <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
+          <a-select v-model:value="upstreamForm.hash_on">
             <a-select-option value="header">HTTP请求头</a-select-option>
             <a-select-option value="cookie">Cookie</a-select-option>
             <a-select-option value="vars">内置变量</a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'consistent_hash'" label="Key" name="hash_key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-          <a-input v-model:value="upstreamForm.hash_key" placeholder="请输入哈希 Key" />
+        <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
+          <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
         </a-form-item>
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="upstreamForm.description" :rows="2" />
@@ -658,7 +658,7 @@ const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
 const getLoadBalanceLabel = (value: string): string => {
   const labels: Record<string, string> = {
     weighted_roundrobin: '加权轮询',
-    consistent_hash: '一致性哈希'
+    chash: '一致性哈希'
   }
   return labels[value] || value
 }
@@ -708,16 +708,15 @@ const upstreamForm = reactive({
   load_balance: 'weighted_roundrobin',
   description: '',
   targets: [] as { key: number, ip: string, port: number, weight: number }[],
-  hash_location: 'vars',
-  hash_key: '',
+  hash_on: 'vars',
+  key: '',
   checks: null as Record<string, any> | null
 })
 
-// Reset hash_location when switching away from consistent_hash
 watch(() => upstreamForm.load_balance, (newVal) => {
-  if (newVal !== 'consistent_hash') {
-    upstreamForm.hash_location = 'vars'
-    upstreamForm.hash_key = ''
+  if (newVal !== 'chash') {
+    upstreamForm.hash_on = 'vars'
+    upstreamForm.key = ''
   }
 })
 
@@ -1278,8 +1277,8 @@ const showAddUpstreamModal = async (cluster: Cluster) => {
   upstreamForm.load_balance = 'weighted_roundrobin'
   upstreamForm.description = ''
   upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
-  upstreamForm.hash_location = 'vars'
-  upstreamForm.hash_key = ''
+  upstreamForm.hash_on = 'vars'
+  upstreamForm.key = ''
   upstreamForm.checks = {
     "passive": {
       "type": "http"
@@ -1322,8 +1321,8 @@ const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   upstreamForm.name = upstream.name
   upstreamForm.load_balance = upstream.load_balance
   upstreamForm.description = upstream.description || ''
-  upstreamForm.hash_location = (upstream as any).hash_location || 'vars'
-  upstreamForm.hash_key = (upstream as any).hash_key || ''
+  upstreamForm.hash_on = (upstream as any).hash_on || 'vars'
+  upstreamForm.key = (upstream as any).key || ''
   if (upstream.targets && upstream.targets.length > 0) {
     upstreamForm.targets = upstream.targets.map((t) => {
       const [ip, port] = t.target.split(':')
@@ -1388,9 +1387,9 @@ const handleUpstreamSubmit = async () => {
         target: `${t.ip}:${t.port}`,
         weight: t.weight
       })),
-      ...(upstreamForm.load_balance === 'consistent_hash' && {
-        hash_location: upstreamForm.hash_location,
-        hash_key: upstreamForm.hash_key
+      ...(upstreamForm.load_balance === 'chash' && {
+        hash_on: upstreamForm.hash_on,
+        key: upstreamForm.key
       })
     }
     if (upstreamForm.checks) {

@@ -29,8 +29,8 @@ class Upstream(Base):
     name = Column(String(100), nullable=False)
     load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
     description = Column(Text, nullable=True)
-    hash_location = Column(String(20), nullable=True)  # header, cookie, vars
-    hash_key = Column(String(100), nullable=True)
+    hash_on = Column(String(20), nullable=True)
+    key = Column(String(100), nullable=True)
     checks = Column(Text, nullable=True)  # JSON string for health check config
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
