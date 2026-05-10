@@ -1,0 +1,54 @@
+Admin
+
+
+
+管理接口数据加密解密流程
+
+在edge.cfg中配置加解密密钥
+edge:
+  admin_encrypt_salt: a16bc20453da220f
+  admin_decrypt_salt: a16bc20453da220f
+
+管理页面加密
+管理端调用接口发送请求时，请求体应先加密后发给服务器，
+首先对请求体做sm4加密，模式为ecb+pkcs7填充算法，密钥对应上面配置的admin_decrypt_salt
+然后对加密后的数据做base64处理，
+再把这个数据作为请求体发给服务器，
+否则服务器会报错：invalid request body: Expected value but found T_END at character 1
+
+管理页面解密
+服务器正常响应后，应对响应体解密再使用，
+管理端收到响应后，先判断响应结果是否为200,201等，否则检查请求参数是否有误
+然后对正常的响应体做debase64处理，
+再对这个数据做sm4解密，模式为ecb+pkcs7填充算法，密钥对应上面配置的admin_decrypt_salt
+解密后就是可以正常使用的数据
+
+
+例：
+添加全局插件
+curl -L -X PUT 'http://192.168.100.233:9990/edge/admin/global_rules/global_common' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' -d '{
+    "desc": "global common",
+    "plugins": {
+        "monitor": {},
+        "traceid": {}
+    }
+}'
+
+报错400，
+{
+    "error_msg": "invalid request body: Expected value but found T_END at character 1",
+    "req_body": ""
+}
+
+
+需要将请求体加密后传输
+curl -L -X PUT 'http://192.168.100.233:9990/edge/admin/global_rules/global_common' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' -d 'opQsb_7JCqmGeYAes532inDYEVE5qJMpfTfqXE4xUcSwd7xcUUCTmwpSEoZLqDMyhOTiVgOmizz9Bhf0gxAW_NhhUmGyP2QG-OYxqTmnOREnj15kbo34OJwJGGai9PllQ9ysy9E5XbJdhRoIrwRtBA'
+
+返回201，
+HgIHWu6dzNgO308JIaXWUXy7SceWVVXzD3XYG8UqMaPtaSo7Hgz2miQVf2QpO8t_JtEbZ7RgSO1mHpse4NZV-xQxPtGrdMx9dtG3Uy9XdvJGC_gf8pazNR1rxczEUDNZiwvc_lirOhF6_hi7eZTfnjONS5mZRkh-KsPeIlb95ISWsc_48SPtLPWcc8GUecDPKBuKa52cNJeJSEbTvSoqcz8cVUg_VmG_w6fZcSO4DQOld1NeCWb5jsUTkCYopF_W8pAUdyJ6FU94S5qaAbk1Mk926A-QGy5ET-5Fo5z8n5Q4JfMOjQYESFt3nZHgZCN6RuZlWMxoO9Frd36A2Qsp-Q
+
+将报文解密后，得到：
+{"header":{},"action":"set","node":{"value":{"update_time":1688369144,"plugins":{"traceid":{},"monitor":{"prefer_name":false}},"create_time":1687169141,"desc":"global common","id":"global_common"},"key":"\/search\/global_rules\/global_common"}}
+添加全局插件成功
+
+

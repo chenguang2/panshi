@@ -1,0 +1,68 @@
+plugin_metadata
+
+
+
+
+
+/edge/admin/plugin_metadata/{id}
+
+配置插件数据
+
+请求方法
+GET     /edge/admin/plugin_metadata/{plugin_name}                 根据 plugin_name 获取资源
+PUT     /edge/admin/plugin_metadata/{plugin_name}         {body}  根据 plugin_name 创建资源
+DELETE  /edge/admin/plugin_metadata/{plugin_name}                 删除资源
+
+
+body 请求参数
+
+json object 。根据各插件要求配置对应的数据属性
+
+
+配置log_process的数据
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugin_metadata/log_process' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "logs": [
+        {
+            "formats": "${remote_addr},${host},${status}",
+            "file": "logs/process.log"
+        },
+        {
+            "formats": [
+                "${remote_addr}",
+                "${host}",
+                "${status}"
+            ],
+            "file": "logs/other.log"
+        }
+    ]
+}'
+
+重新加载插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'--data-raw ''
+
+
+添加日志插件
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/routes/3001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "uri": "/hello1/*",
+    "plugins": {
+        "log_process": {
+          "files": "logs/process.log"
+        }
+    },
+    "upstream": {
+        "nodes": {
+            "127.0.0.1:8111": 1
+        },
+        "type": "roundrobin"
+    }
+}'
+
+测试请求
+curl -L -X GET 'http://127.0.0.1:9980/hello1/h1?username=44dd&test=123a'
+
+
+查看日志文件
+logs/process.log
+
+
+

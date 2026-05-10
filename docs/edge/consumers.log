@@ -1,0 +1,164 @@
+Consumer
+
+
+
+
+
+
+某类服务的消费者，与用户认证体系配合使用
+
+请求方法
+GET     /edge/admin/consumers                      获取消费者列表
+GET     /edge/admin/consumers/{username}           获取指定用户名的信息
+PUT     /edge/admin/consumers         {body}       创建资源
+DELETE  /edge/admin/consumers/{username}           删除指定用户名的信息
+
+
+body 请求参数
+
+username
+Consumer 名称
+
+
+plugins
+该 Consumer 对应的插件配置
+
+
+desc
+服务描述
+
+
+labels
+标识附加属性的键值对
+例：{"version":"v2","build":"16","env":"production"}
+
+
+create_time
+创建时间戳，单位为秒
+如果不指定则自动创建
+
+
+update_time
+更新时间戳，单位为秒
+如果不指定则自动创建
+
+
+
+
+
+
+----------- GET ---------------
+
+curl -L -X GET 'http://192.168.100.233:9990/edge/admin/consumers' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+{
+    "node": {
+        "dir": true,
+        "modifiedIndex": 0,
+        "createdIndex": 0,
+        "key": "/edge/consumers",
+        "nodes": [
+            {
+                "modifiedIndex": 0,
+                "createdIndex": 0,
+                "key": "/edge/consumers/CAtest",
+                "value": {
+                    "plugins": {
+                        "auth_basic": {
+                            "password": "test",
+                            "disable": false,
+                            "username": "test"
+                        }
+                    },
+                    "create_time": 1669612332,
+                    "username": "CAtest",
+                    "update_time": 1669612386
+                }
+            }
+        ]
+    },
+    "action": "get",
+    "header": {
+        "revision": 1
+    },
+    "count": 1
+}
+
+
+curl -L -X GET 'http://192.168.100.233:9990/edge/admin/consumers/CAtest1' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+{
+    "node": {
+        "modifiedIndex": 0,
+        "createdIndex": 0,
+        "key": "/edge/consumers/CAtest1",
+        "value": {
+            "plugins": {
+                "auth_basic": {
+                    "password": "test",
+                    "disable": false,
+                    "username": "test1"
+                }
+            },
+            "create_time": 1673856766,
+            "username": "CAtest1",
+            "update_time": 1673856766
+        }
+    },
+    "action": "get",
+    "header": {
+        "revision": 2
+    },
+    "count": 1
+}
+
+
+----------- PUT ---------------
+
+curl -L -X PUT 'http://192.168.100.233:9990/edge/admin/consumers' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "username": "CAtest1",
+    "plugins": {
+        "auth_basic": {
+            "password": "test",
+            "disable": false,
+            "username": "test1"
+        }
+    }
+}'
+
+{
+    "node": {
+        "key": "/edge/consumers/CAtest1",
+        "value": {
+            "plugins": {
+                "auth_basic": {
+                    "password": "test",
+                    "disable": false,
+                    "username": "test1"
+                }
+            },
+            "create_time": 1673856766,
+            "username": "CAtest1",
+            "update_time": 1673856766
+        }
+    },
+    "action": "set",
+    "header": {}
+}
+
+
+----------- DELETE ---------------
+
+curl -L -X DELETE 'http://192.168.100.233:9990/edge/admin/consumers/CAtest1' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+{
+    "action": "delete",
+    "node": {},
+    "deleted": "1",
+    "header": {},
+    "key": "/edge/consumers/CAtest1"
+}
+
+
+
+

@@ -1,0 +1,95 @@
+Plugins
+
+
+
+加载或获取插件列表及配置属性
+
+请求方法
+PUT     /edge/admin/plugins/reload                重新加载插件
+GET     /edge/admin/plugins/list                  获取插件列表
+
+
+说明
+每个插件的配置属性中，都含有下列属性
+
+disable
+bool，默认false
+不启用插件
+
+_meta
+object
+包含下面属性
+
+_meta.ignore_response
+boolean
+是否忽略这个拦截响应，true：只作记录，不拦截请求，默认false
+
+_meta.error_response
+string or object
+返回的响应信息
+
+_meta.page_response
+object
+意义同上，可以返回更多的信息，例如header，
+
+_meta.sample_ratio1
+integer，(0,1]
+抽样值，插件调用的比例
+
+_meta.sample_ratio2
+integer，(0,1]
+抽样值，插件调用后，拦截请求的比例
+
+_meta.priority
+integer
+自定义运行时的插件优先级，不配置会使用插件默认的优先级
+
+_meta.filter
+array
+过滤器，满足匹配条件后，才执行该插件
+由一个或多个[var, operator, val]元素组成的列表。
+["arg_name", "==", "json"]，表示当前请求参数 name 是 json。
+这里的 var 与 Nginx 内部自身变量命名是保持一致，所以也可以使用 request_uri、host 等。
+当获取 cookie 的值时，cookie name 是区分大小写字母的。
+例如：var 等于 "cookie_x_foo" 与 var 等于 "cookie_X_Foo" 表示不同的 cookie。
+事例：[["arg_name", "==", "json"], ["arg_age", ">", 18]]
+支持的操作符
+!           reverse the result                      {"arg_name", "!", "~~", "[a-z]+"}
+==          equal                                   {"arg_name", "==", "json"}
+~=          not equal                               {"arg_name", "~=", "json"}
+>           greater than                            {"arg_age", ">", 24}
+<           less than                               {"arg_age", "<", 24}
+~~          Regular match                           {"arg_name", "~~", "[a-z]+"}
+~*          Case insensitive regular match          {"arg_name", "~*", "[a-z]+"}
+in          find in array                           {"arg_name", "in", {"1","2"}}
+has         left value array has value in the right {"graphql_root_fields", "has", "repo"}
+ipmatch     ip address match                        {"remote_addr", "ipmatch", {"127.0.0.1", "192.168.0.0/16"}}
+
+
+
+
+
+----------- PUT ---------------
+curl -L -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' --data-raw ''
+
+
+
+----------- GET ---------------
+curl -L -X GET 'http://127.0.0.1:9990/edge/admin/plugins/list' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+[
+    "security_common_uri",
+    "security_common_args",
+    "security_common_body",
+    "security_common_useragent",
+    "security_common_cookie",
+    "security_common_referer",
+    "auth_basic",
+    "auth_key",
+    "proxy_mirror",
+    "proxy_cache",
+    "proxy_rewrite",
+    "monitor"
+]
+
+

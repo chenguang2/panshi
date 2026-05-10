@@ -1,0 +1,203 @@
+Service
+
+
+
+
+Service 是某类 API 的抽象
+
+
+请求方法
+GET     /edge/admin/routes                      获取资源列表
+GET     /edge/admin/routes/{id}                 根据 id 获取资源
+PUT     /edge/admin/routes/{id}         {body}  根据 id 创建资源
+POST    /edge/admin/routes              {body}  创建资源，id 由后台服务自动生成
+DELETE  /edge/admin/routes/{id}                 删除资源
+PATCH   /edge/admin/routes/{id}         {body}  更新属性
+PATCH   /edge/admin/routes/{id}/{path}  {body}  更新path部分的属性
+
+
+body 请求参数
+
+upstream
+启用的 Upstream 配置，或 upstream_id 两个选一个
+
+
+upstream_id
+启用的 upstream id，或 upstream 两个选一个
+
+
+enable_websocket
+是否启用 websocket(boolean)
+缺省 false.
+
+
+hosts
+匹配其中任意一个 host 即可。
+例：["foo.com", "*.bar.com"]
+
+
+name
+标识服务名称
+
+
+desc
+服务描述
+
+
+labels
+标识附加属性的键值对
+例：{"version":"v2","build":"16","env":"production"}
+
+
+create_time
+创建时间戳，单位为秒
+如果不指定则自动创建
+
+
+update_time
+更新时间戳，单位为秒
+如果不指定则自动创建
+
+
+
+
+----------- GET ---------------
+
+curl -L -X GET 'http://192.168.100.233:9990/edge/admin/services/2001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+{
+    "node": {
+        "modifiedIndex": 0,
+        "createdIndex": 0,
+        "key": "/edge/services/2001",
+        "value": {
+            "plugins": {
+                "auth_basic": {
+                    "disable": false,
+                    "hide_credentials": false
+                }
+            },
+            "name": "S-811X-test",
+            "upstream_id": "431253674958783373",
+            "id": "2001",
+            "create_time": 1673858778,
+            "update_time": 1673858778
+        }
+    },
+    "action": "get",
+    "header": {
+        "revision": 3
+    },
+    "count": 1
+}
+
+
+
+----------- PUT ---------------
+
+curl -L -X PUT 'http://192.168.100.233:9990/edge/admin/services/2001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "plugins": {
+        "auth_basic": {
+            "disable": false
+        }
+    },
+    "name": "S-811X-test",
+    "upstream_id": "431253674958783373"
+}'
+
+{
+    "node": {
+        "key": "/edge/services/2001",
+        "value": {
+            "plugins": {
+                "auth_basic": {
+                    "disable": false,
+                    "hide_credentials": false
+                }
+            },
+            "name": "S-811X-test",
+            "upstream_id": "431253674958783373",
+            "id": "2001",
+            "update_time": 1673858778,
+            "create_time": 1673858778
+        }
+    },
+    "action": "set",
+    "header": {}
+}
+
+
+----------- POST ---------------
+
+curl -L -X POST 'http://192.168.100.233:9990/edge/admin/services' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "plugins": {
+        "auth_basic": {
+            "disable": false
+        }
+    },
+    "name": "S-811X-test",
+    "upstream_id": "431253674958783373"
+}'
+
+{
+    "node": {
+        "key": "/edge/services/5f42be65a10247adbfb455e64ec22ac0",
+        "value": {
+            "plugins": {
+                "auth_basic": {
+                    "disable": false,
+                    "hide_credentials": false
+                }
+            },
+            "name": "S-811X-test",
+            "upstream_id": "431253674958783373",
+            "id": "5f42be65a10247adbfb455e64ec22ac0",
+            "update_time": 1673858536,
+            "create_time": 1673858536
+        }
+    },
+    "action": "create",
+    "header": {}
+}
+
+
+----------- DELETE ---------------
+
+curl -L -X DELETE 'http://192.168.100.233:9990/edge/admin/services/2001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e'
+
+{
+    "action": "delete",
+    "node": {},
+    "deleted": "1",
+    "header": {},
+    "key": "/edge/services/2001"
+}
+
+
+----------- PATH ---------------
+
+curl -L -X PATCH 'http://192.168.100.233:9990/edge/admin/services/2001' -H 'X-API-KEY: f9357106bff442f89d4de7169c37c61e' -H 'Content-Type: application/json' --data-raw '{
+    "plugins": {
+        "auth_basic":null
+    }
+}'
+
+{
+    "node": {
+        "key": "/edge/services/2001",
+        "value": {
+            "plugins": {},
+            "name": "S-811X-test",
+            "upstream_id": "431253674958783373",
+            "id": "2001",
+            "update_time": 1673859329,
+            "create_time": 1673859028
+        }
+    },
+    "action": "compareAndSwap",
+    "header": {
+        "revision": 6
+    },
+    "succeeded": true
+}
+

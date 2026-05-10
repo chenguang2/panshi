@@ -1,0 +1,61 @@
+1.插件命名
+插件名统一使用小写单词或拼音，需要分隔的用下划线"_"进行分隔，禁止使用减号"-"分隔
+插件按功能添加对应前缀
+
+核心插件，无前缀，如
+  - monitor                     信息监控插件
+  - traceid                     请求追踪插件
+  - redirect                    重定向插件
+
+认证相关插件，auth_，如
+  - auth_basic                  基础认证插件
+  - auth_key                    密钥认证插件
+
+代理相关插件，proxy_，如
+  - proxy_mirror                代理镜像插件
+  - proxy_cache                 代理缓存插件
+  - proxy_rewrite               代理地址重写插件
+
+日志相关插件，log_，如
+  - log_rotate                  日志分页插件
+  - log_process                 日志记录插件（记录在当前服务器上）
+  - log_kafka                   kafka日志插件（将日志发送到指定的kafka服务器上）
+  - log_http                    http日志插件（将日志发送到指定的http/https服务器上）
+  - log_mirror                  日志镜像插件（将日志按原始请求格式，镜像到指定服务器上）
+  - log_replay                  日志回放插件（将日志按原始请求格式，重新请求一次）
+
+安全检查插件，security_，如
+  - security_common_uri         请求地址安全检查插件
+  - security_common_args        请求参数安全检查插件
+  - security_common_body        请求体安全检查插件
+  - security_common_useragent   useragent安全检查插件
+  - security_common_cookie      cookie安全检查插件
+  - security_common_referer     referer安全检查插件
+  - security_super_ip           超级ip，可以跳过安全检查
+  - security_super_user         超级用户，可以跳过安全检查
+  - security_restrict_ip        ip卡控，基于黑白名单安全检查插件
+  - security_restrict_uri       uri卡控，基于黑白名单安全检查插件
+  - security_realtimeinfo       实时引擎相关的用户信息
+  - security_realtimerisk       实时引擎安全检查
+
+流量控制插件，traffci_，如
+  - traffic_limit_count         限速插件（限制单位时间内的总请求个数）
+
+
+
+2.插件部署
+单文件的插件，部署在 edge/plugins/插件名.lua
+
+多文件的插件，
+主文件部署在 edge/plugins/插件名.lua
+子文件放在插件名对应的目录下 edge/plugins/插件名/
+
+
+
+
+3.插件代码模板
+edge/plugins/plugin_demo.lua
+
+
+
+

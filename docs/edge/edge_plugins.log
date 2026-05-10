@@ -1,0 +1,62 @@
+插件列表
+
+
+
+核心插件
+  - traceid                     追踪请求ID
+  - tracing                     追踪信息（添加修改请求或响应头信息）
+  - redirect                    重定向插件
+  - monitor                     信息监控插件
+  - mocking                     模拟接口响应（不访问upstream）
+
+认证相关插件
+  - auth_basic                  基础认证插件
+  - auth_key                    密钥认证插件
+
+代理相关插件
+  - proxy_mirror                代理镜像插件
+  - proxy_cache                 代理缓存插件
+  - proxy_rewrite               代理重写插件
+
+响应相关插件
+  - response_rewrite            响应重写插件
+
+日志相关插件
+  - log_replay                  日志回放插件（将日志按原始请求格式，重新请求一次）
+  - log_process                 日志记录插件（记录在当前服务器上）
+  - log_kafka                   kafka日志插件（将日志发送到指定的kafka服务器上）
+  - log_http                    http日志插件（将日志发送到指定的http/https服务器上）
+  - log_mirror                  日志镜像插件（将原始请求镜像到指定服务器上）
+  - log_rotate                  日志分页插件
+
+安全检查插件
+  - security_common_uri         请求地址安全检查插件
+  - security_common_args        请求参数安全检查插件
+  - security_common_body        请求体安全检查插件
+  - security_common_useragent   useragent安全检查插件
+  - security_common_cookie      cookie安全检查插件
+  - security_common_referer     referer安全检查插件
+  - security_super_ip           高级ip，可以跳过安全检查
+  - security_super_user         高级user，可以跳过安全检查
+  - security_super_redis        redis端高级配置，可以跳过安全检查
+  - security_restrict_uri       uri卡控，基于黑白名单安全检查插件
+  - security_restrict_ip        ip卡控，基于黑白名单安全检查插件
+  - security_restrict_user      user卡控，基于黑白名单安全检查插件
+  - security_restrict_redis     redis端卡控配置，基于黑白名单安全检查插件
+  - security_realtimeinfo       实时引擎用户信息
+  - security_realtimerisk       实时引擎安全检查
+  - security_fengkong           风控安全检查
+  - security_fengkong_env       风控环境信息
+  - security_fengkong_user      风控用户信息
+  - check_rules
+  - otn_deviceid
+
+流量控制插件
+  - traffic_limit_count         限速插件（限制单位时间内的总请求个数）
+
+其它
+  - remote_redis                获取指定redis的数据
+  - functions_pre               在指定阶段前运行自定义方法
+  - functions_post              在指定阶段后运行自定义方法
+
+
