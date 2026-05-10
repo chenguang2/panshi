@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-04-27
+specs:
+  - upstream-column-config
+  - node-column-config
+  - search-column-config

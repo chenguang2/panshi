@@ -82,11 +82,8 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
-# OpenSpec (if not tracked)
+# OpenSpec (internal cache)
 .openspec/
-openspec/changes/archive/
-openspec/changes/*/tasks.md
-openspec/changes/*/design.md
 
 # History files
 .history/
