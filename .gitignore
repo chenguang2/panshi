@@ -93,6 +93,8 @@ openspec/changes/*/design.md
 prompt*.txt
 prompt-*.txt
 
+docs/**/*.log
+
 # =============================================
 # Environment / Secrets
 # =============================================
