@@ -84,11 +84,18 @@ class UpstreamTargetSchema(BaseModel):
 
 class UpstreamBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    load_balance: str = Field(default="weighted_roundrobin")
+    load_balance: str = Field(default="weighted_roundrobin", description="负载均衡算法: weighted_roundrobin, chash, ewma, least_conn")
     description: Optional[str] = None
-    hash_on: Optional[str] = None
+    hash_on: Optional[str] = Field(None, description="哈希位置: vars, header, cookie, vars_combinations")
     key: Optional[str] = None
     checks: Optional[Dict[str, Any]] = None
+    retries: Optional[int] = None
+    retry_timeout: Optional[float] = None
+    timeout: Optional[Dict[str, Any]] = None
+    pass_host: Optional[str] = Field(None, description="host策略: pass, node, rewrite")
+    upstream_host: Optional[str] = None
+    scheme: Optional[str] = Field(None, description="通信协议: http, https, tcp, udp")
+    keepalive_pool: Optional[Dict[str, Any]] = None
 
 
 class UpstreamCreate(UpstreamBase):
@@ -103,6 +110,13 @@ class UpstreamUpdate(BaseModel):
     key: Optional[str] = None
     targets: Optional[List[UpstreamTargetSchema]] = None
     checks: Optional[Dict[str, Any]] = None
+    retries: Optional[int] = None
+    retry_timeout: Optional[float] = None
+    timeout: Optional[Dict[str, Any]] = None
+    pass_host: Optional[str] = None
+    upstream_host: Optional[str] = None
+    scheme: Optional[str] = None
+    keepalive_pool: Optional[Dict[str, Any]] = None
 
 
 class UpstreamResponse(UpstreamBase):
@@ -121,6 +135,22 @@ class UpstreamResponse(UpstreamBase):
     @field_validator('checks', mode='before')
     @classmethod
     def convert_checks(cls, v):
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
+
+    @field_validator('timeout', mode='before')
+    @classmethod
+    def convert_timeout(cls, v):
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
+
+    @field_validator('keepalive_pool', mode='before')
+    @classmethod
+    def convert_keepalive_pool(cls, v):
         if isinstance(v, str):
             import json
             return json.loads(v)

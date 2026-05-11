@@ -256,6 +256,10 @@ async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSe
     upstream_data = upstream.model_dump(exclude={"targets"})
     if upstream_data.get("checks"):
         upstream_data["checks"] = json.dumps(upstream_data["checks"])
+    if upstream_data.get("timeout"):
+        upstream_data["timeout"] = json.dumps(upstream_data["timeout"])
+    if upstream_data.get("keepalive_pool"):
+        upstream_data["keepalive_pool"] = json.dumps(upstream_data["keepalive_pool"])
     db_upstream = Upstream(cluster_id=cluster_id, **upstream_data)
     db.add(db_upstream)
     await db.commit()
@@ -301,7 +305,7 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
 
     update_data = upstream_update.model_dump(exclude_unset=True, exclude={"targets"})
     for key, value in update_data.items():
-        if key == "checks" and value:
+        if key in ("checks", "timeout", "keepalive_pool") and value:
             value = json.dumps(value)
         setattr(upstream, key, value)
 
@@ -489,7 +493,14 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
         "hash_on": upstream.hash_on,
         "key": upstream.key,
         "targets": [{"target": t.target, "weight": t.weight} for t in targets],
-        "checks": json.loads(upstream.checks) if upstream.checks else None
+        "checks": json.loads(upstream.checks) if upstream.checks else None,
+        "retries": upstream.retries,
+        "retry_timeout": upstream.retry_timeout,
+        "timeout": json.loads(upstream.timeout) if upstream.timeout else None,
+        "pass_host": upstream.pass_host,
+        "upstream_host": upstream.upstream_host,
+        "scheme": upstream.scheme,
+        "keepalive_pool": json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None,
     }
 
     config_version = ConfigVersion(
@@ -511,12 +522,21 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
 
     edge_logger = get_edge_logger()
     upstream_checks = json.loads(upstream.checks) if upstream.checks else None
+    upstream_timeout = json.loads(upstream.timeout) if upstream.timeout else None
+    upstream_keepalive = json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None
     edge_data = EdgeClient.convert_upstream_to_edge_format(
         upstream_id, upstream.name, upstream.load_balance,
         [{"target": t.target, "weight": t.weight} for t in targets],
         hash_on=upstream.hash_on,
         key=upstream.key,
-        checks=upstream_checks
+        checks=upstream_checks,
+        retries=upstream.retries,
+        retry_timeout=upstream.retry_timeout,
+        timeout=upstream_timeout,
+        pass_host=upstream.pass_host,
+        upstream_host=upstream.upstream_host,
+        scheme=upstream.scheme,
+        keepalive_pool=upstream_keepalive
     )
 
     results = []

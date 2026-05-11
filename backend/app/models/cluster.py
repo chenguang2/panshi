@@ -32,6 +32,13 @@ class Upstream(Base):
     hash_on = Column(String(20), nullable=True)
     key = Column(String(100), nullable=True)
     checks = Column(Text, nullable=True)  # JSON string for health check config
+    retries = Column(Integer, nullable=True)
+    retry_timeout = Column(Integer, nullable=True)
+    timeout = Column(Text, nullable=True)  # JSON: {"connect": N, "send": N, "read": N}
+    pass_host = Column(String(20), nullable=True, default="pass")
+    upstream_host = Column(String(255), nullable=True)
+    scheme = Column(String(20), nullable=True, default="http")
+    keepalive_pool = Column(Text, nullable=True)  # JSON: {"size": N, "idle_timeout": N, "requests": N}
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

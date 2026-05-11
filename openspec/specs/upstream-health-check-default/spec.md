@@ -1,64 +1,31 @@
 # upstream-health-check-default Specification
 
 ## Purpose
-Enable passive and active health monitoring for upstreams by providing default health check configuration when creating new upstreams.
+Enable passive and active health monitoring for upstreams by providing default health check configuration when creating new upstreams. Health check configuration is always included in requests, with a minimal default that can be customized via the advanced configuration tab.
 
 ## Requirements
 
 ### Requirement: Upstream health check default configuration
 
-The system SHALL provide default health check configuration when creating a new upstream to enable passive and active health monitoring.
+The system SHALL provide default health check configuration for ALL upstreams, regardless of whether advanced configuration is enabled.
 
-#### Scenario: Health check config present when creating upstream
-- **WHEN** user clicks "添加上游" button in upstream tab
-- **THEN** the upstream form JSON SHALL include a default `checks` object with passive and active health check configuration
+#### Scenario: Health check config always present
+- **WHEN** user creates an upstream (with or without advanced configuration)
+- **THEN** the upstream request SHALL always include a default `checks` object
 
-#### Scenario: Default passive health check
+#### Scenario: Default health check minimal config
 - **WHEN** upstream is created with default health check
-- **THEN** the `checks.passive` object SHALL be `{"type": "http"}`
+- **THEN** the `checks` object SHALL be `{"passive": {}, "active": {"unhealthy": {}}}`
 
-#### Scenario: Default active health check
-- **WHEN** upstream is created with default health check
-- **THEN** the `checks.active` object SHALL include:
-  - `type`: "http"
-  - `unhealthy`: configuration with timeouts, tcp_failures, interval, http_statuses, http_failures
-  - `healthy`: configuration with http_statuses, successes, interval
-  - `https_verify_certificate`: true
-  - `http_path`: "/"
-  - `concurrency`: 10
-  - `timeout`: 1
+#### Scenario: User can customize health check via advanced config
+- **WHEN** user enables advanced configuration and edits the checks JSON
+- **THEN** user SHALL be able to modify the health check configuration before submitting
+- **AND** user SHALL be able to add detailed healthy/unhealthy parameters
 
-Default health check JSON structure:
-```json
-{
-  "checks": {
-    "passive": {
-      "type": "http"
-    },
-    "active": {
-      "type": "http",
-      "unhealthy": {
-        "timeouts": 3,
-        "tcp_failures": 2,
-        "interval": 1,
-        "http_statuses": [429, 500, 501, 502, 503, 504, 505],
-        "http_failures": 5
-      },
-      "https_verify_certificate": true,
-      "http_path": "/",
-      "concurrency": 10,
-      "healthy": {
-        "http_statuses": [200, 302, 403, 404],
-        "successes": 2,
-        "interval": 0
-      },
-      "timeout": 1
-    }
-  }
-}
-```
+### Requirement: Upstream timeout default configuration
 
-#### Scenario: User can modify or remove health check
-- **WHEN** user creates an upstream with default health check
-- **THEN** user SHALL be able to modify the health check JSON before submitting
-- **AND** user SHALL be able to remove the health check configuration if not needed
+The system SHALL provide default timeout configuration for ALL upstreams.
+
+#### Scenario: Default timeout config
+- **WHEN** upstream is created with default configuration
+- **THEN** the `timeout` object SHALL be `{"connect": 6, "send": 6, "read": 6}`

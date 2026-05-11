@@ -257,12 +257,21 @@ class EdgeClient:
         targets: list[dict],
         hash_on: str | None = None,
         key: str | None = None,
-        checks: dict[str, Any] | None = None
+        checks: dict[str, Any] | None = None,
+        retries: int | None = None,
+        retry_timeout: int | None = None,
+        timeout: dict[str, Any] | None = None,
+        pass_host: str | None = None,
+        upstream_host: str | None = None,
+        scheme: str | None = None,
+        keepalive_pool: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         type_mapping = {
             "weighted_roundrobin": "roundrobin",
             "chash": "chash",
             "roundrobin": "roundrobin",
+            "ewma": "ewma",
+            "least_conn": "least_conn",
         }
         upstream_type = type_mapping.get(load_balance, "roundrobin")
 
@@ -280,6 +289,20 @@ class EdgeClient:
             result["key"] = key or ""
         if checks:
             result["checks"] = checks
+        if retries is not None:
+            result["retries"] = retries
+        if retry_timeout is not None:
+            result["retry_timeout"] = retry_timeout
+        if timeout:
+            result["timeout"] = timeout
+        if pass_host:
+            result["pass_host"] = pass_host
+        if upstream_host:
+            result["upstream_host"] = upstream_host
+        if scheme:
+            result["scheme"] = scheme
+        if keepalive_pool:
+            result["keepalive_pool"] = keepalive_pool
 
         return result
 

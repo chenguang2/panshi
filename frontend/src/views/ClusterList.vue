@@ -372,55 +372,138 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="650px" @ok="handleUpstreamSubmit">
-      <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
-          <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
-        </a-form-item>
-        <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
-          <a-select v-model:value="upstreamForm.load_balance">
-            <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-            <a-select-option value="chash">一致性哈希</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
-          <a-select v-model:value="upstreamForm.hash_on">
-            <a-select-option value="header">HTTP请求头</a-select-option>
-            <a-select-option value="cookie">Cookie</a-select-option>
-            <a-select-option value="vars">内置变量</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-          <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="upstreamForm.description" :rows="2" />
-        </a-form-item>
-        <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
-          <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'ip'">
-                <a-input v-model:value="record.ip" placeholder="IP地址" />
-                <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
-              </template>
-              <template v-else-if="column.key === 'port'">
-                <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
-                <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
-              </template>
-              <template v-else-if="column.key === 'weight'">
-                <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
-                <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
-              </template>
-              <template v-else-if="column.key === 'action'">
-                <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
-              </template>
-            </template>
-          </a-table>
-          <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
-            <PlusOutlined /> 添加节点
-          </a-button>
-        </a-form-item>
-      </a-form>
+    <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="750px" @ok="handleUpstreamSubmit">
+      <a-tabs v-model:activeKey="upstreamModalActiveTab">
+        <a-tab-pane key="basic" tab="基础配置">
+          <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
+              <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
+            </a-form-item>
+            <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
+              <a-select v-model:value="upstreamForm.load_balance">
+                <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
+                <a-select-option value="chash">一致性哈希</a-select-option>
+                <a-select-option value="ewma">延迟最小</a-select-option>
+                <a-select-option value="least_conn">最少连接</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
+              <a-select v-model:value="upstreamForm.hash_on">
+                <a-select-option value="header">HTTP请求头</a-select-option>
+                <a-select-option value="cookie">Cookie</a-select-option>
+                <a-select-option value="vars">内置变量</a-select-option>
+                <a-select-option value="vars_combinations">自定义变量</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
+              <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
+            </a-form-item>
+            <a-form-item label="描述" name="description">
+              <a-textarea v-model:value="upstreamForm.description" :rows="2" />
+            </a-form-item>
+            <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
+              <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
+                <template #bodyCell="{ column, record, index }">
+                  <template v-if="column.key === 'ip'">
+                    <a-input v-model:value="record.ip" placeholder="IP地址" />
+                    <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
+                  </template>
+                  <template v-else-if="column.key === 'port'">
+                    <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
+                    <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
+                  </template>
+                  <template v-else-if="column.key === 'weight'">
+                    <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
+                    <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
+                  </template>
+                  <template v-else-if="column.key === 'action'">
+                    <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
+                  </template>
+                </template>
+              </a-table>
+              <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
+                <PlusOutlined /> 添加节点
+              </a-button>
+            </a-form-item>
+            <a-form-item label="高级配置">
+              <a-switch v-model:checked="upstreamForm.advancedEnabled" checked-children="开" un-checked-children="关" />
+              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+
+        <a-tab-pane key="advanced" tab="高级配置">
+          <div v-if="upstreamForm.advancedEnabled">
+            <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+              <a-form-item label="健康检查" name="checks">
+                <a-textarea v-model:value="checksJson" :rows="20" placeholder="健康检查JSON配置" />
+              </a-form-item>
+              <a-form-item label="重试次数" name="retries">
+                <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
+                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
+              </a-form-item>
+              <a-form-item label="重试超时(秒)" name="retry_timeout">
+                <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
+                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
+              </a-form-item>
+              <a-form-item label="超时配置(秒)">
+                <div style="display: flex; gap: 8px;">
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
+                    <a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width: 100%" />
+                  </div>
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
+                    <a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width: 100%" />
+                  </div>
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
+                    <a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width: 100%" />
+                  </div>
+                </div>
+              </a-form-item>
+              <a-form-item label="Host策略" name="pass_host">
+                <a-select v-model:value="upstreamForm.pass_host">
+                  <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
+                  <a-select-option value="node">node（使用节点Host）</a-select-option>
+                  <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item v-if="upstreamForm.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
+                <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" />
+              </a-form-item>
+              <a-form-item label="通信协议" name="scheme">
+                <a-select v-model:value="upstreamForm.scheme">
+                  <a-select-option value="http">http</a-select-option>
+                  <a-select-option value="https">https</a-select-option>
+                  <a-select-option value="tcp">tcp</a-select-option>
+                  <a-select-option value="udp">udp</a-select-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item label="连接池">
+                <div style="display: flex; gap: 8px;">
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
+                    <a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" />
+                  </div>
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
+                    <a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" />
+                  </div>
+                  <div style="flex: 1">
+                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
+                    <a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" />
+                  </div>
+                </div>
+              </a-form-item>
+            </a-form>
+          </div>
+          <div v-else class="advanced-disabled-hint">
+            <WarningOutlined style="color: #faad14; margin-right: 8px;" />
+            高级配置未启用，请在"基础配置"中开启
+          </div>
+        </a-tab-pane>
+      </a-tabs>
     </a-modal>
 
     <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="800px" @ok="handleRouteSubmit">
@@ -525,6 +608,7 @@ const nodeModalVisible = ref(false)
 const upstreamModalVisible = ref(false)
 const routeModalVisible = ref(false)
 const routeModalActiveTab = ref('basic')
+const upstreamModalActiveTab = ref('basic')
 const editingCluster = ref<Cluster | null>(null)
 const editingNode = ref<Node | null>(null)
 const editingUpstream = ref<Upstream | null>(null)
@@ -658,7 +742,9 @@ const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
 const getLoadBalanceLabel = (value: string): string => {
   const labels: Record<string, string> = {
     weighted_roundrobin: '加权轮询',
-    chash: '一致性哈希'
+    chash: '一致性哈希',
+    ewma: '延迟最小',
+    least_conn: '最少连接'
   }
   return labels[value] || value
 }
@@ -710,7 +796,15 @@ const upstreamForm = reactive({
   targets: [] as { key: number, ip: string, port: number, weight: number }[],
   hash_on: 'vars',
   key: '',
-  checks: null as Record<string, any> | null
+  checks: null as Record<string, any> | null,
+  advancedEnabled: false as boolean,
+  retries: undefined as number | undefined,
+  retry_timeout: 0 as number,
+  timeout: { connect: undefined as number | undefined, send: undefined as number | undefined, read: undefined as number | undefined },
+  pass_host: 'pass' as string,
+  upstream_host: '' as string,
+  scheme: 'http' as string,
+  keepalive_pool: { size: undefined as number | undefined, idle_timeout: undefined as number | undefined, requests: undefined as number | undefined } as Record<string, any>
 })
 
 watch(() => upstreamForm.load_balance, (newVal) => {
@@ -721,6 +815,26 @@ watch(() => upstreamForm.load_balance, (newVal) => {
 })
 
 let upstreamTargetKey = 0
+
+const defaultChecksJson = JSON.stringify({
+  "passive": {},
+  "active": {
+    "unhealthy": {}
+  }
+}, null, 2)
+
+const defaultTimeout = { connect: 6, send: 6, read: 6 }
+
+const checksJson = ref(defaultChecksJson)
+
+// Sync checksJson back to upstreamForm.checks on changes
+watch(checksJson, (newVal) => {
+  try {
+    upstreamForm.checks = JSON.parse(newVal)
+  } catch {
+    // Invalid JSON, don't update
+  }
+})
 
 const routeForm = reactive({
   name: '',
@@ -1279,32 +1393,19 @@ const showAddUpstreamModal = async (cluster: Cluster) => {
   upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
   upstreamForm.hash_on = 'vars'
   upstreamForm.key = ''
-  upstreamForm.checks = {
-    "passive": {
-      "type": "http"
-    },
-    "active": {
-      "type": "http",
-      "unhealthy": {
-        "timeouts": 3,
-        "tcp_failures": 2,
-        "interval": 1,
-        "http_statuses": [429, 500, 501, 502, 503, 504, 505],
-        "http_failures": 5
-      },
-      "https_verify_certificate": true,
-      "http_path": "/",
-      "concurrency": 10,
-      "healthy": {
-        "http_statuses": [200, 302, 403, 404],
-        "successes": 2,
-        "interval": 0
-      },
-      "timeout": 1
-    }
-  }
+  checksJson.value = defaultChecksJson
+  upstreamForm.checks = JSON.parse(defaultChecksJson)
+  upstreamForm.advancedEnabled = false
+  upstreamForm.retries = undefined
+  upstreamForm.retry_timeout = 0
+  upstreamForm.timeout = { ...defaultTimeout }
+  upstreamForm.pass_host = 'pass'
+  upstreamForm.upstream_host = ''
+  upstreamForm.scheme = 'http'
+  upstreamForm.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
   targetValidation.value = {}
   upstreamModalVisible.value = true
+  upstreamModalActiveTab.value = 'basic'
 }
 
 const editUpstream = (cluster: Cluster) => {
@@ -1323,6 +1424,52 @@ const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   upstreamForm.description = upstream.description || ''
   upstreamForm.hash_on = (upstream as any).hash_on || 'vars'
   upstreamForm.key = (upstream as any).key || ''
+  const u = upstream as any
+  if (u.checks) {
+    const checksObj = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
+    upstreamForm.checks = checksObj
+    checksJson.value = JSON.stringify(checksObj, null, 2)
+  } else {
+    upstreamForm.checks = JSON.parse(defaultChecksJson)
+    checksJson.value = defaultChecksJson
+  }
+  const isDefaultChecks = (() => {
+    if (!u.checks) return true
+    const c = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
+    return JSON.stringify(c) === JSON.stringify({ passive: {}, active: { unhealthy: {} } })
+  })()
+  const isDefaultTimeout = (() => {
+    if (!u.timeout) return true
+    const t = typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout
+    return t.connect === 6 && t.send === 6 && t.read === 6
+  })()
+  upstreamForm.advancedEnabled = !!(
+    (u.retries !== undefined && u.retries !== null) ||
+    (u.retry_timeout !== undefined && u.retry_timeout !== null && u.retry_timeout !== 0) ||
+    (u.pass_host && u.pass_host !== 'pass') ||
+    (u.upstream_host && u.upstream_host !== '') ||
+    (u.scheme && u.scheme !== 'http') ||
+    !isDefaultChecks ||
+    !isDefaultTimeout ||
+    (u.keepalive_pool && u.keepalive_pool !== '{}')
+  )
+  upstreamForm.retries = u.retries ?? undefined
+  upstreamForm.retry_timeout = u.retry_timeout ?? 0
+  if (u.timeout) {
+    const t = typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout
+    upstreamForm.timeout = { connect: t.connect ?? defaultTimeout.connect, send: t.send ?? defaultTimeout.send, read: t.read ?? defaultTimeout.read }
+  } else {
+    upstreamForm.timeout = { ...defaultTimeout }
+  }
+  upstreamForm.pass_host = u.pass_host || 'pass'
+  upstreamForm.upstream_host = u.upstream_host || ''
+  upstreamForm.scheme = u.scheme || 'http'
+  if (u.keepalive_pool) {
+    const k = typeof u.keepalive_pool === 'string' ? JSON.parse(u.keepalive_pool) : u.keepalive_pool
+    upstreamForm.keepalive_pool = { size: k.size, idle_timeout: k.idle_timeout, requests: k.requests }
+  } else {
+    upstreamForm.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
+  }
   if (upstream.targets && upstream.targets.length > 0) {
     upstreamForm.targets = upstream.targets.map((t) => {
       const [ip, port] = t.target.split(':')
@@ -1338,6 +1485,7 @@ const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   }
   targetValidation.value = {}
   upstreamModalVisible.value = true
+  upstreamModalActiveTab.value = 'basic'
 }
 
 const validateTargets = () => {
@@ -1390,10 +1538,33 @@ const handleUpstreamSubmit = async () => {
       ...(upstreamForm.load_balance === 'chash' && {
         hash_on: upstreamForm.hash_on,
         key: upstreamForm.key
-      })
+      }),
+      checks: upstreamForm.checks,
+      timeout: upstreamForm.timeout
     }
-    if (upstreamForm.checks) {
-      submitData.checks = upstreamForm.checks
+    if (upstreamForm.advancedEnabled) {
+      if (upstreamForm.retries !== undefined) {
+        submitData.retries = upstreamForm.retries
+      }
+      if (upstreamForm.retry_timeout !== undefined) {
+        submitData.retry_timeout = upstreamForm.retry_timeout
+      }
+      if (upstreamForm.pass_host) {
+        submitData.pass_host = upstreamForm.pass_host
+      }
+      if (upstreamForm.pass_host === 'rewrite' && upstreamForm.upstream_host) {
+        submitData.upstream_host = upstreamForm.upstream_host
+      }
+      if (upstreamForm.scheme && upstreamForm.scheme !== 'http') {
+        submitData.scheme = upstreamForm.scheme
+      }
+      const k = upstreamForm.keepalive_pool
+      if (k.size !== undefined || k.idle_timeout !== undefined || k.requests !== undefined) {
+        submitData.keepalive_pool = {} as Record<string, any>
+        if (k.size !== undefined) submitData.keepalive_pool.size = k.size
+        if (k.idle_timeout !== undefined) submitData.keepalive_pool.idle_timeout = k.idle_timeout
+        if (k.requests !== undefined) submitData.keepalive_pool.requests = k.requests
+      }
     }
     if (editingUpstream.value) {
       await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
