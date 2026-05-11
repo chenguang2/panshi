@@ -213,14 +213,35 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
 @router.delete("/{route_id}")
 async def delete_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    from app.models.cluster import Node
+
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-    
+
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+
     await db.delete(route)
     await db.commit()
-    return {"message": "路由已删除"}
+
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                response = client.delete_route(route.edge_uuid)
+                node_result["status"] = "success"
+                node_result["response"] = response
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+
+    return {"message": "路由已删除", "results": results}
 
 
 @router.post("/{route_id}/publish")

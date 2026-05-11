@@ -213,7 +213,7 @@
           </a-table>
         </a-tab-pane>
 
-        <a-tab-pane key="pluginMetadata" tab="插件数据">
+        <a-tab-pane key="pluginMetadata" tab="插件元数据">
           <div class="table-actions">
             <a-button type="primary" @click="showPluginMetadataModal('create')">
               <PlusOutlined /> 添加插件数据

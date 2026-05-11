@@ -331,14 +331,34 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}")
 async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
 
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+
     await db.delete(upstream)
     await db.commit()
-    return {"message": "上游服务已删除"}
+
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                response = client.delete_upstream(upstream.edge_uuid)
+                node_result["status"] = "success"
+                node_result["response"] = response
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+
+    return {"message": "上游服务已删除", "results": results}
 
 
 NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}

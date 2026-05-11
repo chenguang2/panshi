@@ -36,7 +36,7 @@
             <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
-            <a-tab-pane key="globalPlugins" tab="全局插件"></a-tab-pane>
+            <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
@@ -588,7 +588,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, h } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message, Modal, Progress } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
@@ -1586,6 +1586,15 @@ const handleUpstreamSubmit = async () => {
   }
 }
 
+const buildDeleteProgressContent = (progress: { percent: number, status: 'active' | 'success' | 'exception' }, logs: string[]) => {
+  return h('div', {}, [
+    h(Progress, { percent: progress.percent, status: progress.status, showInfo: false, style: 'margin-bottom: 12px;' }),
+    h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+      logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+    )
+  ])
+}
+
 const deleteUpstream = async (cluster: Cluster) => {
   if (!cluster.selectedUpstream) {
     message.warning('请先选择一个上游')
@@ -1606,22 +1615,96 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   }
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除上游"${upstream.name}"吗？此操作不可撤销。`,
+    content: `确定要删除上游"${upstream.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
     okText: '确认删除',
     okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
+
+      const modal = Modal.info({
+        title: `删除上游: ${upstream.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
+
+      addLog(`开始删除上游: ${upstream.name}`)
+      progress.percent = 20
+      updateContent()
+
+      await new Promise(r => setTimeout(r, 400))
+
       try {
-        await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`)
-        message.success('上游已删除')
-        const res = await api.get(`/clusters/${cluster.id}/upstreams`)
-        cluster.upstreams = res.data.items
+        addLog('正在从数据库删除...')
+        progress.percent = 40
+        updateContent()
+
+        const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`)
+        const data = res.data
+
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        if (data.results && data.results.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80
+          updateContent()
+
+          addLog('Edge 节点同步删除结果:')
+          let successCount = 0
+          let failCount = 0
+          for (const r of data.results) {
+            if (r.status === 'success') successCount++
+            else failCount++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog('')
+          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else {
+          addLog('集群中没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'success'
+          addLog('✅ 删除完成!')
+        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+        } else {
+          progress.status = 'success'
+          addLog('✅ 数据库已删除')
+        }
+
+        updateContent()
+
+        const res2 = await api.get(`/clusters/${cluster.id}/upstreams`)
+        cluster.upstreams = res2.data.items
         cluster.upstream_count = cluster.upstreams.length
         cluster.selectedUpstream = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
-        message.error(typeof detail === 'string' ? detail : '删除上游失败')
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
+        updateContent()
       }
+      modal.update({ okButtonProps: { disabled: false } })
     }
   })
 }
@@ -1839,22 +1922,96 @@ const deleteRoute = (cluster: Cluster) => {
 const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除路由"${route.name}"吗？此操作不可撤销。`,
+    content: `确定要删除路由"${route.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
     okText: '确认删除',
     okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
+
+      const modal = Modal.info({
+        title: `删除路由: ${route.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
+
+      addLog(`开始删除路由: ${route.name}`)
+      progress.percent = 20
+      updateContent()
+
+      await new Promise(r => setTimeout(r, 400))
+
       try {
-        await api.delete(`/clusters/${cluster.id}/routes/${route.id}`)
-        message.success('路由已删除')
-        const res = await api.get(`/clusters/${cluster.id}/routes`)
-        cluster.routes = res.data.items
+        addLog('正在从数据库删除...')
+        progress.percent = 40
+        updateContent()
+
+        const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`)
+        const data = res.data
+
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        if (data.results && data.results.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80
+          updateContent()
+
+          addLog('Edge 节点同步删除结果:')
+          let successCount = 0
+          let failCount = 0
+          for (const r of data.results) {
+            if (r.status === 'success') successCount++
+            else failCount++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog('')
+          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else {
+          addLog('集群中没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'success'
+          addLog('✅ 删除完成!')
+        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+        } else {
+          progress.status = 'success'
+          addLog('✅ 数据库已删除')
+        }
+
+        updateContent()
+
+        const res2 = await api.get(`/clusters/${cluster.id}/routes`)
+        cluster.routes = res2.data.items
         cluster.route_count = cluster.routes.length
         cluster.selectedRoute = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
-        message.error(typeof detail === 'string' ? detail : '删除路由失败')
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
+        updateContent()
       }
+      modal.update({ okButtonProps: { disabled: false } })
     }
   })
 }
@@ -1864,70 +2021,85 @@ const publishUpstream = async (cluster: Cluster) => {
     message.warning('请先选择一个上游')
     return
   }
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定要将上游"${cluster.selectedUpstream.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
+    okText: '确认发布',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
 
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  }
+      const modal = Modal.info({
+        title: `发布上游: ${cluster.selectedUpstream!.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
 
-  const modal = Modal.info({
-    title: `发布上游: ${cluster.selectedUpstream.name}`,
-    width: 600,
-    content: '',
-    okText: '确定',
-    cancelText: '',
-    closable: true,
-  })
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
 
-  const updateContent = () => {
-    modal.update({
-      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-      )
-    })
-  }
+      addLog(`开始发布上游: ${cluster.selectedUpstream!.name}`)
+      progress.percent = 10
+      updateContent()
 
-  addLog(`开始发布上游: ${cluster.selectedUpstream.name}`)
-  updateContent()
+      await new Promise(r => setTimeout(r, 400))
 
-  try {
-    const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream.id}/publish`)
-    const data = res.data
+      try {
+        addLog('正在构建发布配置...')
+        progress.percent = 30
+        updateContent()
 
-    addLog(`状态: ${data.status}`)
-    addLog(`消息: ${data.message}`)
-    addLog(`版本: v${data.version}`)
+        const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream!.id}/publish`)
+        const data = res.data
+        progress.percent = 70
 
-    if (data.results && data.results.length > 0) {
-      addLog('')
-      addLog('节点同步结果:')
-      for (const r of data.results) {
-        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
+        }
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+
+      } catch (error: any) {
+        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 发布失败: ${errMsg}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
       }
     }
-
-    updateContent()
-
-    if (data.status === 'ok') {
-      addLog('')
-      addLog('✅ 发布成功!')
-      modal.update({ okText: '确定' })
-    } else if (data.status === 'partial') {
-      addLog('')
-      addLog('⚠️ 部分成功')
-    } else {
-      addLog('')
-      addLog('❌ 发布失败')
-    }
-
-  } catch (error: any) {
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
-    addLog('')
-    addLog(`❌ 发布失败: ${errMsg}`)
-    updateContent()
-  }
-
-  updateContent()
+  })
 }
 
 const openUpstreamVersionManagement = (cluster: Cluster) => {
@@ -1957,70 +2129,85 @@ const publishRoute = async (cluster: Cluster) => {
     message.warning('请先选择一个路由')
     return
   }
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定要将路由"${cluster.selectedRoute.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
+    okText: '确认发布',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
 
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  }
+      const modal = Modal.info({
+        title: `发布路由: ${cluster.selectedRoute!.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
 
-  const modal = Modal.info({
-    title: `发布路由: ${cluster.selectedRoute.name}`,
-    width: 600,
-    content: '',
-    okText: '确定',
-    cancelText: '',
-    closable: true,
-  })
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
 
-  const updateContent = () => {
-    modal.update({
-      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-      )
-    })
-  }
+      addLog(`开始发布路由: ${cluster.selectedRoute!.name}`)
+      progress.percent = 10
+      updateContent()
 
-  addLog(`开始发布路由: ${cluster.selectedRoute.name}`)
-  updateContent()
+      await new Promise(r => setTimeout(r, 400))
 
-  try {
-    const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute.id}/publish`)
-    const data = res.data
+      try {
+        addLog('正在构建发布配置...')
+        progress.percent = 30
+        updateContent()
 
-    addLog(`状态: ${data.status}`)
-    addLog(`消息: ${data.message}`)
-    addLog(`版本: v${data.version}`)
+        const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute!.id}/publish`)
+        const data = res.data
+        progress.percent = 70
 
-    if (data.results && data.results.length > 0) {
-      addLog('')
-      addLog('节点同步结果:')
-      for (const r of data.results) {
-        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
+        }
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+
+      } catch (error: any) {
+        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 发布失败: ${errMsg}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
       }
     }
-
-    updateContent()
-
-    if (data.status === 'ok') {
-      addLog('')
-      addLog('✅ 发布成功!')
-      modal.update({ okText: '确定' })
-    } else if (data.status === 'partial') {
-      addLog('')
-      addLog('⚠️ 部分成功')
-    } else {
-      addLog('')
-      addLog('❌ 发布失败')
-    }
-
-  } catch (error: any) {
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
-    addLog('')
-    addLog(`❌ 发布失败: ${errMsg}`)
-    updateContent()
-  }
-
-  updateContent()
+  })
 }
 
 const openRouteVersionManagement = (cluster: Cluster) => {
@@ -2037,68 +2224,85 @@ const openRouteVersionManagement = (cluster: Cluster) => {
 }
 
 const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  }
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定要将上游"${record.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
+    okText: '确认发布',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
 
-  const modal = Modal.info({
-    title: `发布上游: ${record.name}`,
-    width: 600,
-    content: '',
-    okText: '确定',
-    cancelText: '',
-    closable: true,
-  })
+      const modal = Modal.info({
+        title: `发布上游: ${record.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
 
-  const updateContent = () => {
-    modal.update({
-      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-      )
-    })
-  }
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
 
-  addLog(`开始发布上游: ${record.name}`)
-  updateContent()
+      addLog(`开始发布上游: ${record.name}`)
+      progress.percent = 10
+      updateContent()
 
-  try {
-    const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`)
-    const data = res.data
+      await new Promise(r => setTimeout(r, 400))
 
-    addLog(`状态: ${data.status}`)
-    addLog(`消息: ${data.message}`)
-    addLog(`版本: v${data.version}`)
+      try {
+        addLog('正在构建发布配置...')
+        progress.percent = 30
+        updateContent()
 
-    if (data.results && data.results.length > 0) {
-      addLog('')
-      addLog('节点同步结果:')
-      for (const r of data.results) {
-        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+        const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`)
+        const data = res.data
+        progress.percent = 70
+
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
+        }
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+
+      } catch (error: any) {
+        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 发布失败: ${errMsg}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
       }
     }
-
-    updateContent()
-
-    if (data.status === 'ok') {
-      addLog('')
-      addLog('✅ 发布成功!')
-      modal.update({ okText: '确定' })
-    } else if (data.status === 'partial') {
-      addLog('')
-      addLog('⚠️ 部分成功')
-    } else {
-      addLog('')
-      addLog('❌ 发布失败')
-    }
-  } catch (error: any) {
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
-    addLog('')
-    addLog(`❌ 发布失败: ${errMsg}`)
-    updateContent()
-  }
-
-  updateContent()
+  })
 }
 
 const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstream) => {
@@ -2111,68 +2315,85 @@ const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstrea
 }
 
 const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  }
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定要将路由"${record.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
+    okText: '确认发布',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
 
-  const modal = Modal.info({
-    title: `发布路由: ${record.name}`,
-    width: 600,
-    content: '',
-    okText: '确定',
-    cancelText: '',
-    closable: true,
-  })
+      const modal = Modal.info({
+        title: `发布路由: ${record.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
 
-  const updateContent = () => {
-    modal.update({
-      content: h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-        logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-      )
-    })
-  }
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
 
-  addLog(`开始发布路由: ${record.name}`)
-  updateContent()
+      addLog(`开始发布路由: ${record.name}`)
+      progress.percent = 10
+      updateContent()
 
-  try {
-    const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`)
-    const data = res.data
+      await new Promise(r => setTimeout(r, 400))
 
-    addLog(`状态: ${data.status}`)
-    addLog(`消息: ${data.message}`)
-    addLog(`版本: v${data.version}`)
+      try {
+        addLog('正在构建发布配置...')
+        progress.percent = 30
+        updateContent()
 
-    if (data.results && data.results.length > 0) {
-      addLog('')
-      addLog('节点同步结果:')
-      for (const r of data.results) {
-        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+        const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`)
+        const data = res.data
+        progress.percent = 70
+
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
+        }
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+
+      } catch (error: any) {
+        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 发布失败: ${errMsg}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
       }
     }
-
-    updateContent()
-
-    if (data.status === 'ok') {
-      addLog('')
-      addLog('✅ 发布成功!')
-      modal.update({ okText: '确定' })
-    } else if (data.status === 'partial') {
-      addLog('')
-      addLog('⚠️ 部分成功')
-    } else {
-      addLog('')
-      addLog('❌ 发布失败')
-    }
-  } catch (error: any) {
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
-    addLog('')
-    addLog(`❌ 发布失败: ${errMsg}`)
-    updateContent()
-  }
-
-  updateContent()
+  })
 }
 
 const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => {
