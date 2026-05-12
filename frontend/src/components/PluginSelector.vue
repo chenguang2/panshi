@@ -111,28 +111,35 @@ const emit = defineEmits<{
 // 插件分类定义
 const CATEGORIES = [
   {
-    key: 'limit',
-    label: '限流',
-    plugins: ['limit-req', 'limit-conn', 'limit-count']
+    key: 'flow',
+    label: '流量控制',
+    plugins: ['traffic_split', 'traffic_limit_count']
   },
   {
-    key: 'auth',
-    label: '认证',
-    plugins: ['key-auth', 'jwt-auth', 'basic-auth']
+    key: 'rewrite',
+    label: '请求/响应重写',
+    plugins: ['proxy_rewrite', 'response_rewrite']
   },
   {
-    key: 'transform',
-    label: '转换',
-    plugins: ['proxy_rewrite', 'cors', 'response_rewrite']
+    key: 'process',
+    label: '数据处理',
+    plugins: ['log_process', 'data_center', 'pre_functions']
   }
 ]
+
+// 获取未分类插件的动态"其他"分组
+function getFallbackCategoryName(pluginNames: string[]): string | null {
+  const allKnown = CATEGORIES.flatMap(c => c.plugins)
+  const hasUncategorized = pluginNames.some(n => !allKnown.includes(n))
+  return hasUncategorized ? '其他' : null
+}
 
 // 状态
 const searchText = ref('')
 const expanded = reactive<Record<string, boolean>>({
-  limit: true,
-  auth: true,
-  transform: true
+  flow: true,
+  rewrite: true,
+  process: true
 })
 const selectedPlugins = ref<(RoutePlugin & { schema: Record<string, any> })[]>([])
 const drawerVisible = ref(false)
@@ -169,8 +176,9 @@ watch(() => props.modelValue, (newVal) => {
 // 过滤后的分类
 const filteredCategories = computed(() => {
   const search = searchText.value.toLowerCase().trim()
+  const allKnown = CATEGORIES.flatMap(c => c.plugins)
 
-  return CATEGORIES.map(category => {
+  const results = CATEGORIES.map(category => {
     let plugins = props.plugins.filter(p => category.plugins.includes(p.name))
 
     if (search) {
@@ -185,6 +193,23 @@ const filteredCategories = computed(() => {
       plugins
     }
   }).filter(category => category.plugins.length > 0)
+
+  // 其他未分类插件
+  const uncategorized = props.plugins.filter(p => !allKnown.includes(p.name))
+  if (uncategorized.length > 0) {
+    if (!expanded.other) expanded.other = true
+    results.push({
+      key: 'other',
+      label: '其他',
+      plugins: search
+        ? uncategorized.filter(p =>
+            p.name.toLowerCase().includes(search) ||
+            p.description.toLowerCase().includes(search))
+        : uncategorized
+    })
+  }
+
+  return results.filter(category => category.plugins.length > 0)
 })
 
 // 检查插件是否已选

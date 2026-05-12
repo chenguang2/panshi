@@ -9,248 +9,58 @@ router = APIRouter(prefix="/plugins", tags=["plugins"])
 
 BUILTIN_PLUGINS = [
     {
-        "name": "ip-restriction",
-        "description": "IP 黑白名单限制",
-        "enable_metadata": True,
-        "schema": {
-            "whitelist": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "IP 白名单",
-                "examples": [["127.0.0.1", "10.0.0.0/8"]],
-                "hints": "允许访问的 IP 或 IP 段，支持 CIDR 格式"
-            },
-            "blacklist": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "IP 黑名单",
-                "examples": [["1.2.3.4", "192.168.0.0/16"]],
-                "hints": "禁止访问的 IP 或 IP 段，优先级高于白名单"
-            }
-        }
-    },
-    {
-        "name": "cors",
-        "description": "跨域资源共享（CORS）",
-        "enable_metadata": True,
-        "schema": {
-            "allow_origins": {
-                "type": "string",
-                "description": "允许的源站",
-                "examples": ["https://example.com", "*", "https://*.example.com"],
-                "hints": "支持精确域名、*（允许所有）或通配符子域名"
-            },
-            "allow_methods": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "允许的 HTTP 方法",
-                "examples": [["GET", "POST", "PUT", "DELETE"]],
-                "hints": "逗号分隔，如需允许所有方法可设为 *"
-            },
-            "allow_headers": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "允许的请求头",
-                "examples": [["Content-Type", "Authorization", "X-Request-ID"]],
-                "hints": "实际请求中需要的自定义 Header"
-            },
-            "allow_credentials": {
-                "type": "boolean",
-                "description": "允许携带凭证",
-                "examples": [True, False],
-                "hints": "设为 true 时，allow_origins 不能为 *"
-            }
-        }
-    },
-    {
         "name": "proxy_rewrite",
         "description": "代理重写（修改请求 URI、Header、Host、协议）",
-        "enable_metadata": True,
+        "enable_metadata": False,
         "schema": {
             "uri": {
                 "type": "string",
                 "description": "目标 URI",
                 "examples": ["/api/v2/users", "/new/path"],
-                "hints": "支持 NGINX 变量，如 $uri、$request_uri"
+                "hints": "转发到上游的新 uri 地址，支持 NGINX 变量"
             },
             "regex_uri": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "正则匹配 URI",
-                "examples": [["^/old/(.*)", "/new/$1"], ["/api/v1/(.*)", "/api/v2/$1"]],
-                "hints": "数组第一项为正则表达式，第二项为替换字符串，支持捕获组"
+                "examples": [["^/old/(.*)", "/new/$1"], ["^/test/(.*)/(.*)/(.*)", "/test1/$1-$2-$3"]],
+                "hints": "使用正则替换 URI，第一项为正则，第二项为替换模板。优先级: uri > regex_uri"
             },
             "headers": {
                 "type": "object",
-                "description": "Header 操作",
-                "properties": {
-                    "set": {
-                        "type": "object",
-                        "description": "设置/覆盖 Header",
-                        "examples": [{"X-Request-ID": "abc123", "X-Custom-Header": "value"}],
-                        "hints": "已存在的 Header 会被覆盖"
-                    },
-                    "add": {
-                        "type": "object",
-                        "description": "追加 Header",
-                        "examples": [{"X-Appended": "value1"}, {"X-Request-Time": "$request_time"}],
-                        "hints": "即使 Header 已存在也会追加新值"
-                    },
-                    "remove": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "删除 Header",
-                        "examples": [["X-Internal", "X-Debug"]],
-                        "hints": "从请求中移除指定的 Header"
-                    }
-                }
+                "description": "请求 Header",
+                "examples": [{"version": "v1", "X-Custom": "value"}],
+                "hints": "转发到上游的新 headers，可以设置多个"
+            },
+            "method": {
+                "type": "string",
+                "enum": ["", "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE"],
+                "description": "重写 HTTP 方法",
+                "examples": ["POST"],
+                "hints": "将路由的请求方法代理为该请求方法"
             },
             "host": {
                 "type": "string",
                 "description": "目标 Host",
-                "examples": ["new-host.example.com", "$http_host"],
-                "hints": "修改转发请求的 Host 头，可使用变量"
+                "examples": ["new-host.example.com"],
+                "hints": "转发到上游的新 host 地址"
             },
             "scheme": {
                 "type": "string",
-                "enum": ["http", "https"],
+                "enum": ["", "http", "https"],
+                "default": "http",
                 "description": "目标协议",
                 "examples": ["https"],
-                "hints": "修改转发请求的协议（http 或 https）"
-            },
-            "use_real_request_uri_unsafe": {
-                "type": "boolean",
-                "description": "使用原始 URI（不推荐）",
-                "examples": [False],
-                "hints": "设为 true 时使用未标准化的原始 URI，可能有安全隐患"
+                "hints": "转发到上游的新 scheme，默认 http"
             }
         }
-    },
-    {
-        "name": "limit-req",
-        "description": "请求速率限制（令牌桶算法）",
-        "enable_metadata": True,
-        "schema": {
-            "rate": {
-                "type": "number",
-                "description": "速率限制（每秒请求数）",
-                "examples": [100, 200, 500, 1000],
-                "hints": "每秒允许的请求数，必须大于 0"
-            },
-            "burst": {
-                "type": "number",
-                "description": "突发容量（令牌桶容量）",
-                "examples": [50, 100, 200],
-                "hints": "允许瞬时爆发的请求数，通常设为 rate 的 50%-100%"
-            },
-            "key": {
-                "type": "string",
-                "description": "限流维度",
-                "enum": ["remote_addr", "server_addr", "uri"],
-                "examples": ["remote_addr", "header:X-Real-IP"],
-                "hints": "remote_addr 按客户端 IP 限流，可自定义 header 如 X-Api-Key"
-            }
-        }
-    },
-    {
-        "name": "limit-conn",
-        "description": "并发连接数限制",
-        "enable_metadata": True,
-        "schema": {
-            "conn": {
-                "type": "number",
-                "description": "最大并发连接数",
-                "examples": [100, 500, 1000],
-                "hints": "允许的最大并发连接数"
-            },
-            "burst": {
-                "type": "number",
-                "description": "突发连接数",
-                "examples": [50, 100],
-                "hints": "允许瞬时增加的连接数"
-            },
-            "key": {
-                "type": "string",
-                "description": "限流维度",
-                "enum": ["remote_addr", "server_addr"],
-                "examples": ["remote_addr"],
-                "hints": "通常按客户端 IP（remote_addr）限制"
-            }
-        }
-    },
-    {
-        "name": "limit-count",
-        "description": "时间窗口请求数限制",
-        "enable_metadata": True,
-        "schema": {
-            "count": {
-                "type": "number",
-                "description": "时间窗口内允许的请求数",
-                "examples": [100, 1000, 10000],
-                "hints": "每个 key 在时间窗口内最多允许的请求次数"
-            },
-            "time_window": {
-                "type": "number",
-                "description": "时间窗口（秒）",
-                "examples": [60, 3600, 86400],
-                "hints": "时间窗口大小，单位秒，60=1分钟，3600=1小时"
-            },
-            "key": {
-                "type": "string",
-                "description": "限流维度",
-                "enum": ["remote_addr", "server_addr", "uri"],
-                "examples": ["remote_addr", "header:X-User-ID"],
-                "hints": "按用户 ID 限流可使用 header:X-User-ID，按 IP 用 remote_addr"
-            }
-        }
-    },
-    {
-        "name": "key-auth",
-        "description": "API Key 认证",
-        "enable_metadata": True,
-        "schema": {
-            "key": {
-                "type": "string",
-                "description": "Key 名称",
-                "examples": ["apikey", "X-API-Key"],
-                "hints": "客户端传递 API Key 的 Header 或参数名称"
-            }
-        }
-    },
-    {
-        "name": "jwt-auth",
-        "description": "JWT Token 认证",
-        "enable_metadata": True,
-        "schema": {
-            "secret": {
-                "type": "string",
-                "description": "签名密钥",
-                "examples": ["my-secret-key", "HS256-secret-key-12345"],
-                "hints": "用于验证 JWT 签名的密钥，HS256 算法至少 32 字符"
-            },
-            "algorithms": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "支持的签名算法",
-                "examples": [["HS256"], ["HS256", "RS256"], ["RS256"]],
-                "hints": "推荐使用 RS256（非对称加密），HS256（对称加密）密钥需安全存储"
-            }
-        }
-    },
-    {
-        "name": "basic-auth",
-        "description": "Basic Auth 基本认证",
-        "enable_metadata": True,
-        "schema": {}
     },
     {
         "name": "response_rewrite",
         "description": "响应体重写（修改状态码、Body、Header）",
-        "enable_metadata": True,
+        "enable_metadata": False,
         "schema": {
             "status_code": {
-                "type": "number",
-                "description": "重写状态码",
                 "examples": [200, 301, 302, 400, 404, 500],
                 "hints": "将响应状态码修改为指定值"
             },
@@ -262,21 +72,308 @@ BUILTIN_PLUGINS = [
             },
             "headers": {
                 "type": "object",
-                "description": "Header 操作",
+                "description": "Header 操作（设置/覆盖）",
                 "properties": {
                     "set": {
                         "type": "object",
                         "description": "设置/覆盖 Header",
                         "examples": [{"X-Custom": "value"}, {"Cache-Control": "no-cache"}],
                         "hints": "已存在的 Header 会被覆盖"
-                    },
-                    "add": {
-                        "type": "object",
-                        "description": "追加 Header",
-                        "examples": [{"X-Appended": "value"}],
-                        "hints": "即使 Header 已存在也会追加新值"
                     }
                 }
+            },
+            "add_headers": {
+                "type": "object",
+                "description": "追加 Header（不覆盖已有值）",
+                "examples": [{"X-Appended": "value"}],
+                "hints": "即使 Header 已存在也会追加新值"
+            },
+            "regex_body": {
+                "type": "array",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "description": "正则替换响应体",
+                "examples": [[["old_pattern", "new_value"]]],
+                "hints": "对响应体进行正则匹配替换"
+            },
+            "plain_text": {
+                "type": "boolean",
+                "description": "响应体是否为纯文本",
+                "examples": [True, False],
+                "hints": "设为 true 时，响应体以纯文本方式处理"
+            }
+        }
+    },
+    {
+        "name": "traffic_split",
+        "description": "流量分发（按条件将请求分发到不同的上游）",
+        "enable_metadata": False,
+        "schema": {
+            "splits": {
+                "type": "array",
+                "description": "分发策略列表",
+                "items": {
+                    "type": "object",
+                    "description": "单个分发策略",
+                    "properties": {
+                        "ups_expr": {
+                            "type": "array",
+                            "description": "条件表达式",
+                            "examples": [[["arg_dc", "==", "1"]]],
+                            "hints": "满足表达式时使用该策略的上游，未配置时视为条件成立"
+                        },
+                        "upstreams": {
+                            "type": "array",
+                            "description": "上游负载列表",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "upstream_id": {
+                                        "type": "string",
+                                        "description": "上游 ID",
+                                        "examples": ["ups_test1"],
+                                        "hints": "未配置时使用当前路由的负载"
+                                    },
+                                    "weight": {
+                                        "type": "integer",
+                                        "default": 1,
+                                        "description": "权重",
+                                        "examples": [1, 2, 3],
+                                        "hints": "默认值为 1，用于多上游流量分配"
+                                    }
+                                }
+                            },
+                            "hints": "可以配置多个上游，按权重分配流量"
+                        }
+                    }
+                },
+                "examples": [[{
+                    "ups_expr": [["arg_dc", "==", "1"]],
+                    "upstreams": [{"upstream_id": "ups_test1"}]
+                }, {
+                    "ups_expr": [["arg_dc", "==", "2"]],
+                    "upstreams": [{"upstream_id": "ups_test2"}]
+                }, {
+                    "ups_expr": [["arg_dc", "==", "12"]],
+                    "upstreams": [
+                        {"upstream_id": "ups_test1", "weight": 1},
+                        {"upstream_id": "ups_test2", "weight": 2},
+                        {"weight": 3}
+                    ]
+                }]],
+                "hints": "可以配置复数个分发策略，按顺序匹配"
+            }
+        }
+    },
+    {
+        "name": "data_center",
+        "description": "数据中心（集中管理其他插件的数据属性）",
+        "enable_metadata": True,
+        "schema": {}
+    },
+    {
+        "name": "log_process",
+        "description": "日志记录（将请求信息按指定格式记录到文件）",
+        "enable_metadata": True,
+        "schema": {
+            "logs": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": ["logs/process.log"],
+                "description": "日志文件路径",
+                "examples": [["logs/process.log"], ["logs/process.log", "logs/access.log"]],
+                "hints": "日志记录的文件，可以配置一个或多个"
+            },
+            "cache_duration": {
+                "type": "integer",
+                "default": 1,
+                "description": "缓存时长（秒）",
+                "examples": [1, 0],
+                "hints": "是否先缓存再写入文件日志，0 表示直接写入文件，默认 1"
+            },
+            "include_req_body": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否记录请求体",
+                "examples": [False, True],
+                "hints": "标准日志中是否记录请求体，默认 false"
+            },
+            "include_req_body_expr": {
+                "type": "array",
+                "description": "条件表达式（满足时才记录请求体）",
+                "examples": [[["arg_debug", "==", "1"]]],
+                "hints": "需要开启 include_req_body 才生效"
+            }
+        }
+    },
+    {
+        "name": "traffic_limit_count",
+        "description": "时间窗口请求数限制（按 key 计数限流）",
+        "enable_metadata": False,
+        "schema": {
+            "limits": {
+                "type": "array",
+                "description": "限制策略",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "计数依据",
+                            "examples": ["${remote_addr}", "${arg_user_id}"],
+                            "hints": "用于做请求计数的依据，如 ${remote_addr} 按用户 IP"
+                        },
+                        "count": {
+                            "type": "integer",
+                            "description": "阈值",
+                            "examples": [5, 100],
+                            "hints": "时间窗口内的请求数量阈值，必须大于 0"
+                        },
+                        "window": {
+                            "type": "integer",
+                            "description": "时间窗口（秒）",
+                            "examples": [10, 60],
+                            "hints": "超过这个时间就会重置计数"
+                        }
+                    }
+                },
+                "examples": [[{"key": "${remote_addr}", "count": 2, "window": 5}]],
+                "hints": "可以配置多条限制策略"
+            },
+            "group": {
+                "type": "string",
+                "description": "共享组名",
+                "examples": ["global_limit"],
+                "hints": "多个路由配置相同 group，将共享同样的限流计数器"
+            },
+            "policy": {
+                "type": "string",
+                "enum": ["local", "redis"],
+                "default": "local",
+                "description": "计数器策略",
+                "examples": ["local", "redis"],
+                "hints": "local 内存方式，redis 全局限速，默认 local"
+            },
+            "redis_conf": {
+                "type": "object",
+                "description": "Redis 连接配置",
+                "properties": {
+                    "CLUSTER_DEF": {
+                        "type": "array",
+                        "description": "服务器列表",
+                        "examples": [[["127.0.0.1", 6379]]],
+                        "hints": "组名为 DEF，可配置一个或多个节点"
+                    },
+                    "MODE": {
+                        "type": "string",
+                        "enum": ["redis", "rediscluster"],
+                        "description": "Redis 类型",
+                        "examples": ["redis"],
+                        "hints": "redis 或 rediscluster"
+                    },
+                    "AUTH": {
+                        "type": "string",
+                        "description": "Redis 密钥",
+                        "examples": ["your-redis-password"]
+                    },
+                    "DATABASE": {
+                        "type": "integer",
+                        "description": "Redis DB",
+                        "examples": [0, 1],
+                        "hints": "默认 0"
+                    },
+                    "TIMEOUT": {
+                        "type": "number",
+                        "description": "连接超时（秒）",
+                        "examples": [0.05],
+                        "hints": "默认 0.05 秒"
+                    }
+                },
+                "hints": "policy 为 redis 时需要配置此项"
+            },
+            "redis_dc": {
+                "type": "string",
+                "description": "Redis 数据中心标识",
+                "examples": ["TEST", "DC1"],
+                "hints": "如果 redis_conf 配置了多组服务器，需要指定服务器组名"
+            },
+            "bypass_missing_key": {
+                "type": "boolean",
+                "default": True,
+                "description": "缺少 key 时是否忽略",
+                "examples": [True, False],
+                "hints": "当计数 key 不存在时是否忽略，默认 true，设为 false 按空值统计"
+            },
+            "bypass_error_limit": {
+                "type": "boolean",
+                "default": True,
+                "description": "出错时是否忽略",
+                "examples": [True, False],
+                "hints": "Redis 异常时是否忽略，默认 true，设为 false 会返回 500"
+            },
+            "show_resp_limit_header": {
+                "type": "boolean",
+                "default": False,
+                "description": "显示剩余次数响应头",
+                "examples": [False, True],
+                "hints": "是否在响应头中显示 X-EDGE-LimitCount-Remaining，默认 false"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截状态码",
+                "examples": [403, 429],
+                "hints": "触发限流后响应的状态码，默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截提示信息",
+                "examples": ["请求过于频繁，请稍后再试"],
+                "hints": "触发限流后响应的提示信息"
+            }
+        }
+    },
+    {
+        "name": "pre_functions",
+        "description": "自定义预处理方法（在指定阶段执行 Lua 函数）",
+        "enable_metadata": False,
+        "schema": {
+            "rewrite": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "rewrite 阶段自定义方法",
+                "examples": [["return function(conf, ctx) ngx.log(ngx.ERR, 'hello'); end"]],
+                "hints": "在 rewrite 阶段执行的自定义 Lua 方法列表"
+            },
+            "access": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "access 阶段自定义方法",
+                "examples": [["return function(conf, ctx) return 200, 'OK'; end"]],
+                "hints": "在 access 阶段执行的自定义 Lua 方法列表，返回 status 和 message 可中断请求"
+            },
+            "header_filter": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "header_filter 阶段自定义方法",
+                "examples": [["return function(conf, ctx) ctx.var.fpre_flag = '1'; end"]],
+                "hints": "在 header_filter 阶段执行的自定义 Lua 方法列表"
+            },
+            "body_filter": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "body_filter 阶段自定义方法",
+                "examples": [["return function(conf, ctx) end"]],
+                "hints": "在 body_filter 阶段执行的自定义 Lua 方法列表"
+            },
+            "log": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "log 阶段自定义方法",
+                "examples": [["return function(conf, ctx) ngx.log(ngx.ERR, 'logged'); end"]],
+                "hints": "在 log 阶段执行的自定义 Lua 方法列表"
             }
         }
     }

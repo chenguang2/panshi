@@ -1,0 +1,7 @@
+- [x] 1.1 增强 proxy_rewrite: 新增 method, body, regex_body, include_body_expr
+- [x] 1.2 增强 response_rewrite: 新增 add_headers, regex_body, plain_text
+- [x] 1.3 新增 traffic_split 插件: splits 数组含 ups_expr + upstreams
+- [x] 1.4 新增 data_center 插件: 空 schema, enable_metadata
+- [x] 1.5 新增 log_process 插件: logs, cache_duration, include_req_body, include_req_body_expr
+- [x] 1.6 新增 traffic_limit_count 插件: limits, group, policy, redis_conf 等
+- [x] 1.7 新增 pre_functions 插件: 按阶段注入 Lua 函数字符串数组

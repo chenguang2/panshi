@@ -16,10 +16,12 @@
 
     <!-- JSON 模式 -->
     <div v-if="isJsonMode" class="json-editor">
-      <a-textarea
-        v-model:value="jsonConfig"
-        :rows="14"
-        placeholder="输入插件配置 JSON"
+      <JsonEditorVue
+        v-model="jsonEditorValue"
+        v-model:mode="jsonEditorMode"
+        :navigation-bar="false"
+        :status-bar="false"
+        class="json-editor-component"
       />
       <div v-if="jsonError" class="json-error">{{ jsonError }}</div>
     </div>
@@ -27,7 +29,7 @@
     <!-- 表单模式 -->
     <div v-else class="form-editor">
       <a-form layout="vertical">
-        <template v-for="(schema, key) in currentSchema" :key="key">
+        <template v-for="(schema, key) in visibleSchemaFields" :key="key">
           <!-- object 类型：检测是否为 headers 字段 -->
           <template v-if="getFieldType(schema) === 'object' && isHeadersField(schema)">
             <div class="field-block headers-accordion">
@@ -116,6 +118,26 @@
             </div>
           </template>
 
+          <!-- 简单 headers（key-value 对象，无嵌套 properties） -->
+          <template v-else-if="getFieldType(schema) === 'object' && key === 'headers' && !schema.properties">
+            <div class="field-block">
+              <div class="field-block-header">
+                <span class="field-block-title">{{ key }}</span>
+                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
+              </div>
+              <div class="simple-kv-editor">
+                <div v-for="(item, idx) in simpleKvData" :key="item.id" class="kv-row">
+                  <a-input v-model:value="item.key" placeholder="Header 名称" style="flex: 1" @change="syncSimpleKv" />
+                  <a-input v-model:value="item.value" placeholder="Header 值" style="flex: 1" @change="syncSimpleKv" />
+                  <a-button size="small" danger @click="removeSimpleKvRow(idx)">删除</a-button>
+                </div>
+                <a-button size="small" type="dashed" style="margin-top: 8px" @click="addSimpleKvRow">
+                  <PlusOutlined /> 添加 Header
+                </a-button>
+              </div>
+            </div>
+          </template>
+
           <!-- 普通 object 类型（非 headers） -->
           <template v-else-if="getFieldType(schema) === 'object'">
             <div class="field-block">
@@ -147,7 +169,7 @@
                       v-model:value="formData[key][nestedKey]"
                     >
                       <a-select-option v-for="opt in nestedSchema.enum" :key="opt" :value="opt">
-                        {{ opt }}
+                        {{ opt === '' ? '保持原样' : opt }}
                       </a-select-option>
                     </a-select>
                     <a-textarea
@@ -180,7 +202,23 @@
                 class="field-input"
               />
               <div v-if="schema.examples?.length" class="field-example">
-                示例：{{ formatExample(schema.examples[0]) }}
+                <template v-if="isComplexExample(schema.examples[0])">
+                  <a-button size="small" type="link" @click="toggleExample(key)">
+                    {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
+                  </a-button>
+                  <JsonEditorVue
+                    v-if="expandedExamples[key] !== false"
+                    :model-value="schema.examples[0]"
+                    mode="text"
+                    read-only
+                    :navigation-bar="false"
+                    :status-bar="false"
+                    class="json-example-viewer"
+                  />
+                </template>
+                <template v-else>
+                  示例：{{ formatExample(schema.examples[0]) }}
+                </template>
               </div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
@@ -235,11 +273,27 @@
               <a-textarea
                 v-model:value="formData[key]"
                 :rows="2"
-                :placeholder="schema.description || '逗号分隔'"
+                :placeholder="schema.description || '逗号分隔或 JSON 数组'"
                 class="field-input"
               />
               <div v-if="schema.examples?.length" class="field-example">
-                示例：{{ formatExample(schema.examples[0]) }}
+                <template v-if="isComplexExample(schema.examples[0])">
+                  <a-button size="small" type="link" @click="toggleExample(key)">
+                    {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
+                  </a-button>
+                  <JsonEditorVue
+                    v-if="expandedExamples[key] !== false"
+                    :model-value="schema.examples[0]"
+                    mode="text"
+                    read-only
+                    :navigation-bar="false"
+                    :status-bar="false"
+                    class="json-example-viewer"
+                  />
+                </template>
+                <template v-else>
+                  示例：{{ formatExample(schema.examples[0]) }}
+                </template>
               </div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
@@ -257,7 +311,7 @@
               </div>
               <a-select v-model:value="formData[key]" placeholder="选择" class="field-input">
                 <a-select-option v-for="opt in schema.enum" :key="opt" :value="opt">
-                  {{ opt }}
+                  {{ opt === '' ? '保持原样' : opt }}
                 </a-select-option>
               </a-select>
               <div v-if="schema.examples?.length" class="field-example">
@@ -284,8 +338,9 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import type { Plugin, RoutePlugin } from '@/types'
+import JsonEditorVue from 'json-editor-vue'
 
 const props = defineProps<{
   open: boolean
@@ -306,10 +361,43 @@ const visible = computed({
 const editingPlugin = computed(() => props.plugin)
 const currentSchema = computed(() => props.pluginInfo?.schema || {})
 
+const visibleSchemaFields = computed(() => {
+  const result: Record<string, any> = {}
+  for (const [key, schema] of Object.entries(currentSchema.value)) {
+    if (key === 'redis_conf' && formData.value.policy !== 'redis') continue
+    result[key] = schema
+  }
+  return result
+})
+
 const isJsonMode = ref(false)
 const jsonConfig = ref('')
 const jsonError = ref('')
 const fullJsonConfig = ref('')
+const jsonEditorValue = ref<any>({})
+const jsonEditorMode = ref<string>('text')
+
+// 同步 jsonEditorValue ↔ jsonConfig
+watch(jsonEditorValue, (newVal) => {
+  try {
+    jsonConfig.value = JSON.stringify(newVal)
+    jsonError.value = ''
+  } catch {
+    // keep old value
+  }
+}, { deep: true })
+
+watch(jsonConfig, (newVal) => {
+  try {
+    const parsed = JSON.parse(newVal || '{}')
+    if (JSON.stringify(parsed) !== JSON.stringify(jsonEditorValue.value)) {
+      jsonEditorValue.value = parsed
+    }
+    jsonError.value = ''
+  } catch {
+    // invalid JSON, don't sync back
+  }
+})
 const formData = ref<Record<string, any>>({})
 
 // Headers 手风琴数据
@@ -339,9 +427,20 @@ const headersData = reactive<{
 const isHeadersField = (schema: any): boolean => {
   if (!schema.properties) return false
   const keys = Object.keys(schema.properties)
-  // response-rewrite: set + add (no remove)
-  // proxy-rewrite: set + add + remove
-  return keys.includes('set') && keys.includes('add')
+  // response-rewrite: headers 只有 set，add 在 add_headers 字段
+  // proxy-rewrite: headers 有 set + add + remove
+  return keys.includes('set') || keys.includes('add') || keys.includes('remove')
+}
+
+// 格式化 JSON
+const formatJson = () => {
+  try {
+    const parsed = JSON.parse(jsonConfig.value)
+    jsonConfig.value = JSON.stringify(parsed, null, 2)
+    jsonError.value = ''
+  } catch {
+    jsonError.value = 'JSON 格式错误，无法格式化'
+  }
 }
 
 // 切换手风琴展开状态
@@ -429,7 +528,28 @@ const deserializeHeaders = (json: Record<string, any>) => {
   }
 }
 
-// 获取字段类型
+// 简单 KV 编辑器（用于无嵌套 properties 的 headers 对象）
+interface KvItem { id: number; key: string; value: string }
+const simpleKvData = ref<KvItem[]>([{ id: 1, key: '', value: '' }])
+
+const addSimpleKvRow = () => {
+  simpleKvData.value.push({ id: Date.now(), key: '', value: '' })
+}
+
+const removeSimpleKvRow = (idx: number) => {
+  if (simpleKvData.value.length > 1) {
+    simpleKvData.value.splice(idx, 1)
+    syncSimpleKv()
+  }
+}
+
+const syncSimpleKv = () => {
+  const obj: Record<string, any> = {}
+  simpleKvData.value.forEach(item => {
+    if (item.key) obj[item.key] = item.value
+  })
+  formData.value.headers = obj
+}
 const getFieldType = (schema: any): string => {
   if (schema.enum) return 'enum'
   if (schema.type) return schema.type
@@ -438,13 +558,32 @@ const getFieldType = (schema: any): string => {
 
 // 格式化示例值显示
 const formatExample = (example: any): string => {
-  if (Array.isArray(example)) {
-    return example.join(', ')
-  }
   if (typeof example === 'object') {
-    return JSON.stringify(example)
+    return JSON.stringify(example, null, 2)
+  }
+  if (Array.isArray(example)) {
+    return JSON.stringify(example, null, 2)
   }
   return String(example)
+}
+
+const isComplexExample = (example: any): boolean => {
+  return typeof example === 'object' || Array.isArray(example)
+}
+
+// 示例展开状态
+const expandedExamples = reactive<Record<string, boolean>>({})
+const exampleEditorModes = reactive<Record<string, string>>({})
+
+const toggleExample = (fieldKey: string) => {
+  expandedExamples[fieldKey] = !expandedExamples[fieldKey]
+}
+
+// 默认展开所有复杂示例
+const ensureExampleExpanded = (fieldKey: string) => {
+  if (expandedExamples[fieldKey] === undefined) {
+    expandedExamples[fieldKey] = true
+  }
 }
 
 // 从 JSON 解析到表单数据
@@ -454,8 +593,22 @@ const parseConfig = (configStr: string) => {
 
     // 处理 headers 特殊字段
     if (config.headers) {
-      deserializeHeaders(config.headers)
-      delete config.headers
+      // 简单 KV（无 set/add/remove 嵌套）
+      const headerSchema = currentSchema.value.headers
+      if (!headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))) {
+        simpleKvData.value = Object.entries(config.headers).map(([key, value], i) => ({
+          id: i + 1, key, value: String(value)
+        }))
+        if (simpleKvData.value.length === 0) {
+          simpleKvData.value = [{ id: 1, key: '', value: '' }]
+        }
+        delete config.headers
+      } else {
+        deserializeHeaders(config.headers)
+        delete config.headers
+      }
+    } else {
+      simpleKvData.value = [{ id: 1, key: '', value: '' }]
     }
 
     formData.value = buildFormDataFromConfig(currentSchema.value, config)
@@ -475,23 +628,40 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
 
     const configValue = config[key]
     const fieldType = getFieldType(fieldSchema as any)
+    const fieldDefault = (fieldSchema as any).default
 
     switch (fieldType) {
       case 'string':
-        data[key] = configValue ?? ''
+        data[key] = configValue ?? fieldDefault ?? ''
         break
       case 'number':
-        data[key] = configValue ?? null
+        data[key] = configValue ?? fieldDefault ?? null
         break
       case 'boolean':
-        data[key] = configValue ?? false
+        data[key] = configValue ?? fieldDefault ?? false
         break
       case 'array':
         if (Array.isArray(configValue)) {
-          data[key] = configValue.join(', ')
+          const itemType = (fieldSchema as any).items?.type || 'string'
+          if (itemType === 'object' || itemType === 'array') {
+            data[key] = JSON.stringify(configValue)
+          } else {
+            data[key] = configValue.join(', ')
+          }
+        } else if (configValue !== undefined) {
+          data[key] = configValue
+        } else if (fieldDefault !== undefined) {
+          if (Array.isArray(fieldDefault)) {
+            data[key] = fieldDefault.join(', ')
+          } else {
+            data[key] = fieldDefault
+          }
         } else {
-          data[key] = configValue ?? ''
+          data[key] = ''
         }
+        break
+      case 'enum':
+        data[key] = configValue ?? fieldDefault ?? ''
         break
       case 'object':
         if (typeof configValue === 'object' && configValue !== null) {
@@ -504,7 +674,7 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
         }
         break
       default:
-        data[key] = configValue ?? ''
+        data[key] = configValue ?? fieldDefault ?? ''
     }
   }
 
@@ -524,6 +694,16 @@ const buildConfigFromForm = (): string => {
 
     if (value === undefined || value === null || value === '') continue
 
+    // 跳过等于默认值的字段
+    const fieldDefault = (fieldSchema as any).default
+    if (fieldDefault !== undefined) {
+      let compareValue = value
+      if (fieldType === 'array' && typeof value === 'string') {
+        try { compareValue = JSON.parse(value) } catch { /* keep as string */ }
+      }
+      if (JSON.stringify(compareValue) === JSON.stringify(fieldDefault)) continue
+    }
+
     switch (fieldType) {
       case 'string':
         config[key] = value
@@ -535,7 +715,11 @@ const buildConfigFromForm = (): string => {
         config[key] = Boolean(value)
         break
       case 'array':
-        config[key] = String(value).split(',').map(s => s.trim()).filter(s => s)
+        try {
+          config[key] = JSON.parse(value)
+        } catch {
+          config[key] = String(value).split(',').map(s => s.trim()).filter(s => s)
+        }
         break
       case 'enum':
         config[key] = value
@@ -546,10 +730,29 @@ const buildConfigFromForm = (): string => {
     }
   }
 
+  // 条件依赖清理：policy 是 local 时不保存 redis_conf
+  if (config.policy === 'local' || (!config.policy && currentSchema.value.policy?.default === 'local')) {
+    delete config.redis_conf
+  }
+
   // 处理 headers 特殊字段
-  const headersResult = serializeHeaders()
-  if (Object.keys(headersResult).length > 0) {
-    config.headers = headersResult
+  const headerSchema = currentSchema.value.headers
+  const isSimpleHeaders = !headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))
+
+  if (isSimpleHeaders) {
+    syncSimpleKv()
+    const headersObj: Record<string, any> = {}
+    simpleKvData.value.forEach(item => {
+      if (item.key) headersObj[item.key] = item.value
+    })
+    if (Object.keys(headersObj).length > 0) {
+      config.headers = headersObj
+    }
+  } else {
+    const headersResult = serializeHeaders()
+    if (Object.keys(headersResult).length > 0) {
+      config.headers = headersResult
+    }
   }
 
   return JSON.stringify(config)
@@ -561,13 +764,19 @@ watch(() => props.open, (newVal) => {
     isJsonMode.value = false
     jsonConfig.value = props.plugin.config || '{}'
     fullJsonConfig.value = props.plugin.config || '{}'
+    try { jsonEditorValue.value = JSON.parse(props.plugin.config || '{}') } catch { jsonEditorValue.value = {} }
     parseConfig(jsonConfig.value)
   }
 })
 
 // 监听 JSON 模式切换
 watch(isJsonMode, (val) => {
-  if (!val && props.plugin) {
+  if (val) {
+    // 切到 JSON 模式：从表单重建 JSON
+    jsonConfig.value = buildConfigFromForm()
+    try { jsonEditorValue.value = JSON.parse(jsonConfig.value) } catch {}
+  } else {
+    // 切到表单模式：从 JSON 重建表单
     parseConfig(jsonConfig.value)
   }
 })
@@ -600,6 +809,10 @@ const handleClose = () => {
 <style scoped>
 .json-editor {
   position: relative;
+}
+
+.json-editor-component {
+  height: 420px;
 }
 
 .json-error {
@@ -647,10 +860,14 @@ const handleClose = () => {
   font-size: 12px;
   color: #1890ff;
   background: #e6f7ff;
-  padding: 2px 8px;
+  padding: 4px 8px;
   border-radius: 4px;
   margin-bottom: 4px;
-  display: inline-block;
+}
+
+.json-example-viewer {
+  margin-top: 6px;
+  height: 260px;
 }
 
 .field-hints {
