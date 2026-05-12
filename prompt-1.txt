@@ -560,3 +560,275 @@ curl -L -X GET 'http://192.168.100.235:11999/edge/admin/plugins/list' -H 'X-API-
 1. 存储在 cors 插件内的配置是  proxy_rewrite  的
 2. 发布后，可以看到发布成功，但是检查 edge节点的路由内容，没有插件的配置部分
 
+=======================================================
+
+建立 git 新分支，完成下面需求
+
+使用 openspc 的命令 
+
+/opsx-new 增强上游配置功能
+
+在集群管理的 
+1. 上游tab 中：
+添加上游界面中，需要修改
+1. 仿照添加路由的界面，下面有一个高级配置，默认是关闭的，打开后,高级配置tab可以用
+2. 读取 docs/edge/upstreams.log  文档，将在基础页面中没有的配置都放到高级配置里
+3. 健康检查就放到高级配置里，默认是选中的
+4. 在基础配置里：负责均衡的一致性哈希的哈希位置加一项，自定义变量, 对应值为 vars_combinations 
+5. 在基础配置里：负责均衡再加2个，这两项放到下拉框的最后,一致性哈希的后面，一般不常用
+延迟最小 ： ewma
+连接最少 ： least_conn
+
+6. 高级配置里的配置项：
+
+checks
+健康检查的参数
+
+retries
+重试次数
+默认启用重试且次数为后端可用的 node 数量。
+如果指定了具体重试次数，它将覆盖默认值。
+0 代表不启用重试机制。
+
+retry_timeout
+限制是否继续重试的时间
+若之前的请求和重试请求花费太多时间就不再继续重试。
+0 代表不启用重试超时机制。
+
+timeout
+超时时间对象
+设置连接、发送消息、接收消息的超时时间，以秒为单位
+
+pass_host
+请求发给上游时的 host 设置选型。 [pass，node，rewrite] 之一，
+默认是pass。
+pass: 将客户端的 host 透传给上游；
+node: 使用 upstream node 中配置的 host；
+rewrite: 使用配置项 upstream_host 的值。
+
+upstream_host
+指定上游请求的 host，只在 pass_host 配置为 rewrite 时有效。
+
+scheme
+跟上游通信时使用的 scheme。'http', 'https'，'tcp', 'udp'
+默认是 'http'。
+
+keepalive_pool
+连接池信息
+
+具体的值和json形式，看文档中的示例
+
+
+你先复述，我看看
+================================================================
+  "checks": {
+    "passive": {},
+    "active": {
+      "unhealthy": {}
+    }
+  }
+=================================================================
+local defaults = {
+  checks = {
+    active = {
+      type = "http",
+      timeout = 1,
+      concurrency = 10,
+      http_path = "/",
+      https_verify_certificate = true,
+      healthy = {
+        interval = 0, -- 0 = disabled by default
+        http_statuses = { 200, 302 },
+        successes = 2,
+      },
+      unhealthy = {
+        interval = 0, -- 0 = disabled by default
+        http_statuses = { 429, 404,
+                          500, 501, 502, 503, 504, 505 },
+        tcp_failures = 2,
+        timeouts = 3,
+        http_failures = 5,
+      },
+      req_headers = {""},
+    },
+    passive = {
+      type = "http",
+      healthy = {
+        http_statuses = {
+          200, 201, 202, 203, 204, 205, 206, 207, 208, 226,
+          300, 301, 302, 303, 304, 305, 306, 307, 308,
+        },
+        successes = 0,
+      },
+      unhealthy = {
+        http_statuses = { 429, 500, 503 },
+        tcp_failures = 0,
+        timeouts = 0,
+        http_failures = 0,
+      },
+    },
+  },
+}
+=================================================================
+继续修改：
+1. 如果没有开启高级设置，也要设置健康检查和读写超时，这两个时默认每个上游服务都有，现在你没有默认设置
+健康检查设置：
+  "checks": {
+    "passive": {},
+    "active": {
+      "unhealthy": {}
+    }
+  }
+
+读写超时设置：
+    "timeout": {
+      "connect": 6,
+      "send": 6,
+      "read": 6
+    },
+======================================================================
+1. 例如：现在 编辑名称为 1 的上游服务
+1. 现在高级配置时打开的，实际上原来时关闭的，就是在关闭的情况下，也要把健康检查和超时的默认值传递，
+而不是强制用户打开高级配置
+2. 现在存盘报错，你编写单元测试，使用 playwright 测试成功后，告诉我手工测试
+======================================================================
+
+建立 git 新分支，完成下面需求
+
+使用 openspc 的命令 
+
+/opsx-new 修复上游和路由的删除功能bug
+
+在集群管理的 
+1. 上游tab 中和路由tab 中，删除时，
+1. 从数据库中删除 2. 还要调 edge_client 的接口，从edge节点中删除，现在edge节点中还有，你看看时什么问题？ 
+我记得之前是可以的
+1. 将 全局插件 的 tab 显示名称， 改为 插件元数据
+
+你先复述，我看看
+
+=========================================================================
+
+1. 边缘节点界面中的tab名称: 插件数据 改为 插件元数据
+2. 编写单元测试，测试通过后，告诉我
+
+
+=========================================================================
+
+建立 git 新分支，完成下面需求
+
+使用 openspc 的命令 
+
+/opsx-new 编写路由插件
+
+1. 插件代码 plugins-BACKUP.py 内部为旧版插件，可以参考它的实现
+2. plugins.py 放置新版插件代码, 有下面这些插件
+   traffic_split ， data_center, log_process, traffic_limit_count, 
+   proxy_rewrite , response_rewrite ,pre_functions ， 有些插件在旧版里也有，可以参考实现
+4. 插件文档在 docs\edge\plugins 目录下
+   插件  --> 插件文档
+
+data_center                   data_center.log
+log_process                   log_process.log
+pre_functions                 pre_functions.pdf
+proxy_rewrite                 proxy_rewrite.log
+traffic_limit_count           traffic_limit_count.log
+traffic_split                 traffic_split.pdf
+
+   插件代码在 docs\edge\code 目录下
+   插件  --> 插件代码
+
+traffic_limit_count                    traffic_limit_count.lua
+traffic_split                  traffic_split.lua
+data_center                  data_center.lua
+log_process                  log_process.lua
+pre_functions                  pre_functions.lua
+proxy_rewrite                  proxy_rewrite.lua
+response_rewrite                  response_rewrite.lua
+
+
+请查看各个插件的文档和代码实现，来编写路由插件的配置页面
+
+请复述后，我批准后再执行
+
+===========================================================
+
+1. 先移除下面的插件，目前没有使用这些插件
+ip-restriction
+IP 黑白名单限制
+cors
+跨域资源共享（CORS）
+limit-req
+请求速率限制（令牌桶算法）
+limit-conn
+并发连接数限制
+limit-count
+时间窗口请求数限制
+key-auth
+API Key 认证
+jwt-auth
+JWT Token 认证
+basic-auth
+
+2. 我列出的
+ traffic_split ， data_center, log_process, traffic_limit_count, 
+   proxy_rewrite , response_rewrite ,pre_functions 
+
+   这些插件没有出现在路由的插件配置中
+
+=====================================
+
+修改
+proxy_rewrite 插件的配置页面：
+method ： 这个是否可以改成下拉框，因为 http 的method 都是固定的几种
+scheme :  这个是否可以改成下拉框，因为 scheme 都是固定的的几种
+
+======================================
+
+traffic_split 的插件文档 docs\edge\plugins\traffic_split.md 
+
+1. 插件的配置示例现在为 ： 示例：[object Object]
+   看不到如何配置，请根据插件文档中的配置示例，来展示插件的配置
+
+你先复述一下，出几个方案，我来选择
+
+======================================
+
+在 proxy_rewrite 中
+regex_uri 的示例变成这样的了，多了个 【】
+[
+  "^/old/(.*)",
+  "/new/$1"
+]
+
+1. 是否还按照原来的字符串显示就行了？ 
+2. 如果json显示，如何解决多了这个 【】 的问题？ 
+
+给出原因和方案，我来选择
+
+================================================
+
+例如 log_process 控件的配置页面中：
+
+1. include_req_body 它的默认值是 false, 用户也没有改成true,那么这种就不用存储了，系统会使用默认值
+   这样配置项也会少，用户更加友好
+
+
+同样的情况包括 traffic_limit_count 的配置，
+
+你都改一下，先弄个方案我看看
+
+==============================================
+
+请检查插件的各个字段的默认值，和配置项的界面显示是否一致，我看现在很多是不一致的
+
+你都改一下，先弄个方案我看看
+
+===================================
+traffic_limit_count 的配置
+
+redis_conf
+object，
+如果policy配置为redis时，需要添加该项配置，具体包含下面属性：
+
+如果是 local, 不要添加此属性

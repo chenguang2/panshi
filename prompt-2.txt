@@ -1,4 +1,7 @@
+1. 同步文档
+2. 执行 /opsx-verify 验证
 1. 执行 /opsx-archive 归档
 2. git commit 
 2. 合并分支到主分支
 3. 删除已经在主分支中的分支
+4. git push
