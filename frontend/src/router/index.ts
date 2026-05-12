@@ -30,6 +30,11 @@ const routes: RouteRecordRaw[] = [
         path: 'edge-client',
         name: 'EdgeClient',
         component: () => import('@/views/EdgeClient.vue')
+      },
+      {
+        path: 'tools',
+        name: 'Tools',
+        component: () => import('@/views/Tools.vue')
       }
     ]
   }

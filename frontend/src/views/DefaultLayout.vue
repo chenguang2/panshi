@@ -26,6 +26,10 @@
           <SettingOutlined />
           <span>边缘节点</span>
         </a-menu-item>
+        <a-menu-item key="tools" @click="router.push('/tools')">
+          <ToolOutlined />
+          <span>工具箱</span>
+        </a-menu-item>
       </a-menu>
       <div class="header-right">
         <a-dropdown>
@@ -56,7 +60,8 @@ import {
   DashboardOutlined,
   UserOutlined,
   CloudOutlined,
-  SettingOutlined
+  SettingOutlined,
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
