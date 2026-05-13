@@ -56,14 +56,15 @@
 
       <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px;">
         <a-tab-pane key="upstreams" tab="上游">
-          <div class="table-actions">
+          <div class="table-toolbar">
             <a-button type="primary" @click="showUpstreamModal('create')">
               <PlusOutlined /> 添加上游
             </a-button>
+            <a-input-search v-model:value="upstreamSearch" placeholder="搜索上游..." style="width: 240px;" allow-clear />
           </div>
           <a-table
             :columns="upstreamColumns"
-            :data-source="upstreams"
+            :data-source="upstreamSearch ? upstreams.filter(u => (u.value?.name || '').includes(upstreamSearch) || (u.value?.id || '').includes(upstreamSearch)) : upstreams"
             :loading="loading"
             :pagination="false"
             rowKey="key"
@@ -96,14 +97,15 @@
         </a-tab-pane>
 
         <a-tab-pane key="routes" tab="路由">
-          <div class="table-actions">
+          <div class="table-toolbar">
             <a-button type="primary" @click="showRouteModal('create')">
               <PlusOutlined /> 添加路由
             </a-button>
+            <a-input-search v-model:value="routeSearch" placeholder="搜索路由..." style="width: 240px;" allow-clear />
           </div>
           <a-table
             :columns="routeColumns"
-            :data-source="routes"
+            :data-source="routeSearch ? routes.filter(r => (r.value?.name || '').includes(routeSearch) || (r.value?.uri || '').includes(routeSearch)) : routes"
             :loading="loading"
             :pagination="false"
             rowKey="key"
@@ -136,14 +138,15 @@
         </a-tab-pane>
 
         <a-tab-pane key="globalRules" tab="全局规则">
-          <div class="table-actions">
+          <div class="table-toolbar">
             <a-button type="primary" @click="showGlobalRuleModal('create')">
               <PlusOutlined /> 添加规则
             </a-button>
+            <a-input-search v-model:value="globalRuleSearch" placeholder="搜索规则..." style="width: 240px;" allow-clear />
           </div>
           <a-table
             :columns="globalRuleColumns"
-            :data-source="globalRules"
+            :data-source="globalRuleSearch ? globalRules.filter(r => (r.value?.desc || '').includes(globalRuleSearch) || (r.value?.id || '').includes(globalRuleSearch)) : globalRules"
             :loading="loading"
             :pagination="false"
             rowKey="key"
@@ -171,14 +174,15 @@
         </a-tab-pane>
 
         <a-tab-pane key="pluginConfigs" tab="插件组">
-          <div class="table-actions">
+          <div class="table-toolbar">
             <a-button type="primary" @click="showPluginConfigModal('create')">
               <PlusOutlined /> 添加插件组
             </a-button>
+            <a-input-search v-model:value="pluginConfigSearch" placeholder="搜索插件组..." style="width: 240px;" allow-clear />
           </div>
           <a-table
             :columns="pluginConfigColumns"
-            :data-source="pluginConfigs"
+            :data-source="pluginConfigSearch ? pluginConfigs.filter(p => (p.value?.desc || '').includes(pluginConfigSearch) || (p.value?.id || '').includes(pluginConfigSearch)) : pluginConfigs"
             :loading="loading"
             :pagination="false"
             rowKey="key"
@@ -214,17 +218,18 @@
         </a-tab-pane>
 
         <a-tab-pane key="pluginMetadata" tab="插件元数据">
-          <div class="table-actions">
+          <div class="table-toolbar">
             <a-button type="primary" @click="showPluginMetadataModal('create')">
-              <PlusOutlined /> 添加插件数据
+              <PlusOutlined />               添加插件元数据
             </a-button>
             <a-button @click="reloadPlugins" :loading="reloadingPlugins">
               <ReloadOutlined /> 重新加载
             </a-button>
+            <a-input-search v-model:value="pluginMetadataSearch" placeholder="搜索..." style="width: 200px;" allow-clear />
           </div>
           <a-table
             :columns="pluginMetadataColumns"
-            :data-source="pluginMetadataList"
+            :data-source="pluginMetadataSearch ? pluginMetadataList.filter(m => (m.key || '').includes(pluginMetadataSearch)) : pluginMetadataList"
             :loading="loading"
             :pagination="false"
             rowKey="key"
@@ -436,6 +441,12 @@ const pluginMetadataList = ref<any[]>([])
 const pluginList = ref<any[]>([])
 const reloadingPlugins = ref(false)
 
+const upstreamSearch = ref('')
+const routeSearch = ref('')
+const globalRuleSearch = ref('')
+const pluginConfigSearch = ref('')
+const pluginMetadataSearch = ref('')
+
 const upstreamModalVisible = ref(false)
 const upstreamModalMode = ref<'create' | 'edit'>('create')
 const upstreamForm = reactive({
@@ -460,17 +471,17 @@ const jsonModalVisible = ref(false)
 const jsonContent = ref('')
 
 const upstreamColumns = [
-  { title: 'ID', key: 'id', width: 200 },
-  { title: '名称', key: 'name', width: 150 },
-  { title: '类型', key: 'type', width: 100 },
-  { title: '节点数', key: 'nodes', width: 100 },
+  { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
+  { title: '名称', key: 'name', width: 150, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
+  { title: '类型', key: 'type', width: 100, sorter: (a: any, b: any) => (a.value?.type || '').localeCompare(b.value?.type || '') },
+  { title: '节点数', key: 'nodes', width: 100, sorter: (a: any, b: any) => (getNodeCount(a.value?.nodes) - getNodeCount(b.value?.nodes)) },
   { title: '操作', key: 'actions', width: 150 }
 ]
 
 const routeColumns = [
-  { title: 'ID', key: 'id', width: 200 },
-  { title: '名称', key: 'name', width: 120 },
-  { title: 'URI', key: 'uri', width: 150 },
+  { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
+  { title: '名称', key: 'name', width: 120, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
+  { title: 'URI', key: 'uri', width: 150, sorter: (a: any, b: any) => (a.value?.uri || '').localeCompare(b.value?.uri || '') },
   { title: '方法', key: 'methods', width: 180 },
   { title: '上游', key: 'upstream', width: 150 },
   { title: '操作', key: 'actions', width: 150 }
@@ -482,7 +493,7 @@ const pluginColumns = [
 ]
 
 const pluginMetadataColumns = [
-  { title: '插件名称', key: 'name', width: 200 },
+  { title: '插件名称', key: 'name', width: 200, sorter: (a: any, b: any) => ((a.key?.split('/').pop() || '') + '').localeCompare((b.key?.split('/').pop() || '') + '') },
   { title: '配置', key: 'config' },
   { title: '操作', key: 'actions', width: 200 }
 ]
@@ -493,16 +504,16 @@ const pluginListColumns = [
 ]
 
 const globalRuleColumns = [
-  { title: 'ID', key: 'id', width: 120 },
-  { title: '描述', key: 'desc', width: 150 },
-  { title: '插件数', key: 'plugins', width: 100 },
+  { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
+  { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
+  { title: '插件数', key: 'plugins', width: 100, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
   { title: '操作', key: 'actions', width: 200 }
 ]
 
 const pluginConfigColumns = [
-  { title: 'ID', key: 'id', width: 120 },
-  { title: '描述', key: 'desc', width: 150 },
-  { title: '插件数', key: 'plugins', width: 80 },
+  { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
+  { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
+  { title: '插件数', key: 'plugins', width: 80, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
   { title: 'Labels', key: 'labels', width: 80 },
   { title: 'Hosts', key: 'hosts', width: 80 },
   { title: '操作', key: 'actions', width: 200 }
@@ -1203,7 +1214,10 @@ watch(selectedNode, async (newNode) => {
   margin-bottom: 16px;
 }
 
-.table-actions {
-  margin-bottom: 16px;
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 </style>
