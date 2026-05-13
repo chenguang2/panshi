@@ -99,7 +99,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -209,6 +209,8 @@ const loadHistory = async () => {
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history`
       : props.resourceType === 'plugin_config'
       ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history`
+      : props.resourceType === 'global_rule'
+      ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`
     const res = await api.get(endpoint)
     versions.value = res.data.items || []
@@ -438,6 +440,8 @@ const handleRepublish = async () => {
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
       : props.resourceType === 'plugin_config'
       ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${selectedVersion.value}`
+      : props.resourceType === 'global_rule'
+      ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success('已切换并发布到版本 v' + selectedVersion.value)
@@ -465,6 +469,8 @@ const handleRepublishSelected = async () => {
         ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${targetVersion}`
         : props.resourceType === 'plugin_config'
         ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${targetVersion}`
+        : props.resourceType === 'global_rule'
+        ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${targetVersion}`
         : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${targetVersion}`
       await api.post(endpoint)
       message.success('已切换到版本 v' + targetVersion)
@@ -490,6 +496,8 @@ const handleDelete = async () => {
         ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
         : props.resourceType === 'plugin_config'
         ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history/${selectedVersionData.value.id}`
+        : props.resourceType === 'global_rule'
+        ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history/${selectedVersionData.value.id}`
         : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
       await api.delete(endpoint)
     }

@@ -285,3 +285,44 @@ class PluginConfigResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GlobalRuleCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    plugins: Optional[Dict[str, Any]] = None
+
+
+class GlobalRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    plugins: Optional[Dict[str, Any]] = None
+
+
+class GlobalRuleResponse(BaseModel):
+    id: int
+    edge_uuid: str
+    cluster_id: int
+    name: str
+    description: Optional[str] = None
+    plugins: Optional[Dict[str, Any]] = None
+    current_version: Optional[int] = None
+    created_at: Optional[str] = None
+
+    @field_validator('created_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
+
+    @field_validator('plugins', mode='before')
+    @classmethod
+    def convert_plugins(cls, v):
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
+
+    class Config:
+        from_attributes = True

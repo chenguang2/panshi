@@ -6,13 +6,14 @@ import json
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema,
     NodeCreate, NodeUpdate, NodeResponse, NodeListResponse, ConfigVersionResponse, ConfigVersionListResponse,
-    PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse
+    PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse,
+    GlobalRuleCreate, GlobalRuleUpdate, GlobalRuleResponse
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -547,6 +548,176 @@ async def delete_plugin_config_history(cluster_id: int, config_id: int, history_
         ConfigVersion.id == history_id,
         ConfigVersion.resource_type == "plugin_config",
         ConfigVersion.resource_id == config_id))
+    cv = result.scalar_one_or_none()
+    if not cv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+    await db.delete(cv)
+    await db.commit()
+    return {"message": "历史版本已删除"}
+
+
+# ─── GlobalRule CRUD ────────────────────────────────
+
+
+@router.get("/{cluster_id}/global_rules", response_model=dict)
+async def list_global_rules(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id).order_by(GlobalRule.id))
+    rules = result.scalars().all()
+    response = [GlobalRuleResponse.model_validate(r) for r in rules]
+    return {"total": len(response), "items": response}
+
+
+@router.post("/{cluster_id}/global_rules", response_model=GlobalRuleResponse)
+async def create_global_rule(cluster_id: int, data: GlobalRuleCreate, db: AsyncSession = Depends(get_db)):
+    rule_data = data.model_dump()
+    if rule_data.get("plugins") is not None:
+        rule_data["plugins"] = json.dumps(rule_data["plugins"])
+    db_rule = GlobalRule(cluster_id=cluster_id, **rule_data)
+    db.add(db_rule)
+    await db.commit()
+    await db.refresh(db_rule)
+    return GlobalRuleResponse.model_validate(db_rule)
+
+
+@router.get("/{cluster_id}/global_rules/{rule_id}", response_model=GlobalRuleResponse)
+async def get_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    return GlobalRuleResponse.model_validate(rule)
+
+
+@router.put("/{cluster_id}/global_rules/{rule_id}", response_model=GlobalRuleResponse)
+async def update_global_rule(cluster_id: int, rule_id: int, data: GlobalRuleUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if key == "plugins" and value is not None:
+            value = json.dumps(value)
+        setattr(rule, key, value)
+    await db.commit()
+    await db.refresh(rule)
+    return GlobalRuleResponse.model_validate(rule)
+
+
+@router.delete("/{cluster_id}/global_rules/{rule_id}")
+async def delete_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+    await db.delete(rule)
+    await db.commit()
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                response = client.delete_global_rule(rule.edge_uuid)
+                node_result["status"] = "success"
+                node_result["response"] = response
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+    return {"message": "全局规则已删除", "results": results}
+
+
+@router.post("/{cluster_id}/global_rules/{rule_id}/publish")
+async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule_plugins = json.loads(rule.plugins) if rule.plugins else None
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == "global_rule",
+            ConfigVersion.resource_id == rule_id))
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
+    event_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
+    config_version = ConfigVersion(
+        cluster_id=cluster_id, resource_type="global_rule", resource_id=rule_id,
+        version=new_version, config=json.dumps(event_data))
+    db.add(config_version)
+    rule.current_version = new_version
+    await db.commit()
+    edge_data = {"desc": rule.name, "plugins": rule_plugins or {}}
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+    if not active_nodes:
+        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "results": []}
+    results, success_count, fail_count = [], 0, 0
+    for node in active_nodes:
+        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+        try:
+            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            response = client.create_global_rule(rule.edge_uuid, edge_data)
+            node_result["status"] = "success"
+            node_result["response"] = response
+            success_count += 1
+        except (EdgeConnectionError, EdgeAPIError) as e:
+            node_result["status"] = "failed"
+            node_result["error"] = str(e)
+            fail_count += 1
+        results.append(node_result)
+    if success_count == len(active_nodes):
+        return {"status": "ok", "message": f"全局规则发布成功，已同步到 {success_count} 个节点", "results": results}
+    elif success_count > 0:
+        return {"status": "partial", "message": f"全局规则发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "results": results}
+    else:
+        return {"status": "error", "message": "全局规则发布失败：无法连接到任何 edge 服务器", "results": results}
+
+
+@router.get("/{cluster_id}/global_rules/{rule_id}/history", response_model=ConfigVersionListResponse)
+async def get_global_rule_history(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+    query = select(ConfigVersion).where(
+        ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id
+    ).order_by(ConfigVersion.version.desc())
+    result = await db.execute(query)
+    versions = result.scalars().all()
+    gr = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = gr.scalar_one_or_none()
+    return ConfigVersionListResponse(total=len(versions), items=versions, current_version=rule.current_version if rule else None)
+
+
+@router.post("/{cluster_id}/global_rules/{rule_id}/rollback/{version}")
+async def rollback_global_rule(cluster_id: int, rule_id: int, version: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    cv_result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id, ConfigVersion.version == version))
+    cv = cv_result.scalar_one_or_none()
+    if not cv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    config_data = json.loads(cv.config)
+    rule.name = config_data.get("name", rule.name)
+    rule.description = config_data.get("description")
+    if config_data.get("plugins") is not None:
+        rule.plugins = json.dumps(config_data["plugins"])
+    else:
+        rule.plugins = None
+    rule.current_version = version
+    await db.commit()
+    return {"status": "ok", "message": f"全局规则已切换到版本 v{version}", "version": version}
+
+
+@router.delete("/{cluster_id}/global_rules/{rule_id}/history/{history_id}")
+async def delete_global_rule_history(cluster_id: int, rule_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.id == history_id, ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id))
     cv = result.scalar_one_or_none()
     if not cv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")

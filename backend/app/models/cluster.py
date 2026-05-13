@@ -154,3 +154,17 @@ class PluginConfig(Base):
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class GlobalRule(Base):
+    __tablename__ = "ps_global_rule"
+
+    id = Column(Integer, primary_key=True, index=True)
+    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    plugins = Column(Text, nullable=True)
+    current_version = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

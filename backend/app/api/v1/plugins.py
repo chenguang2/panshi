@@ -376,6 +376,48 @@ BUILTIN_PLUGINS = [
                 "hints": "在 log 阶段执行的自定义 Lua 方法列表"
             }
         }
+    },
+    {
+        "name": "traceid",
+        "description": "TraceID 追踪（在请求头中注入唯一追踪 ID）",
+        "enable_metadata": False,
+        "schema": {
+            "header_name": {
+                "type": "string",
+                "default": "X-EDGE-TraceID",
+                "description": "TraceID 写入 Header 中的字段名",
+                "examples": ["X-EDGE-TraceID", "X-Request-ID"],
+                "hints": "traceid 写入 header 中的字段名，默认 X-EDGE-TraceID"
+            },
+            "ignore_header": {
+                "type": "boolean",
+                "default": False,
+                "description": "如果请求头中已有 TraceID 是否覆盖",
+                "examples": [False, True],
+                "hints": "设为 true 时不覆盖已有值，默认 false"
+            },
+            "show_resp_header": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否将 TraceID 写入响应头",
+                "examples": [False, True],
+                "hints": "设为 true 时在响应头中显示 traceid，默认 false"
+            }
+        }
+    },
+    {
+        "name": "monitor",
+        "description": "监控统计（收集请求指标数据）",
+        "enable_metadata": False,
+        "schema": {
+            "prefer_name": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否使用路由名称标识路由",
+                "examples": [False, True],
+                "hints": "设为 true 时使用路由名称而非 ID 标识，默认 false"
+            }
+        }
     }
 ]
 

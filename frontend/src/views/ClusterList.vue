@@ -36,8 +36,9 @@
             <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
-            <a-tab-pane key="pluginConfigs" tab="插件组"></a-tab-pane>
             <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
+            <a-tab-pane key="pluginConfigs" tab="插件组"></a-tab-pane>
+            <a-tab-pane key="globalRules" tab="全局规则"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
@@ -263,6 +264,42 @@
               </div>
               <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
                 暂无插件组，点击"添加插件组"创建
+              </div>
+            </div>
+          </div>
+          <div v-else-if="cluster.activeTab === 'globalRules'" class="tab-content">
+            <div class="node-actions">
+              <a-button size="small" type="primary" @click="showAddGlobalRule(cluster)">添加全局规则</a-button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+              <div
+                v-for="gr in cluster.global_rules"
+                :key="gr.id"
+                class="plugin-config-card"
+                :class="{ selected: cluster.selectedGlobalRule?.id === gr.id }"
+                @click="cluster.selectedGlobalRule = gr"
+                style="width: 320px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
+              >
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <strong style="font-size: 14px;">{{ gr.name }}</strong>
+                  <span :style="{ color: gr.current_version ? '#52c41a' : '#999', fontSize: '12px' }">
+                    {{ gr.current_version ? `v${gr.current_version} ✅ 已发布` : '⏳ 未发布' }}
+                  </span>
+                </div>
+                <div v-if="gr.description" style="font-size: 12px; color: #666; margin-bottom: 12px;">{{ gr.description }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                  <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="blue" style="cursor: pointer;" @click.stop="viewGlobalRulePluginConfig(gr, pname, cfg)">{{ pname }}</a-tag>
+                  <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                  <a-button size="small" @click.stop="editGlobalRule(cluster, gr)">编辑</a-button>
+                  <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger>删除</a-button>
+                  <a-button size="small" @click.stop="publishGlobalRule(cluster, gr)">发布</a-button>
+                  <a-button size="small" @click.stop="openGlobalRuleVersionManagement(cluster, gr)">版本管理</a-button>
+                </div>
+              </div>
+              <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
+                暂无全局规则，点击"添加全局规则"创建
               </div>
             </div>
           </div>
@@ -677,6 +714,24 @@
       </a-tabs>
     </a-modal>
 
+    <a-modal v-model:open="globalRuleModalVisible" :title="globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则'" width="800px" @ok="handleGlobalRuleSubmit" :ok-text="globalRuleFormMode === 'add' ? '创建' : '保存'">
+      <a-tabs v-model:activeKey="globalRuleActiveTab">
+        <a-tab-pane key="basic" tab="基础配置">
+          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
+              <a-input v-model:value="globalRuleFormData.name" placeholder="请输入名称" />
+            </a-form-item>
+            <a-form-item label="描述" name="description">
+              <a-textarea v-model:value="globalRuleFormData.description" :rows="2" placeholder="可选描述" />
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+        <a-tab-pane key="plugins" tab="插件配置">
+          <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
+        </a-tab-pane>
+      </a-tabs>
+    </a-modal>
+
     <VersionManagementModal
       v-model:open="versionModalVisible"
       :resource-type="versionModalType"
@@ -723,7 +778,7 @@ const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const nameError = ref('')
 const versionModalVisible = ref(false)
-const versionModalType = ref<'upstream' | 'route' | 'plugin_config'>('upstream')
+const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
 const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
@@ -735,6 +790,13 @@ const pluginConfigActiveTab = ref('basic')
 const pluginConfigFormMode = ref<'add' | 'edit'>('add')
 const pluginConfigEditingClusterId = ref<number | null>(null)
 const pluginConfigEditingId = ref<number | null>(null)
+
+const globalRuleModalVisible = ref(false)
+const globalRuleActiveTab = ref('basic')
+const globalRuleFormMode = ref<'add' | 'edit'>('add')
+const globalRuleEditingClusterId = ref<number | null>(null)
+const globalRuleEditingId = ref<number | null>(null)
+const globalRuleFormData = reactive({ name: '', description: '', selectedPlugins: [] as any[] })
 const pluginConfigFormData = reactive({
   name: '',
   description: '',
@@ -1037,7 +1099,9 @@ const loadClusters = async () => {
       selectedUpstream: null,
       selectedRoute: null,
       plugin_configs: [],
-      selectedPluginConfig: null
+      selectedPluginConfig: null,
+      global_rules: [],
+      selectedGlobalRule: null
     }))
     pagination.total = res.data.total
     for (const cluster of clusters.value) {
@@ -1205,6 +1269,8 @@ const handleTabClick = async (cluster: Cluster, key: string) => {
     await loadNodes(cluster)
   } else if (key === 'pluginConfigs') {
     await loadPluginConfigs(cluster)
+  } else if (key === 'globalRules') {
+    await loadGlobalRules(cluster)
   }
 }
 
@@ -2283,6 +2349,8 @@ const versionModalOnPublished = async () => {
     await loadUpstreams(cluster)
   } else if (versionModalType.value === 'plugin_config') {
     await loadPluginConfigs(cluster)
+  } else if (versionModalType.value === 'global_rule') {
+    await loadGlobalRules(cluster)
   }
 }
 
@@ -2834,6 +2902,146 @@ const publishPluginConfig = async (cluster: Cluster, pc?: any) => {
     }
   })
 }
+
+
+const loadGlobalRules = async (cluster: Cluster) => {
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/global_rules`)
+    cluster.global_rules = res.data.items || []
+  } catch {
+    cluster.global_rules = []
+  }
+}
+
+const showAddGlobalRule = async (cluster: Cluster) => {
+  if (availablePlugins.value.length === 0) await loadAvailablePlugins()
+  globalRuleFormMode.value = 'add'
+  globalRuleEditingClusterId.value = cluster.id
+  globalRuleEditingId.value = null
+  globalRuleFormData.name = ''
+  globalRuleFormData.description = ''
+  globalRuleFormData.selectedPlugins = []
+  globalRuleActiveTab.value = 'basic'
+  globalRuleModalVisible.value = true
+}
+
+const editGlobalRule = async (cluster: Cluster, gr: any) => {
+  if (availablePlugins.value.length === 0) await loadAvailablePlugins()
+  globalRuleFormMode.value = 'edit'
+  globalRuleEditingClusterId.value = cluster.id
+  globalRuleEditingId.value = gr.id
+  globalRuleFormData.name = gr.name || ''
+  globalRuleFormData.description = gr.description || ''
+  globalRuleFormData.selectedPlugins = Object.entries(gr.plugins || {}).map(([plugin_name, config]: [string, any]) => ({
+    plugin_name, config: JSON.stringify(config)
+  }))
+  globalRuleActiveTab.value = 'basic'
+  globalRuleModalVisible.value = true
+}
+
+const handleGlobalRuleSubmit = async () => {
+  if (!globalRuleEditingClusterId.value) return
+  if (!globalRuleFormData.name) { message.warning('请输入名称'); return }
+  const plugins: Record<string, any> = {}
+  for (const sp of globalRuleFormData.selectedPlugins) {
+    if (sp.config) { try { plugins[sp.plugin_name] = JSON.parse(sp.config) } catch { plugins[sp.plugin_name] = sp.config } }
+    else { plugins[sp.plugin_name] = {} }
+  }
+  try {
+    const payload = { name: globalRuleFormData.name, description: globalRuleFormData.description, plugins }
+    if (globalRuleEditingId.value) {
+      await api.put(`/clusters/${globalRuleEditingClusterId.value}/global_rules/${globalRuleEditingId.value}`, payload)
+      message.success('全局规则已更新')
+    } else {
+      await api.post(`/clusters/${globalRuleEditingClusterId.value}/global_rules`, payload)
+      message.success('全局规则已添加')
+    }
+    globalRuleModalVisible.value = false
+    const c = clusters.value.find(c => c.id === globalRuleEditingClusterId.value)
+    if (c) await loadGlobalRules(c)
+  } catch (error: any) {
+    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+  }
+}
+
+const deleteGlobalRule = (cluster: Cluster, gr: any) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除全局规则"${gr.name}"吗？将同时删除数据库记录及 Edge 节点上的对应数据，此操作不可撤销。`,
+    okText: '确认删除', okType: 'danger', cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
+      const progress = { percent: 0, status: 'active' as const }
+      const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
+      const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      addLog(`开始删除: ${gr.name}`); progress.percent = 20; update()
+      await new Promise(r => setTimeout(r, 400))
+      try {
+        addLog('正在从数据库删除...'); progress.percent = 40; update()
+        const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`); const data = res.data
+        progress.percent = 60; addLog(`数据库: ${data.message}`); addLog('')
+        if (data.results && data.results.length > 0) {
+          addLog('Edge 节点同步删除结果:');
+          let ok = 0, fail = 0
+          for (const r of data.results) { r.status === 'success' ? ok++ : fail++; addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`) }
+          addLog(`总计: ${data.results.length} 节点, 成功 ${ok}, 失败 ${fail}`)
+        } else { addLog('集群中没有活跃的 Edge 节点') }
+        progress.percent = 100
+        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) { progress.status = 'success'; addLog('✅ 删除完成!') }
+        else if (data.results && data.results.some((r: any) => r.status === 'failed')) { progress.status = 'exception'; addLog('⚠️ 部分节点删除失败') }
+        else { addLog('✅ 数据库已删除') }
+        update()
+      } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 删除失败: ${e.response?.data?.detail || e.message}`); update() }
+      modal.update({ okButtonProps: { disabled: false } })
+      await loadGlobalRules(cluster)
+    }
+  })
+}
+
+const publishGlobalRule = async (cluster: Cluster, gr: any) => {
+  Modal.confirm({
+    title: '确认发布', content: `确定要发布全局规则"${gr.name}"到所有活跃 Edge 节点吗？`,
+    okText: '确认发布', cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
+      const progress = { percent: 0, status: 'active' as const }
+      const modal = Modal.info({ title: `发布全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
+      const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      addLog(`开始发布: ${gr.name}`); progress.percent = 10; update()
+      await new Promise(r => setTimeout(r, 400))
+      try {
+        addLog('正在构建发布配置...'); progress.percent = 30; update()
+        const res = await api.post(`/clusters/${cluster.id}/global_rules/${gr.id}/publish`); const data = res.data
+        progress.percent = 70; addLog(`状态: ${data.status}`); addLog(`消息: ${data.message}`)
+        if (data.results) { addLog(''); addLog('节点同步结果:'); for (const r of data.results) { addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`) } }
+        progress.percent = 100
+        if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
+        else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
+        else { progress.status = 'exception'; addLog('❌ 发布失败') }
+        update(); modal.update({ okButtonProps: { disabled: false } })
+      } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 发布失败: ${e.response?.data?.detail || e.message}`); update(); modal.update({ okButtonProps: { disabled: false } }) }
+      await loadGlobalRules(cluster)
+    }
+  })
+}
+
+const openGlobalRuleVersionManagement = (cluster: Cluster, gr: any) => {
+  versionModalType.value = 'global_rule'
+  versionModalResourceId.value = gr.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = gr.name
+  versionModalEdgeUuid.value = gr.edge_uuid || ''
+  versionModalVisible.value = true
+}
+
+const viewGlobalRulePluginConfig = (gr: any, pname: string, pcfg: any) => {
+  Modal.info({
+    title: `${gr.name} - ${pname}`,
+    content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;' }, typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)),
+    okText: '关闭', width: 560
+  })
+}
+
 
 const openPluginConfigVersionManagement = (cluster: Cluster, pc?: any) => {
   const target = pc || cluster.selectedPluginConfig
