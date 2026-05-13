@@ -1,69 +1,59 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List, Optional
+from typing import Optional, Dict, Any
 import json
 
 from app.core.database import get_db
-from app.models.cluster import ClusterPluginMetadata, PluginMetadataVersion
+from app.models.cluster import PluginMetadata, ConfigVersion, Node
 from app.models.system import AuditLog
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
 
 
+# ─── 列表 ────────────────────────────────────────────
 @router.get("")
-async def list_plugin_metadata(
-    cluster_id: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """获取该集群所有已配置的插件 metadata"""
+async def list_plugin_metadata(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(ClusterPluginMetadata).where(ClusterPluginMetadata.cluster_id == cluster_id)
+        select(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id).order_by(PluginMetadata.id)
     )
     items = result.scalars().all()
-
     return {
         "total": len(items),
-        "items": [
-            {
-                "id": item.id,
-                "cluster_id": item.cluster_id,
-                "plugin_name": item.plugin_name,
-                "metadata": json.loads(item.config_data) if item.config_data else {},
-                "version": item.version,
-                "is_published": bool(item.is_published),
-                "created_at": item.created_at.isoformat() if item.created_at else None,
-                "updated_at": item.updated_at.isoformat() if item.updated_at else None
-            }
-            for item in items
-        ]
+        "items": [{
+            "id": item.id,
+            "cluster_id": item.cluster_id,
+            "plugin_name": item.plugin_name,
+            "metadata": json.loads(item.config_data) if item.config_data else {},
+            "current_version": item.current_version,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None
+        } for item in items]
     }
 
 
+# ─── 创建 ────────────────────────────────────────────
 @router.post("")
 async def create_plugin_metadata(
     cluster_id: int,
-    plugin_name: str = Query(..., description="插件名称"),
+    plugin_name: str,
+    config_data: Optional[Dict[str, Any]] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """添加插件的 metadata 配置（初始为空对象）"""
-    # 检查是否已存在
     existing = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该插件已配置")
 
-    # 创建新记录
-    db_item = ClusterPluginMetadata(
+    db_item = PluginMetadata(
         cluster_id=cluster_id,
         plugin_name=plugin_name,
-        config_data="{}",
-        version=1,
-        is_published=0
+        config_data=json.dumps(config_data or {}),
+        current_version=None
     )
     db.add(db_item)
     await db.commit()
@@ -73,173 +63,227 @@ async def create_plugin_metadata(
         "id": db_item.id,
         "cluster_id": db_item.cluster_id,
         "plugin_name": db_item.plugin_name,
-        "metadata": {},
-        "version": db_item.version,
-        "is_published": bool(db_item.is_published)
+        "metadata": json.loads(db_item.config_data),
+        "current_version": db_item.current_version
     }
 
 
+# ─── 获取 ────────────────────────────────────────────
+@router.get("/{plugin_name}")
+async def get_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
+        )
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    return {
+        "id": item.id,
+        "cluster_id": item.cluster_id,
+        "plugin_name": item.plugin_name,
+        "metadata": json.loads(item.config_data) if item.config_data else {},
+        "current_version": item.current_version,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None
+    }
+
+
+# ─── 更新 ────────────────────────────────────────────
 @router.put("/{plugin_name}")
 async def update_plugin_metadata(
     cluster_id: int,
     plugin_name: str,
-    metadata: dict,
+    metadata: Dict[str, Any],
     db: AsyncSession = Depends(get_db)
 ):
-    """更新插件的 metadata（不产生版本记录）"""
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    # 更新配置，但不增加版本号（版本只在发布时增加）
-    db_item.config_data = json.dumps(metadata)
-    db_item.is_published = 0  # 标记为未发布
-
+    item.config_data = json.dumps(metadata)
     await db.commit()
-    await db.refresh(db_item)
+    await db.refresh(item)
 
     return {
-        "id": db_item.id,
-        "cluster_id": db_item.cluster_id,
-        "plugin_name": db_item.plugin_name,
+        "id": item.id,
+        "cluster_id": item.cluster_id,
+        "plugin_name": item.plugin_name,
         "metadata": metadata,
-        "version": db_item.version,
-        "is_published": bool(db_item.is_published)
+        "current_version": item.current_version
     }
 
 
+# ─── 删除（级联 ConfigVersion） ─────────────────────
 @router.delete("/{plugin_name}")
-async def reset_plugin_metadata(
-    cluster_id: int,
-    plugin_name: str,
-    db: AsyncSession = Depends(get_db)
-):
-    """重置插件的 metadata 为默认（删除配置）"""
+async def delete_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    new_version = db_item.version + 1
-
-    # 记录版本历史
-    version_record = PluginMetadataVersion(
-        cluster_plugin_metadata_id=db_item.id,
-        config_data="{}",
-        version=new_version,
-        action="reset"
+    # 级联删 ConfigVersion
+    await db.execute(
+        ConfigVersion.__table__.delete().where(
+            ConfigVersion.resource_type == "plugin_metadata",
+            ConfigVersion.resource_id == item.id
+        )
     )
-    db.add(version_record)
 
-    # 重置配置
-    db_item.config_data = "{}"
-    db_item.version = new_version
-    db_item.is_published = 0
+    # 尝试从 Edge 节点删除
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
 
+    await db.delete(item)
     await db.commit()
 
-    return {"message": f"插件 {plugin_name} 已重置为默认"}
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                response = client.delete_plugin_metadata(plugin_name)
+                node_result["status"] = "success"
+                node_result["response"] = response
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+
+    return {"message": "插件配置已删除", "results": results}
 
 
+# ─── 发布 ────────────────────────────────────────────
 @router.post("/{plugin_name}/publish")
 async def publish_plugin_metadata(
     cluster_id: int,
     plugin_name: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """发布插件 metadata 到 APISIX"""
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    # 获取已有版本记录，计算新版本号
-    versions_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id
-        ).order_by(PluginMetadataVersion.version.desc())
+    plugin_config = json.loads(item.config_data) if item.config_data else {}
+
+    # 版本递增 + ConfigVersion
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == "plugin_metadata",
+            ConfigVersion.resource_id == item.id
+        )
     )
-    existing_versions = versions_result.scalars().all()
-    max_version = existing_versions[0].version if existing_versions else 0
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
 
-    if not existing_versions:
-        new_version = 1
-    else:
-        new_version = max_version + 1
-
-    version_record = PluginMetadataVersion(
-        cluster_plugin_metadata_id=db_item.id,
-        config_data=db_item.config_data,
+    cv = ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type="plugin_metadata",
+        resource_id=item.id,
         version=new_version,
-        action="publish"
+        config=item.config_data
     )
-    db.add(version_record)
-
-    db_item.version = new_version
-    db_item.is_published = 1
+    db.add(cv)
+    item.current_version = new_version
     await db.commit()
-    await db.refresh(db_item)
 
-    return {"message": f"插件 {plugin_name} 已发布", "version": new_version}
+    edge_data = plugin_config
+
+    # 推送到活跃 Edge 节点
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+
+    if not active_nodes:
+        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
+
+    results = []
+    success_count = 0
+    fail_count = 0
+
+    for node in active_nodes:
+        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+        try:
+            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            response = client.create_plugin_metadata(plugin_name, edge_data)
+            node_result["status"] = "success"
+            node_result["response"] = response
+            success_count += 1
+        except (EdgeConnectionError, EdgeAPIError) as e:
+            node_result["status"] = "failed"
+            node_result["error"] = str(e)
+            fail_count += 1
+        results.append(node_result)
+
+    if success_count == len(active_nodes):
+        return {"status": "ok", "message": f"插件元数据发布成功，已同步到 {success_count} 个节点", "version": new_version, "results": results}
+    elif success_count > 0:
+        return {"status": "partial", "message": f"插件元数据发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "version": new_version, "results": results}
+    else:
+        return {"status": "error", "message": "插件元数据发布失败：无法连接到任何 edge 服务器", "version": new_version, "results": results}
 
 
+# ─── 版本历史 ──────────────────────────────────────
 @router.get("/{plugin_name}/versions")
 async def get_plugin_metadata_versions(
     cluster_id: int,
     plugin_name: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """获取插件 metadata 的版本历史"""
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    # 获取版本历史
     versions_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id
-        ).order_by(PluginMetadataVersion.version.desc())
+        select(ConfigVersion).where(
+            ConfigVersion.resource_type == "plugin_metadata",
+            ConfigVersion.resource_id == item.id
+        ).order_by(ConfigVersion.version.desc())
     )
     versions = versions_result.scalars().all()
 
     return {
         "total": len(versions),
-        "items": [
-            {
-                "id": v.id,
-                "version": v.version,
-                "metadata": json.loads(v.config_data) if v.config_data else {},
-                "action": v.action,
-                "created_at": v.created_at.isoformat() if v.created_at else None
-            }
-            for v in versions
-        ],
-        "current_version": db_item.version
+        "items": [{
+            "id": v.id,
+            "version": v.version,
+            "config": json.loads(v.config) if v.config else {},
+            "created_at": v.created_at.isoformat() if v.created_at else None
+        } for v in versions],
+        "current_version": item.current_version
     }
 
 
+# ─── 回滚 ──────────────────────────────────────────
 @router.post("/{plugin_name}/rollback/{version}")
 async def rollback_plugin_metadata(
     cluster_id: int,
@@ -247,144 +291,65 @@ async def rollback_plugin_metadata(
     version: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """回滚插件 metadata 到指定版本（不发布）"""
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    target_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
-            PluginMetadataVersion.version == version
+    cv_result = await db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.resource_type == "plugin_metadata",
+            ConfigVersion.resource_id == item.id,
+            ConfigVersion.version == version
         )
     )
-    target_version = target_result.scalar_one_or_none()
-    if not target_version:
+    cv = cv_result.scalar_one_or_none()
+    if not cv:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
 
-    db_item.config_data = target_version.config_data
-    db_item.version = version
-    db_item.is_published = 0
-
-    await db.commit()
-    await db.refresh(db_item)
-
-    return {
-        "message": f"插件 {plugin_name} 已回滚到版本 v{version}",
-        "version": version
-    }
-
-
-@router.post("/{plugin_name}/switch-version/{version}")
-async def switch_version_and_publish(
-    cluster_id: int,
-    plugin_name: str,
-    version: int,
-    db: AsyncSession = Depends(get_db)
-):
-    """切换到指定版本并发布（不生成新版本记录）"""
-    result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
-        )
-    )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
-
-    target_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
-            PluginMetadataVersion.version == version
-        )
-    )
-    target_version = target_result.scalar_one_or_none()
-    if not target_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
-
-    db_item.config_data = target_version.config_data
-    db_item.version = version
-    db_item.is_published = 1
-
-    await db.commit()
-    await db.refresh(db_item)
-
-    return {
-        "message": f"插件 {plugin_name} 已切换到版本 v{version} 并发布",
-        "version": version
-    }
-
-
-@router.delete("/{plugin_name}/record")
-async def hard_delete_plugin_metadata(
-    cluster_id: int,
-    plugin_name: str,
-    db: AsyncSession = Depends(get_db)
-):
-    """彻底删除插件配置记录（包括所有版本历史）"""
-    result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
-        )
-    )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
-
-    versions_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id
-        )
-    )
-    for v in versions_result.scalars().all():
-        await db.delete(v)
-
-    await db.delete(db_item)
+    item.config_data = cv.config
+    item.current_version = version
     await db.commit()
 
-    return {"message": f"插件 {plugin_name} 已彻底删除"}
+    return {"message": f"插件 {plugin_name} 已回滚到版本 v{version}", "version": version}
 
 
-@router.delete("/{plugin_name}/versions/{version}")
+# ─── 删历史版本 ─────────────────────────────────────
+@router.delete("/{plugin_name}/versions/{version_id}")
 async def delete_plugin_metadata_version(
     cluster_id: int,
     plugin_name: str,
-    version: int,
+    version_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """删除插件的特定版本记录"""
     result = await db.execute(
-        select(ClusterPluginMetadata).where(
-            ClusterPluginMetadata.cluster_id == cluster_id,
-            ClusterPluginMetadata.plugin_name == plugin_name
+        select(PluginMetadata).where(
+            PluginMetadata.cluster_id == cluster_id,
+            PluginMetadata.plugin_name == plugin_name
         )
     )
-    db_item = result.scalar_one_or_none()
-    if not db_item:
+    item = result.scalar_one_or_none()
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    version_result = await db.execute(
-        select(PluginMetadataVersion).where(
-            PluginMetadataVersion.cluster_plugin_metadata_id == db_item.id,
-            PluginMetadataVersion.version == version
+    cv_result = await db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.id == version_id,
+            ConfigVersion.resource_type == "plugin_metadata",
+            ConfigVersion.resource_id == item.id
         )
     )
-    version_record = version_result.scalar_one_or_none()
-    if not version_record:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
-
-    if db_item.version == version:
+    cv = cv_result.scalar_one_or_none()
+    if not cv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    if item.current_version == cv.version:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法删除当前版本")
 
-    await db.delete(version_record)
+    await db.delete(cv)
     await db.commit()
-
-    return {"message": f"版本 v{version} 已删除"}
+    return {"message": "版本已删除"}

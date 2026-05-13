@@ -184,7 +184,7 @@ BUILTIN_PLUGINS = [
                 "default": ["logs/process.log"],
                 "description": "日志文件路径",
                 "examples": [["logs/process.log"], ["logs/process.log", "logs/access.log"]],
-                "hints": "日志记录的文件，可以配置一个或多个"
+                "hints": "日志记录的文件，可以配置一个或多个。如要自定义日志格式（formats、formats_sep 等），请在'插件元数据'中配置 log_process 的全局属性"
             },
             "cache_duration": {
                 "type": "integer",
@@ -205,6 +205,21 @@ BUILTIN_PLUGINS = [
                 "description": "条件表达式（满足时才记录请求体）",
                 "examples": [[["arg_debug", "==", "1"]]],
                 "hints": "需要开启 include_req_body 才生效"
+            }
+        },
+        "metadata_schema": {
+            "logs": {
+                "type": "object",
+                "description": "日志格式模板，键为日志文件路径，值为格式配置",
+                "examples": [{"logs/process.log": {"formats": ["${req_start_time#time_format,%Y%m%d%H%M%S,%03d}", "${clientip}", "${cookie_X-EDGE-SESSIONID}", "${method}", "${uri}", "${request_time}", "${status}", "${upstream_addr}"]}}],
+                "hints": "键为日志文件名，值为包含 formats（格式串或数组）和 formats_sep（分隔符）的对象"
+            },
+            "formats_sep": {
+                "type": "string",
+                "default": "|;",
+                "description": "日志格式分隔符",
+                "examples": ["|;", ","],
+                "hints": "拼接数组格式的各日志项，默认 |;"
             }
         }
     },

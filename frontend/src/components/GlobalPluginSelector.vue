@@ -47,11 +47,11 @@
             <div class="plugin-info">
               <div class="plugin-name">
                 {{ item.plugin_name }}
-                <a-tag v-if="item.is_published" color="green" size="small">已发布</a-tag>
+                <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
                 <a-tag v-else color="orange" size="small">未发布</a-tag>
               </div>
               <div class="plugin-meta">
-                v{{ item.version }} · {{ formatDate(item.updated_at) }}
+                v{{ item.current_version }} · {{ formatDate(item.updated_at) }}
               </div>
             </div>
             <div class="plugin-actions">
@@ -59,7 +59,7 @@
               <a-button size="small" @click="editPlugin(item)">编辑</a-button>
               <a-button size="small" danger @click="deletePlugin(item)">删除</a-button>
               <a-divider type="vertical" />
-              <a-button size="small" @click="publishPlugin(item)" :disabled="item.is_published">发布</a-button>
+              <a-button size="small" @click="publishPlugin(item)">发布</a-button>
               <a-button size="small" @click="openVersionManagement(item)">版本管理</a-button>
             </div>
           </div>
@@ -79,7 +79,7 @@
       <div v-if="viewingPlugin" class="plugin-detail">
         <a-descriptions :column="1" bordered>
           <a-descriptions-item label="插件名称">{{ viewingPlugin.plugin_name }}</a-descriptions-item>
-          <a-descriptions-item label="版本">v{{ viewingPlugin.version }}</a-descriptions-item>
+          <a-descriptions-item label="版本">v{{ viewingPlugin.current_version || '未发布' }}</a-descriptions-item>
           <a-descriptions-item label="状态">
             <a-tag v-if="viewingPlugin.is_published" color="green">已发布</a-tag>
             <a-tag v-else color="orange">未发布</a-tag>
@@ -114,8 +114,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, computed, watch, h } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -134,6 +134,7 @@ interface ConfiguredPlugin {
   plugin_name: string
   metadata: Record<string, any>
   version: number
+  current_version: number | null
   is_published: boolean
   created_at: string
   updated_at: string
@@ -186,7 +187,8 @@ const loadConfiguredPlugins = async () => {
     const res = await api.get(`/clusters/${props.clusterId}/plugin-metadata`)
     configuredPlugins.value = (res.data.items || []).map((item: any) => ({
       ...item,
-      is_published: item.is_published
+      version: item.current_version,
+      is_published: !!item.current_version
     }))
   } catch (error) {
     console.error('加载已配置插件失败', error)
@@ -219,7 +221,10 @@ const editPlugin = (item: ConfiguredPlugin) => {
     plugin_name: item.plugin_name,
     config: JSON.stringify(item.metadata, null, 2)
   }
-  editingPluginInfo.value = pluginInfo || null
+  editingPluginInfo.value = {
+    ...(pluginInfo || {}),
+    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
+  } as any
   editorDrawerVisible.value = true
 }
 
@@ -243,7 +248,10 @@ const handleVersionManagementEdit = (data: { plugin_name: string; config: string
     plugin_name: data.plugin_name,
     config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config, null, 2)
   }
-  editingPluginInfo.value = pluginInfo || null
+  editingPluginInfo.value = {
+    ...(pluginInfo || {}),
+    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
+  } as any
   editorDrawerVisible.value = true
 }
 
@@ -263,28 +271,154 @@ const handleVersionPublished = async (data: { plugin_name: string }) => {
   await loadConfiguredPlugins()
 }
 
-const deletePlugin = async (item: ConfiguredPlugin) => {
-  try {
-    await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/record`)
-    message.success(`已删除插件 ${item.plugin_name}`)
-    if (viewingPlugin.value?.plugin_name === item.plugin_name) {
-      viewingPlugin.value = null
+const deletePlugin = (item: ConfiguredPlugin) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要彻底删除插件"${item.plugin_name}"的元数据吗？将同时删除数据库记录及所有版本历史，此操作不可撤销。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      const progress = { percent: 0, status: 'active' as const }
+
+      const buildContent = () => h('div', {}, [
+        h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;' }, [
+          h('div', { style: `width:${progress.percent}%;height:100%;background:${progress.status === 'success' ? '#52c41a' : progress.status === 'exception' ? '#ff4d4f' : '#1677ff'};transition:width 0.3s;` })
+        ]),
+        h('div', { style: 'max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px;' },
+          logs.map(log => h('div', { style: 'margin-bottom:4px;white-space:pre-wrap;' }, log))
+        )
+      ])
+
+      const modal = Modal.info({
+        title: `删除插件元数据: ${item.plugin_name}`,
+        width: 600,
+        content: h('div', '正在准备...'),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const update = () => modal.update({ content: buildContent() })
+      addLog(`开始删除插件元数据: ${item.plugin_name}`)
+      progress.percent = 20; update()
+      await new Promise(r => setTimeout(r, 400))
+
+      try {
+        addLog('正在从数据库删除...')
+        progress.percent = 40; update()
+        const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`)
+        const data = response.data
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        if (data.results && data.results.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80; update()
+          addLog('Edge 节点同步删除结果:')
+          let ok = 0, fail = 0
+          for (const r of data.results) {
+            r.status === 'success' ? ok++ : fail++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog(`总计: ${data.results.length} 节点, 成功 ${ok}, 失败 ${fail}`)
+        } else {
+          addLog('集群中没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('')
+          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+        } else {
+          progress.status = 'success'
+          addLog('')
+          addLog('✅ 删除完成!')
+        }
+        update()
+        modal.update({ okButtonProps: { disabled: false } })
+
+        if (viewingPlugin.value?.plugin_name === item.plugin_name) {
+          viewingPlugin.value = null
+        }
+        await Promise.all([loadConfiguredPlugins(), loadPlugins()])
+      } catch (error: any) {
+        progress.percent = 100; progress.status = 'exception'
+        addLog(''); addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
+        update()
+        modal.update({ okButtonProps: { disabled: false } })
+      }
     }
-    await Promise.all([loadConfiguredPlugins(), loadPlugins()])
-  } catch (error) {
-    message.error('删除失败')
-  }
+  })
 }
 
 const publishPlugin = async (item: ConfiguredPlugin) => {
+  const logs: string[] = []
+  const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  const progress = { percent: 0, status: 'active' as const }
+
+  const buildContent = () => h('div', {}, [
+    h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;position:relative;' }, [
+      h('div', { style: `width:${progress.percent}%;height:100%;background:${progress.status === 'success' ? '#52c41a' : progress.status === 'exception' ? '#ff4d4f' : '#1677ff'};transition:width 0.3s;` })
+    ]),
+    h('div', { style: 'max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px;' },
+      logs.map(log => h('div', { style: 'margin-bottom:4px;white-space:pre-wrap;' }, log))
+    )
+  ])
+
+  const modal = Modal.info({
+    title: `发布插件元数据: ${item.plugin_name}`,
+    width: 600,
+    content: h('div', '正在准备...'),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+
+  const update = () => modal.update({ content: buildContent() })
+  addLog(`开始发布: ${item.plugin_name}`)
+  progress.percent = 10; update()
+  await new Promise(r => setTimeout(r, 400))
+
   try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30; update()
     const response = await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`)
-    message.success(`已发布插件 ${item.plugin_name}`)
-    await loadConfiguredPlugins()
+    const data = response.data
+    progress.percent = 70
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
+    else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
+    else { progress.status = 'exception'; addLog('❌ 发布失败') }
+    update()
+    modal.update({ okButtonProps: { disabled: false } })
   } catch (error: any) {
-    const msg = error?.response?.data?.detail || '发布失败'
-    message.error(msg)
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100; progress.status = 'exception'
+    addLog(''); addLog(`❌ 发布失败: ${errMsg}`)
+    update()
+    modal.update({ okButtonProps: { disabled: false } })
   }
+  await loadConfiguredPlugins()
 }
 
 const openVersionManagement = (item: ConfiguredPlugin) => {

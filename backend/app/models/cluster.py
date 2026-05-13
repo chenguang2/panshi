@@ -115,31 +115,16 @@ class ConfigVersion(Base):
     created_by = Column(String(50), default="system")
 
 
-class ClusterPluginMetadata(Base):
-    __tablename__ = "ps_cluster_plugin_metadata"
+class PluginMetadata(Base):
+    __tablename__ = "ps_plugin_metadata"
 
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
-    plugin_name = Column(String(50), nullable=False)
+    plugin_name = Column(String(50), nullable=False, unique=True)
     config_data = Column(Text, nullable=False, default="{}")
-    version = Column(Integer, nullable=False, default=1)
-    is_published = Column(Integer, nullable=False, default=0)
+    current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class PluginMetadataVersion(Base):
-    __tablename__ = "ps_plugin_metadata_version"
-    __table_args__ = (
-        UniqueConstraint('cluster_plugin_metadata_id', 'version', name='uix_plugin_version'),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    cluster_plugin_metadata_id = Column(Integer, ForeignKey("ps_cluster_plugin_metadata.id", ondelete="CASCADE"), nullable=False)
-    config_data = Column(Text, nullable=False)
-    version = Column(Integer, nullable=False)
-    action = Column(String(20), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class PluginConfig(Base):

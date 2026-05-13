@@ -7,11 +7,7 @@
     @close="handleClose"
   >
     <template #extra>
-      <a-switch
-        v-model:checked="isJsonMode"
-        checked-children="JSON"
-        un-checked-children="表单"
-      />
+      <a-switch v-if="hasFormFields" v-model:checked="isJsonMode" checked-children="JSON" un-checked-children="表单" />
     </template>
 
     <!-- JSON 模式 -->
@@ -113,83 +109,35 @@
                     <DeleteOutlined class="delete-btn" @click="removeRow('remove', idx)" />
                   </div>
                   <a-button type="link" @click="addRow('remove')" class="add-row-btn">+ 添加一项</a-button>
-                </div>
               </div>
             </div>
-          </template>
-
-          <!-- 简单 headers（key-value 对象，无嵌套 properties） -->
-          <template v-else-if="getFieldType(schema) === 'object' && key === 'headers' && !schema.properties">
-            <div class="field-block">
-              <div class="field-block-header">
-                <span class="field-block-title">{{ key }}</span>
-                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
-              </div>
-              <div class="simple-kv-editor">
-                <div v-for="(item, idx) in simpleKvData" :key="item.id" class="kv-row">
-                  <a-input v-model:value="item.key" placeholder="Header 名称" style="flex: 1" @change="syncSimpleKv" />
-                  <a-input v-model:value="item.value" placeholder="Header 值" style="flex: 1" @change="syncSimpleKv" />
-                  <a-button size="small" danger @click="removeSimpleKvRow(idx)">删除</a-button>
-                </div>
-                <a-button size="small" type="dashed" style="margin-top: 8px" @click="addSimpleKvRow">
-                  <PlusOutlined /> 添加 Header
+            <div v-if="schema.examples?.length" class="field-example" style="margin-top: 8px;">
+              <template v-if="isComplexExample(schema.examples[0])">
+                <a-button size="small" type="link" @click="toggleExample(key)">
+                  {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
                 </a-button>
-              </div>
+                <JsonEditorVue
+                  v-if="expandedExamples[key] !== false"
+                  :model-value="schema.examples[0]"
+                  mode="text"
+                  read-only
+                  :navigation-bar="false"
+                  :status-bar="false"
+                  class="json-example-viewer"
+                />
+              </template>
+              <template v-else>
+                示例：{{ formatExample(schema.examples[0]) }}
+              </template>
             </div>
-          </template>
-
-          <!-- 普通 object 类型（非 headers） -->
-          <template v-else-if="getFieldType(schema) === 'object'">
-            <div class="field-block">
-              <div class="field-block-header">
-                <span class="field-block-title">{{ key }}</span>
-                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
-              </div>
-              <div class="nested-fields">
-                <template v-for="(nestedSchema, nestedKey) in schema.properties" :key="nestedKey">
-                  <div class="nested-field-item">
-                    <div class="nested-field-header">
-                      <span class="nested-field-name">{{ nestedKey }}</span>
-                      <span v-if="nestedSchema.description" class="nested-field-desc">
-                        {{ nestedSchema.description }}
-                      </span>
-                    </div>
-                    <a-input
-                      v-if="getFieldType(nestedSchema) === 'string'"
-                      v-model:value="formData[key][nestedKey]"
-                      :placeholder="nestedSchema.description"
-                    />
-                    <a-input-number
-                      v-else-if="getFieldType(nestedSchema) === 'number'"
-                      v-model:value="formData[key][nestedKey]"
-                      style="width: 100%"
-                    />
-                    <a-select
-                      v-else-if="getFieldType(nestedSchema) === 'enum'"
-                      v-model:value="formData[key][nestedKey]"
-                    >
-                      <a-select-option v-for="opt in nestedSchema.enum" :key="opt" :value="opt">
-                        {{ opt === '' ? '保持原样' : opt }}
-                      </a-select-option>
-                    </a-select>
-                    <a-textarea
-                      v-else-if="getFieldType(nestedSchema) === 'array'"
-                      v-model:value="formData[key][nestedKey]"
-                      :rows="2"
-                      placeholder="逗号分隔"
-                    />
-                    <a-input v-else v-model:value="formData[key][nestedKey]" />
-                    <div v-if="nestedSchema.hints" class="nested-field-hint">
-                      <InfoCircleOutlined class="hint-icon" />
-                      {{ nestedSchema.hints }}
-                    </div>
-                  </div>
-                </template>
-              </div>
+            <div v-if="schema.hints" class="field-hints">
+              <InfoCircleOutlined class="hint-icon" />
+              {{ schema.hints }}
             </div>
-          </template>
+          </div>
+        </template>
 
-          <!-- string 类型 -->
+        <!-- string 类型 -->
           <template v-else-if="getFieldType(schema) === 'string'">
             <div class="field-block">
               <div class="field-block-header">
@@ -323,6 +271,45 @@
               </div>
             </div>
           </template>
+
+          <!-- object 类型（无嵌套 properties 的简单对象） -->
+          <template v-else-if="getFieldType(schema) === 'object'">
+            <div class="field-block">
+              <div class="field-block-header">
+                <span class="field-block-title">{{ key }}</span>
+                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
+              </div>
+              <a-textarea
+                v-model:value="formData[key]"
+                :rows="4"
+                :placeholder="'请输入 JSON 配置'"
+                style="font-family: monospace;"
+              />
+              <div v-if="schema.examples?.length" class="field-example">
+                <template v-if="isComplexExample(schema.examples[0])">
+                  <a-button size="small" type="link" @click="toggleExample(key)">
+                    {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
+                  </a-button>
+                  <JsonEditorVue
+                    v-if="expandedExamples[key] !== false"
+                    :model-value="schema.examples[0]"
+                    mode="text"
+                    read-only
+                    :navigation-bar="false"
+                    :status-bar="false"
+                    class="json-example-viewer"
+                  />
+                </template>
+                <template v-else>
+                  示例：{{ formatExample(schema.examples[0]) }}
+                </template>
+              </div>
+              <div v-if="schema.hints" class="field-hints">
+                <InfoCircleOutlined class="hint-icon" />
+                {{ schema.hints }}
+              </div>
+            </div>
+          </template>
         </template>
       </a-form>
     </div>
@@ -360,6 +347,8 @@ const visible = computed({
 
 const editingPlugin = computed(() => props.plugin)
 const currentSchema = computed(() => props.pluginInfo?.schema || {})
+
+const hasFormFields = computed(() => Object.keys(currentSchema.value).length > 0)
 
 const visibleSchemaFields = computed(() => {
   const result: Record<string, any> = {}
@@ -725,7 +714,11 @@ const buildConfigFromForm = (): string => {
         config[key] = value
         break
       case 'object':
-        config[key] = value
+        if (typeof value === 'string') {
+          try { config[key] = JSON.parse(value) } catch { config[key] = value }
+        } else {
+          config[key] = value
+        }
         break
     }
   }
@@ -761,7 +754,9 @@ const buildConfigFromForm = (): string => {
 // 监听抽屉打开
 watch(() => props.open, (newVal) => {
   if (newVal && props.plugin) {
-    isJsonMode.value = false
+    const schema = props.pluginInfo?.schema || {}
+    const hasFields = Object.keys(schema).length > 0
+    isJsonMode.value = !hasFields
     jsonConfig.value = props.plugin.config || '{}'
     fullJsonConfig.value = props.plugin.config || '{}'
     try { jsonEditorValue.value = JSON.parse(props.plugin.config || '{}') } catch { jsonEditorValue.value = {} }
@@ -772,8 +767,10 @@ watch(() => props.open, (newVal) => {
 // 监听 JSON 模式切换
 watch(isJsonMode, (val) => {
   if (val) {
-    // 切到 JSON 模式：从表单重建 JSON
-    jsonConfig.value = buildConfigFromForm()
+    // 切到 JSON 模式：有表单字段才从表单重建 JSON，否则保留已有内容
+    if (hasFormFields.value) {
+      jsonConfig.value = buildConfigFromForm()
+    }
     try { jsonEditorValue.value = JSON.parse(jsonConfig.value) } catch {}
   } else {
     // 切到表单模式：从 JSON 重建表单

@@ -132,6 +132,8 @@ export interface Plugin {
   name: string
   description: string
   schema: Record<string, any>
+  metadata_schema?: Record<string, any>
+  enable_metadata?: boolean
 }
 
 export interface RoutePlugin {

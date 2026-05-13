@@ -1,0 +1,6 @@
+- [x] 1.1 模型重命名 + 表迁移
+- [x] 1.2 API 重写（CRUD + ConfigVersion 版本管理 + Edge 发布 + 级联删除）
+- [x] 1.3 metadata_schema（log_process 元数据字段）
+- [x] 1.4 发布/删除进度弹窗
+- [x] 1.5 对象类型编辑器渲染
+- [x] 1.6 Playwright 测试（2/2 通过）
