@@ -17,7 +17,7 @@
 
 #### Scenario: 删除插件组
 - **WHEN** 用户删除一个插件组
-- **THEN** 系统 SHALL 从数据库删除记录
+- **THEN** 系统 SHALL 从数据库删除，并尝试从 Edge 节点删除
 
 ### Requirement: 插件组发布到 Edge 节点
 系统 SHALL 支持将插件组发布到集群中的所有活跃 Edge 节点。

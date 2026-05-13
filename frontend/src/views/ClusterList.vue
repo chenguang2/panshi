@@ -225,8 +225,6 @@
           <div v-else-if="cluster.activeTab === 'pluginConfigs'" class="tab-content">
             <div class="node-actions">
               <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
-              <a-button size="small" @click="publishPluginConfig(cluster)" :disabled="!cluster.selectedPluginConfig">发布</a-button>
-              <a-button size="small" @click="openPluginConfigVersionManagement(cluster)" :disabled="!cluster.selectedPluginConfig">版本管理</a-button>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
               <div
@@ -257,8 +255,9 @@
                 </div>
                 <div style="display: flex; gap: 8px; justify-content: flex-end;">
                   <a-button size="small" @click.stop="editPluginConfig(cluster, pc)">编辑</a-button>
-                  <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
                   <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger>删除</a-button>
+                  <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
+                  <a-button size="small" @click.stop="openPluginConfigVersionManagement(cluster, pc)">版本管理</a-button>
                 </div>
               </div>
               <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
@@ -619,18 +618,25 @@
       </a-tabs>
     </a-modal>
 
-    <a-modal v-model:open="pluginConfigModalVisible" :title="pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组'" width="600px" @ok="handlePluginConfigSubmit">
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
-          <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
-        </a-form-item>
-        <a-form-item label="插件配置(JSON)" name="pluginsJson" :rules="[{ required: true, message: '请输入插件配置JSON' }]">
-          <a-textarea v-model:value="pluginConfigFormData.pluginsJson" :rows="12" placeholder='例如:&#10;{&#10;  "cors": {},&#10;  "limit-count": {&#10;    "count": 100,&#10;    "time_window": 60&#10;  }&#10;}' style="font-family: monospace;" />
-        </a-form-item>
-      </a-form>
+    <a-modal v-model:open="pluginConfigModalVisible" :title="pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组'" width="800px" @ok="handlePluginConfigSubmit" :ok-text="pluginConfigFormMode === 'add' ? '创建' : '保存'">
+      <a-tabs v-model:activeKey="pluginConfigActiveTab">
+        <a-tab-pane key="basic" tab="基础配置">
+          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
+              <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
+            </a-form-item>
+            <a-form-item label="描述" name="description">
+              <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+        <a-tab-pane key="plugins" tab="插件配置">
+          <PluginSelector
+            v-model="pluginConfigFormData.selectedPlugins"
+            :plugins="availablePlugins"
+          />
+        </a-tab-pane>
+      </a-tabs>
     </a-modal>
 
     <VersionManagementModal
@@ -687,13 +693,14 @@ const versionModalEdgeUuid = ref('')
 
 // Plugin Config state
 const pluginConfigModalVisible = ref(false)
+const pluginConfigActiveTab = ref('basic')
 const pluginConfigFormMode = ref<'add' | 'edit'>('add')
 const pluginConfigEditingClusterId = ref<number | null>(null)
 const pluginConfigEditingId = ref<number | null>(null)
 const pluginConfigFormData = reactive({
   name: '',
   description: '',
-  pluginsJson: '{}'
+  selectedPlugins: [] as any[]
 })
 
 const nodeColumns = [
@@ -2494,22 +2501,33 @@ const loadPluginConfigs = async (cluster: Cluster) => {
 
 const showAddPluginConfig = async (cluster: Cluster) => {
   await loadPluginConfigs(cluster)
+  if (!cluster.plugin_configs && availablePlugins.value.length === 0) {
+    await loadAvailablePlugins()
+  }
   pluginConfigFormMode.value = 'add'
   pluginConfigEditingClusterId.value = cluster.id
   pluginConfigEditingId.value = null
   pluginConfigFormData.name = ''
   pluginConfigFormData.description = ''
-  pluginConfigFormData.pluginsJson = '{}'
+  pluginConfigFormData.selectedPlugins = []
+  pluginConfigActiveTab.value = 'basic'
   pluginConfigModalVisible.value = true
 }
 
 const editPluginConfig = async (cluster: Cluster, pc: any) => {
+  if (availablePlugins.value.length === 0) {
+    await loadAvailablePlugins()
+  }
   pluginConfigFormMode.value = 'edit'
   pluginConfigEditingClusterId.value = cluster.id
   pluginConfigEditingId.value = pc.id
   pluginConfigFormData.name = pc.name || ''
   pluginConfigFormData.description = pc.description || ''
-  pluginConfigFormData.pluginsJson = JSON.stringify(pc.plugins || {}, null, 2)
+  pluginConfigFormData.selectedPlugins = Object.entries(pc.plugins || {}).map(([plugin_name, config]: [string, any]) => ({
+    plugin_name,
+    config: JSON.stringify(config)
+  }))
+  pluginConfigActiveTab.value = 'basic'
   pluginConfigModalVisible.value = true
 }
 
@@ -2519,17 +2537,14 @@ const handlePluginConfigSubmit = async () => {
     message.warning('请输入插件组名称')
     return
   }
-  if (!pluginConfigFormData.pluginsJson) {
-    message.warning('请输入插件配置JSON')
-    return
-  }
 
-  let plugins: Record<string, any>
-  try {
-    plugins = JSON.parse(pluginConfigFormData.pluginsJson)
-  } catch {
-    message.warning('插件配置JSON格式不正确')
-    return
+  const plugins: Record<string, any> = {}
+  for (const sp of pluginConfigFormData.selectedPlugins) {
+    if (sp.config) {
+      try { plugins[sp.plugin_name] = JSON.parse(sp.config) } catch { plugins[sp.plugin_name] = sp.config }
+    } else {
+      plugins[sp.plugin_name] = {}
+    }
   }
 
   try {
@@ -2736,12 +2751,13 @@ const publishPluginConfig = async (cluster: Cluster, pc?: any) => {
         updateContent()
         modal.update({ okButtonProps: { disabled: false } })
       }
+      await loadPluginConfigs(cluster)
     }
   })
 }
 
-const openPluginConfigVersionManagement = (cluster: Cluster) => {
-  const target = cluster.selectedPluginConfig
+const openPluginConfigVersionManagement = (cluster: Cluster, pc?: any) => {
+  const target = pc || cluster.selectedPluginConfig
   if (!target) {
     message.warning('请先选择一个插件组')
     return

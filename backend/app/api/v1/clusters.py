@@ -6,7 +6,7 @@ import json
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
@@ -366,7 +366,6 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
 
 @router.get("/{cluster_id}/plugin_configs", response_model=dict)
 async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
     result = await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id).order_by(PluginConfig.id))
     configs = result.scalars().all()
     response = [PluginConfigResponse.model_validate(c) for c in configs]
@@ -375,7 +374,6 @@ async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db
 
 @router.post("/{cluster_id}/plugin_configs", response_model=PluginConfigResponse)
 async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
     config_data = data.model_dump()
     if config_data.get("plugins") is not None:
         config_data["plugins"] = json.dumps(config_data["plugins"])
@@ -388,7 +386,6 @@ async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: As
 
 @router.get("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
 async def get_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
@@ -398,7 +395,6 @@ async def get_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = 
 
 @router.put("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
 async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConfigUpdate, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
@@ -415,32 +411,63 @@ async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConf
 
 @router.delete("/{cluster_id}/plugin_configs/{config_id}")
 async def delete_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
     await db.delete(config)
     await db.commit()
-    return {"message": "插件组已删除"}
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                response = client.delete_plugin_config(config.edge_uuid)
+                node_result["status"] = "success"
+                node_result["response"] = response
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+    return {"message": "插件组已删除", "results": results}
 
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
 async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
-    from app.models.cluster import PluginConfig
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
     upstream_plugins = json.loads(config.plugins) if config.plugins else None
-    # Build event for history
+    # Version increment and save history
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == "plugin_config",
+            ConfigVersion.resource_id == config_id
+        )
+    )
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
     event_data = {
         "id": config.id,
         "edge_uuid": config.edge_uuid,
         "name": config.name,
         "description": config.description,
-        "plugins": upstream_plugins,
-    }
+        "plugins": upstream_plugins}
+    config_version = ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type="plugin_config",
+        resource_id=config_id,
+        version=new_version,
+        config=json.dumps(event_data))
+    db.add(config_version)
+    config.current_version = new_version
+    await db.commit()
     edge_data = {
         "desc": config.name,
         "plugins": upstream_plugins or {},
@@ -473,6 +500,59 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
         return {"status": "partial", "message": f"插件组发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "results": results}
     else:
         return {"status": "error", "message": "插件组发布失败：无法连接到任何 edge 服务器", "results": results}
+
+
+@router.get("/{cluster_id}/plugin_configs/{config_id}/history", response_model=ConfigVersionListResponse)
+async def get_plugin_config_history(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+    query = select(ConfigVersion).where(
+        ConfigVersion.resource_type == "plugin_config",
+        ConfigVersion.resource_id == config_id
+    ).order_by(ConfigVersion.version.desc())
+    result = await db.execute(query)
+    versions = result.scalars().all()
+    pc_result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    pc = pc_result.scalar_one_or_none()
+    return ConfigVersionListResponse(
+        total=len(versions), items=versions, current_version=pc.current_version if pc else None)
+
+
+@router.post("/{cluster_id}/plugin_configs/{config_id}/rollback/{version}")
+async def rollback_plugin_config(cluster_id: int, config_id: int, version: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    cv_result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.resource_type == "plugin_config",
+        ConfigVersion.resource_id == config_id,
+        ConfigVersion.version == version))
+    cv = cv_result.scalar_one_or_none()
+    if not cv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    config_data = json.loads(cv.config)
+    config.name = config_data.get("name", config.name)
+    config.description = config_data.get("description")
+    if config_data.get("plugins") is not None:
+        config.plugins = json.dumps(config_data["plugins"])
+    else:
+        config.plugins = None
+    config.current_version = version
+    await db.commit()
+    return {"status": "ok", "message": f"插件组已切换到版本 v{version}", "version": version}
+
+
+@router.delete("/{cluster_id}/plugin_configs/{config_id}/history/{history_id}")
+async def delete_plugin_config_history(cluster_id: int, config_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ConfigVersion).where(
+        ConfigVersion.id == history_id,
+        ConfigVersion.resource_type == "plugin_config",
+        ConfigVersion.resource_id == config_id))
+    cv = result.scalar_one_or_none()
+    if not cv:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+    await db.delete(cv)
+    await db.commit()
+    return {"message": "历史版本已删除"}
 
 
 NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}
