@@ -1,0 +1,11 @@
+- [x] 1.1 Route 模型新增 plugin_config_ids 列
+- [x] 1.2 RouteCreate/Update/Response schema 新增字段
+- [x] 1.3 CRUD/发布/回滚支持 plugin_config_ids 序列化
+- [x] 1.4 convert_route_to_edge_format 新增参数
+
+- [x] 2.1 路由弹窗新增"插件组"Tab
+- [x] 2.2 集群插件组卡片插件标签可点击弹窗
+- [x] 2.3 handleRouteSubmit 包含 plugin_config_ids
+- [x] 2.4 editRouteByRecord 加载 plugin_config_ids
+- [x] 2.5 DB 迁移（ps_route 新增列）
+- [x] 2.6 Playwright 测试（3/3 通过）

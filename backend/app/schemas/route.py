@@ -15,6 +15,7 @@ class RouteBase(BaseModel):
     remote_addrs: Optional[str] = Field(default=None, description="客户端 IP 地址，多个用逗号分隔")
     vars: Optional[List[List[Any]]] = Field(default=None, description='条件匹配表达式 [["var", "op", "val"], ...]')
     advanced_match_enabled: Optional[bool] = Field(default=False, description="是否启用高级匹配")
+    plugin_config_ids: Optional[List[str]] = Field(default=None, description="关联的插件组 edge_uuid 列表")
 
 
 class RouteCreate(RouteBase):
@@ -33,6 +34,7 @@ class RouteUpdate(BaseModel):
     remote_addrs: Optional[str] = None
     vars: Optional[List[List[Any]]] = None
     advanced_match_enabled: Optional[bool] = None
+    plugin_config_ids: Optional[List[str]] = None
 
 
 class RouteResponse(RouteBase):
@@ -52,6 +54,19 @@ class RouteResponse(RouteBase):
     @field_validator('vars', mode='before')
     @classmethod
     def convert_vars(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except:
+                return None
+        return v
+
+    @field_validator('plugin_config_ids', mode='before')
+    @classmethod
+    def convert_plugin_config_ids(cls, v):
         if v is None:
             return None
         if isinstance(v, str):

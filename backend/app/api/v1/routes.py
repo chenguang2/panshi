@@ -35,6 +35,7 @@ def route_to_response(r: Route) -> RouteResponse:
         "remote_addrs": r.remote_addrs,
         "vars": json.loads(r.vars) if r.vars else None,
         "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
+        "plugin_config_ids": json.loads(r.plugin_config_ids) if r.plugin_config_ids else None,
         "created_at": r.created_at.isoformat() if r.created_at else None
     }
     return RouteResponse.model_validate(route_dict)
@@ -100,6 +101,8 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
     route_data = route.model_dump()
     if route_data.get('vars') is not None:
         route_data['vars'] = json.dumps(route_data['vars'])
+    if route_data.get('plugin_config_ids') is not None:
+        route_data['plugin_config_ids'] = json.dumps(route_data['plugin_config_ids'])
     db_route = Route(cluster_id=cluster_id, **route_data)
     db.add(db_route)
     await db.commit()
@@ -131,6 +134,7 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
         remote_addrs=db_route.remote_addrs,
         vars=json.loads(db_route.vars) if db_route.vars else None,
         advanced_match_enabled=bool(db_route.advanced_match_enabled) if db_route.advanced_match_enabled else False,
+        plugin_config_ids=json.loads(db_route.plugin_config_ids) if db_route.plugin_config_ids else None,
         created_at=db_route.created_at.isoformat() if db_route.created_at else None
     )
 
@@ -157,6 +161,7 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
         remote_addrs=route.remote_addrs,
         vars=json.loads(route.vars) if route.vars else None,
         advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
         created_at=route.created_at.isoformat() if route.created_at else None
     )
 
@@ -174,6 +179,12 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
             update_data['vars'] = json.dumps(update_data['vars'])
         else:
             update_data['vars'] = None
+
+    if 'plugin_config_ids' in update_data:
+        if update_data['plugin_config_ids'] is not None:
+            update_data['plugin_config_ids'] = json.dumps(update_data['plugin_config_ids'])
+        else:
+            update_data['plugin_config_ids'] = None
 
     for key, value in update_data.items():
         setattr(route, key, value)
@@ -207,6 +218,7 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
         remote_addrs=route.remote_addrs,
         vars=json.loads(route.vars) if route.vars else None,
         advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
         created_at=route.created_at.isoformat() if route.created_at else None
     )
 
@@ -296,7 +308,8 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         "remote_addrs": route.remote_addrs,
         "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
         "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
-        "plugins": plugins_edge_format
+        "plugins": plugins_edge_format,
+        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
     }
 
     config_version = ConfigVersion(
@@ -327,7 +340,8 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
         priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
         plugins=plugins,
-        status=route.status
+        status=route.status,
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
     )
 
     results = []
@@ -494,6 +508,8 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     route.remote_addrs = config_data.get("remote_addrs", route.remote_addrs)
     route.vars = json.dumps(config_data.get("vars")) if config_data.get("vars") else None
     route.advanced_match_enabled = 1 if config_data.get("advanced_match_enabled") else 0
+    pids = config_data.get("plugin_config_ids")
+    route.plugin_config_ids = json.dumps(pids) if pids else None
     route.current_version = version
 
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
@@ -544,7 +560,8 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
         priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
         plugins=plugins,
-        status=route.status
+        status=route.status,
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
     )
 
     results = []

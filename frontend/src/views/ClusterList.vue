@@ -247,7 +247,8 @@
                     v-for="(pcfg, pname) in pc.plugins"
                     :key="pname"
                     color="blue"
-                    style="cursor: default;"
+                    style="cursor: pointer;"
+                    @click.stop="viewPluginConfigDetail(pc, pname, pcfg)"
                   >
                     {{ pname }}
                   </a-tag>
@@ -615,6 +616,43 @@
             :plugins="availablePlugins"
           />
         </a-tab-pane>
+
+        <a-tab-pane key="pluginGroups" tab="插件组">
+          <div v-if="clusterPluginGroups.length === 0" style="padding: 40px 0; text-align: center; color: #999;">
+            暂无插件组，请在"插件组"Tab 中创建
+          </div>
+          <div v-else>
+            <div style="margin-bottom: 12px; font-size: 12px; color: #999;">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+              <div
+                v-for="pg in clusterPluginGroups"
+                :key="pg.id"
+                class="plugin-config-card"
+                :class="{ selected: isPluginGroupSelected(pg.edge_uuid) }"
+                @click="togglePluginGroup(pg)"
+                style="width: 280px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; background: #fff;"
+              >
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid)" @click.stop="togglePluginGroup(pg)" />
+                  <strong style="font-size: 13px;">{{ pg.name }}</strong>
+                  <span style="font-size: 11px; color: #999;">v{{ pg.current_version || 0 }}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+                  <a-tag
+                    v-for="(pcfg, pname) in pg.plugins"
+                    :key="pname"
+                    color="blue"
+                    style="font-size: 11px; cursor: pointer;"
+                    @click.stop="viewPluginConfigDetail(pg, pname, pcfg)"
+                  >
+                    {{ pname }}
+                  </a-tag>
+                </div>
+                <div v-if="pg.description" style="font-size: 11px; color: #999;">{{ pg.description }}</div>
+              </div>
+            </div>
+          </div>
+        </a-tab-pane>
       </a-tabs>
     </a-modal>
 
@@ -925,8 +963,39 @@ const routeForm = reactive({
   advancedMatch: {
     vars: [] as [string, string, string][]
   },
-  plugins: [] as RoutePlugin[]
+  plugins: [] as RoutePlugin[],
+  plugin_config_ids: [] as string[]
 })
+
+const currentCluster = computed(() => clusters.value.find(c => c.id === currentClusterId.value))
+
+const clusterPluginGroups = computed(() => {
+  const c = currentCluster.value
+  return c?.plugin_configs || []
+})
+
+const isPluginGroupSelected = (edgeUuid: string) => {
+  return routeForm.plugin_config_ids.indexOf(edgeUuid) !== -1
+}
+
+const togglePluginGroup = (pg: any) => {
+  const idx = routeForm.plugin_config_ids.indexOf(pg.edge_uuid)
+  if (idx !== -1) {
+    routeForm.plugin_config_ids.splice(idx, 1)
+  } else {
+    routeForm.plugin_config_ids.push(pg.edge_uuid)
+  }
+}
+
+const viewPluginConfigDetail = (pg: any, pname: string, pcfg: any) => {
+  const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
+  Modal.info({
+    title: `${pg.name} - ${pname}`,
+    content: h('pre', { style: 'font-size: 12px; white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto;' }, configStr),
+    okText: '关闭',
+    width: 560
+  })
+}
 
 const routeFormRef = ref()
 const nodeFormRef = ref()
@@ -1816,9 +1885,13 @@ const showAddRouteModal = async (cluster: Cluster) => {
     description: '',
     advancedMatchEnabled: false,
     advancedMatch: { vars: [] },
-    plugins: []
+    plugins: [],
+    plugin_config_ids: []
   })
   routeModalActiveTab.value = 'basic'
+  if (cluster.plugin_configs?.length > 0 || !cluster.plugin_configs) {
+    await loadPluginConfigs(cluster)
+  }
   routeModalVisible.value = true
 }
 
@@ -1833,6 +1906,7 @@ const editRoute = (cluster: Cluster) => {
 const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   await loadRoutes(cluster)
   await loadAvailablePlugins()
+  await loadPluginConfigs(cluster)
   
   // 从刷新后的数据中获取最新路由信息，而不是使用旧的 route 参数
   const routeData = cluster.routes?.find((r: Route) => r.id === route.id)
@@ -1854,6 +1928,7 @@ const editRouteByRecord = async (cluster: Cluster, route: Route) => {
   // 使用新对象避免引用问题
   routeForm.advancedMatch = { vars: [...(routeData.vars || [])] }
   routeForm.plugins = []
+  routeForm.plugin_config_ids = (routeData as any).plugin_config_ids ? [...(routeData as any).plugin_config_ids] : []
   routeModalActiveTab.value = 'basic'
 
   try {
@@ -1922,6 +1997,10 @@ const handleRouteSubmit = async () => {
       upstream_id: routeForm.upstream_id,
       description: routeForm.description,
       advanced_match_enabled: routeForm.advancedMatchEnabled
+    }
+
+    if (routeForm.plugin_config_ids.length > 0) {
+      payload.plugin_config_ids = routeForm.plugin_config_ids
     }
 
     if (routeForm.advancedMatchEnabled) {

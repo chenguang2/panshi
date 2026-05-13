@@ -327,7 +327,8 @@ class EdgeClient:
         priority: int,
         vars_json: str | None,
         plugins: list[dict] | None,
-        status: int = 1
+        status: int = 1,
+        plugin_config_ids: list[str] | None = None
     ) -> dict[str, Any]:
         """Convert local route format to edge API format."""
         edge_route = {
@@ -353,6 +354,9 @@ class EdgeClient:
                 edge_route["vars"] = json.loads(vars_json)
             except json.JSONDecodeError:
                 pass
+
+        if plugin_config_ids:
+            edge_route["plugin_config_ids"] = plugin_config_ids
 
         if plugins:
             edge_plugins = {}

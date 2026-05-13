@@ -72,6 +72,7 @@ class Route(Base):
     remote_addrs = Column(String(500), nullable=True)
     vars = Column(Text, nullable=True)
     advanced_match_enabled = Column(Integer, nullable=False, default=0)
+    plugin_config_ids = Column(Text, nullable=True)  # JSON array of plugin_config edge_uuids
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
