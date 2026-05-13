@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
+from app.schemas.auth import PermissionRequest
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -236,3 +237,36 @@ async def assign_clusters(
 
     await db.commit()
     return {"message": "Clusters assigned"}
+
+
+@router.get("/{user_id}/permissions")
+async def get_user_permissions(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    from app.models.user import UserPermission
+    result = await db.execute(select(UserPermission).where(UserPermission.user_id == user_id, UserPermission.enabled == 1))
+    perms = [p.resource_type for p in result.scalars().all()]
+    return {"user_id": user_id, "permissions": perms}
+
+
+@router.put("/{user_id}/permissions")
+async def update_user_permissions(
+    user_id: int,
+    request: PermissionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user)
+):
+    from app.models.user import UserPermission
+    result = await db.execute(select(User).where(User.id == user_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    await db.execute(UserPermission.__table__.delete().where(UserPermission.user_id == user_id))
+
+    for perm in request.permissions:
+        db.add(UserPermission(user_id=user_id, resource_type=perm, enabled=1))
+
+    await db.commit()
+    return {"message": "Permissions updated", "permissions": request.permissions}

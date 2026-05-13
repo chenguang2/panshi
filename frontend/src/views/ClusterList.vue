@@ -37,8 +37,8 @@
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
             <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
-            <a-tab-pane key="pluginConfigs" tab="插件组"></a-tab-pane>
-            <a-tab-pane key="globalRules" tab="全局规则"></a-tab-pane>
+            <a-tab-pane v-if="authStore.hasPermission('plugin_groups')" key="pluginConfigs" tab="插件组"></a-tab-pane>
+            <a-tab-pane v-if="authStore.hasPermission('global_rules')" key="globalRules" tab="全局规则"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
@@ -654,7 +654,7 @@
           />
         </a-tab-pane>
 
-        <a-tab-pane key="pluginGroups" tab="插件组">
+        <a-tab-pane v-if="authStore.hasPermission('plugin_groups')" key="pluginGroups" tab="插件组">
           <div v-if="clusterPluginGroups.length === 0" style="padding: 40px 0; text-align: center; color: #999;">
             暂无插件组，请在"插件组"Tab 中创建
           </div>

@@ -22,30 +22,63 @@
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalVisible" :title="editingUser ? '编辑用户' : '添加用户'" @ok="handleSubmit">
-      <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item v-if="!editingUser" label="用户名" name="username">
-          <a-input v-model:value="form.username" />
-        </a-form-item>
-        <a-form-item v-if="editingUser && isAdmin" label="用户名" name="username">
-          <a-input v-model:value="form.username" disabled />
-        </a-form-item>
-        <a-form-item v-if="!editingUser" label="密码" name="password">
-          <a-input-password v-model:value="form.password" />
-        </a-form-item>
-        <a-form-item v-if="isAdmin" label="角色" name="role">
-          <a-select v-model:value="form.role">
-            <a-select-option value="admin">管理员</a-select-option>
-            <a-select-option value="user">普通用户</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="状态" name="status">
-          <a-select v-model:value="form.status">
-            <a-select-option :value="1">正常</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
+    <a-modal v-model:open="modalVisible" :title="editingUser ? '编辑用户' : '添加用户'" @ok="handleSubmit" width="700px">
+      <a-tabs v-if="editingUser && form.role !== 'admin'" v-model:activeKey="userModalActiveTab">
+        <a-tab-pane key="basic" tab="基本信息">
+          <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="用户名" name="username">
+              <a-input v-model:value="form.username" disabled />
+            </a-form-item>
+            <a-form-item v-if="isAdmin" label="角色" name="role">
+              <a-select v-model:value="form.role">
+                <a-select-option value="admin">管理员</a-select-option>
+                <a-select-option value="user">普通用户</a-select-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item label="状态" name="status">
+              <a-select v-model:value="form.status">
+                <a-select-option :value="1">正常</a-select-option>
+                <a-select-option :value="0">禁用</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-form>
+        </a-tab-pane>
+        <a-tab-pane key="permissions" tab="权限设置">
+          <div style="padding: 16px 0;">
+            <div v-for="perm in allPermissions" :key="perm.key" style="margin-bottom: 16px;">
+              <a-checkbox v-model:checked="perm.checked" @change="onPermissionChange(perm.key, perm.checked)">
+                <strong>{{ perm.label }}</strong>
+              </a-checkbox>
+              <div style="font-size: 12px; color: #999; margin-left: 24px;">{{ perm.desc }}</div>
+            </div>
+          </div>
+        </a-tab-pane>
+      </a-tabs>
+      <div v-else>
+        <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+          <a-form-item v-if="!editingUser" label="用户名" name="username">
+            <a-input v-model:value="form.username" />
+          </a-form-item>
+          <a-form-item v-if="editingUser && isAdmin" label="用户名" name="username">
+            <a-input v-model:value="form.username" disabled />
+          </a-form-item>
+          <a-form-item v-if="!editingUser" label="密码" name="password">
+            <a-input-password v-model:value="form.password" />
+          </a-form-item>
+          <a-form-item v-if="isAdmin" label="角色" name="role">
+            <a-select v-model:value="form.role">
+              <a-select-option value="admin">管理员</a-select-option>
+              <a-select-option value="user">普通用户</a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item label="状态" name="status">
+            <a-select v-model:value="form.status">
+              <a-select-option :value="1">正常</a-select-option>
+              <a-select-option :value="0">禁用</a-select-option>
+            </a-select>
+          </a-form-item>
+        </a-form>
+      </div>
     </a-modal>
   </div>
 </template>
@@ -83,6 +116,27 @@ const form = reactive({
   role: 'user',
   status: 1
 })
+
+const userModalActiveTab = ref('basic')
+const allPermissions = ref([
+  { key: 'plugin_groups', label: '插件组管理', desc: '允许创建和管理插件组，在路由中可关联插件组', checked: false },
+  { key: 'global_rules', label: '全局规则管理', desc: '允许创建和管理全局规则', checked: false },
+  { key: 'edge_nodes', label: '边缘节点管理', desc: '允许访问边缘节点调试页面', checked: false },
+])
+
+const loadUserPermissions = async (userId: number) => {
+  try {
+    const res = await api.get(`/admin/users/${userId}/permissions`)
+    const perms = res.data.permissions || []
+    allPermissions.value.forEach(p => { p.checked = perms.includes(p.key) })
+  } catch {
+    allPermissions.value.forEach(p => { p.checked = false })
+  }
+}
+
+const onPermissionChange = (key: string, checked: boolean) => {
+  // Will be saved on modal submit
+}
 
 const columns = computed(() => {
   if (isAdmin.value) {
@@ -139,6 +193,8 @@ const editUser = (user: User) => {
   form.username = user.username
   form.role = user.role
   form.status = user.status
+  userModalActiveTab.value = 'basic'
+  loadUserPermissions(user.id)
   modalVisible.value = true
 }
 
@@ -146,6 +202,10 @@ const handleSubmit = async () => {
   try {
     if (editingUser.value) {
       await api.put(`/admin/users/${editingUser.value.id}`, { role: form.role, status: form.status })
+      if (form.role !== 'admin') {
+        const perms = allPermissions.value.filter(p => p.checked).map(p => p.key)
+        await api.put(`/admin/users/${editingUser.value.id}/permissions`, { permissions: perms })
+      }
       message.success('用户已更新')
     } else {
       await api.post('/admin/users', form)

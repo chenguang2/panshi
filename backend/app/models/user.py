@@ -22,3 +22,13 @@ class UserCluster(Base):
     user_id = Column(Integer, ForeignKey("sys_user.id", ondelete="CASCADE"), nullable=False)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserPermission(Base):
+    __tablename__ = "sys_user_permission"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("sys_user.id", ondelete="CASCADE"), nullable=False)
+    resource_type = Column(String(50), nullable=False)
+    enabled = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, default=datetime.utcnow)

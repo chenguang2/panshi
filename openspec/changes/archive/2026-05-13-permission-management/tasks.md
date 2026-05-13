@@ -1,0 +1,6 @@
+- [x] 1.1 UserPermission 模型 + DB 迁移
+- [x] 1.2 后端 API（登录返回权限、GET/PUT 用户权限、GET /me/permissions）
+- [x] 1.3 auth store 新增 permissions + hasPermission
+- [x] 1.4 集群 Tab 根据权限显隐（插件组/全局规则）
+- [x] 1.5 路由弹窗插件组 Tab 根据权限显隐
+- [x] 1.6 用户管理页权限编辑 UI
