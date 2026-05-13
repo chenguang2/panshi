@@ -26,7 +26,7 @@
             <a-textarea
               v-model:value="luaInput"
               :rows="16"
-              placeholder="输入 Lua 函数体，例如：ngx.log(ngx.ERR, 'hello')"
+              placeholder="输入完整 Lua 函数定义，例如：function(conf, ctx) ngx.log(ngx.ERR, 'hello') end"
             />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(luaInput)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => luaInput = v)">粘贴</a-button>

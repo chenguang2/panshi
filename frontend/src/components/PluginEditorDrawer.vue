@@ -581,10 +581,12 @@ const parseConfig = (configStr: string) => {
     const config = JSON.parse(configStr || '{}')
 
     // 处理 headers 特殊字段
+    let initialSimpleHeaders: Record<string, any> | null = null
     if (config.headers) {
       // 简单 KV（无 set/add/remove 嵌套）
       const headerSchema = currentSchema.value.headers
       if (!headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))) {
+        initialSimpleHeaders = { ...config.headers }
         simpleKvData.value = Object.entries(config.headers).map(([key, value], i) => ({
           id: i + 1, key, value: String(value)
         }))
@@ -601,6 +603,11 @@ const parseConfig = (configStr: string) => {
     }
 
     formData.value = buildFormDataFromConfig(currentSchema.value, config)
+
+    // 简单 KV headers 回填到 formData，让文本域显示初始值
+    if (initialSimpleHeaders) {
+      formData.value.headers = JSON.stringify(initialSimpleHeaders)
+    }
     jsonError.value = ''
   } catch {
     jsonError.value = 'JSON 格式错误'
@@ -631,17 +638,12 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
         break
       case 'array':
         if (Array.isArray(configValue)) {
-          const itemType = (fieldSchema as any).items?.type || 'string'
-          if (itemType === 'object' || itemType === 'array') {
-            data[key] = JSON.stringify(configValue)
-          } else {
-            data[key] = configValue.join(', ')
-          }
+          data[key] = JSON.stringify(configValue)
         } else if (configValue !== undefined) {
           data[key] = configValue
         } else if (fieldDefault !== undefined) {
           if (Array.isArray(fieldDefault)) {
-            data[key] = fieldDefault.join(', ')
+            data[key] = JSON.stringify(fieldDefault)
           } else {
             data[key] = fieldDefault
           }
@@ -705,9 +707,11 @@ const buildConfigFromForm = (): string => {
         break
       case 'array':
         try {
-          config[key] = JSON.parse(value)
+          const parsed = JSON.parse(value)
+          if (Array.isArray(parsed) && parsed.length === 0) continue
+          config[key] = parsed
         } catch {
-          config[key] = String(value).split(',').map(s => s.trim()).filter(s => s)
+          config[key] = value
         }
         break
       case 'enum':
@@ -733,13 +737,18 @@ const buildConfigFromForm = (): string => {
   const isSimpleHeaders = !headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))
 
   if (isSimpleHeaders) {
-    syncSimpleKv()
-    const headersObj: Record<string, any> = {}
-    simpleKvData.value.forEach(item => {
-      if (item.key) headersObj[item.key] = item.value
-    })
-    if (Object.keys(headersObj).length > 0) {
-      config.headers = headersObj
+    const rawHeaders = formData.value.headers
+    if (rawHeaders && typeof rawHeaders === 'string') {
+      try {
+        const parsed = JSON.parse(rawHeaders)
+        if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+          if (Object.keys(parsed).length > 0) {
+            config.headers = parsed
+          }
+        }
+      } catch {
+        // JSON 无效，不保存 headers
+      }
     }
   } else {
     const headersResult = serializeHeaders()
