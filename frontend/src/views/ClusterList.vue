@@ -2648,7 +2648,7 @@ const loadPluginConfigs = async (cluster: Cluster) => {
 
 const showAddPluginConfig = async (cluster: Cluster) => {
   await loadPluginConfigs(cluster)
-  if (!cluster.plugin_configs && availablePlugins.value.length === 0) {
+  if (availablePlugins.value.length === 0) {
     await loadAvailablePlugins()
   }
   pluginConfigFormMode.value = 'add'
@@ -3058,10 +3058,6 @@ const openPluginConfigVersionManagement = (cluster: Cluster, pc?: any) => {
 }
 
 onMounted(() => {
-  const storedUser = localStorage.getItem('user')
-  if (storedUser && !authStore.user) {
-    authStore.user = JSON.parse(storedUser)
-  }
   loadClusters()
 })
 </script>

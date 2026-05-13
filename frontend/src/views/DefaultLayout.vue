@@ -22,7 +22,7 @@
           <CloudOutlined />
           <span>集群管理</span>
         </a-menu-item>
-        <a-menu-item key="edge-client" @click="router.push('/edge-client')">
+        <a-menu-item v-if="authStore.hasPermission('edge_nodes')" key="edge-client" @click="router.push('/edge-client')">
           <SettingOutlined />
           <span>边缘节点</span>
         </a-menu-item>
@@ -53,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -71,12 +71,7 @@ const selectedKeys = ref(['dashboard'])
 
 const isAdmin = computed(() => authStore.user?.role === 'admin')
 
-onMounted(() => {
-  const storedUser = localStorage.getItem('user')
-  if (storedUser && !authStore.user) {
-    authStore.user = JSON.parse(storedUser)
-  }
-})
+
 
 const handleLogout = async () => {
   await authStore.logout()

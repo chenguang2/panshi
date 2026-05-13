@@ -4,9 +4,11 @@ import api from '@/api'
 import type { User, LoginResponse } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('token'))
-  const user = ref<User | null>(null)
-  const permissions = ref<string[]>([])
+const token = ref<string | null>(localStorage.getItem('token'))
+const storedUser = localStorage.getItem('user')
+const user = ref<User | null>(storedUser ? JSON.parse(storedUser) : null)
+const storedPermissions = localStorage.getItem('permissions')
+const permissions = ref<string[]>(storedPermissions ? JSON.parse(storedPermissions) : [])
 
   const hasPermission = (resource: string): boolean => {
     if (!user.value) return false
@@ -21,6 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions.value = response.data.permissions || []
     localStorage.setItem('token', response.data.access_token)
     localStorage.setItem('user', JSON.stringify(response.data.user))
+    localStorage.setItem('permissions', JSON.stringify(response.data.permissions || []))
     return response.data
   }
 
@@ -31,6 +34,7 @@ export const useAuthStore = defineStore('auth', () => {
     permissions.value = []
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('permissions')
   }
 
   const fetchCurrentUser = async () => {

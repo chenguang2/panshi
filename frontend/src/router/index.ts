@@ -1,11 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/Login.vue')
+    component: () => import('@/views/Login.vue'),
+    meta: { public: true }
   },
   {
     path: '/',
@@ -29,7 +31,8 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'edge-client',
         name: 'EdgeClient',
-        component: () => import('@/views/EdgeClient.vue')
+        component: () => import('@/views/EdgeClient.vue'),
+        meta: { permission: 'edge_nodes' }
       },
       {
         path: 'tools',
@@ -49,9 +52,20 @@ router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  // 权限检查：路由配置了 requiredPermission 时需要对应的权限
+  const requiredPermission = to.meta?.permission as string | undefined
+  if (requiredPermission) {
+    const authStore = useAuthStore()
+    if (!authStore.hasPermission(requiredPermission)) {
+      next('/')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

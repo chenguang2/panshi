@@ -656,12 +656,14 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
         break
       case 'object':
         if (typeof configValue === 'object' && configValue !== null) {
-          data[key] = buildFormDataFromConfig(
-            (fieldSchema as any).properties || {},
-            configValue
-          )
+          const props = (fieldSchema as any).properties
+          if (props && Object.keys(props).length > 0) {
+            data[key] = buildFormDataFromConfig(props, configValue)
+          } else {
+            data[key] = JSON.stringify(configValue)
+          }
         } else {
-          data[key] = {}
+          data[key] = '{}'
         }
         break
       default:
