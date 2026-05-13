@@ -36,6 +36,7 @@
             <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
             <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
             <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
+            <a-tab-pane key="pluginConfigs" tab="插件组"></a-tab-pane>
             <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
@@ -220,6 +221,50 @@
                 </template>
               </template>
             </a-table>
+          </div>
+          <div v-else-if="cluster.activeTab === 'pluginConfigs'" class="tab-content">
+            <div class="node-actions">
+              <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
+              <a-button size="small" @click="publishPluginConfig(cluster)" :disabled="!cluster.selectedPluginConfig">发布</a-button>
+              <a-button size="small" @click="openPluginConfigVersionManagement(cluster)" :disabled="!cluster.selectedPluginConfig">版本管理</a-button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+              <div
+                v-for="pc in cluster.plugin_configs"
+                :key="pc.id"
+                class="plugin-config-card"
+                :class="{ selected: cluster.selectedPluginConfig?.id === pc.id }"
+                @click="cluster.selectedPluginConfig = pc"
+                style="width: 320px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
+              >
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <strong style="font-size: 14px;">{{ pc.name }}</strong>
+                  <span :style="{ color: pc.current_version ? '#52c41a' : '#999', fontSize: '12px' }">
+                    {{ pc.current_version ? `v${pc.current_version} ✅ 已发布` : '⏳ 未发布' }}
+                  </span>
+                </div>
+                <div v-if="pc.description" style="font-size: 12px; color: #666; margin-bottom: 12px;">{{ pc.description }}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
+                  <a-tag
+                    v-for="(pcfg, pname) in pc.plugins"
+                    :key="pname"
+                    color="blue"
+                    style="cursor: default;"
+                  >
+                    {{ pname }}
+                  </a-tag>
+                  <span v-if="!pc.plugins || Object.keys(pc.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                  <a-button size="small" @click.stop="editPluginConfig(cluster, pc)">编辑</a-button>
+                  <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
+                  <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger>删除</a-button>
+                </div>
+              </div>
+              <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
+                暂无插件组，点击"添加插件组"创建
+              </div>
+            </div>
           </div>
           <div v-else-if="cluster.activeTab === 'globalPlugins'" class="tab-content">
             <GlobalPluginSelector :cluster-id="cluster.id" />
@@ -574,6 +619,20 @@
       </a-tabs>
     </a-modal>
 
+    <a-modal v-model:open="pluginConfigModalVisible" :title="pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组'" width="600px" @ok="handlePluginConfigSubmit">
+      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
+          <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
+        </a-form-item>
+        <a-form-item label="描述" name="description">
+          <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
+        </a-form-item>
+        <a-form-item label="插件配置(JSON)" name="pluginsJson" :rules="[{ required: true, message: '请输入插件配置JSON' }]">
+          <a-textarea v-model:value="pluginConfigFormData.pluginsJson" :rows="12" placeholder='例如:&#10;{&#10;  "cors": {},&#10;  "limit-count": {&#10;    "count": 100,&#10;    "time_window": 60&#10;  }&#10;}' style="font-family: monospace;" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
     <VersionManagementModal
       v-model:open="versionModalVisible"
       :resource-type="versionModalType"
@@ -620,11 +679,22 @@ const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const nameError = ref('')
 const versionModalVisible = ref(false)
-const versionModalType = ref<'upstream' | 'route'>('upstream')
+const versionModalType = ref<'upstream' | 'route' | 'plugin_config'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
 const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
 const versionModalEdgeUuid = ref('')
+
+// Plugin Config state
+const pluginConfigModalVisible = ref(false)
+const pluginConfigFormMode = ref<'add' | 'edit'>('add')
+const pluginConfigEditingClusterId = ref<number | null>(null)
+const pluginConfigEditingId = ref<number | null>(null)
+const pluginConfigFormData = reactive({
+  name: '',
+  description: '',
+  pluginsJson: '{}'
+})
 
 const nodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
@@ -889,7 +959,9 @@ const loadClusters = async () => {
       routesSortOrder: 'asc' as 'asc' | 'desc',
       selectedNode: null,
       selectedUpstream: null,
-      selectedRoute: null
+      selectedRoute: null,
+      plugin_configs: [],
+      selectedPluginConfig: null
     }))
     pagination.total = res.data.total
     for (const cluster of clusters.value) {
@@ -1055,6 +1127,8 @@ const handleTabClick = async (cluster: Cluster, key: string) => {
     await loadRoutes(cluster)
   } else if (key === 'nodes') {
     await loadNodes(cluster)
+  } else if (key === 'pluginConfigs') {
+    await loadPluginConfigs(cluster)
   }
 }
 
@@ -2116,12 +2190,14 @@ const openUpstreamVersionManagement = (cluster: Cluster) => {
 }
 
 const versionModalOnPublished = async () => {
-  if (versionModalType.value !== 'upstream') return
   const cluster = clusters.value.find(c => c.id === versionModalClusterId.value)
   if (!cluster) return
 
-  // 刷新上游列表，确保显示最新版本
-  await loadUpstreams(cluster)
+  if (versionModalType.value === 'upstream') {
+    await loadUpstreams(cluster)
+  } else if (versionModalType.value === 'plugin_config') {
+    await loadPluginConfigs(cluster)
+  }
 }
 
 const publishRoute = async (cluster: Cluster) => {
@@ -2402,6 +2478,279 @@ const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => 
   versionModalClusterId.value = cluster.id
   versionModalResourceName.value = record.name
   versionModalEdgeUuid.value = record.edge_uuid || ''
+  versionModalVisible.value = true
+}
+
+// 插件组相关方法
+const loadPluginConfigs = async (cluster: Cluster) => {
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/plugin_configs`)
+    cluster.plugin_configs = res.data.items || res.data || []
+  } catch (error: any) {
+    message.error('加载插件组列表失败')
+    cluster.plugin_configs = []
+  }
+}
+
+const showAddPluginConfig = async (cluster: Cluster) => {
+  await loadPluginConfigs(cluster)
+  pluginConfigFormMode.value = 'add'
+  pluginConfigEditingClusterId.value = cluster.id
+  pluginConfigEditingId.value = null
+  pluginConfigFormData.name = ''
+  pluginConfigFormData.description = ''
+  pluginConfigFormData.pluginsJson = '{}'
+  pluginConfigModalVisible.value = true
+}
+
+const editPluginConfig = async (cluster: Cluster, pc: any) => {
+  pluginConfigFormMode.value = 'edit'
+  pluginConfigEditingClusterId.value = cluster.id
+  pluginConfigEditingId.value = pc.id
+  pluginConfigFormData.name = pc.name || ''
+  pluginConfigFormData.description = pc.description || ''
+  pluginConfigFormData.pluginsJson = JSON.stringify(pc.plugins || {}, null, 2)
+  pluginConfigModalVisible.value = true
+}
+
+const handlePluginConfigSubmit = async () => {
+  if (!pluginConfigEditingClusterId.value) return
+  if (!pluginConfigFormData.name) {
+    message.warning('请输入插件组名称')
+    return
+  }
+  if (!pluginConfigFormData.pluginsJson) {
+    message.warning('请输入插件配置JSON')
+    return
+  }
+
+  let plugins: Record<string, any>
+  try {
+    plugins = JSON.parse(pluginConfigFormData.pluginsJson)
+  } catch {
+    message.warning('插件配置JSON格式不正确')
+    return
+  }
+
+  try {
+    const payload = {
+      name: pluginConfigFormData.name,
+      description: pluginConfigFormData.description,
+      plugins
+    }
+
+    if (pluginConfigEditingId.value) {
+      await api.put(`/clusters/${pluginConfigEditingClusterId.value}/plugin_configs/${pluginConfigEditingId.value}`, payload)
+      message.success('插件组已更新')
+    } else {
+      await api.post(`/clusters/${pluginConfigEditingClusterId.value}/plugin_configs`, payload)
+      message.success('插件组已添加')
+    }
+
+    pluginConfigModalVisible.value = false
+    const cluster = clusters.value.find(c => c.id === pluginConfigEditingClusterId.value)
+    if (cluster) {
+      await loadPluginConfigs(cluster)
+    }
+  } catch (error: any) {
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '操作失败')
+  }
+}
+
+const deletePluginConfig = (cluster: Cluster, pc: any) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除插件组"${pc.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
+
+      const modal = Modal.info({
+        title: `删除插件组: ${pc.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
+
+      addLog(`开始删除插件组: ${pc.name}`)
+      progress.percent = 20
+      updateContent()
+
+      await new Promise(r => setTimeout(r, 400))
+
+      try {
+        addLog('正在从数据库删除...')
+        progress.percent = 40
+        updateContent()
+
+        const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`)
+        const data = res.data
+
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        if (data.results && data.results.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80
+          updateContent()
+
+          addLog('Edge 节点同步删除结果:')
+          let successCount = 0
+          let failCount = 0
+          for (const r of data.results) {
+            if (r.status === 'success') successCount++
+            else failCount++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog('')
+          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else {
+          addLog('集群中没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'success'
+          addLog('✅ 删除完成!')
+        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+        } else {
+          progress.status = 'success'
+          addLog('✅ 数据库已删除')
+        }
+
+        updateContent()
+
+        await loadPluginConfigs(cluster)
+        cluster.selectedPluginConfig = null
+      } catch (error: any) {
+        const detail = error.response?.data?.detail
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
+        updateContent()
+      }
+      modal.update({ okButtonProps: { disabled: false } })
+    }
+  })
+}
+
+const publishPluginConfig = async (cluster: Cluster, pc?: any) => {
+  const target = pc || cluster.selectedPluginConfig
+  if (!target) {
+    message.warning('请先选择一个插件组')
+    return
+  }
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定要将插件组"${target.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
+    okText: '确认发布',
+    cancelText: '取消',
+    onOk: async () => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
+
+      const modal = Modal.info({
+        title: `发布插件组: ${target.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
+
+      addLog(`开始发布插件组: ${target.name}`)
+      progress.percent = 10
+      updateContent()
+
+      await new Promise(r => setTimeout(r, 400))
+
+      try {
+        addLog('正在构建发布配置...')
+        progress.percent = 30
+        updateContent()
+
+        const res = await api.post(`/clusters/${cluster.id}/plugin_configs/${target.id}/publish`)
+        const data = res.data
+        progress.percent = 70
+
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
+        }
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+
+      } catch (error: any) {
+        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 发布失败: ${errMsg}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
+      }
+    }
+  })
+}
+
+const openPluginConfigVersionManagement = (cluster: Cluster) => {
+  const target = cluster.selectedPluginConfig
+  if (!target) {
+    message.warning('请先选择一个插件组')
+    return
+  }
+  versionModalType.value = 'plugin_config'
+  versionModalResourceId.value = target.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = target.name
+  versionModalEdgeUuid.value = target.edge_uuid || ''
   versionModalVisible.value = true
 }
 

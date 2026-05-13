@@ -99,7 +99,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -207,6 +207,8 @@ const loadHistory = async () => {
   try {
     const endpoint = props.resourceType === 'upstream'
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history`
+      : props.resourceType === 'plugin_config'
+      ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`
     const res = await api.get(endpoint)
     versions.value = res.data.items || []
@@ -434,6 +436,8 @@ const handleRepublish = async () => {
   try {
     const endpoint = props.resourceType === 'upstream'
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
+      : props.resourceType === 'plugin_config'
+      ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success('已切换并发布到版本 v' + selectedVersion.value)
@@ -459,6 +463,8 @@ const handleRepublishSelected = async () => {
     } else {
       const endpoint = props.resourceType === 'upstream'
         ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${targetVersion}`
+        : props.resourceType === 'plugin_config'
+        ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${targetVersion}`
         : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${targetVersion}`
       await api.post(endpoint)
       message.success('已切换到版本 v' + targetVersion)
@@ -482,6 +488,8 @@ const handleDelete = async () => {
       if (!props.resourceId) return
       const endpoint = props.resourceType === 'upstream'
         ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
+        : props.resourceType === 'plugin_config'
+        ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history/${selectedVersionData.value.id}`
         : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
       await api.delete(endpoint)
     }

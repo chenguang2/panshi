@@ -139,3 +139,17 @@ class PluginMetadataVersion(Base):
     version = Column(Integer, nullable=False)
     action = Column(String(20), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PluginConfig(Base):
+    __tablename__ = "ps_plugin_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    plugins = Column(Text, nullable=True)
+    current_version = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

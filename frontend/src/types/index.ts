@@ -66,6 +66,8 @@ export interface Cluster {
   selectedNode?: Node | null
   selectedUpstream?: Upstream | null
   selectedRoute?: Route | null
+  plugin_configs?: PluginConfig[]
+  selectedPluginConfig?: PluginConfig | null
 }
 
 export interface Node {
@@ -135,4 +137,15 @@ export interface Plugin {
 export interface RoutePlugin {
   plugin_name: string
   config: string
+}
+
+export interface PluginConfig {
+  id: number
+  name: string
+  description: string
+  plugins: Record<string, any>
+  edge_uuid?: string
+  current_version?: number
+  created_at?: string
+  updated_at?: string
 }

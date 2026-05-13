@@ -11,7 +11,8 @@ from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema,
-    NodeCreate, NodeUpdate, NodeResponse, NodeListResponse, ConfigVersionResponse, ConfigVersionListResponse
+    NodeCreate, NodeUpdate, NodeResponse, NodeListResponse, ConfigVersionResponse, ConfigVersionListResponse,
+    PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -359,6 +360,119 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
             results.append(node_result)
 
     return {"message": "上游服务已删除", "results": results}
+
+
+# ─── PluginConfig CRUD ────────────────────────────────────────────────
+
+@router.get("/{cluster_id}/plugin_configs", response_model=dict)
+async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    result = await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id).order_by(PluginConfig.id))
+    configs = result.scalars().all()
+    response = [PluginConfigResponse.model_validate(c) for c in configs]
+    return {"total": len(response), "items": response}
+
+
+@router.post("/{cluster_id}/plugin_configs", response_model=PluginConfigResponse)
+async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    config_data = data.model_dump()
+    if config_data.get("plugins") is not None:
+        config_data["plugins"] = json.dumps(config_data["plugins"])
+    db_config = PluginConfig(cluster_id=cluster_id, **config_data)
+    db.add(db_config)
+    await db.commit()
+    await db.refresh(db_config)
+    return PluginConfigResponse.model_validate(db_config)
+
+
+@router.get("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
+async def get_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    return PluginConfigResponse.model_validate(config)
+
+
+@router.put("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
+async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConfigUpdate, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if key == "plugins" and value:
+            value = json.dumps(value)
+        setattr(config, key, value)
+    await db.commit()
+    await db.refresh(config)
+    return PluginConfigResponse.model_validate(config)
+
+
+@router.delete("/{cluster_id}/plugin_configs/{config_id}")
+async def delete_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    await db.delete(config)
+    await db.commit()
+    return {"message": "插件组已删除"}
+
+
+@router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
+async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+    from app.models.cluster import PluginConfig
+    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
+    config = result.scalar_one_or_none()
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    upstream_plugins = json.loads(config.plugins) if config.plugins else None
+    # Build event for history
+    event_data = {
+        "id": config.id,
+        "edge_uuid": config.edge_uuid,
+        "name": config.name,
+        "description": config.description,
+        "plugins": upstream_plugins,
+    }
+    edge_data = {
+        "desc": config.name,
+        "plugins": upstream_plugins or {},
+    }
+    # Check for active nodes
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+    if not active_nodes:
+        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": 0, "results": []}
+    results = []
+    success_count = 0
+    fail_count = 0
+    for node in active_nodes:
+        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+        try:
+            sync_db = db
+            client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
+            response = client.create_plugin_config(config.edge_uuid, edge_data)
+            node_result["status"] = "success"
+            node_result["response"] = response
+            success_count += 1
+        except (EdgeConnectionError, EdgeAPIError) as e:
+            node_result["status"] = "failed"
+            node_result["error"] = str(e)
+            fail_count += 1
+        results.append(node_result)
+    if success_count == len(active_nodes):
+        return {"status": "ok", "message": f"插件组发布成功，已同步到 {success_count} 个节点", "results": results}
+    elif success_count > 0:
+        return {"status": "partial", "message": f"插件组发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "results": results}
+    else:
+        return {"status": "error", "message": "插件组发布失败：无法连接到任何 edge 服务器", "results": results}
 
 
 NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}
