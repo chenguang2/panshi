@@ -1,0 +1,5 @@
+- [x] 1.1 delete_upstream 增加 UpstreamTarget + ConfigVersion 清理
+- [x] 1.2 delete_route 增加 RoutePlugin + ConfigVersion 清理
+- [x] 1.3 delete_plugin_config 增加 ConfigVersion 清理
+- [x] 1.4 delete_global_rule 增加 ConfigVersion 清理
+- [x] 2.1 Playwright 测试（4/4 通过）

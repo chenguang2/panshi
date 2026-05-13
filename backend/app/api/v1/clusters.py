@@ -343,6 +343,10 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
+    # 先显式删除关联的 targets（SQLite 异步引擎可能未启用外键级联）
+    await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
+
     await db.delete(upstream)
     await db.commit()
 
@@ -419,6 +423,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, db: AsyncSession
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
+    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id == config_id))
     await db.delete(config)
     await db.commit()
     results = []
@@ -613,6 +618,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = D
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
+    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id))
     await db.delete(rule)
     await db.commit()
     results = []

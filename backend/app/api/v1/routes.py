@@ -236,6 +236,8 @@ async def delete_route(cluster_id: int, route_id: int, db: AsyncSession = Depend
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
+    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "route", ConfigVersion.resource_id == route_id))
+    await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
     await db.delete(route)
     await db.commit()
 
