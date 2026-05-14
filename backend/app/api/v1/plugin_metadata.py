@@ -26,8 +26,8 @@ async def list_plugin_metadata(cluster_id: int, db: AsyncSession = Depends(get_d
             "plugin_name": item.plugin_name,
             "metadata": json.loads(item.config_data) if item.config_data else {},
             "current_version": item.current_version,
-            "created_at": item.created_at.isoformat() if item.created_at else None,
-            "updated_at": item.updated_at.isoformat() if item.updated_at else None
+            "created_at": item.created_at.isoformat() + 'Z' if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() + 'Z' if item.updated_at else None
         } for item in items]
     }
 
@@ -86,8 +86,8 @@ async def get_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSessio
         "plugin_name": item.plugin_name,
         "metadata": json.loads(item.config_data) if item.config_data else {},
         "current_version": item.current_version,
-        "created_at": item.created_at.isoformat() if item.created_at else None,
-        "updated_at": item.updated_at.isoformat() if item.updated_at else None
+        "created_at": item.created_at.isoformat() + 'Z' if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() + 'Z' if item.updated_at else None
     }
 
 
@@ -277,7 +277,7 @@ async def get_plugin_metadata_versions(
             "id": v.id,
             "version": v.version,
             "config": json.loads(v.config) if v.config else {},
-            "created_at": v.created_at.isoformat() if v.created_at else None
+            "created_at": v.created_at.isoformat() + 'Z' if v.created_at else None
         } for v in versions],
         "current_version": item.current_version
     }

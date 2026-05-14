@@ -18,7 +18,7 @@ ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
 ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 
 
-def route_to_response(r: Route) -> RouteResponse:
+def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None) -> RouteResponse:
     """Convert Route model to RouteResponse"""
     route_dict = {
         "id": r.id,
@@ -36,6 +36,8 @@ def route_to_response(r: Route) -> RouteResponse:
         "vars": json.loads(r.vars) if r.vars else None,
         "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
         "plugin_config_ids": json.loads(r.plugin_config_ids) if r.plugin_config_ids else None,
+        "current_version": current_version or r.current_version,
+        "published_at": published_at,
         "created_at": r.created_at.isoformat() if r.created_at else None
     }
     return RouteResponse.model_validate(route_dict)
@@ -91,7 +93,20 @@ async def list_routes(
     result = await db.execute(query)
     routes = result.scalars().all()
 
-    items = [route_to_response(r) for r in routes]
+    # 批量查询最新发布时间
+    route_ids = [r.id for r in routes]
+    pub_result = await db.execute(
+        select(
+            ConfigVersion.resource_id,
+            func.max(ConfigVersion.created_at).label("latest_ts")
+        ).where(
+            ConfigVersion.resource_type == "route",
+            ConfigVersion.resource_id.in_(route_ids) if route_ids else False
+        ).group_by(ConfigVersion.resource_id)
+    )
+    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if route_ids else {}
+
+    items = [route_to_response(r, published_at=pub_map.get(r.id).isoformat() + 'Z' if pub_map.get(r.id) else None) for r in routes]
 
     return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
 

@@ -332,12 +332,28 @@ async def list_upstreams(
     result = await db.execute(query)
     upstreams = result.scalars().all()
 
+    # 批量查询最新发布时间
+    upstream_ids = [u.id for u in upstreams]
+    pub_result = await db.execute(
+        select(
+            ConfigVersion.resource_id,
+            func.max(ConfigVersion.created_at).label("latest_ts")
+        ).where(
+            ConfigVersion.resource_type == "upstream",
+            ConfigVersion.resource_id.in_(upstream_ids) if upstream_ids else False
+        ).group_by(ConfigVersion.resource_id)
+    )
+    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if upstream_ids else {}
+
     items = []
     for u in upstreams:
         targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == u.id))
         targets = targets_result.scalars().all()
         response = UpstreamWithTargets.model_validate(u)
         response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+        response.current_version = u.current_version
+        ts = pub_map.get(u.id)
+        response.published_at = ts.isoformat() + 'Z' if ts else None
         items.append(response)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
@@ -463,7 +479,20 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
 async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id).order_by(PluginConfig.id))
     configs = result.scalars().all()
-    response = [PluginConfigResponse.model_validate(c) for c in configs]
+    # 批量查询最新发布时间
+    pc_ids = [c.id for c in configs]
+    pub = await db.execute(
+        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
+        .where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id.in_(pc_ids) if pc_ids else False)
+        .group_by(ConfigVersion.resource_id)
+    ) if pc_ids else None
+    pub_map = {r.resource_id: r.ts for r in pub.all()} if pub else {}
+    response = []
+    for c in configs:
+        r = PluginConfigResponse.model_validate(c)
+        ts = pub_map.get(c.id)
+        r.published_at = ts.isoformat() + 'Z' if ts else None
+        response.append(r)
     return {"total": len(response), "items": response}
 
 
@@ -572,7 +601,7 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
-        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": 0, "results": []}
+        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
     results = []
     success_count = 0
     fail_count = 0
@@ -591,11 +620,11 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
             fail_count += 1
         results.append(node_result)
     if success_count == len(active_nodes):
-        return {"status": "ok", "message": f"插件组发布成功，已同步到 {success_count} 个节点", "results": results}
+        return {"status": "ok", "message": f"插件组发布成功，已同步到 {success_count} 个节点", "version": new_version, "results": results}
     elif success_count > 0:
-        return {"status": "partial", "message": f"插件组发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "results": results}
+        return {"status": "partial", "message": f"插件组发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "version": new_version, "results": results}
     else:
-        return {"status": "error", "message": "插件组发布失败：无法连接到任何 edge 服务器", "results": results}
+        return {"status": "error", "message": "插件组发布失败：无法连接到任何 edge 服务器", "version": new_version, "results": results}
 
 
 @router.get("/{cluster_id}/plugin_configs/{config_id}/history", response_model=ConfigVersionListResponse)
@@ -658,7 +687,20 @@ async def delete_plugin_config_history(cluster_id: int, config_id: int, history_
 async def list_global_rules(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id).order_by(GlobalRule.id))
     rules = result.scalars().all()
-    response = [GlobalRuleResponse.model_validate(r) for r in rules]
+    # 批量查询最新发布时间
+    gr_ids = [g.id for g in rules]
+    pub = await db.execute(
+        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
+        .where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id.in_(gr_ids) if gr_ids else False)
+        .group_by(ConfigVersion.resource_id)
+    ) if gr_ids else None
+    pub_map = {r.resource_id: r.ts for r in pub.all()} if pub else {}
+    response = []
+    for g in rules:
+        r = GlobalRuleResponse.model_validate(g)
+        ts = pub_map.get(g.id)
+        r.published_at = ts.isoformat() + 'Z' if ts else None
+        response.append(r)
     return {"total": len(response), "items": response}
 
 
@@ -752,7 +794,7 @@ async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = 
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
-        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "results": []}
+        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
     results, success_count, fail_count = [], 0, 0
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
@@ -768,11 +810,11 @@ async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = 
             fail_count += 1
         results.append(node_result)
     if success_count == len(active_nodes):
-        return {"status": "ok", "message": f"全局规则发布成功，已同步到 {success_count} 个节点", "results": results}
+        return {"status": "ok", "message": f"全局规则发布成功，已同步到 {success_count} 个节点", "version": new_version, "results": results}
     elif success_count > 0:
-        return {"status": "partial", "message": f"全局规则发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "results": results}
+        return {"status": "partial", "message": f"全局规则发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "version": new_version, "results": results}
     else:
-        return {"status": "error", "message": "全局规则发布失败：无法连接到任何 edge 服务器", "results": results}
+        return {"status": "error", "message": "全局规则发布失败：无法连接到任何 edge 服务器", "version": new_version, "results": results}
 
 
 @router.get("/{cluster_id}/global_rules/{rule_id}/history", response_model=ConfigVersionListResponse)

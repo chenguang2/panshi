@@ -55,14 +55,7 @@ class ClusterResponse(BaseModel):
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
-        return v
-
-    @field_validator('name')
-    @classmethod
-    def validate_name(cls, v: str) -> str:
-        if not NAME_PATTERN.match(v):
-            raise ValueError(NAME_ERROR_MSG)
+            return v.isoformat() + 'Z'
         return v
 
     class Config:
@@ -123,13 +116,15 @@ class UpstreamResponse(UpstreamBase):
     id: int
     edge_uuid: str
     cluster_id: int
+    current_version: Optional[int] = None
+    published_at: Optional[str] = None
     created_at: Optional[str] = None
 
     @field_validator('created_at', mode='before')
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     @field_validator('checks', mode='before')
@@ -207,7 +202,7 @@ class NodeResponse(NodeBase):
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     class Config:
@@ -216,6 +211,8 @@ class NodeResponse(NodeBase):
 
 class NodeListResponse(BaseModel):
     total: int
+    page: int
+    page_size: int
     items: List[NodeResponse]
 
 
@@ -233,7 +230,7 @@ class ConfigVersionResponse(BaseModel):
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     class Config:
@@ -266,13 +263,14 @@ class PluginConfigResponse(BaseModel):
     description: Optional[str] = None
     plugins: Optional[Dict[str, Any]] = None
     current_version: Optional[int] = None
+    published_at: Optional[str] = None
     created_at: Optional[str] = None
 
     @field_validator('created_at', mode='before')
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     @field_validator('plugins', mode='before')
@@ -307,13 +305,14 @@ class GlobalRuleResponse(BaseModel):
     description: Optional[str] = None
     plugins: Optional[Dict[str, Any]] = None
     current_version: Optional[int] = None
+    published_at: Optional[str] = None
     created_at: Optional[str] = None
 
     @field_validator('created_at', mode='before')
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     @field_validator('plugins', mode='before')

@@ -42,13 +42,15 @@ class RouteResponse(RouteBase):
     edge_uuid: str
     cluster_id: int
     upstream_id: Optional[int] = None
+    current_version: Optional[int] = None
+    published_at: Optional[str] = None
     created_at: Optional[str] = None
 
     @field_validator('created_at', mode='before')
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
-            return v.isoformat()
+            return v.isoformat() + 'Z'
         return v
 
     @field_validator('vars', mode='before')

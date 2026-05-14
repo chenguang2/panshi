@@ -45,19 +45,21 @@
             class="plugin-item configured"
           >
             <div class="plugin-info">
-              <div class="plugin-name">
-                {{ item.plugin_name }}
-                <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
-                <a-tag v-else color="orange" size="small">未发布</a-tag>
-              </div>
-              <div class="plugin-meta">
-                v{{ item.current_version }} · {{ formatDate(item.updated_at) }}
+              <div class="plugin-name">{{ item.plugin_name }}</div>
+              <div class="plugin-right">
+                <div>
+                  <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
+                  <a-tag v-else color="orange" size="small">未发布</a-tag>
+                </div>
+                <div class="plugin-meta" :style="{ color: item.current_version ? '#52c41a' : '#999' }">
+                  {{ item.current_version && item.updated_at ? `v${item.current_version} · ${formatDate(item.updated_at)}` : item.current_version ? `v${item.current_version} · 未同步` : '' }}
+                </div>
               </div>
             </div>
             <div class="plugin-actions">
-              <a-button size="small" @click="viewPlugin(item)">查看</a-button>
-              <a-button size="small" @click="editPlugin(item)">编辑</a-button>
-              <a-button size="small" danger @click="deletePlugin(item)">删除</a-button>
+              <a-button size="small" @click="viewPlugin(item)" title="查看"><EyeOutlined /></a-button>
+              <a-button size="small" @click="editPlugin(item)" title="编辑"><EditOutlined /></a-button>
+              <a-button size="small" danger @click="deletePlugin(item)" title="删除"><DeleteOutlined /></a-button>
               <a-divider type="vertical" />
               <a-button size="small" @click="publishPlugin(item)">发布</a-button>
               <a-button size="small" @click="openVersionManagement(item)">版本管理</a-button>
@@ -116,6 +118,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import { EyeOutlined, EditOutlined, DeleteOutlined, CloudUploadOutlined, HistoryOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -428,7 +431,7 @@ const openVersionManagement = (item: ConfiguredPlugin) => {
 
 const formatDate = (dateStr: string | null) => {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  return new Date(dateStr).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
 }
 
 watch(() => props.clusterId, () => {
@@ -501,6 +504,19 @@ watch(() => props.clusterId, () => {
   padding-right: 4px;
 }
 
+.configured-panel .plugin-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+
+.configured-panel .plugin-item {
+  width: calc(50% - 4px);
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
 .plugin-item {
   display: flex;
   justify-content: space-between;
@@ -525,6 +541,14 @@ watch(() => props.clusterId, () => {
 .plugin-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.plugin-right {
+  text-align: right;
+  flex-shrink: 0;
 }
 
 .plugin-name {
@@ -542,14 +566,21 @@ watch(() => props.clusterId, () => {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+  min-height: 18px;
 }
 
 .plugin-actions {
   display: flex;
   gap: 4px;
   margin-top: 8px;
-  flex-wrap: wrap;
+  align-items: center;
 }
+
+.plugin-actions .ant-divider {
+  margin-left: auto;
+}
+
+
 
 .empty-hint {
   text-align: center;

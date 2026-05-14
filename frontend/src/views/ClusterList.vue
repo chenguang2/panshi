@@ -236,11 +236,19 @@
                 @click="cluster.selectedPluginConfig = pc"
                 style="width: 320px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
               >
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 46px;">
                   <strong style="font-size: 14px;">{{ pc.name }}</strong>
-                  <span :style="{ color: pc.current_version ? '#52c41a' : '#999', fontSize: '12px' }">
-                    {{ pc.current_version ? `v${pc.current_version} ✅ 已发布` : '⏳ 未发布' }}
-                  </span>
+                  <div style="text-align: right;">
+                    <div style="margin-bottom: 2px;">
+                      <a-tag v-if="pc.current_version" color="green" size="small">已发布</a-tag>
+                      <a-tag v-else color="orange" size="small">未发布</a-tag>
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                      <template v-if="pc.current_version && pc.published_at">v{{ pc.current_version }} · {{ formatPublishDateTime(pc.published_at) }}</template>
+                      <template v-else-if="pc.current_version">v{{ pc.current_version }} · 未同步</template>
+                      <template v-else>&nbsp;</template>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="pc.description" style="font-size: 12px; color: #666; margin-bottom: 12px;">{{ pc.description }}</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
@@ -255,9 +263,10 @@
                   </a-tag>
                   <span v-if="!pc.plugins || Object.keys(pc.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
                 </div>
-                <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                  <a-button size="small" @click.stop="editPluginConfig(cluster, pc)">编辑</a-button>
-                  <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger>删除</a-button>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <a-button size="small" @click.stop="editPluginConfig(cluster, pc)" title="编辑"><EditOutlined /></a-button>
+                  <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger title="删除"><DeleteOutlined /></a-button>
+                  <span style="flex:1"></span>
                   <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
                   <a-button size="small" @click.stop="openPluginConfigVersionManagement(cluster, pc)">版本管理</a-button>
                 </div>
@@ -280,20 +289,29 @@
                 @click="cluster.selectedGlobalRule = gr"
                 style="width: 320px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
               >
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; min-height: 46px;">
                   <strong style="font-size: 14px;">{{ gr.name }}</strong>
-                  <span :style="{ color: gr.current_version ? '#52c41a' : '#999', fontSize: '12px' }">
-                    {{ gr.current_version ? `v${gr.current_version} ✅ 已发布` : '⏳ 未发布' }}
-                  </span>
+                  <div style="text-align: right;">
+                    <div style="margin-bottom: 2px;">
+                      <a-tag v-if="gr.current_version" color="green" size="small">已发布</a-tag>
+                      <a-tag v-else color="orange" size="small">未发布</a-tag>
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                      <template v-if="gr.current_version && gr.published_at">v{{ gr.current_version }} · {{ formatPublishDateTime(gr.published_at) }}</template>
+                      <template v-else-if="gr.current_version">v{{ gr.current_version }} · 未同步</template>
+                      <template v-else>&nbsp;</template>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="gr.description" style="font-size: 12px; color: #666; margin-bottom: 12px;">{{ gr.description }}</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
                   <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="blue" style="cursor: pointer;" @click.stop="viewGlobalRulePluginConfig(gr, pname, cfg)">{{ pname }}</a-tag>
                   <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
                 </div>
-                <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                  <a-button size="small" @click.stop="editGlobalRule(cluster, gr)">编辑</a-button>
-                  <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger>删除</a-button>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <a-button size="small" @click.stop="editGlobalRule(cluster, gr)" title="编辑"><EditOutlined /></a-button>
+                  <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger title="删除"><DeleteOutlined /></a-button>
+                  <span style="flex:1"></span>
                   <a-button size="small" @click.stop="publishGlobalRule(cluster, gr)">发布</a-button>
                   <a-button size="small" @click.stop="openGlobalRuleVersionManagement(cluster, gr)">版本管理</a-button>
                 </div>
@@ -388,17 +406,23 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['edit', 'delete', 'diff'].includes(a))" :key="btnKey">
+                  <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
                     <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
                       {{ getNodeActionButtonTitle(btnKey) }}
                     </a-button>
                   </template>
-                  <a-divider type="vertical" v-if="nodeActionsSelected.some(a => ['edit', 'delete', 'diff'].includes(a)) && nodeActionsSelected.some(a => ['start', 'stop', 'status'].includes(a))" />
-                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['start', 'stop', 'status'].includes(a))" :key="btnKey">
-                    <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
-                      {{ getNodeActionButtonTitle(btnKey) }}
+                  <a-dropdown v-if="moreNodeActions.length > 0">
+                    <a-button size="small">
+                      更多 <DownOutlined />
                     </a-button>
-                  </template>
+                    <template #overlay>
+                      <a-menu @click="({ key }) => handleNodeAction(cluster, record, key)">
+                        <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
+                          {{ btn.title }}
+                        </a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
                 </template>
               </template>
             </a-table>
@@ -748,7 +772,7 @@
 import { ref, reactive, computed, onMounted, watch, h } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
+import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin, RoutePlugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -828,10 +852,51 @@ const upstreamColumns = [
   { title: '操作', key: 'actions', width: 280 }
 ]
 
+const publishStatusRender = (version: number | null, publishedAt: string | null) => {
+  const published = version !== null && version !== undefined
+  if (published && publishedAt) {
+    return h('span', [
+      h('span', {
+        style: 'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #52c41a;color:#52c41a;font-weight:500;background:#f6ffed;',
+      }, `v${version}`),
+      h('span', {
+        style: 'font-size:11px;color:#666;margin-left:4px;cursor:help;',
+        title: `发布时间: ${formatPublishDateTime(publishedAt)}`
+      }, ` ${formatPublishDateTime(publishedAt)}`),
+    ])
+  }
+  if (published) {
+    return h('span', {
+      style: 'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #52c41a;color:#52c41a;font-weight:500;background:#f6ffed;',
+    }, `v${version} · 未同步`)
+  }
+  return h('span', {
+    style: 'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #d9d9d9;color:#999;background:#fafafa;',
+  }, '未发布')
+}
+
+const formatPublishDate = (isoStr: string | null): string => {
+  if (!isoStr) return ''
+  try { return new Date(isoStr).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) } catch { return '' }
+}
+
+const formatPublishDateTime = (isoStr: string | null): string => {
+  if (!isoStr) return ''
+  try {
+    return new Date(isoStr).toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    })
+  } catch { return '' }
+}
+
 const allUpstreamColumns = [
   { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
   { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true, customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text) },
   { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
+  { title: '发布状态', key: 'publish_status', width: 140, customRender: ({ record }: any) =>
+    publishStatusRender(record.current_version, record.published_at) },
   { title: '操作', key: 'actions', width: 280 }
 ]
 
@@ -849,13 +914,15 @@ const allRouteColumns = [
   { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id' },
   { title: '优先级', dataIndex: 'priority', key: 'priority', sorter: true },
   { title: '状态', key: 'status', sorter: true },
+  { title: '发布状态', key: 'publish_status', width: 140, customRender: ({ record }: any) =>
+    publishStatusRender(record.current_version, record.published_at) },
   { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled' },
   { title: '描述', dataIndex: 'description', key: 'description' },
   { title: '操作', key: 'actions', width: 340 }
 ]
 
 const routeColumnPopoverVisible = ref(false)
-const routeColumnsSelected = ref(['name', 'uri', 'priority', 'actions'])
+const routeColumnsSelected = ref(['name', 'uri', 'publish_status', 'priority', 'actions'])
 const routeSearchVisible = ref(true)
 
 const allActionButtons = [
@@ -873,7 +940,7 @@ const visibleRouteColumns = computed(() => {
 })
 
 const upstreamColumnPopoverVisible = ref(false)
-const upstreamColumnsSelected = ref(['name', 'load_balance', 'description', 'actions'])
+const upstreamColumnsSelected = ref(['name', 'load_balance', 'publish_status', 'description', 'actions'])
 const upstreamSearchVisible = ref(true)
 
 const allUpstreamActionButtons = [
@@ -902,6 +969,9 @@ const allNodeActionButtons = [
   { key: 'status', title: '状态查询' }
 ]
 const nodeActionsSelected = ref(['start', 'stop', 'status'])
+const moreNodeActions = computed(() =>
+  allNodeActionButtons.filter(b => !nodeActionsSelected.value.includes(b.key))
+)
 
 const visibleNodeColumns = computed(() => {
   const selected = new Set(nodeColumnsSelected.value)
@@ -2648,6 +2718,7 @@ const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
         updateContent()
         modal.update({ okButtonProps: { disabled: false } })
 
+        await loadUpstreams(cluster)
       } catch (error: any) {
         const errMsg = error.response?.data?.detail || error.message || '未知错误'
         progress.percent = 100
@@ -2739,6 +2810,7 @@ const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
         updateContent()
         modal.update({ okButtonProps: { disabled: false } })
 
+        await loadRoutes(cluster)
       } catch (error: any) {
         const errMsg = error.response?.data?.detail || error.message || '未知错误'
         progress.percent = 100
