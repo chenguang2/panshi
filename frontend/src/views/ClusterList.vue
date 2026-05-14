@@ -1252,10 +1252,10 @@ const getNodeActionButtonTitle = (key: string) => {
 const handleNodeAction = (cluster: Cluster, record: Node, action: string) => {
   switch (action) {
     case 'edit':
-      editNode(cluster)
+      editNode(cluster, record)
       break
     case 'delete':
-      deleteNode(cluster)
+      deleteNode(cluster, record)
       break
     case 'start':
       startNode(record)
@@ -1663,18 +1663,19 @@ const showAddNodeModal = async (cluster: Cluster) => {
   nodeModalVisible.value = true
 }
 
-const editNode = (cluster: Cluster) => {
-  if (!cluster.selectedNode) {
+const editNode = (cluster: Cluster, node?: Node) => {
+  const target = node || cluster.selectedNode
+  if (!target) {
     message.warning('请先选择一个节点')
     return
   }
-  editingNode.value = cluster.selectedNode
+  editingNode.value = target
   currentClusterId.value = cluster.id
-  nodeForm.ip = cluster.selectedNode.ip
-  nodeForm.service_port = cluster.selectedNode.service_port
-  nodeForm.management_port = cluster.selectedNode.management_port
-  nodeForm.edge_path = cluster.selectedNode.edge_path
-  nodeForm.status = cluster.selectedNode.status
+  nodeForm.ip = target.ip
+  nodeForm.service_port = target.service_port
+  nodeForm.management_port = target.management_port
+  nodeForm.edge_path = target.edge_path
+  nodeForm.status = target.status
   nodeModalVisible.value = true
 }
 
@@ -1707,20 +1708,21 @@ const handleNodeSubmit = async () => {
   }
 }
 
-const deleteNode = (cluster: Cluster) => {
-  if (!cluster.selectedNode) {
+const deleteNode = (cluster: Cluster, node?: Node) => {
+  const target = node || cluster.selectedNode
+  if (!target) {
     message.warning('请先选择一个节点')
     return
   }
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除节点"${cluster.selectedNode.ip}"吗？此操作不可撤销。`,
+    content: `确定要删除节点"${target.ip}"吗？此操作不可撤销。`,
     okText: '确认删除',
     okType: 'danger',
     cancelText: '取消',
     onOk: async () => {
       try {
-        await api.delete(`/clusters/${cluster.id}/nodes/${cluster.selectedNode!.id}`)
+        await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`)
         message.success('节点已删除')
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items

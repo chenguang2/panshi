@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 import json
 
 from app.core.database import get_db
-from app.models.cluster import PluginMetadata, ConfigVersion, Node
+from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
 from app.models.system import AuditLog
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
@@ -177,6 +177,7 @@ async def publish_plugin_metadata(
     db: AsyncSession = Depends(get_db)
 ):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    from app.services.edge_logger import get_edge_logger
 
     result = await db.execute(
         select(PluginMetadata).where(
@@ -213,6 +214,9 @@ async def publish_plugin_metadata(
 
     edge_data = plugin_config
 
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     # 推送到活跃 Edge 节点
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
@@ -220,6 +224,7 @@ async def publish_plugin_metadata(
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
+    edge_logger = get_edge_logger()
     results = []
     success_count = 0
     fail_count = 0
@@ -228,11 +233,42 @@ async def publish_plugin_metadata(
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
             client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+
+            import base64
+            import json as json_module
+            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
             response = client.create_plugin_metadata(plugin_name, edge_data)
+
+            edge_logger.log_plugin_metadata_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                plugin_name=plugin_name,
+                method="PUT",
+                path=f"/edge/admin/plugin_metadata/{plugin_name}",
+                request_body=edge_data,
+                encrypted_body=encrypted,
+                response_status=201,
+                response_body=response,
+                status="SUCCESS"
+            )
+
             node_result["status"] = "success"
             node_result["response"] = response
             success_count += 1
         except (EdgeConnectionError, EdgeAPIError) as e:
+            edge_logger.log_plugin_metadata_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                plugin_name=plugin_name,
+                method="PUT",
+                path=f"/edge/admin/plugin_metadata/{plugin_name}",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=e.status_code if isinstance(e, EdgeAPIError) else None,
+                response_body=e.response_body if isinstance(e, EdgeAPIError) else None,
+                status="FAILED",
+                error=str(e)
+            )
             node_result["status"] = "failed"
             node_result["error"] = str(e)
             fail_count += 1

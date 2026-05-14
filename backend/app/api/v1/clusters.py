@@ -564,6 +564,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, db: AsyncSession
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
 async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    from app.services.edge_logger import get_edge_logger
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
@@ -597,11 +598,17 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
         "desc": config.name,
         "plugins": upstream_plugins or {},
     }
+
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     # Check for active nodes
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
+
+    edge_logger = get_edge_logger()
     results = []
     success_count = 0
     fail_count = 0
@@ -610,11 +617,44 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
         try:
             sync_db = db
             client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
+
+            import base64
+            import json as json_module
+            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
             response = client.create_plugin_config(config.edge_uuid, edge_data)
+
+            edge_logger.log_plugin_config_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                config_id=config_id,
+                config_name=config.name,
+                method="PUT",
+                path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
+                request_body=edge_data,
+                encrypted_body=encrypted,
+                response_status=201,
+                response_body=response,
+                status="SUCCESS"
+            )
+
             node_result["status"] = "success"
             node_result["response"] = response
             success_count += 1
         except (EdgeConnectionError, EdgeAPIError) as e:
+            edge_logger.log_plugin_config_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                config_id=config_id,
+                config_name=config.name,
+                method="PUT",
+                path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=e.status_code if isinstance(e, EdgeAPIError) else None,
+                response_body=e.response_body if isinstance(e, EdgeAPIError) else None,
+                status="FAILED",
+                error=str(e)
+            )
             node_result["status"] = "failed"
             node_result["error"] = str(e)
             fail_count += 1
@@ -772,6 +812,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = D
 @router.post("/{cluster_id}/global_rules/{rule_id}/publish")
 async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+    from app.services.edge_logger import get_edge_logger
     result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
     rule = result.scalar_one_or_none()
     if not rule:
@@ -791,20 +832,59 @@ async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = 
     rule.current_version = new_version
     await db.commit()
     edge_data = {"desc": rule.name, "plugins": rule_plugins or {}}
+
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
+
+    edge_logger = get_edge_logger()
     results, success_count, fail_count = [], 0, 0
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
             client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+
+            import base64
+            import json as json_module
+            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
             response = client.create_global_rule(rule.edge_uuid, edge_data)
+
+            edge_logger.log_global_rule_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                rule_id=rule_id,
+                rule_name=rule.name,
+                method="PUT",
+                path=f"/edge/admin/global_rules/{rule.edge_uuid}",
+                request_body=edge_data,
+                encrypted_body=encrypted,
+                response_status=201,
+                response_body=response,
+                status="SUCCESS"
+            )
+
             node_result["status"] = "success"
             node_result["response"] = response
             success_count += 1
         except (EdgeConnectionError, EdgeAPIError) as e:
+            edge_logger.log_global_rule_operation(
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                rule_id=rule_id,
+                rule_name=rule.name,
+                method="PUT",
+                path=f"/edge/admin/global_rules/{rule.edge_uuid}",
+                request_body=edge_data,
+                encrypted_body=None,
+                response_status=e.status_code if isinstance(e, EdgeAPIError) else None,
+                response_body=e.response_body if isinstance(e, EdgeAPIError) else None,
+                status="FAILED",
+                error=str(e)
+            )
             node_result["status"] = "failed"
             node_result["error"] = str(e)
             fail_count += 1
