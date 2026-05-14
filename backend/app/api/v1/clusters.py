@@ -6,7 +6,7 @@ import json
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
@@ -164,16 +164,104 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: Asy
     return ClusterResponse.model_validate(cluster)
 
 
+@router.get("/{cluster_id}/stats")
+async def get_cluster_stats(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+
+    async def count(model, **filters):
+        q = select(func.count()).select_from(model)
+        for k, v in filters.items():
+            q = q.where(getattr(model, k) == v)
+        r = await db.execute(q)
+        return r.scalar() or 0
+
+    return {
+        "nodes": await count(Node, cluster_id=cluster_id),
+        "upstreams": await count(Upstream, cluster_id=cluster_id),
+        "routes": await count(Route, cluster_id=cluster_id),
+        "plugin_configs": await count(PluginConfig, cluster_id=cluster_id),
+        "global_rules": await count(GlobalRule, cluster_id=cluster_id),
+        "plugin_metadata": await count(PluginMetadata, cluster_id=cluster_id),
+        "config_versions": await count(ConfigVersion, cluster_id=cluster_id),
+    }
+
+
 @router.delete("/{cluster_id}")
 async def delete_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
-    
+
+    # 收集需要同步到 Edge 的资源（删库前先取 edge_uuid）
+    upstreams = (await db.execute(select(Upstream).where(Upstream.cluster_id == cluster_id))).scalars().all()
+    routes = (await db.execute(select(Route).where(Route.cluster_id == cluster_id))).scalars().all()
+    plugin_configs = (await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id))).scalars().all()
+    global_rules = (await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id))).scalars().all()
+    plugin_metadatas = (await db.execute(select(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id))).scalars().all()
+
+    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    active_nodes = nodes_result.scalars().all()
+
+    # 批量删除版本历史
+    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.cluster_id == cluster_id))
+
+    # 批量删除子表（RoutePlugin、UpstreamTarget 通过子查询级联）
+    sub_routes = select(Route.id).where(Route.cluster_id == cluster_id)
+    await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id.in_(sub_routes)))
+    sub_upstreams = select(Upstream.id).where(Upstream.cluster_id == cluster_id)
+    await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id.in_(sub_upstreams)))
+
+    # 批量删除所有子资源
+    await db.execute(Route.__table__.delete().where(Route.cluster_id == cluster_id))
+    await db.execute(Upstream.__table__.delete().where(Upstream.cluster_id == cluster_id))
+    await db.execute(PluginConfig.__table__.delete().where(PluginConfig.cluster_id == cluster_id))
+    await db.execute(GlobalRule.__table__.delete().where(GlobalRule.cluster_id == cluster_id))
+    await db.execute(PluginMetadata.__table__.delete().where(PluginMetadata.cluster_id == cluster_id))
+    await db.execute(Node.__table__.delete().where(Node.cluster_id == cluster_id))
+
+    # 删除集群自身
     await db.delete(cluster)
     await db.commit()
-    return {"message": "集群已删除"}
+
+    # 同步到活跃 Edge 节点
+    results = []
+    if active_nodes:
+        for node in active_nodes:
+            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+            try:
+                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                errs = []
+                for u in upstreams:
+                    try: client.delete_upstream(u.edge_uuid)
+                    except: errs.append(f"upstream:{u.edge_uuid}")
+                for r in routes:
+                    try: client.delete_route(r.edge_uuid)
+                    except: errs.append(f"route:{r.edge_uuid}")
+                for p in plugin_configs:
+                    try: client.delete_plugin_config(p.edge_uuid)
+                    except: errs.append(f"plugin_config:{p.edge_uuid}")
+                for g in global_rules:
+                    try: client.delete_global_rule(g.edge_uuid)
+                    except: errs.append(f"global_rule:{g.edge_uuid}")
+                for pm in plugin_metadatas:
+                    try: client.delete_plugin_metadata(pm.plugin_name)
+                    except: errs.append(f"plugin_metadata:{pm.plugin_name}")
+                if errs:
+                    node_result["status"] = "failed"
+                    node_result["error"] = f"部分失败: {', '.join(errs[:5])}"
+                else:
+                    node_result["status"] = "success"
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                node_result["status"] = "failed"
+                node_result["error"] = str(e)
+            results.append(node_result)
+
+    return {"message": "集群已删除", "results": results}
 
 
 @router.post("/{cluster_id}/test")

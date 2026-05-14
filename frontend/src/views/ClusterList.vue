@@ -1434,22 +1434,144 @@ const viewDetail = (cluster: Cluster) => {
   router.push(`/clusters/${cluster.id}`)
 }
 
-const deleteCluster = (cluster: Cluster) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除集群"${cluster.display_name || cluster.name}"吗？此操作不可撤销。`,
+const resourceLabels: Record<string, string> = {
+  nodes: 'Edge 节点',
+  upstreams: '上游服务',
+  routes: '路由规则',
+  plugin_configs: '插件组',
+  global_rules: '全局规则',
+  plugin_metadata: '插件元数据',
+  config_versions: '配置版本历史',
+}
+
+const deleteCluster = async (cluster: Cluster) => {
+  const clusterName = cluster.display_name || cluster.name
+
+  // 加载资源统计
+  let stats: Record<string, number> = {}
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/stats`)
+    stats = res.data
+  } catch { /* 统计加载失败时不阻塞，显示空计数 */ }
+
+  const totalCount = Object.values(stats).reduce((a, b) => a + b, 0)
+
+  // Step 1: 确认弹窗（资源统计 + 输入名称确认）
+  let confirmInput = ''
+  let confirmModal: any
+
+  const buildConfirmContent = () => h('div', { style: 'font-size: 13px;' }, [
+    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' },
+      `确定要删除集群 "${clusterName}" 吗？此操作不可撤销，将清理所有关联数据和 Edge 配置。`
+    ),
+    h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
+      h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
+      ...Object.entries(stats).map(([k, v]) =>
+        h('div', { style: 'display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5;' }, [
+          h('span', { style: 'color: #666;' }, resourceLabels[k] || k),
+          h('span', { style: 'font-weight: 500;' }, String(v)),
+        ])
+      ),
+      h('div', { style: 'display: flex; justify-content: space-between; padding: 6px 0 0; font-weight: 600; border-top: 2px solid #e8e8e8; margin-top: 4px;' }, [
+        h('span', '合计'),
+        h('span', `${totalCount} 条记录`),
+      ]),
+    ]),
+    h('div', { style: 'color: #ff4d4f; font-size: 12px; margin-bottom: 4px;' }, '请输入集群名称以确认删除：'),
+    h('input', {
+      style: 'width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; outline: none; box-sizing: border-box;',
+      placeholder: '请输入集群名称',
+      onInput: (e: any) => {
+        confirmInput = e.target.value
+        confirmModal.update({ okButtonProps: { disabled: confirmInput !== clusterName } })
+      },
+    }),
+  ])
+
+  confirmModal = Modal.confirm({
+    title: '删除集群',
+    width: 500,
+    content: buildConfirmContent(),
     okText: '确认删除',
-    okType: 'danger',
+    okType: 'danger' as any,
+    okButtonProps: { disabled: true },
     cancelText: '取消',
     onOk: async () => {
+      // Step 2: 进度日志弹窗
+      const logs: string[] = []
+      const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      const progress = { percent: 0, status: 'active' as const }
+
+      const progressModal = Modal.info({
+        title: `删除集群: ${clusterName}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+      const updateContent = () => progressModal.update({ content: buildDeleteProgressContent(progress, logs) })
+
+      addLog(`开始删除集群: ${clusterName}`)
+      progress.percent = 20
+      updateContent()
+      await new Promise(r => setTimeout(r, 300))
+
       try {
-        await api.delete(`/clusters/${cluster.id}`)
-        message.success('集群已删除')
-        loadClusters()
+        addLog('正在从数据库删除...')
+        progress.percent = 40
+        updateContent()
+
+        const res = await api.delete(`/clusters/${cluster.id}`)
+        const data = res.data
+
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        if (data.results && data.results.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80
+          updateContent()
+          await new Promise(r => setTimeout(r, 200))
+
+          addLog('Edge 节点同步删除结果:')
+          let successCount = 0
+          let failCount = 0
+          for (const r of data.results) {
+            if (r.status === 'success') successCount++
+            else failCount++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog('')
+          addLog(`总计: ${data.results.length} 节点, 成功 ${successCount}, 失败 ${failCount}`)
+        } else {
+          addLog('集群下没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('⚠️ 部分节点删除失败，数据库已清理，请在 Edge 节点上手动清理')
+        } else {
+          progress.status = 'success'
+          addLog('✅ 集群已成功删除！')
+        }
+        updateContent()
+
+        await loadClusters()
       } catch (error: any) {
-        message.error(error.response?.data?.detail || '删除集群失败')
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
+        updateContent()
       }
-    }
+
+      progressModal.update({ okButtonProps: { disabled: false } })
+    },
   })
 }
 
