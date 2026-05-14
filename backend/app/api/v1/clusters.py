@@ -7,6 +7,7 @@ import json
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
+from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
@@ -1209,3 +1210,180 @@ async def delete_upstream_history(cluster_id: int, upstream_id: int, history_id:
     await db.delete(config_version)
     await db.commit()
     return {"status": "ok", "message": "历史版本已删除"}
+
+
+@router.get("/{cluster_id}/nodes/{node_id}/diff")
+async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    """对比数据库中某集群的配置与指定 Edge 节点上的运行配置"""
+    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="节点不存在")
+
+    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+
+    # ---------- 1. 从 DB 查询 ----------
+    async def _get_all(model, **filters):
+        q = select(model).filter_by(**filters)
+        r = await db.execute(q)
+        return r.scalars().all()
+
+    db_upstreams = await _get_all(Upstream, cluster_id=cluster_id)
+    db_routes = await _get_all(Route, cluster_id=cluster_id)
+    db_plugin_configs = await _get_all(PluginConfig, cluster_id=cluster_id)
+    db_global_rules = await _get_all(GlobalRule, cluster_id=cluster_id)
+    db_plugin_metadatas = await _get_all(PluginMetadata, cluster_id=cluster_id)
+
+    # ---------- 2. 从 Edge 拉取 ----------
+    try:
+        # list_upstreams 返回原始 dict，需提取 nodes
+        upstream_resp = client.list_upstreams()
+        edge_upstreams_raw = upstream_resp.get("node", {}).get("nodes", []) if isinstance(upstream_resp.get("node"), dict) else []
+        edge_upstreams = {u.get("id", ""): u for u in (edge_upstreams_raw if isinstance(edge_upstreams_raw, list) else [])}
+        edge_routes = {r.get("id", ""): r for r in client.list_routes()}
+        edge_plugin_configs = {p.get("id", ""): p for p in client.list_plugin_configs()}
+        edge_global_rules = {g.get("id", ""): g for g in client.list_global_rules()}
+        edge_plugin_metadatas = {p.get("name", ""): p for p in client.list_plugin_metadata()}
+    except (EdgeConnectionError, EdgeAPIError) as e:
+        raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
+
+    # ---------- 3. 对比函数 ----------
+    def _compare_field(db_val, edge_val) -> dict | None:
+        """对比单个字段，返回差异信息"""
+        # 处理 JSON 字符串 vs dict
+        db_parsed = json.loads(db_val) if isinstance(db_val, str) and db_val.startswith("{" or "[") else db_val
+        edge_parsed = json.loads(edge_val) if isinstance(edge_val, str) and edge_val.startswith("{" or "[") else edge_val
+        if json.dumps(db_parsed, sort_keys=True, default=str) != json.dumps(edge_parsed, sort_keys=True, default=str):
+            return {"name": "value", "db": str(db_parsed), "edge": str(edge_parsed)}
+        return None
+
+    def _compare_upstream(db_u, edge_data: dict | None):
+        if not edge_data:
+            return {"name": db_u.name, "id": db_u.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+        for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
+            db_v = getattr(db_u, key, None)
+            edge_v = edge_data.get(key)
+            if db_v is not None and str(db_v) != str(edge_v):
+                fields.append({"name": key, "db": str(db_v), "edge": str(edge_v)})
+        # 处理 JSON 字段
+        for jkey in ("checks", "timeout", "keepalive_pool"):
+            db_v = getattr(db_u, jkey, None)
+            edge_v = edge_data.get(jkey)
+            if db_v or edge_v:
+                try:
+                    db_j = json.loads(db_v) if isinstance(db_v, str) else db_v or {}
+                    edge_j = edge_v or {}
+                    if json.dumps(db_j, sort_keys=True) != json.dumps(edge_j, sort_keys=True):
+                        fields.append({"name": jkey, "db": json.dumps(db_j, indent=1), "edge": json.dumps(edge_j, indent=1)})
+                except (json.JSONDecodeError, TypeError):
+                    if str(db_v) != str(edge_v):
+                        fields.append({"name": jkey, "db": str(db_v), "edge": str(edge_v)})
+        # 处理 targets
+        # targets 在 DB 中是 UpstreamTarget 子表，这里简化：从名称/ID匹配
+        return {"name": db_u.name, "id": db_u.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+
+    def _compare_route(db_r, edge_data: dict | None):
+        if not edge_data:
+            return {"name": db_r.name, "id": db_r.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+        for key in ("uri", "methods", "hosts", "priority", "status"):
+            db_v = getattr(db_r, key, None)
+            edge_v = edge_data.get(key)
+            if db_v is not None and str(db_v) != str(edge_v):
+                fields.append({"name": key, "db": str(db_v), "edge": str(edge_v)})
+        return {"name": db_r.name, "id": db_r.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+
+    def _compare_plugin_config(db_p, edge_data: dict | None):
+        if not edge_data:
+            return {"name": db_p.name, "id": db_p.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+        # 比较 plugins JSON
+        db_plugins = json.loads(db_p.plugins) if db_p.plugins else {}
+        edge_plugins = edge_data.get("plugins", {})
+        if isinstance(edge_plugins, str):
+            try: edge_plugins = json.loads(edge_plugins)
+            except: pass
+        if json.dumps(db_plugins, sort_keys=True) != json.dumps(edge_plugins, sort_keys=True):
+            fields.append({"name": "plugins", "db": json.dumps(db_plugins, indent=1), "edge": json.dumps(edge_plugins, indent=1)})
+        return {"name": db_p.name, "id": db_p.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+
+    def _compare_global_rule(db_g, edge_data: dict | None):
+        if not edge_data:
+            return {"name": db_g.name, "id": db_g.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+        db_plugins = json.loads(db_g.plugins) if db_g.plugins else {}
+        edge_plugins = edge_data.get("plugins", {})
+        if isinstance(edge_plugins, str):
+            try: edge_plugins = json.loads(edge_plugins)
+            except: pass
+        if json.dumps(db_plugins, sort_keys=True) != json.dumps(edge_plugins, sort_keys=True):
+            fields.append({"name": "plugins", "db": json.dumps(db_plugins, indent=1), "edge": json.dumps(edge_plugins, indent=1)})
+        return {"name": db_g.name, "id": db_g.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+
+    def _compare_plugin_metadata(db_pm, edge_data: dict | None):
+        if not edge_data:
+            return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "only_in_db", "fields": []}
+        fields = []
+        db_config = json.loads(db_pm.config_data) if db_pm.config_data else {}
+        edge_config = edge_data.get("config", {})
+        if isinstance(edge_config, str):
+            try: edge_config = json.loads(edge_config)
+            except: pass
+        if json.dumps(db_config, sort_keys=True) != json.dumps(edge_config, sort_keys=True):
+            fields.append({"name": "config", "db": json.dumps(db_config, indent=1), "edge": json.dumps(edge_config, indent=1)})
+        return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "mismatch" if fields else "match", "fields": fields}
+
+    def _find_only_in_edge(edge_dict, db_items, id_attr="id"):
+        """找出仅在 Edge 上存在、DB 中没有的项"""
+        db_ids = {getattr(d, "edge_uuid", getattr(d, "plugin_name", "")) for d in db_items}
+        result = []
+        for eid, edata in edge_dict.items():
+            if eid and eid not in db_ids:
+                result.append({"name": edata.get("name", edata.get("uri", eid)), "id": eid, "status": "only_in_edge", "fields": []})
+        return result
+
+    # ---------- 4. 构建分组 ----------
+    groups = []
+    summary = {"total": 0, "match": 0, "mismatch": 0, "only_in_db": 0, "only_in_edge": 0}
+
+    def _add_group(label: str, type_name: str, items: list):
+        if not items:
+            return
+        groups.append({"type": type_name, "label": label, "items": items})
+        for it in items:
+            s = it["status"]
+            summary["total"] += 1
+            if s in summary:
+                summary[s] += 1
+
+    # 上游
+    upstream_items = [_compare_upstream(u, edge_upstreams.get(u.edge_uuid)) for u in db_upstreams]
+    upstream_items += _find_only_in_edge(edge_upstreams, db_upstreams)
+    _add_group("上游服务", "upstreams", upstream_items)
+
+    # 路由
+    route_items = [_compare_route(r, edge_routes.get(r.edge_uuid)) for r in db_routes]
+    route_items += _find_only_in_edge(edge_routes, db_routes)
+    _add_group("路由规则", "routes", route_items)
+
+    # 插件组
+    pc_items = [_compare_plugin_config(p, edge_plugin_configs.get(p.edge_uuid)) for p in db_plugin_configs]
+    pc_items += _find_only_in_edge(edge_plugin_configs, db_plugin_configs)
+    _add_group("插件组", "plugin_configs", pc_items)
+
+    # 全局规则
+    gr_items = [_compare_global_rule(g, edge_global_rules.get(g.edge_uuid)) for g in db_global_rules]
+    gr_items += _find_only_in_edge(edge_global_rules, db_global_rules)
+    _add_group("全局规则", "global_rules", gr_items)
+
+    # 插件元数据
+    pm_items = [_compare_plugin_metadata(p, edge_plugin_metadatas.get(p.plugin_name)) for p in db_plugin_metadatas]
+    pm_items += _find_only_in_edge(edge_plugin_metadatas, db_plugin_metadatas, id_attr="name")
+    _add_group("插件元数据", "plugin_metadata", pm_items)
+
+    return {
+        "node": f"{node.ip}:{node.management_port}",
+        "summary": summary,
+        "groups": groups,
+    }

@@ -388,12 +388,12 @@
                   <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
                 </template>
                 <template v-if="column.key === 'actions'">
-                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['edit', 'delete'].includes(a))" :key="btnKey">
+                  <template v-for="btnKey in nodeActionsSelected.filter(a => ['edit', 'delete', 'diff'].includes(a))" :key="btnKey">
                     <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
                       {{ getNodeActionButtonTitle(btnKey) }}
                     </a-button>
                   </template>
-                  <a-divider type="vertical" v-if="nodeActionsSelected.some(a => ['edit', 'delete'].includes(a)) && nodeActionsSelected.some(a => ['start', 'stop', 'status'].includes(a))" />
+                  <a-divider type="vertical" v-if="nodeActionsSelected.some(a => ['edit', 'delete', 'diff'].includes(a)) && nodeActionsSelected.some(a => ['start', 'stop', 'status'].includes(a))" />
                   <template v-for="btnKey in nodeActionsSelected.filter(a => ['start', 'stop', 'status'].includes(a))" :key="btnKey">
                     <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
                       {{ getNodeActionButtonTitle(btnKey) }}
@@ -896,6 +896,7 @@ const nodeSearchVisible = ref(true)
 const allNodeActionButtons = [
   { key: 'edit', title: '编辑' },
   { key: 'delete', title: '删除' },
+  { key: 'diff', title: '数据库对比' },
   { key: 'start', title: '启动' },
   { key: 'stop', title: '停止' },
   { key: 'status', title: '状态查询' }
@@ -1194,6 +1195,9 @@ const handleNodeAction = (cluster: Cluster, record: Node, action: string) => {
       break
     case 'status':
       queryNodeStatus(record)
+      break
+    case 'diff':
+      router.push(`/clusters/${cluster.id}/diff/${record.id}`)
       break
   }
 }

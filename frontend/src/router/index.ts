@@ -25,8 +25,14 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'clusters',
-        name: 'Clusters',
-        component: () => import('@/views/ClusterList.vue')
+        component: () => import('@/views/ClusterList.vue'),
+        children: [
+          {
+            path: ':clusterId/diff/:nodeId',
+            name: 'ConfigDiff',
+            component: () => import('@/views/ConfigDiff.vue'),
+          },
+        ],
       },
       {
         path: 'edge-client',
