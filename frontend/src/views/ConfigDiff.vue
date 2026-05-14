@@ -92,7 +92,7 @@
         <a-alert type="error" :message="errorMsg" banner closable @close="errorMsg = ''" />
       </div>
 
-      <div v-if="!loading && !errorMsg && groups.length === 0" class="empty-state">
+      <div v-if="!loading && !errorMsg && summary && summary.total === 0" class="empty-state">
         <a-empty description="该集群下没有任何资源配置" />
       </div>
     </a-spin>

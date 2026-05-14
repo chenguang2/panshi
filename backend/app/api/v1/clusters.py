@@ -1362,10 +1362,8 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     summary = {"total": 0, "match": 0, "mismatch": 0, "only_in_db": 0, "only_in_edge": 0}
 
     def _add_group(label: str, type_name: str, items: list):
-        if not items:
-            return
-        groups.append({"type": type_name, "label": label, "items": items})
-        for it in items:
+        groups.append({"type": type_name, "label": label, "items": items or []})
+        for it in items or []:
             s = it["status"]
             summary["total"] += 1
             if s in summary:
