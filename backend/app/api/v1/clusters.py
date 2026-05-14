@@ -236,12 +236,13 @@ async def delete_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
             try:
                 client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
                 errs = []
-                for u in upstreams:
-                    try: client.delete_upstream(u.edge_uuid)
-                    except: errs.append(f"upstream:{u.edge_uuid}")
+                # 先删路由（路由引用上游），再删上游，最后删独立资源
                 for r in routes:
                     try: client.delete_route(r.edge_uuid)
                     except: errs.append(f"route:{r.edge_uuid}")
+                for u in upstreams:
+                    try: client.delete_upstream(u.edge_uuid)
+                    except: errs.append(f"upstream:{u.edge_uuid}")
                 for p in plugin_configs:
                     try: client.delete_plugin_config(p.edge_uuid)
                     except: errs.append(f"plugin_config:{p.edge_uuid}")
