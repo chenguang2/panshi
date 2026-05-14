@@ -1235,15 +1235,21 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     db_plugin_metadatas = await _get_all(PluginMetadata, cluster_id=cluster_id)
 
     # ---------- 2. 从 Edge 拉取 ----------
+    def _edge_val(item: dict) -> dict:
+        """Edge API 列表返回格式：{key, value: {实际数据}, ...}，提取 value"""
+        v = item.get("value")
+        return v if isinstance(v, dict) else item
+
     try:
         # list_upstreams 返回原始 dict，需提取 nodes
         upstream_resp = client.list_upstreams()
         edge_upstreams_raw = upstream_resp.get("node", {}).get("nodes", []) if isinstance(upstream_resp.get("node"), dict) else []
-        edge_upstreams = {u.get("id", ""): u for u in (edge_upstreams_raw if isinstance(edge_upstreams_raw, list) else [])}
-        edge_routes = {r.get("id", ""): r for r in client.list_routes()}
-        edge_plugin_configs = {p.get("id", ""): p for p in client.list_plugin_configs()}
-        edge_global_rules = {g.get("id", ""): g for g in client.list_global_rules()}
-        edge_plugin_metadatas = {p.get("name", ""): p for p in client.list_plugin_metadata()}
+        edge_upstreams_raw = edge_upstreams_raw if isinstance(edge_upstreams_raw, list) else []
+        edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in edge_upstreams_raw}
+        edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
+        edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
+        edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
+        edge_plugin_metadatas = {_edge_val(p).get("name", ""): _edge_val(p) for p in client.list_plugin_metadata()}
     except (EdgeConnectionError, EdgeAPIError) as e:
         raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
 
