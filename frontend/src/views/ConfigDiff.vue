@@ -88,7 +88,11 @@
         </div>
       </div>
 
-      <div v-if="!loading && groups.length === 0" class="empty-state">
+      <div v-if="errorMsg" class="error-banner">
+        <a-alert type="error" :message="errorMsg" banner closable @close="errorMsg = ''" />
+      </div>
+
+      <div v-if="!loading && !errorMsg && groups.length === 0" class="empty-state">
         <a-empty description="该集群下没有任何资源配置" />
       </div>
     </a-spin>
@@ -105,6 +109,7 @@ const clusterId = Number(route.params.clusterId)
 const nodeId = Number(route.params.nodeId)
 
 const loading = ref(false)
+const errorMsg = ref('')
 const nodeAddr = ref('')
 const summary = ref<any>(null)
 const groups = ref<any[]>([])
@@ -176,7 +181,7 @@ const loadDiff = async () => {
     nodes.value = nodesRes.data.items || []
     expandedItems.value = {}
   } catch (e: any) {
-    console.error('加载对比数据失败', e)
+    errorMsg.value = e.response?.data?.detail || e.message || '加载对比数据失败，请检查 Edge 节点连接'
   } finally {
     loading.value = false
   }
@@ -251,4 +256,5 @@ onMounted(loadDiff)
 }
 
 .empty-state { text-align: center; padding: 80px 0; }
+.error-banner { margin-bottom: 16px; }
 </style>
