@@ -1257,6 +1257,9 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
             return {"name": "value", "db": str(db_parsed), "edge": str(edge_parsed)}
         return None
 
+    # 字段默认值：DB 中有默认值但 Edge 没返回该字段时视为一致
+    _UPSTREAM_DEFAULTS = {"load_balance": "weighted_roundrobin", "scheme": "http", "pass_host": "pass"}
+
     def _compare_upstream(db_u, edge_data: dict | None):
         if not edge_data:
             return {"name": db_u.name, "id": db_u.edge_uuid, "status": "only_in_db", "fields": []}
@@ -1264,7 +1267,12 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
             db_v = getattr(db_u, key, None)
             edge_v = edge_data.get(key)
-            if db_v is not None and str(db_v) != str(edge_v):
+            if edge_v is None:
+                # Edge 没返回该字段：DB 值等于默认值则视为一致
+                if db_v is not None and db_v != _UPSTREAM_DEFAULTS.get(key):
+                    fields.append({"name": key, "db": str(db_v), "edge": "(未配置)"})
+                continue
+            if str(db_v) != str(edge_v):
                 fields.append({"name": key, "db": str(db_v), "edge": str(edge_v)})
         # 处理 JSON 字段
         for jkey in ("checks", "timeout", "keepalive_pool"):
