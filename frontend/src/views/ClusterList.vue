@@ -1113,6 +1113,28 @@ const routeForm = reactive({
   plugin_config_ids: [] as string[]
 })
 
+// 开关高级配置时重置为默认值
+watch(() => upstreamForm.advancedEnabled, (newVal) => {
+  if (!newVal) {
+    upstreamForm.checks = JSON.parse(defaultChecksJson)
+    checksJson.value = defaultChecksJson
+    upstreamForm.retries = undefined
+    upstreamForm.retry_timeout = 0
+    upstreamForm.timeout = { ...defaultTimeout }
+    upstreamForm.pass_host = 'pass'
+    upstreamForm.upstream_host = ''
+    upstreamForm.scheme = 'http'
+    upstreamForm.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
+  }
+})
+
+// 开关高级匹配时重置为默认值
+watch(() => routeForm.advancedMatchEnabled, (newVal) => {
+  if (!newVal) {
+    routeForm.advancedMatch = { vars: [] }
+  }
+})
+
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 
 const allMethodsSelected = computed(() => ALL_METHODS.every(m => routeForm.methods.includes(m)))

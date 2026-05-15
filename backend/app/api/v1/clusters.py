@@ -1534,7 +1534,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         return {"name": db_g.name, "id": db_g.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _compare_plugin_metadata(db_pm, edge_data: dict | None):
-        if not edge_data:
+        if edge_data is None:
             return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "only_in_db", "fields": []}
         fields = []
         db_config = json.loads(db_pm.config_data) if db_pm.config_data else {}
