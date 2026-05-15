@@ -765,6 +765,12 @@
       :edge-uuid="versionModalEdgeUuid"
       @published="versionModalOnPublished"
     />
+
+    <ConfigDiff
+      v-model:visible="diffDrawerVisible"
+      :cluster-id="diffClusterId"
+      :initial-node-id="diffNodeId"
+    />
   </div>
 </template>
 
@@ -780,6 +786,7 @@ import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import GlobalPluginSelector from '@/components/GlobalPluginSelector.vue'
+import ConfigDiff from '@/views/ConfigDiff.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -800,6 +807,9 @@ const currentClusterId = ref<number | null>(null)
 const currentUpstreamId = ref<number | null>(null)
 const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
+const diffDrawerVisible = ref(false)
+let diffClusterId = 0
+let diffNodeId = 0
 const nameError = ref('')
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule'>('upstream')
@@ -1267,7 +1277,9 @@ const handleNodeAction = (cluster: Cluster, record: Node, action: string) => {
       queryNodeStatus(record)
       break
     case 'diff':
-      router.push(`/clusters/${cluster.id}/diff/${record.id}`)
+      diffClusterId = cluster.id
+      diffNodeId = record.id
+      diffDrawerVisible.value = true
       break
   }
 }

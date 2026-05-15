@@ -18,14 +18,14 @@ The system SHALL use existing EdgeClient `list_upstreams`, `list_routes`, `list_
 - **WHEN** `list_upstreams()` is called
 - **THEN** it SHALL return a list of upstream config dicts
 
-### Requirement: Frontend has independent diff page
+### Requirement: Frontend shows diff in Drawer
 
-The system SHALL provide a dedicated page at `/clusters/:clusterId/diff/:nodeId` showing the configuration comparison.
+The system SHALL provide a Drawer panel on the cluster list page showing configuration comparison, with field-level differences expanded inline below each mismatched row.
 
-#### Scenario: Page shows grouped comparison
-- **WHEN** the user navigates to the diff page
-- **THEN** the page SHALL display all resource groups with match/mismatch status
-- **THEN** the page SHALL have a two-column layout (DB | Edge)
+#### Scenario: Mismatched items expand inline
+- **WHEN** the user clicks "查看差异" on a mismatched row
+- **THEN** the field-level comparison SHALL expand directly below that row
+- **THEN** expanding another row SHALL NOT affect previously expanded rows
 
 #### Scenario: Mismatched fields are highlighted
 - **WHEN** a field value differs between DB and Edge
@@ -35,6 +35,7 @@ The system SHALL provide a dedicated page at `/clusters/:clusterId/diff/:nodeId`
 
 The system SHALL add a "数据库对比" button to each node's operation column in the cluster list.
 
-#### Scenario: Button navigates to diff page
+#### Scenario: Button opens diff drawer
 - **WHEN** the user clicks "数据库对比" on a node
-- **THEN** the browser SHALL navigate to `/clusters/{cluster_id}/diff/{node_id}`
+- **THEN** a Drawer panel SHALL open on the right side of the cluster list page
+- **THEN** the Drawer SHALL show configuration comparison for that node

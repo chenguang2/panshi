@@ -29,8 +29,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'clusters/:clusterId/diff/:nodeId',
-        name: 'ConfigDiff',
-        component: () => import('@/views/ConfigDiff.vue'),
+        redirect: '/clusters',
       },
       {
         path: 'edge-client',
