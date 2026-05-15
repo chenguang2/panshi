@@ -623,7 +623,7 @@
               <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
             </a-form-item>
             <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-              <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法">
+              <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法" style="width: 300px">
                 <a-select-option value="GET">GET</a-select-option>
                 <a-select-option value="POST">POST</a-select-option>
                 <a-select-option value="PUT">PUT</a-select-option>
@@ -632,6 +632,9 @@
                 <a-select-option value="HEAD">HEAD</a-select-option>
                 <a-select-option value="OPTIONS">OPTIONS</a-select-option>
               </a-select>
+              <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
+                {{ allMethodsSelected ? '取消全选' : '全选' }}
+              </a>
             </a-form-item>
             <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
               <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
@@ -1109,6 +1112,14 @@ const routeForm = reactive({
   plugins: [] as RoutePlugin[],
   plugin_config_ids: [] as string[]
 })
+
+const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+
+const allMethodsSelected = computed(() => ALL_METHODS.every(m => routeForm.methods.includes(m)))
+
+function toggleAllMethods() {
+  routeForm.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]
+}
 
 const currentCluster = computed(() => clusters.value.find(c => c.id === currentClusterId.value))
 

@@ -346,7 +346,7 @@ class EdgeClient:
         if upstream_edge_uuid:
             edge_route["upstream_id"] = upstream_edge_uuid
 
-        if priority:
+        if priority is not None:
             edge_route["priority"] = priority
 
         if vars_json:

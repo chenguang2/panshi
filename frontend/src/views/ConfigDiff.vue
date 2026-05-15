@@ -68,13 +68,23 @@
                 <span class="col-db">{{ item.status === 'only_in_edge' ? '—' : '已配置' }}</span>
                 <span class="col-edge">{{ item.status === 'only_in_db' ? '—' : '已配置' }}</span>
                 <span class="col-action">
-                  <a v-if="item.status === 'mismatch'" style="font-size:12px">{{ expandedItems[item.id] ? '收起' : '查看差异' }}</a>
+                  <a v-if="item.fields?.length" style="font-size:12px;margin-right:8px;cursor:pointer" @click.stop="toggleExpand('fields', item)">
+                    {{ expandedMode[item.id] === 'fields' ? '收起字段' : '查看字段' }}
+                  </a>
+                  <a v-if="item.status === 'mismatch' && item.fields?.length" style="font-size:12px;cursor:pointer" @click.stop="toggleExpand('diffs', item)">
+                    {{ expandedMode[item.id] === 'diffs' ? '收起差异' : '查看差异' }}
+                  </a>
                 </span>
               </div>
 
-              <div v-if="expandedItems[item.id] && item.fields?.length" class="diff-fields">
-                <div class="fields-header">字段级对比</div>
-                <div class="fields-row" v-for="f in item.fields" :key="f.name">
+              <div v-if="expandedMode[item.id] && item.fields?.length" class="diff-fields">
+                <div class="fields-header">{{ expandedMode[item.id] === 'diffs' ? '字段差异（仅显示不同字段）' : '全部字段' }}</div>
+                <div
+                  v-for="f in filteredFields(item, expandedMode[item.id])"
+                  :key="f.name"
+                  class="fields-row"
+                  :class="{ 'field-diff': f.status === 'diff' }"
+                >
                   <span class="field-name">{{ fieldLabel(group.type, f.name) }}</span>
                   <span class="field-db">
                     <pre>{{ f.db }}</pre>
@@ -122,7 +132,7 @@ const groups = ref<any[]>([])
 const nodes = ref<any[]>([])
 const selectedNodeId = ref(props.initialNodeId)
 const collapsedGroups = ref<Record<string, boolean>>({})
-const expandedItems = ref<Record<string, boolean>>({})
+const expandedMode = ref<Record<string, 'fields' | 'diffs' | null>>({})
 
 const fieldLabel = (groupType: string, field: string): string => {
   const labels: Record<string, Record<string, string>> = {
@@ -154,10 +164,19 @@ const toggleGroup = (type: string) => {
   collapsedGroups.value[type] = !collapsedGroups.value[type]
 }
 
-const toggleExpand = (item: any) => {
+const toggleExpand = (mode: 'fields' | 'diffs', item: any) => {
   if (item.fields?.length) {
-    expandedItems.value[item.id] = !expandedItems.value[item.id]
+    if (expandedMode.value[item.id] === mode) {
+      expandedMode.value[item.id] = null
+    } else {
+      expandedMode.value[item.id] = mode
+    }
   }
+}
+
+const filteredFields = (item: any, mode: 'fields' | 'diffs') => {
+  if (mode === 'diffs') return item.fields?.filter((f: any) => f.status === 'diff') ?? []
+  return item.fields ?? []
 }
 
 const loadDiff = async () => {
@@ -176,7 +195,7 @@ const loadDiff = async () => {
     summary.value = data.summary
     groups.value = data.groups || []
     nodes.value = nodesRes.data.items || []
-    expandedItems.value = {}
+    expandedMode.value = {}
   } catch (e: any) {
     errorMsg.value = e.response?.data?.detail || e.message || '加载对比数据失败，请检查 Edge 节点连接'
   } finally {
@@ -188,7 +207,7 @@ watch(() => props.visible, (val) => {
   if (val) {
     selectedNodeId.value = props.initialNodeId
     collapsedGroups.value = {}
-    expandedItems.value = {}
+    expandedMode.value = {}
     loadDiff()
   }
 })
@@ -272,7 +291,7 @@ watch(() => props.visible, (val) => {
 .col-name { flex: 2; font-weight: 500; }
 .col-db { flex: 2; color: #666; }
 .col-edge { flex: 2; color: #666; }
-.col-action { width: 80px; text-align: right; }
+.col-action { width: 160px; text-align: right; white-space: nowrap; }
 
 .diff-fields {
   background: #fafafa;
@@ -293,6 +312,9 @@ watch(() => props.visible, (val) => {
   font-size: 12px;
 }
 .fields-row:last-child { border-bottom: none; }
+.field-diff { background: #fff2f0; }
+.field-diff .field-db pre,
+.field-diff .field-edge pre { border-color: #ffccc7; }
 .field-name { width: 100px; color: #666; flex-shrink: 0; }
 .field-db { flex: 1; }
 .field-edge { flex: 1; }

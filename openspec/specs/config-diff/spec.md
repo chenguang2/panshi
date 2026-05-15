@@ -9,6 +9,8 @@ The system SHALL provide a `GET /clusters/{cluster_id}/nodes/{node_id}/diff` end
 - **THEN** the response SHALL contain grouped comparisons for upstreams, routes, plugin_configs, global_rules, and plugin_metadata
 - **THEN** each group SHALL list items with status: `match`, `mismatch`, `only_in_db`, or `only_in_edge`
 - **THEN** mismatched items SHALL include field-level differences
+- **THEN** route comparison SHALL include `vars` (advanced match), `plugin_config_ids`, and per-plugin `plugins`
+- **THEN** plugin metadata SHALL be keyed by plugin name from the Edge node key path
 
 ### Requirement: EdgeClient can list all configs
 
@@ -39,3 +41,15 @@ The system SHALL add a "数据库对比" button to each node's operation column 
 - **WHEN** the user clicks "数据库对比" on a node
 - **THEN** a Drawer panel SHALL open on the right side of the cluster list page
 - **THEN** the Drawer SHALL show configuration comparison for that node
+
+### Requirement: Equivalence rules reduce false mismatches
+
+The system SHALL use the EquivalenceRules engine to normalize DB and Edge values before comparison, reducing false mismatch reports caused by missing defaults.
+
+#### Scenario: load_balance field is properly mapped
+- **WHEN** DB upstream has `load_balance="weighted_roundrobin"` and Edge has `type="roundrobin"`
+- **THEN** they SHALL be considered equivalent (not shown as mismatch)
+
+#### Scenario: DB comma strings match Edge arrays
+- **WHEN** DB stores `methods="GET,POST"` and Edge stores `methods=["GET","POST"]`
+- **THEN** they SHALL be considered equivalent

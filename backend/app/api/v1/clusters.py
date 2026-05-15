@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
-from typing import Optional
+from typing import Optional, Any
 import json
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services.config_diff import EquivalenceRules
 from app.models.user import User
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
@@ -1356,6 +1357,14 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     db_global_rules = await _get_all(GlobalRule, cluster_id=cluster_id)
     db_plugin_metadatas = await _get_all(PluginMetadata, cluster_id=cluster_id)
 
+    # 查询路由级插件，按 route_id 分组
+    db_route_plugins_all = await _get_all(RoutePlugin)
+    db_route_plugins: dict[int, dict[str, Any]] = {}
+    for rp in db_route_plugins_all:
+        if rp.route_id not in db_route_plugins:
+            db_route_plugins[rp.route_id] = {}
+        db_route_plugins[rp.route_id][rp.plugin_name] = json.loads(rp.config) if rp.config else {}
+
     # ---------- 2. 从 Edge 拉取 ----------
     def _edge_val(item: dict) -> dict:
         """Edge API 列表返回格式：{key, value: {实际数据}, ...}，提取 value"""
@@ -1371,53 +1380,72 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
         edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
         edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
-        edge_plugin_metadatas = {_edge_val(p).get("name", ""): _edge_val(p) for p in client.list_plugin_metadata()}
+        edge_plugin_metadatas = {}
+        for p in client.list_plugin_metadata():
+            pd = _edge_val(p)
+            pname = pd.get("name") or (p.get("key", "").rsplit("/", 1)[-1] if p.get("key") else "")
+            if pname:
+                edge_plugin_metadatas[pname] = pd
     except (EdgeConnectionError, EdgeAPIError) as e:
         raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
 
     # ---------- 3. 对比函数 ----------
+    _rules = EquivalenceRules()
+
+    def _parse_json_safe(val: Any) -> Any:
+        if isinstance(val, str) and val.strip().startswith(("{", "[")):
+            try:
+                return json.loads(val)
+            except json.JSONDecodeError:
+                return val
+        return val
+
     def _compare_field(db_val, edge_val) -> dict | None:
         """对比单个字段，返回差异信息"""
-        # 处理 JSON 字符串 vs dict
-        db_parsed = json.loads(db_val) if isinstance(db_val, str) and db_val.startswith("{" or "[") else db_val
-        edge_parsed = json.loads(edge_val) if isinstance(edge_val, str) and edge_val.startswith("{" or "[") else edge_val
+        db_parsed = _parse_json_safe(db_val)
+        edge_parsed = _parse_json_safe(edge_val)
         if json.dumps(db_parsed, sort_keys=True, default=str) != json.dumps(edge_parsed, sort_keys=True, default=str):
             return {"name": "value", "db": str(db_parsed), "edge": str(edge_parsed)}
         return None
-
-    # 字段默认值：DB 中有默认值但 Edge 没返回该字段时视为一致
-    _UPSTREAM_DEFAULTS = {"load_balance": "weighted_roundrobin", "scheme": "http", "pass_host": "pass"}
 
     def _compare_upstream(db_u, edge_data: dict | None):
         if not edge_data:
             return {"name": db_u.name, "id": db_u.edge_uuid, "status": "only_in_db", "fields": []}
         fields = []
         for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
-            db_v = getattr(db_u, key, None)
-            edge_v = edge_data.get(key)
+            db_raw = getattr(db_u, key, None)
+            edge_key = _rules.get_field_alias("upstream", key)
+            edge_v = edge_data.get(edge_key)
             if edge_v is None:
-                # Edge 没返回该字段：DB 值等于默认值则视为一致
-                if db_v is not None and db_v != _UPSTREAM_DEFAULTS.get(key):
-                    fields.append({"name": key, "db": str(db_v), "edge": "(未配置)"})
+                fields.append({
+                    "name": key,
+                    "db": str(db_raw) if db_raw is not None and db_raw != _rules.get_field_default("upstream", key) else "(默认)",
+                    "edge": "(未配置)",
+                    "status": "diff" if (db_raw is not None and db_raw != _rules.get_field_default("upstream", key)) else "equal",
+                })
                 continue
-            if str(db_v) != str(edge_v):
-                fields.append({"name": key, "db": str(db_v), "edge": str(edge_v)})
-        # 处理 JSON 字段
+            db_v = _rules.normalize_value("upstream", db_raw, key)
+            if db_v is None:
+                db_v = _rules.normalize_scalar("upstream", db_raw, key)
+            equal = str(db_v) == str(edge_v)
+            fields.append({
+                "name": key,
+                "db": str(db_v),
+                "edge": str(edge_v),
+                "status": "equal" if equal else "diff",
+            })
         for jkey in ("checks", "timeout", "keepalive_pool"):
             db_v = getattr(db_u, jkey, None)
             edge_v = edge_data.get(jkey)
             if db_v or edge_v:
-                try:
-                    db_j = json.loads(db_v) if isinstance(db_v, str) else db_v or {}
-                    edge_j = edge_v or {}
-                    if json.dumps(db_j, sort_keys=True) != json.dumps(edge_j, sort_keys=True):
-                        fields.append({"name": jkey, "db": json.dumps(db_j, indent=1), "edge": json.dumps(edge_j, indent=1)})
-                except (json.JSONDecodeError, TypeError):
-                    if str(db_v) != str(edge_v):
-                        fields.append({"name": jkey, "db": str(db_v), "edge": str(edge_v)})
-        # 处理 targets
-        # targets 在 DB 中是 UpstreamTarget 子表，这里简化：从名称/ID匹配
-        return {"name": db_u.name, "id": db_u.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+                result = _rules.compare_json_field(db_v, edge_v, _rules.get_json_rules("upstream", jkey))
+                fields.append({
+                    "name": jkey,
+                    "db": result["db"] if result else (json.dumps(db_v, indent=1, ensure_ascii=False) if isinstance(db_v, dict) else str(db_v or "{}")),
+                    "edge": result["edge"] if result else (json.dumps(edge_v, indent=1, ensure_ascii=False) if isinstance(edge_v, dict) else str(edge_v or "{}")),
+                    "status": "equal" if not result else "diff",
+                })
+        return {"name": db_u.name, "id": db_u.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _compare_route(db_r, edge_data: dict | None):
         if not edge_data:
@@ -1426,49 +1454,104 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         for key in ("uri", "methods", "hosts", "priority", "status"):
             db_v = getattr(db_r, key, None)
             edge_v = edge_data.get(key)
-            if db_v is not None and str(db_v) != str(edge_v):
-                fields.append({"name": key, "db": str(db_v), "edge": str(edge_v)})
-        return {"name": db_r.name, "id": db_r.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+            if db_v is None:
+                continue
+            if _rules.is_list_field("route", key):
+                matched, db_norm, edge_norm = _rules.normalize_list(db_v, edge_v)
+                fields.append({
+                    "name": key,
+                    "db": str(db_v),
+                    "edge": str(edge_v),
+                    "status": "equal" if matched else "diff",
+                })
+            else:
+                equal = str(db_v) == str(edge_v)
+                fields.append({
+                    "name": key,
+                    "db": str(db_v),
+                    "edge": str(edge_v),
+                    "status": "equal" if equal else "diff",
+                })
+        # 高级匹配 vars
+        db_vars = json.loads(db_r.vars) if db_r.vars else None
+        edge_vars = edge_data.get("vars")
+        if db_vars or edge_vars:
+            equal = json.dumps(db_vars, sort_keys=True, default=str) == json.dumps(edge_vars, sort_keys=True, default=str)
+            fields.append({
+                "name": "vars",
+                "db": json.dumps(db_vars, indent=1, ensure_ascii=False) if db_vars else "{}",
+                "edge": json.dumps(edge_vars, indent=1, ensure_ascii=False) if edge_vars else "{}",
+                "status": "equal" if equal else "diff",
+            })
+        # 插件组 plugin_config_ids
+        db_pids = json.loads(db_r.plugin_config_ids) if db_r.plugin_config_ids else None
+        edge_pids = edge_data.get("plugin_config_ids")
+        if db_pids or edge_pids:
+            equal = json.dumps(db_pids, sort_keys=True, default=str) == json.dumps(edge_pids, sort_keys=True, default=str)
+            fields.append({
+                "name": "plugin_config_ids",
+                "db": json.dumps(db_pids, indent=1, ensure_ascii=False) if db_pids else "[]",
+                "edge": json.dumps(edge_pids, indent=1, ensure_ascii=False) if edge_pids else "[]",
+                "status": "equal" if equal else "diff",
+            })
+        # 路由级插件 RoutePlugin
+        db_rp = db_route_plugins.get(db_r.id, {})
+        edge_plugins = edge_data.get("plugins", {})
+        if isinstance(edge_plugins, str):
+            try:
+                edge_plugins = json.loads(edge_plugins)
+            except json.JSONDecodeError:
+                pass
+        if db_rp or edge_plugins:
+            plugin_fields = _rules.compare_plugins(db_rp, edge_plugins, _rules.get_plugin_defaults("plugin_config"), ignore_edge_fields=_rules.get_ignore_plugin_fields("plugin_config"))
+            fields.extend(plugin_fields)
+        return {"name": db_r.name, "id": db_r.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _compare_plugin_config(db_p, edge_data: dict | None):
         if not edge_data:
             return {"name": db_p.name, "id": db_p.edge_uuid, "status": "only_in_db", "fields": []}
-        fields = []
-        # 比较 plugins JSON
         db_plugins = json.loads(db_p.plugins) if db_p.plugins else {}
         edge_plugins = edge_data.get("plugins", {})
         if isinstance(edge_plugins, str):
-            try: edge_plugins = json.loads(edge_plugins)
-            except: pass
-        if json.dumps(db_plugins, sort_keys=True) != json.dumps(edge_plugins, sort_keys=True):
-            fields.append({"name": "plugins", "db": json.dumps(db_plugins, indent=1), "edge": json.dumps(edge_plugins, indent=1)})
-        return {"name": db_p.name, "id": db_p.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+            try:
+                edge_plugins = json.loads(edge_plugins)
+            except json.JSONDecodeError:
+                pass
+        fields = _rules.compare_plugins(db_plugins, edge_plugins, _rules.get_plugin_defaults("plugin_config"), ignore_edge_fields=_rules.get_ignore_plugin_fields("plugin_config"))
+        return {"name": db_p.name, "id": db_p.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _compare_global_rule(db_g, edge_data: dict | None):
         if not edge_data:
             return {"name": db_g.name, "id": db_g.edge_uuid, "status": "only_in_db", "fields": []}
-        fields = []
         db_plugins = json.loads(db_g.plugins) if db_g.plugins else {}
         edge_plugins = edge_data.get("plugins", {})
         if isinstance(edge_plugins, str):
-            try: edge_plugins = json.loads(edge_plugins)
-            except: pass
-        if json.dumps(db_plugins, sort_keys=True) != json.dumps(edge_plugins, sort_keys=True):
-            fields.append({"name": "plugins", "db": json.dumps(db_plugins, indent=1), "edge": json.dumps(edge_plugins, indent=1)})
-        return {"name": db_g.name, "id": db_g.edge_uuid, "status": "mismatch" if fields else "match", "fields": fields}
+            try:
+                edge_plugins = json.loads(edge_plugins)
+            except json.JSONDecodeError:
+                pass
+        fields = _rules.compare_plugins(db_plugins, edge_plugins, _rules.get_plugin_defaults("global_rule"), ignore_edge_fields=_rules.get_ignore_plugin_fields("global_rule"))
+        return {"name": db_g.name, "id": db_g.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _compare_plugin_metadata(db_pm, edge_data: dict | None):
         if not edge_data:
             return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "only_in_db", "fields": []}
         fields = []
         db_config = json.loads(db_pm.config_data) if db_pm.config_data else {}
-        edge_config = edge_data.get("config", {})
+        edge_config = edge_data
         if isinstance(edge_config, str):
-            try: edge_config = json.loads(edge_config)
-            except: pass
-        if json.dumps(db_config, sort_keys=True) != json.dumps(edge_config, sort_keys=True):
-            fields.append({"name": "config", "db": json.dumps(db_config, indent=1), "edge": json.dumps(edge_config, indent=1)})
-        return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "mismatch" if fields else "match", "fields": fields}
+            try:
+                edge_config = json.loads(edge_config)
+            except json.JSONDecodeError:
+                pass
+        equal = json.dumps(db_config, sort_keys=True) == json.dumps(edge_config, sort_keys=True)
+        fields.append({
+            "name": "config",
+            "db": json.dumps(db_config, indent=1, ensure_ascii=False),
+            "edge": json.dumps(edge_config, indent=1, ensure_ascii=False),
+            "status": "equal" if equal else "diff",
+        })
+        return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _find_only_in_edge(edge_dict, db_items, id_attr="id"):
         """找出仅在 Edge 上存在、DB 中没有的项"""
