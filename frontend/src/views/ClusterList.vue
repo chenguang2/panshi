@@ -544,7 +544,7 @@
           <div v-if="upstreamForm.advancedEnabled">
             <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
               <a-form-item label="健康检查" name="checks">
-                <a-textarea v-model:value="checksJson" :rows="20" placeholder="健康检查JSON配置" />
+                <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
               </a-form-item>
               <a-form-item label="重试次数" name="retries">
                 <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />

@@ -1,9 +1,7 @@
 ## Purpose
 
 上游创建/编辑弹窗的高级配置功能，将健康检查、重试、超时、host策略、协议、连接池等配置项从隐藏默认值变为 Tab 中可编辑的配置项。
-
 ## Requirements
-
 ### Requirement: 上游表单高级配置 Tab
 上游创建/编辑弹窗 SHALL 包含"基础配置"和"高级配置"两个 Tab，使用 `a-tabs` 组件。高级配置默认关闭，需通过开关启用。
 
@@ -19,16 +17,13 @@
 - **AND** 高级配置中的健康检查配置 SHALL 使用预设默认值
 
 ### Requirement: 高级配置包含健康检查
-高级配置 Tab SHALL 包含可编辑的健康检查（checks）JSON 文本域。
 
-#### Scenario: 查看健康检查默认值
-- **WHEN** 用户进入高级配置 Tab
-- **THEN** 健康检查区域 SHALL 显示 checks JSON
-- **AND** 默认值 SHALL 为 `{"passive": {}, "active": {"unhealthy": {}}}`
+高级配置 Tab SHALL 包含可编辑的健康检查（checks）JSON 文本域。文本域高度 SHALL 匹配默认内容行数，避免过高空白。
 
-#### Scenario: 编辑健康检查
-- **WHEN** 用户修改 checks JSON 内容
-- **THEN** 提交时 SHALL 使用用户修改后的值
+#### Scenario: 健康检查文本域高度适配内容
+- **WHEN** 用户打开上游弹窗并启用高级配置
+- **THEN** 健康检查文本域高度 SHALL 为 6 行
+- **AND** 能够完整展示默认 JSON 内容 `{"passive": {}, "active": {"unhealthy": {}}}`
 
 ### Requirement: 基础配置始终包含健康检查和超时默认值
 无论高级配置是否开启，创建上游时 SHALL 始终包含默认的 checks 和 timeout 配置。
@@ -83,3 +78,4 @@
 #### Scenario: 连接池配置
 - **WHEN** 用户设置 keepalive_pool 参数
 - **THEN** 提交时 SHALL 将 keepalive_pool 对象包含在请求中
+
