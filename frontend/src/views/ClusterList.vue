@@ -264,6 +264,7 @@
                   <span v-if="!pc.plugins || Object.keys(pc.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
                 </div>
                 <div style="display: flex; gap: 4px; align-items: center;">
+                  <a-button size="small" @click.stop="viewPluginConfig(pc)" title="查看"><EyeOutlined /></a-button>
                   <a-button size="small" @click.stop="editPluginConfig(cluster, pc)" title="编辑"><EditOutlined /></a-button>
                   <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger title="删除"><DeleteOutlined /></a-button>
                   <span style="flex:1"></span>
@@ -309,6 +310,7 @@
                   <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
                 </div>
                 <div style="display: flex; gap: 4px; align-items: center;">
+                  <a-button size="small" @click.stop="viewGlobalRule(gr)" title="查看"><EyeOutlined /></a-button>
                   <a-button size="small" @click.stop="editGlobalRule(cluster, gr)" title="编辑"><EditOutlined /></a-button>
                   <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger title="删除"><DeleteOutlined /></a-button>
                   <span style="flex:1"></span>
@@ -774,6 +776,50 @@
       :cluster-id="diffClusterId"
       :initial-node-id="diffNodeId"
     />
+
+    <!-- 查看插件组 -->
+    <a-drawer
+      v-model:open="viewPcDrawerVisible"
+      :title="`查看插件组 - ${viewingPc?.name}`"
+      width="600"
+      @close="viewPcDrawerVisible = false"
+    >
+      <div v-if="viewingPc">
+        <a-descriptions :column="1" bordered>
+          <a-descriptions-item label="名称">{{ viewingPc.name }}</a-descriptions-item>
+          <a-descriptions-item label="描述">{{ viewingPc.description || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag v-if="viewingPc.current_version" color="green">已发布</a-tag>
+            <a-tag v-else color="orange">未发布</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="版本" v-if="viewingPc.current_version">v{{ viewingPc.current_version }}</a-descriptions-item>
+        </a-descriptions>
+        <a-divider>插件配置</a-divider>
+        <pre class="config-preview">{{ JSON.stringify(viewingPc.plugins, null, 2) }}</pre>
+      </div>
+    </a-drawer>
+
+    <!-- 查看全局规则 -->
+    <a-drawer
+      v-model:open="viewGrDrawerVisible"
+      :title="`查看全局规则 - ${viewingGr?.name}`"
+      width="600"
+      @close="viewGrDrawerVisible = false"
+    >
+      <div v-if="viewingGr">
+        <a-descriptions :column="1" bordered>
+          <a-descriptions-item label="名称">{{ viewingGr.name }}</a-descriptions-item>
+          <a-descriptions-item label="描述">{{ viewingGr.description || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag v-if="viewingGr.current_version" color="green">已发布</a-tag>
+            <a-tag v-else color="orange">未发布</a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="版本" v-if="viewingGr.current_version">v{{ viewingGr.current_version }}</a-descriptions-item>
+        </a-descriptions>
+        <a-divider>插件配置</a-divider>
+        <pre class="config-preview">{{ JSON.stringify(viewingGr.plugins, null, 2) }}</pre>
+      </div>
+    </a-drawer>
   </div>
 </template>
 
@@ -781,7 +827,7 @@
 import { ref, reactive, computed, onMounted, watch, h } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin, RoutePlugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -813,6 +859,12 @@ const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const diffDrawerVisible = ref(false)
 let diffClusterId = 0
 let diffNodeId = 0
+
+// 查看插件组 / 全局规则
+const viewPcDrawerVisible = ref(false)
+const viewingPc = ref<any>(null)
+const viewGrDrawerVisible = ref(false)
+const viewingGr = ref<any>(null)
 const nameError = ref('')
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule'>('upstream')
@@ -2906,6 +2958,11 @@ const showAddPluginConfig = async (cluster: Cluster) => {
   pluginConfigModalVisible.value = true
 }
 
+const viewPluginConfig = (pc: any) => {
+  viewingPc.value = pc
+  viewPcDrawerVisible.value = true
+}
+
 const editPluginConfig = async (cluster: Cluster, pc: any) => {
   if (availablePlugins.value.length === 0) {
     await loadAvailablePlugins()
@@ -3168,6 +3225,11 @@ const showAddGlobalRule = async (cluster: Cluster) => {
   globalRuleFormData.selectedPlugins = []
   globalRuleActiveTab.value = 'basic'
   globalRuleModalVisible.value = true
+}
+
+const viewGlobalRule = (gr: any) => {
+  viewingGr.value = gr
+  viewGrDrawerVisible.value = true
 }
 
 const editGlobalRule = async (cluster: Cluster, gr: any) => {
