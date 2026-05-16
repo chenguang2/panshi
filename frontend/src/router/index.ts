@@ -38,6 +38,11 @@ const routes: RouteRecordRaw[] = [
         meta: { permission: 'edge_nodes' }
       },
       {
+        path: 'edge-import',
+        name: 'EdgeImport',
+        component: () => import('@/views/EdgeImport.vue'),
+      },
+      {
         path: 'tools',
         name: 'Tools',
         component: () => import('@/views/Tools.vue')

@@ -22,9 +22,12 @@ class Cluster(Base):
 
 class Upstream(Base):
     __tablename__ = "ps_upstream"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "edge_uuid", name="uq_upstream_cluster_edge"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
@@ -56,9 +59,12 @@ class UpstreamTarget(Base):
 
 class Route(Base):
     __tablename__ = "ps_route"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "edge_uuid", name="uq_route_cluster_edge"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     upstream_id = Column(Integer, ForeignKey("ps_upstream.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(100), nullable=False)
@@ -117,10 +123,13 @@ class ConfigVersion(Base):
 
 class PluginMetadata(Base):
     __tablename__ = "ps_plugin_metadata"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "plugin_name", name="uq_cluster_plugin"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
-    plugin_name = Column(String(50), nullable=False, unique=True)
+    plugin_name = Column(String(50), nullable=False)
     config_data = Column(Text, nullable=False, default="{}")
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -129,9 +138,12 @@ class PluginMetadata(Base):
 
 class PluginConfig(Base):
     __tablename__ = "ps_plugin_config"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "edge_uuid", name="uq_pc_cluster_edge"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
@@ -143,9 +155,12 @@ class PluginConfig(Base):
 
 class GlobalRule(Base):
     __tablename__ = "ps_global_rule"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "edge_uuid", name="uq_gr_cluster_edge"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    edge_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)

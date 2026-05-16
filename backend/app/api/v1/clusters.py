@@ -1454,7 +1454,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         for key in ("uri", "methods", "hosts", "priority", "status"):
             db_v = getattr(db_r, key, None)
             edge_v = edge_data.get(key)
-            if db_v is None:
+            if db_v is None or db_v == "":
                 continue
             if _rules.is_list_field("route", key):
                 matched, db_norm, edge_norm = _rules.normalize_list(db_v, edge_v)

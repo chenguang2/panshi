@@ -26,6 +26,10 @@
           <SettingOutlined />
           <span>边缘节点</span>
         </a-menu-item>
+        <a-menu-item key="edge-import" @click="router.push('/edge-import')">
+          <ImportOutlined />
+          <span>Edge 数据导入</span>
+        </a-menu-item>
         <a-menu-item key="tools" @click="router.push('/tools')">
           <ToolOutlined />
           <span>工具箱</span>
@@ -62,6 +66,7 @@ import {
   CloudOutlined,
   SettingOutlined,
   ToolOutlined,
+  ImportOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 

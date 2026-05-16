@@ -22,7 +22,7 @@ class ClusterBase(BaseModel):
 
 
 class ClusterCreate(ClusterBase):
-    pass
+    admin_key: Optional[str] = Field(None, max_length=255)
 
 
 class ClusterUpdate(BaseModel):
@@ -30,6 +30,7 @@ class ClusterUpdate(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = None
     status: Optional[int] = None
+    admin_key: Optional[str] = Field(None, max_length=255)
 
     @field_validator('name')
     @classmethod
@@ -44,6 +45,7 @@ class ClusterResponse(BaseModel):
     name: str
     display_name: Optional[str] = None
     description: Optional[str] = None
+    admin_key: Optional[str] = None
     status: int = 1
     created_at: Optional[str] = None
     node_count: int = 0
