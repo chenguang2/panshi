@@ -69,6 +69,9 @@ export interface Cluster {
   selectedRoute?: Route | null
   plugin_configs?: PluginConfig[]
   selectedPluginConfig?: PluginConfig | null
+  static_resources?: any[]
+  staticResourcesLoading?: boolean
+  selectedStaticResource?: any | null
 }
 
 export interface Node {

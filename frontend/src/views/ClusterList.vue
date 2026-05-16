@@ -39,6 +39,7 @@
             <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
             <a-tab-pane v-if="authStore.hasPermission('plugin_groups')" key="pluginConfigs" tab="插件组"></a-tab-pane>
             <a-tab-pane v-if="authStore.hasPermission('global_rules')" key="globalRules" tab="全局规则"></a-tab-pane>
+            <a-tab-pane key="staticResources" tab="静态资源"></a-tab-pane>
           </a-tabs>
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
@@ -320,6 +321,48 @@
               </div>
               <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
                 暂无全局规则，点击"添加全局规则"创建
+              </div>
+            </div>
+          </div>
+          <div v-else-if="cluster.activeTab === 'staticResources'" class="tab-content">
+            <div class="node-actions">
+              <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">添加静态资源</a-button>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+              <div
+                v-for="sr in cluster.static_resources"
+                :key="sr.id"
+                class="plugin-config-card"
+                :class="{ selected: cluster.selectedStaticResource?.id === sr.id }"
+                @click="cluster.selectedStaticResource = sr"
+                style="width: 360px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
+              >
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                  <div>
+                    <strong style="font-size: 14px;">{{ sr.name }}</strong>
+                    <div style="font-size: 12px; color: #1890ff; margin-top: 2px;">{{ sr.url_path }}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="margin-bottom: 2px;">
+                      <a-tag v-if="sr.current_version" color="green" size="small">已发布</a-tag>
+                      <a-tag v-else color="orange" size="small">未发布</a-tag>
+                    </div>
+                    <div v-if="sr.current_version" style="font-size: 12px; color: #666;">v{{ sr.current_version }}</div>
+                  </div>
+                </div>
+                <div v-if="sr.description" style="font-size: 12px; color: #666; margin-bottom: 8px;">{{ sr.description }}</div>
+                <div v-if="sr.file_size" style="font-size: 12px; color: #999; margin-bottom: 8px;">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
+                <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                  <a-button size="small" @click.stop="editStaticResource(cluster, sr)" title="编辑"><EditOutlined /></a-button>
+                  <a-button size="small" @click.stop="uploadStaticResourceZip(sr)" :disabled="!sr.id">上传 ZIP</a-button>
+                  <a-button size="small" @click.stop="publishStaticResource(cluster, sr)" :disabled="!sr.file_size">发布</a-button>
+                  <a-button size="small" @click.stop="openStaticResourceVersionManagement(cluster, sr)" :disabled="!sr.current_version">版本管理</a-button>
+                  <span style="flex:1"></span>
+                  <a-button size="small" danger @click.stop="deleteStaticResource(cluster, sr)" title="删除"><DeleteOutlined /></a-button>
+                </div>
+              </div>
+              <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
+                暂无静态资源，点击"添加静态资源"创建
               </div>
             </div>
           </div>
@@ -762,6 +805,26 @@
           <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
         </a-tab-pane>
       </a-tabs>
+    </a-modal>
+
+    <a-modal
+      v-model:open="staticResourceModalVisible"
+      :title="staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源'"
+      @ok="handleStaticResourceSubmit"
+      width="600px"
+      :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
+    >
+      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
+          <a-input v-model:value="staticResourceFormData.name" placeholder="如 myapp" />
+        </a-form-item>
+        <a-form-item label="访问路径" name="url_path" :rules="[{ required: true, message: '请输入访问路径' }]">
+          <a-input v-model:value="staticResourceFormData.url_path" placeholder="如 /static/myapp" />
+        </a-form-item>
+        <a-form-item label="描述" name="description">
+          <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
+        </a-form-item>
+      </a-form>
     </a-modal>
 
     <VersionManagementModal
@@ -1446,6 +1509,8 @@ const handleTabClick = async (cluster: Cluster, key: string) => {
     await loadPluginConfigs(cluster)
   } else if (key === 'globalRules') {
     await loadGlobalRules(cluster)
+  } else if (key === 'staticResources') {
+    await loadStaticResources(cluster)
   }
 }
 
@@ -3380,6 +3445,153 @@ const viewGlobalRulePluginConfig = (gr: any, pname: string, pcfg: any) => {
     content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;' }, typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)),
     okText: '关闭', width: 560
   })
+}
+
+
+const staticResourceFormData = reactive({
+  name: '',
+  url_path: '',
+  description: '',
+})
+const staticResourceModalVisible = ref(false)
+const staticResourceFormMode = ref<'add' | 'edit'>('add')
+const staticResourceEditingId = ref<number | null>(null)
+const staticResourceEditingCluster = ref<Cluster | null>(null)
+
+const loadStaticResources = async (cluster: Cluster) => {
+  try {
+    cluster.staticResourcesLoading = true
+    const res = await api.get(`/clusters/${cluster.id}/static-resources`)
+    cluster.static_resources = res.data.items || []
+  } catch {
+    cluster.static_resources = []
+  } finally {
+    cluster.staticResourcesLoading = false
+  }
+}
+
+const showAddStaticResource = async (cluster: Cluster) => {
+  staticResourceFormMode.value = 'add'
+  staticResourceEditingCluster.value = cluster
+  staticResourceEditingId.value = null
+  staticResourceFormData.name = ''
+  staticResourceFormData.url_path = ''
+  staticResourceFormData.description = ''
+  staticResourceModalVisible.value = true
+}
+
+const editStaticResource = (cluster: Cluster, sr: any) => {
+  staticResourceFormMode.value = 'edit'
+  staticResourceEditingCluster.value = cluster
+  staticResourceEditingId.value = sr.id
+  staticResourceFormData.name = sr.name
+  staticResourceFormData.url_path = sr.url_path
+  staticResourceFormData.description = sr.description || ''
+  staticResourceModalVisible.value = true
+}
+
+const handleStaticResourceSubmit = async () => {
+  const cluster = staticResourceEditingCluster.value
+  if (!cluster) return
+
+  if (!staticResourceFormData.name || !staticResourceFormData.url_path) {
+    message.warning('请填写名称和访问路径')
+    return
+  }
+
+  try {
+    const payload = {
+      name: staticResourceFormData.name,
+      url_path: staticResourceFormData.url_path,
+      description: staticResourceFormData.description || undefined,
+    }
+
+    if (staticResourceFormMode.value === 'add') {
+      await api.post(`/clusters/${cluster.id}/static-resources`, payload)
+      message.success('静态资源已创建')
+    } else {
+      await api.put(`/clusters/${cluster.id}/static-resources/${staticResourceEditingId.value}`, payload)
+      message.success('静态资源已更新')
+    }
+
+    staticResourceModalVisible.value = false
+    await loadStaticResources(cluster)
+  } catch (error: any) {
+    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+  }
+}
+
+const deleteStaticResource = async (cluster: Cluster, sr: any) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定删除静态资源 "${sr.name}"？`,
+    okText: '删除',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`)
+        message.success('已删除')
+        await loadStaticResources(cluster)
+      } catch (error: any) {
+        message.error('删除失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+  })
+}
+
+const uploadStaticResourceZip = (sr: any) => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.zip'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const cluster = clusters.value.find((c: Cluster) =>
+      c.static_resources?.some((s: any) => s.id === sr.id)
+    )
+    if (!cluster) return
+
+    try {
+      const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      message.success('上传成功')
+      await loadStaticResources(cluster)
+    } catch (error: any) {
+      message.error('上传失败: ' + (error.response?.data?.detail || error.message))
+    }
+  }
+  input.click()
+}
+
+const publishStaticResource = async (cluster: Cluster, sr: any) => {
+  Modal.confirm({
+    title: '确认发布',
+    content: `确定发布静态资源 "${sr.name}" 到所有活跃 Edge 节点？`,
+    okText: '发布',
+    onOk: async () => {
+      try {
+        const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/publish`)
+        message.success('发布成功')
+        await loadStaticResources(cluster)
+      } catch (error: any) {
+        message.error('发布失败: ' + (error.response?.data?.detail || error.message))
+      }
+    },
+  })
+}
+
+const openStaticResourceVersionManagement = (cluster: Cluster, sr: any) => {
+  versionModalType.value = 'static_resource'
+  versionModalResourceId.value = sr.id
+  versionModalClusterId.value = cluster.id
+  versionModalResourceName.value = sr.name
+  versionModalEdgeUuid.value = ''
+  versionModalVisible.value = true
 }
 
 
