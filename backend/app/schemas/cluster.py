@@ -176,6 +176,11 @@ class NodeBase(BaseModel):
         return v
 
 
+class DeleteClusterRequest(BaseModel):
+    delete_db: bool = False
+    delete_edge: bool = False
+
+
 class NodeCreate(NodeBase):
     cluster_id: Optional[int] = None
 

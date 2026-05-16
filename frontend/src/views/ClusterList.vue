@@ -1637,9 +1637,18 @@ const deleteCluster = async (cluster: Cluster) => {
   let confirmInput = ''
   let confirmModal: any
 
+  let deleteDb = false
+  let deleteEdge = false
+
+  const updateOkDisabled = () => {
+    const nameMatch = confirmInput === clusterName
+    const atLeastOne = deleteDb || deleteEdge
+    confirmModal.update({ okButtonProps: { disabled: !(nameMatch && atLeastOne) } })
+  }
+
   const buildConfirmContent = () => h('div', { style: 'font-size: 13px;' }, [
     h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' },
-      `确定要删除集群 "${clusterName}" 吗？此操作不可撤销，将清理所有关联数据和 Edge 配置。`
+      `确定要删除集群 "${clusterName}" 吗？`
     ),
     h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
       h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
@@ -1653,6 +1662,26 @@ const deleteCluster = async (cluster: Cluster) => {
         h('span', '合计'),
         h('span', `${totalCount} 条记录`),
       ]),
+      h('div', { style: 'margin-top: 12px; border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
+        h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
+          h('input', {
+            type: 'checkbox', checked: deleteDb,
+            onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
+            style: 'width: 16px; height: 16px; cursor: pointer;',
+          }),
+          h('span', { style: 'font-size: 14px;' }, '数据库'),
+          h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的集群记录'),
+        ]),
+        h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
+          h('input', {
+            type: 'checkbox', checked: deleteEdge,
+            onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
+            style: 'width: 16px; height: 16px; cursor: pointer;',
+          }),
+          h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
+          h('span', { style: 'color: #999; font-size: 12px;' }, '同步删除 Edge 节点上的配置'),
+        ]),
+      ]),
     ]),
     h('div', { style: 'color: #ff4d4f; font-size: 12px; margin-bottom: 4px;' }, '请输入集群名称以确认删除：'),
     h('input', {
@@ -1660,7 +1689,7 @@ const deleteCluster = async (cluster: Cluster) => {
       placeholder: '请输入集群名称',
       onInput: (e: any) => {
         confirmInput = e.target.value
-        confirmModal.update({ okButtonProps: { disabled: confirmInput !== clusterName } })
+        updateOkDisabled()
       },
     }),
   ])
@@ -1696,34 +1725,32 @@ const deleteCluster = async (cluster: Cluster) => {
       await new Promise(r => setTimeout(r, 300))
 
       try {
-        addLog('正在从数据库删除...')
+        const actions = []
+        if (deleteDb) actions.push('数据库')
+        if (deleteEdge) actions.push('Edge 节点')
+        addLog(`删除范围: ${actions.join(' + ') || '无'}`)
         progress.percent = 40
         updateContent()
 
-        const res = await api.delete(`/clusters/${cluster.id}`)
+        const res = await api.delete(`/clusters/${cluster.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        addLog(data.message)
         addLog('')
 
         if (data.results && data.results.length > 0) {
-          addLog('正在从 Edge 节点同步删除...')
-          progress.percent = 80
-          updateContent()
-          await new Promise(r => setTimeout(r, 200))
-
-          addLog('Edge 节点同步删除结果:')
+          addLog('Edge 节点删除结果:')
           let successCount = 0
           let failCount = 0
           for (const r of data.results) {
             if (r.status === 'success') successCount++
             else failCount++
-            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+            addLog(`  ${r.node}: ${r.status === 'success' ? '\u2705' : '\u274C'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog('')
           addLog(`总计: ${data.results.length} 节点, 成功 ${successCount}, 失败 ${failCount}`)
-        } else {
+        } else if (deleteEdge) {
           addLog('集群下没有活跃的 Edge 节点')
         }
 
@@ -1731,10 +1758,10 @@ const deleteCluster = async (cluster: Cluster) => {
         addLog('')
         if (data.results && data.results.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
-          addLog('⚠️ 部分节点删除失败，数据库已清理，请在 Edge 节点上手动清理')
+          addLog('\u26A0\uFE0F 部分节点删除失败，请在 Edge 节点上手动清理')
         } else {
           progress.status = 'success'
-          addLog('✅ 集群已成功删除！')
+          addLog('\u2705 操作完成！')
         }
         updateContent()
 

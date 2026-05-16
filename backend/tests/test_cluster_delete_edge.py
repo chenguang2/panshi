@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock
 from unittest.mock import patch as _patch
 from app.models.cluster import Cluster, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata, Node
+from app.schemas.cluster import DeleteClusterRequest
 
 # EdgeClient 是函数内导入的，patch 它的原始定义位置
 EC_PATH = "app.services.edge_client.EdgeClient"
@@ -50,9 +51,8 @@ class TestClusterDeleteEdgeSync:
             getattr(mock_client, m).return_value = {}
 
         with patch_ec(return_value=mock_client):
-            result = await delete_cluster(cid, test_db)
+            result = await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
-        assert result["message"] == "集群已删除"
         assert len(result["results"]) == 1
         assert result["results"][0]["status"] == "success"
         assert mock_client.delete_route.call_count == 2
@@ -74,7 +74,7 @@ class TestClusterDeleteEdgeSync:
             def delete_plugin_metadata(self, pn): seq.append("pm"); return {}
 
         with patch_ec(return_value=T()):
-            await delete_cluster(cid, test_db)
+            await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
         ri = [i for i, x in enumerate(seq) if x == "route"]
         ui = [i for i, x in enumerate(seq) if x == "upstream"]
@@ -98,7 +98,7 @@ class TestClusterDeleteEdgeSync:
             def delete_plugin_metadata(self, pn): return {}
 
         with patch_ec(return_value=F()):
-            result = await delete_cluster(cid, test_db)
+            result = await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
         assert result["results"][0]["status"] == "failed"
         assert "route" in result["results"][0]["error"]
@@ -117,6 +117,6 @@ class TestClusterDeleteEdgeSync:
             def delete_plugin_metadata(self, pn): raise Exception("err")
 
         with patch_ec(return_value=F()):
-            result = await delete_cluster(cid, test_db)
+            result = await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
         assert result["results"][0]["status"] == "failed"

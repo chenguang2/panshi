@@ -98,6 +98,9 @@ backend/uvicorn.err
 # OpenSpec (internal cache)
 .openspec/
 
+# Sisyphus orchestration
+.sisyphus/
+
 # History files
 .history/
 prompt*.txt
