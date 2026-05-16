@@ -336,6 +336,38 @@
         <a-form-item label="插件配置 (JSON)" name="plugins">
           <a-textarea v-model:value="routeForm.pluginsJson" :rows="4" placeholder='{"proxy_rewrite": {...}}' />
         </a-form-item>
+        <a-divider style="margin: 8px 0;" />
+        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
+        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: #999; font-size: 12px;">
+          暂无插件组
+        </div>
+        <div v-else style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 240px; overflow-y: auto;">
+          <div
+            v-for="pg in pluginConfigs"
+            :key="pg.value?.id || pg.key"
+            class="plugin-config-card"
+            :class="{ selected: isPluginGroupSelected(pg.value?.id || pg.key) }"
+            @click="togglePluginGroup(pg)"
+            style="width: 100%; border: 1px solid #e8e8e8; border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: #fff;"
+          >
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <a-checkbox :checked="isPluginGroupSelected(pg.value?.id || pg.key)" @click.stop="togglePluginGroup(pg)" />
+              <strong style="font-size: 13px; flex: 1; margin-left: 8px;">{{ pg.value?.id || pg.key }}</strong>
+              <span style="font-size: 11px; color: #999;">v{{ pg.value?.current_version || 0 }}</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
+              <a-tag
+                v-for="(pcfg, pname) in (typeof pg.value?.plugins === 'string' ? JSON.parse(pg.value.plugins) : (pg.value?.plugins || {}))"
+                :key="pname"
+                color="blue"
+                style="font-size: 11px;"
+              >
+                {{ pname }}
+              </a-tag>
+            </div>
+            <div v-if="pg.value?.desc" style="font-size: 11px; color: #999; margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
+          </div>
+        </div>
       </a-form>
     </a-modal>
 
@@ -464,7 +496,8 @@ const routeForm = reactive({
   hosts: '',
   priority: 0,
   upstream_id: '',
-  pluginsJson: ''
+  pluginsJson: '',
+  plugin_config_ids: [] as string[]
 })
 
 const jsonModalVisible = ref(false)
@@ -791,6 +824,7 @@ const showRouteModal = (mode: 'create' | 'edit', record?: any) => {
     routeForm.priority = record.value.priority || 0
     routeForm.upstream_id = record.value.upstream_id || ''
     routeForm.pluginsJson = record.value.plugins ? JSON.stringify(record.value.plugins, null, 2) : ''
+    routeForm.plugin_config_ids = record.value.plugin_config_ids ? [...record.value.plugin_config_ids] : []
   } else {
     routeForm.name = ''
     routeForm.uri = ''
@@ -799,8 +833,27 @@ const showRouteModal = (mode: 'create' | 'edit', record?: any) => {
     routeForm.priority = 0
     routeForm.upstream_id = ''
     routeForm.pluginsJson = ''
+    routeForm.plugin_config_ids = []
   }
   routeModalVisible.value = true
+}
+
+const getPluginGroupId = (pg: any) => {
+  return pg.value?.id || pg.key?.split('/').pop() || pg.id
+}
+
+const isPluginGroupSelected = (edgeUuid: string) => {
+  return routeForm.plugin_config_ids.indexOf(edgeUuid) !== -1
+}
+
+const togglePluginGroup = (pg: any) => {
+  const edgeUuid = getPluginGroupId(pg)
+  const idx = routeForm.plugin_config_ids.indexOf(edgeUuid)
+  if (idx !== -1) {
+    routeForm.plugin_config_ids.splice(idx, 1)
+  } else {
+    routeForm.plugin_config_ids.push(edgeUuid)
+  }
 }
 
 const handleRouteSubmit = async () => {
@@ -822,7 +875,7 @@ const handleRouteSubmit = async () => {
     }
   }
 
-  const payload = {
+  const payload: Record<string, any> = {
     name: routeForm.name || undefined,
     uri: routeForm.uri || undefined,
     methods: routeForm.methods.length ? routeForm.methods : undefined,
@@ -830,6 +883,10 @@ const handleRouteSubmit = async () => {
     priority: routeForm.priority || 0,
     upstream_id: routeForm.upstream_id || undefined,
     plugins
+  }
+
+  if (routeForm.plugin_config_ids.length > 0) {
+    payload.plugin_config_ids = routeForm.plugin_config_ids
   }
 
   try {
@@ -1219,5 +1276,14 @@ watch(selectedNode, async (newNode) => {
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.plugin-config-card:hover {
+  border-color: #1890ff !important;
+}
+
+.plugin-config-card.selected {
+  border-color: #1890ff !important;
+  background: #e6f7ff !important;
 }
 </style>

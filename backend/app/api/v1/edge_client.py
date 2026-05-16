@@ -51,6 +51,7 @@ class RouteCreate(BaseModel):
     priority: int = 0
     upstream_id: str | None = None
     plugins: dict[str, Any] | None = None
+    plugin_config_ids: list[str] | None = None
 
 
 class RouteUpdate(BaseModel):
@@ -62,6 +63,7 @@ class RouteUpdate(BaseModel):
     priority: int | None = None
     upstream_id: str | None = None
     plugins: dict[str, Any] | None = None
+    plugin_config_ids: list[str] | None = None
 
 
 @router.get("/nodes")
