@@ -454,6 +454,9 @@
             <a-select-option :value="0">禁用</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item label="Admin Key" name="admin_key">
+          <a-input-password v-model:value="form.admin_key" placeholder="Edge 节点 Admin API 密钥" />
+        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -1091,7 +1094,8 @@ const form = reactive({
   name: '',
   display_name: '',
   description: '',
-  status: 1
+  status: 1,
+  admin_key: '',
 })
 
 const nodeForm = reactive({
@@ -1559,7 +1563,8 @@ const showAddModal = () => {
     name: '',
     display_name: '',
     description: '',
-    status: 1
+    status: 1,
+    admin_key: '',
   })
   nameError.value = ''
   modalVisible.value = true
@@ -1571,6 +1576,7 @@ const editCluster = (cluster: Cluster) => {
   form.display_name = cluster.display_name || ''
   form.description = cluster.description || ''
   form.status = cluster.status
+  form.admin_key = (cluster as any).admin_key || ''
   nameError.value = ''
   modalVisible.value = true
 }

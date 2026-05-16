@@ -378,14 +378,20 @@ class EdgeClient:
         return edge_route
 
     def _parse_node_list(self, response: dict[str, Any]) -> list[dict[str, Any]]:
-        """Parse edge admin list response to extract nodes array."""
+        if not isinstance(response, dict):
+            return []
         node = response.get("node", {})
-        if node.get("dir"):
+        if isinstance(node, dict) and node.get("dir"):
             nodes = node.get("nodes", [])
-            # Handle empty dict {} returned when no routes exist
             if isinstance(nodes, dict):
-                return [] if not nodes else [nodes]
+                return [nodes] if nodes else []
             return nodes if isinstance(nodes, list) else []
+        if "list" in response:
+            items = response["list"]
+            return items if isinstance(items, list) else []
+        if "nodes" in response:
+            items = response["nodes"]
+            return items if isinstance(items, list) else []
         return [node] if node else []
 
     def list_routes(self) -> list[dict[str, Any]]:
