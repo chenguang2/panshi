@@ -991,10 +991,11 @@ class EdgeImportService:
                         skipped_counts["routes"] += 1
                         continue
                     existing_route_uuids.add(r_data["edge_uuid"])
-                    if r_data["name"] in existing_route_names:
-                        skipped_counts["routes"] += 1
-                        continue
-                    existing_route_names.add(r_data["name"])
+                    resolved_name = self._resolve_upstream_name(
+                        r_data["name"], existing_route_names
+                    )
+                    r_data["name"] = resolved_name
+                    existing_route_names.add(resolved_name)
 
                     new_route = Route(**r_data)
                     session.add(new_route)
