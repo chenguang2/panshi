@@ -158,18 +158,18 @@ class EdgeClient:
 
         try:
             if method == "GET":
-                response = httpx.get(url, headers=headers, timeout=30.0, trust_env=False)
+                response = httpx.get(url, headers=headers, timeout=5.0, trust_env=False)
             elif method == "POST":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.post(url, headers=headers, content=encrypted_body, timeout=30.0, trust_env=False)
+                response = httpx.post(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
             elif method == "PUT":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.put(url, headers=headers, content=encrypted_body, timeout=30.0, trust_env=False)
+                response = httpx.put(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
             elif method == "PATCH":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.patch(url, headers=headers, content=encrypted_body, timeout=30.0, trust_env=False)
+                response = httpx.patch(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
             elif method == "DELETE":
-                response = httpx.delete(url, headers=headers, timeout=30.0, trust_env=False)
+                response = httpx.delete(url, headers=headers, timeout=5.0, trust_env=False)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
         except httpx.TimeoutException as e:

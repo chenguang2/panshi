@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, create_engine
 from sqlalchemy.orm import Session
@@ -20,6 +21,16 @@ def get_sync_db():
     else:
         engine = create_engine(sync_url)
     return Session(engine)
+
+
+async def run_edge_sync(call, timeout=10.0):
+    """Run a synchronous EdgeClient call in a thread pool so it doesn't block the event loop.
+    
+    The event loop must remain free to handle cancellation (client disconnect)
+    and other concurrent requests. Without this, 6 parallel edge queries
+    would serialize and block the server for up to 30 seconds.
+    """
+    return await asyncio.wait_for(asyncio.to_thread(call), timeout=timeout)
 
 
 class UpstreamCreate(BaseModel):
@@ -89,7 +100,7 @@ async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db))
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_upstreams()
+        result = await run_edge_sync(client.list_upstreams)
         import json
         print(f"[DEBUG] Edge upstream raw result keys: {result.keys() if isinstance(result, dict) else type(result)}")
         if isinstance(result, dict) and "raw_response" in result:
@@ -161,7 +172,7 @@ async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_routes()
+        result = await run_edge_sync(client.list_routes)
         return {"routes": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -228,7 +239,7 @@ async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_plugins()
+        result = await run_edge_sync(client.list_plugins)
         return {"plugins": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -241,7 +252,7 @@ async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_d
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_global_rules()
+        result = await run_edge_sync(client.list_global_rules)
         return {"global_rules": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -306,7 +317,7 @@ async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_plugin_configs()
+        result = await run_edge_sync(client.list_plugin_configs)
         return {"plugin_configs": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -371,7 +382,7 @@ async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(ge
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_plugin_metadata()
+        result = await run_edge_sync(client.list_plugin_metadata)
         return {"plugin_metadata": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -423,7 +434,7 @@ async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(
     sync_db = get_sync_db()
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
-        result = client.list_available_plugins()
+        result = await run_edge_sync(client.list_available_plugins)
         return {"plugins": result}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")

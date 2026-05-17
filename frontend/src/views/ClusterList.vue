@@ -3962,6 +3962,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
+  background: #fff;
 }
 
 /* Expand row — name + click-zone */
@@ -3972,13 +3973,14 @@ onMounted(() => {
   padding: 8px 14px;
   cursor: pointer;
   user-select: none;
+  background: #dce0e8;
   transition: background 0.15s;
 }
 .expand-row:hover {
-  background: #f0f5ff;
+  background: #cdd2dd;
 }
 .expand-row:active {
-  background: #e6f0ff;
+  background: #bec5d2;
 }
 
 .cname-wrap {
@@ -4140,8 +4142,13 @@ onMounted(() => {
 
 /* Drag cursor on expanded card header */
 .card-expanded .expand-row {
+  background: #d4d9e3;
+  border-bottom: 1px solid #d0d5df;
   cursor: grab;
   user-select: none;
+}
+.card-expanded .expand-row:hover {
+  background: #c5cad7;
 }
 .card-expanded .expand-row:active {
   cursor: grabbing;

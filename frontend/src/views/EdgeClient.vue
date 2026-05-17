@@ -49,8 +49,11 @@
           />
         </template>
 
-        <a-button @click="refresh" :loading="loading" style="margin-left: 8px;">
-          <ReloadOutlined /> 刷新
+        <a-button type="primary" @click="startQuery" :loading="loading" style="margin-left: 8px;">
+          <SearchOutlined /> 查询
+        </a-button>
+        <a-button @click="cancelQuery" :disabled="!loading" style="margin-left: 4px;">
+          <CloseCircleOutlined /> 取消查询
         </a-button>
       </div>
 
@@ -443,10 +446,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { ReloadOutlined, PlusOutlined } from '@ant-design/icons-vue'
-import { computed } from 'vue'
+import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
@@ -457,6 +459,27 @@ const selectedNode = ref<string | null>(null)
 const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
+const currentSignal = ref<AbortSignal | undefined>(undefined)
+
+// AbortController for cancel query
+let abortController: AbortController | null = null
+
+function getSignal(): AbortSignal | undefined {
+  abortController = new AbortController()
+  return abortController.signal
+}
+
+function cancelQuery() {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
+  loading.value = false
+}
+
+onUnmounted(() => {
+  cancelQuery()
+})
 
 const canQuery = computed(() => {
   if (inputMode.value === 'cluster') {
@@ -614,52 +637,57 @@ const onManualInput = () => {
 // 单独加载各标签页数据
 const loadUpstreams = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`, { signal: currentSignal.value })
     upstreams.value = res.data.upstreams || []
   } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadUpstreams error:', error)
   }
 }
 
 const loadRoutes = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`, { signal: currentSignal.value })
     routes.value = res.data.routes || []
   } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadRoutes error:', error)
   }
 }
 
 const loadGlobalRules = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`, { signal: currentSignal.value })
     globalRules.value = res.data.global_rules || []
   } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadGlobalRules error:', error)
   }
 }
 
 const loadPluginConfigs = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`, { signal: currentSignal.value })
     pluginConfigs.value = res.data.plugin_configs || []
   } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadPluginConfigs error:', error)
   }
 }
 
 const loadPluginMetadata = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`, { signal: currentSignal.value })
     pluginMetadataList.value = res.data.plugin_metadata || []
   } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadPluginMetadata error:', error)
   }
 }
 
 const loadPluginList = async (ip: string, port: string) => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`)
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`, { signal: currentSignal.value })
     pluginList.value = res.data.plugins || []
   } catch (error: any) {
     console.error('[DEBUG] loadPluginList error:', error)
@@ -672,6 +700,11 @@ const loadAllData = async () => {
   if (!node) return
 
   const [ip, port] = node.split(':')
+  
+  // Create abort signal for this query
+  abortController = new AbortController()
+  currentSignal.value = abortController.signal
+  
   loading.value = true
 
   try {
@@ -708,9 +741,8 @@ const loadData = async () => {
   }
 }
 
-const refresh = async () => {
+const startQuery = async () => {
   await loadAllData()
-  message.success('已刷新')
 }
 
 const getNodeCount = (nodes: any) => {
@@ -1214,7 +1246,7 @@ const deleteGlobalRule = (record: any) => {
 
 onMounted(async () => {
   await loadClusters()
-  // Auto-select first cluster and node, then load all data
+  // Auto-select first cluster and load node list for dropdown
   if (clusters.value.length > 0) {
     selectedClusterId.value = clusters.value[0].id
     try {
@@ -1222,7 +1254,6 @@ onMounted(async () => {
       clusterNodes.value = res.data?.items || []
       if (clusterNodes.value.length > 0) {
         selectedNode.value = clusterNodes.value[0].ip + ':' + clusterNodes.value[0].management_port
-        await loadAllData()
       }
     } catch (error: any) {
       message.error('加载节点列表失败: ' + (error.response?.data?.detail || error.message))
@@ -1252,9 +1283,7 @@ watch(selectedClusterId, async (newClusterId, oldClusterId) => {
 
 // Watch for node changes to load data
 watch(selectedNode, async (newNode) => {
-  if (newNode) {
-    await loadAllData()
-  }
+  // 不再自动调用查询，用户点击「查询」按钮才加载
 })
 </script>
 
