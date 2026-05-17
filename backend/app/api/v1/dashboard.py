@@ -58,7 +58,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
 @router.get("/recent-routes", response_model=RecentRoutesResponse)
 async def get_recent_routes(limit: int = 10, db: AsyncSession = Depends(get_db)):
     query = (
-        select(Route, Cluster.display_name)
+        select(Route, Cluster.name, Cluster.display_name)
         .join(Cluster, Route.cluster_id == Cluster.id)
         .order_by(desc(Route.created_at))
         .limit(limit)
@@ -72,9 +72,9 @@ async def get_recent_routes(limit: int = 10, db: AsyncSession = Depends(get_db))
             name=route.name,
             uri=route.uri,
             status=route.status,
-            cluster_name=display_name or Cluster.name
+            cluster_name=display_name or cluster_name
         )
-        for route, display_name in rows
+        for route, cluster_name, display_name in rows
     ]
 
     return RecentRoutesResponse(items=items)

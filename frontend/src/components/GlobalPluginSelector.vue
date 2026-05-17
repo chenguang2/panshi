@@ -275,12 +275,48 @@ const handleVersionPublished = async (data: { plugin_name: string }) => {
 }
 
 const deletePlugin = (item: ConfiguredPlugin) => {
-  Modal.confirm({
+  let deleteDb = false
+  let deleteEdge = false
+  let confirmModal: any
+
+  const updateOkDisabled = () => {
+    const atLeastOne = deleteDb || deleteEdge
+    confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
+  }
+
+  const confirmContent = h('div', { style: 'font-size: 13px;' }, [
+    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, `确定要删除插件元数据 "${item.plugin_name}" 吗？`),
+    h('div', { style: 'color: #666; margin-bottom: 12px;' }, '此操作不可撤销，将同时删除数据库记录及所有版本历史。'),
+
+    h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
+      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
+        h('input', {
+          type: 'checkbox', checked: deleteDb,
+          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
+          style: 'width: 16px; height: 16px; cursor: pointer;',
+        }),
+        h('span', { style: 'font-size: 14px;' }, '数据库'),
+        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
+      ]),
+      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
+        h('input', {
+          type: 'checkbox', checked: deleteEdge,
+          onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
+          style: 'width: 16px; height: 16px; cursor: pointer;',
+        }),
+        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
+        h('span', { style: 'color: #999; font-size: 12px;' }, '从活跃 Edge 节点中删除'),
+      ]),
+    ]),
+  ])
+
+  confirmModal = Modal.confirm({
     title: '确认删除',
-    content: `确定要彻底删除插件"${item.plugin_name}"的元数据吗？将同时删除数据库记录及所有版本历史，此操作不可撤销。`,
+    content: confirmContent,
     okText: '确认删除',
     okType: 'danger',
     cancelText: '取消',
+    okButtonProps: { disabled: true },
     onOk: async () => {
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -313,28 +349,31 @@ const deletePlugin = (item: ConfiguredPlugin) => {
       try {
         addLog('正在从数据库删除...')
         progress.percent = 40; update()
-        const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`)
+        const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`, {
+          data: { delete_db: deleteDb, delete_edge: deleteEdge }
+        })
         const data = response.data
         progress.percent = 60
         addLog(`数据库: ${data.message}`)
         addLog('')
 
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
           progress.percent = 80; update()
           addLog('Edge 节点同步删除结果:')
           let ok = 0, fail = 0
-          for (const r of data.results) {
+          for (const r of edgeResults) {
             r.status === 'success' ? ok++ : fail++
             addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
           }
-          addLog(`总计: ${data.results.length} 节点, 成功 ${ok}, 失败 ${fail}`)
-        } else {
+          addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
+        } else if (deleteEdge) {
           addLog('集群中没有活跃的 Edge 节点')
         }
 
         progress.percent = 100
-        if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+        if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('')
           addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')

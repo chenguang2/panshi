@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import Optional, Any
@@ -448,8 +448,11 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
 
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}")
-async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
     upstream = result.scalar_one_or_none()
@@ -459,26 +462,31 @@ async def delete_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = 
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
-    # 先显式删除关联的 targets（SQLite 异步引擎可能未启用外键级联）
-    await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
-    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
-
-    await db.delete(upstream)
-    await db.commit()
-
     results = []
-    if active_nodes:
-        for node in active_nodes:
-            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-            try:
-                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
-                response = client.delete_upstream(upstream.edge_uuid)
-                node_result["status"] = "success"
-                node_result["response"] = response
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                node_result["status"] = "failed"
-                node_result["error"] = str(e)
-            results.append(node_result)
+
+    if body.delete_db:
+        # 先显式删除关联的 targets（SQLite 异步引擎可能未启用外键级联）
+        await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
+        await db.delete(upstream)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        if active_nodes:
+            for node in active_nodes:
+                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
+                try:
+                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    response = client.delete_upstream(upstream.edge_uuid)
+                    node_result["status"] = "success"
+                    node_result["response"] = response
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    node_result["status"] = "failed"
+                    node_result["error"] = str(e)
+                results.append(node_result)
+        else:
+            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
 
     return {"message": "上游服务已删除", "results": results}
 
@@ -544,30 +552,44 @@ async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConf
 
 
 @router.delete("/{cluster_id}/plugin_configs/{config_id}")
-async def delete_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
-    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id == config_id))
-    await db.delete(config)
-    await db.commit()
+
     results = []
-    if active_nodes:
-        for node in active_nodes:
-            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-            try:
-                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
-                response = client.delete_plugin_config(config.edge_uuid)
-                node_result["status"] = "success"
-                node_result["response"] = response
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                node_result["status"] = "failed"
-                node_result["error"] = str(e)
-            results.append(node_result)
+
+    if body.delete_db:
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id == config_id))
+        await db.delete(config)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        if active_nodes:
+            for node in active_nodes:
+                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
+                try:
+                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    response = client.delete_plugin_config(config.edge_uuid)
+                    node_result["status"] = "success"
+                    node_result["response"] = response
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    node_result["status"] = "failed"
+                    node_result["error"] = str(e)
+                results.append(node_result)
+        else:
+            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
+
     return {"message": "插件组已删除", "results": results}
 
 
@@ -792,30 +814,44 @@ async def update_global_rule(cluster_id: int, rule_id: int, data: GlobalRuleUpda
 
 
 @router.delete("/{cluster_id}/global_rules/{rule_id}")
-async def delete_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
     result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
-    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id))
-    await db.delete(rule)
-    await db.commit()
+
     results = []
-    if active_nodes:
-        for node in active_nodes:
-            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-            try:
-                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
-                response = client.delete_global_rule(rule.edge_uuid)
-                node_result["status"] = "success"
-                node_result["response"] = response
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                node_result["status"] = "failed"
-                node_result["error"] = str(e)
-            results.append(node_result)
+
+    if body.delete_db:
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id))
+        await db.delete(rule)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        if active_nodes:
+            for node in active_nodes:
+                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
+                try:
+                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    response = client.delete_global_rule(rule.edge_uuid)
+                    node_result["status"] = "success"
+                    node_result["response"] = response
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    node_result["status"] = "failed"
+                    node_result["error"] = str(e)
+                results.append(node_result)
+        else:
+            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
+
     return {"message": "全局规则已删除", "results": results}
 
 
@@ -1035,15 +1071,27 @@ async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db
 
 
 @router.delete("/{cluster_id}/nodes/{node_id}")
-async def delete_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
     result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
     node = result.scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
 
-    await db.delete(node)
-    await db.commit()
-    return {"message": "节点已删除"}
+    results = []
+
+    if body.delete_db:
+        await db.delete(node)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        # 节点本身是 Edge 运行时，没有对应的 Edge API 删除操作
+        results.append({"scope": "edge", "status": "skipped", "message": "节点是 Edge 运行时，无对应的 Edge API 删除操作"})
+
+    return {"message": "节点已删除", "results": results}
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/start")

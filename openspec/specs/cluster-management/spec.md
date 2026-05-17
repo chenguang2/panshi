@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Cluster management capabilities for creating, editing, deleting, and monitoring gateway clusters.
+
+## Requirements
 
 ### Requirement: Route edit form has method select all
 
