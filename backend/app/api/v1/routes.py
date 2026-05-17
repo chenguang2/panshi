@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from typing import List, Optional
@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
+from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
@@ -239,9 +239,12 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
 
 @router.delete("/{route_id}")
-async def delete_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     from app.models.cluster import Node
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
@@ -251,24 +254,30 @@ async def delete_route(cluster_id: int, route_id: int, db: AsyncSession = Depend
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
-    await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "route", ConfigVersion.resource_id == route_id))
-    await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
-    await db.delete(route)
-    await db.commit()
-
     results = []
-    if active_nodes:
-        for node in active_nodes:
-            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-            try:
-                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
-                response = client.delete_route(route.edge_uuid)
-                node_result["status"] = "success"
-                node_result["response"] = response
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                node_result["status"] = "failed"
-                node_result["error"] = str(e)
-            results.append(node_result)
+
+    if body.delete_db:
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "route", ConfigVersion.resource_id == route_id))
+        await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
+        await db.delete(route)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        if active_nodes:
+            for node in active_nodes:
+                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
+                try:
+                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    response = client.delete_route(route.edge_uuid)
+                    node_result["status"] = "success"
+                    node_result["response"] = response
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    node_result["status"] = "failed"
+                    node_result["error"] = str(e)
+                results.append(node_result)
+        else:
+            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
 
     return {"message": "路由已删除", "results": results}
 

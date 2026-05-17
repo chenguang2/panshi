@@ -1,46 +1,115 @@
 <template>
   <div class="cluster-list">
-    <div class="header-actions">
-      <h2>集群管理</h2>
+    <div class="header-section">
+      <div class="header-left">
+        <h2>集群管理</h2>
+        <div class="filter-bar">
+          <a-input-search
+            v-model:value="filterText"
+            placeholder="搜索集群名称或显示名"
+            style="width: 280px;"
+            allow-clear
+          />
+          <a-radio-group v-model:value="statusFilter" size="small" option-type="button" button-style="solid">
+            <a-radio-button value="all">全部</a-radio-button>
+            <a-radio-button value="healthy">健康</a-radio-button>
+            <a-radio-button value="offline">离线</a-radio-button>
+          </a-radio-group>
+          <span class="filter-count">共 {{ filteredClusters.length }} 个集群</span>
+        </div>
+      </div>
       <a-button type="primary" @click="showAddModal">添加集群</a-button>
     </div>
 
-    <a-row :gutter="[16, 16]" class="cluster-grid">
-      <a-col :span="24" v-for="cluster in clusters" :key="cluster.id">
-        <a-card :bordered="true" class="cluster-card" hoverable>
-          <template #title>
-            <div class="card-title">
-              <CloudOutlined />
-              <span class="cluster-title-name">
-                {{ cluster.display_name || cluster.name }}
-                <span class="cluster-name-hint" v-if="cluster.display_name">({{ cluster.name }})</span>
-              </span>
-              <span class="stat-item-inline">
-                <TeamOutlined /> 节点: {{ cluster.healthy_node_count }}/{{ cluster.node_count }}
-              </span>
-              <span class="stat-item-inline">
-                <CloudServerOutlined /> 上游: {{ cluster.upstream_count }}
-              </span>
-              <span class="stat-item-inline">
-                <GatewayOutlined /> 路由: {{ cluster.route_count }}
-              </span>
-            </div>
-          </template>
-          <template #extra>
-            <div class="title-actions">
-              <a-button size="small" @click="editCluster(cluster)">编辑</a-button>
-              <a-button size="small" danger @click="deleteCluster(cluster)">删除</a-button>
-            </div>
-          </template>
-          <a-tabs v-model:activeKey="cluster.activeTab" size="small" class="cluster-tabs" @tabClick="(key: string) => handleTabClick(cluster, key)">
-            <a-tab-pane key="nodes" tab="集群节点"></a-tab-pane>
-            <a-tab-pane key="upstreams" tab="上游" :disabled="!cluster.nodes || cluster.nodes.length === 0"></a-tab-pane>
-            <a-tab-pane key="routes" tab="路由" :disabled="!cluster.upstreams || cluster.upstreams.length === 0"></a-tab-pane>
-            <a-tab-pane key="globalPlugins" tab="插件元数据"></a-tab-pane>
-            <a-tab-pane v-if="authStore.hasPermission('plugin_groups')" key="pluginConfigs" tab="插件组"></a-tab-pane>
-            <a-tab-pane v-if="authStore.hasPermission('global_rules')" key="globalRules" tab="全局规则"></a-tab-pane>
-            <a-tab-pane key="staticResources" tab="静态资源"></a-tab-pane>
-          </a-tabs>
+    <TransitionGroup v-if="gridClusters.length > 0" name="grid" tag="div" class="cluster-grid">
+      <div v-for="cluster in gridClusters" :key="cluster.id"
+           class="cluster-card">
+
+        <!-- Clickable expand row: status + name only -->
+        <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+          <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
+          <div class="cname-wrap">
+            <span class="cname">{{ cluster.display_name || cluster.name }}</span>
+            <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+          </div>
+          <div class="click-zone">
+            <span class="arrow">⬇</span>
+            <span class="label">展开</span>
+          </div>
+        </div>
+
+        <!-- Stats + actions row -->
+        <div class="card-header">
+          <div class="stats-bar">
+            <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
+            <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
+            <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+          </div>
+          <div class="cactions">
+            <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
+            <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+          </div>
+        </div>
+
+        <!-- Chips row -->
+        <div class="chips-row">
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'nodes')">集群节点 <span class="cb">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
+          <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组</span>
+          <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则</span>
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源</span>
+        </div>
+
+      </div>
+    </TransitionGroup>
+
+    <!-- EXPANDED AREA: clusters removed from grid -->
+    <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
+      <div v-for="cluster in expandedClusters" :key="cluster.id"
+           class="card-expanded" :data-cluster-id="cluster.id">
+        <!-- Clickable row: name + drag handle + click-zone -->
+        <div class="expand-row" draggable="true"
+             @click="toggleExpand(cluster.id)"
+             title="点击收回 · 拖拽排序"
+             @dragstart="onDragStart($event, cluster.id)"
+             @dragover="onDragOver($event)"
+             @drop="onDrop($event)"
+             @dragend="onDragEnd($event)">
+          <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
+          <div class="cname-wrap">
+            <span class="cname">{{ cluster.display_name || cluster.name }}</span>
+            <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+          </div>
+          <div class="click-zone on">
+            <span class="arrow">⬆</span>
+            <span class="label">收回</span>
+          </div>
+        </div>
+        <!-- Stats + actions row -->
+        <div class="card-header">
+          <div class="stats-bar">
+            <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
+            <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
+            <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+          </div>
+          <div class="cactions">
+            <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
+            <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+          </div>
+        </div>
+        <div class="card-detail">
+          <div class="dtabs">
+            <span class="dt" :class="{ active: cluster.activeTab === 'nodes' }" @click="cluster.activeTab = 'nodes'; handleTabClick(cluster, 'nodes')">集群节点 <span class="db">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
+            <span class="dt" :class="{ active: cluster.activeTab === 'upstreams' }" @click="cluster.activeTab = 'upstreams'; handleTabClick(cluster, 'upstreams')">上游 <span class="db">{{ cluster.upstream_count }}</span></span>
+            <span class="dt" :class="{ active: cluster.activeTab === 'routes' }" @click="cluster.activeTab = 'routes'; handleTabClick(cluster, 'routes')">路由 <span class="db">{{ cluster.route_count }}</span></span>
+            <span class="dt" :class="{ active: cluster.activeTab === 'globalPlugins' }" @click="cluster.activeTab = 'globalPlugins'; handleTabClick(cluster, 'globalPlugins')">插件元数据</span>
+            <span v-if="authStore.hasPermission('plugin_groups')" class="dt" :class="{ active: cluster.activeTab === 'pluginConfigs' }" @click="cluster.activeTab = 'pluginConfigs'; handleTabClick(cluster, 'pluginConfigs')">插件组</span>
+            <span v-if="authStore.hasPermission('global_rules')" class="dt" :class="{ active: cluster.activeTab === 'globalRules' }" @click="cluster.activeTab = 'globalRules'; handleTabClick(cluster, 'globalRules')">全局规则</span>
+            <span class="dt" :class="{ active: cluster.activeTab === 'staticResources' }" @click="cluster.activeTab = 'staticResources'; handleTabClick(cluster, 'staticResources')">静态资源</span>
+          </div>
+          <div class="dbody">
           <div v-if="cluster.activeTab === 'upstreams'" class="tab-content">
             <div class="node-actions">
               <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
@@ -472,11 +541,13 @@
               </template>
             </a-table>
           </div>
-        </a-card>
-      </a-col>
-    </a-row>
+          </div>
+        </div>
 
-    <div v-if="clusters.length === 0 && !loading" class="empty-state">
+      </div>
+    </TransitionGroup>
+
+    <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
       <a-empty description="暂无集群" />
     </div>
 
@@ -907,6 +978,120 @@ const router = useRouter()
 const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
+const filterText = ref('')
+const statusFilter = ref<string>('all')
+
+const expandedIds = ref<Set<number>>(new Set())
+const expandedOrder = ref<number[]>([])
+
+function toggleExpand(clusterId: number) {
+  const s = new Set(expandedIds.value)
+  const order = [...expandedOrder.value]
+  if (s.has(clusterId)) {
+    s.delete(clusterId)
+    const idx = order.indexOf(clusterId)
+    if (idx > -1) order.splice(idx, 1)
+  } else {
+    s.add(clusterId)
+    order.push(clusterId)
+  }
+  expandedIds.value = s
+  expandedOrder.value = order
+}
+
+function expandAndSwitchTab(cluster: Cluster, tab: string) {
+  cluster.activeTab = tab
+  const s = new Set(expandedIds.value)
+  const order = [...expandedOrder.value]
+  if (!s.has(cluster.id)) {
+    s.add(cluster.id)
+    order.push(cluster.id)
+  }
+  expandedIds.value = s
+  expandedOrder.value = order
+  handleTabClick(cluster, tab)
+}
+
+function isExpanded(clusterId: number): boolean {
+  return expandedIds.value.has(clusterId)
+}
+
+const filteredClusters = computed(() => {
+  return clusters.value.filter((c: Cluster) => {
+    const text = filterText.value.trim().toLowerCase()
+    if (text) {
+      const matchName = (c.display_name || c.name).toLowerCase().includes(text)
+      const matchKey = c.name.toLowerCase().includes(text)
+      if (!matchName && !matchKey) return false
+    }
+    if (statusFilter.value === 'healthy') return c.status === 1
+    if (statusFilter.value === 'offline') return c.status !== 1
+    return true
+  })
+})
+
+const gridClusters = computed(() => {
+  return filteredClusters.value.filter((c: Cluster) => !expandedIds.value.has(c.id))
+})
+
+const expandedClusters = computed(() => {
+  const byId: Record<number, Cluster> = {}
+  for (const c of filteredClusters.value) {
+    if (expandedIds.value.has(c.id)) byId[c.id] = c
+  }
+  return expandedOrder.value.map(id => byId[id]).filter(Boolean)
+})
+
+let draggedClusterId: number | null = null
+
+function onDragStart(event: DragEvent, clusterId: number) {
+  draggedClusterId = clusterId
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(clusterId))
+  }
+  const el = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
+  if (el) setTimeout(() => el.classList.add('dragging'), 0)
+}
+
+function onDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  const target = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
+  if (!target || !draggedClusterId) return
+  const targetId = Number(target.dataset.clusterId)
+  if (targetId === draggedClusterId) return
+  document.querySelectorAll('.card-expanded.drag-over').forEach(el => el.classList.remove('drag-over'))
+  target.classList.add('drag-over')
+}
+
+function onDrop(event: DragEvent) {
+  event.preventDefault()
+  document.querySelectorAll('.card-expanded.drag-over, .card-expanded.dragging').forEach(el => {
+    el.classList.remove('drag-over', 'dragging')
+  })
+  if (!draggedClusterId) return
+  const target = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
+  if (!target) return
+  const targetId = Number(target.dataset.clusterId)
+  if (targetId === draggedClusterId) return
+  
+  const order = [...expandedOrder.value]
+  const fromIdx = order.indexOf(draggedClusterId)
+  const toIdx = order.indexOf(targetId)
+  if (fromIdx === -1 || toIdx === -1) return
+  order.splice(fromIdx, 1)
+  order.splice(toIdx, 0, draggedClusterId)
+  expandedOrder.value = order
+}
+
+function onDragEnd(event: DragEvent) {
+  document.querySelectorAll('.card-expanded.drag-over, .card-expanded.dragging').forEach(el => {
+    el.classList.remove('drag-over', 'dragging')
+  })
+  draggedClusterId = null
+}
+
 const modalVisible = ref(false)
 const nodeModalVisible = ref(false)
 const upstreamModalVisible = ref(false)
@@ -1686,6 +1871,81 @@ const resourceLabels: Record<string, string> = {
   config_versions: '配置版本历史',
 }
 
+// Shared delete confirmation with DB/Edge selection
+function showDeleteConfirm(opts: {
+  title: string
+  apiEndpoint: string
+  onOk: (deleteDb: boolean, deleteEdge: boolean) => void
+  showResourceStats?: boolean
+  stats?: Record<string, number>
+}) {
+  let deleteDb = false
+  let deleteEdge = false
+  let confirmModal: any
+
+  const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
+
+  const updateOkDisabled = () => {
+    const atLeastOne = deleteDb || deleteEdge
+    confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
+  }
+
+  const content = h('div', { style: 'font-size: 13px;' }, [
+    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
+
+    // Resource stats section (only for cluster)
+    ...(opts.showResourceStats && opts.stats ? [
+      h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
+        h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
+        ...Object.entries(opts.stats).map(([k, v]) =>
+          h('div', { style: 'display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5;' }, [
+            h('span', { style: 'color: #666;' }, resourceLabels[k] || k),
+            h('span', { style: 'font-weight: 500;' }, String(v)),
+          ])
+        ),
+        h('div', { style: 'display: flex; justify-content: space-between; padding: 6px 0 0; font-weight: 600; border-top: 2px solid #e8e8e8; margin-top: 4px;' }, [
+          h('span', '合计'),
+          h('span', `${totalCount} 条记录`),
+        ]),
+      ])
+    ] : []),
+
+    // Delete scope selection
+    h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
+      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
+        h('input', {
+          type: 'checkbox', checked: deleteDb,
+          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
+          style: 'width: 16px; height: 16px; cursor: pointer;',
+        }),
+        h('span', { style: 'font-size: 14px;' }, '数据库'),
+        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
+      ]),
+      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
+        h('input', {
+          type: 'checkbox', checked: deleteEdge,
+          onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
+          style: 'width: 16px; height: 16px; cursor: pointer;',
+        }),
+        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
+        h('span', { style: 'color: #999; font-size: 12px;' }, '删除 Edge 节点上的配置'),
+      ]),
+    ]),
+  ])
+
+  confirmModal = Modal.confirm({
+    title: '确认删除',
+    content,
+    okText: '确认删除',
+    okType: 'danger' as any,
+    cancelText: '取消',
+    okButtonProps: { disabled: true },
+    onOk: () => {
+      opts.onOk(deleteDb, deleteEdge)
+    },
+  })
+}
+
 const deleteCluster = async (cluster: Cluster) => {
   const clusterName = cluster.display_name || cluster.name
 
@@ -1696,79 +1956,12 @@ const deleteCluster = async (cluster: Cluster) => {
     stats = res.data
   } catch { /* 统计加载失败时不阻塞，显示空计数 */ }
 
-  const totalCount = Object.values(stats).reduce((a, b) => a + b, 0)
-
-  // Step 1: 确认弹窗（资源统计 + 输入名称确认）
-  let confirmInput = ''
-  let confirmModal: any
-
-  let deleteDb = false
-  let deleteEdge = false
-
-  const updateOkDisabled = () => {
-    const nameMatch = confirmInput === clusterName
-    const atLeastOne = deleteDb || deleteEdge
-    confirmModal.update({ okButtonProps: { disabled: !(nameMatch && atLeastOne) } })
-  }
-
-  const buildConfirmContent = () => h('div', { style: 'font-size: 13px;' }, [
-    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' },
-      `确定要删除集群 "${clusterName}" 吗？`
-    ),
-    h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
-      h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
-      ...Object.entries(stats).map(([k, v]) =>
-        h('div', { style: 'display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5;' }, [
-          h('span', { style: 'color: #666;' }, resourceLabels[k] || k),
-          h('span', { style: 'font-weight: 500;' }, String(v)),
-        ])
-      ),
-      h('div', { style: 'display: flex; justify-content: space-between; padding: 6px 0 0; font-weight: 600; border-top: 2px solid #e8e8e8; margin-top: 4px;' }, [
-        h('span', '合计'),
-        h('span', `${totalCount} 条记录`),
-      ]),
-      h('div', { style: 'margin-top: 12px; border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-        h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-          h('input', {
-            type: 'checkbox', checked: deleteDb,
-            onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-            style: 'width: 16px; height: 16px; cursor: pointer;',
-          }),
-          h('span', { style: 'font-size: 14px;' }, '数据库'),
-          h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的集群记录'),
-        ]),
-        h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-          h('input', {
-            type: 'checkbox', checked: deleteEdge,
-            onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
-            style: 'width: 16px; height: 16px; cursor: pointer;',
-          }),
-          h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-          h('span', { style: 'color: #999; font-size: 12px;' }, '同步删除 Edge 节点上的配置'),
-        ]),
-      ]),
-    ]),
-    h('div', { style: 'color: #ff4d4f; font-size: 12px; margin-bottom: 4px;' }, '请输入集群名称以确认删除：'),
-    h('input', {
-      style: 'width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; outline: none; box-sizing: border-box;',
-      placeholder: '请输入集群名称',
-      onInput: (e: any) => {
-        confirmInput = e.target.value
-        updateOkDisabled()
-      },
-    }),
-  ])
-
-  confirmModal = Modal.confirm({
-    title: '删除集群',
-    width: 500,
-    content: buildConfirmContent(),
-    okText: '确认删除',
-    okType: 'danger' as any,
-    okButtonProps: { disabled: true },
-    cancelText: '取消',
-    onOk: async () => {
-      // Step 2: 进度日志弹窗
+  showDeleteConfirm({
+    title: `确定要删除集群 "${clusterName}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}`,
+    showResourceStats: true,
+    stats,
+    onOk: async (deleteDb: boolean, deleteEdge: boolean) => {
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       const progress = { percent: 0, status: 'active' as const }
@@ -1804,24 +1997,25 @@ const deleteCluster = async (cluster: Cluster) => {
         addLog(data.message)
         addLog('')
 
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('Edge 节点删除结果:')
           let successCount = 0
           let failCount = 0
-          for (const r of data.results) {
+          for (const r of edgeResults) {
             if (r.status === 'success') successCount++
             else failCount++
             addLog(`  ${r.node}: ${r.status === 'success' ? '\u2705' : '\u274C'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog('')
-          addLog(`总计: ${data.results.length} 节点, 成功 ${successCount}, 失败 ${failCount}`)
+          addLog(`总计: ${edgeResults.length} 节点, 成功 ${successCount}, 失败 ${failCount}`)
         } else if (deleteEdge) {
           addLog('集群下没有活跃的 Edge 节点')
         }
 
         progress.percent = 100
         addLog('')
-        if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+        if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('\u26A0\uFE0F 部分节点删除失败，请在 Edge 节点上手动清理')
         } else {
@@ -1909,34 +2103,31 @@ const deleteNode = (cluster: Cluster, node?: Node) => {
     message.warning('请先选择一个节点')
     return
   }
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除节点"${target.ip}"吗？此操作不可撤销。`,
-    okText: '确认删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定要删除节点 "${target.ip}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}/nodes/${target.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       try {
-        await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`)
+        await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         message.success('节点已删除')
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items
         cluster.node_count = cluster.nodes.length
         cluster.selectedNode = null
         loadClusters()
-} catch (error: any) {
-    const detail = error.response?.data?.detail
-    if (typeof detail === 'string') {
-      message.error(detail)
-    } else if (Array.isArray(detail)) {
-      message.error(detail.map((d: any) => d.msg || JSON.stringify(d)).join('; '))
-    } else if (error.response?.data?.message) {
-      message.error(error.response.data.message)
-    } else {
-      message.error('操作失败')
-    }
-  }
-    }
+      } catch (error: any) {
+        const detail = error.response?.data?.detail
+        if (typeof detail === 'string') {
+          message.error(detail)
+        } else if (Array.isArray(detail)) {
+          message.error(detail.map((d: any) => d.msg || JSON.stringify(d)).join('; '))
+        } else if (error.response?.data?.message) {
+          message.error(error.response.data.message)
+        } else {
+          message.error('操作失败')
+        }
+      }
+    },
   })
 }
 
@@ -2222,13 +2413,10 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
     message.error(`该上游已被路由 "${routeNames}" 引用，请先删除这些路由`)
     return
   }
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除上游"${upstream.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
-    okText: '确认删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定要删除上游 "${upstream.name}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -2260,14 +2448,15 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
         progress.percent = 40
         updateContent()
 
-        const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`)
+        const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
         addLog(`数据库: ${data.message}`)
         addLog('')
 
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
           progress.percent = 80
           updateContent()
@@ -2275,23 +2464,23 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
           addLog('Edge 节点同步删除结果:')
           let successCount = 0
           let failCount = 0
-          for (const r of data.results) {
+          for (const r of edgeResults) {
             if (r.status === 'success') successCount++
             else failCount++
             addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog('')
-          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-        } else {
+          addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else if (deleteEdge) {
           addLog('集群中没有活跃的 Edge 节点')
         }
 
         progress.percent = 100
         addLog('')
-        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+        if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'success'
           addLog('✅ 删除完成!')
-        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+        } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
         } else {
@@ -2314,7 +2503,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
         updateContent()
       }
       modal.update({ okButtonProps: { disabled: false } })
-    }
+    },
   })
 }
 
@@ -2539,13 +2728,10 @@ const deleteRoute = (cluster: Cluster) => {
 }
 
 const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除路由"${route.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
-    okText: '确认删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定要删除路由 "${route.name}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -2577,14 +2763,15 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
         progress.percent = 40
         updateContent()
 
-        const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`)
+        const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
         addLog(`数据库: ${data.message}`)
         addLog('')
 
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
           progress.percent = 80
           updateContent()
@@ -2592,23 +2779,23 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
           addLog('Edge 节点同步删除结果:')
           let successCount = 0
           let failCount = 0
-          for (const r of data.results) {
+          for (const r of edgeResults) {
             if (r.status === 'success') successCount++
             else failCount++
             addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog('')
-          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-        } else {
+          addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else if (deleteEdge) {
           addLog('集群中没有活跃的 Edge 节点')
         }
 
         progress.percent = 100
         addLog('')
-        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+        if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'success'
           addLog('✅ 删除完成!')
-        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+        } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
         } else {
@@ -2631,7 +2818,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
         updateContent()
       }
       modal.update({ okButtonProps: { disabled: false } })
-    }
+    },
   })
 }
 
@@ -3121,13 +3308,10 @@ const handlePluginConfigSubmit = async () => {
 }
 
 const deletePluginConfig = (cluster: Cluster, pc: any) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除插件组"${pc.name}"吗？将同时删除数据库记录及所有 Edge 节点上的对应数据，此操作不可撤销。`,
-    okText: '确认删除',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定要删除插件组 "${pc.name}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}/plugin_configs/${pc.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -3159,14 +3343,15 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
         progress.percent = 40
         updateContent()
 
-        const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`)
+        const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
         addLog(`数据库: ${data.message}`)
         addLog('')
 
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
           progress.percent = 80
           updateContent()
@@ -3174,23 +3359,23 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
           addLog('Edge 节点同步删除结果:')
           let successCount = 0
           let failCount = 0
-          for (const r of data.results) {
+          for (const r of edgeResults) {
             if (r.status === 'success') successCount++
             else failCount++
             addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog('')
-          addLog(`总计: ${data.results.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-        } else {
+          addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else if (deleteEdge) {
           addLog('集群中没有活跃的 Edge 节点')
         }
 
         progress.percent = 100
         addLog('')
-        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) {
+        if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'success'
           addLog('✅ 删除完成!')
-        } else if (data.results && data.results.some((r: any) => r.status === 'failed')) {
+        } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
         } else {
@@ -3211,7 +3396,7 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
         updateContent()
       }
       modal.update({ okButtonProps: { disabled: false } })
-    }
+    },
   })
 }
 
@@ -3370,11 +3555,10 @@ const handleGlobalRuleSubmit = async () => {
 }
 
 const deleteGlobalRule = (cluster: Cluster, gr: any) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除全局规则"${gr.name}"吗？将同时删除数据库记录及 Edge 节点上的对应数据，此操作不可撤销。`,
-    okText: '确认删除', okType: 'danger', cancelText: '取消',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定要删除全局规则 "${gr.name}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
       const progress = { percent: 0, status: 'active' as const }
       const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
@@ -3383,17 +3567,18 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
       await new Promise(r => setTimeout(r, 400))
       try {
         addLog('正在从数据库删除...'); progress.percent = 40; update()
-        const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`); const data = res.data
+        const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } }); const data = res.data
         progress.percent = 60; addLog(`数据库: ${data.message}`); addLog('')
-        if (data.results && data.results.length > 0) {
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
           addLog('Edge 节点同步删除结果:');
           let ok = 0, fail = 0
-          for (const r of data.results) { r.status === 'success' ? ok++ : fail++; addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`) }
-          addLog(`总计: ${data.results.length} 节点, 成功 ${ok}, 失败 ${fail}`)
-        } else { addLog('集群中没有活跃的 Edge 节点') }
+          for (const r of edgeResults) { r.status === 'success' ? ok++ : fail++; addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`) }
+          addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
+        } else if (deleteEdge) { addLog('集群中没有活跃的 Edge 节点') }
         progress.percent = 100
-        if (data.results && data.results.length > 0 && !data.results.some((r: any) => r.status === 'failed')) { progress.status = 'success'; addLog('✅ 删除完成!') }
-        else if (data.results && data.results.some((r: any) => r.status === 'failed')) { progress.status = 'exception'; addLog('⚠️ 部分节点删除失败') }
+        if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'success'; addLog('✅ 删除完成!') }
+        else if (edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'exception'; addLog('⚠️ 部分节点删除失败') }
         else { addLog('✅ 数据库已删除') }
         update()
       } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 删除失败: ${e.response?.data?.detail || e.message}`); update() }
@@ -3522,14 +3707,12 @@ const handleStaticResourceSubmit = async () => {
 }
 
 const deleteStaticResource = async (cluster: Cluster, sr: any) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定删除静态资源 "${sr.name}"？`,
-    okText: '删除',
-    okType: 'danger',
-    onOk: async () => {
+  showDeleteConfirm({
+    title: `确定删除静态资源 "${sr.name}"？`,
+    apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
+    onOk: async (deleteDb, deleteEdge) => {
       try {
-        await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`)
+        await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         message.success('已删除')
         await loadStaticResources(cluster)
       } catch (error: any) {
@@ -3619,114 +3802,249 @@ onMounted(() => {
   padding: 0;
 }
 
-.header-actions {
+.header-section {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.header-actions h2 {
-  margin: 0;
+.header-section h2 {
+  margin: 0 0 8px 0;
 }
 
-.cluster-grid {
-  margin-top: 16px;
+.header-left {
+  display: flex;
+  flex-direction: column;
 }
 
-.cluster-card {
-  height: 100%;
-  width: 100%;
-}
-
-.cluster-card :deep(.ant-card-head) {
-  min-height: 48px;
-}
-
-.cluster-card :deep(.ant-card-head-title) {
-  padding: 8px 0;
-}
-
-.card-title {
+.filter-bar {
   display: flex;
   align-items: center;
-  font-weight: 500;
-  width: 100%;
-}
-
-.card-title :deep(.anticon) {
-  font-size: 18px;
-  color: #1890ff;
-  margin-right: 8px;
-}
-
-.cluster-title-name {
-  text-align: left;
-}
-
-.cluster-name-hint {
-  color: #999;
-  font-weight: normal;
-  font-size: 12px;
-  margin-left: 8px;
-}
-
-.title-actions {
-  display: flex;
-  gap: 4px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.title-actions :deep(.ant-btn) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.filter-count {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
 }
 
-.card-stats {
-  display: flex;
-  gap: 16px;
+.status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.status-dot.green { background: #52c41a; }
+.status-dot.red { background: #ff4d4f; }
+.status-dot.yellow { background: #faad14; }
+
+.cluster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  position: relative;
+}
+
+.expanded-area {
+  margin-top: 16px;
+  /* Allow collapse animation — no min-height */
+}
+
+/* ===== Grid card transitions ===== */
+
+/* Leave (card drops out of grid) */
+.grid-leave-active {
+  position: absolute !important;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s ease-in;
+  width: calc(100% / 3 - 8px);
+  z-index: 1;
+}
+
+/* Move (remaining cards slide to fill gap) */
+.grid-move {
+  transition: all 0.3s ease;
+}
+
+/* Enter (card returns to grid - pops back up) */
+.grid-enter-active {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.grid-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+}
+
+/* ===== Expanded area transitions ===== */
+
+/* Enter (card drops like a waterfall from above) */
+.expand-enter-active {
+  animation: expandWaterfall 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes expandWaterfall {
+  0% {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    transform: translateY(-250px);
+  }
+  25% {
+    opacity: 1;
+  }
+  85% {
+    max-height: 500px;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    max-height: 500px;
+    margin-bottom: 12px;
+    transform: translateY(0);
+  }
+}
+
+/* Leave (card flies back up) */
+.expand-leave-active {
+  animation: expandFlyUp 0.3s ease-in forwards;
+  overflow: hidden;
+}
+@keyframes expandFlyUp {
+  0% {
+    opacity: 1;
+    max-height: 500px;
+    margin-bottom: 12px;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transform: translateY(-120px);
+  }
+}
+
+.card-expanded {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid var(--p-primary, #1890ff);
+  overflow: hidden;
   margin-bottom: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
+  box-shadow: 0 3px 14px rgba(24,144,255,.16);
+}
+.card-expanded .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8e8e8;
 }
 
-.stat-item {
+.cluster-card {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e8e8e8;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.cluster-card:hover {
+  box-shadow: 0 3px 10px rgba(0,0,0,.08);
+}
+
+/* Header — stats + actions row */
+.card-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: #666;
-  font-size: 13px;
+  gap: 8px;
+  padding: 8px 14px;
 }
 
-.stat-item :deep(.anticon) {
-  color: #1890ff;
-}
-
-.stat-item-inline {
-  display: inline-flex;
+/* Expand row — name + click-zone */
+.expand-row {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: 16px;
-  font-size: 13px;
-  color: #666;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.expand-row:hover {
+  background: #f0f5ff;
+}
+.expand-row:active {
+  background: #e6f0ff;
 }
 
-.stat-item-inline :deep(.anticon) {
-  color: #1890ff;
+.cname-wrap {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+}
+.cname {
+  font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chint {
+  font-size: 11px; color: #999; font-weight: 400; flex-shrink: 0;
 }
 
-.cluster-tabs {
-  margin-bottom: 8px;
+.stats-bar {
+  display: flex; background: #f8f9fa; border-radius: 6px; overflow: hidden; flex-shrink: 0;
+}
+.scell {
+  text-align: center; padding: 4px 10px;
+}
+.scell + .scell { border-left: 1px solid #eee; }
+.snum { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
+.slbl { font-size: 10px; color: #aaa; }
+
+.cactions {
+  display: flex; gap: 3px; flex-shrink: 0;
+}
+.cbtn {
+  padding: 2px 7px; font-size: 11px; border: 1px solid #e0e0e0;
+  border-radius: 4px; background: #fff; cursor: pointer; color: #888;
+}
+.cbtn:hover { border-color: #1890ff; color: #1890ff; }
+.cbtn.danger:hover { border-color: #ff4d4f; color: #ff4d4f; }
+
+/* Chips */
+.chips-row {
+  display: flex; gap: 3px; flex-wrap: wrap; padding: 0 14px 10px;
+}
+.chip {
+  padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  border: 1px solid #e8e8e8; background: #fff; color: #888;
+  cursor: pointer; transition: all 0.2s;
+}
+.chip:hover { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
+.chip.disabled { opacity: 0.4; cursor: not-allowed; }
+.chip.disabled:hover { border-color: #e8e8e8; color: #888; background: #fff; }
+.cb { font-size: 9px; color: #bbb; margin-left: 2px; }
+
+/* Detail area */
+.card-detail {
+  border-top: 1px solid #e8e8e8;
+  position: relative;
 }
 
-.cluster-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 0;
+.dtabs {
+  display: flex; background: #fff; border-bottom: 1px solid #e8e8e8;
+  padding: 0 16px; overflow-x: auto;
 }
-
-.cluster-tabs :deep(.ant-tabs-tab) {
-  padding: 8px 16px !important;
+.dt {
+  padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap;
+  transition: all 0.2s;
 }
+.dt:hover { color: #1890ff; }
+.dt.active { color: #1890ff; border-bottom-color: #1890ff; margin-bottom: -1px; }
+.db { margin-left: 4px; padding: 1px 5px; border-radius: 8px; font-size: 10px; background: #f0f0f0; color: #999; }
+.dt.active .db { background: #e6f7ff; color: #1890ff; }
+.dbody { padding: 16px; }
 
 .node-tab {
   width: 100%;
@@ -3783,5 +4101,58 @@ onMounted(() => {
 .empty-state {
   padding: 48px 0;
   text-align: center;
+}
+
+/* Click zone indicator */
+.click-zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border: 1px solid #e8e8e8;
+  transition: all 0.2s;
+  user-select: none;
+}
+.click-zone:hover {
+  background: #e6f7ff;
+  border-color: var(--p-primary, #1890ff);
+  color: var(--p-primary, #1890ff);
+}
+.click-zone.on {
+  background: #e6f7ff;
+  border-color: var(--p-primary, #1890ff);
+  color: var(--p-primary, #1890ff);
+}
+.click-zone .arrow {
+  font-size: 12px;
+  line-height: 1;
+}
+.click-zone .label {
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* Drag cursor on expanded card header */
+.card-expanded .expand-row {
+  cursor: grab;
+  user-select: none;
+}
+.card-expanded .expand-row:active {
+  cursor: grabbing;
+}
+
+/* Drag states */
+.card-expanded.dragging {
+  opacity: 0.4;
+}
+.card-expanded.drag-over {
+  border-color: #fa8c16 !important;
+  box-shadow: 0 3px 16px rgba(250, 140, 22, 0.3) !important;
 }
 </style>

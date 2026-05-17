@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional, Dict, Any
@@ -7,6 +7,7 @@ import json
 from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
 from app.models.system import AuditLog
+from app.schemas.cluster import DeleteClusterRequest
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
 
@@ -124,8 +125,11 @@ async def update_plugin_metadata(
 
 # ─── 删除（级联 ConfigVersion） ─────────────────────
 @router.delete("/{plugin_name}")
-async def delete_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
+async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     result = await db.execute(
         select(PluginMetadata).where(
@@ -137,34 +141,37 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSes
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    # 级联删 ConfigVersion
-    await db.execute(
-        ConfigVersion.__table__.delete().where(
-            ConfigVersion.resource_type == "plugin_metadata",
-            ConfigVersion.resource_id == item.id
-        )
-    )
-
-    # 尝试从 Edge 节点删除
     nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
-    await db.delete(item)
-    await db.commit()
-
     results = []
-    if active_nodes:
-        for node in active_nodes:
-            node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-            try:
-                client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
-                response = client.delete_plugin_metadata(plugin_name)
-                node_result["status"] = "success"
-                node_result["response"] = response
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                node_result["status"] = "failed"
-                node_result["error"] = str(e)
-            results.append(node_result)
+
+    if body.delete_db:
+        await db.execute(
+            ConfigVersion.__table__.delete().where(
+                ConfigVersion.resource_type == "plugin_metadata",
+                ConfigVersion.resource_id == item.id
+            )
+        )
+        await db.delete(item)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        if active_nodes:
+            for node in active_nodes:
+                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
+                try:
+                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    response = client.delete_plugin_metadata(plugin_name)
+                    node_result["status"] = "success"
+                    node_result["response"] = response
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    node_result["status"] = "failed"
+                    node_result["error"] = str(e)
+                results.append(node_result)
+        else:
+            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
 
     return {"message": "插件配置已删除", "results": results}
 

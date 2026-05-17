@@ -6,7 +6,7 @@ import uuid
 import zipfile
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.schemas.static_resource import (
     StaticResourceResponse,
     StaticResourceListResponse,
 )
+from app.schemas.cluster import DeleteClusterRequest
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])
@@ -176,12 +177,16 @@ async def update_static_resource(
     return resource_to_response(resource)
 
 
-@router.delete("/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{resource_id}")
 async def delete_static_resource(
     cluster_id: int,
     resource_id: int,
+    body: DeleteClusterRequest = Body(...),
     db: AsyncSession = Depends(get_db),
 ):
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
     result = await db.execute(
         select(StaticResource).where(
             StaticResource.id == resource_id,
@@ -192,8 +197,17 @@ async def delete_static_resource(
     if not resource:
         raise HTTPException(status_code=404, detail="静态资源不存在")
 
-    await db.delete(resource)
-    await db.commit()
+    results = []
+
+    if body.delete_db:
+        await db.delete(resource)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    if body.delete_edge:
+        results.append({"scope": "edge", "status": "skipped", "message": "静态资源无对应的 Edge API 删除操作"})
+
+    return {"message": "静态资源已删除", "results": results}
 
 
 @router.post("/{resource_id}/upload", response_model=StaticResourceResponse)
