@@ -90,6 +90,17 @@ local function get_file_etag(filepath)
 end
 
 
+local function get_file_size(filepath)
+  local f, err = io.open(filepath, "r")
+  if not f then
+    return nil
+  end
+  local size = f:seek("end")
+  f:close()
+  return size
+end
+
+
 local schema = {
   type = "object",
   properties = {
@@ -99,6 +110,17 @@ local schema = {
   },
 }
 
+
+local attr_schema = {
+  type = "object",
+  properties = {
+    base_path = { type = "string" },
+    cache_max_age = { type = "integer", minimum = 0 },
+    index_file = { type = "string" },
+  },
+}
+
+
 local default_attr_schema = {
   type = "object",
   properties = {
@@ -107,6 +129,7 @@ local default_attr_schema = {
     index_file = { type = "string" },
   },
 }
+
 
 local default_attr = {
   base_path = DEFAULT_BASE_PATH,
@@ -144,30 +167,20 @@ function _M.access(conf, ctx)
     return
   end
 
-  -- extract resource name from /static/{name}/... or /{prefix}/{name}/...
-  -- the route's uri should match /static/{name}/*
   local base_path = conf.base_path or DEFAULT_BASE_PATH
   local index_file = conf.index_file or DEFAULT_INDEX_FILE
 
-  -- uri format: /static/{name}/path/to/file
-  -- the route plugin config determines the prefix matching
-  -- extract name from uri segments
   local segments = {}
   for s in string.gmatch(uri, "([^/]+)") do
     table.insert(segments, s)
   end
 
   if #segments < 2 then
-    ngx.status = 404
-    ngx.say("Not Found")
-    ngx.exit(404)
-    return
+    return 404, "Not Found"
   end
 
-  -- first segment is the prefix (e.g., "static"), second is the resource name
   local resource_name = segments[2]
 
-  -- build file path: everything after /{prefix}/{name}/
   local relative_path
   if #segments > 2 then
     local path_parts = {}
@@ -179,35 +192,12 @@ function _M.access(conf, ctx)
     relative_path = index_file
   end
 
-  -- prevent path traversal
   if string.find(relative_path, "..") or string.find(resource_name, "..") then
-    ngx.status = 403
-    ngx.say("Forbidden")
-    ngx.exit(403)
-    return
+    return 403, "Forbidden"
   end
 
   local filepath = base_path .. "/" .. resource_name .. "/" .. relative_path
 
-  local f, err = io.open(filepath, "r")
-  if not f then
-    ngx.status = 404
-    ngx.say("Not Found")
-    ngx.exit(404)
-    return
-  end
-
-  local content = f:read("*all")
-  f:close()
-
-  if not content or content == "" then
-    ngx.status = 404
-    ngx.say("Not Found")
-    ngx.exit(404)
-    return
-  end
-
-  -- determine content type from file extension
   local ext = ""
   local dot_idx = string.find(relative_path, "%.[^%.]*$")
   if dot_idx then
@@ -215,32 +205,43 @@ function _M.access(conf, ctx)
   end
   ngx.header.content_type = get_mime_type(ext)
 
-  -- cache control headers
   local cache_max_age = conf.cache_max_age or DEFAULT_CACHE_MAX_AGE
   ngx.header["Cache-Control"] = "public, max-age=" .. tostring(cache_max_age)
 
-  -- etag
   local etag = get_file_etag(filepath)
   if etag then
     ngx.header["ETag"] = etag
 
-    -- conditional request (304)
     local if_none_match = ngx.var.http_if_none_match
     if if_none_match and if_none_match == etag then
-      ngx.status = 304
       ngx.header.content_type = nil
-      ngx.header.content_length = nil
-      ngx.exit(304)
-      return
+      ngx.header["Content-Length"] = nil
+      return 304
     end
   end
 
-  -- last-modified from file mtime (use a simple approximation)
-  local file_size = #content
+  local f, err = io.open(filepath, "r")
+  if not f then
+    return 404, "Not Found"
+  end
+
+  local file_size = get_file_size(filepath)
+  if not file_size then
+    f:close()
+    return 404, "Not Found"
+  end
+
   ngx.header["Last-Modified"] = ngx.http_time(ngx.time())
   ngx.header["Content-Length"] = tostring(file_size)
 
-  ngx.say(content)
+  local content = f:read("*all")
+  f:close()
+
+  if not content then
+    return 404, "Not Found"
+  end
+
+  return 0, content
 end
 
 
