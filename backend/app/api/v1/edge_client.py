@@ -154,6 +154,19 @@ async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUp
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+@router.patch("/nodes/{ip}/{port}/upstreams/{upstream_id}")
+async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    sync_db = get_sync_db()
+    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    try:
+        result = client.patch_upstream(upstream_id, data)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
 @router.delete("/nodes/{ip}/{port}/upstreams/{upstream_id}")
 async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
     sync_db = get_sync_db()
@@ -214,6 +227,19 @@ async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUp
     payload = data.model_dump(exclude_none=True)
     try:
         result = client.update_route(route_id, payload)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.patch("/nodes/{ip}/{port}/routes/{route_id}")
+async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    sync_db = get_sync_db()
+    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    try:
+        result = client.patch_route(route_id, data)
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -409,6 +435,19 @@ async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dic
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
         result = client.create_plugin_metadata(plugin_name, data)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.patch("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
+async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
+    sync_db = get_sync_db()
+    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    try:
+        result = client.update_plugin_metadata(plugin_name, data)
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
