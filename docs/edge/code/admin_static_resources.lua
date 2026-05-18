@@ -22,12 +22,9 @@ local ngx = ngx
 local core = require("edge.core")
 local plugin = require("edge.plugin")
 
-local config_local = core.config_local
 local core_req = core.request
-local core_tab = core.table
 
 local req_get_body = core_req.get_body
-local tab_copy = core_tab.copy
 
 local log = core.log
 local log_error = log.error
@@ -40,29 +37,62 @@ local plugin_name = "static_resource"
 
 local STATIC_BASE_PATH = "/data/edge/static"
 
+-- zip magic bytes: PK\x03\x04
+local ZIP_MAGIC_BYTES = string.char(0x50, 0x4B, 0x03, 0x04)
+
+
+local function shell_quote(path)
+  return "'" .. string.gsub(path, "'", "'\\''") .. "'"
+end
+
 
 local function ensure_directory(dirpath)
-  local ok, err = os.rename(dirpath, dirpath)
+  local cmd = "mkdir -p " .. shell_quote(dirpath)
+  local ok = os.execute(cmd)
   if not ok then
-    local mkdir_cmd = "mkdir -p " .. dirpath
-    os.execute(mkdir_cmd)
+    log_error("failed to create directory: ", dirpath)
   end
+  return ok
 end
 
 
 local function remove_directory(dirpath)
-  os.execute("rm -rf " .. dirpath)
+  local cmd = "rm -rf " .. shell_quote(dirpath)
+  os.execute(cmd)
+end
+
+
+local function is_directory_empty(dirpath)
+  local q = shell_quote(dirpath)
+  local handle = io.popen("ls -1A " .. q .. " 2>/dev/null")
+  if not handle then
+    return true
+  end
+  local count = 0
+  for _ in handle:lines() do
+    count = count + 1
+    if count > 0 then
+      break
+    end
+  end
+  handle:close()
+  return count == 0
 end
 
 
 local function extract_zip(zip_path, target_dir)
-  ensure_directory(target_dir)
-  local cmd = "unzip -o " .. zip_path .. " -d " .. target_dir .. " 2>/dev/null"
-  local ok = os.execute(cmd)
-  if ok then
-    os.execute("chmod -R 755 " .. target_dir)
+  if not ensure_directory(target_dir) then
+    return nil, "failed to create target directory"
   end
-  return ok
+  local q_zip = shell_quote(zip_path)
+  local q_dir = shell_quote(target_dir)
+  local cmd = "unzip -o " .. q_zip .. " -d " .. q_dir .. " 2>/dev/null"
+  local ok = os.execute(cmd)
+  if not ok then
+    return nil, "unzip command failed"
+  end
+  os.execute("chmod -R 755 " .. q_dir)
+  return true
 end
 
 
@@ -88,49 +118,59 @@ local function save_temp_zip(data)
 end
 
 
+local function is_valid_zip(data)
+  if #data < 4 then
+    return false
+  end
+  return string.sub(data, 1, 4) == ZIP_MAGIC_BYTES
+end
+
+
 local function handle_upload(name)
   if not name or name == "" then
-    ngx.status = 400
-    return { error_msg = "resource name is required" }
+    return 400, { error_msg = "resource name is required" }
   end
 
-  if string.find(name, "..") or string.find(name, "/") then
-    ngx.status = 400
-    return { error_msg = "invalid resource name" }
+  if string.find(name, "..") or string.find(name, "/") or string.find(name, "'") then
+    return 400, { error_msg = "invalid resource name" }
   end
 
   local req_body = req_get_body()
   if not req_body or req_body == "" then
-    ngx.status = 400
-    return { error_msg = "request body is empty" }
+    return 400, { error_msg = "request body is empty" }
   end
 
-  -- save incoming zip data to temp file
+  if not is_valid_zip(req_body) then
+    return 400, { error_msg = "only zip files are supported" }
+  end
+
   local zip_path, err = save_temp_zip(req_body)
   if not zip_path then
     log_error("failed to save temp zip: ", err)
-    ngx.status = 500
-    return { error_msg = "failed to save upload data" }
+    return 500, { error_msg = "failed to save upload data" }
   end
 
   local resource_dir = build_resource_path(name)
   remove_directory(resource_dir)
 
-  -- extract zip to resource directory
-  local ok = extract_zip(zip_path, resource_dir)
+  local ok, ex_err = extract_zip(zip_path, resource_dir)
 
-  -- clean up temp file
   os.remove(zip_path)
 
   if not ok then
-    log_error("failed to extract zip for resource: ", name)
-    ngx.status = 500
-    return { error_msg = "failed to extract zip" }
+    log_error("failed to extract zip for resource: ", name, ", error: ", ex_err or "unknown")
+    return 500, { error_msg = "failed to extract zip" }
+  end
+
+  if is_directory_empty(resource_dir) then
+    log_warn("extracted zip for resource ", name, " produced empty directory")
+    remove_directory(resource_dir)
+    return 400, { error_msg = "zip archive is empty" }
   end
 
   log_info("static resource uploaded: ", name, " -> ", resource_dir)
 
-  return {
+  return 200, {
     action = "set",
     node = {
       key = build_resource_key(name),
@@ -146,8 +186,7 @@ end
 
 local function handle_delete(name)
   if not name or name == "" then
-    ngx.status = 400
-    return { error_msg = "resource name is required" }
+    return 400, { error_msg = "resource name is required" }
   end
 
   local resource_dir = build_resource_path(name)
@@ -155,7 +194,7 @@ local function handle_delete(name)
 
   log_info("static resource deleted: ", name)
 
-  return {
+  return 200, {
     action = "delete",
     node = {
       key = build_resource_key(name),
@@ -165,13 +204,14 @@ local function handle_delete(name)
 end
 
 
-local function handle_list()
-  local resources = {}
-  local handle = io.popen("ls -1 " .. STATIC_BASE_PATH .. " 2>/dev/null")
+local function list_directory(dirpath)
+  local entries = {}
+  local q = shell_quote(dirpath)
+  local handle = io.popen("ls -1A " .. q .. " 2>/dev/null")
   if handle then
     for name in handle:lines() do
       if name and name ~= "" then
-        table.insert(resources, {
+        table.insert(entries, {
           id = name,
           dir = build_resource_path(name),
         })
@@ -179,8 +219,14 @@ local function handle_list()
     end
     handle:close()
   end
+  return entries
+end
 
-  return {
+
+local function handle_list()
+  local resources = list_directory(STATIC_BASE_PATH)
+
+  return 200, {
     node = {
       dir = true,
       nodes = resources,
