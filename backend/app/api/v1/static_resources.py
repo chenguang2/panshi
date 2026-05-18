@@ -322,7 +322,7 @@ async def publish_static_resource(
                     admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
                 client.api_key = admin_key
 
-                client._request("PUT", f"/edge/admin/static_resources/{resource.name}", zip_data)
+                client.raw_put(f"/edge/admin/static_resources/{resource.name}", zip_data)
 
                 edge_route = {
                     "uri": resource.url_path.rstrip("/") + "/*",

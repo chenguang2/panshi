@@ -209,6 +209,71 @@ class EdgeClient:
             except json.JSONDecodeError:
                 return {"raw_response": response.text}
 
+    def raw_put(
+        self,
+        path: str,
+        data: bytes,
+    ) -> dict[str, Any]:
+        """Send raw bytes to edge server via PUT without SM4 encryption.
+
+        Used for binary data transfer (e.g., ZIP files) where JSON
+        serialization and encryption are not applicable.
+
+        Args:
+            path: API path (e.g., /edge/admin/static_resources/myapp)
+            data: Raw binary data to send
+
+        Returns:
+            Decrypted or plain JSON response dictionary
+        """
+        import httpx
+
+        headers = {
+            "X-API-KEY": self.api_key,
+            "Content-Type": "application/octet-stream",
+        }
+
+        url = f"{self.edge_url}{path}"
+
+        try:
+            response = httpx.put(url, headers=headers, content=data, timeout=30.0, trust_env=False)
+        except httpx.TimeoutException as e:
+            raise EdgeConnectionError(f"Request to {url} timed out: {e}") from e
+        except httpx.ConnectError as e:
+            raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
+
+        if response.status_code not in (200, 201, 204):
+            try:
+                error_data = json.loads(response.text)
+                raise EdgeAPIError(
+                    response.status_code,
+                    error_data.get("error_msg", "Unknown error"),
+                    error_data
+                )
+            except json.JSONDecodeError:
+                try:
+                    error_body = self._decrypt(response.text)
+                    error_data = json.loads(error_body)
+                    raise EdgeAPIError(
+                        response.status_code,
+                        error_data.get("error_msg", "Unknown error"),
+                        error_data
+                    )
+                except EdgeEncryptionError:
+                    raise EdgeAPIError(response.status_code, response.text)
+
+        if response.status_code == 204 or not response.text:
+            return {}
+
+        try:
+            decrypted = self._decrypt(response.text)
+            return json.loads(decrypted)
+        except EdgeEncryptionError:
+            try:
+                return json.loads(response.text)
+            except json.JSONDecodeError:
+                return {"raw_response": response.text}
+
     # Upstream API methods
 
     def get_upstream(self, upstream_id: str) -> dict[str, Any]:
