@@ -883,6 +883,8 @@ const handleUpstreamSubmit = async () => {
 
   upstreamModalVisible.value = false
   addLog(`开始${action}上游: ${payload.name || upstreamForm.name}`)
+  addLog(`节点数: ${upstreamForm.nodes.length}, 节点数据: ${JSON.stringify(upstreamForm.nodes)}`)
+  addLog(`payload.nodes: ${JSON.stringify(nodesObj)}`)
   progress.percent = 10
   updateContent()
 
