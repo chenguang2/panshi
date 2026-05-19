@@ -294,6 +294,17 @@
             <a-select-option value="least_conn">least_conn</a-select-option>
           </a-select>
         </a-form-item>
+        <a-form-item v-if="upstreamForm.type === 'chash'" label="哈希位置" name="hash_on">
+          <a-select v-model:value="upstreamForm.hash_on">
+            <a-select-option value="header">HTTP请求头</a-select-option>
+            <a-select-option value="cookie">Cookie</a-select-option>
+            <a-select-option value="vars">内置变量</a-select-option>
+            <a-select-option value="vars_combinations">自定义变量</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item v-if="upstreamForm.type === 'chash'" label="Key" name="key">
+          <a-input v-model:value="upstreamForm.key" placeholder="remote_addr" />
+        </a-form-item>
         <a-form-item label="节点" name="nodes">
           <div v-for="(node, index) in upstreamForm.nodes" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px;">
             <a-input v-model:value="node.host" placeholder="127.0.0.1:1980" style="width: 200px;" />
@@ -510,7 +521,16 @@ const upstreamEditRecord = ref<any>(null)
 const upstreamForm = reactive({
   name: '',
   type: 'roundrobin',
-  nodes: [] as { host: string; weight: number }[]
+  nodes: [] as { host: string; weight: number }[],
+  hash_on: 'vars',
+  key: '',
+})
+
+watch(() => upstreamForm.type, (newType) => {
+  if (newType !== 'chash') {
+    upstreamForm.hash_on = 'vars'
+    upstreamForm.key = ''
+  }
 })
 
 const routeModalVisible = ref(false)
@@ -761,6 +781,8 @@ const showUpstreamModal = (mode: 'create' | 'edit', record?: any) => {
   if (mode === 'edit' && record?.value) {
     upstreamForm.name = record.value.name || ''
     upstreamForm.type = record.value.type || 'roundrobin'
+    upstreamForm.hash_on = (record.value as any).hash_on || 'vars'
+    upstreamForm.key = (record.value as any).key || ''
     upstreamForm.nodes = []
     if (record.value.nodes) {
       if (Array.isArray(record.value.nodes)) {
@@ -776,6 +798,8 @@ const showUpstreamModal = (mode: 'create' | 'edit', record?: any) => {
   } else {
     upstreamForm.name = ''
     upstreamForm.type = 'roundrobin'
+    upstreamForm.hash_on = 'vars'
+    upstreamForm.key = ''
     upstreamForm.nodes = [{ host: '', weight: 1 }]
   }
   upstreamModalVisible.value = true
@@ -802,10 +826,15 @@ const handleUpstreamSubmit = async () => {
     if (n.host) nodesObj[n.host] = n.weight
   })
 
-  const payload = {
+  const payload: Record<string, any> = {
     type: upstreamForm.type,
     name: upstreamForm.name || undefined,
     nodes: nodesObj
+  }
+
+  if (upstreamForm.type === 'chash') {
+    payload.hash_on = upstreamForm.hash_on
+    payload.key = upstreamForm.key || undefined
   }
 
   try {
