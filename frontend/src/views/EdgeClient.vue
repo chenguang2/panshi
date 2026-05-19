@@ -504,6 +504,7 @@ const pluginMetadataSearch = ref('')
 
 const upstreamModalVisible = ref(false)
 const upstreamModalMode = ref<'create' | 'edit'>('create')
+const upstreamEditRecord = ref<any>(null)
 const upstreamForm = reactive({
   name: '',
   type: 'roundrobin',
@@ -512,6 +513,7 @@ const upstreamForm = reactive({
 
 const routeModalVisible = ref(false)
 const routeModalMode = ref<'create' | 'edit'>('create')
+const routeEditRecord = ref<any>(null)
 const routeForm = reactive({
   name: '',
   uri: '',
@@ -753,6 +755,7 @@ const getNodeCount = (nodes: any) => {
 
 const showUpstreamModal = (mode: 'create' | 'edit', record?: any) => {
   upstreamModalMode.value = mode
+  upstreamEditRecord.value = mode === 'edit' ? record : null
   if (mode === 'edit' && record?.value) {
     upstreamForm.name = record.value.name || ''
     upstreamForm.type = record.value.type || 'roundrobin'
@@ -808,7 +811,13 @@ const handleUpstreamSubmit = async () => {
       await api.post(`/edge-client/nodes/${ip}/${port}/upstreams`, payload)
       message.success('上游创建成功')
     } else {
-      message.info('编辑模式暂未完整实现，请使用创建功能')
+      const upstreamId = upstreamEditRecord.value?.value?.id
+      if (!upstreamId) {
+        message.error('无法获取上游 ID')
+        return
+      }
+      await api.put(`/edge-client/nodes/${ip}/${port}/upstreams/${upstreamId}`, payload)
+      message.success('上游更新成功')
     }
     upstreamModalVisible.value = false
     await loadData()
@@ -848,6 +857,7 @@ const deleteUpstream = (record: any) => {
 
 const showRouteModal = (mode: 'create' | 'edit', record?: any) => {
   routeModalMode.value = mode
+  routeEditRecord.value = mode === 'edit' ? record : null
   if (mode === 'edit' && record?.value) {
     routeForm.name = record.value.name || ''
     routeForm.uri = record.value.uri || record.value.uris?.[0] || ''
@@ -926,7 +936,13 @@ const handleRouteSubmit = async () => {
       await api.post(`/edge-client/nodes/${ip}/${port}/routes`, payload)
       message.success('路由创建成功')
     } else {
-      message.info('编辑模式暂未完整实现，请使用创建功能')
+      const routeId = routeEditRecord.value?.value?.id
+      if (!routeId) {
+        message.error('无法获取路由 ID')
+        return
+      }
+      await api.put(`/edge-client/nodes/${ip}/${port}/routes/${routeId}`, payload)
+      message.success('路由更新成功')
     }
     routeModalVisible.value = false
     await loadData()

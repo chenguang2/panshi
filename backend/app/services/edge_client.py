@@ -381,6 +381,10 @@ class EdgeClient:
         """Delete a route by edge_uuid."""
         return self._request("DELETE", f"/edge/admin/routes/{edge_uuid}")
 
+    def patch_route(self, edge_uuid: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Partially update a route (PATCH)."""
+        return self._request("PATCH", f"/edge/admin/routes/{edge_uuid}", data)
+
     @staticmethod
     def convert_route_to_edge_format(
         edge_uuid: str,
@@ -537,6 +541,10 @@ class EdgeClient:
     def delete_plugin_metadata(self, plugin_name: str) -> dict[str, Any]:
         """Delete plugin metadata."""
         return self._request("DELETE", f"/edge/admin/plugin_metadata/{plugin_name}")
+
+    def update_plugin_metadata(self, plugin_name: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Partially update plugin metadata (PATCH)."""
+        return self._request("PATCH", f"/edge/admin/plugin_metadata/{plugin_name}", data)
 
     def reload_plugins(self) -> dict[str, Any]:
         """Reload plugins on edge server."""
