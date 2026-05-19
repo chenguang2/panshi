@@ -358,6 +358,22 @@
         <a-form-item label="插件配置 (JSON)" name="plugins">
           <a-textarea v-model:value="routeForm.pluginsJson" :rows="4" placeholder='{"proxy_rewrite": {...}}' />
         </a-form-item>
+        <a-form-item label="高级匹配">
+          <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
+          <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后配置请求匹配条件</span>
+        </a-form-item>
+        <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
+          <RouteAdvancedMatch
+            :enabled="routeForm.advancedMatchEnabled"
+            :model-value="{ vars: routeForm.advancedMatch.vars }"
+            @update:model-value="(val: any) => { routeForm.advancedMatch.vars = val.vars || []; }"
+          />
+        </div>
+        <div v-else-if="routeForm.advancedMatchEnabled === false && routeForm.advancedMatch.vars.length > 0" style="margin-bottom: 12px;">
+          <WarningOutlined style="color: #faad14; margin-right: 8px;" />
+          <span style="color: #999; font-size: 12px;">高级匹配已配置，但未启用</span>
+        </div>
+
         <a-divider style="margin: 8px 0;" />
         <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
         <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: #999; font-size: 12px;">
@@ -437,12 +453,6 @@
         <a-form-item label="插件配置 (JSON)" name="pluginsJson">
           <a-textarea v-model:value="pluginConfigForm.pluginsJson" :rows="6" placeholder='{"plugin_name": {"option": "value"}}' />
         </a-form-item>
-        <a-form-item label="Labels (JSON)" name="labelsJson">
-          <a-textarea v-model:value="pluginConfigForm.labelsJson" :rows="2" placeholder='{"version": "v2"}' />
-        </a-form-item>
-        <a-form-item label="Hosts (JSON)" name="hostsJson">
-          <a-textarea v-model:value="pluginConfigForm.hostsJson" :rows="2" placeholder='["foo.com", "*.bar.com"]' />
-        </a-form-item>
       </a-form>
     </a-modal>
 
@@ -467,8 +477,9 @@
 <script setup lang="ts">
 import { h, ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
-import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
+import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
@@ -550,7 +561,9 @@ const routeForm = reactive({
   priority: 0,
   upstream_id: '',
   pluginsJson: '',
-  plugin_config_ids: [] as string[]
+  plugin_config_ids: [] as string[],
+  advancedMatchEnabled: false,
+  advancedMatch: { vars: [] as [string, string, string][] }
 })
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -624,9 +637,7 @@ const pluginConfigModalMode = ref<'create' | 'edit'>('create')
 const pluginConfigForm = reactive({
   id: '',
   desc: '',
-  pluginsJson: '',
-  labelsJson: '',
-  hostsJson: ''
+  pluginsJson: ''
 })
 
 const pluginMetadataModalVisible = ref(false)
@@ -977,6 +988,9 @@ const showRouteModal = (mode: 'create' | 'edit', record?: any) => {
     routeForm.upstream_id = record.value.upstream_id || ''
     routeForm.pluginsJson = record.value.plugins ? JSON.stringify(record.value.plugins, null, 2) : ''
     routeForm.plugin_config_ids = record.value.plugin_config_ids ? [...record.value.plugin_config_ids] : []
+    const existingVars = record.value.vars || []
+    routeForm.advancedMatchEnabled = record.value.advanced_match_enabled || existingVars.length > 0
+    routeForm.advancedMatch = { vars: [...existingVars] }
   } else {
     routeForm.name = ''
     routeForm.uri = ''
@@ -986,6 +1000,8 @@ const showRouteModal = (mode: 'create' | 'edit', record?: any) => {
     routeForm.upstream_id = ''
     routeForm.pluginsJson = ''
     routeForm.plugin_config_ids = []
+    routeForm.advancedMatchEnabled = false
+    routeForm.advancedMatch = { vars: [] }
   }
   routeModalVisible.value = true
 }
@@ -1039,6 +1055,13 @@ const handleRouteSubmit = async () => {
 
   if (routeForm.plugin_config_ids.length > 0) {
     payload.plugin_config_ids = routeForm.plugin_config_ids
+  }
+
+  if (routeForm.advancedMatchEnabled) {
+    payload.advanced_match_enabled = true
+    if (routeForm.advancedMatch.vars.length > 0) {
+      payload.vars = routeForm.advancedMatch.vars
+    }
   }
 
   const action = routeModalMode.value === 'create' ? '创建' : '更新'
@@ -1235,14 +1258,10 @@ const showPluginConfigModal = (mode: 'create' | 'edit', record?: any) => {
     pluginConfigForm.id = record.value.id || ''
     pluginConfigForm.desc = record.value.desc || ''
     pluginConfigForm.pluginsJson = record.value.plugins ? JSON.stringify(record.value.plugins, null, 2) : ''
-    pluginConfigForm.labelsJson = record.value.labels ? JSON.stringify(record.value.labels, null, 2) : ''
-    pluginConfigForm.hostsJson = record.value.hosts ? JSON.stringify(record.value.hosts, null, 2) : ''
   } else {
     pluginConfigForm.id = ''
     pluginConfigForm.desc = ''
     pluginConfigForm.pluginsJson = ''
-    pluginConfigForm.labelsJson = ''
-    pluginConfigForm.hostsJson = ''
   }
   pluginConfigModalVisible.value = true
 }
@@ -1264,31 +1283,11 @@ const handlePluginConfigSubmit = async () => {
       return
     }
   }
-  let labels: any = undefined
-  if (pluginConfigForm.labelsJson) {
-    try {
-      labels = JSON.parse(pluginConfigForm.labelsJson)
-    } catch {
-      message.error('Labels JSON格式无效')
-      return
-    }
-  }
-  let hosts: any = undefined
-  if (pluginConfigForm.hostsJson) {
-    try {
-      hosts = JSON.parse(pluginConfigForm.hostsJson)
-    } catch {
-      message.error('Hosts JSON格式无效')
-      return
-    }
-  }
 
   const payload: any = {
     desc: pluginConfigForm.desc || undefined,
     plugins
   }
-  if (labels) payload.labels = labels
-  if (hosts) payload.hosts = hosts
 
   const action = pluginConfigModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
