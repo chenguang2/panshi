@@ -11,6 +11,12 @@
 - **THEN** 前端调用 `PUT /edge-client/nodes/{ip}/{port}/routes/{id}` 提交更新
 - **AND** 提交成功后刷新路由列表并显示成功提示
 
+#### Scenario: 请求方法全选/取消全选
+- **WHEN** 用户点击"全选"链接
+- **THEN** 所有 7 个请求方法（GET、POST、PUT、DELETE、PATCH、HEAD、OPTIONS）全部被选中
+- **WHEN** 用户再次点击"取消全选"链接
+- **THEN** 所有已选方法被清空
+
 #### Scenario: 路由编辑失败
 - **WHEN** 编辑提交时后端返回错误
 - **THEN** 前端显示错误提示，不关闭 Modal

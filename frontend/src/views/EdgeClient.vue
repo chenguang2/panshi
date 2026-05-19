@@ -339,6 +339,9 @@
             <a-select-option value="HEAD">HEAD</a-select-option>
             <a-select-option value="OPTIONS">OPTIONS</a-select-option>
           </a-select>
+          <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
+            {{ allMethodsSelected ? '取消全选' : '全选' }}
+          </a>
         </a-form-item>
         <a-form-item label="域名" name="hosts">
           <a-input v-model:value="routeForm.hosts" placeholder="example.com,*.example.com" />
@@ -546,6 +549,12 @@ const routeForm = reactive({
   pluginsJson: '',
   plugin_config_ids: [] as string[]
 })
+
+const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+const allMethodsSelected = computed(() => ALL_METHODS.every(m => routeForm.methods.includes(m)))
+const toggleAllMethods = () => {
+  routeForm.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]
+}
 
 const jsonModalVisible = ref(false)
 const jsonContent = ref('')
