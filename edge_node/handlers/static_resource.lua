@@ -36,7 +36,7 @@ local log_info = log.info
 local plugin_name = "static_resource"
 
 
-local DEFAULT_BASE_PATH = "/data/edge/static"
+local DEFAULT_BASE_PATH = "/work/jboss/data/edge/static"
 local DEFAULT_CACHE_MAX_AGE = 3600
 local DEFAULT_INDEX_FILE = "index.html"
 
@@ -140,7 +140,7 @@ local default_attr = {
 
 local _M = plugin.new({
   version = 0.1,
-  priority = 990,
+  priority = 9980,
   name = plugin_name,
   schema = schema,
   attr_schema = attr_schema,
@@ -192,11 +192,14 @@ function _M.access(conf, ctx)
     relative_path = index_file
   end
 
-  if string.find(relative_path, "..") or string.find(resource_name, "..") then
+  if string.find(relative_path, "..", 1, true) or string.find(resource_name, "..", 1, true) then
+    log_error("relative_path=[" .. relative_path .. "]")
+    log_error("resource_name=[" .. resource_name .. "]")
     return 403, "Forbidden"
   end
 
   local filepath = base_path .. "/" .. resource_name .. "/" .. relative_path
+  log_error("filepath=[" .. filepath .. "]")
 
   local ext = ""
   local dot_idx = string.find(relative_path, "%.[^%.]*$")
@@ -209,13 +212,23 @@ function _M.access(conf, ctx)
   ngx.header["Cache-Control"] = "public, max-age=" .. tostring(cache_max_age)
 
   local etag = get_file_etag(filepath)
+  log_error("etag=[" .. etag .. "]")
   if etag then
     ngx.header["ETag"] = etag
 
     local if_none_match = ngx.var.http_if_none_match
+
+    if if_none_match then
+      log_error("if_none_match=[" .. if_none_match .. "]")
+    else
+      log_error("if_none_match=[nil]")
+    end
+
     if if_none_match and if_none_match == etag then
       ngx.header.content_type = nil
       ngx.header["Content-Length"] = nil
+
+      log_error("return 304")
       return 304
     end
   end
@@ -230,7 +243,8 @@ function _M.access(conf, ctx)
     f:close()
     return 404, "Not Found"
   end
-
+  log_error("file_size=[" .. file_size .. "]")
+  
   ngx.header["Last-Modified"] = ngx.http_time(ngx.time())
   ngx.header["Content-Length"] = tostring(file_size)
 
@@ -241,7 +255,7 @@ function _M.access(conf, ctx)
     return 404, "Not Found"
   end
 
-  return 0, content
+  return 200, content
 end
 
 
