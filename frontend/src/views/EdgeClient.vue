@@ -913,8 +913,8 @@ const handleUpstreamSubmit = async () => {
 
     progress.percent = 70
     addLog(`节点: ${ip}:${port}`)
-    if (res?.data?.node) {
-      addLog(`状态: ${res.data.node.status || 'ok'}`)
+    if (res?.data) {
+      addLog(`响应: ${JSON.stringify(res.data).substring(0, 200)}`)
     }
     progress.percent = 100
     progress.status = 'success'
