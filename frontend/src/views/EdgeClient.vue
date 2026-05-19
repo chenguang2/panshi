@@ -325,6 +325,8 @@
             <a-select-option value="PUT">PUT</a-select-option>
             <a-select-option value="DELETE">DELETE</a-select-option>
             <a-select-option value="PATCH">PATCH</a-select-option>
+            <a-select-option value="HEAD">HEAD</a-select-option>
+            <a-select-option value="OPTIONS">OPTIONS</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="域名" name="hosts">
