@@ -304,6 +304,9 @@
         </a-form-item>
         <a-form-item v-if="upstreamForm.type === 'chash'" label="Key" name="key">
           <a-input v-model:value="upstreamForm.key" placeholder="remote_addr" />
+          <div style="font-size:12px;color:#999;margin-top:4px">
+            hash_on=内置变量时: remote_addr / uri / host / server_name / query_string / arg_xxx
+          </div>
         </a-form-item>
         <a-form-item label="节点" name="nodes">
           <div v-for="(node, index) in upstreamForm.nodes" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px;">
@@ -462,8 +465,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { h, ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
+import { message, Modal, Progress } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 
@@ -778,6 +781,15 @@ const startQuery = async () => {
   await loadAllData()
 }
 
+const buildProgressContent = (progress: { percent: number, status: 'active' | 'success' | 'exception' }, logs: string[]) => {
+  return h('div', {}, [
+    h(Progress, { percent: progress.percent, status: progress.status, showInfo: false, style: 'margin-bottom: 12px;' }),
+    h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
+      logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
+    )
+  ])
+}
+
 const getNodeCount = (nodes: any) => {
   if (Array.isArray(nodes)) return nodes.length
   if (typeof nodes === 'object') return Object.keys(nodes).length
@@ -843,26 +855,82 @@ const handleUpstreamSubmit = async () => {
 
   if (upstreamForm.type === 'chash') {
     payload.hash_on = upstreamForm.hash_on
+    if (upstreamForm.hash_on === 'vars' && upstreamForm.key) {
+      const VARS_KEY_PATTERN = /^((uri|server_name|server_addr|request_uri|remote_port|remote_addr|query_string|host|hostname)|arg_[0-9a-zA-Z_-]+)$/
+      if (!VARS_KEY_PATTERN.test(upstreamForm.key)) {
+        message.error('Key 格式无效，内置变量模式请输入 remote_addr、uri、arg_xxx 等有效变量')
+        return
+      }
+    }
     payload.key = upstreamForm.key || undefined
   }
 
+  const action = upstreamModalMode.value === 'create' ? '创建' : '更新'
+  const logs: string[] = []
+  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+  const progress = { percent: 0, status: 'active' as const }
+
+  const progressModal = Modal.info({
+    title: `${action}上游: ${payload.name || upstreamForm.name}`,
+    width: 600,
+    content: buildProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+
+  upstreamModalVisible.value = false
+  addLog(`开始${action}上游: ${payload.name || upstreamForm.name}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 300))
+
   try {
+    addLog('正在构建配置...')
+    progress.percent = 30
+    updateContent()
+
+    let res
     if (upstreamModalMode.value === 'create') {
-      await api.post(`/edge-client/nodes/${ip}/${port}/upstreams`, payload)
-      message.success('上游创建成功')
+      res = await api.post(`/edge-client/nodes/${ip}/${port}/upstreams`, payload)
+      addLog('上游已创建')
     } else {
       const upstreamId = upstreamEditRecord.value?.value?.id
       if (!upstreamId) {
-        message.error('无法获取上游 ID')
+        addLog('错误: 无法获取上游 ID')
+        progress.percent = 100
+        progress.status = 'exception'
+        updateContent()
+        progressModal.update({ okButtonProps: { disabled: false } })
         return
       }
-      await api.put(`/edge-client/nodes/${ip}/${port}/upstreams/${upstreamId}`, payload)
-      message.success('上游更新成功')
+      res = await api.put(`/edge-client/nodes/${ip}/${port}/upstreams/${upstreamId}`, payload)
+      addLog('上游已更新')
     }
-    upstreamModalVisible.value = false
+
+    progress.percent = 70
+    addLog(`节点: ${ip}:${port}`)
+    if (res?.data?.node) {
+      addLog(`状态: ${res.data.node.status || 'ok'}`)
+    }
+    progress.percent = 100
+    progress.status = 'success'
+    addLog('')
+    addLog(`✅ ${action}成功`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
     await loadData()
   } catch (error: any) {
-    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ ${action}失败: ${errMsg}`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
   }
 }
 
@@ -971,23 +1039,66 @@ const handleRouteSubmit = async () => {
     payload.plugin_config_ids = routeForm.plugin_config_ids
   }
 
+  const action = routeModalMode.value === 'create' ? '创建' : '更新'
+  const logs: string[] = []
+  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+  const progress = { percent: 0, status: 'active' as const }
+
+  const progressModal = Modal.info({
+    title: `${action}路由: ${payload.name || routeForm.name}`,
+    width: 600,
+    content: buildProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+
+  routeModalVisible.value = false
+  addLog(`开始${action}路由: ${payload.name || routeForm.name}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 300))
+
   try {
+    addLog('正在构建配置...')
+    progress.percent = 30
+    updateContent()
+
     if (routeModalMode.value === 'create') {
       await api.post(`/edge-client/nodes/${ip}/${port}/routes`, payload)
-      message.success('路由创建成功')
+      addLog('路由已创建')
     } else {
       const routeId = routeEditRecord.value?.value?.id
       if (!routeId) {
-        message.error('无法获取路由 ID')
+        addLog('错误: 无法获取路由 ID')
+        progress.percent = 100
+        progress.status = 'exception'
+        updateContent()
+        progressModal.update({ okButtonProps: { disabled: false } })
         return
       }
       await api.put(`/edge-client/nodes/${ip}/${port}/routes/${routeId}`, payload)
-      message.success('路由更新成功')
+      addLog('路由已更新')
     }
-    routeModalVisible.value = false
+
+    progress.percent = 100
+    progress.status = 'success'
+    addLog('')
+    addLog(`✅ ${action}成功`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
     await loadData()
   } catch (error: any) {
-    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ ${action}失败: ${errMsg}`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
   }
 }
 
