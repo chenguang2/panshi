@@ -176,6 +176,10 @@ class NodeBase(BaseModel):
         return v
 
 
+class PublishRequest(BaseModel):
+    node_ids: Optional[List[int]] = None
+
+
 class DeleteClusterRequest(BaseModel):
     delete_db: bool = False
     delete_edge: bool = False

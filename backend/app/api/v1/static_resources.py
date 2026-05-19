@@ -19,7 +19,7 @@ from app.schemas.static_resource import (
     StaticResourceResponse,
     StaticResourceListResponse,
 )
-from app.schemas.cluster import DeleteClusterRequest
+from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])
@@ -273,6 +273,7 @@ def _get_sync_session():
 async def publish_static_resource(
     cluster_id: int,
     resource_id: int,
+    req: Optional[PublishRequest] = None,
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -288,12 +289,17 @@ async def publish_static_resource(
     if not resource.storage_path or not os.path.exists(resource.storage_path):
         raise HTTPException(status_code=400, detail="请先上传 zip 文件")
 
-    nodes_result = await db.execute(
-        select(Node).where(
-            Node.cluster_id == cluster_id,
-            Node.status == 1,
+    if req and req.node_ids:
+        nodes_result = await db.execute(
+            select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id)
         )
-    )
+    else:
+        nodes_result = await db.execute(
+            select(Node).where(
+                Node.cluster_id == cluster_id,
+                Node.status == 1,
+            )
+        )
     nodes = nodes_result.scalars().all()
     if not nodes:
         raise HTTPException(status_code=400, detail="没有活跃的 Edge 节点")

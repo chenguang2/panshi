@@ -7,7 +7,7 @@ import json
 from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
 from app.models.system import AuditLog
-from app.schemas.cluster import DeleteClusterRequest
+from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
 
@@ -181,6 +181,7 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
 async def publish_plugin_metadata(
     cluster_id: int,
     plugin_name: str,
+    req: Optional[PublishRequest] = None,
     db: AsyncSession = Depends(get_db)
 ):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
@@ -224,8 +225,10 @@ async def publish_plugin_metadata(
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
 
-    # 推送到活跃 Edge 节点
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    if req and req.node_ids:
+        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+    else:
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
     if not active_nodes:

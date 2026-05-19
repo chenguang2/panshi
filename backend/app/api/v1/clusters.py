@@ -15,7 +15,7 @@ from app.schemas.cluster import (
     UpstreamCreate, UpstreamUpdate, UpstreamResponse, UpstreamWithTargets, UpstreamTargetSchema,
     NodeCreate, NodeUpdate, NodeResponse, NodeListResponse, ConfigVersionResponse, ConfigVersionListResponse,
     PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse, GlobalRuleCreate, GlobalRuleUpdate,
-    GlobalRuleResponse, DeleteClusterRequest,
+    GlobalRuleResponse, DeleteClusterRequest, PublishRequest,
 )
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -594,7 +594,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
 
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
-async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     from app.services.edge_logger import get_edge_logger
     result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
@@ -634,8 +634,11 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
 
-    # Check for active nodes
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    # Determine target nodes
+    if req and req.node_ids:
+        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+    else:
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
@@ -647,12 +650,8 @@ async def publish_plugin_config(cluster_id: int, config_id: int, db: AsyncSessio
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
-            sync_db = db
-            client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
-
-            import base64
-            import json as json_module
-            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
+            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            encrypted = client._encrypt(json.dumps(event_data).encode())
             response = client.create_plugin_config(config.edge_uuid, edge_data)
 
             edge_logger.log_plugin_config_operation(
@@ -856,7 +855,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
 
 
 @router.post("/{cluster_id}/global_rules/{rule_id}/publish")
-async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
+async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     from app.services.edge_logger import get_edge_logger
     result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
@@ -882,7 +881,10 @@ async def publish_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    if req and req.node_ids:
+        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+    else:
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
@@ -1122,7 +1124,7 @@ async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depe
 
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/publish")
-async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
+async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     from app.services.edge_logger import get_edge_logger
 
@@ -1175,7 +1177,10 @@ async def publish_upstream(cluster_id: int, upstream_id: int, db: AsyncSession =
     upstream.current_version = new_version
     await db.commit()
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    if req and req.node_ids:
+        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+    else:
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
     if not active_nodes:

@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest
+from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, PublishRequest
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
@@ -283,7 +283,7 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 
 
 @router.post("/{route_id}/publish")
-async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
+async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
     from app.services.edge_logger import get_edge_logger
 
@@ -349,7 +349,10 @@ async def publish_route(cluster_id: int, route_id: int, db: AsyncSession = Depen
     route.current_version = new_version
     await db.commit()
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    if req and req.node_ids:
+        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+    else:
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
     active_nodes = nodes_result.scalars().all()
 
     if not active_nodes:
