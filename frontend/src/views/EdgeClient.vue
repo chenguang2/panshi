@@ -1168,18 +1168,57 @@ const handleGlobalRuleSubmit = async () => {
     plugins
   }
 
+  const action = globalRuleModalMode.value === 'create' ? '创建' : '更新'
+  const logs: string[] = []
+  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+  const progress = { percent: 0, status: 'active' as const }
+
+  const progressModal = Modal.info({
+    title: `${action}全局规则: ${globalRuleForm.id}`,
+    width: 600,
+    content: buildProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+
+  globalRuleModalVisible.value = false
+  addLog(`开始${action}全局规则: ${globalRuleForm.id}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 300))
+
   try {
+    addLog('正在构建配置...')
+    progress.percent = 30
+    updateContent()
+
     if (globalRuleModalMode.value === 'create') {
       await api.put(`/edge-client/nodes/${ip}/${port}/global_rules/${globalRuleForm.id}`, payload)
-      message.success('规则创建成功')
+      addLog('全局规则已创建')
     } else {
       await api.patch(`/edge-client/nodes/${ip}/${port}/global_rules/${globalRuleForm.id}`, payload)
-      message.success('规则更新成功')
+      addLog('全局规则已更新')
     }
-    globalRuleModalVisible.value = false
+
+    progress.percent = 100
+    progress.status = 'success'
+    addLog('')
+    addLog(`✅ ${action}成功`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
     await loadData()
   } catch (error: any) {
-    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ ${action}失败: ${errMsg}`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
   }
 }
 
@@ -1249,18 +1288,57 @@ const handlePluginConfigSubmit = async () => {
   if (labels) payload.labels = labels
   if (hosts) payload.hosts = hosts
 
+  const action = pluginConfigModalMode.value === 'create' ? '创建' : '更新'
+  const logs: string[] = []
+  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+  const progress = { percent: 0, status: 'active' as const }
+
+  const progressModal = Modal.info({
+    title: `${action}插件组: ${pluginConfigForm.desc || pluginConfigForm.id}`,
+    width: 600,
+    content: buildProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+
+  pluginConfigModalVisible.value = false
+  addLog(`开始${action}插件组: ${pluginConfigForm.desc || pluginConfigForm.id}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 300))
+
   try {
+    addLog('正在构建配置...')
+    progress.percent = 30
+    updateContent()
+
     if (pluginConfigModalMode.value === 'create') {
       await api.put(`/edge-client/nodes/${ip}/${port}/plugin_configs/${pluginConfigForm.id}`, payload)
-      message.success('插件组创建成功')
+      addLog('插件组已创建')
     } else {
       await api.patch(`/edge-client/nodes/${ip}/${port}/plugin_configs/${pluginConfigForm.id}`, payload)
-      message.success('插件组更新成功')
+      addLog('插件组已更新')
     }
-    pluginConfigModalVisible.value = false
+
+    progress.percent = 100
+    progress.status = 'success'
+    addLog('')
+    addLog(`✅ ${action}成功`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
     await loadData()
   } catch (error: any) {
-    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ ${action}失败: ${errMsg}`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
   }
 }
 
@@ -1324,18 +1402,52 @@ const handlePluginMetadataSubmit = async () => {
     }
   }
 
+  const action = pluginMetadataModalMode.value === 'create' ? '创建' : '更新'
+  const logs: string[] = []
+  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+  const progress = { percent: 0, status: 'active' as const }
+
+  const progressModal = Modal.info({
+    title: `${action}插件元数据: ${pluginMetadataForm.name}`,
+    width: 600,
+    content: buildProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+
+  pluginMetadataModalVisible.value = false
+  addLog(`开始${action}插件元数据: ${pluginMetadataForm.name}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 300))
+
   try {
-    if (pluginMetadataModalMode.value === 'create') {
-      await api.put(`/edge-client/nodes/${ip}/${port}/plugin_metadata/${pluginMetadataForm.name}`, config || {})
-      message.success('插件数据创建成功')
-    } else {
-      await api.put(`/edge-client/nodes/${ip}/${port}/plugin_metadata/${pluginMetadataForm.name}`, config || {})
-      message.success('插件数据更新成功')
-    }
-    pluginMetadataModalVisible.value = false
+    addLog('正在构建配置...')
+    progress.percent = 30
+    updateContent()
+
+    await api.put(`/edge-client/nodes/${ip}/${port}/plugin_metadata/${pluginMetadataForm.name}`, config || {})
+    addLog(`插件元数据已${action === '创建' ? '创建' : '更新'}`)
+
+    progress.percent = 100
+    progress.status = 'success'
+    addLog('')
+    addLog(`✅ ${action}成功`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
     await loadData()
   } catch (error: any) {
-    message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ ${action}失败: ${errMsg}`)
+    updateContent()
+    progressModal.update({ okButtonProps: { disabled: false } })
   }
 }
 
