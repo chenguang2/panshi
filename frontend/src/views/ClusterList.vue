@@ -436,7 +436,7 @@
             </div>
           </div>
           <div v-else-if="cluster.activeTab === 'globalPlugins'" class="tab-content">
-            <GlobalPluginSelector :cluster-id="cluster.id" />
+            <PluginMetadata :cluster-id="cluster.id" />
           </div>
           <div v-else class="tab-content node-tab">
             <div class="node-actions">
@@ -957,6 +957,14 @@
         <pre class="config-preview">{{ JSON.stringify(viewingGr.plugins, null, 2) }}</pre>
       </div>
     </a-drawer>
+
+    <PublishConfirmModal
+      v-model:visible="publishModalVisible"
+      :title="publishModalTitle"
+      :cluster-id="publishModalClusterId"
+      @confirm="handlePublishConfirm"
+      @cancel="handlePublishCancel"
+    />
   </div>
 </template>
 
@@ -971,7 +979,8 @@ import { useAuthStore } from '@/stores/auth'
 import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
-import GlobalPluginSelector from '@/components/GlobalPluginSelector.vue'
+import PluginMetadata from '@/components/PluginMetadata.vue'
+import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 
 const router = useRouter()
@@ -980,6 +989,33 @@ const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const statusFilter = ref<string>('all')
+
+// PublishConfirmModal state
+const publishModalVisible = ref(false)
+const publishModalTitle = ref('')
+const publishModalClusterId = ref(0)
+let publishModalResolve: ((nodeIds: number[]) => void) | null = null
+
+function openPublishModal(title: string, clusterId: number): Promise<number[]> {
+  publishModalTitle.value = title
+  publishModalClusterId.value = clusterId
+  publishModalVisible.value = true
+  return new Promise((resolve) => {
+    publishModalResolve = resolve
+  })
+}
+
+function handlePublishConfirm(nodeIds: number[]) {
+  publishModalVisible.value = false
+  publishModalResolve?.(nodeIds)
+  publishModalResolve = null
+}
+
+function handlePublishCancel() {
+  publishModalVisible.value = false
+  publishModalResolve?.([])
+  publishModalResolve = null
+}
 
 const expandedIds = ref<Set<number>>(new Set())
 const expandedOrder = ref<number[]>([])
@@ -2827,85 +2863,80 @@ const publishUpstream = async (cluster: Cluster) => {
     message.warning('请先选择一个上游')
     return
   }
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定要将上游"${cluster.selectedUpstream.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
-    okText: '确认发布',
-    cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as const }
+  const nodeIds = await openPublishModal(`发布上游: ${cluster.selectedUpstream.name}`, cluster.id)
+  if (!nodeIds.length) return
 
-      const modal = Modal.info({
-        title: `发布上游: ${cluster.selectedUpstream!.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
-      })
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress = { percent: 0, status: 'active' as const }
 
-      const updateContent = () => {
-        modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      }
+  const modal = Modal.info({
+    title: `发布上游: ${cluster.selectedUpstream!.name}`,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
 
-      addLog(`开始发布上游: ${cluster.selectedUpstream!.name}`)
-      progress.percent = 10
-      updateContent()
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
 
-      await new Promise(r => setTimeout(r, 400))
+  addLog(`开始发布上游: ${cluster.selectedUpstream!.name}`)
+  progress.percent = 10
+  updateContent()
 
-      try {
-        addLog('正在构建发布配置...')
-        progress.percent = 30
-        updateContent()
+  await new Promise(r => setTimeout(r, 400))
 
-        const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream!.id}/publish`)
-        const data = res.data
-        progress.percent = 70
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
 
-        addLog(`状态: ${data.status}`)
-        addLog(`消息: ${data.message}`)
-        addLog(`版本: v${data.version}`)
+    const res = await api.post(`/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream!.id}/publish`, { node_ids: nodeIds })
+    const data = res.data
+    progress.percent = 70
 
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-          }
-        }
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
 
-        progress.percent = 100
-        addLog('')
-        if (data.status === 'ok') {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else if (data.status === 'partial') {
-          progress.status = 'exception'
-          addLog('⚠️ 部分成功')
-        } else {
-          progress.status = 'exception'
-          addLog('❌ 发布失败')
-        }
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 发布失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
       }
     }
-  })
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') {
+      progress.status = 'success'
+      addLog('✅ 发布成功!')
+    } else if (data.status === 'partial') {
+      progress.status = 'exception'
+      addLog('⚠️ 部分成功')
+    } else {
+      progress.status = 'exception'
+      addLog('❌ 发布失败')
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+  } catch (error: any) {
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
 }
 
 const openUpstreamVersionManagement = (cluster: Cluster) => {
@@ -2939,85 +2970,80 @@ const publishRoute = async (cluster: Cluster) => {
     message.warning('请先选择一个路由')
     return
   }
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定要将路由"${cluster.selectedRoute.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
-    okText: '确认发布',
-    cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as const }
+  const nodeIds = await openPublishModal(`发布路由: ${cluster.selectedRoute.name}`, cluster.id)
+  if (!nodeIds.length) return
 
-      const modal = Modal.info({
-        title: `发布路由: ${cluster.selectedRoute!.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
-      })
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress = { percent: 0, status: 'active' as const }
 
-      const updateContent = () => {
-        modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      }
+  const modal = Modal.info({
+    title: `发布路由: ${cluster.selectedRoute!.name}`,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
 
-      addLog(`开始发布路由: ${cluster.selectedRoute!.name}`)
-      progress.percent = 10
-      updateContent()
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
 
-      await new Promise(r => setTimeout(r, 400))
+  addLog(`开始发布路由: ${cluster.selectedRoute!.name}`)
+  progress.percent = 10
+  updateContent()
 
-      try {
-        addLog('正在构建发布配置...')
-        progress.percent = 30
-        updateContent()
+  await new Promise(r => setTimeout(r, 400))
 
-        const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute!.id}/publish`)
-        const data = res.data
-        progress.percent = 70
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
 
-        addLog(`状态: ${data.status}`)
-        addLog(`消息: ${data.message}`)
-        addLog(`版本: v${data.version}`)
+    const res = await api.post(`/clusters/${cluster.id}/routes/${cluster.selectedRoute!.id}/publish`, { node_ids: nodeIds })
+    const data = res.data
+    progress.percent = 70
 
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-          }
-        }
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
 
-        progress.percent = 100
-        addLog('')
-        if (data.status === 'ok') {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else if (data.status === 'partial') {
-          progress.status = 'exception'
-          addLog('⚠️ 部分成功')
-        } else {
-          progress.status = 'exception'
-          addLog('❌ 发布失败')
-        }
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 发布失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
       }
     }
-  })
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') {
+      progress.status = 'success'
+      addLog('✅ 发布成功!')
+    } else if (data.status === 'partial') {
+      progress.status = 'exception'
+      addLog('⚠️ 部分成功')
+    } else {
+      progress.status = 'exception'
+      addLog('❌ 发布失败')
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+  } catch (error: any) {
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
 }
 
 const openRouteVersionManagement = (cluster: Cluster) => {
@@ -3034,86 +3060,81 @@ const openRouteVersionManagement = (cluster: Cluster) => {
 }
 
 const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定要将上游"${record.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
-    okText: '确认发布',
-    cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as const }
+  const nodeIds = await openPublishModal(`发布上游: ${record.name}`, cluster.id)
+  if (!nodeIds.length) return
 
-      const modal = Modal.info({
-        title: `发布上游: ${record.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
-      })
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress = { percent: 0, status: 'active' as const }
 
-      const updateContent = () => {
-        modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      }
+  const modal = Modal.info({
+    title: `发布上游: ${record.name}`,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
 
-      addLog(`开始发布上游: ${record.name}`)
-      progress.percent = 10
-      updateContent()
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
 
-      await new Promise(r => setTimeout(r, 400))
+  addLog(`开始发布上游: ${record.name}`)
+  progress.percent = 10
+  updateContent()
 
-      try {
-        addLog('正在构建发布配置...')
-        progress.percent = 30
-        updateContent()
+  await new Promise(r => setTimeout(r, 400))
 
-        const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`)
-        const data = res.data
-        progress.percent = 70
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
 
-        addLog(`状态: ${data.status}`)
-        addLog(`消息: ${data.message}`)
-        addLog(`版本: v${data.version}`)
+    const res = await api.post(`/clusters/${cluster.id}/upstreams/${record.id}/publish`, { node_ids: nodeIds })
+    const data = res.data
+    progress.percent = 70
 
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-          }
-        }
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
 
-        progress.percent = 100
-        addLog('')
-        if (data.status === 'ok') {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else if (data.status === 'partial') {
-          progress.status = 'exception'
-          addLog('⚠️ 部分成功')
-        } else {
-          progress.status = 'exception'
-          addLog('❌ 发布失败')
-        }
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-
-        await loadUpstreams(cluster)
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 发布失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
       }
     }
-  })
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') {
+      progress.status = 'success'
+      addLog('✅ 发布成功!')
+    } else if (data.status === 'partial') {
+      progress.status = 'exception'
+      addLog('⚠️ 部分成功')
+    } else {
+      progress.status = 'exception'
+      addLog('❌ 发布失败')
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+    await loadUpstreams(cluster)
+  } catch (error: any) {
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
 }
 
 const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstream) => {
@@ -3126,86 +3147,81 @@ const openUpstreamVersionManagementByRecord = (cluster: Cluster, record: Upstrea
 }
 
 const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定要将路由"${record.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
-    okText: '确认发布',
-    cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as const }
+  const nodeIds = await openPublishModal(`发布路由: ${record.name}`, cluster.id)
+  if (!nodeIds.length) return
 
-      const modal = Modal.info({
-        title: `发布路由: ${record.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
-      })
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress = { percent: 0, status: 'active' as const }
 
-      const updateContent = () => {
-        modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      }
+  const modal = Modal.info({
+    title: `发布路由: ${record.name}`,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
 
-      addLog(`开始发布路由: ${record.name}`)
-      progress.percent = 10
-      updateContent()
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
 
-      await new Promise(r => setTimeout(r, 400))
+  addLog(`开始发布路由: ${record.name}`)
+  progress.percent = 10
+  updateContent()
 
-      try {
-        addLog('正在构建发布配置...')
-        progress.percent = 30
-        updateContent()
+  await new Promise(r => setTimeout(r, 400))
 
-        const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`)
-        const data = res.data
-        progress.percent = 70
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
 
-        addLog(`状态: ${data.status}`)
-        addLog(`消息: ${data.message}`)
-        addLog(`版本: v${data.version}`)
+    const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`, { node_ids: nodeIds })
+    const data = res.data
+    progress.percent = 70
 
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-          }
-        }
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
 
-        progress.percent = 100
-        addLog('')
-        if (data.status === 'ok') {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else if (data.status === 'partial') {
-          progress.status = 'exception'
-          addLog('⚠️ 部分成功')
-        } else {
-          progress.status = 'exception'
-          addLog('❌ 发布失败')
-        }
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-
-        await loadRoutes(cluster)
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 发布失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
       }
     }
-  })
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') {
+      progress.status = 'success'
+      addLog('✅ 发布成功!')
+    } else if (data.status === 'partial') {
+      progress.status = 'exception'
+      addLog('⚠️ 部分成功')
+    } else {
+      progress.status = 'exception'
+      addLog('❌ 发布失败')
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+    await loadRoutes(cluster)
+  } catch (error: any) {
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
 }
 
 const openRouteVersionManagementByRecord = (cluster: Cluster, record: Route) => {
@@ -3406,86 +3422,81 @@ const publishPluginConfig = async (cluster: Cluster, pc?: any) => {
     message.warning('请先选择一个插件组')
     return
   }
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定要将插件组"${target.name}"发布到 ${cluster.healthy_node_count || cluster.node_count || 0} 个 Edge 节点吗？`,
-    okText: '确认发布',
-    cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as const }
+  const nodeIds = await openPublishModal(`发布插件组: ${target.name}`, cluster.id)
+  if (!nodeIds.length) return
 
-      const modal = Modal.info({
-        title: `发布插件组: ${target.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
-      })
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress = { percent: 0, status: 'active' as const }
 
-      const updateContent = () => {
-        modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      }
-
-      addLog(`开始发布插件组: ${target.name}`)
-      progress.percent = 10
-      updateContent()
-
-      await new Promise(r => setTimeout(r, 400))
-
-      try {
-        addLog('正在构建发布配置...')
-        progress.percent = 30
-        updateContent()
-
-        const res = await api.post(`/clusters/${cluster.id}/plugin_configs/${target.id}/publish`)
-        const data = res.data
-        progress.percent = 70
-
-        addLog(`状态: ${data.status}`)
-        addLog(`消息: ${data.message}`)
-        addLog(`版本: v${data.version}`)
-
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-          }
-        }
-
-        progress.percent = 100
-        addLog('')
-        if (data.status === 'ok') {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else if (data.status === 'partial') {
-          progress.status = 'exception'
-          addLog('⚠️ 部分成功')
-        } else {
-          progress.status = 'exception'
-          addLog('❌ 发布失败')
-        }
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 发布失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
-      }
-      await loadPluginConfigs(cluster)
-    }
+  const modal = Modal.info({
+    title: `发布插件组: ${target.name}`,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
   })
+
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
+
+  addLog(`开始发布插件组: ${target.name}`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise(r => setTimeout(r, 400))
+
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
+
+    const res = await api.post(`/clusters/${cluster.id}/plugin_configs/${target.id}/publish`, { node_ids: nodeIds })
+    const data = res.data
+    progress.percent = 70
+
+    addLog(`状态: ${data.status}`)
+    addLog(`消息: ${data.message}`)
+    addLog(`版本: v${data.version}`)
+
+    if (data.results && data.results.length > 0) {
+      addLog('')
+      addLog('节点同步结果:')
+      for (const r of data.results) {
+        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      }
+    }
+
+    progress.percent = 100
+    addLog('')
+    if (data.status === 'ok') {
+      progress.status = 'success'
+      addLog('✅ 发布成功!')
+    } else if (data.status === 'partial') {
+      progress.status = 'exception'
+      addLog('⚠️ 部分成功')
+    } else {
+      progress.status = 'exception'
+      addLog('❌ 发布失败')
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+  } catch (error: any) {
+    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
+  await loadPluginConfigs(cluster)
 }
 
 
@@ -3589,30 +3600,27 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
 }
 
 const publishGlobalRule = async (cluster: Cluster, gr: any) => {
-  Modal.confirm({
-    title: '确认发布', content: `确定要发布全局规则"${gr.name}"到所有活跃 Edge 节点吗？`,
-    okText: '确认发布', cancelText: '取消',
-    onOk: async () => {
-      const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
-      const progress = { percent: 0, status: 'active' as const }
-      const modal = Modal.info({ title: `发布全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
-      const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      addLog(`开始发布: ${gr.name}`); progress.percent = 10; update()
-      await new Promise(r => setTimeout(r, 400))
-      try {
-        addLog('正在构建发布配置...'); progress.percent = 30; update()
-        const res = await api.post(`/clusters/${cluster.id}/global_rules/${gr.id}/publish`); const data = res.data
-        progress.percent = 70; addLog(`状态: ${data.status}`); addLog(`消息: ${data.message}`)
-        if (data.results) { addLog(''); addLog('节点同步结果:'); for (const r of data.results) { addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`) } }
-        progress.percent = 100
-        if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
-        else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
-        else { progress.status = 'exception'; addLog('❌ 发布失败') }
-        update(); modal.update({ okButtonProps: { disabled: false } })
-      } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 发布失败: ${e.response?.data?.detail || e.message}`); update(); modal.update({ okButtonProps: { disabled: false } }) }
-      await loadGlobalRules(cluster)
-    }
-  })
+  const nodeIds = await openPublishModal(`发布全局规则: ${gr.name}`, cluster.id)
+  if (!nodeIds.length) return
+
+  const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
+  const progress = { percent: 0, status: 'active' as const }
+  const modal = Modal.info({ title: `发布全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
+  const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  addLog(`开始发布: ${gr.name}`); progress.percent = 10; update()
+  await new Promise(r => setTimeout(r, 400))
+  try {
+    addLog('正在构建发布配置...'); progress.percent = 30; update()
+    const res = await api.post(`/clusters/${cluster.id}/global_rules/${gr.id}/publish`, { node_ids: nodeIds }); const data = res.data
+    progress.percent = 70; addLog(`状态: ${data.status}`); addLog(`消息: ${data.message}`)
+    if (data.results) { addLog(''); addLog('节点同步结果:'); for (const r of data.results) { addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`) } }
+    progress.percent = 100
+    if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
+    else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
+    else { progress.status = 'exception'; addLog('❌ 发布失败') }
+    update(); modal.update({ okButtonProps: { disabled: false } })
+  } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 发布失败: ${e.response?.data?.detail || e.message}`); update(); modal.update({ okButtonProps: { disabled: false } }) }
+  await loadGlobalRules(cluster)
 }
 
 const openGlobalRuleVersionManagement = (cluster: Cluster, gr: any) => {
@@ -3752,20 +3760,15 @@ const uploadStaticResourceZip = (sr: any) => {
 }
 
 const publishStaticResource = async (cluster: Cluster, sr: any) => {
-  Modal.confirm({
-    title: '确认发布',
-    content: `确定发布静态资源 "${sr.name}" 到所有活跃 Edge 节点？`,
-    okText: '发布',
-    onOk: async () => {
-      try {
-        const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/publish`)
-        message.success('发布成功')
-        await loadStaticResources(cluster)
-      } catch (error: any) {
-        message.error('发布失败: ' + (error.response?.data?.detail || error.message))
-      }
-    },
-  })
+  const nodeIds = await openPublishModal(`发布静态资源: ${sr.name}`, cluster.id)
+  if (!nodeIds.length) return
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/publish`, { node_ids: nodeIds })
+    message.success('发布成功')
+    await loadStaticResources(cluster)
+  } catch (error: any) {
+    message.error('发布失败: ' + (error.response?.data?.detail || error.message))
+  }
 }
 
 const openStaticResourceVersionManagement = (cluster: Cluster, sr: any) => {

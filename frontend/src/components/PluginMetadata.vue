@@ -1,5 +1,5 @@
 <template>
-  <div class="global-plugin-selector">
+  <div class="plugin-metadata">
     <div class="search-wrapper">
       <a-input-search
         v-model:value="searchText"
@@ -112,6 +112,14 @@
       @version-change="handleVersionChange"
       @published="handleVersionPublished"
     />
+
+    <PublishConfirmModal
+      v-model:visible="publishModalVisible"
+      :title="publishModalTitle"
+      :cluster-id="clusterId"
+      @confirm="handlePublishConfirm"
+      @cancel="handlePublishCancel"
+    />
   </div>
 </template>
 
@@ -122,6 +130,7 @@ import { EyeOutlined, EditOutlined, DeleteOutlined, CloudUploadOutlined, History
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
+import PublishConfirmModal from './PublishConfirmModal.vue'
 
 interface Plugin {
   name: string
@@ -150,6 +159,31 @@ const props = defineProps<{
 const searchText = ref('')
 const allPlugins = ref<Plugin[]>([])
 const configuredPlugins = ref<ConfiguredPlugin[]>([])
+
+// PublishConfirmModal state
+const publishModalVisible = ref(false)
+const publishModalTitle = ref('')
+let publishModalResolve: ((nodeIds: number[]) => void) | null = null
+
+function openPublishModal(title: string): Promise<number[]> {
+  publishModalTitle.value = title
+  publishModalVisible.value = true
+  return new Promise((resolve) => {
+    publishModalResolve = resolve
+  })
+}
+
+function handlePublishConfirm(nodeIds: number[]) {
+  publishModalVisible.value = false
+  publishModalResolve?.(nodeIds)
+  publishModalResolve = null
+}
+
+function handlePublishCancel() {
+  publishModalVisible.value = false
+  publishModalResolve?.([])
+  publishModalResolve = null
+}
 
 const editingPluginName = ref<string>('')
 
@@ -400,6 +434,9 @@ const deletePlugin = (item: ConfiguredPlugin) => {
 }
 
 const publishPlugin = async (item: ConfiguredPlugin) => {
+  const nodeIds = await openPublishModal(`发布插件元数据: ${item.plugin_name}`)
+  if (!nodeIds.length) return
+
   const logs: string[] = []
   const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   const progress = { percent: 0, status: 'active' as const }
@@ -431,7 +468,7 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
   try {
     addLog('正在构建发布配置...')
     progress.percent = 30; update()
-    const response = await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`)
+    const response = await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`, { node_ids: nodeIds })
     const data = response.data
     progress.percent = 70
     addLog(`状态: ${data.status}`)
@@ -482,7 +519,7 @@ watch(() => props.clusterId, () => {
 </script>
 
 <style scoped>
-.global-plugin-selector {
+.plugin-metadata {
   padding: 8px;
   display: flex;
   flex-direction: column;
