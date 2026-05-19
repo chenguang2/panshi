@@ -35,7 +35,7 @@ local log_info = log.info
 local plugin_name = "static_resource"
 
 
-local STATIC_BASE_PATH = "/data/edge/static"
+local STATIC_BASE_PATH = "/work/jboss/data/edge/static"
 
 -- zip magic bytes: PK\x03\x04
 local ZIP_MAGIC_BYTES = string.char(0x50, 0x4B, 0x03, 0x04)
@@ -256,7 +256,7 @@ local default_attr = {
 
 local _M = plugin.new({
   version = 0.1,
-  priority = 0,
+  priority = 9090,
   name = plugin_name,
   schema = schema,
   attr_schema = default_attr_schema,
@@ -269,7 +269,7 @@ function _M.control_api()
   return {
     {
       methods = {"PUT"},
-      uris = {"/edge/admin/static_resources/*"},
+      uris = {"/edge/panshi/static_resources/*"},
       handler = function(params)
         local name = params.name
         return handle_upload(name)
@@ -277,7 +277,7 @@ function _M.control_api()
     },
     {
       methods = {"DELETE"},
-      uris = {"/edge/admin/static_resources/*"},
+      uris = {"/edge/panshi/static_resources/*"},
       handler = function(params)
         local name = params.name
         return handle_delete(name)
@@ -285,7 +285,7 @@ function _M.control_api()
     },
     {
       methods = {"GET"},
-      uris = {"/edge/admin/static_resources"},
+      uris = {"/edge/panshi/static_resources"},
       handler = function()
         return handle_list()
       end,
