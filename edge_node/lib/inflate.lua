@@ -273,7 +273,10 @@ function BitStream:files()
         local offset = int4le(buffer, position + 42) + 1
         local name = sub(buffer, position + 46, position + 45 + length)
         position = position + 46 + length + int2le(buffer, position + 30) + int2le(buffer, position + 32)
-        return name, offset + 30 + length + int2le(buffer, offset + 28), int4le(buffer, offset + 18), packed, crc
+        local local_name_len = int2le(buffer, offset + 26)
+        local local_extra_len = int2le(buffer, offset + 28)
+        local data_offset = offset + 30 + local_name_len + local_extra_len
+        return name, data_offset, int4le(buffer, offset + 18), packed, crc
     end
 end
 ---Inflates the bitstream starting from the specified offset and optionally performs checksum verification

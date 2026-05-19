@@ -1,4 +1,4 @@
-local zip_utils = require("lib.zip_utils")
+local inflate = require("lib.inflate")
 local cjson = require("cjson.safe")
 
 local handler = {}
