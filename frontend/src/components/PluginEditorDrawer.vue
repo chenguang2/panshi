@@ -541,6 +541,7 @@ const syncSimpleKv = () => {
 }
 const getFieldType = (schema: any): string => {
   if (schema.enum) return 'enum'
+  if (schema.type === 'integer') return 'number'
   if (schema.type) return schema.type
   return 'string'
 }

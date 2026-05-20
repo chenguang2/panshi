@@ -124,6 +124,11 @@ const CATEGORIES = [
     key: 'process',
     label: '数据处理',
     plugins: ['log_process', 'data_center', 'pre_functions']
+  },
+  {
+    key: 'static',
+    label: '静态资源',
+    plugins: ['static_resource']
   }
 ]
 
@@ -131,7 +136,7 @@ const CATEGORIES = [
 function getFallbackCategoryName(pluginNames: string[]): string | null {
   const allKnown = CATEGORIES.flatMap(c => c.plugins)
   const hasUncategorized = pluginNames.some(n => !allKnown.includes(n))
-  return hasUncategorized ? '其他' : null
+  return hasUncategorized ? '监控' : null
 }
 
 // 状态
@@ -200,7 +205,7 @@ const filteredCategories = computed(() => {
     if (!expanded.other) expanded.other = true
     results.push({
       key: 'other',
-      label: '其他',
+      label: '监控',
       plugins: search
         ? uncategorized.filter(p =>
             p.name.toLowerCase().includes(search) ||
