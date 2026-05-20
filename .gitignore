@@ -49,6 +49,7 @@ backend/uvicorn.err
 # commit 时不需要
 uv.lock
 .history/
+.sisyphus/
 session-*.md
 *.png
 prompt-*.txt
