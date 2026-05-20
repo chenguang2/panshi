@@ -15,10 +15,12 @@ class StaticResourceResponse(BaseModel):
     id: int
     cluster_id: int
     route_id: Optional[int] = None
+    edge_uuid: Optional[str] = None
     name: str
     url_path: Optional[str] = None
     description: Optional[str] = None
     file_size: Optional[int] = None
+    storage_path: Optional[str] = None
     current_version: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

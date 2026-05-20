@@ -30,9 +30,9 @@ BASE_STORAGE_DIR = os.path.join(
 )
 
 
-def _get_storage_path(route_id: int, version: int) -> str:
-    """Generate storage path: {BASE}/static/{route_id}/{version}.zip"""
-    return os.path.join(BASE_STORAGE_DIR, str(route_id), f"{version}.zip")
+def _get_storage_path(edge_uuid: str, version: int) -> str:
+    """Generate storage path: {BASE}/static/{edge_uuid}/{version}.zip"""
+    return os.path.join(BASE_STORAGE_DIR, edge_uuid, f"{version}.zip")
 
 
 def resource_to_response(r: StaticResource) -> StaticResourceResponse:
@@ -40,6 +40,7 @@ def resource_to_response(r: StaticResource) -> StaticResourceResponse:
         id=r.id,
         cluster_id=r.cluster_id,
         route_id=r.route_id,
+        edge_uuid=r.edge_uuid,
         name=r.name,
         url_path=r.url_path,
         description=r.description,
@@ -60,8 +61,11 @@ async def _get_route_with_plugins(db: AsyncSession, cluster_id: int, route_id: i
         raise HTTPException(status_code=404, detail="路由不存在")
 
     uri = (route.uri or "").strip()
-    if not uri.endswith("*"):
-        raise HTTPException(status_code=400, detail="路由路径必须以 * 结尾")
+    if not uri.endswith("/*"):
+        raise HTTPException(status_code=400, detail="路由路径必须以 /* 结尾")
+
+    if route.status != 1:
+        raise HTTPException(status_code=400, detail="路由必须是已发布状态")
 
     plugin_result = await db.execute(
         select(RoutePlugin).where(
@@ -146,6 +150,7 @@ async def create_static_resource(
     resource = StaticResource(
         cluster_id=cluster_id,
         route_id=body.route_id,
+        edge_uuid=route.edge_uuid,
         name=route.name,
         url_path=route.uri,
         description=body.description,
@@ -224,7 +229,8 @@ async def delete_static_resource(
     if body.delete_db:
         if resource.storage_path and os.path.exists(resource.storage_path):
             os.remove(resource.storage_path)
-        route_dir = os.path.join(BASE_STORAGE_DIR, str(resource.route_id))
+        del_dir_name = resource.edge_uuid or str(resource.route_id)
+        route_dir = os.path.join(BASE_STORAGE_DIR, del_dir_name)
         if os.path.exists(route_dir):
             shutil.rmtree(route_dir)
         await db.delete(resource)
@@ -296,7 +302,8 @@ async def upload_static_resource_zip(
         resource.current_version = 0
     next_version = resource.current_version + 1
 
-    storage_path = _get_storage_path(resource.route_id, next_version)
+    edge_uuid = resource.edge_uuid or str(resource.route_id)
+    storage_path = _get_storage_path(edge_uuid, next_version)
     os.makedirs(os.path.dirname(storage_path), exist_ok=True)
 
     with open(storage_path, "wb") as f:
@@ -315,6 +322,7 @@ async def upload_static_resource_zip(
             "file_size": len(content),
             "file_path": storage_path,
             "route_id": resource.route_id,
+            "edge_uuid": resource.edge_uuid,
         }, ensure_ascii=False),
         created_by="system",
     ))

@@ -894,7 +894,7 @@
             :filter-option="(input: string, option: any) => option.children.toLowerCase().includes(input.toLowerCase())"
             @change="onStaticResourceRouteChange"
           >
-            <a-select-option v-for="r in editingCluster?.routes || []" :key="r.id" :value="r.id">
+            <a-select-option v-for="r in srActiveCluster?.routes || []" :key="r.id" :value="r.id">
               {{ r.name }} ({{ r.uri }})
             </a-select-option>
           </a-select>
@@ -3666,7 +3666,7 @@ const staticResourceModalVisible = ref(false)
 const staticResourceFormMode = ref<'add' | 'edit'>('add')
 const staticResourceEditingId = ref<number | null>(null)
 const staticResourceEditingCluster = ref<Cluster | null>(null)
-const editingCluster = computed(() => staticResourceEditingCluster.value)
+const srActiveCluster = computed(() => staticResourceEditingCluster.value)
 
 const loadStaticResources = async (cluster: Cluster) => {
   try {
@@ -3689,16 +3689,12 @@ const onStaticResourceRouteChange = (routeId: number) => {
     return
   }
   const uri = (route.uri || '').trim()
-  if (!uri.endsWith('*')) {
-    staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 * 结尾' }
+  if (!uri.endsWith('/*')) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
     return
   }
-  const plugins = route.plugins || []
-  const hasStaticResource = plugins.some((p: any) =>
-    p.plugin_name === 'static_resource' || (typeof p === 'object' && (p.name === 'static_resource' || p.key === 'static_resource'))
-  )
-  if (!hasStaticResource) {
-    staticResourceRouteInfo.value = { valid: false, msg: '静态资源路由必须加载 static_resource 插件' }
+  if (route.status !== 1) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由必须是已发布状态' }
     return
   }
   staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
@@ -3740,7 +3736,7 @@ const handleStaticResourceSubmit = async () => {
       return
     }
     if (!staticResourceRouteInfo.value?.valid) {
-      message.warning('请选择符合条件（加载了 static_resource 插件且路径以 * 结尾）的路由')
+      message.warning('请选择符合条件（已发布且路径以 /* 结尾）的路由')
       return
     }
   }
@@ -3785,6 +3781,12 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
   })
 }
 
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
 const uploadStaticResourceZip = (sr: any) => {
   const input = document.createElement('input')
   input.type = 'file'
@@ -3793,22 +3795,81 @@ const uploadStaticResourceZip = (sr: any) => {
     const file = input.files?.[0]
     if (!file) return
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     const cluster = clusters.value.find((c: Cluster) =>
       c.static_resources?.some((s: any) => s.id === sr.id)
     )
     if (!cluster) return
 
+    const logs: string[] = []
+    const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+    const progress = { percent: 0, status: 'active' as const }
+    const totalSize = file.size
+
+    const modal = Modal.info({
+      title: `上传静态资源: ${sr.name}`,
+      width: 600,
+      content: buildDeleteProgressContent(progress, logs),
+      okText: '确定',
+      okButtonProps: { disabled: true },
+      cancelText: '',
+      closable: true,
+    })
+    const updateContent = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
+
+    addLog(`文件: ${file.name} (${formatFileSize(totalSize)})`)
+    progress.percent = 5
+    updateContent()
+
+    await new Promise(r => setTimeout(r, 200))
+
     try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      addLog('正在上传...')
+      progress.percent = 20
+      updateContent()
+
       const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e: any) => {
+          if (e.total) {
+            const pct = Math.round(20 + (e.loaded / e.total) * 50)
+            progress.percent = pct
+            addLog(`上传进度: ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`)
+            updateContent()
+          }
+        },
       })
-      message.success('上传成功')
+
+      progress.percent = 80
+      addLog('上传完成')
+      addLog('')
+      const edgeUuid = res.data.edge_uuid || res.data.route_id || '?'
+      const serverHost = window.location.hostname
+      addLog('── 上传结果 ──')
+      addLog(`服务器: ${serverHost}`)
+      addLog(`绝对路径: /data/edge/static/${edgeUuid}/${res.data.current_version || '?'}.zip`)
+      addLog(`管理端路径: data/static/${edgeUuid}/${res.data.current_version || '?'}.zip`)
+      addLog(`文件大小: ${res.data.file_size ? formatFileSize(res.data.file_size) : '—'}`)
+      addLog(`当前版本: v${res.data.current_version || '—'}`)
+      addLog(`路由: ${sr.name} (${sr.url_path})`)
+      progress.percent = 100
+      progress.status = 'success'
+      addLog('')
+      addLog('✅ 上传成功')
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
+
       await loadStaticResources(cluster)
     } catch (error: any) {
-      message.error('上传失败: ' + (error.response?.data?.detail || error.message))
+      const errMsg = error.response?.data?.detail || error.message || '未知错误'
+      progress.percent = 100
+      progress.status = 'exception'
+      addLog('')
+      addLog(`❌ 上传失败: ${errMsg}`)
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
     }
   }
   input.click()

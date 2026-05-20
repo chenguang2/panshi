@@ -12,6 +12,7 @@ class StaticResource(Base):
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     route_id = Column(Integer, ForeignKey("ps_route.id", ondelete="SET NULL"), nullable=True)
+    edge_uuid = Column(String(36), nullable=True)
     name = Column(String(100), nullable=False)
     url_path = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
