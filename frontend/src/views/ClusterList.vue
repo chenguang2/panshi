@@ -416,7 +416,11 @@
                       <a-tag v-if="sr.current_version" color="green" size="small">已发布</a-tag>
                       <a-tag v-else color="orange" size="small">未发布</a-tag>
                     </div>
-                    <div v-if="sr.current_version" style="font-size: 12px; color: #666;">v{{ sr.current_version }}</div>
+                    <div style="font-size: 12px; color: #666;">
+                      <template v-if="sr.current_version && sr.updated_at">v{{ sr.current_version }} · {{ formatPublishDateTime(sr.updated_at) }}</template>
+                      <template v-else-if="sr.current_version">v{{ sr.current_version }} · 未同步</template>
+                      <template v-else>&nbsp;</template>
+                    </div>
                   </div>
                 </div>
                 <div v-if="sr.description" style="font-size: 12px; color: #666; margin-bottom: 8px;">{{ sr.description }}</div>
