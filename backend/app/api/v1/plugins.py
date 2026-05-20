@@ -439,13 +439,6 @@ BUILTIN_PLUGINS = [
         "description": "静态资源服务（从本地文件系统响应静态文件请求，支持缓存控制和 MIME 类型）",
         "enable_metadata": False,
         "schema": {
-            "base_path": {
-                "type": "string",
-                "default": "/data/edge/static",
-                "description": "静态资源根目录",
-                "examples": ["/data/edge/static"],
-                "hints": "静态资源文件在 Edge 节点上的存储路径"
-            },
             "cache_max_age": {
                 "type": "integer",
                 "default": 3600,

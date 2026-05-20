@@ -45,6 +45,7 @@ def resource_to_response(r: StaticResource) -> StaticResourceResponse:
         url_path=r.url_path,
         description=r.description,
         file_size=r.file_size,
+        storage_path=r.storage_path,
         current_version=r.current_version,
         created_at=r.created_at.isoformat() + "Z" if r.created_at else None,
         updated_at=r.updated_at.isoformat() + "Z" if r.updated_at else None,
@@ -419,3 +420,93 @@ async def publish_static_resource(
         "current_version": resource.current_version,
         "results": results,
     }
+
+
+@router.get("/{resource_id}/history")
+async def get_static_resource_history(
+    cluster_id: int,
+    resource_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.cluster import ConfigVersion
+    from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
+
+    result = await db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.resource_type == "static_resource",
+            ConfigVersion.resource_id == resource_id,
+        ).order_by(ConfigVersion.version.desc())
+    )
+    versions = result.scalars().all()
+
+    sr = await db.execute(
+        select(StaticResource).where(StaticResource.id == resource_id, StaticResource.cluster_id == cluster_id)
+    )
+    resource = sr.scalar_one_or_none()
+
+    return ConfigVersionListResponse(
+        total=len(versions),
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=resource.current_version if resource else None
+    )
+
+
+@router.delete("/{resource_id}/history/{version_id}")
+async def delete_static_resource_history(
+    cluster_id: int,
+    resource_id: int,
+    version_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.cluster import ConfigVersion
+
+    result = await db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.id == version_id,
+            ConfigVersion.resource_type == "static_resource",
+            ConfigVersion.resource_id == resource_id,
+        )
+    )
+    version = result.scalar_one_or_none()
+    if not version:
+        raise HTTPException(status_code=404, detail="历史版本不存在")
+
+    await db.delete(version)
+    await db.commit()
+    return {"message": "历史版本已删除"}
+
+
+@router.post("/{resource_id}/rollback/{version}")
+async def rollback_static_resource(
+    cluster_id: int,
+    resource_id: int,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.cluster import ConfigVersion
+
+    sr = await db.execute(
+        select(StaticResource).where(StaticResource.id == resource_id, StaticResource.cluster_id == cluster_id)
+    )
+    resource = sr.scalar_one_or_none()
+    if not resource:
+        raise HTTPException(status_code=404, detail="静态资源不存在")
+
+    cv = await db.execute(
+        select(ConfigVersion).where(
+            ConfigVersion.resource_type == "static_resource",
+            ConfigVersion.resource_id == resource_id,
+            ConfigVersion.version == version,
+        )
+    )
+    config_version = cv.scalar_one_or_none()
+    if not config_version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+
+    config_data = json.loads(config_version.config)
+    resource.storage_path = config_data.get("file_path", resource.storage_path)
+    resource.file_size = config_data.get("file_size", resource.file_size)
+    resource.current_version = version
+    await db.commit()
+
+    return {"message": f"已回滚到版本 v{version}", "current_version": version}

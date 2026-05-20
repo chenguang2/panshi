@@ -18,7 +18,8 @@ ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
 ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 
 
-def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None) -> RouteResponse:
+def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None,
+                       plugins: list | None = None) -> RouteResponse:
     """Convert Route model to RouteResponse"""
     route_dict = {
         "id": r.id,
@@ -38,7 +39,8 @@ def route_to_response(r: Route, current_version: int | None = None, published_at
         "plugin_config_ids": json.loads(r.plugin_config_ids) if r.plugin_config_ids else None,
         "current_version": current_version or r.current_version,
         "published_at": published_at,
-        "created_at": r.created_at.isoformat() if r.created_at else None
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "plugins": plugins or [],
     }
     return RouteResponse.model_validate(route_dict)
 
@@ -106,7 +108,21 @@ async def list_routes(
     )
     pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if route_ids else {}
 
-    items = [route_to_response(r, published_at=pub_map.get(r.id).isoformat() + 'Z' if pub_map.get(r.id) else None) for r in routes]
+    # 批量查询插件
+    plugin_rows = await db.execute(
+        select(RoutePlugin).where(RoutePlugin.route_id.in_(route_ids) if route_ids else False)
+    )
+    plugin_map: dict[int, list] = {}
+    for rp in plugin_rows.scalars().all():
+        if rp.route_id not in plugin_map:
+            plugin_map[rp.route_id] = []
+        plugin_map[rp.route_id].append({"plugin_name": rp.plugin_name})
+
+    items = [
+        route_to_response(r, published_at=pub_map.get(r.id).isoformat() + 'Z' if pub_map.get(r.id) else None,
+                          plugins=plugin_map.get(r.id, []))
+        for r in routes
+    ]
 
     return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
 

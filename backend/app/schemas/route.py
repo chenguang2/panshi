@@ -45,6 +45,7 @@ class RouteResponse(RouteBase):
     current_version: Optional[int] = None
     published_at: Optional[str] = None
     created_at: Optional[str] = None
+    plugins: Optional[List[Dict[str, Any]]] = None
 
     @field_validator('created_at', mode='before')
     @classmethod

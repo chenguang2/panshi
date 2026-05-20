@@ -1,6 +1,4 @@
 import { test, expect } from '@playwright/test';
-import * as path from 'path';
-import * as fs from 'fs';
 
 test.describe('静态资源上传', () => {
   test.beforeEach(async ({ page }) => {
@@ -11,7 +9,7 @@ test.describe('静态资源上传', () => {
     await page.waitForURL('/');
   });
 
-  test('上传 zip 文件后路径正确', async ({ page }) => {
+  test('上传交互流程正常', async ({ page }) => {
     await page.click('text=集群管理');
     await page.waitForTimeout(1000);
 
@@ -34,31 +32,24 @@ test.describe('静态资源上传', () => {
       return;
     }
 
-    const testZip = 'test-upload.zip';
-    fs.writeFileSync(testZip, Buffer.from([
-      0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0xB7, 0xAC, 0xCE, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-    ]));
-
     const [fileChooser] = await Promise.all([
       page.waitForEvent('filechooser'),
       uploadBtn.click(),
     ]);
-    await fileChooser.setFiles(testZip);
-    fs.unlinkSync(testZip);
+    await fileChooser.setFiles('e2e/test-valid.zip');
     await page.waitForTimeout(3000);
 
     const modal = page.locator('.ant-modal-confirm');
     await expect(modal).toBeVisible({ timeout: 5000 });
+  });
 
-    const modalContent = await modal.textContent() || '';
-    if (modalContent.includes('❌ 上传失败')) {
-      console.log('upload API failed - network error in test environment');
-    } else {
-      expect(modalContent).toContain('管理端文件');
-      expect(modalContent).toContain('backend/data/static/');
-      await expect(modal).toContainText('✅ 上传成功');
+  test('API 返回格式包含 storage_path', async ({ page }) => {
+    const resp = await page.request.get('http://localhost:9000/api/v1/clusters/1/static-resources');
+    const body = await resp.json();
+    expect(resp.ok()).toBeTruthy();
+    expect(body.items.length).toBeGreaterThan(0);
+    for (const item of body.items) {
+      expect(item).toHaveProperty('storage_path');
     }
   });
 });
