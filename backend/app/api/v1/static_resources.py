@@ -234,6 +234,12 @@ async def delete_static_resource(
         route_dir = os.path.join(BASE_STORAGE_DIR, del_dir_name)
         if os.path.exists(route_dir):
             shutil.rmtree(route_dir)
+        await db.execute(
+            ConfigVersion.__table__.delete().where(
+                ConfigVersion.resource_type == "static_resource",
+                ConfigVersion.resource_id == resource_id,
+            )
+        )
         await db.delete(resource)
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除，本地文件已清理"})
