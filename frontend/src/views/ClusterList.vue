@@ -884,6 +884,7 @@
       @ok="handleStaticResourceSubmit"
       width="600px"
       :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
+      :ok-button-props="{ disabled: staticResourceFormMode === 'add' && !staticResourceFormValid }"
     >
       <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
         <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
@@ -898,6 +899,15 @@
               {{ r.name }} ({{ r.uri }})
             </a-select-option>
           </a-select>
+          <div style="margin-top: 6px; font-size: 12px; color: #999;">
+            <div>选择路由的要求：</div>
+            <div :style="{ color: (!staticResourceFormData.route_id || !uriValid) ? '#ff4d4f' : '#52c41a' }">
+              {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
+            </div>
+            <div :style="{ color: (!staticResourceFormData.route_id || !publishedValid) ? '#ff4d4f' : '#52c41a' }">
+              {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
+            </div>
+          </div>
           <div v-if="staticResourceRouteInfo" style="margin-top: 4px;">
             <div v-if="staticResourceRouteInfo.valid" style="font-size:12px;color:#52c41a;">✅ {{ staticResourceRouteInfo.msg }}</div>
             <div v-else style="font-size:12px;color:#ff4d4f;">❌ {{ staticResourceRouteInfo.msg }}</div>
@@ -3663,6 +3673,22 @@ const staticResourceFormData = reactive({
 })
 const staticResourceRouteInfo = ref<{ valid: boolean; msg: string } | null>(null)
 const staticResourceModalVisible = ref(false)
+
+const selectedRoute = computed(() => {
+  if (!staticResourceFormData.route_id || !staticResourceEditingCluster.value) return null
+  return staticResourceEditingCluster.value.routes?.find((r: any) => r.id === staticResourceFormData.route_id) || null
+})
+const uriValid = computed(() => {
+  const r = selectedRoute.value
+  return r ? (r.uri || '').trim().endsWith('/*') : false
+})
+const publishedValid = computed(() => {
+  const r = selectedRoute.value
+  return r ? !!(r.current_version || r.published_at) : false
+})
+const staticResourceFormValid = computed(() => {
+  return staticResourceFormData.route_id && uriValid.value && publishedValid.value
+})
 const staticResourceFormMode = ref<'add' | 'edit'>('add')
 const staticResourceEditingId = ref<number | null>(null)
 const staticResourceEditingCluster = ref<Cluster | null>(null)
@@ -3693,8 +3719,19 @@ const onStaticResourceRouteChange = (routeId: number) => {
     staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
     return
   }
-  if (route.status !== 1) {
-    staticResourceRouteInfo.value = { valid: false, msg: '路由必须是已发布状态' }
+  if (!route.current_version && !route.published_at) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由必须先发布到 Edge 节点' }
+    return
+  }
+  staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
+}
+  const uri = (route.uri || '').trim()
+  if (!uri.endsWith('/*')) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
+    return
+  }
+  if (!route.current_version && !route.published_at) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由必须先发布到 Edge 节点' }
     return
   }
   staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
@@ -3736,7 +3773,7 @@ const handleStaticResourceSubmit = async () => {
       return
     }
     if (!staticResourceRouteInfo.value?.valid) {
-      message.warning('请选择符合条件（已发布且路径以 /* 结尾）的路由')
+      message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
       return
     }
   }
