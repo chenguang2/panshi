@@ -886,11 +886,25 @@
       :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
     >
       <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
-          <a-input v-model:value="staticResourceFormData.name" placeholder="如 myapp" />
+        <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由" name="route_id" :rules="[{ required: true, message: '请选择路由' }]">
+          <a-select
+            v-model:value="staticResourceFormData.route_id"
+            placeholder="请选择路由"
+            show-search
+            :filter-option="(input: string, option: any) => option.children.toLowerCase().includes(input.toLowerCase())"
+            @change="onStaticResourceRouteChange"
+          >
+            <a-select-option v-for="r in editingCluster?.routes || []" :key="r.id" :value="r.id">
+              {{ r.name }} ({{ r.uri }})
+            </a-select-option>
+          </a-select>
+          <div v-if="staticResourceRouteInfo" style="margin-top: 4px;">
+            <div v-if="staticResourceRouteInfo.valid" style="font-size:12px;color:#52c41a;">✅ {{ staticResourceRouteInfo.msg }}</div>
+            <div v-else style="font-size:12px;color:#ff4d4f;">❌ {{ staticResourceRouteInfo.msg }}</div>
+          </div>
         </a-form-item>
-        <a-form-item label="访问路径" name="url_path" :rules="[{ required: true, message: '请输入访问路径' }]">
-          <a-input v-model:value="staticResourceFormData.url_path" placeholder="如 /static/myapp" />
+        <a-form-item v-else label="关联路由">
+          <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
         </a-form-item>
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
@@ -3642,14 +3656,17 @@ const viewGlobalRulePluginConfig = (gr: any, pname: string, pcfg: any) => {
 
 
 const staticResourceFormData = reactive({
+  route_id: null as number | null,
   name: '',
   url_path: '',
   description: '',
 })
+const staticResourceRouteInfo = ref<{ valid: boolean; msg: string } | null>(null)
 const staticResourceModalVisible = ref(false)
 const staticResourceFormMode = ref<'add' | 'edit'>('add')
 const staticResourceEditingId = ref<number | null>(null)
 const staticResourceEditingCluster = ref<Cluster | null>(null)
+const editingCluster = computed(() => staticResourceEditingCluster.value)
 
 const loadStaticResources = async (cluster: Cluster) => {
   try {
@@ -3663,13 +3680,42 @@ const loadStaticResources = async (cluster: Cluster) => {
   }
 }
 
+const onStaticResourceRouteChange = (routeId: number) => {
+  const cluster = staticResourceEditingCluster.value
+  if (!cluster) return
+  const route = cluster.routes?.find((r: any) => r.id === routeId)
+  if (!route) {
+    staticResourceRouteInfo.value = null
+    return
+  }
+  const uri = (route.uri || '').trim()
+  if (!uri.endsWith('*')) {
+    staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 * 结尾' }
+    return
+  }
+  const plugins = route.plugins || []
+  const hasStaticResource = plugins.some((p: any) =>
+    p.plugin_name === 'static_resource' || (typeof p === 'object' && (p.name === 'static_resource' || p.key === 'static_resource'))
+  )
+  if (!hasStaticResource) {
+    staticResourceRouteInfo.value = { valid: false, msg: '静态资源路由必须加载 static_resource 插件' }
+    return
+  }
+  staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
+}
+
 const showAddStaticResource = async (cluster: Cluster) => {
   staticResourceFormMode.value = 'add'
   staticResourceEditingCluster.value = cluster
   staticResourceEditingId.value = null
+  staticResourceFormData.route_id = null
   staticResourceFormData.name = ''
   staticResourceFormData.url_path = ''
   staticResourceFormData.description = ''
+  staticResourceRouteInfo.value = null
+  if (!cluster.routes || cluster.routes.length === 0) {
+    await loadRoutes(cluster)
+  }
   staticResourceModalVisible.value = true
 }
 
@@ -3680,6 +3726,7 @@ const editStaticResource = (cluster: Cluster, sr: any) => {
   staticResourceFormData.name = sr.name
   staticResourceFormData.url_path = sr.url_path
   staticResourceFormData.description = sr.description || ''
+  staticResourceRouteInfo.value = null
   staticResourceModalVisible.value = true
 }
 
@@ -3687,22 +3734,30 @@ const handleStaticResourceSubmit = async () => {
   const cluster = staticResourceEditingCluster.value
   if (!cluster) return
 
-  if (!staticResourceFormData.name || !staticResourceFormData.url_path) {
-    message.warning('请填写名称和访问路径')
-    return
+  if (staticResourceFormMode.value === 'add') {
+    if (!staticResourceFormData.route_id) {
+      message.warning('请选择路由')
+      return
+    }
+    if (!staticResourceRouteInfo.value?.valid) {
+      message.warning('请选择符合条件（加载了 static_resource 插件且路径以 * 结尾）的路由')
+      return
+    }
   }
 
   try {
-    const payload = {
-      name: staticResourceFormData.name,
-      url_path: staticResourceFormData.url_path,
-      description: staticResourceFormData.description || undefined,
-    }
-
     if (staticResourceFormMode.value === 'add') {
+      const payload = {
+        route_id: staticResourceFormData.route_id,
+        description: staticResourceFormData.description || undefined,
+      }
       await api.post(`/clusters/${cluster.id}/static-resources`, payload)
       message.success('静态资源已创建')
     } else {
+      const payload: Record<string, any> = {}
+      if (staticResourceFormData.description !== undefined) {
+        payload.description = staticResourceFormData.description || undefined
+      }
       await api.put(`/clusters/${cluster.id}/static-resources/${staticResourceEditingId.value}`, payload)
       message.success('静态资源已更新')
     }

@@ -1,17 +1,14 @@
 import json
 import os
 import shutil
-import tempfile
-import uuid
-import zipfile
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Node, ConfigVersion
+from app.models.cluster import Cluster, Node, ConfigVersion, Route, RoutePlugin
 from app.models.static_resource import StaticResource
 from app.schemas.static_resource import (
     StaticResourceCreate,
@@ -24,14 +21,25 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 
 router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])
 
-ALLOWED_SORT_FIELDS = {"name", "url_path", "file_size", "created_at"}
-ALLOWED_SEARCH_FIELDS = {"name", "url_path", "description"}
+ALLOWED_SORT_FIELDS = {"name", "created_at"}
+ALLOWED_SEARCH_FIELDS = {"name", "description"}
+
+BASE_STORAGE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "data", "static"
+)
+
+
+def _get_storage_path(route_id: int, version: int) -> str:
+    """Generate storage path: {BASE}/static/{route_id}/{version}.zip"""
+    return os.path.join(BASE_STORAGE_DIR, str(route_id), f"{version}.zip")
 
 
 def resource_to_response(r: StaticResource) -> StaticResourceResponse:
     return StaticResourceResponse(
         id=r.id,
         cluster_id=r.cluster_id,
+        route_id=r.route_id,
         name=r.name,
         url_path=r.url_path,
         description=r.description,
@@ -40,6 +48,31 @@ def resource_to_response(r: StaticResource) -> StaticResourceResponse:
         created_at=r.created_at.isoformat() + "Z" if r.created_at else None,
         updated_at=r.updated_at.isoformat() + "Z" if r.updated_at else None,
     )
+
+
+async def _get_route_with_plugins(db: AsyncSession, cluster_id: int, route_id: int):
+    """Get a route and verify it has static_resource plugin and URI ends with *."""
+    route_result = await db.execute(
+        select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id)
+    )
+    route = route_result.scalar_one_or_none()
+    if not route:
+        raise HTTPException(status_code=404, detail="路由不存在")
+
+    uri = (route.uri or "").strip()
+    if not uri.endswith("*"):
+        raise HTTPException(status_code=400, detail="路由路径必须以 * 结尾")
+
+    plugin_result = await db.execute(
+        select(RoutePlugin).where(
+            RoutePlugin.route_id == route_id,
+            RoutePlugin.plugin_name == "static_resource",
+        )
+    )
+    if not plugin_result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="静态资源路由必须加载 static_resource 插件")
+
+    return route
 
 
 @router.get("", response_model=StaticResourceListResponse)
@@ -96,23 +129,25 @@ async def create_static_resource(
     db: AsyncSession = Depends(get_db),
 ):
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = cluster_result.scalar_one_or_none()
-    if not cluster:
+    if not cluster_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="集群不存在")
+
+    route = await _get_route_with_plugins(db, cluster_id, body.route_id)
 
     existing = await db.execute(
         select(StaticResource).where(
             StaticResource.cluster_id == cluster_id,
-            StaticResource.name == body.name,
+            StaticResource.route_id == body.route_id,
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"静态资源 '{body.name}' 已存在")
+        raise HTTPException(status_code=409, detail="该路由已关联静态资源")
 
     resource = StaticResource(
         cluster_id=cluster_id,
-        name=body.name,
-        url_path=body.url_path,
+        route_id=body.route_id,
+        name=route.name,
+        url_path=route.uri,
         description=body.description,
     )
     db.add(resource)
@@ -156,19 +191,6 @@ async def update_static_resource(
     if not resource:
         raise HTTPException(status_code=404, detail="静态资源不存在")
 
-    if body.name is not None:
-        existing = await db.execute(
-            select(StaticResource).where(
-                StaticResource.cluster_id == cluster_id,
-                StaticResource.name == body.name,
-                StaticResource.id != resource_id,
-            )
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail=f"静态资源 '{body.name}' 已存在")
-        resource.name = body.name
-    if body.url_path is not None:
-        resource.url_path = body.url_path
     if body.description is not None:
         resource.description = body.description
 
@@ -200,12 +222,43 @@ async def delete_static_resource(
     results = []
 
     if body.delete_db:
+        if resource.storage_path and os.path.exists(resource.storage_path):
+            os.remove(resource.storage_path)
+        route_dir = os.path.join(BASE_STORAGE_DIR, str(resource.route_id))
+        if os.path.exists(route_dir):
+            shutil.rmtree(route_dir)
         await db.delete(resource)
         await db.commit()
-        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除，本地文件已清理"})
 
-    if body.delete_edge:
-        results.append({"scope": "edge", "status": "skipped", "message": "静态资源无对应的 Edge API 删除操作"})
+    if body.delete_edge and resource.route_id:
+        sync_db = _get_sync_session()
+        try:
+            nodes_result = await db.execute(
+                select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+            )
+            nodes = nodes_result.scalars().all()
+            for node in nodes:
+                try:
+                    client = EdgeClient(
+                        cluster_id=cluster_id,
+                        db=sync_db,
+                        node_ip=node.ip,
+                        node_port=node.management_port,
+                    )
+                    cluster_row = sync_db.execute(
+                        select(Cluster.admin_key).where(Cluster.id == cluster_id)
+                    ).first()
+                    admin_key = cluster_row[0] if cluster_row and cluster_row[0] else None
+                    if not admin_key:
+                        admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
+                    client.api_key = admin_key
+                    client._request("DELETE", f"/edge/panshi/static_resources/{resource.name}")
+                    results.append({"node": f"{node.ip}:{node.management_port}", "status": "success", "message": "Edge 节点文件已删除"})
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
+        finally:
+            sync_db.close()
 
     return {"message": "静态资源已删除", "results": results}
 
@@ -235,21 +288,36 @@ async def upload_static_resource_zip(
         raise HTTPException(status_code=400, detail="文件内容为空")
 
     import io
+    import zipfile
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="无效的 zip 文件")
 
-    storage_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "static_resources")
-    os.makedirs(storage_dir, exist_ok=True)
-    storage_path = os.path.join(storage_dir, f"{resource.name}_{uuid.uuid4().hex}.zip")
+    if resource.current_version is None:
+        resource.current_version = 0
+    next_version = resource.current_version + 1
+
+    storage_path = _get_storage_path(resource.route_id, next_version)
+    os.makedirs(os.path.dirname(storage_path), exist_ok=True)
 
     with open(storage_path, "wb") as f:
         f.write(content)
 
-    if resource.storage_path and os.path.exists(resource.storage_path):
-        os.remove(resource.storage_path)
-
     resource.storage_path = storage_path
     resource.file_size = len(content)
+    resource.current_version = next_version
+
+    db.add(ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type="static_resource",
+        resource_id=resource.id,
+        version=next_version,
+        config=json.dumps({
+            "file_size": len(content),
+            "file_path": storage_path,
+            "route_id": resource.route_id,
+        }, ensure_ascii=False),
+        created_by="system",
+    ))
     await db.commit()
     await db.refresh(resource)
     return resource_to_response(resource)
@@ -328,44 +396,12 @@ async def publish_static_resource(
                     admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
                 client.api_key = admin_key
 
-                client.raw_put(f"/edge/admin/static_resources/{resource.name}", zip_data)
+                client.raw_put(f"/edge/panshi/static_resources/{resource.name}", zip_data)
 
-                edge_route = {
-                    "uri": resource.url_path.rstrip("/") + "/*",
-                    "name": f"static-{resource.name}",
-                    "plugins": {
-                        "static_resource": {
-                            "base_path": "/data/edge/static",
-                            "cache_max_age": 3600,
-                        }
-                    },
-                    "status": 1,
-                }
-                client.create_route(edge_route)
                 results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
             except (EdgeConnectionError, EdgeAPIError) as e:
                 results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
                 all_success = False
-
-        if resource.current_version is None:
-            resource.current_version = 1
-        else:
-            resource.current_version += 1
-
-        db.add(ConfigVersion(
-            cluster_id=cluster_id,
-            resource_type="static_resource",
-            resource_id=resource.id,
-            version=resource.current_version,
-            config=json.dumps({
-                "name": resource.name,
-                "url_path": resource.url_path,
-                "file_size": resource.file_size,
-            }, ensure_ascii=False),
-            created_by="system",
-        ))
-        await db.commit()
-        await db.refresh(resource)
 
     finally:
         sync_db.close()
