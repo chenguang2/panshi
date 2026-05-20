@@ -433,9 +433,37 @@ BUILTIN_PLUGINS = [
                 "hints": "设为 true 时使用路由名称而非 ID 标识，默认 false"
             }
         }
+    },
+    {
+        "name": "static_resource",
+        "description": "静态资源服务（从本地文件系统响应静态文件请求，支持缓存控制和 MIME 类型）",
+        "enable_metadata": False,
+        "schema": {
+            "base_path": {
+                "type": "string",
+                "default": "/data/edge/static",
+                "description": "静态资源根目录",
+                "examples": ["/data/edge/static"],
+                "hints": "静态资源文件在 Edge 节点上的存储路径"
+            },
+            "cache_max_age": {
+                "type": "integer",
+                "default": 3600,
+                "minimum": 0,
+                "description": "缓存时间（秒）",
+                "examples": [3600, 86400],
+                "hints": "Cache-Control max-age，单位秒，默认 3600"
+            },
+            "index_file": {
+                "type": "string",
+                "default": "index.html",
+                "description": "默认首页文件",
+                "examples": ["index.html"],
+                "hints": "访问目录时默认返回的文件名"
+            }
+        }
     }
 ]
-
 
 @router.get("/builtin")
 async def get_builtin_plugins():
