@@ -25,7 +25,7 @@ ALLOWED_SORT_FIELDS = {"name", "created_at"}
 ALLOWED_SEARCH_FIELDS = {"name", "description"}
 
 BASE_STORAGE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
     "data", "static"
 )
 
@@ -64,8 +64,8 @@ async def _get_route_with_plugins(db: AsyncSession, cluster_id: int, route_id: i
     if not uri.endswith("/*"):
         raise HTTPException(status_code=400, detail="路由路径必须以 /* 结尾")
 
-    if route.status != 1:
-        raise HTTPException(status_code=400, detail="路由必须是已发布状态")
+    if route.current_version is None:
+        raise HTTPException(status_code=400, detail="路由必须先发布到 Edge 节点")
 
     plugin_result = await db.execute(
         select(RoutePlugin).where(

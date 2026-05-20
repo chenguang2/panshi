@@ -3881,7 +3881,6 @@ const uploadStaticResourceZip = (sr: any) => {
       addLog('── 上传结果 ──')
       addLog(`管理端服务器: ${serverHost}`)
       addLog(`管理端文件: ${res.data.storage_path || `backend/data/static/${edgeUuid}/${ver}.zip`}`)
-      addLog(`Edge 节点目标路径(发布后): /data/edge/static/${edgeUuid}/${ver}.zip`)
       addLog(`文件大小: ${res.data.file_size ? formatFileSize(res.data.file_size) : '—'}`)
       addLog(`当前版本: v${ver}`)
       addLog(`路由: ${sr.name} (${sr.url_path})`)
