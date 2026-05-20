@@ -57,6 +57,8 @@ prompt-*.txt
 # Test artifacts
 frontend/e2e/test-valid.zip
 frontend/e2e/test-data/
+frontend/test-results/
+.playwright-mcp/
 
 # Static resource uploads (dev)
 backend/data/static/
