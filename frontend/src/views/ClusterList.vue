@@ -886,7 +886,7 @@
       :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
     >
       <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由" name="route_id" :rules="[{ required: true, message: '请选择路由' }]">
+        <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
           <a-select
             v-model:value="staticResourceFormData.route_id"
             placeholder="请选择路由"
@@ -3846,13 +3846,14 @@ const uploadStaticResourceZip = (sr: any) => {
       addLog('上传完成')
       addLog('')
       const edgeUuid = res.data.edge_uuid || res.data.route_id || '?'
+      const ver = res.data.current_version || '?'
       const serverHost = window.location.hostname
       addLog('── 上传结果 ──')
-      addLog(`服务器: ${serverHost}`)
-      addLog(`绝对路径: /data/edge/static/${edgeUuid}/${res.data.current_version || '?'}.zip`)
-      addLog(`管理端路径: data/static/${edgeUuid}/${res.data.current_version || '?'}.zip`)
+      addLog(`管理端服务器: ${serverHost}`)
+      addLog(`管理端绝对路径: ${res.data.storage_path || `backend/data/static/${edgeUuid}/${ver}.zip`}`)
+      addLog(`Edge 节点路径: /data/edge/static/${edgeUuid}/${ver}.zip`)
       addLog(`文件大小: ${res.data.file_size ? formatFileSize(res.data.file_size) : '—'}`)
-      addLog(`当前版本: v${res.data.current_version || '—'}`)
+      addLog(`当前版本: v${ver}`)
       addLog(`路由: ${sr.name} (${sr.url_path})`)
       progress.percent = 100
       progress.status = 'success'
