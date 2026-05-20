@@ -161,7 +161,9 @@ const categoryConfig: Record<string, { label: string; order: number }> = {
   'response': { label: '转换类', order: 3 },
   'ip': { label: '安全类', order: 4 },
   'static': { label: '静态资源', order: 5 },
-  'default': { label: '监控', order: 99 }
+  'monitor': { label: '监控', order: 6 },
+  'traceid': { label: '监控', order: 6 },
+  'default': { label: '其他', order: 99 }
 }
 
 // 获取插件分类

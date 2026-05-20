@@ -129,6 +129,11 @@ const CATEGORIES = [
     key: 'static',
     label: '静态资源',
     plugins: ['static_resource']
+  },
+  {
+    key: 'monitor',
+    label: '监控',
+    plugins: ['monitor', 'traceid']
   }
 ]
 
@@ -136,7 +141,7 @@ const CATEGORIES = [
 function getFallbackCategoryName(pluginNames: string[]): string | null {
   const allKnown = CATEGORIES.flatMap(c => c.plugins)
   const hasUncategorized = pluginNames.some(n => !allKnown.includes(n))
-  return hasUncategorized ? '监控' : null
+  return hasUncategorized ? '其他' : null
 }
 
 // 状态
@@ -205,7 +210,7 @@ const filteredCategories = computed(() => {
     if (!expanded.other) expanded.other = true
     results.push({
       key: 'other',
-      label: '监控',
+      label: '其他',
       plugins: search
         ? uncategorized.filter(p =>
             p.name.toLowerCase().includes(search) ||

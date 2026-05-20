@@ -145,7 +145,8 @@ const getPluginCategory = (name: string): string => {
   if (name.includes('auth')) return '认证'
   if (name.includes('rewrite') || name.includes('cors')) return '转换'
   if (name.includes('static')) return '静态资源'
-  return '监控'
+  if (name.includes('monitor') || name.includes('traceid')) return '监控'
+  return '其他'
 }
 </script>
 
