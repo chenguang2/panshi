@@ -899,18 +899,17 @@
               {{ r.name }} ({{ r.uri }})
             </a-select-option>
           </a-select>
-          <div style="margin-top: 6px; font-size: 12px; color: #999;">
-            <div>选择路由的要求：</div>
-            <div :style="{ color: (!staticResourceFormData.route_id || !uriValid) ? '#ff4d4f' : '#52c41a' }">
+          <div style="margin-top: 6px; font-size: 12px;">
+            <div style="color: #999;">选择路由的要求：</div>
+            <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
               {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
             </div>
-            <div :style="{ color: (!staticResourceFormData.route_id || !publishedValid) ? '#ff4d4f' : '#52c41a' }">
+            <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
               {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
             </div>
-          </div>
-          <div v-if="staticResourceRouteInfo" style="margin-top: 4px;">
-            <div v-if="staticResourceRouteInfo.valid" style="font-size:12px;color:#52c41a;">✅ {{ staticResourceRouteInfo.msg }}</div>
-            <div v-else style="font-size:12px;color:#ff4d4f;">❌ {{ staticResourceRouteInfo.msg }}</div>
+            <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
+              {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
+            </div>
           </div>
         </a-form-item>
         <a-form-item v-else label="关联路由">
@@ -3686,8 +3685,13 @@ const publishedValid = computed(() => {
   const r = selectedRoute.value
   return r ? !!(r.current_version || r.published_at) : false
 })
+const pluginValid = computed(() => {
+  const r = selectedRoute.value
+  if (!r) return false
+  return (r.plugins || []).some((p: any) => p.plugin_name === 'static_resource')
+})
 const staticResourceFormValid = computed(() => {
-  return staticResourceFormData.route_id && uriValid.value && publishedValid.value
+  return staticResourceFormData.route_id && uriValid.value && publishedValid.value && pluginValid.value
 })
 const staticResourceFormMode = ref<'add' | 'edit'>('add')
 const staticResourceEditingId = ref<number | null>(null)
@@ -3714,17 +3718,6 @@ const onStaticResourceRouteChange = (routeId: number) => {
     staticResourceRouteInfo.value = null
     return
   }
-  const uri = (route.uri || '').trim()
-  if (!uri.endsWith('/*')) {
-    staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
-    return
-  }
-  if (!route.current_version && !route.published_at) {
-    staticResourceRouteInfo.value = { valid: false, msg: '路由必须先发布到 Edge 节点' }
-    return
-  }
-  staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
-}
   const uri = (route.uri || '').trim()
   if (!uri.endsWith('/*')) {
     staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
@@ -3887,8 +3880,8 @@ const uploadStaticResourceZip = (sr: any) => {
       const serverHost = window.location.hostname
       addLog('── 上传结果 ──')
       addLog(`管理端服务器: ${serverHost}`)
-      addLog(`管理端绝对路径: ${res.data.storage_path || `backend/data/static/${edgeUuid}/${ver}.zip`}`)
-      addLog(`Edge 节点路径: /data/edge/static/${edgeUuid}/${ver}.zip`)
+      addLog(`管理端文件: ${res.data.storage_path || `backend/data/static/${edgeUuid}/${ver}.zip`}`)
+      addLog(`Edge 节点目标路径(发布后): /data/edge/static/${edgeUuid}/${ver}.zip`)
       addLog(`文件大小: ${res.data.file_size ? formatFileSize(res.data.file_size) : '—'}`)
       addLog(`当前版本: v${ver}`)
       addLog(`路由: ${sr.name} (${sr.url_path})`)
