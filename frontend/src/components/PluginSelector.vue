@@ -131,6 +131,11 @@ const CATEGORIES = [
     plugins: ['static_resource']
   },
   {
+    key: 'security',
+    label: '安全防护',
+    plugins: ['security_common_body']
+  },
+  {
     key: 'monitor',
     label: '监控',
     plugins: ['monitor', 'traceid']
