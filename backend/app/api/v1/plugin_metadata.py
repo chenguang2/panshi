@@ -141,7 +141,10 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+    if body.node_ids:
+        node_query = node_query.where(Node.id.in_(body.node_ids))
+    nodes_result = await db.execute(node_query)
     active_nodes = nodes_result.scalars().all()
 
     results = []
