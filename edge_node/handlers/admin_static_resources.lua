@@ -172,43 +172,26 @@ local function parse_multipart_file(req_body, content_type)
 end
 
 local function handle_upload(edge_uuid)
-  local req_body = req_get_body()
-  local headers = ngx.req.get_headers()
-  local content_type = headers["content-type"] or ""
+    local req_body = req_get_body()
+    local headers = ngx.req.get_headers()
+    local content_type = headers["content-type"] or ""
 
-  local zip_data
-  if content_type:find("multipart/form-data", 1, true) then
-    local file_name
-    file_name, zip_data = parse_multipart_file(req_body, content_type)
-  else
-    zip_data = req_body
-  end
+    local file_name = ""
+    local zip_data = nil
+    if content_type:find("multipart/form-data", 1, true) then
+        file_name, zip_data = parse_multipart_file(req_body, content_type)
+    else
+        zip_data = req_body
+    end
 
-  if not zip_data then
-      return 400, { error_msg = "未在请求体中解析出有效的文件" }
-  end
-
-  local name = edge_uuid
-  if not name or name == "" then
-    return 400, { error_msg = "edge_uuid is required" }
-  end
-
-  if string.find(name, "..", 1, true) or string.find(name, "/", 1, true) or string.find(name, "'", 1, true) then
-    return 400, { error_msg = "invalid resource name" }
-  end
-
-  if #zip_data == 0 then
-    return 400, { error_msg = "request body is empty" }
-  end
-
-    local name = edge_uuid
-    if not name or name == "" then
+    if not zip_data then
         return 400, {
-            error_msg = "edge_uuid is required"
+            error_msg = "未在请求体中解析出有效的文件"
         }
     end
 
-    if string.find(name, "..", 1, true) or string.find(name, "/", 1, true) or string.find(name, "'", 1, true) then
+    if string.find(edge_uuid, "..", 1, true) or string.find(edge_uuid, "/", 1, true) or
+        string.find(edge_uuid, "'", 1, true) then
         return 400, {
             error_msg = "invalid resource name"
         }
@@ -238,9 +221,6 @@ local function handle_upload(edge_uuid)
     end
 
     log_error("上传的 zip files are supported ")
-
-    local dest_dir = default_base_path .. "/" .. name
-
     -- save incoming zip data to temp file
     local zip_path, err = save_temp_zip(zip_data)
     if not zip_path then
@@ -250,7 +230,7 @@ local function handle_upload(edge_uuid)
         }
     end
 
-    local resource_dir = build_resource_path(name)
+    local resource_dir = build_resource_path(edge_uuid)
     remove_directory(resource_dir)
 
     -- extract zip to resource directory
@@ -260,22 +240,20 @@ local function handle_upload(edge_uuid)
     os.remove(zip_path)
 
     if not ok then
-        log_error("failed to extract zip for resource: ", name)
+        log_error("failed to extract zip for resource: ", edge_uuid)
         return 500, {
             error_msg = "failed to extract zip"
         }
     end
 
-    log_info("static resource uploaded: ", name, " -> ", resource_dir)
-
-    log_info("static resource uploaded: ", name, " -> ", dest_dir)
+    log_info("static resource uploaded: ", edge_uuid, " -> ", resource_dir)
 
     return 200, {
         action = "set",
         node = {
-            key = build_resource_key(name),
+            key = build_resource_key(edge_uuid),
             value = {
-                id = name,
+                id = edge_uuid,
                 dir = resource_dir,
                 update_time = ngx.time()
             }
