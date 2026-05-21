@@ -359,18 +359,10 @@ function _M.control_api()
       methods = {"DELETE"},
       uris = {"/edge/panshi/admin_static_resources"},
       handler = function()
-        ngx.req.read_body()
-        local body = ngx.req.get_body_data()
-        if not body then
-          return 400, { error_msg = "request body is required" }
-        end
-        local ok, data = pcall(require("cjson.safe").decode, body)
-        if not ok or not data then
-          return 400, { error_msg = "invalid JSON body" }
-        end
-        local edge_uuid = data.edge_uuid
+        local args = ngx.req.get_uri_args()
+        local edge_uuid = args.edge_uuid
         if not edge_uuid or edge_uuid == "" then
-          return 400, { error_msg = "edge_uuid is required in request body" }
+          return 400, { error_msg = "edge_uuid is required" }
         end
         return handle_delete(edge_uuid)
       end,
