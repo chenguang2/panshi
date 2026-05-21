@@ -26,7 +26,7 @@
 #### Scenario: 仅删除 Edge 节点文件
 - **WHEN** 用户仅勾选"同时删除 Edge 节点文件"
 - **THEN** 系统遍历所有活跃 Edge 节点
-- **AND** 调用 `DELETE /edge/panshi/admin_static_resources/{edge_uuid}`
+- **AND** 调用 `DELETE /edge/panshi/admin_static_resources?edge_uuid={edge_uuid}`
 - **AND** 不操作数据库
 - **AND** 弹窗展示每节点删除结果
 
