@@ -267,7 +267,10 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+    if body.node_ids:
+        node_query = node_query.where(Node.id.in_(body.node_ids))
+    nodes_result = await db.execute(node_query)
     active_nodes = nodes_result.scalars().all()
 
     results = []

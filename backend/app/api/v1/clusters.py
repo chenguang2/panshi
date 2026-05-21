@@ -473,6 +473,11 @@ async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteCluster
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     if body.delete_edge:
+        node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+        if body.node_ids:
+            node_query = node_query.where(Node.id.in_(body.node_ids))
+        nodes_result = await db.execute(node_query)
+        active_nodes = nodes_result.scalars().all()
         if active_nodes:
             for node in active_nodes:
                 node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
@@ -563,14 +568,18 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+    if body.node_ids:
+        node_query = node_query.where(Node.id.in_(body.node_ids))
+    nodes_result = await db.execute(node_query)
     active_nodes = nodes_result.scalars().all()
 
     results = []
 
     if body.delete_db:
-        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id == config_id))
-        await db.delete(config)
+        await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
+        await db.delete(upstream)
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
@@ -824,7 +833,10 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+    if body.node_ids:
+        node_query = node_query.where(Node.id.in_(body.node_ids))
+    nodes_result = await db.execute(node_query)
     active_nodes = nodes_result.scalars().all()
 
     results = []

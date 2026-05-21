@@ -183,6 +183,7 @@ class PublishRequest(BaseModel):
 class DeleteClusterRequest(BaseModel):
     delete_db: bool = False
     delete_edge: bool = False
+    node_ids: Optional[List[int]] = None
 
 
 class NodeCreate(NodeBase):

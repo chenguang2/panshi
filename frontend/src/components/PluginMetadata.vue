@@ -154,6 +154,7 @@ interface ConfiguredPlugin {
 
 const props = defineProps<{
   clusterId: number
+  nodes?: { id: number; ip: string; management_port: number }[]
 }>()
 
 const searchText = ref('')
@@ -311,14 +312,15 @@ const handleVersionPublished = async (data: { plugin_name: string }) => {
 const deletePlugin = (item: ConfiguredPlugin) => {
   let deleteDb = false
   let deleteEdge = false
+  const selectedNodeIds: Set<number> = new Set((props.nodes || []).map(n => n.id))
   let confirmModal: any
 
   const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || deleteEdge
+    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
     confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
   }
 
-  const confirmContent = h('div', { style: 'font-size: 13px;' }, [
+  const buildConfirmContent = (showNodes: boolean) => h('div', { style: 'font-size: 13px;' }, [
     h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, `确定要删除插件元数据 "${item.plugin_name}" 吗？`),
     h('div', { style: 'color: #666; margin-bottom: 12px;' }, '此操作不可撤销，将同时删除数据库记录及所有版本历史。'),
 
@@ -335,23 +337,48 @@ const deletePlugin = (item: ConfiguredPlugin) => {
       h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
         h('input', {
           type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
+          onInput: (e: any) => {
+            deleteEdge = e.target.checked
+            if (!deleteEdge) selectedNodeIds.clear()
+            confirmModal.update({ content: buildConfirmContent(deleteEdge) })
+            updateOkDisabled()
+          },
           style: 'width: 16px; height: 16px; cursor: pointer;',
         }),
         h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
         h('span', { style: 'color: #999; font-size: 12px;' }, '从活跃 Edge 节点中删除'),
       ]),
+      showNodes && props.nodes ? h('div', {
+        style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px;',
+      }, [
+        h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
+        ...props.nodes.map(n =>
+          h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
+            h('input', {
+              type: 'checkbox', checked: selectedNodeIds.has(n.id),
+              onInput: (e: any) => {
+                if (e.target.checked) selectedNodeIds.add(n.id)
+                else selectedNodeIds.delete(n.id)
+                updateOkDisabled()
+              },
+              style: 'width: 14px; height: 14px; cursor: pointer;',
+            }),
+            h('span', {}, `${n.ip}:${n.management_port}`),
+          ])
+        ),
+      ]) : null,
     ]),
   ])
 
   confirmModal = Modal.confirm({
     title: '确认删除',
-    content: confirmContent,
+    content: buildConfirmContent(false),
     okText: '确认删除',
     okType: 'danger',
     cancelText: '取消',
     okButtonProps: { disabled: true },
     onOk: async () => {
+      const nodeIds = Array.from(selectedNodeIds)
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       const progress = { percent: 0, status: 'active' as const }
@@ -384,7 +411,7 @@ const deletePlugin = (item: ConfiguredPlugin) => {
         addLog('正在从数据库删除...')
         progress.percent = 40; update()
         const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`, {
-          data: { delete_db: deleteDb, delete_edge: deleteEdge }
+          data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined }
         })
         const data = response.data
         progress.percent = 60
