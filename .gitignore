@@ -36,6 +36,7 @@ edge_run/
 
 # uv / Python
 backend/.venv/
+backend/python/
 backend/.python-version
 
 # =============================================
