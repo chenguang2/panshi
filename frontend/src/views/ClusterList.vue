@@ -3804,12 +3804,87 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
     title: `确定删除静态资源 "${sr.name}"？`,
     apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
     onOk: async (deleteDb, deleteEdge) => {
+      const logs: string[] = []
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
+      const progress = { percent: 0, status: 'active' as const }
+
+      const modal = Modal.info({
+        title: `删除静态资源: ${sr.name}`,
+        width: 600,
+        content: buildDeleteProgressContent(progress, logs),
+        okText: '确定',
+        okButtonProps: { disabled: true },
+        cancelText: '',
+        closable: true,
+      })
+
+      const updateContent = () => {
+        modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      }
+
+      addLog(`开始删除静态资源: ${sr.name}`)
+      progress.percent = 20
+      updateContent()
+
+      await new Promise(r => setTimeout(r, 400))
+
       try {
-        await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
-        message.success('已删除')
+        addLog('正在从数据库删除...')
+        progress.percent = 40
+        updateContent()
+
+        const res = await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const data = res.data
+
+        progress.percent = 60
+        addLog(`数据库: ${data.message}`)
+        addLog('')
+
+        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
+          progress.percent = 80
+          updateContent()
+
+          addLog('Edge 节点同步删除结果:')
+          let successCount = 0
+          let failCount = 0
+          for (const r of edgeResults) {
+            if (r.status === 'success') successCount++
+            else failCount++
+            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+          }
+          addLog('')
+          addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+        } else if (deleteEdge) {
+          addLog('集群中没有活跃的 Edge 节点')
+        }
+
+        progress.percent = 100
+        addLog('')
+        if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
+          progress.status = 'success'
+          addLog('✅ 删除完成!')
+        } else if (edgeResults.some((r: any) => r.status === 'failed')) {
+          progress.status = 'exception'
+          addLog('⚠️ 部分删除失败（数据库已删除），请手动清理 Edge 节点')
+        } else {
+          progress.status = 'success'
+          addLog('✅ 数据库已删除')
+        }
+
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
         await loadStaticResources(cluster)
       } catch (error: any) {
-        message.error('删除失败: ' + (error.response?.data?.detail || error.message))
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message}`)
+        updateContent()
+        modal.update({ okButtonProps: { disabled: false } })
       }
     },
   })
