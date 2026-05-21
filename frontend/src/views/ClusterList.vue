@@ -2513,15 +2513,15 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        addLog('正在从数据库删除...')
-        progress.percent = 40
-        updateContent()
-
         const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog('正在从数据库删除...')
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        }
         addLog('')
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
@@ -2828,15 +2828,15 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        addLog('正在从数据库删除...')
-        progress.percent = 40
-        updateContent()
-
         const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog('正在从数据库删除...')
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        }
         addLog('')
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
@@ -3388,15 +3388,15 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        addLog('正在从数据库删除...')
-        progress.percent = 40
-        updateContent()
-
         const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog('正在从数据库删除...')
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        }
         addLog('')
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
@@ -3610,9 +3610,11 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
       addLog(`开始删除: ${gr.name}`); progress.percent = 20; update()
       await new Promise(r => setTimeout(r, 400))
       try {
-        addLog('正在从数据库删除...'); progress.percent = 40; update()
         const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } }); const data = res.data
-        progress.percent = 60; addLog(`数据库: ${data.message}`); addLog('')
+        progress.percent = 60
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) { addLog('正在从数据库删除...'); addLog(`数据库: ${dbResult.message || '已删除'}`) }
+        addLog('')
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
         if (edgeResults.length > 0) {
           addLog('Edge 节点同步删除结果:');
