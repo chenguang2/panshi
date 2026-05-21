@@ -2551,10 +2551,10 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
           addLog('✅ 删除完成!')
         } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
-          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+          addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
         } else {
           progress.status = 'success'
-          addLog('✅ 数据库已删除')
+          addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
         }
 
         updateContent()
@@ -2866,10 +2866,10 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
           addLog('✅ 删除完成!')
         } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
-          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+          addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
         } else {
           progress.status = 'success'
-          addLog('✅ 数据库已删除')
+          addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
         }
 
         updateContent()
@@ -3426,10 +3426,10 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
           addLog('✅ 删除完成!')
         } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
-          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+          addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
         } else {
           progress.status = 'success'
-          addLog('✅ 数据库已删除')
+          addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
         }
 
         updateContent()
@@ -3623,7 +3623,7 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
         progress.percent = 100
         if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'success'; addLog('✅ 删除完成!') }
         else if (edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'exception'; addLog('⚠️ 部分节点删除失败') }
-        else { addLog('✅ 数据库已删除') }
+        else { addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`) }
         update()
       } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 删除失败: ${e.response?.data?.detail || e.message}`); update() }
       modal.update({ okButtonProps: { disabled: false } })
@@ -3878,7 +3878,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
           addLog(`⚠️ 部分删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理 Edge 节点`)
         } else {
           progress.status = 'success'
-          addLog('✅ 数据库已删除')
+          addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
         }
 
         updateContent()
