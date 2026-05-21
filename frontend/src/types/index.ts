@@ -69,6 +69,8 @@ export interface Cluster {
   selectedRoute?: Route | null
   plugin_configs?: PluginConfig[]
   selectedPluginConfig?: PluginConfig | null
+  global_rules?: any[]
+  selectedGlobalRule?: any | null
   static_resources?: any[]
   staticResourcesLoading?: boolean
   selectedStaticResource?: any | null
@@ -80,6 +82,7 @@ export interface Node {
   ip: string
   service_port: number
   management_port: number
+  edge_path?: string
   status: number
   created_at?: string
 }
@@ -152,6 +155,7 @@ export interface PluginConfig {
   plugins: Record<string, any>
   edge_uuid?: string
   current_version?: number
+  published_at?: string
   created_at?: string
   updated_at?: string
 }
