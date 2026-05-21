@@ -92,6 +92,7 @@ interface ConfigVersion {
   id: number
   version: number
   metadata: Record<string, any>
+  config?: Record<string, any>
   action?: string
   created_at: string
   created_by?: string
@@ -458,34 +459,6 @@ const handleRepublish = async () => {
   }
 }
 
-const handleRepublishSelected = async () => {
-  if (selectedVersions.value.length !== 2) return
-  const targetVersion = Math.max(...selectedVersions.value)
-  if (!props.clusterId || !props.resourceId) return
-  try {
-    if (props.resourceType === 'plugin_metadata') {
-      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${targetVersion}`)
-      emit('published', { plugin_name: props.resourceName })
-      message.success('已切换到版本 v' + targetVersion)
-    } else {
-      const endpoint = props.resourceType === 'upstream'
-        ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${targetVersion}`
-        : props.resourceType === 'plugin_config'
-        ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${targetVersion}`
-        : props.resourceType === 'global_rule'
-        ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${targetVersion}`
-        : props.resourceType === 'static_resource'
-        ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${targetVersion}`
-        : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${targetVersion}`
-      await api.post(endpoint)
-      message.success('已切换到版本 v' + targetVersion)
-    }
-    await loadHistory()
-  } catch (error: any) {
-    message.error(error.response?.data?.detail || '切换失败')
-  }
-}
-
 const handleDelete = async () => {
   if (!props.clusterId || !selectedVersionData.value) return
   if (selectedVersionData.value.version === currentVersion.value) {
@@ -513,17 +486,6 @@ const handleDelete = async () => {
   } catch (error: any) {
     message.error(error.response?.data?.detail || '删除失败')
   }
-}
-
-const handleEdit = () => {
-  if (!selectedVersionData.value || !props.resourceName) return
-  // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
-  const rawData = selectedVersionData.value.metadata || selectedVersionData.value.config
-  emit('edit', {
-    plugin_name: props.resourceName,
-    config: typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2)
-  })
-  visible.value = false
 }
 
 const handleClose = () => {

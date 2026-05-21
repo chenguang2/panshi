@@ -126,7 +126,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { EyeOutlined, EditOutlined, DeleteOutlined, CloudUploadOutlined, HistoryOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -137,6 +137,7 @@ interface Plugin {
   description: string
   category?: string
   enable_metadata?: boolean
+  metadata_schema?: Record<string, any>
   schema: Record<string, any>
 }
 
@@ -304,7 +305,7 @@ const handleVersionChange = (data: { plugin_name: string; version: number; metad
   loadConfiguredPlugins()
 }
 
-const handleVersionPublished = async (data: { plugin_name: string }) => {
+const handleVersionPublished = async (_data: { plugin_name: string }) => {
   viewingPlugin.value = null
   await loadConfiguredPlugins()
 }
@@ -381,7 +382,7 @@ const deletePlugin = (item: ConfiguredPlugin) => {
       const nodeIds = Array.from(selectedNodeIds)
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      const progress = { percent: 0, status: 'active' as const }
+const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
 
       const buildContent = () => h('div', {}, [
         h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;' }, [
@@ -469,7 +470,7 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
 
   const logs: string[] = []
   const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  const progress = { percent: 0, status: 'active' as const }
+  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
 
   const buildContent = () => h('div', {}, [
     h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;position:relative;' }, [

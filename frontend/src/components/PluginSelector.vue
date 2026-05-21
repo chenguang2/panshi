@@ -143,11 +143,14 @@ const CATEGORIES = [
 ]
 
 // 获取未分类插件的动态"其他"分组
+// (保留以备后续使用)
+/*
 function getFallbackCategoryName(pluginNames: string[]): string | null {
   const allKnown = CATEGORIES.flatMap(c => c.plugins)
   const hasUncategorized = pluginNames.some(n => !allKnown.includes(n))
   return hasUncategorized ? '其他' : null
 }
+*/
 
 // 状态
 const searchText = ref('')
@@ -156,7 +159,12 @@ const expanded = reactive<Record<string, boolean>>({
   rewrite: true,
   process: true
 })
-const selectedPlugins = ref<(RoutePlugin & { schema: Record<string, any> })[]>([])
+interface SelectedPlugin {
+  plugin_name: string
+  config: string | Record<string, any>
+  schema: Record<string, any>
+}
+const selectedPlugins = ref<SelectedPlugin[]>([])
 const drawerVisible = ref(false)
 const editingPlugin = ref<RoutePlugin | null>(null)
 const editingPluginIndex = ref(-1)
@@ -233,7 +241,7 @@ const isSelected = (plugin: Plugin) => {
 }
 
 // 检查插件是否有配置
-const hasConfig = (plugin: RoutePlugin & { config: Record<string, any> }) => {
+const hasConfig = (plugin: { config: string | Record<string, any> }) => {
   try {
     const cfg = typeof plugin.config === 'string' ? JSON.parse(plugin.config) : plugin.config
     return Object.keys(cfg).length > 0
@@ -271,7 +279,7 @@ const togglePlugin = (plugin: Plugin) => {
 
 // 添加插件
 const addPlugin = (plugin: Plugin) => {
-  const newPlugin: RoutePlugin & { schema: Record<string, any> } = {
+  const newPlugin: SelectedPlugin = {
     plugin_name: plugin.name,
     config: {},
     schema: plugin.schema
@@ -308,7 +316,6 @@ const removePlugin = (index: number) => {
 
   removingIndex.value = index
   setTimeout(() => {
-    const newList = props.modelValue.filter((_, i) => i !== index)
     selectedPlugins.value = selectedPlugins.value.filter((_, i) => i !== index)
     emitUpdate()
     removingIndex.value = null
@@ -316,7 +323,7 @@ const removePlugin = (index: number) => {
 }
 
 // 编辑插件
-const handleEdit = (plugin: RoutePlugin & { config: Record<string, any>; schema: Record<string, any> }, index: number) => {
+const handleEdit = (plugin: SelectedPlugin, index: number) => {
   editingPluginIndex.value = index
   editingPlugin.value = {
     plugin_name: plugin.plugin_name,
