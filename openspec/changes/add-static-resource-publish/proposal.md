@@ -7,7 +7,7 @@
 - **后端新增 StaticResource 模型和 CRUD API**：管理静态资源元数据（名称、URL 路径、文件大小、版本）
 - **后端新增静态资源发布流程**：上传 zip → 解压 → 通过 Admin API 分发到所有活跃 Edge 节点
 - **后端新增 Edge 节点通信端点**：扩展 EdgeClient，支持向 Edge 节点传输静态资源文件
-- **Edge 节点侧新增 Admin API**：`PUT/DELETE /edge/admin/static_resources/{name}`，接收加密 zip，在节点本地解压存储
+- **Edge 节点侧新增 Admin API**：`PUT /edge/panshi/admin_static_resources?edge_uuid={uuid}`，接收原始 zip 二进制（不加密），在节点本地解压存储
 - **Edge 节点侧新增 APISIX Lua 插件 `static_resource`**：在 access 阶段匹配路由，从本地文件系统读取文件返回，含缓存控制（ETag、Cache-Control、304 条件请求）
 - **前端集群管理页新增"静态资源" Tab**：上传 zip、配置路径、查看发布状态
 - **前端新增版本管理支持**：沿用现有 ConfigVersion 记录发布历史

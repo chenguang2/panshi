@@ -1274,8 +1274,7 @@ static_resource插件代码在： edge_node/handlers/static_resource.lua
 
 ====================================================================
 
-静态资源管理的删除：
-其中的删除 edge 节点的执行代码,列出一下并解释过程
+静态资源管理的发布的执行代码,列出一下并解释过程
 
 ====================================================================
 
@@ -1318,7 +1317,9 @@ client._request("DELETE", f"/edge/panshi/static_resources")
 ============================================================
 
 在 openspec 的 add-static-resource-publish 中，修改相关的需求
-根据现在的实际情况需要修改 add-static-resource-publish 中的文档，列一下修改点，并同步
+根据现在的实际情况需要修改 add-static-resource-publish 中的文档，
+
+列一下修改点，并同步
 
 静态资源管理的发布：
 修改部分：
@@ -1345,4 +1346,6 @@ client._request("DELETE", f"/edge/panshi/static_resources")
 因为发布静态资源需要 edge_uuid , 作为 url 参数发送
 
 
+
+请复述后，我批准后再执行
 

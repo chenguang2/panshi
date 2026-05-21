@@ -1,6 +1,6 @@
 ## Context
 
-当前管理系统支持 upstream、route、plugin_config、global_rule、plugin_metadata 五种资源类型，均遵循 Model → Schema → API → 前端 Tab 的模式。资源通过 EdgeClient（SM4 加密 HTTP）推送到基于 OpenResty 的 Edge 节点集群。
+当前管理系统支持 upstream、route、plugin_config、global_rule、plugin_metadata 五种资源类型，均遵循 Model → Schema → API → 前端 Tab 的模式。资源通过 EdgeClient（SM4 加密 HTTP）推送到基于 OpenResty 的 Edge 节点集群。静态资源发布采用 raw_put 直连，不经过 SM4 加密。
 
 Edge 节点已有自定义 Lua 插件框架（data_center、pre_functions、proxy_rewrite 等），可以通过新增 Admin API handler 和 APISIX 插件来扩展能力。
 
@@ -20,11 +20,11 @@ Edge 节点已有自定义 Lua 插件框架（data_center、pre_functions、prox
 ## Decisions
 
 1. **文件存储于 Edge 节点本地文件系统** — zip 解压到各 Edge 节点磁盘，不走数据库。数据库只存元数据。
-2. **文件传输复用 SM4 加密通道** — 新增 Admin API 端点 `PUT/DELETE /edge/admin/static_resources/{name}`，zip 内容作为加密 body 传输，沿用现有 X-API-KEY 认证。
+2. **文件传输使用 raw_put 直连，不加密** — 新增 Admin API 端点 `PUT /edge/panshi/admin_static_resources?edge_uuid={uuid}`，zip 内容作为原始二进制传输，不经过 SM4 加密，仅使用 X-API-KEY 认证。
 3. **APISIX 插件方式（非 Nginx 注入）** — 不需要 reload，完全在 APISIX 请求生命周期内处理。
 4. **缓存控制内置于插件中** — 约 30 行 Lua 代码实现 ETag + Cache-Control + 304，避免引入外部依赖。
 5. **复用现有发布流程** — 版本递增、ConfigVersion 记录、节点同步结果展示与 upstream/route 一致。
-6. **路由绑定复用现有路由资源类型** — 静态资源发布时，在 Edge 节点上通过现有路由 API 创建一条指向本地服务的路由。
+6. **发布时不创建路由** — 静态资源发布仅发送 zip 文件到 Edge 节点，路由需事先配置好并加载 `static_resource` 插件。
 
 ## Risks / Trade-offs
 
