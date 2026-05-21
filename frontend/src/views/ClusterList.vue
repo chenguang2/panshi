@@ -534,7 +534,7 @@
                       更多 <DownOutlined />
                     </a-button>
                     <template #overlay>
-                      <a-menu @click="({ key }) => handleNodeAction(cluster, record, key)">
+                      <a-menu @click="(e) => handleNodeAction(cluster, record, e.key)">
                         <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
                           {{ btn.title }}
                         </a-menu-item>
@@ -815,12 +815,12 @@
                 v-for="pg in clusterPluginGroups"
                 :key="pg.id"
                 class="plugin-config-card"
-                :class="{ selected: isPluginGroupSelected(pg.edge_uuid) }"
+                :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
                 @click="togglePluginGroup(pg)"
                 style="width: 280px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; background: #fff;"
               >
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid)" @click.stop="togglePluginGroup(pg)" />
+                  <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)" />
                   <strong style="font-size: 13px;">{{ pg.name }}</strong>
                   <span style="font-size: 11px; color: #999;">v{{ pg.current_version || 0 }}</span>
                 </div>
@@ -999,7 +999,7 @@
 import { ref, reactive, computed, onMounted, watch, h } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import { CloudOutlined, TeamOutlined, CloudServerOutlined, GatewayOutlined, PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin, RoutePlugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -1076,9 +1076,6 @@ function expandAndSwitchTab(cluster: Cluster, tab: string) {
 }
 
 function isExpanded(clusterId: number): boolean {
-  return expandedIds.value.has(clusterId)
-}
-
 const filteredClusters = computed(() => {
   return clusters.value.filter((c: Cluster) => {
     const text = filterText.value.trim().toLowerCase()
@@ -1148,7 +1145,7 @@ function onDrop(event: DragEvent) {
   expandedOrder.value = order
 }
 
-function onDragEnd(event: DragEvent) {
+function onDragEnd(_event: DragEvent) {
   document.querySelectorAll('.card-expanded.drag-over, .card-expanded.dragging').forEach(el => {
     el.classList.remove('drag-over', 'dragging')
   })
@@ -1167,8 +1164,6 @@ const editingUpstream = ref<Upstream | null>(null)
 const editingRoute = ref<Route | null>(null)
 const copyingRoute = ref(false)
 const currentClusterId = ref<number | null>(null)
-const currentUpstreamId = ref<number | null>(null)
-const currentRouteId = ref<number | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
 const diffDrawerVisible = ref(false)
 let diffClusterId = 0
@@ -1206,28 +1201,12 @@ const pluginConfigFormData = reactive({
   selectedPlugins: [] as any[]
 })
 
-const nodeColumns = [
-  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
-  { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
-  { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
-  { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
-  { title: '状态', key: 'status', sorter: true },
-  { title: '操作', key: 'actions', width: 280 }
-]
-
 const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
   { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
   { title: '状态', key: 'status', sorter: true },
-  { title: '操作', key: 'actions', width: 280 }
-]
-
-const upstreamColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
-  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance', sorter: true, customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text) },
-  { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
 
@@ -1252,11 +1231,6 @@ const publishStatusRender = (version: number | null, publishedAt: string | null)
   return h('span', {
     style: 'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #d9d9d9;color:#999;background:#fafafa;',
   }, '未发布')
-}
-
-const formatPublishDate = (isoStr: string | null): string => {
-  if (!isoStr) return ''
-  try { return new Date(isoStr).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) } catch { return '' }
 }
 
 const formatPublishDateTime = (isoStr: string | null): string => {
@@ -1911,19 +1885,6 @@ const handleSubmit = async () => {
   }
 }
 
-const testConnection = async (cluster: Cluster) => {
-  try {
-    await api.post(`/clusters/${cluster.id}/test`)
-    message.success('连接成功')
-  } catch (error) {
-    message.error('连接失败')
-  }
-}
-
-const viewDetail = (cluster: Cluster) => {
-  router.push(`/clusters/${cluster.id}`)
-}
-
 const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
   upstreams: '上游服务',
@@ -2108,10 +2069,10 @@ const deleteCluster = async (cluster: Cluster) => {
     apiEndpoint: `/clusters/${cluster.id}`,
     showResourceStats: true,
     stats,
-    onOk: async (deleteDb: boolean, deleteEdge: boolean) => {
+    onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
       const progressModal = Modal.info({
         title: `删除集群: ${clusterName}`,
@@ -2575,7 +2536,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       }
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
       const modal = Modal.info({
         title: `删除上游: ${upstream.name}`,
@@ -2891,7 +2852,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       }
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
       const modal = Modal.info({
         title: `删除路由: ${route.name}`,
@@ -2989,7 +2950,7 @@ const publishUpstream = async (cluster: Cluster) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布上游: ${cluster.selectedUpstream!.name}`,
@@ -3096,7 +3057,7 @@ const publishRoute = async (cluster: Cluster) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布路由: ${cluster.selectedRoute!.name}`,
@@ -3186,7 +3147,7 @@ const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布上游: ${record.name}`,
@@ -3273,7 +3234,7 @@ const publishRouteByRecord = async (cluster: Cluster, record: Route) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布路由: ${record.name}`,
@@ -3452,7 +3413,7 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       }
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
       const modal = Modal.info({
         title: `删除插件组: ${pc.name}`,
@@ -3549,7 +3510,7 @@ const publishPluginConfig = async (cluster: Cluster, pc?: any) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布插件组: ${target.name}`,
@@ -3692,7 +3653,7 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
     nodes: cluster.nodes,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
       const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
       const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
       addLog(`开始删除: ${gr.name}`); progress.percent = 20; update()
@@ -3727,7 +3688,7 @@ const publishGlobalRule = async (cluster: Cluster, gr: any) => {
   if (!nodeIds.length) return
 
   const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
   const modal = Modal.info({ title: `发布全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
   const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
   addLog(`开始发布: ${gr.name}`); progress.percent = 10; update()
@@ -3905,7 +3866,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       }
-      const progress = { percent: 0, status: 'active' as const }
+      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
       const modal = Modal.info({
         title: `删除静态资源: ${sr.name}`,
@@ -4008,7 +3969,7 @@ const uploadStaticResourceZip = (sr: any) => {
 
     const logs: string[] = []
     const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-    const progress = { percent: 0, status: 'active' as const }
+    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
     const totalSize = file.size
 
     const modal = Modal.info({
@@ -4089,7 +4050,7 @@ const publishStaticResource = async (cluster: Cluster, sr: any) => {
   const addLog = (text: string) => {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const modal = Modal.info({
     title: `发布静态资源: ${sr.name}`,

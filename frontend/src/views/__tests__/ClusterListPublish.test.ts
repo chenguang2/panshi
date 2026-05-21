@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { h } from 'vue'
 
 const formatPublishDate = (isoStr: string | null): string => {
   if (!isoStr) return ''
