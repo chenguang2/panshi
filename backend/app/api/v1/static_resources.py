@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File
@@ -251,6 +252,8 @@ async def delete_static_resource(
                 select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
             )
             nodes = nodes_result.scalars().all()
+            edge_log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "logs", "edge", "static_resources.log")
+            os.makedirs(os.path.dirname(edge_log_path), exist_ok=True)
             for node in nodes:
                 try:
                     client = EdgeClient(
@@ -267,13 +270,16 @@ async def delete_static_resource(
                         admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
                     client.api_key = admin_key
                     delete_url = f"/edge/panshi/admin_static_resources?edge_uuid={resource.edge_uuid}"
-                    print(f"[DEBUG] Deleting from edge node {node.ip}:{node.management_port}, url={delete_url}")
-                    try:
-                        client.raw_delete(delete_url)
-                        results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
-                    except Exception as e:
-                        print(f"[DEBUG] raw_delete failed: {e}")
-                        raise
+                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} {delete_url}\n")
+                    client.raw_delete(delete_url)
+                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} success\n")
+                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
+                except (EdgeConnectionError, EdgeAPIError) as e:
+                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} failed: {e}\n")
+                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
                 except (EdgeConnectionError, EdgeAPIError) as e:
                     results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
         finally:
