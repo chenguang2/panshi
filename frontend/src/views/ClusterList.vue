@@ -2057,10 +2057,17 @@ const deleteCluster = async (cluster: Cluster) => {
         const data = res.data
 
         progress.percent = 60
-        addLog(data.message)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        } else if (deleteDb) {
+          addLog('数据库: 删除失败（无返回结果）')
+        }
         addLog('')
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+        if (edgeResults.length > 0) {
+          addLog('正在从 Edge 节点同步删除...')
         if (edgeResults.length > 0) {
           addLog('Edge 节点删除结果:')
           let successCount = 0
