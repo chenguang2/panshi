@@ -268,9 +268,9 @@ async def delete_static_resource(
                     client.api_key = admin_key
                     edge_uuid = resource.edge_uuid
                     client.raw_delete(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}")
-                    results.append({"node": f"{node.ip}:{node.management_port}", "status": "success", "message": "Edge 节点文件已删除"})
+                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
                 except (EdgeConnectionError, EdgeAPIError) as e:
-                    results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
+                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
         finally:
             sync_db.close()
 
