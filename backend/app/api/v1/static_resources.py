@@ -244,7 +244,7 @@ async def delete_static_resource(
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除，本地文件已清理"})
 
-    if body.delete_edge and resource.route_id:
+    if body.delete_edge and resource.edge_uuid:
         sync_db = _get_sync_session()
         try:
             nodes_result = await db.execute(
@@ -266,7 +266,8 @@ async def delete_static_resource(
                     if not admin_key:
                         admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
                     client.api_key = admin_key
-                    client._request("DELETE", f"/edge/panshi/static_resources/{resource.name}")
+                    edge_uuid = resource.edge_uuid
+                    client.raw_delete(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}")
                     results.append({"node": f"{node.ip}:{node.management_port}", "status": "success", "message": "Edge 节点文件已删除"})
                 except (EdgeConnectionError, EdgeAPIError) as e:
                     results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})

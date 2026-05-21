@@ -546,6 +546,44 @@ class EdgeClient:
         """Partially update plugin metadata (PATCH)."""
         return self._request("PATCH", f"/edge/admin/plugin_metadata/{plugin_name}", data)
 
+    def raw_delete(self, path: str) -> dict[str, Any]:
+        """Send a DELETE request without SM4 encryption.
+        
+        Used when the Edge node's control_api handler receives the
+        resource identifier directly (e.g., via POST body or header),
+        and SM4 encryption is not needed.
+        """
+        import httpx
+
+        headers = {
+            "X-API-KEY": self.api_key,
+        }
+
+        url = f"{self.edge_url}{path}"
+
+        try:
+            response = httpx.delete(url, headers=headers, timeout=10.0, trust_env=False)
+        except httpx.TimeoutException as e:
+            raise EdgeConnectionError(f"Request to {url} timed out: {e}") from e
+        except httpx.ConnectError as e:
+            raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
+
+        if response.status_code not in (200, 201, 204):
+            try:
+                error_data = json.loads(response.text)
+                raise EdgeAPIError(
+                    response.status_code,
+                    error_data.get("error_msg", "Unknown error"),
+                    error_data,
+                )
+            except json.JSONDecodeError:
+                raise EdgeAPIError(response.status_code, response.text)
+
+        if response.status_code == 204 or not response.text:
+            return {}
+
+        return json.loads(response.text)
+
     def reload_plugins(self) -> dict[str, Any]:
         """Reload plugins on edge server."""
         return self._request("PUT", "/edge/admin/plugins/reload", {})

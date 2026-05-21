@@ -261,20 +261,24 @@ local function handle_upload()
 end
 
 
-local function handle_delete(name)
-  if not name or name == "" then
-    return 400, { error_msg = "resource name is required" }
+local function handle_delete(edge_uuid)
+  if not edge_uuid or edge_uuid == "" then
+    return 400, { error_msg = "edge_uuid is required" }
   end
 
-  local resource_dir = build_resource_path(name)
+  if string.find(edge_uuid, "..") or string.find(edge_uuid, "/") or string.find(edge_uuid, "'") then
+    return 400, { error_msg = "invalid edge_uuid" }
+  end
+
+  local resource_dir = build_resource_path(edge_uuid)
   remove_directory(resource_dir)
 
-  log_info("static resource deleted: ", name)
+  log_info("static resource deleted: ", edge_uuid)
 
   return 200, {
     action = "delete",
     node = {
-      key = build_resource_key(name),
+      key = build_resource_key(edge_uuid),
       value = nil,
     },
   }
@@ -355,7 +359,12 @@ function _M.control_api()
       methods = {"DELETE"},
       uris = {"/edge/panshi/admin_static_resources"},
       handler = function()
-        return handle_delete()
+        local args = ngx.req.get_uri_args()
+        local edge_uuid = args.edge_uuid
+        if not edge_uuid or edge_uuid == "" then
+          return 400, { error_msg = "edge_uuid query parameter is required" }
+        end
+        return handle_delete(edge_uuid)
       end,
     },
     {
