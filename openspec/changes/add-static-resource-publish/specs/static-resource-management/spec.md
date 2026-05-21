@@ -18,8 +18,10 @@
 
 #### Scenario: 发布到活跃节点
 - **WHEN** 用户点击发布按钮
-- **THEN** 系统解压 zip，将文件通过 Admin API 分发到每个活跃 Edge 节点
-- **AND** 系统在 Edge 节点上创建对应的路由（`uri: /static/{name}/*plugin: static_resource`）
+- **THEN** 系统弹出节点选择弹窗，用户选择目标节点后确认
+- **AND** 系统读取本地 zip 文件，通过 `raw_put` 直接发送原始二进制到各节点
+- **AND** URL 格式为 `PUT /edge/panshi/admin_static_resources?edge_uuid={uuid}`
+- **AND** 不经过 SM4 加密
 
 #### Scenario: 发布结果展示
 - **WHEN** 发布完成
