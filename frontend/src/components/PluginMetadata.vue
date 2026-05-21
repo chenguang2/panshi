@@ -408,15 +408,18 @@ const deletePlugin = (item: ConfiguredPlugin) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        addLog('正在从数据库删除...')
-        progress.percent = 40; update()
         const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`, {
           data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined }
         })
         const data = response.data
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog('正在从数据库删除...')
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        }
         addLog('')
+        update()
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
         if (edgeResults.length > 0) {

@@ -1321,8 +1321,8 @@ client._request("DELETE", f"/edge/panshi/static_resources")
 根据现在的实际情况需要修改 add-static-resource-publish 中的文档，列一下修改点，并同步
 
 静态资源管理的发布：
-修改删除edge节点部分：
-1. 现在不用传递 admin_key ，并进行 sm4 的加解密
+修改部分：
+1. 现在不用传递 admin_key ，不用 sm4 的加解密
 2. 调用的接口：这个是错误的
 client._request("DELETE", f"/edge/panshi/static_resources")
 
@@ -1332,12 +1332,17 @@ client._request("DELETE", f"/edge/panshi/static_resources")
       methods = {"PUT"},
       uris = {"/edge/panshi/admin_static_resources"},
       handler = function()
-        return handle_upload()
+        local args = ngx.req.get_uri_args()
+        local edge_uuid = args["edge_uuid"] or ""
+        log_error("edge_uuid=[" .. edge_uuid .. "]")
+        if not edge_uuid or edge_uuid == "" then
+          return 400, { error_msg = "edge_uuid query parameter is required" }
+        end        
+        return handle_upload(edge_uuid)
       end,
     }
 
-因为删除静态资源需要 edge_uuid, 需要讨论一下这个edge_uuid 放在什么地方传递好？ 你给个方案对比一下
+因为发布静态资源需要 edge_uuid , 作为 url 参数发送
 
-还要确认一下：
-4. 删除 Edge 节点文件（第 247–274 行）— 勾选了"同时删除 Edge 节点文件"时执行
-这个是什么意思？ 不可以单独删除 Edge 节点文件吗？ 我理解 db 和 edge 节点都是可以单独删除的
+
+

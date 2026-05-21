@@ -2886,6 +2886,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
     title: `确定要删除路由 "${route.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
     nodes: cluster.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -3446,6 +3447,7 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
     title: `确定要删除插件组 "${pc.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/plugin_configs/${pc.id}`,
     nodes: cluster.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -3688,6 +3690,7 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
     title: `确定要删除全局规则 "${gr.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
     nodes: cluster.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
       const progress = { percent: 0, status: 'active' as const }
       const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
@@ -3897,6 +3900,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
     title: `确定删除静态资源 "${sr.name}"？`,
     apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
     nodes: cluster.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
