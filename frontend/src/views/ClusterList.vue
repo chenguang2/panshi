@@ -3875,7 +3875,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
           addLog('✅ 删除完成!')
         } else if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
-          addLog('⚠️ 部分删除失败（数据库已删除），请手动清理 Edge 节点')
+          addLog(`⚠️ 部分删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理 Edge 节点`)
         } else {
           progress.status = 'success'
           addLog('✅ 数据库已删除')
