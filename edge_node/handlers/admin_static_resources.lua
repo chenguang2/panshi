@@ -357,12 +357,11 @@ function _M.control_api()
     },
     {
       methods = {"DELETE"},
-      uris = {"/edge/panshi/admin_static_resources"},
-      handler = function()
-        local args = ngx.req.get_uri_args()
-        local edge_uuid = args.edge_uuid
+      uris = {"/edge/panshi/admin_static_resources/*"},
+      handler = function(params)
+        local edge_uuid = params.edge_uuid
         if not edge_uuid or edge_uuid == "" then
-          return 400, { error_msg = "edge_uuid query parameter is required" }
+          return 400, { error_msg = "edge_uuid is required" }
         end
         return handle_delete(edge_uuid)
       end,

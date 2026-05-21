@@ -2068,7 +2068,6 @@ const deleteCluster = async (cluster: Cluster) => {
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
         if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
-        if (edgeResults.length > 0) {
           addLog('Edge 节点删除结果:')
           let successCount = 0
           let failCount = 0
@@ -3838,15 +3837,15 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        addLog('正在从数据库删除...')
-        progress.percent = 40
-        updateContent()
-
         const res = await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
         const data = res.data
 
         progress.percent = 60
-        addLog(`数据库: ${data.message}`)
+        const dbResult = data.results?.find((r: any) => r.scope === 'database')
+        if (dbResult) {
+          addLog('正在从数据库删除...')
+          addLog(`数据库: ${dbResult.message || '已删除'}`)
+        }
         addLog('')
 
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
