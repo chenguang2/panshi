@@ -359,7 +359,7 @@ function _M.control_api()
       methods = {"DELETE"},
       uris = {"/edge/panshi/admin_static_resources/*"},
       handler = function(params)
-        local edge_uuid = params.edge_uuid
+        local edge_uuid = params.name
         if not edge_uuid or edge_uuid == "" then
           return 400, { error_msg = "edge_uuid is required" }
         end
