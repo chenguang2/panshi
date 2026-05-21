@@ -455,6 +455,47 @@ BUILTIN_PLUGINS = [
                 "hints": "访问目录时默认返回的文件名"
             }
         }
+    },
+    {
+        "name": "security_common_body",
+        "description": "安全防护 - Body 检查（对请求体内容进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配 body 中的关键字，命中后拦截用户请求",
+                "examples": [["jndi\\:(?:ldap|rmi|iiop|iiopname|corbaname|dns|nis)", "\\.\\./", "\\$\\{"]],
+                "hints": "匹配请求体中的关键字，由正则表达式组成的黑名单列表"
+            },
+            "maxsize": {
+                "type": "integer",
+                "default": 4096,
+                "description": "请求体大小（字节），超过限制大小的不进行匹配",
+                "examples": [4096, 8192],
+                "hints": "超过此大小的请求体不进行关键字匹配，默认 4096"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "命中黑名单后返回的 HTTP 状态码，默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request data is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            },
+            "bypass_hugebody": {
+                "type": "boolean",
+                "default": True,
+                "description": "当请求体大小超过 maxsize 时是否绕过检查",
+                "examples": [True, False],
+                "hints": "设为 true 时，请求体超限则直接放行；设为 false 时，超限也检查，默认 true"
+            }
+        }
     }
 ]
 

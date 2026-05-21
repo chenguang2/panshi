@@ -21,7 +21,7 @@ string，
 拦截后，响应的信息
 
 bypass_hugebody
-boolean，默认值，false
+boolean，默认值，true
 当设置为 true 时，如果请求体大小超过maxsize时，将绕过检查。
 
 说明：
