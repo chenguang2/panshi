@@ -119,7 +119,7 @@
                 <JsonEditorVue
                   v-if="expandedExamples[key] !== false"
                   :model-value="schema.examples[0]"
-                  mode="text"
+                  :mode="textMode"
                   read-only
                   :navigation-bar="false"
                   :status-bar="false"
@@ -157,7 +157,7 @@
                   <JsonEditorVue
                     v-if="expandedExamples[key] !== false"
                     :model-value="schema.examples[0]"
-                    mode="text"
+                    :mode="textMode"
                     read-only
                     :navigation-bar="false"
                     :status-bar="false"
@@ -232,7 +232,7 @@
                   <JsonEditorVue
                     v-if="expandedExamples[key] !== false"
                     :model-value="schema.examples[0]"
-                    mode="text"
+                    :mode="textMode"
                     read-only
                     :navigation-bar="false"
                     :status-bar="false"
@@ -293,7 +293,7 @@
                   <JsonEditorVue
                     v-if="expandedExamples[key] !== false"
                     :model-value="schema.examples[0]"
-                    mode="text"
+                    :mode="textMode"
                     read-only
                     :navigation-bar="false"
                     :status-bar="false"
@@ -325,9 +325,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { Plugin, RoutePlugin } from '@/types'
 import JsonEditorVue from 'json-editor-vue'
+import { Mode } from 'vanilla-jsoneditor'
+
+const textMode = Mode.text
 
 const props = defineProps<{
   open: boolean
@@ -364,7 +367,7 @@ const jsonConfig = ref('')
 const jsonError = ref('')
 const fullJsonConfig = ref('')
 const jsonEditorValue = ref<any>({})
-const jsonEditorMode = ref<string>('text')
+const jsonEditorMode = ref<Mode>(Mode.text)
 
 // 同步 jsonEditorValue ↔ jsonConfig
 watch(jsonEditorValue, (newVal) => {
@@ -419,17 +422,6 @@ const isHeadersField = (schema: any): boolean => {
   // response-rewrite: headers 只有 set，add 在 add_headers 字段
   // proxy-rewrite: headers 有 set + add + remove
   return keys.includes('set') || keys.includes('add') || keys.includes('remove')
-}
-
-// 格式化 JSON
-const formatJson = () => {
-  try {
-    const parsed = JSON.parse(jsonConfig.value)
-    jsonConfig.value = JSON.stringify(parsed, null, 2)
-    jsonError.value = ''
-  } catch {
-    jsonError.value = 'JSON 格式错误，无法格式化'
-  }
 }
 
 // 切换手风琴展开状态
@@ -521,24 +513,6 @@ const deserializeHeaders = (json: Record<string, any>) => {
 interface KvItem { id: number; key: string; value: string }
 const simpleKvData = ref<KvItem[]>([{ id: 1, key: '', value: '' }])
 
-const addSimpleKvRow = () => {
-  simpleKvData.value.push({ id: Date.now(), key: '', value: '' })
-}
-
-const removeSimpleKvRow = (idx: number) => {
-  if (simpleKvData.value.length > 1) {
-    simpleKvData.value.splice(idx, 1)
-    syncSimpleKv()
-  }
-}
-
-const syncSimpleKv = () => {
-  const obj: Record<string, any> = {}
-  simpleKvData.value.forEach(item => {
-    if (item.key) obj[item.key] = item.value
-  })
-  formData.value.headers = obj
-}
 const getFieldType = (schema: any): string => {
   if (schema.enum) return 'enum'
   if (schema.type === 'integer') return 'number'
@@ -563,17 +537,9 @@ const isComplexExample = (example: any): boolean => {
 
 // 示例展开状态
 const expandedExamples = reactive<Record<string, boolean>>({})
-const exampleEditorModes = reactive<Record<string, string>>({})
 
 const toggleExample = (fieldKey: string) => {
   expandedExamples[fieldKey] = !expandedExamples[fieldKey]
-}
-
-// 默认展开所有复杂示例
-const ensureExampleExpanded = (fieldKey: string) => {
-  if (expandedExamples[fieldKey] === undefined) {
-    expandedExamples[fieldKey] = true
-  }
 }
 
 // 从 JSON 解析到表单数据

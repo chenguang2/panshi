@@ -126,8 +126,7 @@ import {
   DragOutlined,
   EditOutlined,
   DeleteOutlined,
-  InboxOutlined,
-  QuestionCircleOutlined
+  InboxOutlined
 } from '@ant-design/icons-vue'
 import { Empty, Tooltip as ATooltip } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
