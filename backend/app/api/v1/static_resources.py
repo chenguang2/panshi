@@ -248,9 +248,10 @@ async def delete_static_resource(
     if body.delete_edge and resource.edge_uuid:
         sync_db = _get_sync_session()
         try:
-            nodes_result = await db.execute(
-                select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
-            )
+            node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+            if body.node_ids:
+                node_query = node_query.where(Node.id.in_(body.node_ids))
+            nodes_result = await db.execute(node_query)
             nodes = nodes_result.scalars().all()
             edge_log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "logs", "edge", "static_resources.log")
             os.makedirs(os.path.dirname(edge_log_path), exist_ok=True)

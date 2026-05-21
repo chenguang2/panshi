@@ -440,7 +440,7 @@
             </div>
           </div>
           <div v-else-if="cluster.activeTab === 'globalPlugins'" class="tab-content">
-            <PluginMetadata :cluster-id="cluster.id" />
+            <PluginMetadata :cluster-id="cluster.id" :nodes="cluster.nodes" />
           </div>
           <div v-else class="tab-content node-tab">
             <div class="node-actions">
@@ -1938,20 +1938,42 @@ const resourceLabels: Record<string, string> = {
 function showDeleteConfirm(opts: {
   title: string
   apiEndpoint: string
-  onOk: (deleteDb: boolean, deleteEdge: boolean) => void
+  onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
   showResourceStats?: boolean
   stats?: Record<string, number>
+  nodes?: { id: number; ip: string; management_port: number }[]
 }) {
   let deleteDb = false
   let deleteEdge = false
+  const selectedNodeIds: Set<number> = new Set((opts.nodes || []).map(n => n.id))
   let confirmModal: any
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
 
   const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || deleteEdge
+    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
     confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
   }
+
+  const nodeCheckboxContent = (opts.nodes && opts.nodes.length > 0) ? h('div', {
+    style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (deleteEdge ? 'block' : 'none'),
+  }, [
+    h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
+    ...opts.nodes.map(n =>
+      h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
+        h('input', {
+          type: 'checkbox', checked: selectedNodeIds.has(n.id),
+          onInput: (e: any) => {
+            if (e.target.checked) selectedNodeIds.add(n.id)
+            else selectedNodeIds.delete(n.id)
+            updateOkDisabled()
+          },
+          style: 'width: 14px; height: 14px; cursor: pointer;',
+        }),
+        h('span', {}, `${n.ip}:${n.management_port}`),
+      ])
+    ),
+  ]) : null
 
   const content = h('div', { style: 'font-size: 13px;' }, [
     h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
@@ -1987,14 +2009,76 @@ function showDeleteConfirm(opts: {
       h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
         h('input', {
           type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => { deleteEdge = e.target.checked; updateOkDisabled() },
+          onInput: (e: any) => {
+            deleteEdge = e.target.checked
+            if (!deleteEdge) selectedNodeIds.clear()
+            // update the node list visibility by re-rendering
+            confirmModal.update({
+              content: rebuildContent(true)
+            })
+            updateOkDisabled()
+          },
           style: 'width: 16px; height: 16px; cursor: pointer;',
         }),
         h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '删除 Edge 节点上的配置'),
+        h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
       ]),
+      deleteEdge && opts.nodes ? nodeCheckboxContent : null,
     ]),
   ])
+
+  function rebuildContent(force?: boolean): any {
+    const showNodes = force !== undefined ? force : deleteEdge
+    const nc = (opts.nodes && opts.nodes.length > 0) ? h('div', {
+      style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (showNodes ? 'block' : 'none'),
+    }, [
+      h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
+      ...opts.nodes.map(n =>
+        h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
+          h('input', {
+            type: 'checkbox', checked: selectedNodeIds.has(n.id),
+            onInput: (e: any) => {
+              if (e.target.checked) selectedNodeIds.add(n.id)
+              else selectedNodeIds.delete(n.id)
+              updateOkDisabled()
+            },
+            style: 'width: 14px; height: 14px; cursor: pointer;',
+          }),
+          h('span', {}, `${n.ip}:${n.management_port}`),
+        ])
+      ),
+    ]) : null
+
+    return h('div', { style: 'font-size: 13px;' }, [
+      h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
+      h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
+        h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
+          h('input', {
+            type: 'checkbox', checked: deleteDb,
+            onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
+            style: 'width: 16px; height: 16px; cursor: pointer;',
+          }),
+          h('span', { style: 'font-size: 14px;' }, '数据库'),
+          h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
+        ]),
+        h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
+          h('input', {
+            type: 'checkbox', checked: deleteEdge,
+            onInput: (e: any) => {
+              deleteEdge = e.target.checked
+              if (!deleteEdge) selectedNodeIds.clear()
+              confirmModal.update({ content: rebuildContent(true) })
+              updateOkDisabled()
+            },
+            style: 'width: 16px; height: 16px; cursor: pointer;',
+          }),
+          h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
+          h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
+        ]),
+        showNodes ? nc : null,
+      ]),
+    ])
+  }
 
   confirmModal = Modal.confirm({
     title: '确认删除',
@@ -2004,7 +2088,7 @@ function showDeleteConfirm(opts: {
     cancelText: '取消',
     okButtonProps: { disabled: true },
     onOk: () => {
-      opts.onOk(deleteDb, deleteEdge)
+      opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
     },
   })
 }
@@ -2053,7 +2137,7 @@ const deleteCluster = async (cluster: Cluster) => {
         progress.percent = 40
         updateContent()
 
-        const res = await api.delete(`/clusters/${cluster.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const res = await api.delete(`/clusters/${cluster.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         const data = res.data
 
         progress.percent = 60
@@ -2175,9 +2259,9 @@ const deleteNode = (cluster: Cluster, node?: Node) => {
   showDeleteConfirm({
     title: `确定要删除节点 "${target.ip}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/nodes/${target.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       try {
-        await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         message.success('节点已删除')
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items
@@ -2485,7 +2569,8 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   showDeleteConfirm({
     title: `确定要删除上游 "${upstream.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    nodes: cluster.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -2513,7 +2598,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const res = await api.delete(`/clusters/${cluster.id}/upstreams/${upstream.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         const data = res.data
 
         progress.percent = 60
@@ -2800,7 +2885,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
   showDeleteConfirm({
     title: `确定要删除路由 "${route.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    nodes: cluster.nodes,
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -2828,7 +2913,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         const data = res.data
 
         progress.percent = 60
@@ -3360,7 +3445,7 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
   showDeleteConfirm({
     title: `确定要删除插件组 "${pc.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/plugin_configs/${pc.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    nodes: cluster.nodes,
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -3388,7 +3473,7 @@ const deletePluginConfig = (cluster: Cluster, pc: any) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const res = await api.delete(`/clusters/${cluster.id}/plugin_configs/${pc.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         const data = res.data
 
         progress.percent = 60
@@ -3602,7 +3687,7 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
   showDeleteConfirm({
     title: `确定要删除全局规则 "${gr.name}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    nodes: cluster.nodes,
       const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
       const progress = { percent: 0, status: 'active' as const }
       const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
@@ -3610,7 +3695,7 @@ const deleteGlobalRule = (cluster: Cluster, gr: any) => {
       addLog(`开始删除: ${gr.name}`); progress.percent = 20; update()
       await new Promise(r => setTimeout(r, 400))
       try {
-        const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } }); const data = res.data
+        const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } }); const data = res.data
         progress.percent = 60
         const dbResult = data.results?.find((r: any) => r.scope === 'database')
         if (dbResult) { addLog('正在从数据库删除...'); addLog(`数据库: ${dbResult.message || '已删除'}`) }
@@ -3811,7 +3896,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
   showDeleteConfirm({
     title: `确定删除静态资源 "${sr.name}"？`,
     apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
-    onOk: async (deleteDb, deleteEdge) => {
+    nodes: cluster.nodes,
       const logs: string[] = []
       const addLog = (text: string) => {
         logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -3839,7 +3924,7 @@ const deleteStaticResource = async (cluster: Cluster, sr: any) => {
       await new Promise(r => setTimeout(r, 400))
 
       try {
-        const res = await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge } })
+        const res = await api.delete(`/clusters/${cluster.id}/static-resources/${sr.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
         const data = res.data
 
         progress.percent = 60
