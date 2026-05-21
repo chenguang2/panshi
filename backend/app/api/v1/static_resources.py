@@ -424,7 +424,8 @@ async def publish_static_resource(
                     admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
                 client.api_key = admin_key
 
-                client.raw_put(f"/edge/panshi/static_resources/{resource.name}", zip_data)
+                edge_uuid = resource.edge_uuid or ""
+                client.raw_put(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}", zip_data)
 
                 results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
             except (EdgeConnectionError, EdgeAPIError) as e:

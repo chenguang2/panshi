@@ -176,7 +176,7 @@ local function parse_multipart_file(req_body, content_type)
   return file_name, file_data
 end
 
-local function handle_upload()
+local function handle_upload(edge_uuid)
   -- 已经通过 req_get_body() 和 ngx.req.get_headers() 拿到了以下两个变量：
   local req_body = req_get_body()
   local headers = ngx.req.get_headers()
@@ -190,9 +190,9 @@ local function handle_upload()
       return 400, { error_msg = "未在请求体中解析出有效的文件" }
   end
 
-  local name = headers ["name"] or ""
+  local name = edge_uuid
   if not name or name == "" then
-    return 400, { error_msg = "resource name is required" }
+    return 400, { error_msg = "edge_uuid is required" }
   end
 
   if string.find(name, "..", 1, true) or string.find(name, "/",1, true) or string.find(name, "'",1, true) then
@@ -352,7 +352,13 @@ function _M.control_api()
       methods = {"PUT"},
       uris = {"/edge/panshi/admin_static_resources"},
       handler = function()
-        return handle_upload()
+        local args = ngx.req.get_uri_args()
+        local edge_uuid = args.edge_uuid or ""
+        log_error("[admin_static_resources] PUT called, edge_uuid=" .. tostring(edge_uuid))
+        if not edge_uuid or edge_uuid == "" then
+          return 400, { error_msg = "edge_uuid query parameter is required" }
+        end
+        return handle_upload(edge_uuid)
       end,
     },
     {
