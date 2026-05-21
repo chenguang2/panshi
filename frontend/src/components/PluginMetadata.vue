@@ -440,7 +440,7 @@ const deletePlugin = (item: ConfiguredPlugin) => {
         if (edgeResults.some((r: any) => r.status === 'failed')) {
           progress.status = 'exception'
           addLog('')
-          addLog('⚠️ 部分节点删除失败（数据库已删除），请手动清理')
+          addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
         } else {
           progress.status = 'success'
           addLog('')
