@@ -44,7 +44,9 @@ echo "  源路径: $PYTHON_BIN"
 PYTHON_DIR=$(dirname "$(dirname "$PYTHON_BIN")")
 TARGET_PYTHON_DIR="$PROJECT_ROOT/backend/python"
 rm -rf "$TARGET_PYTHON_DIR"
-cp -r "$PYTHON_DIR" "$TARGET_PYTHON_DIR"
+# -rL: 跟踪符号链接拷贝实际内容（backend/python 可能被 ln -s 到 uv 缓存）
+cp -rL "$PYTHON_DIR" "$TARGET_PYTHON_DIR"
+chmod -R u+rwX,go+rX "$TARGET_PYTHON_DIR"
 echo "  已拷贝到: $TARGET_PYTHON_DIR"
 
 # ---------- 2. 创建 .venv（--copies 确保是文件副本，非符号链接）----------
@@ -60,7 +62,10 @@ echo "  .venv 已创建"
 # ---------- 3. 安装后端依赖 ----------
 echo ""
 echo "[3/4] 安装后端依赖..."
+# standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 强制指向拷贝后的 Python
+export PYTHONHOME="$TARGET_PYTHON_DIR"
 "$PROJECT_ROOT/backend/.venv/bin/pip" install -e "$PROJECT_ROOT/backend"
+unset PYTHONHOME
 echo "  后端依赖安装完成"
 
 # ---------- 4. 构建前端 ----------
@@ -68,7 +73,7 @@ echo ""
 echo "[4/4] 构建前端..."
 cd "$PROJECT_ROOT/frontend"
 npm install
-npm run build:deploy
+npm run build
 echo "  前端构建完成 → frontend/dist/"
 
 # ---------- 完成 ----------

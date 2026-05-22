@@ -35,6 +35,8 @@ sleep 1
 # ---------- 启动后端（自动托管前端 dist/ 静态文件）----------
 echo ""
 echo "Starting Backend..."
+# standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 指向项目内 Python
+export PYTHONHOME="$PROJECT_ROOT/backend/python"
 cd "$PROJECT_ROOT/backend"
 nohup "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 9000 >> "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
