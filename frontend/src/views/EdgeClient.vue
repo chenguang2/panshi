@@ -395,7 +395,7 @@
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
               <a-tag
-                v-for="(pcfg, pname) in (typeof pg.value?.plugins === 'string' ? JSON.parse(pg.value.plugins) : (pg.value?.plugins || {}))"
+                v-for="(_pcfg, pname) in (typeof pg.value?.plugins === 'string' ? JSON.parse(pg.value.plugins) : (pg.value?.plugins || {}))"
                 :key="pname"
                 color="blue"
                 style="font-size: 11px;"
@@ -494,11 +494,6 @@ const currentSignal = ref<AbortSignal | undefined>(undefined)
 // AbortController for cancel query
 let abortController: AbortController | null = null
 
-function getSignal(): AbortSignal | undefined {
-  abortController = new AbortController()
-  return abortController.signal
-}
-
 function cancelQuery() {
   if (abortController) {
     abortController.abort()
@@ -509,13 +504,6 @@ function cancelQuery() {
 
 onUnmounted(() => {
   cancelQuery()
-})
-
-const canQuery = computed(() => {
-  if (inputMode.value === 'cluster') {
-    return !!selectedNode.value
-  }
-  return manualNode.value.trim().includes(':')
 })
 
 const upstreams = ref<any[]>([])
@@ -590,11 +578,6 @@ const routeColumns = [
   { title: '方法', key: 'methods', width: 180 },
   { title: '上游', key: 'upstream', width: 150 },
   { title: '操作', key: 'actions', width: 150 }
-]
-
-const pluginColumns = [
-  { title: '名称', key: 'name', width: 150 },
-  { title: '配置', key: 'config' }
 ]
 
 const pluginMetadataColumns = [
@@ -879,7 +862,7 @@ const handleUpstreamSubmit = async () => {
   const action = upstreamModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
   const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const progressModal = Modal.info({
     title: `${action}上游: ${payload.name || upstreamForm.name}`,
@@ -1067,7 +1050,7 @@ const handleRouteSubmit = async () => {
   const action = routeModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
   const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const progressModal = Modal.info({
     title: `${action}路由: ${payload.name || routeForm.name}`,
@@ -1196,7 +1179,7 @@ const handleGlobalRuleSubmit = async () => {
   const action = globalRuleModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
   const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const progressModal = Modal.info({
     title: `${action}全局规则: ${globalRuleForm.id}`,
@@ -1292,7 +1275,7 @@ const handlePluginConfigSubmit = async () => {
   const action = pluginConfigModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
   const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const progressModal = Modal.info({
     title: `${action}插件组: ${pluginConfigForm.desc || pluginConfigForm.id}`,
@@ -1406,7 +1389,7 @@ const handlePluginMetadataSubmit = async () => {
   const action = pluginMetadataModalMode.value === 'create' ? '创建' : '更新'
   const logs: string[] = []
   const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
-  const progress = { percent: 0, status: 'active' as const }
+  const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
 
   const progressModal = Modal.info({
     title: `${action}插件元数据: ${pluginMetadataForm.name}`,
@@ -1562,7 +1545,7 @@ watch(selectedClusterId, async (newClusterId, oldClusterId) => {
 })
 
 // Watch for node changes to load data
-watch(selectedNode, async (newNode) => {
+watch(selectedNode, async (_newNode) => {
   // 不再自动调用查询，用户点击「查询」按钮才加载
 })
 </script>

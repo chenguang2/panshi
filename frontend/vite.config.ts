@@ -20,6 +20,5 @@ export default defineConfig({
         changeOrigin: true
       }
     }
-  },
-  cacheDir: '/tmp/vite-cache'
+  }
 })

@@ -56,7 +56,7 @@
             <a-menu-item key="layout-sidebar" :class="{ active: themeStore.layoutMode === 'sidebar' }" @click="themeStore.setLayoutMode('sidebar')">
               <span class="layout-icon">◧</span> 侧边栏
             </a-menu-item>
-            <a-menu-item key="layout-topnav" :class="{ active: themeStore.layoutMode === 'topnav' }" @click="themeStore.setLayoutMode('topnav')">
+            <a-menu-item key="layout-topnav" :class="{ active: String(themeStore.layoutMode) === 'topnav' }" @click="themeStore.setLayoutMode('topnav')">
               <span class="layout-icon">◨</span> 顶部导航
             </a-menu-item>
             <a-menu-item key="layout-fullwidth" :class="{ active: themeStore.layoutMode === 'fullwidth' }" @click="themeStore.setLayoutMode('fullwidth')">
@@ -106,9 +106,9 @@
               <a-menu-item v-if="isAdmin" key="users" @click="router.push('/users')"><UserOutlined /> 用户管理</a-menu-item>
               <a-menu-divider v-if="isAdmin" />
               <a-sub-menu key="layout-group" title="界面布局">
-                <a-menu-item key="layout-sidebar" :class="{ active: themeStore.layoutMode === 'sidebar' }" @click="themeStore.setLayoutMode('sidebar')">◧ 侧边栏</a-menu-item>
-                <a-menu-item key="layout-topnav" :class="{ active: themeStore.layoutMode === 'topnav' }" @click="themeStore.setLayoutMode('topnav')">◨ 顶部导航</a-menu-item>
-                <a-menu-item key="layout-fullwidth" :class="{ active: themeStore.layoutMode === 'fullwidth' }" @click="themeStore.setLayoutMode('fullwidth')">▣ 全宽</a-menu-item>
+                <a-menu-item key="layout-sidebar" :class="{ active: String(themeStore.layoutMode) === 'sidebar' }" @click="themeStore.setLayoutMode('sidebar')">◧ 侧边栏</a-menu-item>
+                <a-menu-item key="layout-topnav" :class="{ active: String(themeStore.layoutMode) === 'topnav' }" @click="themeStore.setLayoutMode('topnav')">◨ 顶部导航</a-menu-item>
+                <a-menu-item key="layout-fullwidth" :class="{ active: String(themeStore.layoutMode) === 'fullwidth' }" @click="themeStore.setLayoutMode('fullwidth')">▣ 全宽</a-menu-item>
               </a-sub-menu>
               <a-menu-divider />
               <a-sub-menu key="theme-group" title="主题色">
@@ -181,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -196,7 +196,7 @@ import {
   NodeIndexOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { useThemeStore, themeColorMap } from '@/stores/theme'
+import { useThemeStore, type ThemeColor } from '@/stores/theme'
 
 const router = useRouter()
 const route = useRoute()

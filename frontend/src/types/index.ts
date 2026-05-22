@@ -122,6 +122,9 @@ export interface Route {
   remote_addrs?: string
   vars?: [string, string, string][]
   advanced_match_enabled?: boolean
+  current_version?: number
+  published_at?: string
+  plugins?: Record<string, any>
 }
 
 export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'

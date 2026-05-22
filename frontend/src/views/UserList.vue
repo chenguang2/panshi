@@ -134,7 +134,7 @@ const loadUserPermissions = async (userId: number) => {
   }
 }
 
-const onPermissionChange = (key: string, checked: boolean) => {
+const onPermissionChange = (_key: string, _checked: boolean) => {
   // Will be saved on modal submit
 }
 
