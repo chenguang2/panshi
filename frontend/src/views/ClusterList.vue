@@ -376,7 +376,7 @@
                 </div>
                 <div v-if="gr.description" style="font-size: 12px; color: #666; margin-bottom: 12px;">{{ gr.description }}</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;">
-                  <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="blue" style="cursor: pointer;" @click.stop="viewGlobalRulePluginConfig(gr, pname, cfg)">{{ pname }}</a-tag>
+                  <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="blue" style="cursor: pointer;" @click.stop="viewGlobalRulePluginConfig(gr, pname as string, cfg)">{{ pname }}</a-tag>
                   <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" style="font-size: 12px; color: #ccc;">无插件</span>
                 </div>
                 <div style="display: flex; gap: 4px; align-items: center;">
@@ -534,7 +534,7 @@
                       更多 <DownOutlined />
                     </a-button>
                     <template #overlay>
-                      <a-menu @click="(e) => handleNodeAction(cluster, record, e.key)">
+                      <a-menu @click="(e: { key: string }) => handleNodeAction(cluster, record, e.key)">
                         <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
                           {{ btn.title }}
                         </a-menu-item>
@@ -998,7 +998,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, h } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
-import { useRouter } from 'vue-router'
 import { PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Node, Upstream, Route, Plugin, RoutePlugin } from '@/types'
@@ -1010,7 +1009,6 @@ import PluginMetadata from '@/components/PluginMetadata.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 
-const router = useRouter()
 const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
@@ -1075,7 +1073,6 @@ function expandAndSwitchTab(cluster: Cluster, tab: string) {
   handleTabClick(cluster, tab)
 }
 
-function isExpanded(clusterId: number): boolean {
 const filteredClusters = computed(() => {
   return clusters.value.filter((c: Cluster) => {
     const text = filterText.value.trim().toLowerCase()
@@ -1176,7 +1173,7 @@ const viewGrDrawerVisible = ref(false)
 const viewingGr = ref<any>(null)
 const nameError = ref('')
 const versionModalVisible = ref(false)
-const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule'>('upstream')
+const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
 const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
@@ -2177,7 +2174,7 @@ const editNode = (cluster: Cluster, node?: Node) => {
   nodeForm.ip = target.ip
   nodeForm.service_port = target.service_port
   nodeForm.management_port = target.management_port
-  nodeForm.edge_path = target.edge_path
+  nodeForm.edge_path = target.edge_path || ''
   nodeForm.status = target.status
   nodeModalVisible.value = true
 }
@@ -2202,7 +2199,7 @@ const handleNodeSubmit = async () => {
     if (cluster) {
       const res = await api.get(`/clusters/${cluster.id}/nodes`)
       cluster.nodes = res.data.items
-      cluster.node_count = cluster.nodes.length
+      cluster.node_count = cluster.nodes!.length
     }
     loadClusters()
   } catch (error: any) {
@@ -2226,7 +2223,7 @@ const deleteNode = (cluster: Cluster, node?: Node) => {
         message.success('节点已删除')
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items
-        cluster.node_count = cluster.nodes.length
+        cluster.node_count = cluster.nodes!.length
         cluster.selectedNode = null
         loadClusters()
       } catch (error: any) {
@@ -2492,7 +2489,7 @@ const handleUpstreamSubmit = async () => {
     if (c) {
       const res = await api.get(`/clusters/${c.id}/upstreams`)
       c.upstreams = res.data.items
-      c.upstream_count = c.upstreams.length
+      c.upstream_count = c.upstreams!.length
     }
   } catch (error: any) {
     const detail = error.response?.data?.detail
@@ -2521,7 +2518,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
   if (!cluster.routes || cluster.routes.length === 0) {
     await loadRoutes(cluster)
   }
-  const linkedRoutes = cluster.routes.filter((r: Route) => r.upstream_id === upstream.id)
+  const linkedRoutes = cluster.routes!.filter((r: Route) => r.upstream_id === upstream.id)
   if (linkedRoutes.length > 0) {
     const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
     message.error(`该上游已被路由 "${routeNames}" 引用，请先删除这些路由`)
@@ -2607,7 +2604,7 @@ const deleteUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
 
         const res2 = await api.get(`/clusters/${cluster.id}/upstreams`)
         cluster.upstreams = res2.data.items
-        cluster.upstream_count = cluster.upstreams.length
+        cluster.upstream_count = cluster.upstreams!.length
         cluster.selectedUpstream = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
@@ -2652,7 +2649,7 @@ const showAddRouteModal = async (cluster: Cluster) => {
     plugin_config_ids: []
   })
   routeModalActiveTab.value = 'basic'
-  if (cluster.plugin_configs?.length > 0 || !cluster.plugin_configs) {
+  if ((cluster.plugin_configs?.length ?? 0) > 0 || !cluster.plugin_configs) {
     await loadPluginConfigs(cluster)
   }
   routeModalVisible.value = true
@@ -2774,7 +2771,7 @@ const handleRouteSubmit = async () => {
 
     let routeId: number
     if (editingRoute.value) {
-      const res = await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)
+      await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)
       routeId = editingRoute.value.id
       message.success('路由已更新')
     } else {
@@ -2792,7 +2789,7 @@ const handleRouteSubmit = async () => {
     if (c) {
       const res = await api.get(`/clusters/${c.id}/routes`)
       c.routes = res.data.items
-      c.route_count = c.routes.length
+      c.route_count = c.routes!.length
     }
   } catch (error: any) {
     // 检查是否是表单验证错误（validate 抛出的是 Error 对象，没有 response 属性）
@@ -2923,7 +2920,7 @@ const deleteRouteByRecord = (cluster: Cluster, route: Route) => {
 
         const res2 = await api.get(`/clusters/${cluster.id}/routes`)
         cluster.routes = res2.data.items
-        cluster.route_count = cluster.routes.length
+        cluster.route_count = cluster.routes!.length
         cluster.selectedRoute = null
       } catch (error: any) {
         const detail = error.response?.data?.detail
@@ -4012,7 +4009,6 @@ const uploadStaticResourceZip = (sr: any) => {
       progress.percent = 80
       addLog('上传完成')
       addLog('')
-      const edgeUuid = res.data.edge_uuid || res.data.route_id || '?'
       const ver = res.data.current_version || '?'
       const serverHost = window.location.hostname
       addLog('── 上传结果 ──')

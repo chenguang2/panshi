@@ -56,7 +56,7 @@
               <div
                 class="diff-row"
                 :class="{ 'row-mismatch': item.status === 'mismatch', 'row-only-db': item.status === 'only_in_db', 'row-only-edge': item.status === 'only_in_edge' }"
-                @click="item.status === 'mismatch' && toggleExpand(item)"
+                @click="item.status === 'mismatch' && toggleExpand('diffs', item)"
               >
                 <span class="col-status">
                   <span v-if="item.status === 'match'" style="color:#52c41a">✅</span>
@@ -80,7 +80,7 @@
               <div v-if="expandedMode[item.id] && item.fields?.length" class="diff-fields">
                 <div class="fields-header">{{ expandedMode[item.id] === 'diffs' ? '字段差异（仅显示不同字段）' : '全部字段' }}</div>
                 <div
-                  v-for="f in filteredFields(item, expandedMode[item.id])"
+                  v-for="f in filteredFields(item, expandedMode[item.id] ?? 'diffs')"
                   :key="f.name"
                   class="fields-row"
                   :class="{ 'field-diff': f.status === 'diff' }"

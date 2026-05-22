@@ -469,7 +469,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
@@ -493,8 +493,6 @@ const testingConnection = ref(false)
 const connectionResult = ref<TestConnectionResponse | null>(null)
 const connectionError = ref('')
 const connectionTested = ref(false)
-
-const selectedNode = computed(() => nodes.value.find(n => n.id === selectedNodeId.value) || null)
 
 const previewData = ref<PreviewResponse | null>(null)
 const loadingPreview = ref(false)
