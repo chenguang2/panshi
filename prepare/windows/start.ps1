@@ -1,5 +1,11 @@
 ﻿$ErrorActionPreference = "Stop"
 
+# 默认端口（可在脚本中修改）
+$DEFAULT_PORT = 9000
+
+# 端口获取优先级: 参数 > 环境变量 > 默认值
+$PORT = if ($args[0]) { $args[0] } elseif ($env:PANSHI_PORT) { $env:PANSHI_PORT } else { $DEFAULT_PORT }
+
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) { $ScriptDir = Get-Location }
 $ProjectRoot = (Resolve-Path (Join-Path $ScriptDir "..\..")).Path
@@ -24,35 +30,39 @@ if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 }
 
+# ---------- 写入端口文件 ----------
+$portFile = Join-Path $ProjectRoot "backend\.port"
+Set-Content -Path $portFile -Value $PORT -NoNewline
+
 # ---------- 停止已有进程 ----------
-$conn = Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue
+$conn = Get-NetTCPConnection -LocalPort $PORT -ErrorAction SilentlyContinue
 if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
 
 Start-Sleep -Seconds 2
 
 # ---------- 启动后端（自动托管前端 dist/ 静态文件）----------
 Write-Host ""
-Write-Host "Starting Backend..."
-$backendArgs = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "9000")
+Write-Host "Starting Backend (port $PORT)..."
+$backendArgs = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$PORT")
 $backendProc = Start-Process -FilePath $pythonExe -ArgumentList $backendArgs -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errLogFile
 Write-Host "  Backend started (PID: $($backendProc.Id))"
 
 Start-Sleep -Seconds 5
 
 # ---------- 验证 ----------
-$listening = Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue
+$listening = Get-NetTCPConnection -LocalPort $PORT -State Listen -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "  Panshi Admin started!"
 Write-Host "=========================================="
-Write-Host "  URL:   http://localhost:9000"
+Write-Host "  URL:   http://localhost:$PORT"
 Write-Host "  Login: admin / panshi123"
 Write-Host "  Log:   $logFile"
 Write-Host ""
 
 if (-not $listening) {
-    Write-Host "⚠  Warning: 可能未监听 9000 端口，请查看日志:"
+    Write-Host "⚠  Warning: 可能未监听 $PORT 端口，请查看日志:"
     Write-Host "   Get-Content $logFile -Tail 30"
 }
 Write-Host ""
