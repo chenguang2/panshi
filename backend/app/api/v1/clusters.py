@@ -1438,6 +1438,14 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
             db_route_plugins[rp.route_id] = {}
         db_route_plugins[rp.route_id][rp.plugin_name] = json.loads(rp.config) if rp.config else {}
 
+    # 查询上游目标节点，按 upstream_id 分组
+    db_upstream_targets_all = await _get_all(UpstreamTarget)
+    db_upstream_targets: dict[int, dict[str, int]] = {}
+    for t in db_upstream_targets_all:
+        if t.upstream_id not in db_upstream_targets:
+            db_upstream_targets[t.upstream_id] = {}
+        db_upstream_targets[t.upstream_id][t.target] = t.weight
+
     # ---------- 2. 从 Edge 拉取 ----------
     def _edge_val(item: dict) -> dict:
         """Edge API 列表返回格式：{key, value: {实际数据}, ...}，提取 value"""
@@ -1481,10 +1489,25 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
             return {"name": "value", "db": str(db_parsed), "edge": str(edge_parsed)}
         return None
 
+    def _compare_upstream_targets(u_id: int, edge_nodes: Any) -> dict:
+        db_targets = db_upstream_targets.get(u_id, {})
+        edge_nodes_dict = {}
+        if isinstance(edge_nodes, dict):
+            edge_nodes_dict = edge_nodes
+        elif isinstance(edge_nodes, list):
+            for n in edge_nodes:
+                host = n.get('host', '')
+                port = n.get('port', '')
+                key = f"{host}:{port}" if port else host
+                edge_nodes_dict[key] = n.get('weight', 1)
+        equal = json.dumps(db_targets, sort_keys=True, default=str) == json.dumps(edge_nodes_dict, sort_keys=True, default=str)
+        return {"name": "targets", "db": json.dumps(db_targets, indent=1, ensure_ascii=False) if db_targets else "{}", "edge": json.dumps(edge_nodes_dict, indent=1, ensure_ascii=False) if edge_nodes_dict else "{}", "status": "equal" if equal else "diff"}
+
     def _compare_upstream(db_u, edge_data: dict | None):
         if not edge_data:
             return {"name": db_u.name, "id": db_u.edge_uuid, "status": "only_in_db", "fields": []}
         fields = []
+        fields.append(_compare_upstream_targets(db_u.id, edge_data.get("nodes")))
         for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
             db_raw = getattr(db_u, key, None)
             edge_key = _rules.get_field_alias("upstream", key)
