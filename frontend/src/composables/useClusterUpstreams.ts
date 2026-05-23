@@ -1,9 +1,9 @@
 import { ref, reactive, computed, watch, h } from 'vue'
 import type { Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route } from '@/types'
-import { showDeleteConfirm, buildDeleteProgressContent, executePublish } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 
 interface UpstreamExtras {
   hash_on?: string
@@ -678,133 +678,16 @@ export function useClusterUpstreams(options: {
       apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
       nodes: cluster.nodes,
       onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        const logs: string[] = []
-        const addLog = (text: string) => {
-          logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-        }
-        const progress: {
-          percent: number
-          status: 'active' | 'success' | 'exception'
-        } = { percent: 0, status: 'active' }
-
-        const modal = Modal.info({
+        await executeDeleteWithProgress({
           title: `删除上游: ${upstream.name}`,
-          width: 600,
-          content: buildDeleteProgressContent(progress, logs),
-          okText: '确定',
-          okButtonProps: { disabled: true },
-          cancelText: '',
-          closable: true,
+          apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadUpstreams(cluster),
+          clearSelectedFn: () => { cluster.selectedUpstream = null },
         })
-
-        const updateContent = () => {
-          modal.update({ content: buildDeleteProgressContent(progress, logs) })
-        }
-
-        addLog(`开始删除上游: ${upstream.name}`)
-        progress.percent = 20
-        updateContent()
-
-        await new Promise((r) => setTimeout(r, 400))
-
-        try {
-          const res = await api.delete(
-            `/clusters/${cluster.id}/upstreams/${upstream.id}`,
-            {
-              data: {
-                delete_db: deleteDb,
-                delete_edge: deleteEdge,
-                node_ids: nodeIds.length > 0 ? nodeIds : undefined,
-              },
-            },
-          )
-          const data = res.data
-
-          progress.percent = 60
-          const dbResult = data.results?.find(
-            (r: { scope: string }) => r.scope === 'database',
-          )
-          if (dbResult) {
-            addLog('正在从数据库删除...')
-            addLog(
-              `数据库: ${(dbResult as { message?: string }).message || '已删除'}`,
-            )
-          }
-          addLog('')
-
-          const edgeResults =
-            data.results?.filter(
-              (r: { scope: string }) => r.scope === 'edge',
-            ) || []
-          if (edgeResults.length > 0) {
-            addLog('正在从 Edge 节点同步删除...')
-            progress.percent = 80
-            updateContent()
-
-            addLog('Edge 节点同步删除结果:')
-            let successCount = 0
-            let failCount = 0
-            for (const r of edgeResults as Array<{
-              status: string
-              node: string
-              error?: string
-            }>) {
-              if (r.status === 'success') successCount++
-              else failCount++
-              addLog(
-                `  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${r.error ? ' - ' + r.error : ''}`,
-              )
-            }
-            addLog('')
-            addLog(
-              `总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`,
-            )
-          } else if (deleteEdge) {
-            addLog('集群中没有活跃的 Edge 节点')
-          }
-
-          progress.percent = 100
-          addLog('')
-          if (
-            edgeResults.length > 0 &&
-            !edgeResults.some(
-              (r: { status: string }) => r.status === 'failed',
-            )
-          ) {
-            progress.status = 'success'
-            addLog('✅ 删除完成!')
-          } else if (
-            edgeResults.some((r: { status: string }) => r.status === 'failed')
-          ) {
-            progress.status = 'exception'
-            addLog(
-              `⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`,
-            )
-          } else {
-            progress.status = 'success'
-            addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
-          }
-
-          updateContent()
-
-          const res2 = await api.get(
-            `/clusters/${cluster.id}/upstreams`,
-          )
-          cluster.upstreams = res2.data.items
-          cluster.upstream_count = (cluster.upstreams || []).length
-          cluster.selectedUpstream = null
-        } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string } } }
-          const detail = err.response?.data?.detail
-          progress.percent = 100
-          progress.status = 'exception'
-          addLog('')
-          addLog(
-            `❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`,
-          )
-          updateContent()
-        }
-        modal.update({ okButtonProps: { disabled: false } })
       },
     })
   }

@@ -3,7 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import { buildDeleteProgressContent, executePublish } from './useClusterUtils'
+import { executePublish, executeDeleteWithProgress } from './useClusterUtils'
 
 // ── helpers ────────────────────────────────────────────────────────────
 
@@ -491,9 +491,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         advanced_match_enabled: routeForm.advancedMatchEnabled,
       }
 
-      if (routeForm.plugin_config_ids.length > 0) {
-        payload.plugin_config_ids = routeForm.plugin_config_ids
-      }
+      payload.plugin_config_ids = routeForm.plugin_config_ids
 
       if (routeForm.advancedMatchEnabled) {
         payload.vars = routeForm.advancedMatch?.vars || []
@@ -564,101 +562,16 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
       nodes: cluster.nodes,
       onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        const logs: string[] = []
-        const addLog = (text: string) => {
-          logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-        }
-        const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-        const modal = Modal.info({
+        await executeDeleteWithProgress({
           title: `删除路由: ${route.name}`,
-          width: 600,
-          content: buildDeleteProgressContent(progress, logs),
-          okText: '确定',
-          okButtonProps: { disabled: true },
-          cancelText: '',
-          closable: true,
+          apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadRoutes(cluster),
+          clearSelectedFn: () => { cluster.selectedRoute = null },
         })
-
-        const updateContent = () => {
-          modal.update({ content: buildDeleteProgressContent(progress, logs) })
-        }
-
-        addLog(`开始删除路由: ${route.name}`)
-        progress.percent = 20
-        updateContent()
-
-        await new Promise((r) => setTimeout(r, 400))
-
-        try {
-          const res = await api.delete(`/clusters/${cluster.id}/routes/${route.id}`, {
-            data: {
-              delete_db: deleteDb,
-              delete_edge: deleteEdge,
-              node_ids: nodeIds.length > 0 ? nodeIds : undefined,
-            },
-          })
-          const data = res.data as {
-            results?: Array<{ scope: string; message?: string; status?: string; node?: string; error?: string }>
-          }
-
-          progress.percent = 60
-          const dbResult = data.results?.find((r) => r.scope === 'database')
-          if (dbResult) {
-            addLog('正在从数据库删除...')
-            addLog(`数据库: ${dbResult.message || '已删除'}`)
-          }
-          addLog('')
-
-          const edgeResults = data.results?.filter((r) => r.scope === 'edge') || []
-          if (edgeResults.length > 0) {
-            addLog('正在从 Edge 节点同步删除...')
-            progress.percent = 80
-            updateContent()
-
-            addLog('Edge 节点同步删除结果:')
-            let successCount = 0
-            let failCount = 0
-            for (const r of edgeResults) {
-              if (r.status === 'success') successCount++
-              else failCount++
-              addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
-            }
-            addLog('')
-            addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-          } else if (deleteEdge) {
-            addLog('集群中没有活跃的 Edge 节点')
-          }
-
-          progress.percent = 100
-          addLog('')
-          if (edgeResults.length > 0 && !edgeResults.some((r) => r.status === 'failed')) {
-            progress.status = 'success'
-            addLog('✅ 删除完成!')
-          } else if (edgeResults.some((r) => r.status === 'failed')) {
-            progress.status = 'exception'
-            addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
-          } else {
-            progress.status = 'success'
-            addLog(`✅ ${deleteDb ? '数据库已删除' : '操作完成'}`)
-          }
-
-          updateContent()
-
-          const res2 = await api.get(`/clusters/${cluster.id}/routes`)
-          cluster.routes = res2.data.items
-          cluster.route_count = cluster.routes!.length
-          cluster.selectedRoute = null
-        } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: unknown } } }
-          const detail = err.response?.data?.detail
-          progress.percent = 100
-          progress.status = 'exception'
-          addLog('')
-          addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
-          updateContent()
-        }
-        modal.update({ okButtonProps: { disabled: false } })
       },
     })
   }

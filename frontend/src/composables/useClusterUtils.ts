@@ -275,6 +275,116 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
   }
 }
 
+export interface DeleteProgressOptions {
+  title: string
+  apiEndpoint: string
+  cluster: any
+  deleteDb: boolean
+  deleteEdge: boolean
+  nodeIds: number[]
+  refreshFn: () => Promise<void>
+  clearSelectedFn?: () => void
+  afterDelete?: () => Promise<void>
+}
+
+export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Promise<void> {
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+    percent: 0, status: 'active',
+  }
+
+  const modal = Modal.info({
+    title: opts.title,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
+
+  addLog(`开始删除...`)
+  progress.percent = 20
+  updateContent()
+
+  await new Promise((r) => setTimeout(r, 400))
+
+  try {
+    const res = await api.delete(opts.apiEndpoint, {
+      data: {
+        delete_db: opts.deleteDb,
+        delete_edge: opts.deleteEdge,
+        node_ids: opts.nodeIds.length > 0 ? opts.nodeIds : undefined,
+      },
+    })
+    const data = res.data
+    progress.percent = 60
+
+    const dbResult = data.results?.find((r: any) => r.scope === 'database')
+    if (dbResult) {
+      addLog('正在从数据库删除...')
+      addLog(`数据库: ${dbResult.message || '已删除'}`)
+    }
+    addLog('')
+
+    const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+    if (edgeResults.length > 0) {
+      addLog('正在从 Edge 节点同步删除...')
+      progress.percent = 80
+      updateContent()
+
+      addLog('Edge 节点同步删除结果:')
+      let successCount = 0
+      let failCount = 0
+      for (const r of edgeResults) {
+        if (r.status === 'success') successCount++
+        else failCount++
+        addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+      }
+      addLog('')
+      addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+    } else if (opts.deleteEdge) {
+      addLog('集群中没有活跃的 Edge 节点')
+    }
+
+    progress.percent = 100
+    addLog('')
+    if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
+      progress.status = 'success'
+      addLog('✅ 删除完成!')
+    } else if (edgeResults.some((r: any) => r.status === 'failed')) {
+      progress.status = 'exception'
+      addLog('⚠️ 部分节点删除失败，请手动清理')
+    } else {
+      progress.status = 'success'
+      addLog('✅ 已完成')
+    }
+
+    updateContent()
+
+    if (opts.afterDelete) {
+      await opts.afterDelete()
+    }
+    await opts.refreshFn()
+    opts.clearSelectedFn?.()
+  } catch (error: any) {
+    const detail = error.response?.data?.detail
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
+    updateContent()
+  }
+  modal.update({ okButtonProps: { disabled: false } })
+}
+
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   const d = new Date(dateStr)
