@@ -123,10 +123,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   refresh: []
 }>()
-  publishConfirmVisible.value = false
-  publishConfirmResolve?.([])
-  publishConfirmResolve = null
-}
 
 // Version modal state
 const versionModalVisible = ref(false)
