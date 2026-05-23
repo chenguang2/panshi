@@ -1,5 +1,6 @@
 import { h } from 'vue'
-import { Modal, Progress } from 'ant-design-vue'
+import { message, Modal, Progress } from 'ant-design-vue'
+import api from '@/api'
 
 export const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
@@ -181,6 +182,97 @@ export function buildDeleteProgressContent(
       style: 'max-height:300px;overflow-y:auto;background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:monospace;font-size:12px;line-height:1.6;',
     }, logs.map(l => h('div', l))),
   ])
+}
+
+export interface PublishOptions {
+  title: string
+  apiEndpoint: string
+  nodeIds: number[]
+  refreshFn: () => Promise<void>
+  /** Custom handler for response data. Default handles { status: 'ok'|'partial', message, version, results } */
+  handleResult?: (data: Record<string, any>, addLog: (text: string) => void, progress: { percent: number; status: 'active' | 'success' | 'exception' }) => void
+}
+
+export async function executePublish(opts: PublishOptions): Promise<void> {
+  const logs: string[] = []
+  const addLog = (text: string) => {
+    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+    percent: 0, status: 'active',
+  }
+
+  const modal = Modal.info({
+    title: opts.title,
+    width: 600,
+    content: buildDeleteProgressContent(progress, logs),
+    okText: '确定',
+    okButtonProps: { disabled: true },
+    cancelText: '',
+    closable: true,
+  })
+
+  const updateContent = () => {
+    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+  }
+
+  addLog(`开始发布...`)
+  progress.percent = 10
+  updateContent()
+
+  await new Promise((r) => setTimeout(r, 400))
+
+  try {
+    addLog('正在构建发布配置...')
+    progress.percent = 30
+    updateContent()
+
+    const res = await api.post(opts.apiEndpoint, { node_ids: opts.nodeIds })
+    const data = res.data as Record<string, any>
+    progress.percent = 70
+
+    if (opts.handleResult) {
+      opts.handleResult(data, addLog, progress)
+    } else {
+      addLog(`状态: ${data.status}`)
+      addLog(`消息: ${data.message}`)
+      if (data.version !== undefined) addLog(`版本: v${data.version}`)
+
+      if (data.results && data.results.length > 0) {
+        addLog('')
+        addLog('节点同步结果:')
+        for (const r of data.results) {
+          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+        }
+      }
+
+      progress.percent = 100
+      addLog('')
+      if (data.status === 'ok') {
+        progress.status = 'success'
+        addLog('✅ 发布成功!')
+      } else if (data.status === 'partial') {
+        progress.status = 'exception'
+        addLog('⚠️ 部分成功')
+      } else {
+        progress.status = 'exception'
+        addLog('❌ 发布失败')
+      }
+    }
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+
+    await opts.refreshFn()
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { detail?: string } }; message?: string }
+    const errMsg = err.response?.data?.detail || err.message || '未知错误'
+    progress.percent = 100
+    progress.status = 'exception'
+    addLog('')
+    addLog(`❌ 发布失败: ${errMsg}`)
+    updateContent()
+    modal.update({ okButtonProps: { disabled: false } })
+  }
 }
 
 export function formatDate(dateStr: string | null | undefined): string {

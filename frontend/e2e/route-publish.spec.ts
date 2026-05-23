@@ -89,7 +89,8 @@ test.describe('Route Publish E2E', () => {
     let progressModal: any = null
     for (let i = 0; i < modalCount; i++) {
       const text = await allModals.nth(i).textContent()
-      if (text?.includes('发布路由') && text?.includes('开始发布路由')) {
+      // Progress modal contains both title and progress bar text (like "0%")
+      if (text?.includes('发布路由') && text?.includes('%')) {
         progressModal = allModals.nth(i)
         break
       }

@@ -3,7 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
-import { buildDeleteProgressContent, showDeleteConfirm } from './useClusterUtils'
+import { buildDeleteProgressContent, showDeleteConfirm, executePublish } from './useClusterUtils'
 
 export interface GlobalRuleDeps {
   clusters: Ref<Cluster[]>
@@ -144,24 +144,12 @@ export function useClusterGlobalRules(deps: GlobalRuleDeps) {
     const nodeIds = await openPublishModal(`发布全局规则: ${gr.name}`, cluster.id)
     if (!nodeIds.length) return
 
-    const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
-    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-    const modal = Modal.info({ title: `发布全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
-    const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-    addLog(`开始发布: ${gr.name}`); progress.percent = 10; update()
-    await new Promise(r => setTimeout(r, 400))
-    try {
-      addLog('正在构建发布配置...'); progress.percent = 30; update()
-      const res = await api.post(`/clusters/${cluster.id}/global_rules/${gr.id}/publish`, { node_ids: nodeIds }); const data = res.data
-      progress.percent = 70; addLog(`状态: ${data.status}`); addLog(`消息: ${data.message}`)
-      if (data.results) { addLog(''); addLog('节点同步结果:'); for (const r of data.results) { addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`) } }
-      progress.percent = 100
-      if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
-      else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
-      else { progress.status = 'exception'; addLog('❌ 发布失败') }
-      update(); modal.update({ okButtonProps: { disabled: false } })
-      await loadGlobalRules(cluster)
-    } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 发布失败: ${e.response?.data?.detail || e.message}`); update(); modal.update({ okButtonProps: { disabled: false } }) }
+    await executePublish({
+      title: `发布全局规则: ${gr.name}`,
+      apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}/publish`,
+      nodeIds,
+      refreshFn: () => loadGlobalRules(cluster),
+    })
   }
 
   const openGlobalRuleVersionManagement = (cluster: Cluster, gr: any) => {

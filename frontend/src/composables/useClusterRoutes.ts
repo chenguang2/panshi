@@ -3,7 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import { buildDeleteProgressContent } from './useClusterUtils'
+import { buildDeleteProgressContent, executePublish } from './useClusterUtils'
 
 // ── helpers ────────────────────────────────────────────────────────────
 
@@ -673,173 +673,24 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     const nodeIds = await openPublishModal(`发布路由: ${cluster.selectedRoute.name}`, cluster.id)
     if (!nodeIds.length) return
 
-    const logs: string[] = []
-    const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-    const modal = Modal.info({
-      title: `发布路由: ${cluster.selectedRoute!.name}`,
-      width: 600,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
+    await executePublish({
+      title: `发布路由: ${cluster.selectedRoute.name}`,
+      apiEndpoint: `/clusters/${cluster.id}/routes/${cluster.selectedRoute.id}/publish`,
+      nodeIds,
+      refreshFn: () => loadRoutes(cluster),
     })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
-    }
-
-    addLog(`开始发布路由: ${cluster.selectedRoute!.name}`)
-    progress.percent = 10
-    updateContent()
-
-    await new Promise((r) => setTimeout(r, 400))
-
-    try {
-      addLog('正在构建发布配置...')
-      progress.percent = 30
-      updateContent()
-
-      const res = await api.post(
-        `/clusters/${cluster.id}/routes/${cluster.selectedRoute!.id}/publish`,
-        { node_ids: nodeIds },
-      )
-      const data = res.data as {
-        status: string
-        message: string
-        version: number
-        results?: Array<{ node: string; status: string; error?: string }>
-      }
-      progress.percent = 70
-
-      addLog(`状态: ${data.status}`)
-      addLog(`消息: ${data.message}`)
-      addLog(`版本: v${data.version}`)
-
-      if (data.results && data.results.length > 0) {
-        addLog('')
-        addLog('节点同步结果:')
-        for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-        }
-      }
-
-      progress.percent = 100
-      addLog('')
-      if (data.status === 'ok') {
-        progress.status = 'success'
-        addLog('✅ 发布成功!')
-      } else if (data.status === 'partial') {
-        progress.status = 'exception'
-        addLog('⚠️ 部分成功')
-      } else {
-        progress.status = 'exception'
-        addLog('❌ 发布失败')
-      }
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-
-      await loadRoutes(cluster)
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { detail?: unknown } }; message?: string }
-      const errMsg = err.response?.data?.detail || err.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
-      addLog('')
-      addLog(`❌ 发布失败: ${errMsg}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-    }
   }
 
   async function publishRouteByRecord(cluster: Cluster, record: Route) {
     const nodeIds = await openPublishModal(`发布路由: ${record.name}`, cluster.id)
     if (!nodeIds.length) return
 
-    const logs: string[] = []
-    const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-    const modal = Modal.info({
+    await executePublish({
       title: `发布路由: ${record.name}`,
-      width: 600,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
+      apiEndpoint: `/clusters/${cluster.id}/routes/${record.id}/publish`,
+      nodeIds,
+      refreshFn: () => loadRoutes(cluster),
     })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
-    }
-
-    addLog(`开始发布路由: ${record.name}`)
-    progress.percent = 10
-    updateContent()
-
-    await new Promise((r) => setTimeout(r, 400))
-
-    try {
-      addLog('正在构建发布配置...')
-      progress.percent = 30
-      updateContent()
-
-      const res = await api.post(`/clusters/${cluster.id}/routes/${record.id}/publish`, {
-        node_ids: nodeIds,
-      })
-      const data = res.data as {
-        status: string
-        message: string
-        version: number
-        results?: Array<{ node: string; status: string; error?: string }>
-      }
-      progress.percent = 70
-
-      addLog(`状态: ${data.status}`)
-      addLog(`消息: ${data.message}`)
-      addLog(`版本: v${data.version}`)
-
-      if (data.results && data.results.length > 0) {
-        addLog('')
-        addLog('节点同步结果:')
-        for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-        }
-      }
-
-      progress.percent = 100
-      addLog('')
-      if (data.status === 'ok') {
-        progress.status = 'success'
-        addLog('✅ 发布成功!')
-      } else if (data.status === 'partial') {
-        progress.status = 'exception'
-        addLog('⚠️ 部分成功')
-      } else {
-        progress.status = 'exception'
-        addLog('❌ 发布失败')
-      }
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-
-      await loadRoutes(cluster)
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { detail?: unknown } }; message?: string }
-      const errMsg = err.response?.data?.detail || err.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
-      addLog('')
-      addLog(`❌ 发布失败: ${errMsg}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-    }
   }
 
   // ── version management ─────────────────────────────────────────────

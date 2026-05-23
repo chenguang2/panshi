@@ -14,9 +14,9 @@
 
 ## 3. 后端 EdgeClient 通用 api 方法
 
-- [ ] 3.1 在 `EdgeClient` 中添加 `api(resource, action, resource_id=None, data=None)` 方法，含 `RESOURCE_PATHS` 和 `action → method` 映射
-- [ ] 3.2 将 29 个资源方法改为代理到 `api()`
-- [ ] 3.3 更新 api/v1/edge_client.py 中的调用点
+- [x] 3.1 在 `EdgeClient` 中添加 `api(resource, action, resource_id=None, data=None)` 方法
+- [x] 3.2 将 29 个资源方法改为代理到 `api()`
+- [ ] 3.3 更新 api/v1/edge_client.py 中的调用点（旧方法仍可用，后续清理）
 
 ## 4. 前端 publish/delete 提取到 useClusterUtils.ts
 
