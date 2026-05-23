@@ -373,14 +373,12 @@ export function useClusterUpstreams(options: {
 
   // ── Target management ──
   const addUpstreamTarget = () => {
-    const lastTarget = upstreamForm.targets[upstreamForm.targets.length - 1]
-    const newTarget: UpstreamTargetForm = {
+    upstreamForm.targets.push({
       key: ++upstreamTargetKey,
-      ip: lastTarget ? lastTarget.ip : '',
-      port: lastTarget ? lastTarget.port : 80,
-      weight: lastTarget ? lastTarget.weight : 100,
-    }
-    upstreamForm.targets.push(newTarget)
+      ip: '',
+      port: 80,
+      weight: 100,
+    })
   }
 
   const removeUpstreamTarget = (index: number) => {
