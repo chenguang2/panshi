@@ -174,255 +174,11 @@
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="800px" @ok="handleRouteSubmit">
-      <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
-              <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
-            </a-form-item>
-            <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
-              <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
-            </a-form-item>
-            <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-              <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法" style="width: 300px">
-                <a-select-option value="GET">GET</a-select-option>
-                <a-select-option value="POST">POST</a-select-option>
-                <a-select-option value="PUT">PUT</a-select-option>
-                <a-select-option value="DELETE">DELETE</a-select-option>
-                <a-select-option value="PATCH">PATCH</a-select-option>
-                <a-select-option value="HEAD">HEAD</a-select-option>
-                <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-              </a-select>
-              <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
-                {{ allMethodsSelected ? '取消全选' : '全选' }}
-              </a>
-            </a-form-item>
-            <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
-              <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
-                <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
-              <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
-            </a-form-item>
-            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-              <a-select v-model:value="routeForm.status">
-                <a-select-option :value="1">正常</a-select-option>
-                <a-select-option :value="0">禁用</a-select-option>
-              </a-select>
-</a-form-item>
-        <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="routeForm.description" :rows="2" />
-            </a-form-item>
-            <a-form-item label="高级匹配" name="advancedMatch">
-              <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
-              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级匹配"页配置请求条件</span>
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-
-        <a-tab-pane key="advanced" tab="高级匹配">
-          <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
-            <RouteAdvancedMatch
-              :enabled="routeForm.advancedMatchEnabled"
-              :model-value="{ vars: routeForm.advancedMatch.vars }"
-              @update:model-value="(val: any) => { routeForm.advancedMatch.vars = val.vars || []; }"
-            />
-          </div>
-          <div v-else class="advanced-disabled-hint">
-            <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-            高级匹配未启用，请在"基础配置"中开启
-          </div>
-        </a-tab-pane>
-
-        <a-tab-pane key="plugins" tab="插件管理">
-          <PluginSelector
-            v-model="routeForm.plugins"
-            :plugins="availablePlugins"
-          />
-        </a-tab-pane>
-
-        <a-tab-pane v-if="authStore.hasPermission('plugin_groups')" key="pluginGroups" tab="插件组">
-          <div v-if="clusterPluginGroups.length === 0" style="padding: 40px 0; text-align: center; color: #999;">
-            暂无插件组，请在"插件组"Tab 中创建
-          </div>
-          <div v-else>
-            <div style="margin-bottom: 12px; font-size: 12px; color: #999;">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-              <div
-                v-for="pg in clusterPluginGroups"
-                :key="pg.id"
-                class="plugin-config-card"
-                :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
-                @click="togglePluginGroup(pg)"
-                style="width: 280px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; background: #fff;"
-              >
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)" />
-                  <strong style="font-size: 13px;">{{ pg.name }}</strong>
-                  <span style="font-size: 11px; color: #999;">v{{ pg.current_version || 0 }}</span>
-                </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-                  <a-tag
-                    v-for="(pcfg, pname) in pg.plugins"
-                    :key="pname"
-                    color="blue"
-                    style="font-size: 11px; cursor: pointer;"
-                    @click.stop="viewPluginConfigDetail(pg, pname, pcfg)"
-                  >
-                    {{ pname }}
-                  </a-tag>
-                </div>
-                <div v-if="pg.description" style="font-size: 11px; color: #999;">{{ pg.description }}</div>
-              </div>
-            </div>
-          </div>
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
-
-    <a-modal v-model:open="pluginConfigModalVisible" :title="pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组'" width="800px" @ok="handlePluginConfigSubmit" :ok-text="pluginConfigFormMode === 'add' ? '创建' : '保存'">
-      <a-tabs v-model:activeKey="pluginConfigActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
-              <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-        <a-tab-pane key="plugins" tab="插件配置">
-          <PluginSelector
-            v-model="pluginConfigFormData.selectedPlugins"
-            :plugins="availablePlugins"
-          />
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
-
-    <a-modal v-model:open="globalRuleModalVisible" :title="globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则'" width="800px" @ok="handleGlobalRuleSubmit" :ok-text="globalRuleFormMode === 'add' ? '创建' : '保存'">
-      <a-tabs v-model:activeKey="globalRuleActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
-              <a-input v-model:value="globalRuleFormData.name" placeholder="请输入名称" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="globalRuleFormData.description" :rows="2" placeholder="可选描述" />
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-        <a-tab-pane key="plugins" tab="插件配置">
-          <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
-
-    <a-modal
-      v-model:open="staticResourceModalVisible"
-      :title="staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源'"
-      @ok="handleStaticResourceSubmit"
-      width="600px"
-      :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
-      :ok-button-props="{ disabled: staticResourceFormMode === 'add' && !staticResourceFormValid }"
-    >
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
-          <a-select
-            v-model:value="staticResourceFormData.route_id"
-            placeholder="请选择路由"
-            show-search
-            :filter-option="(input: string, option: any) => option.children.toLowerCase().includes(input.toLowerCase())"
-            @change="onStaticResourceRouteChange"
-          >
-            <a-select-option v-for="r in srActiveCluster?.routes || []" :key="r.id" :value="r.id">
-              {{ r.name }} ({{ r.uri }})
-            </a-select-option>
-          </a-select>
-          <div style="margin-top: 6px; font-size: 12px;">
-            <div style="color: #999;">选择路由的要求：</div>
-            <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
-              {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
-            </div>
-            <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
-              {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
-            </div>
-            <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
-              {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
-            </div>
-          </div>
-        </a-form-item>
-        <a-form-item v-else label="关联路由">
-          <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <VersionManagementModal
-      v-model:open="versionModalVisible"
-      :resource-type="versionModalType"
-      :resource-id="versionModalResourceId"
-      :cluster-id="versionModalClusterId"
-      :resource-name="versionModalResourceName"
-      :edge-uuid="versionModalEdgeUuid"
-      @published="versionModalOnPublished"
-    />
-
     <ConfigDiff
       v-model:visible="diffDrawerVisible"
       :cluster-id="diffClusterId"
       :initial-node-id="diffNodeId"
     />
-
-    <!-- 查看插件组 -->
-    <a-drawer
-      v-model:open="viewPcDrawerVisible"
-      :title="`查看插件组 - ${viewingPc?.name}`"
-      width="600"
-      @close="viewPcDrawerVisible = false"
-    >
-      <div v-if="viewingPc">
-        <a-descriptions :column="1" bordered>
-          <a-descriptions-item label="名称">{{ viewingPc.name }}</a-descriptions-item>
-          <a-descriptions-item label="描述">{{ viewingPc.description || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="状态">
-            <a-tag v-if="viewingPc.current_version" color="green">已发布</a-tag>
-            <a-tag v-else color="orange">未发布</a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="版本" v-if="viewingPc.current_version">v{{ viewingPc.current_version }}</a-descriptions-item>
-        </a-descriptions>
-        <a-divider>插件配置</a-divider>
-        <pre class="config-preview">{{ JSON.stringify(viewingPc.plugins, null, 2) }}</pre>
-      </div>
-    </a-drawer>
-
-    <!-- 查看全局规则 -->
-    <a-drawer
-      v-model:open="viewGrDrawerVisible"
-      :title="`查看全局规则 - ${viewingGr?.name}`"
-      width="600"
-      @close="viewGrDrawerVisible = false"
-    >
-      <div v-if="viewingGr">
-        <a-descriptions :column="1" bordered>
-          <a-descriptions-item label="名称">{{ viewingGr.name }}</a-descriptions-item>
-          <a-descriptions-item label="描述">{{ viewingGr.description || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="状态">
-            <a-tag v-if="viewingGr.current_version" color="green">已发布</a-tag>
-            <a-tag v-else color="orange">未发布</a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="版本" v-if="viewingGr.current_version">v{{ viewingGr.current_version }}</a-descriptions-item>
-        </a-descriptions>
-        <a-divider>插件配置</a-divider>
-        <pre class="config-preview">{{ JSON.stringify(viewingGr.plugins, null, 2) }}</pre>
-      </div>
-    </a-drawer>
 
     <PublishConfirmModal
       v-model:visible="publishModalVisible"
@@ -708,12 +464,7 @@ const {
 })
 
 const {
-  pluginConfigModalVisible, pluginConfigActiveTab, pluginConfigFormMode,
-  pluginConfigEditingClusterId, pluginConfigEditingId, pluginConfigFormData,
-  viewPcDrawerVisible, viewingPc,
-  loadPluginConfigs, showAddPluginConfig, viewPluginConfig, editPluginConfig,
-  handlePluginConfigSubmit, deletePluginConfig, publishPluginConfig,
-  openPluginConfigVersionManagement, viewPluginConfigDetail: viewPcPluginConfigDetailFn,
+  loadPluginConfigs,
 } = useClusterPluginConfigs({
   clusters,
   versionModal,
@@ -736,43 +487,23 @@ let _showDeleteConfirmRoute: ((opts: {
 }) => void) = () => {}
 
 const {
-  routeModalVisible, routeModalActiveTab, editingRoute, copyingRoute,
-  routeForm, routeFormRef,
-  allRouteColumns, routeColumnPopoverVisible, routeColumnsSelected,
-  routeSearchVisible, allActionButtons, routeActionsSelected, visibleRouteColumns,
-  ALL_METHODS, allMethodsSelected, toggleAllMethods,
-  isPluginGroupSelected, togglePluginGroup, viewPluginConfigDetail: viewPcPluginConfigDetail,
-  getActionButtonTitle, handleRouteAction,
-  loadRoutes, handleRouteTableChange, selectRoute,
-  showAddRouteModal, editRoute, editRouteByRecord, copyRoute, copyRouteByRecord,
-  handleRouteSubmit, deleteRoute, deleteRouteByRecord,
-  publishRoute, publishRouteByRecord,
-  openRouteVersionManagement, openRouteVersionManagementByRecord,
-  hasPluginGroupsPermission,
-  clusterPluginGroups,
+  loadRoutes,
 } = useClusterRoutes({
-  clusters,
-  currentClusterId,
-  buildDeleteProgressContent: ((progress: { percent: number; status: string }, logs: string[]) =>
-    buildDeleteProgressContent({ percent: progress.percent, status: progress.status as 'active' | 'success' | 'exception' }, logs)),
-  openPublishModal,
-  showDeleteConfirm: ((opts) => _showDeleteConfirmRoute(opts)) as typeof _showDeleteConfirmRoute,
-  loadPluginConfigs,
-  versionModalVisible,
-  versionModalType,
-  versionModalResourceId,
-  versionModalClusterId,
-  versionModalResourceName,
-  versionModalEdgeUuid,
+  clusters: clusters as any,
+  currentClusterId: currentClusterId as any,
+  openPublishModal: openPublishModal as any,
+  showDeleteConfirm: _showDeleteConfirmRoute as any,
+  loadPluginConfigs: loadPluginConfigs as any,
+  versionModalVisible: versionModalVisible as any,
+  versionModalType: versionModalType as any,
+  versionModalResourceId: versionModalResourceId as any,
+  versionModalClusterId: versionModalClusterId as any,
+  versionModalResourceName: versionModalResourceName as any,
+  versionModalEdgeUuid: versionModalEdgeUuid as any,
 })
 
 const {
-  globalRuleModalVisible, globalRuleActiveTab, globalRuleFormMode,
-  globalRuleEditingClusterId, globalRuleEditingId, globalRuleFormData,
-  viewGrDrawerVisible, viewingGr,
-  loadGlobalRules, showAddGlobalRule, viewGlobalRule, editGlobalRule,
-  handleGlobalRuleSubmit, deleteGlobalRule, publishGlobalRule,
-  openGlobalRuleVersionManagement, viewGlobalRulePluginConfig,
+  loadGlobalRules,
 } = useClusterGlobalRules({
   clusters,
   versionModal,
@@ -782,13 +513,7 @@ const {
 })
 
 const {
-  staticResourceFormData, staticResourceRouteInfo, staticResourceModalVisible,
-  staticResourceFormMode, staticResourceEditingId, staticResourceEditingCluster,
-  staticResourceFormValid, selectedRoute: staticSelectedRoute,
-  uriValid, publishedValid, pluginValid,
-  loadStaticResources, onStaticResourceRouteChange, showAddStaticResource,
-  editStaticResource, handleStaticResourceSubmit, deleteStaticResource,
-  uploadStaticResource, publishStaticResource, openStaticResourceVersionManagement,
+  loadStaticResources,
 } = useClusterStaticResources({
   clusters,
   versionModal,
@@ -796,26 +521,7 @@ const {
   loadRoutes,
 })
 
-// Aliases to match template usage
-const uploadStaticResourceZip = uploadStaticResource
-const selectedRoute = staticSelectedRoute
-const viewPluginConfigDetail = viewPcPluginConfigDetail
 
-// ── Inline helpers (kept per task instructions) ──
-const targetColumns = [
-  { title: 'IP地址', key: 'ip', width: 200 },
-  { title: '端口', key: 'port', width: 120 },
-  { title: '权重', key: 'weight', width: 100 },
-  { title: '操作', key: 'action', width: 80 }
-]
-
-const currentCluster = computed(() => clusters.value.find(c => c.id === currentClusterId.value))
-const srActiveCluster = computed(() => staticResourceEditingCluster.value)
-
-const getClusterUpstreams = () => {
-  const cluster = clusters.value.find(c => c.id === currentClusterId.value)
-  return cluster?.upstreams || []
-}
 
 const loadClusters = async () => {
   loading.value = true
