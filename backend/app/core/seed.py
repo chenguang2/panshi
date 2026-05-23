@@ -20,14 +20,3 @@ async def seed_data(db: AsyncSession):
         await db.commit()
 
 
-async def seed_admin(db: AsyncSession):
-    result = await db.execute(select(User).where(User.username == "admin"))
-    if not result.scalar_one_or_none():
-        admin = User(
-            username="admin",
-            password_hash=hash_password("panshi123"),
-            role="admin",
-            status=1
-        )
-        db.add(admin)
-        await db.commit()

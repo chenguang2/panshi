@@ -4,7 +4,7 @@ from sqlalchemy import select
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import verify_password, hash_password, create_access_token, decode_access_token
+from app.core.security import verify_password, create_access_token, decode_access_token
 from app.models.user import User
 from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 
@@ -96,11 +96,6 @@ async def logout():
     return {"message": "Logout successful"}
 
 
-@router.get("/me", response_model=UserInfo)
-async def get_me(current_user: User = Depends(lambda: None)):
-    pass
-
-
 @router.get("/me/permissions")
 async def get_my_permissions(
     db: AsyncSession = Depends(get_db),
@@ -114,10 +109,3 @@ async def get_my_permissions(
     return {"permissions": [p.resource_type for p in result.scalars().all()]}
 
 
-@router.put("/password")
-async def change_password(
-    request: ChangePasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(lambda: None)
-):
-    pass

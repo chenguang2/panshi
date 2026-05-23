@@ -87,6 +87,7 @@
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import { formatDate } from '@/composables/useClusterUtils'
 
 interface ConfigVersion {
   id: number
@@ -405,16 +406,6 @@ const escapeHtml = (str: string): string => {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-}
-
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  })
 }
 
 const handleRepublish = async () => {

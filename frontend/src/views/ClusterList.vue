@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="cluster-list">
     <div class="header-section">
       <div class="header-left">
@@ -110,7 +110,7 @@
             <span class="dt" :class="{ active: cluster.activeTab === 'staticResources' }" @click="cluster.activeTab = 'staticResources'; handleTabClick(cluster, 'staticResources')">静态资源</span>
           </div>
           <div class="dbody">
-          <ClusterUpstreams v-if="cluster.activeTab === 'upstreams'" :cluster="cluster" :open-publish-modal="openPublishModal" @refresh="loadClusters" />
+          <ClusterUpstreams v-if="cluster.activeTab === 'upstreams'" :cluster="cluster" :clusters="clusters" :open-publish-modal="openPublishModal" @refresh="loadClusters" />
           <ClusterRoutes v-else-if="cluster.activeTab === 'routes'" :cluster="cluster" :clusters="clusters" :open-publish-modal="openPublishModal" :show-delete-confirm="showDeleteConfirm" :load-plugin-configs="loadPluginConfigs" :build-delete-progress-content="(p: any, l: string[]) => buildDeleteProgressContent({ percent: p.percent, status: p.status as any }, l)" @refresh="loadClusters" />
           <ClusterPluginConfigs v-else-if="cluster.activeTab === 'pluginConfigs'" :cluster="cluster" :clusters="clusters" :open-publish-modal="openPublishModal" :available-plugins="availablePlugins" :load-available-plugins="loadAvailablePlugins" @refresh="loadClusters" />
           <ClusterGlobalRules v-else-if="cluster.activeTab === 'globalRules'" :cluster="cluster" :clusters="clusters" :open-publish-modal="openPublishModal" :available-plugins="availablePlugins" :load-available-plugins="loadAvailablePlugins" @refresh="loadClusters" />
@@ -172,140 +172,6 @@
           </a-select>
         </a-form-item>
       </a-form>
-    </a-modal>
-
-    <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="750px" @ok="handleUpstreamSubmit">
-      <a-tabs v-model:activeKey="upstreamModalActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
-              <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
-            </a-form-item>
-            <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
-              <a-select v-model:value="upstreamForm.load_balance">
-                <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-                <a-select-option value="chash">一致性哈希</a-select-option>
-                <a-select-option value="ewma">延迟最小</a-select-option>
-                <a-select-option value="least_conn">最少连接</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
-              <a-select v-model:value="upstreamForm.hash_on">
-                <a-select-option value="header">HTTP请求头</a-select-option>
-                <a-select-option value="cookie">Cookie</a-select-option>
-                <a-select-option value="vars">内置变量</a-select-option>
-                <a-select-option value="vars_combinations">自定义变量</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-              <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="upstreamForm.description" :rows="2" />
-            </a-form-item>
-            <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
-              <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
-                <template #bodyCell="{ column, record, index }">
-                  <template v-if="column.key === 'ip'">
-                    <a-input v-model:value="record.ip" placeholder="IP地址" />
-                    <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'port'">
-                    <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
-                    <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'weight'">
-                    <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
-                    <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'action'">
-                    <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
-                  </template>
-                </template>
-              </a-table>
-              <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
-                <PlusOutlined /> 添加节点
-              </a-button>
-            </a-form-item>
-            <a-form-item label="高级配置">
-              <a-switch v-model:checked="upstreamForm.advancedEnabled" checked-children="开" un-checked-children="关" />
-              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-
-        <a-tab-pane key="advanced" tab="高级配置">
-          <div v-if="upstreamForm.advancedEnabled">
-            <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-              <a-form-item label="健康检查" name="checks">
-                <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
-              </a-form-item>
-              <a-form-item label="重试次数" name="retries">
-                <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
-                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
-              </a-form-item>
-              <a-form-item label="重试超时(秒)" name="retry_timeout">
-                <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
-                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
-              </a-form-item>
-              <a-form-item label="超时配置(秒)">
-                <div style="display: flex; gap: 8px;">
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width: 100%" />
-                  </div>
-                </div>
-              </a-form-item>
-              <a-form-item label="Host策略" name="pass_host">
-                <a-select v-model:value="upstreamForm.pass_host">
-                  <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
-                  <a-select-option value="node">node（使用节点Host）</a-select-option>
-                  <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
-                </a-select>
-              </a-form-item>
-              <a-form-item v-if="upstreamForm.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
-                <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" />
-              </a-form-item>
-              <a-form-item label="通信协议" name="scheme">
-                <a-select v-model:value="upstreamForm.scheme">
-                  <a-select-option value="http">http</a-select-option>
-                  <a-select-option value="https">https</a-select-option>
-                  <a-select-option value="tcp">tcp</a-select-option>
-                  <a-select-option value="udp">udp</a-select-option>
-                </a-select>
-              </a-form-item>
-              <a-form-item label="连接池">
-                <div style="display: flex; gap: 8px;">
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" />
-                  </div>
-                </div>
-              </a-form-item>
-            </a-form>
-          </div>
-          <div v-else class="advanced-disabled-hint">
-            <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-            高级配置未启用，请在"基础配置"中开启
-          </div>
-        </a-tab-pane>
-      </a-tabs>
     </a-modal>
 
     <a-modal v-model:open="routeModalVisible" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由')" width="800px" @ok="handleRouteSubmit">
@@ -569,9 +435,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, h } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { PlusOutlined, WarningOutlined, DownOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons-vue'
+import { showDeleteConfirm, resourceLabels } from '@/composables/useClusterUtils'
+import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -828,21 +695,9 @@ const {
 })
 
 const {
-  upstreamModalVisible, upstreamModalActiveTab, editingUpstream,
-  upstreamForm, upstreamFormRef, targetValidation, checksJson,
-  defaultChecksJson, defaultTimeout,
-  allUpstreamColumns, upstreamColumnPopoverVisible, upstreamColumnsSelected,
-  upstreamSearchVisible, allUpstreamActionButtons, upstreamActionsSelected, visibleUpstreamColumns,
-  loadUpstreams, handleUpstreamTableChange, selectUpstream,
-  showAddUpstreamModal, editUpstream, editUpstreamByRecord, handleUpstreamSubmit,
-  deleteUpstream, deleteUpstreamByRecord,
-  publishUpstream, publishUpstreamByRecord,
-  openUpstreamVersionManagement, openUpstreamVersionManagementByRecord,
-  addUpstreamTarget, removeUpstreamTarget,
-  getUpstreamActionButtonTitle, handleUpstreamAction,
-  getLoadBalanceLabel, isValidIP,
-  buildDeleteProgressContent, publishStatusRender, formatPublishDateTime,
+  loadUpstreams,
 } = useClusterUpstreams({
+  clusters,
   versionModalVisible,
   versionModalType,
   versionModalResourceId,
@@ -962,12 +817,6 @@ const getClusterUpstreams = () => {
   return cluster?.upstreams || []
 }
 
-const getUpstreamName = (cluster: Cluster, upstreamId: number | null) => {
-  if (!upstreamId || !cluster.upstreams) return '-'
-  const upstream = cluster.upstreams.find((u: Upstream) => u.id === upstreamId)
-  return upstream?.name || '-'
-}
-
 const loadClusters = async () => {
   loading.value = true
   try {
@@ -1061,174 +910,6 @@ const handleSubmit = async () => {
   }
 }
 
-const resourceLabels: Record<string, string> = {
-  nodes: 'Edge 节点',
-  upstreams: '上游服务',
-  routes: '路由规则',
-  plugin_configs: '插件组',
-  global_rules: '全局规则',
-  plugin_metadata: '插件元数据',
-  config_versions: '配置版本历史',
-}
-
-// Shared delete confirmation with DB/Edge selection
-function showDeleteConfirm(opts: {
-  title: string
-  apiEndpoint: string
-  onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
-  showResourceStats?: boolean
-  stats?: Record<string, number>
-  nodes?: { id: number; ip: string; management_port: number }[]
-}) {
-  let deleteDb = false
-  let deleteEdge = false
-  const selectedNodeIds: Set<number> = new Set((opts.nodes || []).map(n => n.id))
-  let confirmModal: any
-
-  const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
-
-  const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
-    confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
-  }
-
-  const nodeCheckboxContent = (opts.nodes && opts.nodes.length > 0) ? h('div', {
-    style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (deleteEdge ? 'block' : 'none'),
-  }, [
-    h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
-    ...opts.nodes.map(n =>
-      h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
-        h('input', {
-          type: 'checkbox', checked: selectedNodeIds.has(n.id),
-          onInput: (e: any) => {
-            if (e.target.checked) selectedNodeIds.add(n.id)
-            else selectedNodeIds.delete(n.id)
-            updateOkDisabled()
-          },
-          style: 'width: 14px; height: 14px; cursor: pointer;',
-        }),
-        h('span', {}, `${n.ip}:${n.management_port}`),
-      ])
-    ),
-  ]) : null
-
-  const content = h('div', { style: 'font-size: 13px;' }, [
-    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
-
-    // Resource stats section (only for cluster)
-    ...(opts.showResourceStats && opts.stats ? [
-      h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
-        h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
-        ...Object.entries(opts.stats).map(([k, v]) =>
-          h('div', { style: 'display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5;' }, [
-            h('span', { style: 'color: #666;' }, resourceLabels[k] || k),
-            h('span', { style: 'font-weight: 500;' }, String(v)),
-          ])
-        ),
-        h('div', { style: 'display: flex; justify-content: space-between; padding: 6px 0 0; font-weight: 600; border-top: 2px solid #e8e8e8; margin-top: 4px;' }, [
-          h('span', '合计'),
-          h('span', `${totalCount} 条记录`),
-        ]),
-      ])
-    ] : []),
-
-    // Delete scope selection
-    h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteDb,
-          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, '数据库'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
-      ]),
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => {
-            deleteEdge = e.target.checked
-            if (!deleteEdge) selectedNodeIds.clear()
-            // update the node list visibility by re-rendering
-            confirmModal.update({
-              content: rebuildContent(true)
-            })
-            updateOkDisabled()
-          },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
-      ]),
-      deleteEdge && opts.nodes ? nodeCheckboxContent : null,
-    ]),
-  ])
-
-  function rebuildContent(force?: boolean): any {
-    const showNodes = force !== undefined ? force : deleteEdge
-    const nc = (opts.nodes && opts.nodes.length > 0) ? h('div', {
-      style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (showNodes ? 'block' : 'none'),
-    }, [
-      h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
-      ...opts.nodes.map(n =>
-        h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
-          h('input', {
-            type: 'checkbox', checked: selectedNodeIds.has(n.id),
-            onInput: (e: any) => {
-              if (e.target.checked) selectedNodeIds.add(n.id)
-              else selectedNodeIds.delete(n.id)
-              updateOkDisabled()
-            },
-            style: 'width: 14px; height: 14px; cursor: pointer;',
-          }),
-          h('span', {}, `${n.ip}:${n.management_port}`),
-        ])
-      ),
-    ]) : null
-
-    return h('div', { style: 'font-size: 13px;' }, [
-      h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
-      h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-        h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-          h('input', {
-            type: 'checkbox', checked: deleteDb,
-            onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-            style: 'width: 16px; height: 16px; cursor: pointer;',
-          }),
-          h('span', { style: 'font-size: 14px;' }, '数据库'),
-          h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
-        ]),
-        h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-          h('input', {
-            type: 'checkbox', checked: deleteEdge,
-            onInput: (e: any) => {
-              deleteEdge = e.target.checked
-              if (!deleteEdge) selectedNodeIds.clear()
-              confirmModal.update({ content: rebuildContent(true) })
-              updateOkDisabled()
-            },
-            style: 'width: 16px; height: 16px; cursor: pointer;',
-          }),
-          h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-          h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
-        ]),
-        showNodes ? nc : null,
-      ]),
-    ])
-  }
-
-  confirmModal = Modal.confirm({
-    title: '确认删除',
-    content,
-    okText: '确认删除',
-    okType: 'danger' as any,
-    cancelText: '取消',
-    okButtonProps: { disabled: true },
-    onOk: () => {
-      opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
-    },
-  })
-}
 
 const deleteCluster = async (cluster: Cluster) => {
   const clusterName = cluster.display_name || cluster.name

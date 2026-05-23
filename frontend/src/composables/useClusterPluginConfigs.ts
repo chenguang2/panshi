@@ -1,7 +1,8 @@
 import { ref, reactive, h, type Ref } from 'vue'
-import { message, Modal, Progress } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
+import { buildDeleteProgressContent } from './useClusterUtils'
 
 export interface VersionModalState {
   type: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
@@ -18,18 +19,6 @@ export interface PluginConfigDeps {
   availablePlugins: Ref<Plugin[]>
   loadAvailablePlugins: () => Promise<void>
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
-}
-
-function buildDeleteProgressContent(
-  progress: { percent: number; status: 'active' | 'success' | 'exception' },
-  logs: string[]
-) {
-  return h('div', {}, [
-    h(Progress, { percent: progress.percent, status: progress.status, showInfo: false, style: 'margin-bottom: 12px;' }),
-    h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-      logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-    )
-  ])
 }
 
 export function useClusterPluginConfigs(deps: PluginConfigDeps) {
