@@ -456,8 +456,11 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeForm.status = sourceRoute.status
     routeForm.upstream_id = sourceRoute.upstream_id
     routeForm.description = sourceRoute.description || ''
-    routeForm.advancedMatchEnabled = sourceRoute.advanced_match_enabled || false
     routeForm.advancedMatch = { vars: sourceRoute.vars || [] }
+    routeForm.advancedMatchEnabled = !!(
+      sourceRoute.advanced_match_enabled ||
+      (routeForm.advancedMatch.vars.length > 0)
+    )
     routeForm.plugins = []
     routeModalActiveTab.value = 'basic'
 
