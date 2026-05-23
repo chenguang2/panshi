@@ -108,14 +108,6 @@
       @published="onVersionPublished"
     />
 
-    <!-- Publish Confirm Modal -->
-    <PublishConfirmModal
-      v-model:visible="publishConfirmVisible"
-      :title="publishConfirmTitle"
-      :cluster-id="publishConfirmClusterId"
-      @confirm="onPublishConfirm"
-      @cancel="onPublishCancel"
-    />
   </div>
 </template>
 
@@ -126,57 +118,21 @@ import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
 import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
-import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import { formatDate } from '@/composables/useClusterUtils'
 
 const props = defineProps<{
   cluster: Cluster
+  clusters: Cluster[]
+  openPublishModal: (title: string, clusterId: number) => Promise<number[]>
+  availablePlugins: Plugin[]
+  loadAvailablePlugins: () => Promise<void>
 }>()
 
 const emit = defineEmits<{
   refresh: []
 }>()
-
-// Available plugins (shared within this component)
-const availablePlugins = ref<Plugin[]>([])
-
-const loadAvailablePlugins = async () => {
-  try {
-    const res = await api.get('/plugins/builtin')
-    availablePlugins.value = res.data.plugins || []
-  } catch (error) {
-    console.error('加载插件列表失败', error)
-  }
-}
-
-// Publish confirm modal state
-const publishConfirmVisible = ref(false)
-const publishConfirmTitle = ref('')
-const publishConfirmClusterId = ref(0)
-let publishConfirmResolve: ((nodeIds: number[]) => void) | null = null
-
-function openPublishModal(title: string, clusterId: number): Promise<number[]> {
-  publishConfirmTitle.value = title
-  publishConfirmClusterId.value = clusterId
-  publishConfirmVisible.value = true
-  return new Promise((resolve) => {
-    publishConfirmResolve = resolve
-  })
-}
-
-function onPublishConfirm(nodeIds: number[]) {
-  publishConfirmVisible.value = false
-  publishConfirmResolve?.(nodeIds)
-  publishConfirmResolve = null
-}
-
-function onPublishCancel() {
-  publishConfirmVisible.value = false
-  publishConfirmResolve?.([])
-  publishConfirmResolve = null
-}
 
 // Version modal state
 const versionModalVisible = ref(false)
@@ -195,9 +151,6 @@ const versionModal: VersionModalState = {
   edgeUuid: versionModalEdgeUuid,
 }
 
-// Wrap single cluster as array for composable
-const clusters = computed(() => [props.cluster])
-
 const {
   pluginConfigModalVisible,
   pluginConfigActiveTab,
@@ -214,11 +167,11 @@ const {
   openPluginConfigVersionManagement,
   viewPluginConfigDetail,
 } = useClusterPluginConfigs({
-  clusters,
+  clusters: computed(() => props.clusters),
   versionModal,
-  availablePlugins,
-  loadAvailablePlugins,
-  openPublishModal,
+  availablePlugins: computed(() => props.availablePlugins),
+  loadAvailablePlugins: props.loadAvailablePlugins,
+  openPublishModal: props.openPublishModal,
 })
 
 function onVersionPublished() {
