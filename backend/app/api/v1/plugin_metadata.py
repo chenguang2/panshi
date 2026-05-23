@@ -6,7 +6,6 @@ import json
 
 from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
-from app.models.system import AuditLog
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])

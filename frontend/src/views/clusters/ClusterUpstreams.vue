@@ -235,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Cluster } from '@/types'
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -243,6 +243,7 @@ import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 
 const props = defineProps<{
   cluster: Cluster
+  clusters: Cluster[]
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
 }>()
 
@@ -283,6 +284,7 @@ const {
   getUpstreamActionButtonTitle,
   handleUpstreamAction,
 } = useClusterUpstreams({
+  clusters: computed(() => props.clusters),
   versionModalVisible,
   versionModalType,
   versionModalResourceId,

@@ -1,26 +1,15 @@
-import { ref, reactive, computed, h, type Ref } from 'vue'
-import { message, Modal, Progress } from 'ant-design-vue'
+import { ref, reactive, computed, type Ref } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
+import { buildDeleteProgressContent } from './useClusterUtils'
 
 export interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
   versionModal: VersionModalState
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   loadRoutes: (cluster: Cluster) => Promise<void>
-}
-
-function buildDeleteProgressContent(
-  progress: { percent: number; status: 'active' | 'success' | 'exception' },
-  logs: string[]
-) {
-  return h('div', {}, [
-    h(Progress, { percent: progress.percent, status: progress.status, showInfo: false, style: 'margin-bottom: 12px;' }),
-    h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-      logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-    )
-  ])
 }
 
 function formatFileSize(bytes: number) {

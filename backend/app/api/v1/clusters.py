@@ -577,9 +577,8 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     results = []
 
     if body.delete_db:
-        await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
-        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
-        await db.delete(upstream)
+        await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id == config_id))
+        await db.delete(config)
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 

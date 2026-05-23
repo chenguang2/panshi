@@ -129,6 +129,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
+import { formatDate } from '@/composables/useClusterUtils'
 
 const props = defineProps<{
   cluster: Cluster
@@ -225,12 +226,6 @@ function onVersionPublished() {
   emit('refresh')
 }
 
-function formatDate(dateStr: string): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 </script>
 
 <style scoped>

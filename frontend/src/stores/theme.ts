@@ -55,8 +55,6 @@ export const useThemeStore = defineStore('theme', () => {
   const setDarkMode = (val: boolean) => { darkMode.value = val }
   const setLayoutMode = (mode: LayoutMode) => { layoutMode.value = mode }
   const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value }
-  const setSidebarCollapsed = (val: boolean) => { sidebarCollapsed.value = val }
-
   return {
     themeColor,
     darkMode,
@@ -67,6 +65,5 @@ export const useThemeStore = defineStore('theme', () => {
     setDarkMode,
     setLayoutMode,
     toggleSidebar,
-    setSidebarCollapsed,
   }
 })

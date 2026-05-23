@@ -37,18 +37,5 @@ const permissions = ref<string[]>(storedPermissions ? JSON.parse(storedPermissio
     localStorage.removeItem('permissions')
   }
 
-  const fetchCurrentUser = async () => {
-    const response = await api.get<User>('/auth/me')
-    user.value = response.data
-    return response.data
-  }
-
-  const fetchPermissions = async () => {
-    try {
-      const res = await api.get('/auth/me/permissions')
-      permissions.value = res.data.permissions || []
-    } catch { permissions.value = [] }
-  }
-
-  return { token, user, permissions, hasPermission, login, logout, fetchCurrentUser, fetchPermissions }
+  return { token, user, permissions, hasPermission, login, logout }
 })

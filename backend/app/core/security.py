@@ -38,5 +38,3 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def get_password_hash_cost() -> int:
-    return 12

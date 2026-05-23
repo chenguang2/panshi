@@ -131,6 +131,7 @@ import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
+import { formatDate } from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string
@@ -534,11 +535,6 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
 const openVersionManagement = (item: ConfiguredPlugin) => {
   versionModalPluginName.value = item.plugin_name
   versionModalVisible.value = true
-}
-
-const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
 }
 
 watch(() => props.clusterId, () => {
