@@ -3,7 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
-import { buildDeleteProgressContent, showDeleteConfirm } from './useClusterUtils'
+import { buildDeleteProgressContent, showDeleteConfirm, executePublish } from './useClusterUtils'
 
 export interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
@@ -342,73 +342,24 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     const nodeIds = await openPublishModal(`发布静态资源: ${sr.name}`, cluster.id)
     if (!nodeIds.length) return
 
-    const logs: string[] = []
-    const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-    const modal = Modal.info({
+    await executePublish({
       title: `发布静态资源: ${sr.name}`,
-      width: 600,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
-    })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
-    }
-
-    addLog(`开始发布静态资源: ${sr.name}`)
-    progress.percent = 10
-    updateContent()
-
-    await new Promise(r => setTimeout(r, 400))
-
-    try {
-      addLog('正在构建发布配置...')
-      progress.percent = 30
-      updateContent()
-
-      const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/publish`, { node_ids: nodeIds })
-      const data = res.data
-      progress.percent = 70
-
-      addLog(`当前版本: v${data.current_version}`)
-
-      if (data.results && data.results.length > 0) {
-        addLog('')
-        addLog('节点同步结果:')
-        for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+      apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}/publish`,
+      nodeIds,
+      refreshFn: () => loadStaticResources(cluster),
+      handleResult: (data, addLog, progress) => {
+        if (data.current_version !== undefined) addLog(`当前版本: v${data.current_version}`)
+        if (data.results && data.results.length > 0) {
+          addLog(''); addLog('节点同步结果:')
+          for (const r of data.results) {
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          }
         }
-      }
-
-      progress.percent = 100
-      addLog('')
-      if (data.success) {
-        progress.status = 'success'
-        addLog('✅ 发布成功!')
-      } else {
-        progress.status = 'exception'
-        addLog('⚠️ 发布完成，部分节点失败')
-      }
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-
-      await loadStaticResources(cluster)
-    } catch (error: any) {
-      const errMsg = error.response?.data?.detail || error.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
-      addLog('')
-      addLog(`❌ 发布失败: ${errMsg}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-    }
+        progress.percent = 100; addLog('')
+        if (data.success) { progress.status = 'success'; addLog('✅ 发布成功!') }
+        else { progress.status = 'exception'; addLog('⚠️ 发布完成，部分节点失败') }
+      },
+    })
   }
 
   const openStaticResourceVersionManagement = (cluster: Cluster, sr: any) => {

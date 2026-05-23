@@ -2,7 +2,7 @@ import { ref, reactive, h, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
-import { buildDeleteProgressContent, showDeleteConfirm } from './useClusterUtils'
+import { buildDeleteProgressContent, showDeleteConfirm, executePublish } from './useClusterUtils'
 
 export interface VersionModalState {
   type: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
@@ -237,78 +237,12 @@ export function useClusterPluginConfigs(deps: PluginConfigDeps) {
     const nodeIds = await openPublishModal(`发布插件组: ${target.name}`, cluster.id)
     if (!nodeIds.length) return
 
-    const logs: string[] = []
-    const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-    const modal = Modal.info({
+    await executePublish({
       title: `发布插件组: ${target.name}`,
-      width: 600,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
+      apiEndpoint: `/clusters/${cluster.id}/plugin_configs/${target.id}/publish`,
+      nodeIds,
+      refreshFn: () => loadPluginConfigs(cluster),
     })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
-    }
-
-    addLog(`开始发布插件组: ${target.name}`)
-    progress.percent = 10
-    updateContent()
-
-    await new Promise(r => setTimeout(r, 400))
-
-    try {
-      addLog('正在构建发布配置...')
-      progress.percent = 30
-      updateContent()
-
-      const res = await api.post(`/clusters/${cluster.id}/plugin_configs/${target.id}/publish`, { node_ids: nodeIds })
-      const data = res.data
-      progress.percent = 70
-
-      addLog(`状态: ${data.status}`)
-      addLog(`消息: ${data.message}`)
-      addLog(`版本: v${data.version}`)
-
-      if (data.results && data.results.length > 0) {
-        addLog('')
-        addLog('节点同步结果:')
-        for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-        }
-      }
-
-      progress.percent = 100
-      addLog('')
-      if (data.status === 'ok') {
-        progress.status = 'success'
-        addLog('✅ 发布成功!')
-      } else if (data.status === 'partial') {
-        progress.status = 'exception'
-        addLog('⚠️ 部分成功')
-      } else {
-        progress.status = 'exception'
-        addLog('❌ 发布失败')
-      }
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-
-      await loadPluginConfigs(cluster)
-    } catch (error: any) {
-      const errMsg = error.response?.data?.detail || error.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
-      addLog('')
-      addLog(`❌ 发布失败: ${errMsg}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
-    }
   }
 
   const openPluginConfigVersionManagement = (cluster: Cluster, pc?: any) => {
