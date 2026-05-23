@@ -161,7 +161,6 @@ function onPublishConfirm(nodeIds: number[]) {
   publishConfirmVisible.value = false
   publishConfirmResolve?.(nodeIds)
   publishConfirmResolve = null
-  emit('refresh')
 }
 
 function onPublishCancel() {
