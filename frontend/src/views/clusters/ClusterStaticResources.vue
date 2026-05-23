@@ -100,14 +100,6 @@
       @published="onVersionPublished"
     />
 
-    <!-- Publish Confirm Modal -->
-    <PublishConfirmModal
-      v-model:visible="publishConfirmVisible"
-      :title="publishConfirmTitle"
-      :cluster-id="publishConfirmClusterId"
-      @confirm="onPublishConfirm"
-      @cancel="onPublishCancel"
-    />
   </div>
 </template>
 
@@ -117,53 +109,20 @@ import { EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
-import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import { formatDate } from '@/composables/useClusterUtils'
 
 const props = defineProps<{
   cluster: Cluster
+  clusters: Cluster[]
+  openPublishModal: (title: string, clusterId: number) => Promise<number[]>
+  loadRoutes: (cluster: Cluster) => Promise<void>
 }>()
 
 const emit = defineEmits<{
   refresh: []
 }>()
-
-// loadRoutes for the composable (fetches routes for the cluster)
-const loadRoutes = async (cluster: Cluster) => {
-  try {
-    const res = await api.get(`/clusters/${cluster.id}/routes`, {
-      params: { page: 1, page_size: 200 },
-    })
-    cluster.routes = res.data.items || []
-  } catch {
-    cluster.routes = []
-  }
-}
-
-// Publish confirm modal state
-const publishConfirmVisible = ref(false)
-const publishConfirmTitle = ref('')
-const publishConfirmClusterId = ref(0)
-let publishConfirmResolve: ((nodeIds: number[]) => void) | null = null
-
-function openPublishModal(title: string, clusterId: number): Promise<number[]> {
-  publishConfirmTitle.value = title
-  publishConfirmClusterId.value = clusterId
-  publishConfirmVisible.value = true
-  return new Promise((resolve) => {
-    publishConfirmResolve = resolve
-  })
-}
-
-function onPublishConfirm(nodeIds: number[]) {
-  publishConfirmVisible.value = false
-  publishConfirmResolve?.(nodeIds)
-  publishConfirmResolve = null
-}
-
-function onPublishCancel() {
   publishConfirmVisible.value = false
   publishConfirmResolve?.([])
   publishConfirmResolve = null
@@ -186,9 +145,6 @@ const versionModal: VersionModalState = {
   edgeUuid: versionModalEdgeUuid,
 }
 
-// Wrap single cluster as array for composable
-const clusters = computed(() => [props.cluster])
-
 const {
   staticResourceFormData,
   staticResourceModalVisible,
@@ -207,10 +163,10 @@ const {
   openStaticResourceVersionManagement,
   onStaticResourceRouteChange,
 } = useClusterStaticResources({
-  clusters,
+  clusters: computed(() => props.clusters),
   versionModal,
-  openPublishModal,
-  loadRoutes,
+  openPublishModal: props.openPublishModal,
+  loadRoutes: props.loadRoutes,
 })
 
 // Alias to match template usage from original ClusterList.vue
