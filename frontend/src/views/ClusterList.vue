@@ -193,14 +193,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { showDeleteConfirm, resourceLabels, buildDeleteProgressContent } from '@/composables/useClusterUtils'
-import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
+import { showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import PluginSelector from '@/components/PluginSelector.vue'
-import VersionManagementModal from '@/components/VersionManagementModal.vue'
-import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
@@ -717,19 +713,6 @@ const deleteCluster = async (cluster: Cluster) => {
 
 // Wire showDeleteConfirm for route composable (must be after showDeleteConfirm definition)
 _showDeleteConfirmRoute = showDeleteConfirm
-
-const versionModalOnPublished = async () => {
-  const cluster = clusters.value.find(c => c.id === versionModalClusterId.value)
-  if (!cluster) return
-
-  if (versionModalType.value === 'upstream') {
-    await loadUpstreams(cluster)
-  } else if (versionModalType.value === 'plugin_config') {
-    await loadPluginConfigs(cluster)
-  } else if (versionModalType.value === 'global_rule') {
-    await loadGlobalRules(cluster)
-  }
-}
 
 onMounted(() => {
   loadClusters()
