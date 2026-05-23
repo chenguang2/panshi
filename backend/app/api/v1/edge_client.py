@@ -103,8 +103,8 @@ async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db))
     client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_upstreams)
-        import json
-        print(f"[DEBUG] Edge upstream raw result keys: {result.keys() if isinstance(result, dict) else type(result)}")
+        if isinstance(result, list):
+            return {"upstreams": result}
         if isinstance(result, dict) and "raw_response" in result:
             return {"error": "解密失败", "detail": "Edge server response could not be decrypted", "raw_length": len(result.get("raw_response", ""))}
         nodes = client._parse_node_list(result)
