@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route } from '@/types'
-import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
 
 interface UpstreamExtras {
   hash_on?: string
@@ -129,65 +129,6 @@ export function useClusterUpstreams(options: {
   const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
   const checksJson = ref(defaultChecksJson)
-
-  const formatPublishDateTime = (isoStr: string | null): string => {
-    if (!isoStr) return ''
-    try {
-      return new Date(isoStr).toLocaleString('zh-CN', {
-        timeZone: 'Asia/Shanghai',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    } catch {
-      return ''
-    }
-  }
-
-  const publishStatusRender = (version: number | null, publishedAt: string | null) => {
-    const published = version !== null && version !== undefined
-    if (published && publishedAt) {
-      return h('span', [
-        h(
-          'span',
-          {
-            style:
-              'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #52c41a;color:#52c41a;font-weight:500;background:#f6ffed;',
-          },
-          `v${version}`,
-        ),
-        h(
-          'span',
-          {
-            style: 'font-size:11px;color:#666;margin-left:4px;cursor:help;',
-            title: `发布时间: ${formatPublishDateTime(publishedAt)}`,
-          },
-          ` ${formatPublishDateTime(publishedAt)}`,
-        ),
-      ])
-    }
-    if (published) {
-      return h(
-        'span',
-        {
-          style:
-            'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #52c41a;color:#52c41a;font-weight:500;background:#f6ffed;',
-        },
-        `v${version} · 未同步`,
-      )
-    }
-    return h(
-      'span',
-      {
-        style:
-          'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #d9d9d9;color:#999;background:#fafafa;',
-      },
-      '未发布',
-    )
-  }
 
   const allUpstreamColumns = [
     { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
