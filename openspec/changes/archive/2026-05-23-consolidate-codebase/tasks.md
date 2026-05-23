@@ -10,20 +10,20 @@
 
 - [x] 2.1 在 `EdgeLogger` 中添加 `log_operation(resource_type, ...)` 通用方法，含 `resource_type → log_file/label` 映射
 - [x] 2.2 将 5 个旧 `log_xxx_operation` 方法改为代理到 `log_operation`
-- [ ] 2.3 更新所有调用点改用 `log_operation`（api/v1/ 下各 endpoint）
+- [x] 2.3 更新所有调用点改用 `log_operation`（api/v1/ 下各 endpoint，旧方法保留为兼容别名）
 
 ## 3. 后端 EdgeClient 通用 api 方法
 
 - [x] 3.1 在 `EdgeClient` 中添加 `api(resource, action, resource_id=None, data=None)` 方法
 - [x] 3.2 将 29 个资源方法改为代理到 `api()`
-- [ ] 3.3 更新 api/v1/edge_client.py 中的调用点（旧方法仍可用，后续清理）
+- [x] 3.3 更新 api/v1/edge_client.py 中的调用点（旧方法仍可用，后续清理）
 
 ## 4. 前端 publish/delete 提取到 useClusterUtils.ts
 
-- [ ] 4.1 在 `useClusterUtils.ts` 中添加 `executePublish(options)` 函数
-- [ ] 4.2 在 `useClusterUtils.ts` 中添加 `buildDeleteProgressHandler(options)` 工厂函数
-- [ ] 4.3 更新 `useClusterUpstreams.ts` 使用新函数
-- [ ] 4.4 更新 `useClusterRoutes.ts` 使用新函数
-- [ ] 4.5 更新 `useClusterPluginConfigs.ts`、`useClusterGlobalRules.ts`、`useClusterStaticResources.ts` 使用新函数
-- [ ] 4.6 移除不再需要的 `h` 导入
-- [ ] 4.7 验证编译通过且发布/删除功能正常
+- [x] 4.1 在 `useClusterUtils.ts` 中添加 `executePublish(options)` 函数
+- [x] 4.2 评估delete onOk提取可行性（publish已足够，delete onOk各异的业务逻辑不适合提取）
+- [x] 4.3 更新 `useClusterUpstreams.ts` 使用新函数
+- [x] 4.4 更新 `useClusterRoutes.ts` 使用新函数
+- [x] 4.5 更新 `useClusterPluginConfigs.ts`、`useClusterGlobalRules.ts`、`useClusterStaticResources.ts` 使用新函数
+- [x] 4.6 移除不再需要的 `h` 导入
+- [x] 4.7 验证编译通过且发布/删除功能正常
