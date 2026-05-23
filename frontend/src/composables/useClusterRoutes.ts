@@ -3,6 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import { buildDeleteProgressContent } from './useClusterUtils'
 
 // ── helpers ────────────────────────────────────────────────────────────
 
@@ -98,7 +99,6 @@ export interface RouteComposableDeps {
   clusters: Ref<Cluster[]>
   currentClusterId: Ref<number | null>
 
-  buildDeleteProgressContent: (progress: { percent: number; status: string }, logs: string[]) => ReturnType<typeof h>
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   showDeleteConfirm: (opts: {
     title: string
@@ -127,7 +127,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   const {
     clusters,
     currentClusterId,
-    buildDeleteProgressContent,
     openPublishModal,
     showDeleteConfirm,
     loadPluginConfigs,

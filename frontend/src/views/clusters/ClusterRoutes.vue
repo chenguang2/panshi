@@ -237,7 +237,6 @@ import PluginSelector from '@/components/PluginSelector.vue'
 const props = defineProps<{
   cluster: Cluster
   clusters: Cluster[]
-  buildDeleteProgressContent: (progress: { percent: number; status: string }, logs: string[]) => ReturnType<typeof h>
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   showDeleteConfirm: (opts: {
     title: string
@@ -299,7 +298,6 @@ const {
 } = useClusterRoutes({
   clusters: computed(() => props.clusters),
   currentClusterId,
-  buildDeleteProgressContent: props.buildDeleteProgressContent,
   openPublishModal: props.openPublishModal,
   showDeleteConfirm: props.showDeleteConfirm,
   loadPluginConfigs: props.loadPluginConfigs,
