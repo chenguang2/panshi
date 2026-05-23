@@ -388,6 +388,7 @@ export function useClusterUpstreams(options: {
   const validateTargets = (): boolean => {
     targetValidation.value = {}
     let valid = true
+    const seen = new Set<string>()
     upstreamForm.targets.forEach((t, i) => {
       const errors: Record<string, string> = {}
       if (!t.ip) {
@@ -404,6 +405,15 @@ export function useClusterUpstreams(options: {
       if (!t.weight || t.weight < 1 || t.weight > 100) {
         errors.weight = '权重不合法'
         valid = false
+      }
+      // 检查重复 IP:端口
+      if (t.ip && t.port) {
+        const key = `${t.ip}:${t.port}`
+        if (seen.has(key)) {
+          errors.ip = `IP和端口与第 ${[...seen].indexOf(key) + 1} 行重复`
+          valid = false
+        }
+        seen.add(key)
       }
       targetValidation.value[`${i}`] = errors
     })
