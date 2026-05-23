@@ -124,14 +124,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, h } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
-import { formatDate } from '@/composables/useClusterUtils'
+import { formatDate, showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string
@@ -312,99 +312,26 @@ const handleVersionPublished = async (_data: { plugin_name: string }) => {
 }
 
 const deletePlugin = (item: ConfiguredPlugin) => {
-  let deleteDb = false
-  let deleteEdge = false
-  const selectedNodeIds: Set<number> = new Set((props.nodes || []).map(n => n.id))
-  let confirmModal: any
-
-  const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
-    confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
-  }
-
-  const buildConfirmContent = (showNodes: boolean) => h('div', { style: 'font-size: 13px;' }, [
-    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, `确定要删除插件元数据 "${item.plugin_name}" 吗？`),
-    h('div', { style: 'color: #666; margin-bottom: 12px;' }, '此操作不可撤销，将同时删除数据库记录及所有版本历史。'),
-
-    h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteDb,
-          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, '数据库'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
-      ]),
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => {
-            deleteEdge = e.target.checked
-            if (!deleteEdge) selectedNodeIds.clear()
-            confirmModal.update({ content: buildConfirmContent(deleteEdge) })
-            updateOkDisabled()
-          },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '从活跃 Edge 节点中删除'),
-      ]),
-      showNodes && props.nodes ? h('div', {
-        style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px;',
-      }, [
-        h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
-        ...props.nodes.map(n =>
-          h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
-            h('input', {
-              type: 'checkbox', checked: selectedNodeIds.has(n.id),
-              onInput: (e: any) => {
-                if (e.target.checked) selectedNodeIds.add(n.id)
-                else selectedNodeIds.delete(n.id)
-                updateOkDisabled()
-              },
-              style: 'width: 14px; height: 14px; cursor: pointer;',
-            }),
-            h('span', {}, `${n.ip}:${n.management_port}`),
-          ])
-        ),
-      ]) : null,
-    ]),
-  ])
-
-  confirmModal = Modal.confirm({
-    title: '确认删除',
-    content: buildConfirmContent(false),
-    okText: '确认删除',
-    okType: 'danger',
-    cancelText: '取消',
-    okButtonProps: { disabled: true },
-    onOk: async () => {
-      const nodeIds = Array.from(selectedNodeIds)
+  showDeleteConfirm({
+    title: `确定要删除插件元数据 "${item.plugin_name}" 吗？`,
+    apiEndpoint: `/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`,
+    nodes: props.nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
       const logs: string[] = []
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
-
-      const buildContent = () => h('div', {}, [
-        h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;' }, [
-          h('div', { style: `width:${progress.percent}%;height:100%;background:${progress.status === 'success' ? '#52c41a' : progress.status === 'exception' ? '#ff4d4f' : '#1677ff'};transition:width 0.3s;` })
-        ]),
-        h('div', { style: 'max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px;' },
-          logs.map(log => h('div', { style: 'margin-bottom:4px;white-space:pre-wrap;' }, log))
-        )
-      ])
+      const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
 
       const modal = Modal.info({
         title: `删除插件元数据: ${item.plugin_name}`,
         width: 600,
-        content: h('div', '正在准备...'),
+        content: buildDeleteProgressContent(progress, logs),
         okText: '确定',
         okButtonProps: { disabled: true },
         cancelText: '',
         closable: true,
       })
 
-      const update = () => modal.update({ content: buildContent() })
+      const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
       addLog(`开始删除插件元数据: ${item.plugin_name}`)
       progress.percent = 20; update()
       await new Promise(r => setTimeout(r, 400))
@@ -461,7 +388,7 @@ const progress: { percent: number; status: 'active' | 'success' | 'exception' } 
         update()
         modal.update({ okButtonProps: { disabled: false } })
       }
-    }
+    },
   })
 }
 
@@ -473,26 +400,17 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
   const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
 
-  const buildContent = () => h('div', {}, [
-    h('div', { style: 'background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;margin-bottom:12px;position:relative;' }, [
-      h('div', { style: `width:${progress.percent}%;height:100%;background:${progress.status === 'success' ? '#52c41a' : progress.status === 'exception' ? '#ff4d4f' : '#1677ff'};transition:width 0.3s;` })
-    ]),
-    h('div', { style: 'max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px;' },
-      logs.map(log => h('div', { style: 'margin-bottom:4px;white-space:pre-wrap;' }, log))
-    )
-  ])
-
   const modal = Modal.info({
     title: `发布插件元数据: ${item.plugin_name}`,
     width: 600,
-    content: h('div', '正在准备...'),
+    content: buildDeleteProgressContent(progress, logs),
     okText: '确定',
     okButtonProps: { disabled: true },
     cancelText: '',
     closable: true,
   })
 
-  const update = () => modal.update({ content: buildContent() })
+  const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
   addLog(`开始发布: ${item.plugin_name}`)
   progress.percent = 10; update()
   await new Promise(r => setTimeout(r, 400))
@@ -522,6 +440,8 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
     else { progress.status = 'exception'; addLog('❌ 发布失败') }
     update()
     modal.update({ okButtonProps: { disabled: false } })
+
+    await loadConfiguredPlugins()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
     progress.percent = 100; progress.status = 'exception'
@@ -529,7 +449,6 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
     update()
     modal.update({ okButtonProps: { disabled: false } })
   }
-  await loadConfiguredPlugins()
 }
 
 const openVersionManagement = (item: ConfiguredPlugin) => {
