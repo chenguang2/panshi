@@ -3,7 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
-import { buildDeleteProgressContent, showDeleteConfirm, executePublish } from './useClusterUtils'
+import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from './useClusterUtils'
 
 export interface GlobalRuleDeps {
   clusters: Ref<Cluster[]>
@@ -102,40 +102,15 @@ export function useClusterGlobalRules(deps: GlobalRuleDeps) {
       apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
       nodes: cluster.nodes,
       onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        const logs: string[] = []; const addLog = (t: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${t}`)
-        const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-        const modal = Modal.info({ title: `删除全局规则: ${gr.name}`, width: 600, content: buildDeleteProgressContent(progress, logs), okText: '确定', okButtonProps: { disabled: true }, cancelText: '', closable: true })
-        const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-        addLog(`开始删除: ${gr.name}`); progress.percent = 20; update()
-        await new Promise(r => setTimeout(r, 400))
-        try {
-          const res = await api.delete(`/clusters/${cluster.id}/global_rules/${gr.id}`, {
-            data: {
-              delete_db: deleteDb,
-              delete_edge: deleteEdge,
-              node_ids: nodeIds.length > 0 ? nodeIds : undefined,
-            },
-          })
-          const data = res.data
-          progress.percent = 60
-          const dbResult = data.results?.find((r: any) => r.scope === 'database')
-          if (dbResult) { addLog('正在从数据库删除...'); addLog(`数据库: ${dbResult.message || '已删除'}`) }
-          addLog('')
-          const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
-          if (edgeResults.length > 0) {
-            addLog('Edge 节点同步删除结果:');
-            let ok = 0, fail = 0
-            for (const r of edgeResults) { r.status === 'success' ? ok++ : fail++; addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`) }
-            addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
-          } else if (deleteEdge) { addLog('集群中没有活跃的 Edge 节点') }
-          progress.percent = 100
-          if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'success'; addLog('✅ 删除完成!') }
-          else if (edgeResults.some((r: any) => r.status === 'failed')) { progress.status = 'exception'; addLog('⚠️ 部分节点删除失败') }
-          else { addLog(`✅ 已完成`) }
-          update()
-          await loadGlobalRules(cluster)
-        } catch (e: any) { progress.percent = 100; progress.status = 'exception'; addLog(`❌ 删除失败: ${e.response?.data?.detail || e.message}`); update() }
-        modal.update({ okButtonProps: { disabled: false } })
+        await executeDeleteWithProgress({
+          title: `删除全局规则: ${gr.name}`,
+          apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadGlobalRules(cluster),
+        })
       },
     })
   }
