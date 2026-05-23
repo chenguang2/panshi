@@ -737,6 +737,8 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       }
       updateContent()
       modal.update({ okButtonProps: { disabled: false } })
+
+      await loadRoutes(cluster)
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: unknown } }; message?: string }
       const errMsg = err.response?.data?.detail || err.message || '未知错误'
