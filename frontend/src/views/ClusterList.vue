@@ -437,7 +437,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { showDeleteConfirm, resourceLabels } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, resourceLabels, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
