@@ -409,8 +409,11 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeForm.status = routeData.status
     routeForm.upstream_id = routeData.upstream_id
     routeForm.description = routeData.description || ''
-    routeForm.advancedMatchEnabled = routeData.advanced_match_enabled || false
     routeForm.advancedMatch = { vars: [...(routeData.vars || [])] }
+    routeForm.advancedMatchEnabled = !!(
+      routeData.advanced_match_enabled ||
+      (routeForm.advancedMatch.vars.length > 0)
+    )
     routeForm.plugins = []
     routeForm.plugin_config_ids = (routeData as unknown as Record<string, unknown>).plugin_config_ids
       ? [...((routeData as unknown as Record<string, unknown>).plugin_config_ids as string[])]
