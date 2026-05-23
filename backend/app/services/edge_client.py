@@ -274,45 +274,64 @@ class EdgeClient:
             except json.JSONDecodeError:
                 return {"raw_response": response.text}
 
-    # Upstream API methods
+    RESOURCE_PATHS = {
+        "upstream": "/edge/admin/upstreams",
+        "route": "/edge/admin/routes",
+        "plugin_config": "/edge/admin/plugin_configs",
+        "global_rule": "/edge/admin/global_rules",
+        "plugin_metadata": "/edge/admin/plugin_metadata",
+        "plugin": "/edge/admin/plugins",
+    }
 
-    def get_upstream(self, upstream_id: str) -> dict[str, Any]:
-        """Get a single upstream by ID."""
-        return self._request("GET", f"/edge/admin/upstreams/{upstream_id}")
+    ACTION_METHOD = {
+        "list": "GET", "get": "GET", "create": "POST",
+        "update": "PUT", "patch": "PATCH", "delete": "DELETE",
+        "reload": "PUT",
+    }
 
-    def list_upstreams(self) -> dict[str, Any]:
-        """List all upstreams."""
-        return self._request("GET", "/edge/admin/upstreams")
-
-    def create_upstream(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Create a new upstream."""
-        return self._request("POST", "/edge/admin/upstreams", data)
-
-    def update_upstream(self, upstream_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Update an existing upstream by ID."""
-        return self._request("PUT", f"/edge/admin/upstreams/{upstream_id}", data)
-
-    def delete_upstream(self, upstream_id: str) -> dict[str, Any]:
-        """Delete an upstream by ID."""
-        return self._request("DELETE", f"/edge/admin/upstreams/{upstream_id}")
-
-    def patch_upstream(
-        self,
-        upstream_id: str,
-        data: dict[str, Any],
-        path: str | None = None
-    ) -> dict[str, Any]:
-        """
-        Partially update an upstream.
+    def api(self, resource: str, action: str, resource_id: str | None = None, data: dict | None = None, sub_path: str | None = None) -> dict[str, Any]:
+        """Generic Edge API resource method.
 
         Args:
-            upstream_id: The upstream ID
-            data: Partial update data
-            path: Optional sub-path for targeted updates
+            resource: Resource type key from RESOURCE_PATHS
+            action: Action key from ACTION_METHOD
+            resource_id: Optional resource identifier for single-resource operations
+            data: Optional request body
+            sub_path: Optional sub-path for targeted operations
         """
+        base = self.RESOURCE_PATHS[resource]
+        method = self.ACTION_METHOD[action]
+        path = base
+        if resource_id:
+            path += f"/{resource_id}"
+        if sub_path:
+            path += f"/{sub_path}"
+        if action == "list":
+            response = self._request(method, path)
+            return self._parse_node_list(response)
+        return self._request(method, path, data)
+
+    # ── Upstream API methods ──
+
+    def get_upstream(self, upstream_id: str) -> dict[str, Any]:
+        return self.api("upstream", "get", upstream_id)
+
+    def list_upstreams(self) -> dict[str, Any]:
+        return self.api("upstream", "list")
+
+    def create_upstream(self, data: dict[str, Any]) -> dict[str, Any]:
+        return self.api("upstream", "create", data=data)
+
+    def update_upstream(self, upstream_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return self.api("upstream", "update", upstream_id, data)
+
+    def delete_upstream(self, upstream_id: str) -> dict[str, Any]:
+        return self.api("upstream", "delete", upstream_id)
+
+    def patch_upstream(self, upstream_id: str, data: dict[str, Any], path: str | None = None) -> dict[str, Any]:
         if path:
-            return self._request("PATCH", f"/edge/admin/upstreams/{upstream_id}/{path}", data)
-        return self._request("PATCH", f"/edge/admin/upstreams/{upstream_id}", data)
+            return self.api("upstream", "patch", upstream_id, data, sub_path=path)
+        return self.api("upstream", "patch", upstream_id, data)
 
     @staticmethod
     def convert_upstream_to_edge_format(
@@ -371,19 +390,16 @@ class EdgeClient:
 
         return result
 
-    # Route API methods
+    # ── Route API methods ──
 
     def update_route(self, edge_uuid: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Update an existing route by edge_uuid."""
-        return self._request("PUT", f"/edge/admin/routes/{edge_uuid}", data)
+        return self.api("route", "update", edge_uuid, data)
 
     def delete_route(self, edge_uuid: str) -> dict[str, Any]:
-        """Delete a route by edge_uuid."""
-        return self._request("DELETE", f"/edge/admin/routes/{edge_uuid}")
+        return self.api("route", "delete", edge_uuid)
 
     def patch_route(self, edge_uuid: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Partially update a route (PATCH)."""
-        return self._request("PATCH", f"/edge/admin/routes/{edge_uuid}", data)
+        return self.api("route", "patch", edge_uuid, data)
 
     @staticmethod
     def convert_route_to_edge_format(
@@ -464,87 +480,65 @@ class EdgeClient:
         return [node] if node else []
 
     def list_routes(self) -> list[dict[str, Any]]:
-        """List all routes from edge server."""
-        response = self._request("GET", "/edge/admin/routes")
-        return self._parse_node_list(response)
+        return self.api("route", "list")
 
     def get_route(self, route_id: str) -> dict[str, Any] | None:
-        """Get a single route by ID."""
-        return self._request("GET", f"/edge/admin/routes/{route_id}")
+        return self.api("route", "get", route_id)
 
     def create_route(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Create a new route on edge server."""
-        return self._request("POST", "/edge/admin/routes", data)
+        return self.api("route", "create", data=data)
 
     def list_plugins(self) -> list[dict[str, Any]]:
-        """List all plugins from edge server."""
-        response = self._request("GET", "/edge/admin/plugins")
-        return self._parse_node_list(response)
+        return self.api("plugin", "list")
 
     def list_global_rules(self) -> list[dict[str, Any]]:
-        """List all global rules from edge server."""
-        response = self._request("GET", "/edge/admin/global_rules")
-        return self._parse_node_list(response)
+        return self.api("global_rule", "list")
 
     def get_global_rule(self, rule_id: str) -> dict[str, Any]:
-        """Get a single global rule by ID."""
-        return self._request("GET", f"/edge/admin/global_rules/{rule_id}")
+        return self.api("global_rule", "get", rule_id)
 
     def create_global_rule(self, rule_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Create or update a global rule (PUT)."""
-        return self._request("PUT", f"/edge/admin/global_rules/{rule_id}", data)
+        return self.api("global_rule", "update", rule_id, data)
 
     def update_global_rule(self, rule_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Update a global rule (PATCH)."""
-        return self._request("PATCH", f"/edge/admin/global_rules/{rule_id}", data)
+        return self.api("global_rule", "patch", rule_id, data)
 
     def delete_global_rule(self, rule_id: str) -> dict[str, Any]:
-        """Delete a global rule."""
-        return self._request("DELETE", f"/edge/admin/global_rules/{rule_id}")
+        return self.api("global_rule", "delete", rule_id)
 
-    # Plugin Configs API methods
+    # ── Plugin Configs API methods ──
 
     def list_plugin_configs(self) -> list[dict[str, Any]]:
-        """List all plugin configs from edge server."""
-        response = self._request("GET", "/edge/admin/plugin_configs")
-        return self._parse_node_list(response)
+        return self.api("plugin_config", "list")
 
     def get_plugin_config(self, config_id: str) -> dict[str, Any]:
-        """Get a single plugin config by ID."""
-        return self._request("GET", f"/edge/admin/plugin_configs/{config_id}")
+        return self.api("plugin_config", "get", config_id)
 
     def create_plugin_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Create or update a plugin config (PUT)."""
-        return self._request("PUT", f"/edge/admin/plugin_configs/{config_id}", data)
+        return self.api("plugin_config", "update", config_id, data)
 
     def update_plugin_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Update a plugin config (PATCH)."""
-        return self._request("PATCH", f"/edge/admin/plugin_configs/{config_id}", data)
+        return self.api("plugin_config", "patch", config_id, data)
 
     def delete_plugin_config(self, config_id: str) -> dict[str, Any]:
-        """Delete a plugin config."""
-        return self._request("DELETE", f"/edge/admin/plugin_configs/{config_id}")
+        return self.api("plugin_config", "delete", config_id)
+
+    # ── Plugin Metadata API methods ──
 
     def list_plugin_metadata(self) -> list[dict[str, Any]]:
-        """List all plugin metadata from edge server."""
-        response = self._request("GET", "/edge/admin/plugin_metadata")
-        return self._parse_node_list(response)
+        return self.api("plugin_metadata", "list")
 
     def get_plugin_metadata(self, plugin_name: str) -> dict[str, Any]:
-        """Get plugin metadata by plugin name."""
-        return self._request("GET", f"/edge/admin/plugin_metadata/{plugin_name}")
+        return self.api("plugin_metadata", "get", plugin_name)
 
     def create_plugin_metadata(self, plugin_name: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Create or update plugin metadata (PUT)."""
-        return self._request("PUT", f"/edge/admin/plugin_metadata/{plugin_name}", data)
+        return self.api("plugin_metadata", "update", plugin_name, data)
 
     def delete_plugin_metadata(self, plugin_name: str) -> dict[str, Any]:
-        """Delete plugin metadata."""
-        return self._request("DELETE", f"/edge/admin/plugin_metadata/{plugin_name}")
+        return self.api("plugin_metadata", "delete", plugin_name)
 
     def update_plugin_metadata(self, plugin_name: str, data: dict[str, Any]) -> dict[str, Any]:
-        """Partially update plugin metadata (PATCH)."""
-        return self._request("PATCH", f"/edge/admin/plugin_metadata/{plugin_name}", data)
+        return self.api("plugin_metadata", "patch", plugin_name, data)
 
     def raw_delete(self, path: str) -> dict[str, Any]:
         """Send a DELETE request without SM4 encryption."""

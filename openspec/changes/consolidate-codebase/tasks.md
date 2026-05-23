@@ -8,8 +8,8 @@
 
 ## 2. 后端 EdgeLogger 统一
 
-- [ ] 2.1 在 `EdgeLogger` 中添加 `log_operation(resource_type, ...)` 通用方法，含 `resource_type → log_file/label` 映射
-- [ ] 2.2 将 5 个旧 `log_xxx_operation` 方法改为代理到 `log_operation`
+- [x] 2.1 在 `EdgeLogger` 中添加 `log_operation(resource_type, ...)` 通用方法，含 `resource_type → log_file/label` 映射
+- [x] 2.2 将 5 个旧 `log_xxx_operation` 方法改为代理到 `log_operation`
 - [ ] 2.3 更新所有调用点改用 `log_operation`（api/v1/ 下各 endpoint）
 
 ## 3. 后端 EdgeClient 通用 api 方法

@@ -6,11 +6,14 @@ from typing import Any
 
 class EdgeLogger:
     LOG_DIR = "logs/edge"
-    UPSTREAM_LOG_FILE = "logs/edge/upstream.log"
-    ROUTE_LOG_FILE = "logs/edge/route.log"
-    PLUGIN_CONFIG_LOG_FILE = "logs/edge/plugin_config.log"
-    GLOBAL_RULE_LOG_FILE = "logs/edge/global_rule.log"
-    PLUGIN_METADATA_LOG_FILE = "logs/edge/plugin_metadata.log"
+
+    RESOURCE_LOG_CONFIG: dict[str, dict[str, Any]] = {
+        "upstream": {"file": "logs/edge/upstream.log", "label": "Upstream:{name} (ID:{id})"},
+        "route": {"file": "logs/edge/route.log", "label": "Route:{name} (ID:{id})"},
+        "plugin_config": {"file": "logs/edge/plugin_config.log", "label": "PluginConfig:{name} (ID:{id})"},
+        "global_rule": {"file": "logs/edge/global_rule.log", "label": "GlobalRule:{name} (ID:{id})"},
+        "plugin_metadata": {"file": "logs/edge/plugin_metadata.log", "label": "PluginMetadata:{name}"},
+    }
 
     def __init__(self):
         os.makedirs(self.LOG_DIR, exist_ok=True)
@@ -39,30 +42,31 @@ class EdgeLogger:
         with open(log_file, "a", encoding="utf-8-sig") as f:
             f.write("\n".join(log_entry) + "\n")
 
-    def log_edge_operation(
+    def log_operation(
         self,
+        resource_type: str,
         cluster_id: int,
         cluster_name: str,
-        upstream_id: int,
-        upstream_name: str,
+        resource_label: str,
         method: str,
         path: str,
-        request_body: dict[str, Any] | None,
-        encrypted_body: str | None,
-        response_status: int | None,
-        response_body: dict[str, Any] | None,
-        status: str,
-        error: str | None = None
+        request_body: dict[str, Any] | None = None,
+        encrypted_body: str | None = None,
+        response_status: int | None = None,
+        response_body: dict[str, Any] | None = None,
+        status: str = "",
+        error: str | None = None,
     ) -> None:
         import os as os_module
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
+        log_file = self.RESOURCE_LOG_CONFIG.get(resource_type, {}).get("file", "logs/edge/upstream.log")
 
         log_entry = [
             f"[{timestamp}]",
             f"Cluster:{cluster_name} (ID:{cluster_id})",
-            f"Upstream:{upstream_name} (ID:{upstream_id})",
+            resource_label,
             f"Request: {method} {path}",
         ]
 
@@ -89,214 +93,22 @@ class EdgeLogger:
         log_entry.append(f"Status: {status}")
         log_entry.append("---")
 
-        self._write_log(self.UPSTREAM_LOG_FILE, log_entry)
+        self._write_log(log_file, log_entry)
 
-    def log_route_operation(
-        self,
-        cluster_id: int,
-        cluster_name: str,
-        route_id: int,
-        route_name: str,
-        method: str,
-        path: str,
-        request_body: dict[str, Any] | None,
-        encrypted_body: str | None,
-        response_status: int | None,
-        response_body: dict[str, Any] | None,
-        status: str,
-        error: str | None = None
-    ) -> None:
-        import os as os_module
+    def log_edge_operation(self, cluster_id, cluster_name, upstream_id, upstream_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
+        self.log_operation("upstream", cluster_id, cluster_name, f"Upstream:{upstream_name} (ID:{upstream_id})", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
+    def log_route_operation(self, cluster_id, cluster_name, route_id, route_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
+        self.log_operation("route", cluster_id, cluster_name, f"Route:{route_name} (ID:{route_id})", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
-        log_entry = [
-            f"[{timestamp}]",
-            f"Cluster:{cluster_name} (ID:{cluster_id})",
-            f"Route:{route_name} (ID:{route_id})",
-            f"Request: {method} {path}",
-        ]
+    def log_plugin_config_operation(self, cluster_id, cluster_name, config_id, config_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
+        self.log_operation("plugin_config", cluster_id, cluster_name, f"PluginConfig:{config_name} (ID:{config_id})", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
-        if request_body:
-            log_entry.append(f"Request Body: {request_body}")
-        if encrypted_body:
-            log_entry.append(f"Encrypted: {encrypted_body}")
-        if response_status:
-            log_entry.append(f"Response: {response_status}")
+    def log_global_rule_operation(self, cluster_id, cluster_name, rule_id, rule_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
+        self.log_operation("global_rule", cluster_id, cluster_name, f"GlobalRule:{rule_name} (ID:{rule_id})", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
-        if response_body:
-            if 'raw_response' in response_body:
-                decrypted = self._try_decrypt(response_body['raw_response'], sm4_key)
-                if decrypted:
-                    log_entry.append(f"Response Body (decrypted): {decrypted}")
-                else:
-                    log_entry.append(f"Response Body: (encrypted, decryption failed)")
-            else:
-                log_entry.append(f"Response Body: {response_body}")
-
-        if error:
-            log_entry.append(f"Error: {error}")
-
-        log_entry.append(f"Status: {status}")
-        log_entry.append("---")
-
-        self._write_log(self.ROUTE_LOG_FILE, log_entry)
-
-    def log_plugin_config_operation(
-        self,
-        cluster_id: int,
-        cluster_name: str,
-        config_id: int,
-        config_name: str,
-        method: str,
-        path: str,
-        request_body: dict[str, Any] | None,
-        encrypted_body: str | None,
-        response_status: int | None,
-        response_body: dict[str, Any] | None,
-        status: str,
-        error: str | None = None
-    ) -> None:
-        import os as os_module
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
-
-        log_entry = [
-            f"[{timestamp}]",
-            f"Cluster:{cluster_name} (ID:{cluster_id})",
-            f"PluginConfig:{config_name} (ID:{config_id})",
-            f"Request: {method} {path}",
-        ]
-
-        if request_body:
-            log_entry.append(f"Request Body: {request_body}")
-        if encrypted_body:
-            log_entry.append(f"Encrypted: {encrypted_body}")
-        if response_status:
-            log_entry.append(f"Response: {response_status}")
-
-        if response_body:
-            if 'raw_response' in response_body:
-                decrypted = self._try_decrypt(response_body['raw_response'], sm4_key)
-                if decrypted:
-                    log_entry.append(f"Response Body (decrypted): {decrypted}")
-                else:
-                    log_entry.append(f"Response Body: (encrypted, decryption failed)")
-            else:
-                log_entry.append(f"Response Body: {response_body}")
-
-        if error:
-            log_entry.append(f"Error: {error}")
-
-        log_entry.append(f"Status: {status}")
-        log_entry.append("---")
-
-        self._write_log(self.PLUGIN_CONFIG_LOG_FILE, log_entry)
-
-    def log_global_rule_operation(
-        self,
-        cluster_id: int,
-        cluster_name: str,
-        rule_id: int,
-        rule_name: str,
-        method: str,
-        path: str,
-        request_body: dict[str, Any] | None,
-        encrypted_body: str | None,
-        response_status: int | None,
-        response_body: dict[str, Any] | None,
-        status: str,
-        error: str | None = None
-    ) -> None:
-        import os as os_module
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
-
-        log_entry = [
-            f"[{timestamp}]",
-            f"Cluster:{cluster_name} (ID:{cluster_id})",
-            f"GlobalRule:{rule_name} (ID:{rule_id})",
-            f"Request: {method} {path}",
-        ]
-
-        if request_body:
-            log_entry.append(f"Request Body: {request_body}")
-        if encrypted_body:
-            log_entry.append(f"Encrypted: {encrypted_body}")
-        if response_status:
-            log_entry.append(f"Response: {response_status}")
-
-        if response_body:
-            if 'raw_response' in response_body:
-                decrypted = self._try_decrypt(response_body['raw_response'], sm4_key)
-                if decrypted:
-                    log_entry.append(f"Response Body (decrypted): {decrypted}")
-                else:
-                    log_entry.append(f"Response Body: (encrypted, decryption failed)")
-            else:
-                log_entry.append(f"Response Body: {response_body}")
-
-        if error:
-            log_entry.append(f"Error: {error}")
-
-        log_entry.append(f"Status: {status}")
-        log_entry.append("---")
-
-        self._write_log(self.GLOBAL_RULE_LOG_FILE, log_entry)
-
-    def log_plugin_metadata_operation(
-        self,
-        cluster_id: int,
-        cluster_name: str,
-        plugin_name: str,
-        method: str,
-        path: str,
-        request_body: dict[str, Any] | None,
-        encrypted_body: str | None,
-        response_status: int | None,
-        response_body: dict[str, Any] | None,
-        status: str,
-        error: str | None = None
-    ) -> None:
-        import os as os_module
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
-
-        log_entry = [
-            f"[{timestamp}]",
-            f"Cluster:{cluster_name} (ID:{cluster_id})",
-            f"PluginMetadata:{plugin_name}",
-            f"Request: {method} {path}",
-        ]
-
-        if request_body:
-            log_entry.append(f"Request Body: {request_body}")
-        if encrypted_body:
-            log_entry.append(f"Encrypted: {encrypted_body}")
-        if response_status:
-            log_entry.append(f"Response: {response_status}")
-
-        if response_body:
-            if 'raw_response' in response_body:
-                decrypted = self._try_decrypt(response_body['raw_response'], sm4_key)
-                if decrypted:
-                    log_entry.append(f"Response Body (decrypted): {decrypted}")
-                else:
-                    log_entry.append(f"Response Body: (encrypted, decryption failed)")
-            else:
-                log_entry.append(f"Response Body: {response_body}")
-
-        if error:
-            log_entry.append(f"Error: {error}")
-
-        log_entry.append(f"Status: {status}")
-        log_entry.append("---")
-
-        self._write_log(self.PLUGIN_METADATA_LOG_FILE, log_entry)
+    def log_plugin_metadata_operation(self, cluster_id, cluster_name, plugin_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
+        self.log_operation("plugin_metadata", cluster_id, cluster_name, f"PluginMetadata:{plugin_name}", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
 
 _edge_logger: EdgeLogger | None = None
