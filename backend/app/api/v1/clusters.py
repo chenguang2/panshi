@@ -1453,11 +1453,8 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         return v if isinstance(v, dict) else item
 
     try:
-        # list_upstreams 返回原始 dict，需提取 nodes
-        upstream_resp = client.list_upstreams()
-        edge_upstreams_raw = upstream_resp.get("node", {}).get("nodes", []) if isinstance(upstream_resp.get("node"), dict) else []
-        edge_upstreams_raw = edge_upstreams_raw if isinstance(edge_upstreams_raw, list) else []
-        edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in edge_upstreams_raw}
+        # list_upstreams 返回解析后的 [{key, value}, ...]
+        edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
         edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
         edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
         edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
