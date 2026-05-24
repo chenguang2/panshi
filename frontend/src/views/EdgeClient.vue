@@ -1589,7 +1589,7 @@ watch(selectedNode, async (_newNode) => {
   color: var(--p-text-secondary) !important;
 }
 :deep(.ant-select-selector) {
-  background: var(--p-bg-input) !important;
+  background: var(--p-bg-glass) !important;
   border: 1px solid var(--p-border-default) !important;
 }
 :deep(.ant-select-selection-item) {

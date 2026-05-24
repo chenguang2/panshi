@@ -342,7 +342,7 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   border-color: var(--p-glass-border) !important;
 }
 :deep(.ant-select-selector) {
-  background: var(--p-bg-input) !important;
+  background: var(--p-bg-glass) !important;
   border: 1px solid var(--p-border-default) !important;
 }
 :deep(.ant-select-selection-item) {
