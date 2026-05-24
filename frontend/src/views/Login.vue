@@ -91,16 +91,15 @@ const handleLogin = async () => {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #e8f0fe 0%, #f0e8ff 30%, #e6f0fa 60%, #e8f0fe 100%);
+  background: linear-gradient(135deg, var(--p-bg-page) 0%, color-mix(in srgb, var(--p-color-info) 15%, var(--p-bg-page)) 30%, var(--p-bg-page) 60%, var(--p-bg-page));
 }
 
-/* ---- Background elements ---- */
 .bg-grid {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(24, 144, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(24, 144, 255, 0.08) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--p-color-primary) 15%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--p-color-primary) 15%, transparent) 1px, transparent 1px);
   background-size: 60px 60px;
   mask-image: radial-gradient(ellipse at center, black 15%, transparent 65%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 15%, transparent 65%);
@@ -119,7 +118,7 @@ const handleLogin = async () => {
   height: 500px;
   left: -150px;
   top: -150px;
-  background: radial-gradient(circle, rgba(24, 144, 255, 0.12) 0%, rgba(24, 144, 255, 0.02) 60%, transparent 100%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--p-color-primary) 20%, transparent) 0%, color-mix(in srgb, var(--p-color-primary) 5%, transparent) 60%, transparent 100%);
   animation-delay: 0s;
 }
 
@@ -128,7 +127,7 @@ const handleLogin = async () => {
   height: 420px;
   right: -120px;
   bottom: -100px;
-  background: radial-gradient(circle, rgba(124, 58, 237, 0.1) 0%, rgba(124, 58, 237, 0.02) 60%, transparent 100%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--p-color-info) 18%, transparent) 0%, color-mix(in srgb, var(--p-color-info) 5%, transparent) 60%, transparent 100%);
   animation-delay: -4s;
 }
 
@@ -138,7 +137,7 @@ const handleLogin = async () => {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(24, 144, 255, 0.06) 0%, transparent 60%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--p-color-primary) 10%, transparent) 0%, transparent 60%);
   animation-delay: -8s;
 }
 
@@ -148,7 +147,6 @@ const handleLogin = async () => {
   66% { transform: translate(-30px, 25px) scale(0.92); }
 }
 
-/* ---- Card centering wrapper ---- */
 .login-wrapper {
   position: absolute;
   left: 50%;
@@ -165,7 +163,6 @@ const handleLogin = async () => {
   padding: 40px 36px 32px;
 }
 
-/* ---- Logo area ---- */
 .logo-area {
   text-align: center;
   margin-bottom: 32px;
@@ -177,19 +174,19 @@ const handleLogin = async () => {
   justify-content: center;
   width: 56px;
   height: 56px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #1890ff, #7c3aed);
+  border-radius: var(--p-radius-xl);
+  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info));
   color: #fff;
   font-size: 26px;
   font-weight: bold;
   margin-bottom: 16px;
-  box-shadow: 0 8px 32px rgba(24, 144, 255, 0.25);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--p-color-primary) 40%, transparent);
 }
 
 h2 {
   text-align: center;
   margin-bottom: 6px;
-  color: #1a1a2e;
+  color: var(--p-text-primary);
   font-size: 22px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -197,61 +194,59 @@ h2 {
 
 .subtitle {
   text-align: center;
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--p-text-tertiary);
   font-size: 13px;
   margin: 0;
 }
 
-/* ---- Glass inputs ---- */
 :deep(.glass-input) {
-  background: rgba(255, 255, 255, 0.7) !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  background: var(--p-bg-input) !important;
+  border: 1px solid var(--p-border-default) !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  color: #333 !important;
+  color: var(--p-text-primary) !important;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
 
 :deep(.glass-input):hover {
-  border-color: rgba(24, 144, 255, 0.4) !important;
+  border-color: var(--p-border-hover) !important;
 }
 
 :deep(.glass-input):focus,
 :deep(.glass-input-focused) {
-  border-color: #1890ff !important;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.15) !important;
+  border-color: var(--p-color-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--p-color-primary) 20%, transparent) !important;
 }
 
 :deep(.glass-input)::placeholder {
-  color: rgba(0, 0, 0, 0.25) !important;
+  color: var(--p-text-disabled) !important;
 }
 
 :deep(.glass-input) .ant-input-password-icon {
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--p-text-tertiary);
 }
 
 :deep(.glass-input) .ant-input-password-icon:hover {
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--p-text-secondary);
 }
 
 :deep(.glass-input) .ant-input {
   background: transparent !important;
-  color: #333 !important;
+  color: var(--p-text-primary) !important;
 }
 
-/* ---- Glass button ---- */
 :deep(.glass-btn) {
   height: 44px;
   font-size: 16px;
   border: none;
-  background: linear-gradient(135deg, #1890ff 0%, #7c3aed 100%) !important;
-  box-shadow: 0 4px 20px rgba(24, 144, 255, 0.3) !important;
+  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important;
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--p-color-primary) 35%, transparent) !important;
   transition: opacity 0.25s, box-shadow 0.25s;
 }
 
 :deep(.glass-btn):hover {
   opacity: 0.92;
-  box-shadow: 0 6px 28px rgba(24, 144, 255, 0.4) !important;
+  box-shadow: 0 6px 28px color-mix(in srgb, var(--p-color-primary) 45%, transparent) !important;
 }
 
 :deep(.glass-btn):active {

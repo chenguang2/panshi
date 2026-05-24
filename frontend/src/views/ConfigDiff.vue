@@ -222,9 +222,9 @@ watch(() => props.visible, (val) => {
   display: flex;
   gap: 24px;
   padding: 16px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
+  background: var(--p-bg-hover);
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-lg);
   margin-bottom: 12px;
 }
 .summary-bar :deep(.ant-statistic) {
@@ -234,14 +234,14 @@ watch(() => props.visible, (val) => {
 
 .node-addr-info {
   font-size: 13px;
-  color: #666;
+  color: var(--p-text-secondary);
   margin-bottom: 12px;
   padding: 0 4px;
 }
 
 .diff-group {
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-lg);
   margin-bottom: 12px;
   overflow: hidden;
 }
@@ -250,57 +250,58 @@ watch(() => props.visible, (val) => {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: #fafafa;
+  background: var(--p-bg-hover);
   cursor: pointer;
   font-weight: 600;
   user-select: none;
 }
-.group-header:hover { background: #f0f0f0; }
-.group-title { font-size: 15px; }
-.group-count { color: #999; font-size: 13px; }
+.group-header:hover { background: color-mix(in srgb, var(--p-color-primary) 6%, transparent); }
+.group-title { font-size: 15px; color: var(--p-text-primary); }
+.group-count { color: var(--p-text-tertiary); font-size: 13px; }
 .group-stats { margin-left: auto; font-size: 12px; display: flex; gap: 8px; }
-.stat-match { color: #52c41a; }
-.stat-diff { color: #ff4d4f; }
-.stat-db-only { color: #faad14; }
-.stat-edge-only { color: #1890ff; }
+.stat-match { color: var(--p-color-success); }
+.stat-diff { color: var(--p-color-danger); }
+.stat-db-only { color: var(--p-color-warning); }
+.stat-edge-only { color: var(--p-color-primary); }
 
 .diff-row-header {
   display: flex;
   padding: 8px 16px;
-  background: #f5f5f5;
+  background: rgba(0,0,0,0.02);
   font-size: 12px;
-  color: #999;
+  color: var(--p-text-tertiary);
   font-weight: 500;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--p-border-default);
 }
 .diff-row {
   display: flex;
   padding: 10px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--p-border-divider);
   font-size: 13px;
   cursor: default;
   transition: background 0.15s;
+  color: var(--p-text-primary);
 }
-.diff-row:hover { background: #fafafa; }
-.diff-row.row-mismatch { background: #fff2f0; }
-.diff-row.row-mismatch:hover { background: #ffd8d2; }
-.diff-row.row-only-db { background: #fffbe6; }
-.diff-row.row-only-edge { background: #e6f7ff; }
+.diff-row:hover { background: var(--p-bg-hover); }
+.diff-row.row-mismatch { background: color-mix(in srgb, var(--p-color-danger) 6%, transparent); }
+.diff-row.row-mismatch:hover { background: color-mix(in srgb, var(--p-color-danger) 12%, transparent); }
+.diff-row.row-only-db { background: color-mix(in srgb, var(--p-color-warning) 8%, transparent); }
+.diff-row.row-only-edge { background: var(--p-color-primary-bg); }
 
 .col-status { width: 40px; text-align: center; }
 .col-name { flex: 2; font-weight: 500; }
-.col-db { flex: 2; color: #666; }
-.col-edge { flex: 2; color: #666; }
+.col-db { flex: 2; color: var(--p-text-secondary); }
+.col-edge { flex: 2; color: var(--p-text-secondary); }
 .col-action { width: 160px; text-align: right; white-space: nowrap; }
 
 .diff-fields {
-  background: #fafafa;
-  border-bottom: 1px solid #e8e8e8;
+  background: var(--p-bg-hover);
+  border-bottom: 1px solid var(--p-border-default);
   padding: 0 16px 12px;
 }
 .fields-header {
   font-size: 11px;
-  color: #999;
+  color: var(--p-text-tertiary);
   text-transform: uppercase;
   padding: 8px 0 4px;
 }
@@ -308,27 +309,28 @@ watch(() => props.visible, (val) => {
   display: flex;
   gap: 8px;
   padding: 4px 0;
-  border-bottom: 1px dashed #eee;
+  border-bottom: 1px dashed var(--p-border-divider);
   font-size: 12px;
 }
 .fields-row:last-child { border-bottom: none; }
-.field-diff { background: #fff2f0; }
+.field-diff { background: color-mix(in srgb, var(--p-color-danger) 6%, transparent); }
 .field-diff .field-db pre,
-.field-diff .field-edge pre { border-color: #ffccc7; }
-.field-name { width: 100px; color: #666; flex-shrink: 0; }
+.field-diff .field-edge pre { border-color: color-mix(in srgb, var(--p-color-danger) 30%, transparent); }
+.field-name { width: 100px; color: var(--p-text-secondary); flex-shrink: 0; }
 .field-db { flex: 1; }
 .field-edge { flex: 1; }
 .field-db pre,
 .field-edge pre {
   margin: 0;
   font-size: 11px;
-  background: #fff;
+  background: var(--p-bg-input);
   padding: 4px 8px;
   border-radius: 3px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--p-border-default);
   white-space: pre-wrap;
   max-height: 200px;
   overflow: auto;
+  color: var(--p-text-primary);
 }
 
 .empty-state { text-align: center; padding: 80px 0; }
