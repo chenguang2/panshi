@@ -27,7 +27,7 @@
         </div>
         <div v-if="gr.description" class="pcc-desc">{{ gr.description }}</div>
         <div class="pcc-plugins">
-          <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="blue" class="pcc-plugin-tag" @click.stop="viewGlobalRulePluginConfig(gr, pname as string, cfg)">{{ pname }}</a-tag>
+          <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="var(--p-color-primary)" class="pcc-plugin-tag" @click.stop="viewGlobalRulePluginConfig(gr, pname as string, cfg)">{{ pname }}</a-tag>
           <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" class="pcc-no-plugins">无插件</span>
         </div>
         <div class="pcc-actions">

@@ -195,7 +195,7 @@
                   <a-tag
                     v-for="(pcfg, pname) in pg.plugins"
                     :key="pname"
-                    color="blue"
+                    color="var(--p-color-primary)"
                     style="font-size: 11px; cursor: pointer;"
                     @click.stop="viewPluginConfigDetail(pg, pname as string, pcfg)"
                   >

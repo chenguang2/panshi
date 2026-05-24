@@ -30,7 +30,7 @@
           <a-tag
             v-for="(pcfg, pname) in pc.plugins"
             :key="pname"
-            color="blue"
+            color="var(--p-color-primary)"
             class="pcc-plugin-tag"
             @click.stop="viewPluginConfigDetail(pc, pname, pcfg)"
           >
