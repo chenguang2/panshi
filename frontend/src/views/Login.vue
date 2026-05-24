@@ -91,7 +91,7 @@ const handleLogin = async () => {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1040 30%, #0d1b3e 60%, #0a0e27 100%);
+  background: linear-gradient(135deg, #e8f0fe 0%, #f0e8ff 30%, #e6f0fa 60%, #e8f0fe 100%);
 }
 
 /* ---- Background elements ---- */
@@ -102,44 +102,44 @@ const handleLogin = async () => {
     linear-gradient(rgba(24, 144, 255, 0.08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(24, 144, 255, 0.08) 1px, transparent 1px);
   background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
-  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+  mask-image: radial-gradient(ellipse at center, black 15%, transparent 65%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 15%, transparent 65%);
 }
 
 .bg-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
+  filter: blur(80px);
   pointer-events: none;
-  animation: orbFloat 10s ease-in-out infinite;
+  animation: orbFloat 12s ease-in-out infinite;
 }
 
 .bg-orb-1 {
-  width: 450px;
-  height: 450px;
-  left: -120px;
-  top: -120px;
-  background: radial-gradient(circle, rgba(24, 144, 255, 0.3) 0%, rgba(24, 144, 255, 0.05) 60%, transparent 100%);
+  width: 500px;
+  height: 500px;
+  left: -150px;
+  top: -150px;
+  background: radial-gradient(circle, rgba(24, 144, 255, 0.12) 0%, rgba(24, 144, 255, 0.02) 60%, transparent 100%);
   animation-delay: 0s;
 }
 
 .bg-orb-2 {
-  width: 380px;
-  height: 380px;
-  right: -80px;
-  bottom: -80px;
-  background: radial-gradient(circle, rgba(124, 58, 237, 0.25) 0%, rgba(124, 58, 237, 0.05) 60%, transparent 100%);
-  animation-delay: -3s;
+  width: 420px;
+  height: 420px;
+  right: -120px;
+  bottom: -100px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.1) 0%, rgba(124, 58, 237, 0.02) 60%, transparent 100%);
+  animation-delay: -4s;
 }
 
 .bg-orb-3 {
-  width: 250px;
-  height: 250px;
+  width: 300px;
+  height: 300px;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(24, 144, 255, 0.12) 0%, transparent 60%);
-  animation-delay: -6s;
+  background: radial-gradient(circle, rgba(24, 144, 255, 0.06) 0%, transparent 60%);
+  animation-delay: -8s;
 }
 
 @keyframes orbFloat {
@@ -155,9 +155,6 @@ const handleLogin = async () => {
   top: 50%;
   width: 420px;
   z-index: 1;
-  /* Note: LiquidGlass internally applies translate(-50%, -50%)
-     to center itself, so we place the wrapper origin at (50%, 50%)
-     and let LiquidGlass handle the centering from there. */
 }
 
 .login-glass-card {
@@ -186,13 +183,13 @@ const handleLogin = async () => {
   font-size: 26px;
   font-weight: bold;
   margin-bottom: 16px;
-  box-shadow: 0 8px 32px rgba(24, 144, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(24, 144, 255, 0.25);
 }
 
 h2 {
   text-align: center;
   margin-bottom: 6px;
-  color: #fff;
+  color: #1a1a2e;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: 2px;
@@ -200,48 +197,46 @@ h2 {
 
 .subtitle {
   text-align: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.35);
   font-size: 13px;
   margin: 0;
 }
 
-/* ---- Glass inputs (override Ant Design) ---- */
+/* ---- Glass inputs ---- */
 :deep(.glass-input) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  color: #fff !important;
+  color: #333 !important;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
 
 :deep(.glass-input):hover {
-  border-color: rgba(24, 144, 255, 0.5) !important;
+  border-color: rgba(24, 144, 255, 0.4) !important;
 }
 
 :deep(.glass-input):focus,
 :deep(.glass-input-focused) {
   border-color: #1890ff !important;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.15) !important;
 }
 
 :deep(.glass-input)::placeholder {
-  color: rgba(255, 255, 255, 0.35) !important;
+  color: rgba(0, 0, 0, 0.25) !important;
 }
 
-/* Password visibility toggle */
 :deep(.glass-input) .ant-input-password-icon {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.35);
 }
 
 :deep(.glass-input) .ant-input-password-icon:hover {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(0, 0, 0, 0.65);
 }
 
-/* Ant Design input wrapper inside password */
 :deep(.glass-input) .ant-input {
   background: transparent !important;
-  color: #fff !important;
+  color: #333 !important;
 }
 
 /* ---- Glass button ---- */
@@ -250,13 +245,13 @@ h2 {
   font-size: 16px;
   border: none;
   background: linear-gradient(135deg, #1890ff 0%, #7c3aed 100%) !important;
-  box-shadow: 0 4px 20px rgba(24, 144, 255, 0.35) !important;
+  box-shadow: 0 4px 20px rgba(24, 144, 255, 0.3) !important;
   transition: opacity 0.25s, box-shadow 0.25s;
 }
 
 :deep(.glass-btn):hover {
   opacity: 0.92;
-  box-shadow: 0 6px 28px rgba(24, 144, 255, 0.5) !important;
+  box-shadow: 0 6px 28px rgba(24, 144, 255, 0.4) !important;
 }
 
 :deep(.glass-btn):active {

@@ -721,14 +721,14 @@ onMounted(() => {
 
 <style scoped>
 /* ===================================================================
-   Cluster Management — Dark Tech Theme (matching Dashboard)
+   Cluster Management — Bright Tech Theme
    =================================================================== */
 .cluster-list {
   position: relative;
   min-height: calc(100vh - 56px - 40px);
   margin: -20px -24px;
   padding: 20px 24px;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1040 30%, #0d1b3e 60%, #0a0e27 100%);
+  background: linear-gradient(135deg, #e8f0fe 0%, #f0e8ff 30%, #e6f0fa 60%, #e8f0fe 100%);
   overflow: hidden;
 }
 
@@ -746,7 +746,7 @@ onMounted(() => {
 
 .header-section h2 {
   margin: 0 0 8px 0;
-  color: rgba(255, 255, 255, 0.9);
+  color: #1a1a2e;
   font-size: 20px;
   font-weight: 600;
 }
@@ -765,42 +765,38 @@ onMounted(() => {
 
 .filter-count {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(0, 0, 0, 0.35);
   white-space: nowrap;
 }
 
 /* ---- Search & Radio overrides ---- */
 :deep(.header-section) .ant-input-affix-wrapper {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
   border-radius: 6px;
   box-shadow: none !important;
 }
 :deep(.header-section) .ant-input-affix-wrapper .ant-input {
   background: transparent !important;
   border: none !important;
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: #333 !important;
 }
 :deep(.header-section) .ant-input-affix-wrapper .ant-input::placeholder {
-  color: rgba(255, 255, 255, 0.3) !important;
-}
-:deep(.header-section) .ant-input-affix-wrapper .ant-input-suffix {
-  color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(0, 0, 0, 0.25) !important;
 }
 :deep(.header-section) .ant-input-search-button {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
+  border: none !important;
+  color: #fff !important;
   border-radius: 0 6px 6px 0 !important;
 }
 :deep(.header-section) .ant-input-search-button:hover {
-  background: rgba(24, 144, 255, 0.15) !important;
-  color: #1890ff !important;
+  opacity: 0.92;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper-checked {
   background: var(--p-primary, #1890ff) !important;
@@ -808,18 +804,18 @@ onMounted(() => {
   color: #fff !important;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:not(:first-child)::before {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(0, 0, 0, 0.08) !important;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:hover {
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: rgba(0, 0, 0, 0.75) !important;
 }
 
 /* ---- Status dot ---- */
 .status-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
 }
-.status-dot.green { background: #52c41a; box-shadow: 0 0 6px rgba(82,196,26,0.6); }
-.status-dot.red { background: #ff4d4f; box-shadow: 0 0 6px rgba(255,77,79,0.6); }
+.status-dot.green { background: #52c41a; box-shadow: 0 0 6px rgba(82,196,26,0.4); }
+.status-dot.red { background: #ff4d4f; box-shadow: 0 0 6px rgba(255,77,79,0.4); }
 
 /* ---- Grid cards ---- */
 .cluster-grid {
@@ -831,18 +827,18 @@ onMounted(() => {
 }
 
 .cluster-card {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 .cluster-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   border-color: rgba(24, 144, 255, 0.2);
 }
 
@@ -854,15 +850,15 @@ onMounted(() => {
   padding: 10px 14px;
   cursor: pointer;
   user-select: none;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.015);
   transition: background 0.15s;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 .expand-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.03);
 }
 .expand-row:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .cname-wrap {
@@ -871,10 +867,10 @@ onMounted(() => {
 .cname {
   font-weight: 600; font-size: 14px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: rgba(255, 255, 255, 0.9);
+  color: #1a1a2e;
 }
 .chint {
-  font-size: 11px; color: rgba(255, 255, 255, 0.35); font-weight: 400; flex-shrink: 0;
+  font-size: 11px; color: rgba(0, 0, 0, 0.3); font-weight: 400; flex-shrink: 0;
 }
 
 /* ---- Card header (stats + actions) ---- */
@@ -888,7 +884,7 @@ onMounted(() => {
 
 .stats-bar {
   display: flex;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
@@ -896,24 +892,24 @@ onMounted(() => {
 .scell {
   text-align: center; padding: 5px 12px;
 }
-.scell + .scell { border-left: 1px solid rgba(255, 255, 255, 0.06); }
-.snum { font-size: 15px; font-weight: 700; color: rgba(255, 255, 255, 0.9); line-height: 1.2; }
-.slbl { font-size: 10px; color: rgba(255, 255, 255, 0.35); }
+.scell + .scell { border-left: 1px solid rgba(0, 0, 0, 0.06); }
+.snum { font-size: 15px; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
+.slbl { font-size: 10px; color: rgba(0, 0, 0, 0.3); }
 
 .cactions {
   display: flex; gap: 3px; flex-shrink: 0; margin-left: auto;
 }
 .cbtn {
   padding: 3px 10px; font-size: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.5);
   transition: all 0.2s;
 }
-.cbtn:hover { border-color: #1890ff; color: #1890ff; background: rgba(24,144,255,0.12); }
-.cbtn.danger:hover { border-color: #ff4d4f; color: #ff4d4f; background: rgba(255,77,79,0.12); }
+.cbtn:hover { border-color: #1890ff; color: #1890ff; background: rgba(24,144,255,0.06); }
+.cbtn.danger:hover { border-color: #ff4d4f; color: #ff4d4f; background: rgba(255,77,79,0.06); }
 
 /* ---- Chips ---- */
 .chips-row {
@@ -921,16 +917,15 @@ onMounted(() => {
 }
 .chip {
   padding: 3px 10px; border-radius: 10px; font-size: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.4);
   cursor: pointer;
   transition: all 0.2s;
 }
-.chip:hover { border-color: rgba(24,144,255,0.5); color: #1890ff; background: rgba(24,144,255,0.08); }
+.chip:hover { border-color: rgba(24,144,255,0.4); color: #1890ff; background: rgba(24,144,255,0.06); }
 .chip.disabled { opacity: 0.35; cursor: not-allowed; }
-.chip.disabled:hover { border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); background: transparent; }
-.cb { font-size: 9px; color: rgba(255,255,255,0.3); margin-left: 3px; }
+.cb { font-size: 9px; color: rgba(0,0,0,0.25); margin-left: 3px; }
 
 /* ===== Expanded area ===== */
 .expanded-area {
@@ -940,28 +935,28 @@ onMounted(() => {
 }
 
 .card-expanded {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(24, 144, 255, 0.2);
   border-radius: 12px;
   overflow: hidden;
   margin-bottom: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 .card-expanded .card-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   background: transparent;
 }
 
 /* Expanded card expand row */
 .card-expanded .expand-row {
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   cursor: grab;
 }
 .card-expanded .expand-row:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.04);
 }
 .card-expanded .expand-row:active {
   cursor: grabbing;
@@ -971,35 +966,35 @@ onMounted(() => {
 .card-expanded.dragging { opacity: 0.35; }
 .card-expanded.drag-over {
   border-color: #fa8c16 !important;
-  box-shadow: 0 4px 24px rgba(250, 140, 22, 0.3) !important;
+  box-shadow: 0 4px 24px rgba(250, 140, 22, 0.15) !important;
 }
 
 /* ---- Detail area ---- */
 .card-detail {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
   position: relative;
 }
 
 .dtabs {
   display: flex;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.01);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   padding: 0 16px;
   overflow-x: auto;
 }
 .dt {
   padding: 10px 16px; font-size: 13px;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgba(0, 0, 0, 0.45);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
   transition: all 0.2s;
   flex-shrink: 0;
 }
-.dt:hover { color: rgba(255, 255, 255, 0.9); }
+.dt:hover { color: rgba(0, 0, 0, 0.75); }
 .dt.active { color: #1890ff; border-bottom-color: #1890ff; margin-bottom: -1px; }
-.db { margin-left: 4px; padding: 1px 6px; border-radius: 8px; font-size: 10px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.35); }
-.dt.active .db { background: rgba(24,144,255,0.15); color: #1890ff; }
+.db { margin-left: 4px; padding: 1px 6px; border-radius: 8px; font-size: 10px; background: rgba(0,0,0,0.04); color: rgba(0,0,0,0.3); }
+.dt.active .db { background: rgba(24,144,255,0.1); color: #1890ff; }
 
 .dbody {
   padding: 16px;
@@ -1050,22 +1045,22 @@ onMounted(() => {
   gap: 4px;
   padding: 3px 10px 3px 6px;
   border-radius: 4px;
-  color: rgba(255,255,255,0.35);
+  color: rgba(0,0,0,0.3);
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(0,0,0,0.06);
   transition: all 0.2s;
   user-select: none;
 }
 .click-zone:hover {
-  background: rgba(24,144,255,0.1);
+  background: rgba(24,144,255,0.06);
   border-color: var(--p-primary, #1890ff);
   color: var(--p-primary, #1890ff);
 }
 .click-zone.on {
-  background: rgba(24,144,255,0.12);
+  background: rgba(24,144,255,0.08);
   border-color: var(--p-primary, #1890ff);
   color: var(--p-primary, #1890ff);
 }
@@ -1080,12 +1075,12 @@ onMounted(() => {
 
 /* ---- Generic description text ---- */
 .cluster-desc {
-  color: rgba(255,255,255,0.5);
+  color: rgba(0,0,0,0.5);
   font-size: 13px;
   margin: 0;
 }
 .no-desc {
-  color: rgba(255,255,255,0.3);
+  color: rgba(0,0,0,0.3);
   font-size: 13px;
   font-style: italic;
   margin: 0;
@@ -1135,40 +1130,37 @@ onMounted(() => {
 :deep(.header-section .ant-btn-primary) {
   background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
   border: none !important;
-  box-shadow: 0 4px 16px rgba(24,144,255,0.3) !important;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.25) !important;
 }
 :deep(.header-section .ant-btn-primary:hover) {
   opacity: 0.92;
-  box-shadow: 0 6px 24px rgba(24,144,255,0.45) !important;
+  box-shadow: 0 6px 24px rgba(24,144,255,0.35) !important;
 }
-
-/* ---- Modal mask styling ---- */
-/* (Modal body/header/footer styles are in the global <style> block below) */
 
 /* ---- Tab component table overrides ---- */
 :deep(.node-table) .ant-table {
   background: transparent !important;
 }
 :deep(.node-table) .ant-table-thead > tr > th {
-  background: rgba(255,255,255,0.04) !important;
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
-  color: rgba(255,255,255,0.5) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
   font-size: 12px;
   font-weight: 500;
 }
 :deep(.node-table) .ant-table-tbody > tr > td {
   background: transparent !important;
-  border-bottom: 1px solid rgba(255,255,255,0.04) !important;
-  color: rgba(255,255,255,0.75);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03) !important;
+  color: rgba(0, 0, 0, 0.65);
 }
 :deep(.node-table) .ant-table-tbody > tr:hover > td {
-  background: rgba(24,144,255,0.08) !important;
+  background: rgba(24,144,255,0.04) !important;
 }
 :deep(.node-table) .ant-table-tbody > tr:last-child > td {
   border-bottom: none !important;
 }
 :deep(.node-table) .ant-empty-description {
-  color: rgba(255,255,255,0.3) !important;
+  color: rgba(0,0,0,0.25) !important;
 }
 
 /* ---- Tag & badge in tables ---- */
@@ -1178,14 +1170,14 @@ onMounted(() => {
   border-radius: 4px;
 }
 :deep(.node-table) .ant-badge-status-text {
-  color: rgba(255,255,255,0.6);
+  color: rgba(0,0,0,0.5);
 }
 
 /* ---- Table action column buttons ---- */
 :deep(.node-table) .ant-table-tbody .ant-btn {
-  background: linear-gradient(135deg, rgba(24,144,255,0.1), rgba(124,58,237,0.1)) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
-  color: rgba(255,255,255,0.7) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  color: rgba(0,0,0,0.55) !important;
   border-radius: 4px;
   height: 26px;
   font-size: 12px;
@@ -1193,29 +1185,27 @@ onMounted(() => {
   transition: all 0.2s;
 }
 :deep(.node-table) .ant-table-tbody .ant-btn:hover {
-  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
-  border-color: rgba(24,144,255,0.4) !important;
-  color: #fff !important;
+  background: rgba(24,144,255,0.06) !important;
+  border-color: rgba(24,144,255,0.3) !important;
+  color: #1890ff !important;
 }
 :deep(.node-table) .ant-table-tbody .ant-btn-dangerous {
-  background: linear-gradient(135deg, rgba(255,77,79,0.1), rgba(255,77,79,0.05)) !important;
-  border-color: rgba(255,77,79,0.25) !important;
-  color: #ff7875 !important;
+  color: #ff4d4f !important;
 }
 :deep(.node-table) .ant-table-tbody .ant-btn-dangerous:hover {
-  background: linear-gradient(135deg, rgba(255,77,79,0.2), rgba(255,77,79,0.1)) !important;
   border-color: #ff4d4f !important;
   color: #ff4d4f !important;
+  background: rgba(255,77,79,0.06) !important;
 }
 
 /* ---- Table pagination ---- */
 :deep(.node-table) .ant-pagination .ant-pagination-item {
-  background: rgba(255,255,255,0.04) !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: rgba(255,255,255,0.6) !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
   border-radius: 4px;
 }
 :deep(.node-table) .ant-pagination .ant-pagination-item a {
-  color: rgba(255,255,255,0.5) !important;
+  color: rgba(0,0,0,0.45) !important;
 }
 :deep(.node-table) .ant-pagination .ant-pagination-item-active {
   background: var(--p-primary, #1890ff) !important;
@@ -1226,35 +1216,35 @@ onMounted(() => {
 }
 :deep(.node-table) .ant-pagination .ant-pagination-prev button,
 :deep(.node-table) .ant-pagination .ant-pagination-next button {
-  background: rgba(255,255,255,0.04) !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
-  color: rgba(255,255,255,0.5) !important;
+  background: rgba(255,255,255,0.6) !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  color: rgba(0,0,0,0.45) !important;
 }
 :deep(.node-table) .ant-pagination .ant-pagination-disabled button {
   opacity: 0.3 !important;
 }
 :deep(.node-table) .ant-pagination-options .ant-select-selector {
-  background: rgba(255,255,255,0.04) !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
-  color: rgba(255,255,255,0.6) !important;
+  background: rgba(255,255,255,0.6) !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  color: rgba(0,0,0,0.5) !important;
 }
 :deep(.node-table) .ant-pagination-total-text {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.35) !important;
 }
 
 /* ---- Search inputs inside tab components ---- */
 :deep(.dbody) .ant-input-affix-wrapper {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
   border-radius: 6px;
 }
 :deep(.dbody) .ant-input-affix-wrapper .ant-input {
   background: transparent !important;
   border: none !important;
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: #333 !important;
 }
 :deep(.dbody) .ant-input-affix-wrapper .ant-input::placeholder {
-  color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(0,0,0,0.25) !important;
 }
 :deep(.dbody) .ant-input-search-button {
   background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
@@ -1263,30 +1253,30 @@ onMounted(() => {
   border-radius: 0 6px 6px 0 !important;
 }
 :deep(.dbody) .ant-select-selector {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: rgba(255, 255, 255, 0.85) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  color: #333 !important;
   border-radius: 6px !important;
 }
 :deep(.dbody) .ant-select-selection-placeholder {
-  color: rgba(255, 255, 255, 0.3) !important;
+  color: rgba(0,0,0,0.25) !important;
 }
 :deep(.dbody) .ant-select-arrow {
-  color: rgba(255, 255, 255, 0.4) !important;
+  color: rgba(0,0,0,0.35) !important;
 }
 
 /* ---- Node action buttons in tabs: gradient style ---- */
 :deep(.node-actions .ant-btn) {
-  background: linear-gradient(135deg, rgba(24,144,255,0.12), rgba(124,58,237,0.12)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  color: rgba(0,0,0,0.55) !important;
   border-radius: 6px;
   transition: all 0.2s;
 }
 :deep(.node-actions .ant-btn:hover) {
-  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
-  border-color: rgba(24,144,255,0.4) !important;
-  color: #fff !important;
+  background: rgba(24,144,255,0.06) !important;
+  border-color: rgba(24,144,255,0.3) !important;
+  color: #1890ff !important;
 }
 :deep(.node-actions .ant-btn-primary) {
   background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
@@ -1295,36 +1285,34 @@ onMounted(() => {
 }
 :deep(.node-actions .ant-btn-primary:hover) {
   opacity: 0.92;
-  box-shadow: 0 4px 16px rgba(24,144,255,0.35) !important;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.25) !important;
 }
 :deep(.node-actions .ant-btn-dangerous) {
-  background: linear-gradient(135deg, rgba(255,77,79,0.1), rgba(255,77,79,0.05)) !important;
-  border-color: rgba(255,77,79,0.3) !important;
-  color: #ff7875 !important;
-}
-:deep(.node-actions .ant-btn-dangerous:hover) {
-  background: linear-gradient(135deg, rgba(255,77,79,0.2), rgba(255,77,79,0.1)) !important;
-  border-color: #ff4d4f !important;
   color: #ff4d4f !important;
 }
+:deep(.node-actions .ant-btn-dangerous:hover) {
+  border-color: #ff4d4f !important;
+  color: #ff4d4f !important;
+  background: rgba(255,77,79,0.06) !important;
+}
 :deep(.node-actions .ant-divider-vertical) {
-  border-color: rgba(255,255,255,0.1) !important;
+  border-color: rgba(0,0,0,0.08) !important;
 }
 
 /* ---- Popover (column config) ---- */
 :deep(.ant-popover-inner) {
-  background: #1a1a2e !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: #fff !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
 }
 :deep(.ant-popover-title) {
-  color: rgba(255,255,255,0.85) !important;
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  color: #1a1a2e !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
 }
 :deep(.ant-popover-inner-content) {
-  color: rgba(255,255,255,0.7) !important;
+  color: rgba(0,0,0,0.65) !important;
 }
 :deep(.ant-checkbox-wrapper) {
-  color: rgba(255,255,255,0.7) !important;
+  color: rgba(0,0,0,0.65) !important;
 }
 </style>
 
@@ -1332,29 +1320,27 @@ onMounted(() => {
      GLOBAL styles for teleported elements (modals/drawers rendered at <body>)
      ======================================================================== -->
 <style>
-/* ---- Modal body inputs/textareas/selects ---- */
+/* ---- Modal ---- */
 .ant-modal-content {
-  background: #1a1a2e !important;
-  border: 1px solid rgba(255,255,255,0.08) !important;
+  background: #fff !important;
+  border: 1px solid rgba(0,0,0,0.06) !important;
 }
 .ant-modal-header {
-  background: #1a1a2e !important;
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  background: #fff !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
 }
 .ant-modal-title {
-  color: rgba(255,255,255,0.85) !important;
+  color: #1a1a2e !important;
 }
 .ant-modal-close {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.3) !important;
 }
 .ant-modal-close:hover {
-  color: rgba(255,255,255,0.8) !important;
+  color: rgba(0,0,0,0.6) !important;
 }
 .ant-modal-body .ant-form-item-label > label {
-  color: rgba(255,255,255,0.65) !important;
+  color: rgba(0,0,0,0.55) !important;
 }
-
-/* Modal form elements */
 .ant-modal-body .ant-input,
 .ant-modal-body .ant-input-password,
 .ant-modal-body .ant-input-affix-wrapper,
@@ -1363,63 +1349,50 @@ onMounted(() => {
 .ant-modal-body .ant-input-number-group-addon,
 .ant-modal-body .ant-input-textarea,
 .ant-modal-body .ant-picker {
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  color: rgba(255,255,255,0.85) !important;
-}
-
-/* Input text */
-.ant-modal-body .ant-input {
-  color: rgba(255,255,255,0.85) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  color: #333 !important;
 }
 .ant-modal-body .ant-input::placeholder,
 .ant-modal-body .ant-input-password input::placeholder {
-  color: rgba(255,255,255,0.3) !important;
+  color: rgba(0,0,0,0.25) !important;
 }
 .ant-modal-body .ant-input-password .ant-input {
   background: transparent !important;
   border: none !important;
 }
 .ant-modal-body .ant-input-password-icon {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.3) !important;
 }
 .ant-modal-body .ant-input-password-icon:hover {
-  color: rgba(255,255,255,0.7) !important;
+  color: rgba(0,0,0,0.6) !important;
 }
-
-/* Select */
 .ant-modal-body .ant-select-selection-placeholder {
-  color: rgba(255,255,255,0.3) !important;
+  color: rgba(0,0,0,0.25) !important;
 }
 .ant-modal-body .ant-select-selection-item {
-  color: rgba(255,255,255,0.85) !important;
+  color: #333 !important;
 }
 .ant-modal-body .ant-select-arrow {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.3) !important;
 }
-
-/* Input number */
 .ant-modal-body .ant-input-number-handler-wrap {
-  background: rgba(255,255,255,0.06) !important;
-  border-left: 1px solid rgba(255,255,255,0.1) !important;
+  background: rgba(0,0,0,0.02) !important;
+  border-left: 1px solid rgba(0,0,0,0.08) !important;
 }
 .ant-modal-body .ant-input-number-handler-up-inner,
 .ant-modal-body .ant-input-number-handler-down-inner {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.3) !important;
 }
-
-/* Form help/error text */
 .ant-modal-body .ant-form-item-explain,
 .ant-modal-body .ant-form-item-extra {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.35) !important;
 }
-
-/* Modal tabs */
 .ant-modal-body .ant-tabs {
-  color: rgba(255,255,255,0.85) !important;
+  color: #333 !important;
 }
 .ant-modal-body .ant-tabs-tab {
-  color: rgba(255,255,255,0.5) !important;
+  color: rgba(0,0,0,0.45) !important;
 }
 .ant-modal-body .ant-tabs-tab-active {
   color: #1890ff !important;
@@ -1428,27 +1401,23 @@ onMounted(() => {
   background: #1890ff !important;
 }
 .ant-modal-body .ant-tabs-nav {
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
 }
-
-/* Modal switches */
 .ant-modal-body .ant-switch {
-  background: rgba(255,255,255,0.15) !important;
+  background: rgba(0,0,0,0.15) !important;
 }
 .ant-modal-body .ant-switch-checked {
   background: #1890ff !important;
 }
-
-/* Modal footer buttons */
 .ant-modal-footer .ant-btn {
-  background: linear-gradient(135deg, rgba(24,144,255,0.1), rgba(124,58,237,0.1)) !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  color: rgba(255,255,255,0.7) !important;
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+  color: rgba(0,0,0,0.55) !important;
   border-radius: 6px;
 }
 .ant-modal-footer .ant-btn:hover {
-  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
-  color: #fff !important;
+  background: rgba(24,144,255,0.06) !important;
+  color: #1890ff !important;
 }
 .ant-modal-footer .ant-btn-primary {
   background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
@@ -1457,39 +1426,36 @@ onMounted(() => {
 }
 .ant-modal-footer .ant-btn-primary:hover {
   opacity: 0.92;
-  box-shadow: 0 4px 16px rgba(24,144,255,0.35) !important;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.25) !important;
 }
-
-/* Modal masks */
 .ant-modal-mask {
-  background: rgba(0,0,0,0.6) !important;
-  backdrop-filter: blur(4px);
+  background: rgba(0,0,0,0.3) !important;
 }
 
-/* ---- Drawer (config view/edit) ---- */
+/* ---- Drawer ---- */
 .ant-drawer-content {
-  background: #1a1a2e !important;
+  background: #fff !important;
 }
 .ant-drawer-header {
-  background: #1a1a2e !important;
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  background: #fff !important;
+  border-bottom: 1px solid rgba(0,0,0,0.06) !important;
 }
 .ant-drawer-title {
-  color: rgba(255,255,255,0.85) !important;
+  color: #1a1a2e !important;
 }
 .ant-drawer-close {
-  color: rgba(255,255,255,0.4) !important;
+  color: rgba(0,0,0,0.3) !important;
 }
 .ant-drawer-body {
-  color: rgba(255,255,255,0.7) !important;
+  color: rgba(0,0,0,0.65) !important;
 }
 .ant-drawer-body .ant-descriptions-title {
-  color: rgba(255,255,255,0.8) !important;
+  color: rgba(0,0,0,0.8) !important;
 }
 .ant-drawer-body .ant-descriptions-item-label {
-  color: rgba(255,255,255,0.5) !important;
+  color: rgba(0,0,0,0.45) !important;
 }
 .ant-drawer-body .ant-descriptions-item-content {
-  color: rgba(255,255,255,0.8) !important;
+  color: rgba(0,0,0,0.65) !important;
 }
 </style>
