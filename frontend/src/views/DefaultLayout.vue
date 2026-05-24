@@ -69,6 +69,14 @@
               <span>{{ themeStore.darkMode ? '☀️' : '🌙' }}</span>
               <span>{{ themeStore.darkMode ? '亮色模式' : '暗色模式' }}</span>
             </a-menu-item>
+            <a-menu-item key="style-modern" :class="{ active: themeStore.style === 'modern' }" @click="themeStore.setThemeStyle('modern')">
+              <span>◧</span>
+              <span>现代风格</span>
+            </a-menu-item>
+            <a-menu-item key="style-default" :class="{ active: themeStore.style === 'default' }" @click="themeStore.setThemeStyle('default')">
+              <span>▣</span>
+              <span>经典风格</span>
+            </a-menu-item>
             <a-menu-item v-for="t in themeOptions" :key="'theme-' + t.key" :class="{ active: themeStore.themeColor === t.key }" @click="themeStore.setThemeColor(t.key)">
               <span class="theme-dot-menu" :style="{ background: t.color }"></span>
               {{ t.label }}
@@ -115,6 +123,14 @@
                 <a-menu-item key="darkmode" @click="themeStore.toggleDarkMode()">
                   <span>{{ themeStore.darkMode ? '☀️' : '🌙' }}</span>
                   <span>{{ themeStore.darkMode ? '亮色模式' : '暗色模式' }}</span>
+                </a-menu-item>
+                <a-menu-item key="style-modern" :class="{ active: themeStore.style === 'modern' }" @click="themeStore.setThemeStyle('modern')">
+                  <span>◧</span>
+                  <span>现代风格</span>
+                </a-menu-item>
+                <a-menu-item key="style-default" :class="{ active: themeStore.style === 'default' }" @click="themeStore.setThemeStyle('default')">
+                  <span>▣</span>
+                  <span>经典风格</span>
                 </a-menu-item>
                 <a-menu-item v-for="t in themeOptions" :key="'theme-' + t.key" :class="{ active: themeStore.themeColor === t.key }" @click="themeStore.setThemeColor(t.key)">
                   <span class="theme-dot-menu" :style="{ background: t.color }"></span>{{ t.label }}

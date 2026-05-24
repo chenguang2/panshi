@@ -13,9 +13,11 @@ export function useAntdThemeSync() {
   const themeStore = useThemeStore()
 
   const themeConfig = computed(() => {
-    const algorithm = themeStore.darkMode
-      ? theme.darkAlgorithm
-      : theme.defaultAlgorithm
+    const algorithm = themeStore.style === 'default'
+      ? theme.defaultAlgorithm
+      : themeStore.darkMode
+        ? theme.darkAlgorithm
+        : theme.defaultAlgorithm
 
     const root = document.documentElement
     const st = getComputedStyle(root)
@@ -25,7 +27,9 @@ export function useAntdThemeSync() {
     return {
       algorithm,
       token: {
-        colorPrimary: themeColorMap[themeStore.themeColor],
+        colorPrimary: themeStore.style === 'default'
+          ? cssVar('--p-color-primary') || '#1890ff'
+          : themeColorMap[themeStore.themeColor as keyof typeof themeColorMap],
         colorBgLayout: cssVar('--p-bg-page') || '#f0f2f5',
         colorBgContainer: cssVar('--p-bg-elevated') || '#fff',
         colorBgElevated: cssVar('--p-bg-elevated') || '#fff',
