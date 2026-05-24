@@ -248,10 +248,10 @@ const handleLogout = async () => {
   min-height: 100vh;
 }
 
-/* Sidebar */
 .app-sider {
   overflow: auto;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  background: var(--p-bg-sidebar);
+  box-shadow: 2px 0 8px var(--p-shadow-sm);
 }
 
 .sider-logo {
@@ -262,14 +262,14 @@ const handleLogout = async () => {
   gap: 8px;
   font-size: 18px;
   font-weight: bold;
-  color: #fff;
+  color: var(--p-text-sidebar-active);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .sider-logo.collapsed {
   font-size: 22px;
 }
 .logo-icon {
-  color: var(--p-primary);
+  color: var(--p-color-primary);
   flex-shrink: 0;
 }
 .logo-text {
@@ -292,7 +292,7 @@ const handleLogout = async () => {
   padding: 12px 16px;
   text-align: center;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--p-text-sidebar);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -301,8 +301,6 @@ const handleLogout = async () => {
   font-size: 13px;
 }
 
-
-/* Header */
 .app-header {
   background: var(--p-header-bg);
   padding: 0 24px;
@@ -310,10 +308,11 @@ const handleLogout = async () => {
   align-items: center;
   height: 56px;
   line-height: 56px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--p-shadow-sm);
   position: sticky;
   top: 0;
   z-index: 50;
+  border-bottom: 1px solid var(--p-header-border);
 }
 
 .header-left {
@@ -329,7 +328,7 @@ const handleLogout = async () => {
   transition: color 0.2s;
 }
 .trigger:hover {
-  color: var(--p-primary);
+  color: var(--p-color-primary);
 }
 
 .header-breadcrumb {
@@ -342,11 +341,11 @@ const handleLogout = async () => {
   color: var(--p-text-secondary);
 }
 .crumb-item.crumb-current {
-  color: var(--p-text);
+  color: var(--p-text-primary);
   font-weight: 500;
 }
 .crumb-sep {
-  color: var(--p-border);
+  color: var(--p-border-default);
 }
 
 .header-right {
@@ -359,28 +358,25 @@ const handleLogout = async () => {
 .user-info {
   cursor: pointer;
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--p-radius-sm);
   font-size: 13px;
   color: var(--p-text-secondary);
   transition: background 0.2s;
 }
 .user-info:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--p-bg-hover);
 }
 
-/* Layout switch in dropdown: highlight active */
 :deep(.ant-dropdown-menu-item.active) {
-  color: var(--p-primary);
+  color: var(--p-color-primary) !important;
   font-weight: 500;
 }
 
-/* Sidebar layout items: active highlight */
 :deep(.ant-menu-item.active) {
-  color: #fff !important;
-  background: var(--p-primary) !important;
+  color: var(--p-text-inverse) !important;
+  background: var(--p-color-primary) !important;
 }
 
-/* Theme color dot in menu */
 .theme-dot-menu {
   display: inline-block;
   width: 10px;
@@ -391,7 +387,6 @@ const handleLogout = async () => {
   border: 1px solid rgba(255,255,255,0.2);
 }
 
-/* Content */
 .app-main {
   transition: margin-left 0.2s;
 }
@@ -399,21 +394,20 @@ const handleLogout = async () => {
   margin: 0;
   padding: 20px 24px;
   min-height: calc(100vh - 56px);
-  background: var(--p-bg);
+  background: var(--p-bg-page);
 }
 .app-content.content-fullwidth {
   padding: 20px 12px;
   max-width: 100%;
 }
 
-/* Topnav mode */
 .topnav-logo {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 16px;
   font-weight: bold;
-  color: var(--p-text);
+  color: var(--p-text-primary);
   margin-right: 24px;
   flex-shrink: 0;
 }
