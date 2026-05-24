@@ -44,10 +44,15 @@ body {
 
 /* ---- Global button theming ---- */
 .ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous) {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-glass-border) !important;
-  color: var(--p-text-secondary) !important;
   border-radius: 6px;
+  background: var(--p-bg-hover) !important;
+  border: 1px solid var(--p-border-default) !important;
+  color: var(--p-text-secondary) !important;
+}
+.ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):hover {
+  background: var(--p-color-primary-bg) !important;
+  border-color: var(--p-color-primary) !important;
+  color: var(--p-color-primary) !important;
 }
 .ant-btn:not(.ant-btn-primary):not(.ant-btn-dangerous):hover {
   background: var(--p-bg-hover) !important;
@@ -82,9 +87,13 @@ body {
 .ant-input-number,
 .ant-picker,
 .ant-select-selector {
-  background: var(--p-bg-input) !important;
+  background: var(--p-bg-glass) !important;
   border: 1px solid var(--p-border-default) !important;
   color: var(--p-text-primary) !important;
+}
+.ant-input-affix-wrapper-focused {
+  border-color: var(--p-color-primary) !important;
+  box-shadow: 0 0 0 2px var(--p-color-primary-bg) !important;
 }
 .ant-input::placeholder {
   color: var(--p-text-disabled) !important;
@@ -112,8 +121,8 @@ body {
 
 /* ---- Modal / Drawer theming ---- */
 .ant-modal-content {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-glass-border) !important;
+  background: var(--p-bg-page) !important;
+  border: 1px solid var(--p-border-default) !important;
 }
 .ant-modal-header {
   background: var(--p-color-primary-bg) !important;
@@ -129,18 +138,47 @@ body {
 .ant-modal-body .ant-tabs-nav { border-bottom: 1px solid var(--p-border-divider) !important; }
 .ant-modal-body .ant-switch { background: var(--p-border-default) !important; }
 .ant-modal-body .ant-switch-checked { background: var(--p-color-primary) !important; }
-.ant-modal-footer .ant-btn { background: var(--p-bg-glass) !important; border: 1px solid var(--p-glass-border) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
-.ant-modal-footer .ant-btn:hover { background: var(--p-bg-hover) !important; color: var(--p-color-primary) !important; }
+.ant-modal-footer .ant-btn { border-radius: 6px; background: var(--p-bg-hover) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; }
+.ant-modal-footer .ant-btn:hover { background: var(--p-color-primary-bg) !important; border-color: var(--p-color-primary) !important; color: var(--p-color-primary) !important; }
 .ant-modal-footer .ant-btn-primary { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; }
 .ant-modal-mask { background: var(--p-bg-mask) !important; }
 
-.ant-drawer-content { background: var(--p-bg-glass) !important; }
+.ant-drawer-content { background: var(--p-bg-page) !important; }
 .ant-drawer-header { background: var(--p-color-primary-bg) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
 .ant-drawer-title { color: var(--p-text-primary) !important; }
 .ant-drawer-body { color: var(--p-text-secondary) !important; }
 .ant-drawer-body .ant-descriptions-title { color: var(--p-text-primary) !important; }
 .ant-drawer-body .ant-descriptions-item-label { color: var(--p-text-secondary) !important; }
 .ant-drawer-body .ant-descriptions-item-content { color: var(--p-text-primary) !important; }
+
+/* ---- Popover theming ---- */
+.ant-popover-inner {
+  background: var(--p-bg-page) !important;
+  border: 1px solid var(--p-border-default) !important;
+}
+.ant-popover-title {
+  color: var(--p-text-primary) !important;
+  border-bottom: 1px solid var(--p-border-divider) !important;
+}
+.ant-popover-inner-content {
+  color: var(--p-text-secondary) !important;
+}
+.ant-checkbox-wrapper {
+  color: var(--p-text-secondary) !important;
+}
+.ant-checkbox-checked .ant-checkbox-inner {
+  background-color: var(--p-color-primary) !important;
+  border-color: var(--p-color-primary) !important;
+}
+.ant-checkbox-wrapper:hover .ant-checkbox-inner {
+  border-color: var(--p-color-primary) !important;
+}
+
+/* ---- Tag theming ---- */
+.ant-tag {
+  font-weight: 500;
+  border-radius: var(--p-radius-sm);
+}
 
 /* Plugin selector inside modals: themed backgrounds */
 .ant-modal-body .plugin-selector,
