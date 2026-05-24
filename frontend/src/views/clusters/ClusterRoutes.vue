@@ -332,14 +332,6 @@ function onVersionPublished() {
   margin-top: 8px;
 }
 
-.node-table :deep(.ant-table-thead > tr > th) {
-  padding: 8px;
-}
-
-.node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 8px;
-}
-
 .advanced-tab {
   min-height: 100px;
 }
@@ -347,7 +339,7 @@ function onVersionPublished() {
 .advanced-disabled-hint {
   padding: 40px 0;
   text-align: center;
-  color: #999;
+  color: rgba(255,255,255,0.35);
 }
 
 .plugin-config-card {
@@ -361,6 +353,6 @@ function onVersionPublished() {
 
 .plugin-config-card.selected {
   border-color: #1890ff !important;
-  background: #e6f7ff !important;
+  background: rgba(24,144,255,0.12) !important;
 }
 </style>

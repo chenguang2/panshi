@@ -189,23 +189,38 @@ function onVersionPublished() {
 .config-preview {
   font-size: 12px;
   white-space: pre-wrap;
-  background: #f5f5f5;
+  background: rgba(255,255,255,0.04);
   padding: 12px;
   border-radius: 4px;
   max-height: 400px;
   overflow-y: auto;
+  color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.06);
 }
 
 .plugin-config-card {
   transition: all 0.2s;
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.08) !important;
 }
 
 .plugin-config-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+  border-color: rgba(24,144,255,0.3) !important;
 }
 
 .plugin-config-card.selected {
   border-color: #1890ff !important;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+  box-shadow: 0 2px 12px rgba(24, 144, 255, 0.25);
+  background: rgba(24,144,255,0.08) !important;
+}
+
+:deep(.plugin-config-card .ant-card-head) {
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.85) !important;
+}
+
+:deep(.plugin-config-card .ant-card-body) {
+  color: rgba(255,255,255,0.65) !important;
 }
 </style>

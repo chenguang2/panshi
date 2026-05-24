@@ -323,12 +323,4 @@ const versionModalOnPublished = async () => {
 .node-table {
   margin-top: 8px;
 }
-
-.node-table :deep(.ant-table-thead > tr > th) {
-  padding: 8px;
-}
-
-.node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 8px;
-}
 </style>
