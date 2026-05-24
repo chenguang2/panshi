@@ -1,0 +1,84 @@
+/* ============================================================
+   磐石 Admin — Design Token 声明
+   ============================================================
+   本文件只声明变量名，不赋值。
+   具体值在 theme-light.css / theme-dark.css 中定义。
+   切换主题 = 切换 <html> 的 class
+   ============================================================ */
+
+/* ---- 背景 ---- */
+:root {
+  --p-bg-page:                 initial;
+  --p-bg-container:            initial;
+  --p-bg-elevated:             initial;
+  --p-bg-glass:                initial;
+  --p-bg-glass-table:          initial;
+  --p-bg-input:                initial;
+  --p-bg-hover:                initial;
+  --p-bg-mask:                 initial;
+  --p-bg-header:               initial;
+  --p-bg-sidebar:              initial;
+
+  /* ---- 文字 ---- */
+  --p-text-primary:            initial;
+  --p-text-secondary:          initial;
+  --p-text-tertiary:           initial;
+  --p-text-disabled:           initial;
+  --p-text-inverse:            initial;
+  --p-text-sidebar:            initial;
+  --p-text-sidebar-active:     initial;
+
+  /* ---- 边框 ---- */
+  --p-border-default:          initial;
+  --p-border-hover:            initial;
+  --p-border-active:           initial;
+  --p-border-divider:          initial;
+  --p-border-glass:            initial;
+
+  /* ---- 品牌色 ---- */
+  --p-color-primary:           initial;
+  --p-color-primary-hover:     initial;
+  --p-color-primary-active:    initial;
+  --p-color-primary-bg:        initial;
+  --p-color-success:           initial;
+  --p-color-warning:           initial;
+  --p-color-danger:            initial;
+  --p-color-info:              initial;
+
+  /* ---- 侧边栏 ---- */
+  --p-sidebar-bg:              initial;
+  --p-sidebar-text:            initial;
+  --p-sidebar-text-active:     initial;
+
+  /* ---- 头部 ---- */
+  --p-header-bg:               initial;
+  --p-header-border:           initial;
+
+  /* ---- 玻璃效果 ---- */
+  --p-glass-bg:                initial;
+  --p-glass-border:            initial;
+  --p-glass-blur:              14px;
+
+  /* ---- 阴影 ---- */
+  --p-shadow-sm:               initial;
+  --p-shadow-md:               initial;
+  --p-shadow-lg:               initial;
+  --p-shadow-glass:            initial;
+
+  /* ---- 圆角 ---- */
+  --p-radius-sm:               4px;
+  --p-radius-md:               6px;
+  --p-radius-lg:               12px;
+  --p-radius-xl:               16px;
+
+  /* ---- 间距 ---- */
+  --p-space-xs:                4px;
+  --p-space-sm:                8px;
+  --p-space-md:                16px;
+  --p-space-lg:                24px;
+  --p-space-xl:                32px;
+
+  /* ---- 字体 ---- */
+  --p-sans:                    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --p-mono:                    ui-monospace, Consolas, monospace;
+}
