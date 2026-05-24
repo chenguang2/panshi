@@ -720,10 +720,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ===================================================================
+   Cluster Management — Dark Tech Theme (matching Dashboard)
+   =================================================================== */
 .cluster-list {
-  padding: 0;
+  position: relative;
+  min-height: calc(100vh - 56px - 40px);
+  margin: -20px -24px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1040 30%, #0d1b3e 60%, #0a0e27 100%);
+  overflow: hidden;
 }
 
+/* ---- Header section ---- */
 .header-section {
   display: flex;
   justify-content: space-between;
@@ -731,10 +740,15 @@ onMounted(() => {
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .header-section h2 {
   margin: 0 0 8px 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .header-left {
@@ -751,225 +765,248 @@ onMounted(() => {
 
 .filter-count {
   font-size: 13px;
-  color: #666;
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
 }
 
+/* ---- Search & Radio overrides ---- */
+:deep(.header-section) .ant-input-affix-wrapper {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px;
+  box-shadow: none !important;
+}
+:deep(.header-section) .ant-input-affix-wrapper .ant-input {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+:deep(.header-section) .ant-input-affix-wrapper .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+:deep(.header-section) .ant-input-affix-wrapper .ant-input-suffix {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+:deep(.header-section) .ant-input-search-button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  border-radius: 0 6px 6px 0 !important;
+}
+:deep(.header-section) .ant-input-search-button:hover {
+  background: rgba(24, 144, 255, 0.15) !important;
+  color: #1890ff !important;
+}
+:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper-checked {
+  background: var(--p-primary, #1890ff) !important;
+  border-color: var(--p-primary, #1890ff) !important;
+  color: #fff !important;
+}
+:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:not(:first-child)::before {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:hover {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ---- Status dot ---- */
 .status-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
 }
-.status-dot.green { background: #52c41a; }
-.status-dot.red { background: #ff4d4f; }
-.status-dot.yellow { background: #faad14; }
+.status-dot.green { background: #52c41a; box-shadow: 0 0 6px rgba(82,196,26,0.6); }
+.status-dot.red { background: #ff4d4f; box-shadow: 0 0 6px rgba(255,77,79,0.6); }
 
+/* ---- Grid cards ---- */
 .cluster-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
   position: relative;
-}
-
-.expanded-area {
-  margin-top: 16px;
-  /* Allow collapse animation — no min-height */
-}
-
-/* ===== Grid card transitions ===== */
-
-/* Leave (card drops out of grid) */
-.grid-leave-active {
-  position: absolute !important;
-  opacity: 0;
-  transform: translateY(10px);
-  transition: all 0.2s ease-in;
-  width: calc(100% / 3 - 8px);
   z-index: 1;
 }
 
-/* Move (remaining cards slide to fill gap) */
-.grid-move {
-  transition: all 0.3s ease;
-}
-
-/* Enter (card returns to grid - pops back up) */
-.grid-enter-active {
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.grid-enter-from {
-  opacity: 0;
-  transform: translateY(10px) scale(0.95);
-}
-
-/* ===== Expanded area transitions ===== */
-
-/* Enter (card drops like a waterfall from above) */
-.expand-enter-active {
-  animation: expandWaterfall 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-@keyframes expandWaterfall {
-  0% {
-    opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    overflow: hidden;
-    transform: translateY(-250px);
-  }
-  25% {
-    opacity: 1;
-  }
-  85% {
-    max-height: 500px;
-    transform: translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    max-height: 500px;
-    margin-bottom: 12px;
-    transform: translateY(0);
-  }
-}
-
-/* Leave (card flies back up) */
-.expand-leave-active {
-  animation: expandFlyUp 0.3s ease-in forwards;
-  overflow: hidden;
-}
-@keyframes expandFlyUp {
-  0% {
-    opacity: 1;
-    max-height: 500px;
-    margin-bottom: 12px;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    transform: translateY(-120px);
-  }
-}
-
-.card-expanded {
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid var(--p-primary, #1890ff);
-  overflow: hidden;
-  margin-bottom: 12px;
-  box-shadow: 0 3px 14px rgba(24,144,255,.16);
-}
-.card-expanded .card-header {
-  background: #f8f9fa;
-  border-bottom: 1px solid #e8e8e8;
-}
-
 .cluster-card {
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid #e8e8e8;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
   overflow: hidden;
-  transition: all 0.3s ease;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
 .cluster-card:hover {
-  box-shadow: 0 3px 10px rgba(0,0,0,.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  border-color: rgba(24, 144, 255, 0.2);
 }
 
-/* Header — stats + actions row */
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: #fff;
-}
-
-/* Expand row — name + click-zone */
+/* ---- Expand row ---- */
 .expand-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   cursor: pointer;
   user-select: none;
-  background: #dce0e8;
+  background: rgba(255, 255, 255, 0.03);
   transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .expand-row:hover {
-  background: #cdd2dd;
+  background: rgba(255, 255, 255, 0.06);
 }
 .expand-row:active {
-  background: #bec5d2;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .cname-wrap {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
 }
 .cname {
-  font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: rgba(255, 255, 255, 0.9);
 }
 .chint {
-  font-size: 11px; color: #999; font-weight: 400; flex-shrink: 0;
+  font-size: 11px; color: rgba(255, 255, 255, 0.35); font-weight: 400; flex-shrink: 0;
+}
+
+/* ---- Card header (stats + actions) ---- */
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
 }
 
 .stats-bar {
-  display: flex; background: #f8f9fa; border-radius: 6px; overflow: hidden; flex-shrink: 0;
+  display: flex;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 .scell {
-  text-align: center; padding: 4px 10px;
+  text-align: center; padding: 5px 12px;
 }
-.scell + .scell { border-left: 1px solid #eee; }
-.snum { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
-.slbl { font-size: 10px; color: #aaa; }
+.scell + .scell { border-left: 1px solid rgba(255, 255, 255, 0.06); }
+.snum { font-size: 15px; font-weight: 700; color: rgba(255, 255, 255, 0.9); line-height: 1.2; }
+.slbl { font-size: 10px; color: rgba(255, 255, 255, 0.35); }
 
 .cactions {
-  display: flex; gap: 3px; flex-shrink: 0;
+  display: flex; gap: 3px; flex-shrink: 0; margin-left: auto;
 }
 .cbtn {
-  padding: 2px 7px; font-size: 11px; border: 1px solid #e0e0e0;
-  border-radius: 4px; background: #fff; cursor: pointer; color: #888;
+  padding: 3px 10px; font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  transition: all 0.2s;
 }
-.cbtn:hover { border-color: #1890ff; color: #1890ff; }
-.cbtn.danger:hover { border-color: #ff4d4f; color: #ff4d4f; }
+.cbtn:hover { border-color: #1890ff; color: #1890ff; background: rgba(24,144,255,0.12); }
+.cbtn.danger:hover { border-color: #ff4d4f; color: #ff4d4f; background: rgba(255,77,79,0.12); }
 
-/* Chips */
+/* ---- Chips ---- */
 .chips-row {
-  display: flex; gap: 3px; flex-wrap: wrap; padding: 0 14px 10px;
+  display: flex; gap: 4px; flex-wrap: wrap; padding: 0 14px 12px;
 }
 .chip {
-  padding: 2px 8px; border-radius: 10px; font-size: 11px;
-  border: 1px solid #e8e8e8; background: #fff; color: #888;
-  cursor: pointer; transition: all 0.2s;
+  padding: 3px 10px; border-radius: 10px; font-size: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.chip:hover { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
-.chip.disabled { opacity: 0.4; cursor: not-allowed; }
-.chip.disabled:hover { border-color: #e8e8e8; color: #888; background: #fff; }
-.cb { font-size: 9px; color: #bbb; margin-left: 2px; }
+.chip:hover { border-color: rgba(24,144,255,0.5); color: #1890ff; background: rgba(24,144,255,0.08); }
+.chip.disabled { opacity: 0.35; cursor: not-allowed; }
+.chip.disabled:hover { border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); background: transparent; }
+.cb { font-size: 9px; color: rgba(255,255,255,0.3); margin-left: 3px; }
 
-/* Detail area */
+/* ===== Expanded area ===== */
+.expanded-area {
+  margin-top: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.card-expanded {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(24, 144, 255, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+}
+.card-expanded .card-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+}
+
+/* Expanded card expand row */
+.card-expanded .expand-row {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: grab;
+}
+.card-expanded .expand-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.card-expanded .expand-row:active {
+  cursor: grabbing;
+}
+
+/* Drag states */
+.card-expanded.dragging { opacity: 0.35; }
+.card-expanded.drag-over {
+  border-color: #fa8c16 !important;
+  box-shadow: 0 4px 24px rgba(250, 140, 22, 0.3) !important;
+}
+
+/* ---- Detail area ---- */
 .card-detail {
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
 }
 
 .dtabs {
-  display: flex; background: #fff; border-bottom: 1px solid #e8e8e8;
-  padding: 0 16px; overflow-x: auto;
+  display: flex;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 16px;
+  overflow-x: auto;
 }
 .dt {
-  padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;
-  border-bottom: 2px solid transparent; white-space: nowrap;
+  padding: 10px 16px; font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
-.dt:hover { color: #1890ff; }
+.dt:hover { color: rgba(255, 255, 255, 0.9); }
 .dt.active { color: #1890ff; border-bottom-color: #1890ff; margin-bottom: -1px; }
-.db { margin-left: 4px; padding: 1px 5px; border-radius: 8px; font-size: 10px; background: #f0f0f0; color: #999; }
-.dt.active .db { background: #e6f7ff; color: #1890ff; }
-.dbody { padding: 16px; }
+.db { margin-left: 4px; padding: 1px 6px; border-radius: 8px; font-size: 10px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.35); }
+.dt.active .db { background: rgba(24,144,255,0.15); color: #1890ff; }
 
+.dbody {
+  padding: 16px;
+  min-height: 100px;
+}
+
+/* ---- Tab content ---- */
 .node-tab {
   width: 100%;
 }
@@ -986,23 +1023,7 @@ onMounted(() => {
   min-height: 100px;
 }
 
-.cluster-desc {
-  color: #666;
-  font-size: 13px;
-  margin: 0;
-}
-
-.no-desc {
-  color: #999;
-  font-size: 13px;
-  font-style: italic;
-  margin: 0;
-}
-
-.node-tab {
-  padding: 0;
-}
-
+/* ---- Node action bar ---- */
 .node-actions {
   display: flex;
   gap: 8px;
@@ -1014,42 +1035,37 @@ onMounted(() => {
   margin-top: 8px;
 }
 
-.node-table :deep(.ant-table-thead > tr > th) {
-  padding: 8px;
-}
-
-.node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 8px;
-}
-
+/* ---- Empty state ---- */
 .empty-state {
   padding: 48px 0;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
-/* Click zone indicator */
+/* ---- Click zone ---- */
 .click-zone {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 10px 3px 6px;
   border-radius: 4px;
-  color: #aaa;
+  color: rgba(255,255,255,0.35);
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
-  background: #f5f5f5;
-  border: 1px solid #e8e8e8;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   transition: all 0.2s;
   user-select: none;
 }
 .click-zone:hover {
-  background: #e6f7ff;
+  background: rgba(24,144,255,0.1);
   border-color: var(--p-primary, #1890ff);
   color: var(--p-primary, #1890ff);
 }
 .click-zone.on {
-  background: #e6f7ff;
+  background: rgba(24,144,255,0.12);
   border-color: var(--p-primary, #1890ff);
   color: var(--p-primary, #1890ff);
 }
@@ -1062,26 +1078,418 @@ onMounted(() => {
   line-height: 1;
 }
 
-/* Drag cursor on expanded card header */
-.card-expanded .expand-row {
-  background: #d4d9e3;
-  border-bottom: 1px solid #d0d5df;
-  cursor: grab;
-  user-select: none;
+/* ---- Generic description text ---- */
+.cluster-desc {
+  color: rgba(255,255,255,0.5);
+  font-size: 13px;
+  margin: 0;
 }
-.card-expanded .expand-row:hover {
-  background: #c5cad7;
-}
-.card-expanded .expand-row:active {
-  cursor: grabbing;
+.no-desc {
+  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+  font-style: italic;
+  margin: 0;
 }
 
-/* Drag states */
-.card-expanded.dragging {
-  opacity: 0.4;
+/* ===== Grid card transitions ===== */
+.grid-leave-active {
+  position: absolute !important;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.2s ease-in;
+  width: calc(100% / 3 - 8px);
+  z-index: 1;
 }
-.card-expanded.drag-over {
-  border-color: #fa8c16 !important;
-  box-shadow: 0 3px 16px rgba(250, 140, 22, 0.3) !important;
+.grid-move {
+  transition: all 0.3s ease;
+}
+.grid-enter-active {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.grid-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+}
+
+/* ===== Expanded area transitions ===== */
+.expand-enter-active {
+  animation: expandWaterfall 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes expandWaterfall {
+  0% { opacity: 0; max-height: 0; margin-bottom: 0; overflow: hidden; transform: translateY(-250px); }
+  25% { opacity: 1; }
+  85% { max-height: 500px; transform: translateY(8px); }
+  100% { opacity: 1; max-height: 500px; margin-bottom: 12px; transform: translateY(0); }
+}
+.expand-leave-active {
+  animation: expandFlyUp 0.3s ease-in forwards;
+  overflow: hidden;
+}
+@keyframes expandFlyUp {
+  0% { opacity: 1; max-height: 500px; margin-bottom: 12px; transform: translateY(0); }
+  40% { opacity: 1; }
+  100% { opacity: 0; max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; transform: translateY(-120px); }
+}
+
+/* ---- Add button override ---- */
+:deep(.header-section .ant-btn-primary) {
+  background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.3) !important;
+}
+:deep(.header-section .ant-btn-primary:hover) {
+  opacity: 0.92;
+  box-shadow: 0 6px 24px rgba(24,144,255,0.45) !important;
+}
+
+/* ---- Modal mask styling ---- */
+/* (Modal body/header/footer styles are in the global <style> block below) */
+
+/* ---- Tab component table overrides ---- */
+:deep(.node-table) .ant-table {
+  background: transparent !important;
+}
+:deep(.node-table) .ant-table-thead > tr > th {
+  background: rgba(255,255,255,0.04) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  color: rgba(255,255,255,0.5) !important;
+  font-size: 12px;
+  font-weight: 500;
+}
+:deep(.node-table) .ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255,255,255,0.04) !important;
+  color: rgba(255,255,255,0.75);
+}
+:deep(.node-table) .ant-table-tbody > tr:hover > td {
+  background: rgba(24,144,255,0.08) !important;
+}
+:deep(.node-table) .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+:deep(.node-table) .ant-empty-description {
+  color: rgba(255,255,255,0.3) !important;
+}
+
+/* ---- Tag & badge in tables ---- */
+:deep(.node-table) .ant-tag {
+  border: none;
+  font-weight: 500;
+  border-radius: 4px;
+}
+:deep(.node-table) .ant-badge-status-text {
+  color: rgba(255,255,255,0.6);
+}
+
+/* ---- Table action column buttons ---- */
+:deep(.node-table) .ant-table-tbody .ant-btn {
+  background: linear-gradient(135deg, rgba(24,144,255,0.1), rgba(124,58,237,0.1)) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  color: rgba(255,255,255,0.7) !important;
+  border-radius: 4px;
+  height: 26px;
+  font-size: 12px;
+  padding: 0 8px;
+  transition: all 0.2s;
+}
+:deep(.node-table) .ant-table-tbody .ant-btn:hover {
+  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
+  border-color: rgba(24,144,255,0.4) !important;
+  color: #fff !important;
+}
+:deep(.node-table) .ant-table-tbody .ant-btn-dangerous {
+  background: linear-gradient(135deg, rgba(255,77,79,0.1), rgba(255,77,79,0.05)) !important;
+  border-color: rgba(255,77,79,0.25) !important;
+  color: #ff7875 !important;
+}
+:deep(.node-table) .ant-table-tbody .ant-btn-dangerous:hover {
+  background: linear-gradient(135deg, rgba(255,77,79,0.2), rgba(255,77,79,0.1)) !important;
+  border-color: #ff4d4f !important;
+  color: #ff4d4f !important;
+}
+
+/* ---- Table pagination ---- */
+:deep(.node-table) .ant-pagination .ant-pagination-item {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 4px;
+}
+:deep(.node-table) .ant-pagination .ant-pagination-item a {
+  color: rgba(255,255,255,0.5) !important;
+}
+:deep(.node-table) .ant-pagination .ant-pagination-item-active {
+  background: var(--p-primary, #1890ff) !important;
+  border-color: var(--p-primary, #1890ff) !important;
+}
+:deep(.node-table) .ant-pagination .ant-pagination-item-active a {
+  color: #fff !important;
+}
+:deep(.node-table) .ant-pagination .ant-pagination-prev button,
+:deep(.node-table) .ant-pagination .ant-pagination-next button {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: rgba(255,255,255,0.5) !important;
+}
+:deep(.node-table) .ant-pagination .ant-pagination-disabled button {
+  opacity: 0.3 !important;
+}
+:deep(.node-table) .ant-pagination-options .ant-select-selector {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: rgba(255,255,255,0.6) !important;
+}
+:deep(.node-table) .ant-pagination-total-text {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+/* ---- Search inputs inside tab components ---- */
+:deep(.dbody) .ant-input-affix-wrapper {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 6px;
+}
+:deep(.dbody) .ant-input-affix-wrapper .ant-input {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+:deep(.dbody) .ant-input-affix-wrapper .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+:deep(.dbody) .ant-input-search-button {
+  background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 0 6px 6px 0 !important;
+}
+:deep(.dbody) .ant-select-selector {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-radius: 6px !important;
+}
+:deep(.dbody) .ant-select-selection-placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+:deep(.dbody) .ant-select-arrow {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* ---- Node action buttons in tabs: gradient style ---- */
+:deep(.node-actions .ant-btn) {
+  background: linear-gradient(135deg, rgba(24,144,255,0.12), rgba(124,58,237,0.12)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+:deep(.node-actions .ant-btn:hover) {
+  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
+  border-color: rgba(24,144,255,0.4) !important;
+  color: #fff !important;
+}
+:deep(.node-actions .ant-btn-primary) {
+  background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
+  border: none !important;
+  color: #fff !important;
+}
+:deep(.node-actions .ant-btn-primary:hover) {
+  opacity: 0.92;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.35) !important;
+}
+:deep(.node-actions .ant-btn-dangerous) {
+  background: linear-gradient(135deg, rgba(255,77,79,0.1), rgba(255,77,79,0.05)) !important;
+  border-color: rgba(255,77,79,0.3) !important;
+  color: #ff7875 !important;
+}
+:deep(.node-actions .ant-btn-dangerous:hover) {
+  background: linear-gradient(135deg, rgba(255,77,79,0.2), rgba(255,77,79,0.1)) !important;
+  border-color: #ff4d4f !important;
+  color: #ff4d4f !important;
+}
+:deep(.node-actions .ant-divider-vertical) {
+  border-color: rgba(255,255,255,0.1) !important;
+}
+
+/* ---- Popover (column config) ---- */
+:deep(.ant-popover-inner) {
+  background: #1a1a2e !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+:deep(.ant-popover-title) {
+  color: rgba(255,255,255,0.85) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+:deep(.ant-popover-inner-content) {
+  color: rgba(255,255,255,0.7) !important;
+}
+:deep(.ant-checkbox-wrapper) {
+  color: rgba(255,255,255,0.7) !important;
+}
+</style>
+
+<!-- ========================================================================
+     GLOBAL styles for teleported elements (modals/drawers rendered at <body>)
+     ======================================================================== -->
+<style>
+/* ---- Modal body inputs/textareas/selects ---- */
+.ant-modal-content {
+  background: #1a1a2e !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+.ant-modal-header {
+  background: #1a1a2e !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+.ant-modal-title {
+  color: rgba(255,255,255,0.85) !important;
+}
+.ant-modal-close {
+  color: rgba(255,255,255,0.4) !important;
+}
+.ant-modal-close:hover {
+  color: rgba(255,255,255,0.8) !important;
+}
+.ant-modal-body .ant-form-item-label > label {
+  color: rgba(255,255,255,0.65) !important;
+}
+
+/* Modal form elements */
+.ant-modal-body .ant-input,
+.ant-modal-body .ant-input-password,
+.ant-modal-body .ant-input-affix-wrapper,
+.ant-modal-body .ant-select-selector,
+.ant-modal-body .ant-input-number,
+.ant-modal-body .ant-input-number-group-addon,
+.ant-modal-body .ant-input-textarea,
+.ant-modal-body .ant-picker {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  color: rgba(255,255,255,0.85) !important;
+}
+
+/* Input text */
+.ant-modal-body .ant-input {
+  color: rgba(255,255,255,0.85) !important;
+}
+.ant-modal-body .ant-input::placeholder,
+.ant-modal-body .ant-input-password input::placeholder {
+  color: rgba(255,255,255,0.3) !important;
+}
+.ant-modal-body .ant-input-password .ant-input {
+  background: transparent !important;
+  border: none !important;
+}
+.ant-modal-body .ant-input-password-icon {
+  color: rgba(255,255,255,0.4) !important;
+}
+.ant-modal-body .ant-input-password-icon:hover {
+  color: rgba(255,255,255,0.7) !important;
+}
+
+/* Select */
+.ant-modal-body .ant-select-selection-placeholder {
+  color: rgba(255,255,255,0.3) !important;
+}
+.ant-modal-body .ant-select-selection-item {
+  color: rgba(255,255,255,0.85) !important;
+}
+.ant-modal-body .ant-select-arrow {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+/* Input number */
+.ant-modal-body .ant-input-number-handler-wrap {
+  background: rgba(255,255,255,0.06) !important;
+  border-left: 1px solid rgba(255,255,255,0.1) !important;
+}
+.ant-modal-body .ant-input-number-handler-up-inner,
+.ant-modal-body .ant-input-number-handler-down-inner {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+/* Form help/error text */
+.ant-modal-body .ant-form-item-explain,
+.ant-modal-body .ant-form-item-extra {
+  color: rgba(255,255,255,0.4) !important;
+}
+
+/* Modal tabs */
+.ant-modal-body .ant-tabs {
+  color: rgba(255,255,255,0.85) !important;
+}
+.ant-modal-body .ant-tabs-tab {
+  color: rgba(255,255,255,0.5) !important;
+}
+.ant-modal-body .ant-tabs-tab-active {
+  color: #1890ff !important;
+}
+.ant-modal-body .ant-tabs-ink-bar {
+  background: #1890ff !important;
+}
+.ant-modal-body .ant-tabs-nav {
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Modal switches */
+.ant-modal-body .ant-switch {
+  background: rgba(255,255,255,0.15) !important;
+}
+.ant-modal-body .ant-switch-checked {
+  background: #1890ff !important;
+}
+
+/* Modal footer buttons */
+.ant-modal-footer .ant-btn {
+  background: linear-gradient(135deg, rgba(24,144,255,0.1), rgba(124,58,237,0.1)) !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  color: rgba(255,255,255,0.7) !important;
+  border-radius: 6px;
+}
+.ant-modal-footer .ant-btn:hover {
+  background: linear-gradient(135deg, rgba(24,144,255,0.2), rgba(124,58,237,0.2)) !important;
+  color: #fff !important;
+}
+.ant-modal-footer .ant-btn-primary {
+  background: linear-gradient(135deg, #1890ff, #7c3aed) !important;
+  border: none !important;
+  color: #fff !important;
+}
+.ant-modal-footer .ant-btn-primary:hover {
+  opacity: 0.92;
+  box-shadow: 0 4px 16px rgba(24,144,255,0.35) !important;
+}
+
+/* Modal masks */
+.ant-modal-mask {
+  background: rgba(0,0,0,0.6) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* ---- Drawer (config view/edit) ---- */
+.ant-drawer-content {
+  background: #1a1a2e !important;
+}
+.ant-drawer-header {
+  background: #1a1a2e !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+}
+.ant-drawer-title {
+  color: rgba(255,255,255,0.85) !important;
+}
+.ant-drawer-close {
+  color: rgba(255,255,255,0.4) !important;
+}
+.ant-drawer-body {
+  color: rgba(255,255,255,0.7) !important;
+}
+.ant-drawer-body .ant-descriptions-title {
+  color: rgba(255,255,255,0.8) !important;
+}
+.ant-drawer-body .ant-descriptions-item-label {
+  color: rgba(255,255,255,0.5) !important;
+}
+.ant-drawer-body .ant-descriptions-item-content {
+  color: rgba(255,255,255,0.8) !important;
 }
 </style>
