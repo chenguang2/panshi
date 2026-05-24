@@ -600,7 +600,7 @@ const handleClose = () => {
 
 .detail-config {
   flex: 1;
-  background: var(--p-bg-elevated);
+  background: var(--p-bg-page);
   border: 1px solid var(--p-border-default);
   border-radius: var(--p-radius-sm);
   padding: 12px;
@@ -613,6 +613,7 @@ const handleClose = () => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+  color: var(--p-text-primary);
 }
 
 .json-textarea {
@@ -634,7 +635,7 @@ const handleClose = () => {
 .diff-container {
   flex: 1;
   overflow: auto;
-  background: var(--p-bg-elevated);
+  background: var(--p-bg-page);
   border: 1px solid var(--p-border-default);
   border-radius: var(--p-radius-sm);
   padding: 12px;
