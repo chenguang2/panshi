@@ -17,8 +17,8 @@ watch(() => themeStore.themeColor, (color) => {
   root.style.setProperty('--p-color-primary-hover', primary + 'cc')
   root.style.setProperty('--p-color-primary-active', primary + '99')
   root.style.setProperty('--p-color-primary-bg', primary + '18')
-  root.style.setProperty('--p-bg-hover', primary + '0f')    // ~6% opacity
-  root.style.setProperty('--p-border-hover', primary + '4d')  // ~30% opacity
+  root.style.setProperty('--p-bg-hover', primary + '0f')
+  root.style.setProperty('--p-border-hover', primary + '4d')
   root.style.setProperty('--p-border-active', primary)
 
   if (!isDark) {
@@ -50,6 +50,7 @@ watch(() => themeStore.darkMode, (val) => {
     root.style.removeProperty('--p-bg-hover')
     root.style.removeProperty('--p-border-hover')
     root.style.removeProperty('--p-border-active')
+    root.style.removeProperty('--p-bg-input')
   }
 }, { immediate: true })
 
