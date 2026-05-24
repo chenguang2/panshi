@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch } from 'vue'
 import api from '@/api'
 
 const props = defineProps<{
@@ -209,12 +209,6 @@ watch(() => props.visible, async (val) => {
     collapsedGroups.value = {}
     expandedMode.value = {}
     loadDiff()
-    await nextTick()
-    // Override drawer background for readability
-    const drawers = document.querySelectorAll<HTMLElement>('.ant-drawer-content')
-    drawers.forEach(el => {
-      el.style.setProperty('background', 'var(--p-bg-elevated)', 'important')
-    })
   }
 })
 </script>
