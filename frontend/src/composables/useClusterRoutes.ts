@@ -180,7 +180,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         'pre',
         {
           style:
-            'font-size: 12px; white-space: pre-wrap; background: #f5f5f5; padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto;',
+            'font-size: 12px; white-space: pre-wrap; background: var(--p-bg-hover); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--p-text-primary);',
         },
         configStr,
       ),
