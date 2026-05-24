@@ -8,6 +8,7 @@ import './style.css'
 import './styles/tokens.css'
 import './styles/theme-light.css'
 import './styles/theme-dark.css'
+import './styles/theme-default.css'
 
 const app = createApp(App)
 

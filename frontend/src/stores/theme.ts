@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 
 export type ThemeColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
+export type ThemeStyle = 'modern' | 'default'
 export type LayoutMode = 'sidebar' | 'topnav' | 'fullwidth'
 
 const THEME_STORAGE_KEY = 'panshi_theme_prefs'
@@ -9,6 +10,7 @@ const THEME_STORAGE_KEY = 'panshi_theme_prefs'
 interface ThemePrefs {
   themeColor: ThemeColor
   darkMode: boolean
+  style: ThemeStyle
   layoutMode: LayoutMode
   sidebarCollapsed: boolean
 }
@@ -18,7 +20,7 @@ function loadPrefs(): ThemePrefs {
     const raw = localStorage.getItem(THEME_STORAGE_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
-  return { themeColor: 'blue', darkMode: false, layoutMode: 'sidebar', sidebarCollapsed: false }
+  return { themeColor: 'blue', darkMode: false, style: 'modern', layoutMode: 'sidebar', sidebarCollapsed: false }
 }
 
 function savePrefs(prefs: ThemePrefs) {
@@ -72,55 +74,54 @@ export const themeGlassBorderMap: Record<ThemeColor, string> = {
 export const useThemeStore = defineStore('theme', () => {
   const prefs = loadPrefs()
 
+  const style = ref<ThemeStyle>(prefs.style)
   const themeColor = ref<ThemeColor>(prefs.themeColor)
   const darkMode = ref<boolean>(prefs.darkMode)
   const layoutMode = ref<LayoutMode>(prefs.layoutMode)
   const sidebarCollapsed = ref<boolean>(prefs.sidebarCollapsed)
 
-  /** The class to set on <html>: 'theme-light' or 'theme-dark' */
-  const themeClass = computed(() => darkMode.value ? 'theme-dark' : 'theme-light')
-
-  /** The Ant Design algorithm: darkAlgorithm or defaultAlgorithm */
-  const antdAlgorithm = computed(() => darkMode.value ? 'dark' : 'default')
-
-  /** Apply theme class to <html>. Called on init and whenever darkMode changes. */
-  function applyHtmlClass() {
-    const root = document.documentElement
-    root.className = root.className
-      .replace(/theme-\w+/g, '')
-      .trim()
-    root.classList.add(themeClass.value)
-  }
-
-  // Apply on change
-  watch(darkMode, applyHtmlClass, { immediate: true })
+  /** The class to set on <html>: 'theme-light', 'theme-dark', or 'theme-default' */
+  const themeClass = computed(() => {
+    if (style.value === 'default') return 'theme-default'
+    return darkMode.value ? 'theme-dark' : 'theme-light'
+  })
 
   const persist = () => savePrefs({
     themeColor: themeColor.value,
     darkMode: darkMode.value,
+    style: style.value,
     layoutMode: layoutMode.value,
     sidebarCollapsed: sidebarCollapsed.value,
   })
 
-  watch([themeColor, darkMode, layoutMode, sidebarCollapsed], persist, { deep: true })
+  watch([themeColor, darkMode, style, layoutMode, sidebarCollapsed], persist, { deep: true })
+
+  // Sync html class with themeClass
+  watch(themeClass, (cls) => {
+    const root = document.documentElement
+    root.className = root.className.replace(/theme-\w+/g, '').trim()
+    root.classList.add(cls)
+  }, { immediate: true })
 
   const setThemeColor = (color: ThemeColor) => { themeColor.value = color }
   const toggleDarkMode = () => { darkMode.value = !darkMode.value }
   const setDarkMode = (val: boolean) => { darkMode.value = val }
   const setLayoutMode = (mode: LayoutMode) => { layoutMode.value = mode }
   const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value }
+  const setThemeStyle = (s: ThemeStyle) => { style.value = s }
 
   return {
+    style,
     themeColor,
     darkMode,
     layoutMode,
     sidebarCollapsed,
     themeClass,
-    antdAlgorithm,
     setThemeColor,
     toggleDarkMode,
     setDarkMode,
     setLayoutMode,
     toggleSidebar,
+    setThemeStyle,
   }
 })
