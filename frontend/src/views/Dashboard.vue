@@ -149,7 +149,216 @@ onMounted(async () => {
   margin: -20px -24px;
   padding: 20px 24px;
   overflow: hidden;
-  background: linear-gradient(135deg, #0a0e27 0%, #1a1040 30%, #0d1b3e 60%, #0a0e27 100%);
+  background: linear-gradient(135deg, #e8f0fe 0%, #f0e8ff 30%, #e6f0fa 60%, #e8f0fe 100%);
+}
+
+/* ---- Ambient background glow ---- */
+.ambient {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-1 {
+  width: 600px;
+  height: 600px;
+  left: -200px;
+  top: -100px;
+  background: radial-gradient(circle, rgba(24, 144, 255, 0.06) 0%, transparent 60%);
+}
+
+.ambient-2 {
+  width: 500px;
+  height: 500px;
+  right: -150px;
+  bottom: -50px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.05) 0%, transparent 60%);
+}
+
+/* ---- Content wrapper ---- */
+.dash-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- Header ---- */
+h2 {
+  margin-bottom: 16px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+/* ---- Stats row ---- */
+.stats-row {
+  margin-bottom: 16px;
+}
+
+/* ---- Glass stat card ---- */
+.glass-stat-card {
+  height: 100%;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: transform 0.25s, box-shadow 0.25s;
+  overflow: hidden;
+  position: relative;
+}
+
+.glass-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card-body {
+  padding: 22px 24px 26px;
+  position: relative;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.45);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--p-primary, #1890ff);
+  line-height: 1.2;
+  letter-spacing: 1px;
+}
+
+.stat-accent {
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #1890ff, #7c3aed, transparent);
+  opacity: 0.4;
+}
+
+/* ---- Glass table card ---- */
+.glass-table-card {
+  height: 100%;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.table-card-header {
+  position: relative;
+  padding: 16px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+  letter-spacing: 0.3px;
+}
+
+.table-card-header::after {
+  content: '';
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.01));
+}
+
+.table-card-body {
+  padding: 0;
+}
+
+/* ---- Content row ---- */
+.content-row {
+  margin-top: 16px;
+}
+
+/* ---- Dark table overrides ---- */
+:deep(.dark-table) .ant-table {
+  background: transparent !important;
+}
+
+:deep(.dark-table) .ant-table-thead > tr > th {
+  background: rgba(0, 0, 0, 0.02) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  color: rgba(0, 0, 0, 0.45) !important;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 10px 16px;
+}
+
+:deep(.dark-table) .ant-table-thead > tr > th:not(:last-child)::after {
+  display: none !important;
+}
+
+:deep(.dark-table) .ant-table-tbody > tr > td {
+  background: transparent !important;
+  border-bottom: none !important;
+  padding: 10px 16px;
+  color: rgba(0, 0, 0, 0.65);
+}
+
+:deep(.dark-table) .ant-table-tbody > tr:nth-child(even) > td {
+  background: rgba(0, 0, 0, 0.015) !important;
+}
+
+:deep(.dark-table) .ant-table-tbody > tr:hover > td {
+  background: rgba(24, 144, 255, 0.04) !important;
+}
+
+:deep(.dark-table) .ant-tag {
+  border: none;
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 1px 8px;
+  line-height: 20px;
+  height: 22px;
+}
+
+:deep(.dark-table) .ant-table-placeholder .ant-empty-description {
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+
+/* ---- Status indicators ---- */
+.status-ok {
+  color: #389e0d;
+}
+
+.status-err {
+  color: #cf1322;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.dot-ok {
+  background: #52c41a;
+  box-shadow: 0 0 6px rgba(82, 196, 26, 0.3);
+}
+
+.dot-err {
+  background: #ff4d4f;
+  box-shadow: 0 0 6px rgba(255, 77, 79, 0.3);
 }
 
 /* ---- Tech grid background (matching login page) ---- */
