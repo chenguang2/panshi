@@ -33,6 +33,42 @@ export const themeColorMap: Record<ThemeColor, string> = {
   red: '#f5222d',
 }
 
+/** Light-tinted background colors matching each theme color (for --p-bg-page) */
+export const themeBgLightMap: Record<ThemeColor, string> = {
+  blue: '#e8f0fe',
+  green: '#eef7e8',
+  purple: '#f0e8ff',
+  orange: '#fef0e6',
+  red: '#fde8e9',
+}
+
+/** Glass card background tinted per theme */
+export const themeGlassMap: Record<ThemeColor, string> = {
+  blue: 'rgba(232,240,254,0.7)',
+  green: 'rgba(238,247,232,0.7)',
+  purple: 'rgba(240,232,255,0.7)',
+  orange: 'rgba(254,240,230,0.7)',
+  red: 'rgba(253,232,233,0.7)',
+}
+
+/** Table card glass background per theme */
+export const themeTableGlassMap: Record<ThemeColor, string> = {
+  blue: 'rgba(232,240,254,0.65)',
+  green: 'rgba(238,247,232,0.65)',
+  purple: 'rgba(240,232,255,0.65)',
+  orange: 'rgba(254,240,230,0.65)',
+  red: 'rgba(253,232,233,0.65)',
+}
+
+/** Glass border per theme */
+export const themeGlassBorderMap: Record<ThemeColor, string> = {
+  blue: 'rgba(24,144,255,0.15)',
+  green: 'rgba(82,196,26,0.15)',
+  purple: 'rgba(124,58,237,0.15)',
+  orange: 'rgba(250,140,22,0.15)',
+  red: 'rgba(245,34,45,0.15)',
+}
+
 export const useThemeStore = defineStore('theme', () => {
   const prefs = loadPrefs()
 
