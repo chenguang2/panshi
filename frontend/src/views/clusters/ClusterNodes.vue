@@ -199,14 +199,6 @@ const {
   padding: 0;
 }
 
-.node-tab :deep(.ant-table-wrapper) {
-  width: 100%;
-}
-
-.node-tab :deep(.ant-table) {
-  width: 100% !important;
-}
-
 .node-actions {
   display: flex;
   gap: 8px;
@@ -216,13 +208,5 @@ const {
 
 .node-table {
   margin-top: 8px;
-}
-
-.node-table :deep(.ant-table-thead > tr > th) {
-  padding: 8px;
-}
-
-.node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 8px;
 }
 </style>
