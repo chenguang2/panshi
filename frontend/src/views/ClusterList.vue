@@ -772,7 +772,7 @@ onMounted(() => {
 }
 
 :deep(.header-section) .ant-input-affix-wrapper {
-  background: var(--p-bg-input) !important;
+  background: var(--p-bg-glass) !important;
   border: 1px solid var(--p-border-default) !important;
   border-radius: 6px;
   box-shadow: none !important;
@@ -795,7 +795,7 @@ onMounted(() => {
   opacity: 0.92;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper {
-  background: var(--p-bg-input) !important;
+  background: var(--p-bg-glass) !important;
   border-color: var(--p-border-default) !important;
   color: var(--p-text-secondary) !important;
 }
@@ -900,7 +900,7 @@ onMounted(() => {
   padding: 3px 10px; font-size: 11px;
   border: 1px solid var(--p-border-default);
   border-radius: var(--p-radius-sm);
-  background: var(--p-bg-input);
+  background: var(--p-bg-hover);
   cursor: pointer;
   color: var(--p-text-secondary);
   transition: all 0.2s;
@@ -914,7 +914,7 @@ onMounted(() => {
 .chip {
   padding: 3px 10px; border-radius: 10px; font-size: 11px;
   border: 1px solid var(--p-border-default);
-  background: var(--p-bg-input);
+  background: var(--p-bg-hover);
   color: var(--p-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
@@ -1013,7 +1013,7 @@ onMounted(() => {
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
-  background: var(--p-bg-input);
+  background: var(--p-bg-hover);
   border: 1px solid var(--p-border-default);
   transition: all 0.2s;
   user-select: none;
@@ -1071,40 +1071,40 @@ onMounted(() => {
 :deep(.node-table) .ant-badge-status-text { color: var(--p-text-secondary); }
 
 :deep(.node-table) .ant-table-tbody .ant-btn {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-glass-border) !important;
+  background: var(--p-bg-hover) !important;
+  border: 1px solid var(--p-border-default) !important;
   color: var(--p-text-secondary) !important;
   border-radius: var(--p-radius-sm); height: 26px; font-size: 12px; padding: 0 8px;
 }
-:deep(.node-table) .ant-table-tbody .ant-btn:hover { background: var(--p-bg-hover) !important; border-color: var(--p-border-hover) !important; color: var(--p-color-primary) !important; }
+:deep(.node-table) .ant-table-tbody .ant-btn:hover { background: var(--p-color-primary-bg) !important; border-color: var(--p-color-primary) !important; color: var(--p-color-primary) !important; }
 :deep(.node-table) .ant-table-tbody .ant-btn-dangerous { color: var(--p-color-danger) !important; }
 
-:deep(.node-table) .ant-pagination .ant-pagination-item { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; border-radius: var(--p-radius-sm); }
+:deep(.node-table) .ant-pagination .ant-pagination-item { background: var(--p-bg-glass) !important; border: 1px solid var(--p-border-default) !important; border-radius: var(--p-radius-sm); }
 :deep(.node-table) .ant-pagination .ant-pagination-item a { color: var(--p-text-secondary) !important; }
 :deep(.node-table) .ant-pagination .ant-pagination-item-active { background: var(--p-color-primary) !important; border-color: var(--p-color-primary) !important; }
 :deep(.node-table) .ant-pagination .ant-pagination-item-active a { color: var(--p-text-inverse) !important; }
 :deep(.node-table) .ant-pagination .ant-pagination-prev button,
-:deep(.node-table) .ant-pagination .ant-pagination-next button { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; }
+:deep(.node-table) .ant-pagination .ant-pagination-next button { background: var(--p-bg-glass) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; }
 :deep(.node-table) .ant-pagination .ant-pagination-disabled button { opacity: 0.3 !important; }
-:deep(.node-table) .ant-pagination-options .ant-select-selector { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; }
+:deep(.node-table) .ant-pagination-options .ant-select-selector { background: var(--p-bg-glass) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; }
 :deep(.node-table) .ant-pagination-total-text { color: var(--p-text-tertiary) !important; }
 
-:deep(.dbody) .ant-input-affix-wrapper { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; border-radius: 6px; }
+:deep(.dbody) .ant-input-affix-wrapper { background: var(--p-bg-glass) !important; border: 1px solid var(--p-border-default) !important; border-radius: 6px; }
 :deep(.dbody) .ant-input-affix-wrapper .ant-input { background: transparent !important; border: none !important; color: var(--p-text-primary) !important; }
 :deep(.dbody) .ant-input-affix-wrapper .ant-input::placeholder { color: var(--p-text-disabled) !important; }
 :deep(.dbody) .ant-input-search-button { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; border-radius: 0 6px 6px 0 !important; }
-:deep(.dbody) .ant-select-selector { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-primary) !important; border-radius: 6px !important; }
+:deep(.dbody) .ant-select-selector { background: var(--p-bg-glass) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-primary) !important; border-radius: 6px !important; }
 :deep(.dbody) .ant-select-selection-placeholder { color: var(--p-text-disabled) !important; }
 :deep(.dbody) .ant-select-arrow { color: var(--p-text-tertiary) !important; }
 
-:deep(.node-actions .ant-btn) { background: var(--p-bg-glass) !important; border: 1px solid var(--p-glass-border) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
-:deep(.node-actions .ant-btn:hover) { background: var(--p-bg-hover) !important; border-color: var(--p-border-hover) !important; color: var(--p-color-primary) !important; }
+:deep(.node-actions .ant-btn) { background: var(--p-bg-hover) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
+:deep(.node-actions .ant-btn:hover) { background: var(--p-color-primary-bg) !important; border-color: var(--p-color-primary) !important; color: var(--p-color-primary) !important; }
 :deep(.node-actions .ant-btn-primary) { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; }
 :deep(.node-actions .ant-btn-primary:hover) { opacity: 0.92; box-shadow: 0 4px 16px color-mix(in srgb, var(--p-color-primary) 30%, transparent) !important; }
 :deep(.node-actions .ant-btn-dangerous) { color: var(--p-color-danger) !important; }
 :deep(.node-actions .ant-divider-vertical) { border-color: var(--p-border-default) !important; }
 
-:deep(.ant-popover-inner) { background: var(--p-bg-elevated) !important; border: 1px solid var(--p-border-default) !important; }
+:deep(.ant-popover-inner) { background: var(--p-bg-page) !important; border: 1px solid var(--p-border-default) !important; }
 :deep(.ant-popover-title) { color: var(--p-text-primary) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
 :deep(.ant-popover-inner-content) { color: var(--p-text-secondary) !important; }
 :deep(.ant-checkbox-wrapper) { color: var(--p-text-secondary) !important; }
