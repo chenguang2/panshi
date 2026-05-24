@@ -74,10 +74,46 @@ body {
   background: color-mix(in srgb, var(--p-color-danger) 8%, transparent) !important;
 }
 
+/* ---- Input / Textarea theming ---- */
+.ant-input,
+.ant-input-password,
+.ant-input-affix-wrapper,
+.ant-input-textarea,
+.ant-input-number,
+.ant-picker,
+.ant-select-selector {
+  background: var(--p-bg-input) !important;
+  border: 1px solid var(--p-border-default) !important;
+  color: var(--p-text-primary) !important;
+}
+.ant-input::placeholder {
+  color: var(--p-text-disabled) !important;
+}
+.ant-input-affix-wrapper .ant-input {
+  background: transparent !important;
+  border: none !important;
+}
+.ant-input-password-icon {
+  color: var(--p-text-tertiary) !important;
+}
+.ant-select-selection-placeholder {
+  color: var(--p-text-disabled) !important;
+}
+.ant-select-selection-item {
+  color: var(--p-text-primary) !important;
+}
+.ant-select-arrow {
+  color: var(--p-text-tertiary) !important;
+}
+.ant-input-number-handler-wrap {
+  background: var(--p-bg-hover) !important;
+  border-left: 1px solid var(--p-border-default) !important;
+}
+
 /* ---- Modal / Drawer theming ---- */
 .ant-modal-content {
-  background: var(--p-bg-elevated) !important;
-  border: 1px solid var(--p-border-default) !important;
+  background: var(--p-bg-glass) !important;
+  border: 1px solid var(--p-glass-border) !important;
 }
 .ant-modal-header {
   background: var(--p-color-primary-bg) !important;
@@ -86,24 +122,6 @@ body {
 .ant-modal-title { color: var(--p-text-primary) !important; }
 .ant-modal-close { color: var(--p-text-tertiary) !important; }
 .ant-modal-body .ant-form-item-label > label { color: var(--p-text-secondary) !important; }
-.ant-modal-body .ant-input,
-.ant-modal-body .ant-input-password,
-.ant-modal-body .ant-input-affix-wrapper,
-.ant-modal-body .ant-select-selector,
-.ant-modal-body .ant-input-number,
-.ant-modal-body .ant-input-textarea,
-.ant-modal-body .ant-picker {
-  background: var(--p-bg-input) !important;
-  border: 1px solid var(--p-border-default) !important;
-  color: var(--p-text-primary) !important;
-}
-.ant-modal-body .ant-input::placeholder { color: var(--p-text-disabled) !important; }
-.ant-modal-body .ant-input-password .ant-input { background: transparent !important; border: none !important; }
-.ant-modal-body .ant-input-password-icon { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-select-selection-placeholder { color: var(--p-text-disabled) !important; }
-.ant-modal-body .ant-select-selection-item { color: var(--p-text-primary) !important; }
-.ant-modal-body .ant-select-arrow { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-input-number-handler-wrap { background: var(--p-bg-hover) !important; border-left: 1px solid var(--p-border-default) !important; }
 .ant-modal-body .ant-form-item-explain { color: var(--p-text-tertiary) !important; }
 .ant-modal-body .ant-tabs-tab { color: var(--p-text-secondary) !important; }
 .ant-modal-body .ant-tabs-tab-active { color: var(--p-color-primary) !important; }
@@ -116,10 +134,30 @@ body {
 .ant-modal-footer .ant-btn-primary { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; }
 .ant-modal-mask { background: var(--p-bg-mask) !important; }
 
-.ant-drawer-content { background: var(--p-bg-elevated) !important; }
+.ant-drawer-content { background: var(--p-bg-glass) !important; }
 .ant-drawer-header { background: var(--p-color-primary-bg) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
 .ant-drawer-title { color: var(--p-text-primary) !important; }
 .ant-drawer-body { color: var(--p-text-secondary) !important; }
 .ant-drawer-body .ant-descriptions-title { color: var(--p-text-primary) !important; }
 .ant-drawer-body .ant-descriptions-item-label { color: var(--p-text-secondary) !important; }
 .ant-drawer-body .ant-descriptions-item-content { color: var(--p-text-primary) !important; }
+
+/* Plugin selector inside modals: themed backgrounds */
+.ant-modal-body .plugin-selector,
+.ant-modal-body .plugin-selector .category-panel,
+.ant-modal-body .plugin-selector .selected-panel,
+.ant-modal-body .plugin-selector .selected-list {
+  background: var(--p-bg-page) !important;
+  border-color: var(--p-border-default) !important;
+}
+.ant-modal-body .plugin-selector .category-header {
+  background: var(--p-bg-hover) !important;
+}
+.ant-modal-body .plugin-selector .plugin-item {
+  background: var(--p-bg-page) !important;
+  border-color: var(--p-border-default) !important;
+}
+.ant-modal-body .plugin-selector .selected-header {
+  background: var(--p-bg-hover) !important;
+  border-bottom-color: var(--p-border-default) !important;
+}

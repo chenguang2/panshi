@@ -173,26 +173,25 @@
 
         <!-- Plugin groups tab (permission gated) -->
         <a-tab-pane v-if="hasPluginGroupsPermission()" key="pluginGroups" tab="插件组">
-          <div v-if="clusterPluginGroups.length === 0" style="padding: 40px 0; text-align: center; color: #999;">
+          <div v-if="clusterPluginGroups.length === 0" class="pg-empty">
             暂无插件组，请在"插件组"Tab 中创建
           </div>
           <div v-else>
-            <div style="margin-bottom: 12px; font-size: 12px; color: #999;">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <div class="pg-desc">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
+            <div class="pg-list">
               <div
                 v-for="pg in clusterPluginGroups"
                 :key="pg.id"
                 class="plugin-config-card"
                 :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
                 @click="togglePluginGroup(pg)"
-                style="width: 280px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; background: #fff;"
               >
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <div class="pg-item-header">
                   <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)" />
-                  <strong style="font-size: 13px;">{{ pg.name }}</strong>
-                  <span style="font-size: 11px; color: #999;">v{{ pg.current_version || 0 }}</span>
+                  <strong class="pg-item-name">{{ pg.name }}</strong>
+                  <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
                 </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
+                <div class="pg-item-plugins">
                   <a-tag
                     v-for="(pcfg, pname) in pg.plugins"
                     :key="pname"
@@ -203,7 +202,7 @@
                     {{ pname }}
                   </a-tag>
                 </div>
-                <div v-if="pg.description" style="font-size: 11px; color: #999;">{{ pg.description }}</div>
+                <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
               </div>
             </div>
           </div>
@@ -353,6 +352,60 @@ function onVersionPublished() {
 
 .plugin-config-card.selected {
   border-color: var(--p-color-primary) !important;
-  background: rgba(24,144,255,0.12) !important;
+  background: var(--p-color-primary-bg) !important;
+}
+
+/* Plugin group tab inside route modal */
+.pg-empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--p-text-tertiary);
+}
+.pg-desc {
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--p-text-tertiary);
+}
+.pg-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.plugin-config-card {
+  width: 280px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-lg);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--p-bg-page);
+}
+.plugin-config-card:hover {
+  border-color: var(--p-border-hover);
+  box-shadow: var(--p-shadow-sm);
+}
+.pg-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.pg-item-name {
+  font-size: 13px;
+  color: var(--p-text-primary);
+}
+.pg-item-version {
+  font-size: 11px;
+  color: var(--p-text-tertiary);
+}
+.pg-item-plugins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.pg-item-desc {
+  font-size: 11px;
+  color: var(--p-text-tertiary);
 }
 </style>
