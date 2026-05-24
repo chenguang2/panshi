@@ -216,7 +216,7 @@ function onVersionPublished() {
 }
 
 .plugin-config-card.selected {
-  border-color: #1890ff !important;
+  border-color: var(--p-color-primary) !important;
   box-shadow: 0 2px 12px rgba(24, 144, 255, 0.25);
   background: rgba(24,144,255,0.08) !important;
 }

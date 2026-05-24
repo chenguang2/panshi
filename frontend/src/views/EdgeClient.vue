@@ -1571,11 +1571,10 @@ watch(selectedNode, async (_newNode) => {
 }
 
 .plugin-config-card:hover {
-  border-color: #1890ff !important;
+  border-color: var(--p-color-primary) !important;
 }
-
-.plugin-config-card.selected {
-  border-color: #1890ff !important;
-  background: #e6f7ff !important;
+.edge-client .plugin-card.selected {
+  border-color: var(--p-color-primary) !important;
+  background: var(--p-color-primary-bg) !important;
 }
 </style>
