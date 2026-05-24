@@ -336,4 +336,16 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   color: var(--p-text-secondary);
   white-space: nowrap;
 }
+
+:deep(.ant-card) {
+  background: var(--p-bg-glass) !important;
+  border-color: var(--p-glass-border) !important;
+}
+:deep(.ant-select-selector) {
+  background: var(--p-bg-input) !important;
+  border: 1px solid var(--p-border-default) !important;
+}
+:deep(.ant-select-selection-item) {
+  color: var(--p-text-primary) !important;
+}
 </style>

@@ -87,7 +87,7 @@
             <div>插件: {{ connectionResult?.plugin_count }} 个</div>
             <div>路由: {{ connectionResult?.route_count }} 条</div>
             <div>上游: {{ connectionResult?.upstream_count }} 个</div>
-            <div style="margin-top: 4px; color: #999; font-size: 12px;">
+            <div style="margin-top: 4px; color: var(--p-text-tertiary); font-size: 12px;">
               {{ connectionResult?.message }}
             </div>
           </template>
@@ -724,13 +724,41 @@ onMounted(() => {
 
 <style scoped>
 .edge-import {
-  padding: 16px;
+  position: relative;
+  min-height: calc(100vh - 56px - 40px);
+  margin: -20px -24px;
+  padding: 20px 24px;
+  background: var(--p-bg-page);
 }
 
 .edge-import h2 {
   margin-bottom: 24px;
   font-size: 20px;
   font-weight: 600;
+  color: var(--p-text-primary);
+}
+
+.section-card {
+  border: 1px solid var(--p-border-default);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--p-bg-glass);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--p-color-primary-bg);
+  border-bottom: 1px solid var(--p-border-default);
+}
+
+.section-title {
+  flex: 1;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--p-text-primary);
 }
 
 .step-actions {
@@ -770,6 +798,43 @@ onMounted(() => {
 
 .section-body {
   padding: 12px;
+}
+
+:deep(.ant-table) {
+  background: transparent !important;
+}
+:deep(.ant-table-thead > tr > th) {
+  background: var(--p-color-primary-bg) !important;
+  border-bottom: 2px solid var(--p-color-primary) !important;
+  color: var(--p-text-primary) !important;
+  font-weight: 600;
+}
+:deep(.ant-table-tbody > tr > td) {
+  background: transparent !important;
+  border-bottom: 1px solid var(--p-border-divider) !important;
+  color: var(--p-text-primary);
+}
+:deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--p-bg-hover) !important;
+}
+
+:deep(.ant-card) {
+  background: var(--p-bg-glass) !important;
+  border-color: var(--p-glass-border) !important;
+}
+:deep(.ant-card .ant-card-head) {
+  border-bottom: 1px solid var(--p-border-divider) !important;
+  color: var(--p-text-primary) !important;
+}
+:deep(.ant-card .ant-card-body) {
+  color: var(--p-text-secondary) !important;
+}
+:deep(.ant-select-selector) {
+  background: var(--p-bg-input) !important;
+  border: 1px solid var(--p-border-default) !important;
+}
+:deep(.ant-select-selection-item) {
+  color: var(--p-text-primary) !important;
 }
 
 .loading-overlay {

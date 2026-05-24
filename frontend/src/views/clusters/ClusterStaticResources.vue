@@ -10,28 +10,27 @@
         class="plugin-config-card"
         :class="{ selected: cluster.selectedStaticResource?.id === sr.id }"
         @click="cluster.selectedStaticResource = sr"
-        style="width: 360px; border: 1px solid #e8e8e8; border-radius: 8px; padding: 16px; cursor: pointer; transition: all 0.2s; background: #fff;"
       >
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+        <div class="pcc-header">
           <div>
-            <strong style="font-size: 14px;">{{ sr.name }}</strong>
-            <div style="font-size: 12px; color: var(--p-color-primary); margin-top: 2px;">{{ sr.url_path }}</div>
+            <strong class="pcc-title">{{ sr.name }}</strong>
+            <div class="sr-path">{{ sr.url_path }}</div>
           </div>
-          <div style="text-align: right;">
-            <div style="margin-bottom: 2px;">
+          <div class="pcc-meta">
+            <div class="pcc-status-row">
               <a-tag v-if="sr.current_version" color="green" size="small">已发布</a-tag>
               <a-tag v-else color="orange" size="small">未发布</a-tag>
             </div>
-            <div style="font-size: 12px; color: #666;">
+            <div class="pcc-version">
               <template v-if="sr.current_version && sr.updated_at">v{{ sr.current_version }} · {{ formatDate(sr.updated_at) }}</template>
               <template v-else-if="sr.current_version">v{{ sr.current_version }} · 未同步</template>
               <template v-else>&nbsp;</template>
             </div>
           </div>
         </div>
-        <div v-if="sr.description" style="font-size: 12px; color: #666; margin-bottom: 8px;">{{ sr.description }}</div>
-        <div v-if="sr.file_size" style="font-size: 12px; color: #999; margin-bottom: 8px;">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
-        <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+        <div v-if="sr.description" class="pcc-desc">{{ sr.description }}</div>
+        <div v-if="sr.file_size" class="sr-size">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
+        <div class="pcc-actions" style="flex-wrap: wrap;">
           <a-button size="small" @click.stop="editStaticResource(cluster, sr)" title="编辑"><EditOutlined /></a-button>
           <a-button size="small" @click.stop="uploadStaticResourceZip(sr)" :disabled="!sr.id">上传 ZIP</a-button>
           <a-button size="small" @click.stop="publishStaticResource(cluster, sr)" :disabled="!sr.file_size">发布</a-button>
@@ -40,7 +39,7 @@
           <a-button size="small" danger @click.stop="deleteStaticResource(cluster, sr)" title="删除"><DeleteOutlined /></a-button>
         </div>
       </div>
-      <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
+      <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" class="empty-hint">
         暂无静态资源，点击"添加静态资源"创建
       </div>
     </div>
@@ -189,38 +188,89 @@ function onVersionPublished() {
 .config-preview {
   font-size: 12px;
   white-space: pre-wrap;
-  background: rgba(255,255,255,0.04);
+  background: var(--p-bg-hover);
   padding: 12px;
-  border-radius: 4px;
+  border-radius: var(--p-radius-sm);
   max-height: 400px;
   overflow-y: auto;
-  color: rgba(255,255,255,0.7);
-  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--p-text-secondary);
+  border: 1px solid var(--p-border-default);
 }
 
 .plugin-config-card {
+  width: 360px;
+  border: 1px solid var(--p-glass-border);
+  border-radius: var(--p-radius-lg);
+  padding: 16px;
+  cursor: pointer;
   transition: all 0.2s;
-  background: rgba(255,255,255,0.03) !important;
-  border-color: rgba(255,255,255,0.08) !important;
+  background: var(--p-bg-glass-table);
 }
 
 .plugin-config-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-  border-color: rgba(24,144,255,0.3) !important;
+  box-shadow: var(--p-shadow-md);
+  border-color: var(--p-border-hover);
 }
 
 .plugin-config-card.selected {
-  border-color: var(--p-color-primary) !important;
-  box-shadow: 0 2px 12px rgba(24, 144, 255, 0.25);
-  background: rgba(24,144,255,0.08) !important;
+  border-color: var(--p-color-primary);
+  box-shadow: 0 2px 12px var(--p-shadow-glass);
+  background: var(--p-color-primary-bg);
 }
 
-:deep(.plugin-config-card .ant-card-head) {
-  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
-  color: rgba(255,255,255,0.85) !important;
+.pcc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
 }
 
-:deep(.plugin-config-card .ant-card-body) {
-  color: rgba(255,255,255,0.65) !important;
+.pcc-title {
+  font-size: 14px;
+  color: var(--p-text-primary);
+}
+
+.sr-path {
+  font-size: 12px;
+  color: var(--p-color-primary);
+  margin-top: 2px;
+}
+
+.pcc-meta {
+  text-align: right;
+}
+
+.pcc-status-row {
+  margin-bottom: 2px;
+}
+
+.pcc-version {
+  font-size: 12px;
+  color: var(--p-text-secondary);
+}
+
+.pcc-desc {
+  font-size: 12px;
+  color: var(--p-text-secondary);
+  margin-bottom: 8px;
+}
+
+.sr-size {
+  font-size: 12px;
+  color: var(--p-text-tertiary);
+  margin-bottom: 8px;
+}
+
+.pcc-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.empty-hint {
+  width: 100%;
+  text-align: center;
+  padding: 40px;
+  color: var(--p-text-tertiary);
 }
 </style>
