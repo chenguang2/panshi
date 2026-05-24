@@ -44,6 +44,9 @@
             <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
             <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
             <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+            <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
+            <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
+            <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
           </div>
           <div class="cactions">
             <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
@@ -57,9 +60,9 @@
           <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
           <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
           <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
-          <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组</span>
-          <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则</span>
-          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源</span>
+          <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组 <span class="cb">{{ cluster.plugin_config_count }}</span></span>
+          <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则 <span class="cb">{{ cluster.global_rule_count }}</span></span>
+          <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
         </div>
 
       </div>
@@ -93,6 +96,9 @@
             <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
             <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
             <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+            <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
+            <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
+            <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
           </div>
           <div class="cactions">
             <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
@@ -105,9 +111,9 @@
             <span class="dt" :class="{ active: cluster.activeTab === 'upstreams' }" @click="cluster.activeTab = 'upstreams'; handleTabClick(cluster, 'upstreams')">上游 <span class="db">{{ cluster.upstream_count }}</span></span>
             <span class="dt" :class="{ active: cluster.activeTab === 'routes' }" @click="cluster.activeTab = 'routes'; handleTabClick(cluster, 'routes')">路由 <span class="db">{{ cluster.route_count }}</span></span>
             <span class="dt" :class="{ active: cluster.activeTab === 'globalPlugins' }" @click="cluster.activeTab = 'globalPlugins'; handleTabClick(cluster, 'globalPlugins')">插件元数据</span>
-            <span v-if="authStore.hasPermission('plugin_groups')" class="dt" :class="{ active: cluster.activeTab === 'pluginConfigs' }" @click="cluster.activeTab = 'pluginConfigs'; handleTabClick(cluster, 'pluginConfigs')">插件组</span>
-            <span v-if="authStore.hasPermission('global_rules')" class="dt" :class="{ active: cluster.activeTab === 'globalRules' }" @click="cluster.activeTab = 'globalRules'; handleTabClick(cluster, 'globalRules')">全局规则</span>
-            <span class="dt" :class="{ active: cluster.activeTab === 'staticResources' }" @click="cluster.activeTab = 'staticResources'; handleTabClick(cluster, 'staticResources')">静态资源</span>
+            <span v-if="authStore.hasPermission('plugin_groups')" class="dt" :class="{ active: cluster.activeTab === 'pluginConfigs' }" @click="cluster.activeTab = 'pluginConfigs'; handleTabClick(cluster, 'pluginConfigs')">插件组 <span class="db">{{ cluster.plugin_config_count }}</span></span>
+            <span v-if="authStore.hasPermission('global_rules')" class="dt" :class="{ active: cluster.activeTab === 'globalRules' }" @click="cluster.activeTab = 'globalRules'; handleTabClick(cluster, 'globalRules')">全局规则 <span class="db">{{ cluster.global_rule_count }}</span></span>
+            <span class="dt" :class="{ active: cluster.activeTab === 'staticResources' }" @click="cluster.activeTab = 'staticResources'; handleTabClick(cluster, 'staticResources')">静态资源 <span class="db">{{ cluster.static_resource_count }}</span></span>
           </div>
           <div class="dbody">
           <ClusterUpstreams v-if="cluster.activeTab === 'upstreams'" :cluster="cluster" :clusters="clusters" :open-publish-modal="openPublishModal" @refresh="loadClusters" />
@@ -821,6 +827,7 @@ onMounted(() => {
   backdrop-filter: blur(var(--p-glass-blur));
   -webkit-backdrop-filter: blur(var(--p-glass-blur));
   border: 1px solid var(--p-glass-border);
+  border-top: 3px solid var(--p-color-primary);
   border-radius: var(--p-radius-lg);
   overflow: hidden;
   box-shadow: var(--p-shadow-glass);
@@ -842,6 +849,11 @@ onMounted(() => {
   background: var(--p-bg-hover);
   transition: background 0.15s;
   border-bottom: 1px solid var(--p-border-divider);
+  border-left: 3px solid transparent;
+}
+.expand-row:hover {
+  background: var(--p-color-primary-bg);
+  border-left-color: var(--p-color-primary);
 }
 .expand-row:hover {
   background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
@@ -932,12 +944,13 @@ onMounted(() => {
   background: transparent;
 }
 .card-expanded .expand-row {
-  background: color-mix(in srgb, var(--p-color-primary) 6%, transparent);
+  background: var(--p-color-primary-bg);
   border-bottom: 1px solid var(--p-border-divider);
+  border-left: 3px solid var(--p-color-primary);
   cursor: grab;
 }
 .card-expanded .expand-row:hover {
-  background: color-mix(in srgb, var(--p-color-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--p-color-primary) 15%, transparent);
 }
 .card-expanded.dragging { opacity: 0.35; }
 .card-expanded.drag-over {
@@ -1041,10 +1054,10 @@ onMounted(() => {
 
 :deep(.node-table) .ant-table { background: transparent !important; }
 :deep(.node-table) .ant-table-thead > tr > th {
-  background: var(--p-bg-hover) !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-tertiary) !important;
-  font-size: 12px; font-weight: 500;
+  background: var(--p-color-primary-bg) !important;
+  border-bottom: 2px solid var(--p-color-primary) !important;
+  color: var(--p-text-primary) !important;
+  font-size: 12px; font-weight: 600;
 }
 :deep(.node-table) .ant-table-tbody > tr > td {
   background: transparent !important;
