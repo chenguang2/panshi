@@ -52,6 +52,9 @@ class ClusterResponse(BaseModel):
     healthy_node_count: int = 0
     upstream_count: int = 0
     route_count: int = 0
+    plugin_config_count: int = 0
+    global_rule_count: int = 0
+    static_resource_count: int = 0
 
     @field_validator('created_at', mode='before')
     @classmethod

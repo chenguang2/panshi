@@ -7,6 +7,7 @@ import json
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
+from app.models.static_resource import StaticResource
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.config_diff import EquivalenceRules
 from app.models.user import User
@@ -80,6 +81,12 @@ async def list_my_clusters(
         cluster_resp.upstream_count = upstream_result.scalar() or 0
         route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
         cluster_resp.route_count = route_result.scalar() or 0
+        pc_result = await db.execute(select(func.count()).select_from(PluginConfig).where(PluginConfig.cluster_id == c.id))
+        cluster_resp.plugin_config_count = pc_result.scalar() or 0
+        gr_result = await db.execute(select(func.count()).select_from(GlobalRule).where(GlobalRule.cluster_id == c.id))
+        cluster_resp.global_rule_count = gr_result.scalar() or 0
+        sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
+        cluster_resp.static_resource_count = sr_result.scalar() or 0
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
@@ -115,6 +122,12 @@ async def list_clusters(
         cluster_resp.upstream_count = upstream_result.scalar() or 0
         route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
         cluster_resp.route_count = route_result.scalar() or 0
+        pc_result = await db.execute(select(func.count()).select_from(PluginConfig).where(PluginConfig.cluster_id == c.id))
+        cluster_resp.plugin_config_count = pc_result.scalar() or 0
+        gr_result = await db.execute(select(func.count()).select_from(GlobalRule).where(GlobalRule.cluster_id == c.id))
+        cluster_resp.global_rule_count = gr_result.scalar() or 0
+        sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
+        cluster_resp.static_resource_count = sr_result.scalar() or 0
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
