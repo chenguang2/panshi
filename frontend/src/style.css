@@ -1,26 +1,4 @@
-:root {
-  --p-primary: #1890ff;
-  --p-primary-light: rgba(24, 144, 255, 0.12);
-  --p-bg: #f0f2f5;
-  --p-bg-container: #fff;
-  --p-text: #333;
-  --p-text-secondary: #666;
-  --p-border: #e8e8e8;
-  --p-header-bg: #fff;
-  --p-sidebar-bg: #001529;
-  --p-sidebar-text: rgba(255, 255, 255, 0.65);
-  --p-sidebar-text-active: #fff;
-
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font-family: var(--sans);
-  font-size: 14px;
-  color-scheme: light dark;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
+/* ---- Reset ---- */
 * {
   margin: 0;
   padding: 0;
@@ -29,22 +7,23 @@
 
 body {
   margin: 0;
-  background: var(--p-bg);
-  color: var(--p-text);
+  font-family: var(--p-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
+/* ---- Scrollbar styling ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
 
-/* Ant Design card override for consistent card appearance */
+/* ---- Ant Design card override ---- */
 .card-stat-compact {
   padding: 4px 0;
 }
 
-/* Ant Design table inside cards: remove redundant border */
 .card-table .ant-table-wrapper .ant-table {
   border: none;
 }
@@ -53,7 +32,7 @@ body {
   border-right: none;
 }
 
-/* Transitions for layout switching */
+/* ---- Layout transitions ---- */
 .layout-fade-enter-active,
 .layout-fade-leave-active {
   transition: opacity 0.2s ease;

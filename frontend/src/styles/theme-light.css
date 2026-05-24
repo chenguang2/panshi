@@ -1,0 +1,51 @@
+html.theme-light {
+  --p-bg-page: #e8f0fe;
+  --p-bg-container: rgba(255, 255, 255, 0.6);
+  --p-bg-elevated: #ffffff;
+  --p-bg-glass: rgba(255, 255, 255, 0.55);
+  --p-bg-glass-table: rgba(255, 255, 255, 0.55);
+  --p-bg-input: rgba(255, 255, 255, 0.7);
+  --p-bg-hover: rgba(24, 144, 255, 0.06);
+  --p-bg-mask: rgba(0, 0, 0, 0.3);
+  --p-bg-header: rgba(255, 255, 255, 0.8);
+  --p-bg-sidebar: #001529;
+
+  --p-text-primary: #1a1a2e;
+  --p-text-secondary: rgba(0, 0, 0, 0.55);
+  --p-text-tertiary: rgba(0, 0, 0, 0.35);
+  --p-text-disabled: rgba(0, 0, 0, 0.2);
+  --p-text-inverse: #ffffff;
+  --p-text-sidebar: rgba(255, 255, 255, 0.65);
+  --p-text-sidebar-active: #ffffff;
+
+  --p-border-default: rgba(0, 0, 0, 0.08);
+  --p-border-hover: rgba(24, 144, 255, 0.3);
+  --p-border-active: #1890ff;
+  --p-border-divider: rgba(0, 0, 0, 0.05);
+  --p-border-glass: rgba(255, 255, 255, 0.7);
+
+  --p-color-primary: #1890ff;
+  --p-color-primary-hover: #40a9ff;
+  --p-color-primary-active: #096dd9;
+  --p-color-primary-bg: rgba(24, 144, 255, 0.1);
+  --p-color-success: #52c41a;
+  --p-color-warning: #faad14;
+  --p-color-danger: #ff4d4f;
+  --p-color-info: #7c3aed;
+
+  --p-sidebar-bg: #001529;
+  --p-sidebar-text: rgba(255, 255, 255, 0.65);
+  --p-sidebar-text-active: #ffffff;
+
+  --p-header-bg: rgba(255, 255, 255, 0.8);
+  --p-header-border: rgba(0, 0, 0, 0.06);
+
+  --p-glass-bg: rgba(255, 255, 255, 0.55);
+  --p-glass-border: rgba(255, 255, 255, 0.7);
+  --p-glass-blur: 14px;
+
+  --p-shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --p-shadow-md: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --p-shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --p-shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
