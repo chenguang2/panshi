@@ -276,10 +276,10 @@ watch(() => props.modelValue, (val) => {
 
 <style scoped>
 .route-advanced-match {
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--p-border-default);
   border-radius: 8px;
   padding: 16px;
-  background: #fafafa;
+  background: var(--p-bg-hover);
 }
 
 .match-content {
@@ -287,14 +287,14 @@ watch(() => props.modelValue, (val) => {
 }
 
 .match-rules {
-  background: #fff;
+  background: var(--p-bg-page);
   border-radius: 6px;
   padding: 16px;
 }
 
 .match-rule {
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
+  background: var(--p-bg-hover);
+  border: 1px solid var(--p-border-default);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 12px;
@@ -310,17 +310,17 @@ watch(() => props.modelValue, (val) => {
 .rule-index {
   font-weight: 500;
   font-size: 13px;
-  color: #333;
+  color: var(--p-text-primary);
 }
 
 .delete-rule {
-  color: #ff4d4f;
+  color: var(--p-color-danger);
   cursor: pointer;
   font-size: 14px;
 }
 
 .delete-rule:hover {
-  color: #ff7875;
+  color: var(--p-color-danger);
 }
 
 .rule-body {
@@ -337,14 +337,14 @@ watch(() => props.modelValue, (val) => {
 .match-hints {
   margin-top: 20px;
   padding: 12px;
-  background: #f0f5ff;
+  background: var(--p-color-primary-bg);
   border-radius: 6px;
   font-size: 12px;
 }
 
 .hint-title {
   font-weight: 500;
-  color: #333;
+  color: var(--p-text-primary);
   margin-bottom: 8px;
 }
 
@@ -353,23 +353,23 @@ watch(() => props.modelValue, (val) => {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-  color: #666;
+  color: var(--p-text-secondary);
 }
 
 .hint-type {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: var(--p-color-primary-bg);
+  color: var(--p-color-primary);
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 11px;
 }
 
 .hint-op {
-  color: #999;
+  color: var(--p-text-tertiary);
 }
 
 .hint-desc {
-  color: #999;
+  color: var(--p-text-tertiary);
   margin-left: 8px;
 }
 </style>

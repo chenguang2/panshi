@@ -791,7 +791,7 @@ const handleClose = () => {
 }
 
 .json-error {
-  color: #ff4d4f;
+  color: var(--p-color-danger);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -800,12 +800,11 @@ const handleClose = () => {
   padding: 0 4px;
 }
 
-/* 单字段行内布局 */
 .field-block {
   margin-bottom: 20px;
   padding: 12px;
-  background: #fff;
-  border: 1px solid #e8e8e8;
+  background: var(--p-bg-page);
+  border: 1px solid var(--p-border-default);
   border-radius: 6px;
 }
 
@@ -817,14 +816,14 @@ const handleClose = () => {
   display: block;
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--p-text-primary);
   margin-bottom: 2px;
 }
 
 .field-block-desc {
   display: block;
   font-size: 12px;
-  color: #666;
+  color: var(--p-text-secondary);
 }
 
 .field-input {
@@ -833,10 +832,10 @@ const handleClose = () => {
 
 .field-example {
   font-size: 12px;
-  color: #1890ff;
-  background: #e6f7ff;
+  color: var(--p-color-primary);
+  background: var(--p-color-primary-bg);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--p-radius-sm);
   margin-bottom: 4px;
 }
 
@@ -847,7 +846,7 @@ const handleClose = () => {
 
 .field-hints {
   font-size: 12px;
-  color: #faad14;
+  color: var(--p-color-warning);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -857,9 +856,8 @@ const handleClose = () => {
   flex-shrink: 0;
 }
 
-/* Headers 瀑布流布局 */
 .headers-accordion {
-  background: #fafafa;
+  background: var(--p-bg-hover);
   padding: 8px;
 }
 
@@ -876,9 +874,9 @@ const handleClose = () => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #fff;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
+  background: var(--p-bg-page);
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s;
@@ -886,44 +884,40 @@ const handleClose = () => {
 }
 
 .accordion-header:hover {
-  background: #f0f0f0;
+  background: var(--p-bg-hover);
 }
 
 .accordion-header.set {
-  border-left: 3px solid #52c41a;
+  border-left: 3px solid var(--p-color-success);
 }
 
 .accordion-header.add {
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--p-color-primary);
 }
 
 .accordion-header.remove {
-  border-left: 3px solid #ff4d4f;
+  border-left: 3px solid var(--p-color-danger);
 }
 
 .accordion-header.expanded {
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--p-radius-sm) var(--p-radius-sm) 0 0;
 }
 
 .count-badge {
   margin-left: auto;
-  background: #f0f0f0;
+  background: var(--p-bg-hover);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
-  color: #666;
+  color: var(--p-text-secondary);
 }
 
 .accordion-content {
-  background: #fff;
-  border: 1px solid #e8e8e8;
+  background: var(--p-bg-page);
+  border: 1px solid var(--p-border-default);
   border-top: none;
-  border-radius: 0 0 4px 4px;
+  border-radius: 0 0 var(--p-radius-sm) var(--p-radius-sm);
   padding: 12px;
-}
-
-.remove-content {
-  /* Remove 特殊样式 */
 }
 
 .kv-row {
@@ -950,24 +944,23 @@ const handleClose = () => {
 }
 
 .delete-btn {
-  color: #ff4d4f;
+  color: var(--p-color-danger);
   cursor: pointer;
   font-size: 16px;
   flex-shrink: 0;
 }
 
 .delete-btn:hover {
-  color: #ff7875;
+  color: var(--p-color-danger);
 }
 
 .add-row-btn {
   padding-left: 0;
-  color: #1890ff;
+  color: var(--p-color-primary);
 }
 
-/* 普通嵌套字段 */
 .nested-fields {
-  background: #fafafa;
+  background: var(--p-bg-hover);
   border-radius: 6px;
   padding: 12px;
 }
@@ -988,16 +981,16 @@ const handleClose = () => {
 
 .nested-field-name {
   font-weight: 500;
-  color: #333;
+  color: var(--p-text-primary);
 }
 
 .nested-field-desc {
   font-size: 12px;
-  color: #666;
+  color: var(--p-text-secondary);
 }
 
 .nested-field-hint {
-  color: #faad14;
+  color: var(--p-color-warning);
   font-size: 12px;
   margin-top: 4px;
   display: flex;

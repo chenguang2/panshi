@@ -493,7 +493,7 @@ const handleClose = () => {
 .empty-hint {
   text-align: center;
   padding: 60px 0;
-  color: #999;
+  color: var(--p-text-tertiary);
 }
 
 .version-content {
@@ -505,7 +505,7 @@ const handleClose = () => {
 .version-list-panel {
   width: 200px;
   flex-shrink: 0;
-  border-right: 1px solid #f0f0f0;
+  border-right: 1px solid var(--p-border-divider);
   padding-right: 12px;
 }
 
@@ -515,6 +515,7 @@ const handleClose = () => {
   align-items: center;
   margin-bottom: 12px;
   font-weight: 500;
+  color: var(--p-text-primary);
 }
 
 .version-list {
@@ -525,23 +526,23 @@ const handleClose = () => {
 .version-item {
   padding: 8px;
   margin-bottom: 4px;
-  border-radius: 4px;
+  border-radius: var(--p-radius-sm);
   cursor: pointer;
   border: 1px solid transparent;
 }
 
 .version-item:hover {
-  background: #f5f5f5;
+  background: var(--p-bg-hover);
 }
 
 .version-item--current {
-  background: #f6ffed;
-  border-color: #b7eb8f;
+  background: color-mix(in srgb, var(--p-color-success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--p-color-success) 40%, transparent);
 }
 
 .version-item--selected {
-  background: #e6f7ff;
-  border-color: #91d5ff;
+  background: var(--p-color-primary-bg);
+  border-color: color-mix(in srgb, var(--p-color-primary) 30%, transparent);
 }
 
 .version-item-main {
@@ -552,7 +553,7 @@ const handleClose = () => {
 
 .version-number {
   font-weight: 500;
-  color: #1890ff;
+  color: var(--p-color-primary);
   cursor: pointer;
 }
 
@@ -562,7 +563,7 @@ const handleClose = () => {
 
 .version-item-meta {
   font-size: 12px;
-  color: #999;
+  color: var(--p-text-tertiary);
   margin-top: 4px;
   margin-left: 20px;
 }
@@ -588,20 +589,20 @@ const handleClose = () => {
   align-items: center;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: #f5f5f5;
-  border-radius: 4px;
+  background: var(--p-bg-hover);
+  border-radius: var(--p-radius-sm);
 }
 
 .version-info {
   font-weight: 500;
-  color: #333;
+  color: var(--p-text-primary);
 }
 
 .detail-config {
   flex: 1;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
+  background: var(--p-bg-elevated);
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
   padding: 12px;
   overflow: auto;
 }
@@ -621,20 +622,21 @@ const handleClose = () => {
   border: none;
   background: transparent;
   resize: none;
-  font-family: monospace;
+  font-family: var(--p-mono);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
   outline: none;
+  color: var(--p-text-primary);
 }
 
 .diff-container {
   flex: 1;
   overflow: auto;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
+  background: var(--p-bg-elevated);
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
   padding: 12px;
 }
 
@@ -645,39 +647,39 @@ const handleClose = () => {
 }
 
 .diff-tree :deep(.diff-key) {
-  color: #333;
+  color: var(--p-text-primary);
   font-weight: 500;
 }
 
 .diff-tree :deep(.diff-same) {
-  color: #666;
+  color: var(--p-text-secondary);
 }
 
 .diff-tree :deep(.diff-added) {
-  color: #ff4d4f;
-  background: #fff2f0;
+  color: var(--p-color-danger);
+  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
 
 .diff-tree :deep(.diff-removed) {
-  color: #1890ff;
-  background: #e6f7ff;
+  color: var(--p-color-primary);
+  background: var(--p-color-primary-bg);
   padding: 0 4px;
   border-radius: 2px;
   text-decoration: line-through;
 }
 
 .diff-tree :deep(.diff-changed-a) {
-  color: #1890ff;
-  background: #e6f7ff;
+  color: var(--p-color-primary);
+  background: var(--p-color-primary-bg);
   padding: 0 4px;
   border-radius: 2px;
 }
 
 .diff-tree :deep(.diff-changed-b) {
-  color: #ff4d4f;
-  background: #fff2f0;
+  color: var(--p-color-danger);
+  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
@@ -685,6 +687,6 @@ const handleClose = () => {
 .select-hint {
   text-align: center;
   padding: 60px 20px;
-  color: #999;
+  color: var(--p-text-tertiary);
 }
 </style>

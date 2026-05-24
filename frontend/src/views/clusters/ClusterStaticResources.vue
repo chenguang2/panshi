@@ -15,7 +15,7 @@
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
           <div>
             <strong style="font-size: 14px;">{{ sr.name }}</strong>
-            <div style="font-size: 12px; color: #1890ff; margin-top: 2px;">{{ sr.url_path }}</div>
+            <div style="font-size: 12px; color: var(--p-color-primary); margin-top: 2px;">{{ sr.url_path }}</div>
           </div>
           <div style="text-align: right;">
             <div style="margin-bottom: 2px;">
@@ -210,7 +210,7 @@ function onVersionPublished() {
 }
 
 .plugin-config-card.selected {
-  border-color: #1890ff !important;
+  border-color: var(--p-color-primary) !important;
   box-shadow: 0 2px 12px rgba(24, 144, 255, 0.25);
   background: rgba(24,144,255,0.08) !important;
 }

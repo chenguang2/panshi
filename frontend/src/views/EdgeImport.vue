@@ -748,7 +748,7 @@ onMounted(() => {
 }
 
 .section-card {
-  border: 1px solid #e5e4e7;
+  border: 1px solid var(--p-border-default);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -758,8 +758,8 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: #fafafa;
-  border-bottom: 1px solid #e5e4e7;
+  background: var(--p-bg-hover);
+  border-bottom: 1px solid var(--p-border-default);
 }
 
 .section-title {

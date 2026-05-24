@@ -244,8 +244,8 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 }
 
 .tools-sider {
-  background: #fafafa !important;
-  border-right: 1px solid #e8e8e8;
+  background: var(--p-bg-hover) !important;
+  border-right: 1px solid var(--p-border-default);
   padding-top: 12px;
 }
 
@@ -264,19 +264,19 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   justify-content: center;
   border-radius: 8px;
   cursor: pointer;
-  color: #666;
+  color: var(--p-text-secondary);
   font-size: 20px;
   transition: all 0.2s;
 }
 
 .icon-item:hover {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: var(--p-color-primary-bg);
+  color: var(--p-color-primary);
 }
 
 .icon-item.active {
-  background: #1890ff;
-  color: #fff;
+  background: var(--p-color-primary);
+  color: var(--p-text-inverse);
 }
 
 .tools-content {
@@ -289,10 +289,10 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   font-weight: 500;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--p-border-divider);
+  color: var(--p-text-primary);
 }
 
-/* 左右双栏布局 */
 .dual-panel {
   display: flex;
   gap: 16px;
@@ -307,7 +307,7 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 
 .panel-label {
   font-size: 13px;
-  color: #888;
+  color: var(--p-text-tertiary);
   margin-bottom: 6px;
 }
 
@@ -333,7 +333,7 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 
 .key-label {
   font-size: 13px;
-  color: #666;
+  color: var(--p-text-secondary);
   white-space: nowrap;
 }
 </style>

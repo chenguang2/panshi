@@ -347,12 +347,12 @@ function onVersionPublished() {
 }
 
 .plugin-config-card:hover {
-  border-color: #1890ff !important;
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+  border-color: var(--p-color-primary) !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--p-color-primary) 20%, transparent);
 }
 
 .plugin-config-card.selected {
-  border-color: #1890ff !important;
+  border-color: var(--p-color-primary) !important;
   background: rgba(24,144,255,0.12) !important;
 }
 </style>

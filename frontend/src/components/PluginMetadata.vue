@@ -51,7 +51,7 @@
                   <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
                   <a-tag v-else color="orange" size="small">未发布</a-tag>
                 </div>
-                <div class="plugin-meta" :style="{ color: item.current_version ? '#52c41a' : '#999' }">
+                <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--p-color-success)' : 'var(--p-text-tertiary)' }">
                   {{ item.current_version && item.updated_at ? `v${item.current_version} · ${formatDate(item.updated_at)}` : item.current_version ? `v${item.current_version} · 未同步` : '' }}
                 </div>
               </div>
@@ -510,12 +510,13 @@ watch(() => props.clusterId, () => {
   font-weight: 500;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--p-border-divider);
   flex-shrink: 0;
+  color: var(--p-text-primary);
 }
 
 .plugin-count {
-  color: #999;
+  color: var(--p-text-tertiary);
   font-weight: normal;
   margin-left: 4px;
 }
@@ -545,14 +546,14 @@ watch(() => props.clusterId, () => {
   align-items: center;
   padding: 12px;
   margin-bottom: 8px;
-  border: 1px solid #f0f0f0;
-  border-radius: 4px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
   transition: all 0.2s;
 }
 
 .plugin-item:hover {
-  border-color: #1890ff;
-  background: #fafafa;
+  border-color: var(--p-color-primary);
+  background: var(--p-bg-hover);
 }
 
 .plugin-item.configured {
@@ -575,18 +576,18 @@ watch(() => props.clusterId, () => {
 
 .plugin-name {
   font-weight: 500;
-  color: #333;
+  color: var(--p-text-primary);
 }
 
 .plugin-desc {
   font-size: 12px;
-  color: #999;
+  color: var(--p-text-tertiary);
   margin-top: 4px;
 }
 
 .plugin-meta {
   font-size: 12px;
-  color: #999;
+  color: var(--p-text-tertiary);
   margin-top: 4px;
   min-height: 18px;
 }
@@ -602,19 +603,18 @@ watch(() => props.clusterId, () => {
   margin-left: auto;
 }
 
-
-
 .empty-hint {
   text-align: center;
-  color: #999;
+  color: var(--p-text-tertiary);
   padding: 32px;
 }
 
 .config-preview {
-  background: #f5f5f5;
+  background: var(--p-bg-hover);
   padding: 12px;
-  border-radius: 4px;
+  border-radius: var(--p-radius-sm);
   overflow-x: auto;
   font-size: 12px;
+  color: var(--p-text-secondary);
 }
 </style>
