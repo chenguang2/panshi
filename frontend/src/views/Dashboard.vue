@@ -10,7 +10,7 @@
       <h2>仪表盘</h2>
 
       <a-row :gutter="16" class="stats-row">
-        <a-col :span="6">
+        <a-col :span="3">
           <div class="glass-stat-card">
             <div class="stat-card-body">
               <div class="stat-label">集群总数</div>
@@ -19,7 +19,7 @@
             </div>
           </div>
         </a-col>
-        <a-col :span="6">
+        <a-col :span="3">
           <div class="glass-stat-card">
             <div class="stat-card-body">
               <div class="stat-label">上游总数</div>
@@ -28,7 +28,7 @@
             </div>
           </div>
         </a-col>
-        <a-col :span="6">
+        <a-col :span="3">
           <div class="glass-stat-card">
             <div class="stat-card-body">
               <div class="stat-label">路由总数</div>
@@ -37,11 +37,38 @@
             </div>
           </div>
         </a-col>
-        <a-col :span="6">
+        <a-col :span="3">
           <div class="glass-stat-card">
             <div class="stat-card-body">
               <div class="stat-label">用户总数</div>
               <div class="stat-value">{{ stats.users }}</div>
+              <div class="stat-accent"></div>
+            </div>
+          </div>
+        </a-col>
+        <a-col :span="4">
+          <div class="glass-stat-card">
+            <div class="stat-card-body">
+              <div class="stat-label">插件组</div>
+              <div class="stat-value">{{ stats.plugin_configs }}</div>
+              <div class="stat-accent"></div>
+            </div>
+          </div>
+        </a-col>
+        <a-col :span="4">
+          <div class="glass-stat-card">
+            <div class="stat-card-body">
+              <div class="stat-label">全局规则</div>
+              <div class="stat-value">{{ stats.global_rules }}</div>
+              <div class="stat-accent"></div>
+            </div>
+          </div>
+        </a-col>
+        <a-col :span="4">
+          <div class="glass-stat-card">
+            <div class="stat-card-body">
+              <div class="stat-label">静态资源</div>
+              <div class="stat-value">{{ stats.static_resources }}</div>
               <div class="stat-accent"></div>
             </div>
           </div>
@@ -107,7 +134,10 @@ const stats = ref({
   clusters: 0,
   upstreams: 0,
   routes: 0,
-  users: 0
+  users: 0,
+  plugin_configs: 0,
+  global_rules: 0,
+  static_resources: 0
 })
 
 const recentRoutes = ref<any[]>([])
@@ -193,6 +223,7 @@ h2 {
 
 .glass-stat-card {
   height: 100%;
+  background: transparent;
   border-radius: var(--p-radius-lg);
   background: var(--p-bg-glass);
   backdrop-filter: blur(var(--p-glass-blur));
