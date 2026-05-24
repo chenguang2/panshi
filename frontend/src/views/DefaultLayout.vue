@@ -312,7 +312,7 @@ const handleLogout = async () => {
   position: sticky;
   top: 0;
   z-index: 50;
-  border-bottom: 1px solid var(--p-header-border);
+  border-bottom: 2px solid var(--p-color-primary);
 }
 
 .header-left {
@@ -341,8 +341,8 @@ const handleLogout = async () => {
   color: var(--p-text-secondary);
 }
 .crumb-item.crumb-current {
-  color: var(--p-text-primary);
-  font-weight: 500;
+  color: var(--p-color-primary);
+  font-weight: 600;
 }
 .crumb-sep {
   color: var(--p-border-default);
@@ -361,10 +361,11 @@ const handleLogout = async () => {
   border-radius: var(--p-radius-sm);
   font-size: 13px;
   color: var(--p-text-secondary);
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 .user-info:hover {
   background: var(--p-bg-hover);
+  color: var(--p-color-primary);
 }
 
 :deep(.ant-dropdown-menu-item.active) {

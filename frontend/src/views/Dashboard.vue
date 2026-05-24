@@ -207,11 +207,23 @@ h2 {
 .glass-stat-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--p-shadow-lg);
+  border-color: var(--p-color-primary);
 }
 
 .stat-card-body {
   padding: 22px 24px 26px;
   position: relative;
+}
+
+.stat-card-body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--p-color-primary), var(--p-color-info));
+  opacity: 0.5;
 }
 
 .stat-label {
@@ -283,11 +295,11 @@ h2 {
 }
 
 :deep(.dark-table) .ant-table-thead > tr > th {
-  background: var(--p-bg-hover) !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-tertiary) !important;
+  background: var(--p-color-primary-bg) !important;
+  border-bottom: 2px solid var(--p-color-primary) !important;
+  color: var(--p-text-primary) !important;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 10px 16px;
 }
 
