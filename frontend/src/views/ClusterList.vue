@@ -1071,8 +1071,8 @@ onMounted(() => {
 :deep(.node-table) .ant-badge-status-text { color: var(--p-text-secondary); }
 
 :deep(.node-table) .ant-table-tbody .ant-btn {
-  background: var(--p-bg-input) !important;
-  border: 1px solid var(--p-border-default) !important;
+  background: var(--p-bg-glass) !important;
+  border: 1px solid var(--p-glass-border) !important;
   color: var(--p-text-secondary) !important;
   border-radius: var(--p-radius-sm); height: 26px; font-size: 12px; padding: 0 8px;
 }
@@ -1097,7 +1097,7 @@ onMounted(() => {
 :deep(.dbody) .ant-select-selection-placeholder { color: var(--p-text-disabled) !important; }
 :deep(.dbody) .ant-select-arrow { color: var(--p-text-tertiary) !important; }
 
-:deep(.node-actions .ant-btn) { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
+:deep(.node-actions .ant-btn) { background: var(--p-bg-glass) !important; border: 1px solid var(--p-glass-border) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
 :deep(.node-actions .ant-btn:hover) { background: var(--p-bg-hover) !important; border-color: var(--p-border-hover) !important; color: var(--p-color-primary) !important; }
 :deep(.node-actions .ant-btn-primary) { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; }
 :deep(.node-actions .ant-btn-primary:hover) { opacity: 0.92; box-shadow: 0 4px 16px color-mix(in srgb, var(--p-color-primary) 30%, transparent) !important; }
@@ -1111,42 +1111,4 @@ onMounted(() => {
 </style>
 
 <style>
-.ant-modal-content { background: var(--p-bg-elevated) !important; border: 1px solid var(--p-border-default) !important; }
-.ant-modal-header { background: var(--p-bg-elevated) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
-.ant-modal-title { color: var(--p-text-primary) !important; }
-.ant-modal-close { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-form-item-label > label { color: var(--p-text-secondary) !important; }
-.ant-modal-body .ant-input,
-.ant-modal-body .ant-input-password,
-.ant-modal-body .ant-input-affix-wrapper,
-.ant-modal-body .ant-select-selector,
-.ant-modal-body .ant-input-number,
-.ant-modal-body .ant-input-textarea,
-.ant-modal-body .ant-picker { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-primary) !important; }
-.ant-modal-body .ant-input::placeholder { color: var(--p-text-disabled) !important; }
-.ant-modal-body .ant-input-password .ant-input { background: transparent !important; border: none !important; }
-.ant-modal-body .ant-input-password-icon { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-select-selection-placeholder { color: var(--p-text-disabled) !important; }
-.ant-modal-body .ant-select-selection-item { color: var(--p-text-primary) !important; }
-.ant-modal-body .ant-select-arrow { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-input-number-handler-wrap { background: var(--p-bg-hover) !important; border-left: 1px solid var(--p-border-default) !important; }
-.ant-modal-body .ant-form-item-explain { color: var(--p-text-tertiary) !important; }
-.ant-modal-body .ant-tabs-tab { color: var(--p-text-secondary) !important; }
-.ant-modal-body .ant-tabs-tab-active { color: var(--p-color-primary) !important; }
-.ant-modal-body .ant-tabs-ink-bar { background: var(--p-color-primary) !important; }
-.ant-modal-body .ant-tabs-nav { border-bottom: 1px solid var(--p-border-divider) !important; }
-.ant-modal-body .ant-switch { background: var(--p-border-default) !important; }
-.ant-modal-body .ant-switch-checked { background: var(--p-color-primary) !important; }
-.ant-modal-footer .ant-btn { background: var(--p-bg-input) !important; border: 1px solid var(--p-border-default) !important; color: var(--p-text-secondary) !important; border-radius: 6px; }
-.ant-modal-footer .ant-btn:hover { background: var(--p-bg-hover) !important; color: var(--p-color-primary) !important; }
-.ant-modal-footer .ant-btn-primary { background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important; border: none !important; color: var(--p-text-inverse) !important; }
-.ant-modal-mask { background: var(--p-bg-mask) !important; }
-
-.ant-drawer-content { background: var(--p-bg-elevated) !important; }
-.ant-drawer-header { background: var(--p-bg-elevated) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
-.ant-drawer-title { color: var(--p-text-primary) !important; }
-.ant-drawer-body { color: var(--p-text-secondary) !important; }
-.ant-drawer-body .ant-descriptions-title { color: var(--p-text-primary) !important; }
-.ant-drawer-body .ant-descriptions-item-label { color: var(--p-text-secondary) !important; }
-.ant-drawer-body .ant-descriptions-item-content { color: var(--p-text-primary) !important; }
 </style>
