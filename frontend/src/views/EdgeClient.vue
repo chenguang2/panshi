@@ -304,7 +304,7 @@
         </a-form-item>
         <a-form-item v-if="upstreamForm.type === 'chash'" label="Key" name="key">
           <a-input v-model:value="upstreamForm.key" placeholder="remote_addr" />
-          <div style="font-size:12px;color:#999;margin-top:4px">
+          <div style="font-size:12px;color:var(--p-text-tertiary);margin-top:4px">
             hash_on=内置变量时: remote_addr / uri / host / server_name / query_string / arg_xxx
           </div>
         </a-form-item>
@@ -360,7 +360,7 @@
         </a-form-item>
         <a-form-item label="高级匹配">
           <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
-          <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后配置请求匹配条件</span>
+          <span style="margin-left: 12px; color: var(--p-text-tertiary); font-size: 12px;">开启后配置请求匹配条件</span>
         </a-form-item>
         <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
           <RouteAdvancedMatch
@@ -370,13 +370,13 @@
           />
         </div>
         <div v-else-if="routeForm.advancedMatchEnabled === false && routeForm.advancedMatch.vars.length > 0" style="margin-bottom: 12px;">
-          <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-          <span style="color: #999; font-size: 12px;">高级匹配已配置，但未启用</span>
+          <WarningOutlined style="color: var(--p-color-warning); margin-right: 8px;" />
+          <span style="color: var(--p-text-tertiary); font-size: 12px;">高级匹配已配置，但未启用</span>
         </div>
 
         <a-divider style="margin: 8px 0;" />
         <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
-        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: #999; font-size: 12px;">
+        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: var(--p-text-tertiary); font-size: 12px;">
           暂无插件组
         </div>
         <div v-else style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 240px; overflow-y: auto;">
@@ -386,12 +386,12 @@
             class="plugin-config-card"
             :class="{ selected: isPluginGroupSelected(pg.value?.id || pg.key) }"
             @click="togglePluginGroup(pg)"
-            style="width: 100%; border: 1px solid #e8e8e8; border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: #fff;"
+            style="width: 100%; border: 1px solid var(--p-border-default); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: var(--p-bg-page);"
           >
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <a-checkbox :checked="isPluginGroupSelected(pg.value?.id || pg.key)" @click.stop="togglePluginGroup(pg)" />
               <strong style="font-size: 13px; flex: 1; margin-left: 8px;">{{ pg.value?.id || pg.key }}</strong>
-              <span style="font-size: 11px; color: #999;">v{{ pg.value?.current_version || 0 }}</span>
+              <span style="font-size: 11px; color: var(--p-text-tertiary);">v{{ pg.value?.current_version || 0 }}</span>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
               <a-tag
@@ -403,7 +403,7 @@
                 {{ pname }}
               </a-tag>
             </div>
-            <div v-if="pg.value?.desc" style="font-size: 11px; color: #999; margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
+            <div v-if="pg.value?.desc" style="font-size: 11px; color: var(--p-text-tertiary); margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
           </div>
         </div>
       </a-form>
@@ -415,7 +415,7 @@
       :footer="null"
       width="700px"
     >
-      <pre style="max-height: 500px; overflow: auto; background: #f5f5f5; padding: 16px; border-radius: 4px; font-size: 12px;">{{ jsonContent }}</pre>
+      <pre style="max-height: 500px; overflow: auto; background: var(--p-bg-hover); padding: 16px; border-radius: 4px; font-size: 12px;">{{ jsonContent }}</pre>
     </a-modal>
 
     <a-modal
@@ -1552,7 +1552,48 @@ watch(selectedNode, async (_newNode) => {
 
 <style scoped>
 .edge-client {
-  padding: 16px;
+  position: relative;
+  min-height: calc(100vh - 56px - 40px);
+  margin: -20px -24px;
+  padding: 20px 24px;
+  background: var(--p-bg-page);
+}
+
+:deep(.ant-table) {
+  background: transparent !important;
+}
+:deep(.ant-table-thead > tr > th) {
+  background: var(--p-color-primary-bg) !important;
+  border-bottom: 2px solid var(--p-color-primary) !important;
+  color: var(--p-text-primary) !important;
+  font-weight: 600;
+}
+:deep(.ant-table-tbody > tr > td) {
+  background: transparent !important;
+  border-bottom: 1px solid var(--p-border-divider) !important;
+  color: var(--p-text-primary);
+}
+:deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--p-bg-hover) !important;
+}
+
+:deep(.ant-card) {
+  background: var(--p-bg-glass) !important;
+  border-color: var(--p-glass-border) !important;
+}
+:deep(.ant-card .ant-card-head) {
+  border-bottom: 1px solid var(--p-border-divider) !important;
+  color: var(--p-text-primary) !important;
+}
+:deep(.ant-card .ant-card-body) {
+  color: var(--p-text-secondary) !important;
+}
+:deep(.ant-select-selector) {
+  background: var(--p-bg-input) !important;
+  border: 1px solid var(--p-border-default) !important;
+}
+:deep(.ant-select-selection-item) {
+  color: var(--p-text-primary) !important;
 }
 
 .node-selector {

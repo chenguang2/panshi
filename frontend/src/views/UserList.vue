@@ -5,6 +5,7 @@
       <a-button v-if="isAdmin" type="primary" @click="showAddModal">添加用户</a-button>
     </div>
 
+    <div class="table-wrapper">
     <a-table :dataSource="users" :columns="columns" :loading="loading" :pagination="pagination">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
@@ -21,7 +22,7 @@
         </template>
       </template>
     </a-table>
-
+    </div>
     <a-modal v-model:open="modalVisible" :title="editingUser ? '编辑用户' : '添加用户'" @ok="handleSubmit" width="700px">
       <a-tabs v-if="editingUser && form.role !== 'admin'" v-model:activeKey="userModalActiveTab">
         <a-tab-pane key="basic" tab="基本信息">
@@ -49,7 +50,7 @@
               <a-checkbox v-model:checked="perm.checked" @change="onPermissionChange(perm.key, perm.checked)">
                 <strong>{{ perm.label }}</strong>
               </a-checkbox>
-              <div style="font-size: 12px; color: #999; margin-left: 24px;">{{ perm.desc }}</div>
+              <div style="font-size: 12px; color: var(--p-text-tertiary); margin-left: 24px;">{{ perm.desc }}</div>
             </div>
           </div>
         </a-tab-pane>
@@ -276,7 +277,11 @@ onMounted(() => {
 
 <style scoped>
 .user-list {
-  padding: 0;
+  position: relative;
+  min-height: calc(100vh - 56px - 40px);
+  margin: -20px -24px;
+  padding: 20px 24px;
+  background: var(--p-bg-page);
 }
 
 .header-actions {
@@ -288,5 +293,27 @@ onMounted(() => {
 
 .header-actions h2 {
   margin: 0;
+  color: var(--p-text-primary);
+}
+
+.table-wrapper :deep(.ant-table) {
+  background: transparent !important;
+}
+.table-wrapper :deep(.ant-table-thead > tr > th) {
+  background: var(--p-color-primary-bg) !important;
+  border-bottom: 2px solid var(--p-color-primary) !important;
+  color: var(--p-text-primary) !important;
+  font-weight: 600;
+}
+.table-wrapper :deep(.ant-table-tbody > tr > td) {
+  background: transparent !important;
+  border-bottom: 1px solid var(--p-border-divider) !important;
+  color: var(--p-text-primary);
+}
+.table-wrapper :deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--p-bg-hover) !important;
+}
+.table-wrapper :deep(.ant-empty-description) {
+  color: var(--p-text-tertiary) !important;
 }
 </style>
