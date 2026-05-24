@@ -42,6 +42,9 @@ export interface Cluster {
   healthy_node_count: number
   upstream_count: number
   route_count: number
+  plugin_config_count: number
+  global_rule_count: number
+  static_resource_count: number
   activeTab?: string
   nodes?: Node[]
   nodesLoading?: boolean
