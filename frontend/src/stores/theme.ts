@@ -18,9 +18,14 @@ interface ThemePrefs {
 function loadPrefs(): ThemePrefs {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      // 强制使用 default 样式，不跟随亮/暗主题染色背景
+      parsed.style = 'default'
+      return parsed
+    }
   } catch { /* ignore */ }
-  return { themeColor: 'blue', darkMode: false, style: 'modern', layoutMode: 'sidebar', sidebarCollapsed: false }
+  return { themeColor: 'blue', darkMode: false, style: 'default', layoutMode: 'sidebar', sidebarCollapsed: false }
 }
 
 function savePrefs(prefs: ThemePrefs) {
