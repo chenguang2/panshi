@@ -238,6 +238,108 @@
             </div>
           </template>
 
+          <!-- traffic_split 的 splits 卡片编辑器 -->
+          <template v-else-if="key === 'splits'">
+            <div class="field-block">
+              <div class="field-block-header">
+                <span class="field-block-title">分发策略列表</span>
+                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
+              </div>
+
+              <div v-for="(split, si) in splitsData" :key="si" class="split-card">
+                <div class="split-card-header">
+                  <span class="split-card-title">策略 #{{ si + 1 }}</span>
+                  <div class="split-card-actions">
+                    <template v-if="split._exprRaw">
+                      <a-tag color="orange">条件表达式 (JSON)</a-tag>
+                    </template>
+                    <a-button type="link" size="small" @click="toggleExprMode(si)">{{ split._exprRaw ? '切换表单' : '切换JSON' }}</a-button>
+                    <DeleteOutlined class="delete-btn" @click="removeSplit(si)" />
+                  </div>
+                </div>
+
+                <!-- 匹配条件 -->
+                <div class="split-section">
+                  <div class="section-title">匹配条件</div>
+                  <template v-if="split._exprRaw">
+                    <a-textarea
+                      v-model:value="split._exprRaw"
+                      :rows="2"
+                      placeholder='[["key", "op", "value"]]'
+                      style="font-family: monospace;"
+                      @change="syncSplitExprRaw(si)"
+                    />
+                    <div v-if="split._exprError" class="field-error">{{ split._exprError }}</div>
+                  </template>
+                  <template v-else>
+                    <div v-for="(cond, ci) in split.ups_expr" :key="ci" class="condition-row">
+                      <a-input v-model:value="cond[0]" placeholder="字段名" class="cond-key" size="small" />
+                      <a-select v-model:value="cond[1]" class="cond-op" size="small">
+                        <a-select-option value="==">==</a-select-option>
+                        <a-select-option value="!=">!=</a-select-option>
+                        <a-select-option value=">">></a-select-option>
+                        <a-select-option value="<"><</a-select-option>
+                        <a-select-option value="~~">~~ (正则)</a-select-option>
+                        <a-select-option value="~*">~* (正则忽略大小写)</a-select-option>
+                        <a-select-option value="IN">IN</a-select-option>
+                        <a-select-option value="NOT IN">NOT IN</a-select-option>
+                      </a-select>
+                      <a-input v-model:value="cond[2]" placeholder="值" class="cond-val" size="small" />
+                      <DeleteOutlined class="delete-btn" @click="removeCondition(si, ci)" />
+                    </div>
+                    <a-button type="link" size="small" @click="addCondition(si)" class="add-row-btn">+ 添加条件</a-button>
+                  </template>
+                </div>
+
+                <!-- 上游分发目标 -->
+                <div class="split-section">
+                  <div class="section-title">上游分发目标</div>
+                  <div v-for="(up, ui) in split.upstreams" :key="ui" class="upstream-row">
+                    <a-select
+                      v-model:value="up.upstream_id"
+                      placeholder="选择上游（留空=当前路由上游）"
+                      :allow-clear="true"
+                      class="upstream-select"
+                      size="small"
+                    >
+                      <a-select-option v-for="opt in upstreamOptions" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </a-select-option>
+                    </a-select>
+                    <a-input-number v-model:value="up.weight" :min="1" placeholder="权重" class="weight-input" size="small" />
+                    <span class="weight-label">权重</span>
+                    <DeleteOutlined class="delete-btn" @click="removeUpstream(si, ui)" />
+                  </div>
+                  <a-button type="link" size="small" @click="addUpstream(si)" class="add-row-btn">+ 添加上游目标</a-button>
+                </div>
+              </div>
+
+              <a-button type="dashed" block @click="addSplit" class="add-split-btn">
+                <PlusOutlined /> 添加分发策略
+              </a-button>
+
+              <div class="split-example-section">
+                <a-button type="link" size="small" @click="expandedSplitExample = !expandedSplitExample">
+                  {{ expandedSplitExample ? '收起' : '展开' }} 配置示例
+                </a-button>
+                <JsonEditorVue
+                  v-if="expandedSplitExample"
+                  :model-value="splitExampleData"
+                  mode="text"
+                  read-only
+                  :navigation-bar="false"
+                  :status-bar="false"
+                  class="json-example-viewer"
+                />
+              </div>
+
+              <div v-if="schema.hints" class="field-hints" style="margin-top: 8px;">
+                <InfoCircleOutlined class="hint-icon" />
+                {{ schema.hints }}
+              </div>
+            </div>
+          </template>
+
           <!-- array 类型 -->
           <template v-else-if="getFieldType(schema) === 'array'">
             <div class="field-block">
@@ -352,12 +454,33 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import type { Plugin, RoutePlugin } from '@/types'
 import JsonEditorVue from 'json-editor-vue'
 import { Mode } from 'vanilla-jsoneditor'
 
 const textMode = Mode.text
+
+const expandedSplitExample = ref(false)
+
+const splitExampleData = [
+  {
+    ups_expr: [["arg_dc", "==", "1"]],
+    upstreams: [{ upstream_id: "ups_test1" }]
+  },
+  {
+    ups_expr: [["arg_dc", "==", "2"]],
+    upstreams: [{ upstream_id: "ups_test2" }]
+  },
+  {
+    ups_expr: [["arg_dc", "==", "12"]],
+    upstreams: [
+      { upstream_id: "ups_test1", weight: 1 },
+      { upstream_id: "ups_test2", weight: 2 },
+      { weight: 3 }
+    ]
+  }
+]
 
 interface UpstreamOption {
   label: string
@@ -385,6 +508,152 @@ const editingPlugin = computed(() => props.plugin)
 const currentSchema = computed(() => props.pluginInfo?.schema || {})
 
 const upstreamOptions = computed(() => props.upstreams || [])
+
+// ── traffic_split 卡片编辑器 ──────────────────────────────
+interface SplitItem {
+  ups_expr: string[][]
+  upstreams: { upstream_id?: string; weight?: number }[]
+  _exprRaw?: string
+  _exprError?: string
+}
+
+const splitsData = ref<SplitItem[]>([])
+
+const initSplitsData = () => {
+  const raw = formData.value.splits
+  if (!raw) { splitsData.value = []; return }
+  try {
+    const parsed = JSON.parse(typeof raw === 'string' ? raw : '[]')
+    if (Array.isArray(parsed)) {
+      splitsData.value = parsed.map((s: any) => ({
+        ups_expr: Array.isArray(s.ups_expr) ? s.ups_expr.map((c: any) => [...c]) : [],
+        upstreams: Array.isArray(s.upstreams) ? s.upstreams.map((u: any) => ({ upstream_id: u.upstream_id, weight: u.weight })) : [],
+        _exprRaw: undefined,
+        _exprError: undefined,
+      }))
+    }
+  } catch { splitsData.value = [] }
+}
+
+const syncSplitsToForm = () => {
+  const cleaned = splitsData.value.map(s => {
+    const item: any = {}
+    // ups_expr: 如果使用 raw JSON 模式
+    if (s._exprRaw) {
+      try { item.ups_expr = JSON.parse(s._exprRaw) } catch { item.ups_expr = s.ups_expr }
+    } else {
+      item.ups_expr = s.ups_expr
+        .filter(c => c[0] || c[2])
+        .map(c => {
+          const val = c[2]
+          let typedVal: any = val
+          // 空值不处理
+          if (val === '' || val === undefined || val === null) {
+            typedVal = val
+          }
+          // 用引号包裹的字符串 → 去除引号，保留为字符串
+          else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
+            typedVal = val.slice(1, -1)
+          }
+          // 纯数字 → 转为 number
+          else if (/^-?\d+$/.test(val)) {
+            typedVal = Number(val)
+          }
+          // 浮点数 → 转为 number
+          else if (/^-?\d+\.\d+$/.test(val)) {
+            typedVal = Number(val)
+          }
+          // 其他 → 保持字符串
+          return [c[0], c[1], typedVal]
+        })
+    }
+    // upstreams
+    const us = s.upstreams.filter(u => u.upstream_id || u.weight)
+    if (us.length > 0) {
+      item.upstreams = us.map(u => {
+        const entry: any = {}
+        if (u.upstream_id) entry.upstream_id = u.upstream_id
+        if (u.weight && u.weight > 0) entry.weight = u.weight
+        return entry
+      })
+    }
+    // 跳过空策略
+    const hasExpr = Array.isArray(item.ups_expr) && item.ups_expr.length > 0 && item.ups_expr.some((c: any) => c[0] || c[2])
+    const hasUpstreams = Array.isArray(item.upstreams) && item.upstreams.length > 0
+    if (!hasExpr && !hasUpstreams) return null
+    if (!hasExpr) delete item.ups_expr
+    if (!hasUpstreams) delete item.upstreams
+    return item
+  }).filter(Boolean)
+
+  formData.value.splits = cleaned.length > 0 ? JSON.stringify(cleaned) : ''
+}
+
+const addSplit = () => {
+  splitsData.value.push({ ups_expr: [], upstreams: [] })
+  syncSplitsToForm()
+}
+
+const removeSplit = (idx: number) => {
+  splitsData.value.splice(idx, 1)
+  syncSplitsToForm()
+}
+
+const addCondition = (si: number) => {
+  splitsData.value[si].ups_expr.push(['', '==', ''])
+  syncSplitsToForm()
+}
+
+const removeCondition = (si: number, ci: number) => {
+  splitsData.value[si].ups_expr.splice(ci, 1)
+  syncSplitsToForm()
+}
+
+const toggleExprMode = (si: number) => {
+  const split = splitsData.value[si]
+  if (split._exprRaw) {
+    // 切回表单: 解析 JSON
+    try {
+      const parsed = JSON.parse(split._exprRaw)
+      if (Array.isArray(parsed)) {
+        split.ups_expr = parsed.map((c: any) => [...c])
+      }
+      split._exprRaw = undefined
+      split._exprError = undefined
+    } catch {
+      split._exprError = 'JSON 格式错误，无法切换'
+      return
+    }
+  } else {
+    // 切到 JSON: 序列化当前条件
+    split._exprRaw = JSON.stringify(split.ups_expr.filter(c => c[0] || c[2]))
+    split._exprError = undefined
+  }
+  syncSplitsToForm()
+}
+
+const syncSplitExprRaw = (si: number) => {
+  const raw = splitsData.value[si]._exprRaw || ''
+  try {
+    JSON.parse(raw)
+    splitsData.value[si]._exprError = undefined
+  } catch {
+    splitsData.value[si]._exprError = 'JSON 格式错误'
+  }
+  syncSplitsToForm()
+}
+
+const addUpstream = (si: number) => {
+  splitsData.value[si].upstreams.push({ upstream_id: undefined, weight: undefined })
+  syncSplitsToForm()
+}
+
+const removeUpstream = (si: number, ui: number) => {
+  splitsData.value[si].upstreams.splice(ui, 1)
+  syncSplitsToForm()
+}
+// ── 监听 splits 数据变化自动同步 ──
+watch(splitsData, () => { syncSplitsToForm() }, { deep: true })
 
 const hasFormFields = computed(() => Object.keys(currentSchema.value).length > 0)
 
@@ -606,6 +875,9 @@ const parseConfig = (configStr: string) => {
 
     formData.value = buildFormDataFromConfig(currentSchema.value, config)
 
+    // 初始化 traffic_split 编辑器
+    initSplitsData()
+
     // 简单 KV headers 回填到 formData，让文本域显示初始值
     if (initialSimpleHeaders) {
       formData.value.headers = JSON.stringify(initialSimpleHeaders)
@@ -664,8 +936,10 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
           } else {
             data[key] = JSON.stringify(configValue)
           }
+        } else if (configValue !== undefined && configValue !== null) {
+          data[key] = String(configValue)
         } else {
-          data[key] = '{}'
+          data[key] = ''
         }
         break
       default:
@@ -688,6 +962,9 @@ const buildConfigFromForm = (): string => {
     const fieldType = getFieldType(fieldSchema as any)
 
     if (value === undefined || value === null || value === '') continue
+    // 跳过空对象 {}
+    if (fieldType === 'object' && value === '{}') continue
+    if (fieldType === 'array' && value === '[]') continue
 
     // 跳过等于默认值的字段
     const fieldDefault = (fieldSchema as any).default
@@ -1031,5 +1308,95 @@ const handleClose = () => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* ── traffic_split 卡片编辑器 ── */
+.split-card {
+  border: 1px solid var(--p-border-default);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--p-bg-page);
+  overflow: hidden;
+}
+
+.split-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--p-bg-hover);
+  border-bottom: 1px solid var(--p-border-default);
+}
+
+.split-card-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--p-text-primary);
+}
+
+.split-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.split-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--p-border-secondary);
+}
+
+.split-section:last-child {
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--p-text-secondary);
+  margin-bottom: 8px;
+}
+
+.condition-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.condition-row .cond-key { flex: 1.5; }
+.condition-row .cond-op { flex: 1; }
+.condition-row .cond-val { flex: 1.5; }
+
+.upstream-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.upstream-row .upstream-select { flex: 1.5; }
+.upstream-row .weight-input { width: 80px; }
+.upstream-row .weight-label {
+  font-size: 11px;
+  color: var(--p-text-tertiary);
+}
+
+.add-split-btn {
+  margin-top: 8px;
+}
+
+.field-error {
+  color: #ff4d4f;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.split-example-section {
+  margin-top: 12px;
+}
+
+.split-example-section .json-example-viewer {
+  margin-top: 6px;
+  height: 200px;
 }
 </style>
