@@ -8,7 +8,7 @@
 
 /* ---- 背景 ---- */
 :root {
-  --p-bg-page:                 initial;
+  --p-bg-page:                 #f0f2f5;
   --p-bg-container:            initial;
   --p-bg-elevated:             initial;
   --p-bg-glass:                initial;
