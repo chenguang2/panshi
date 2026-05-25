@@ -24,7 +24,7 @@ function syncModernBg(color: ThemeColor, lightBg: boolean) {
   root.style.setProperty('--p-border-hover', primary + '4d')
   root.style.setProperty('--p-border-active', primary)
   if (lightBg) {
-    root.style.setProperty('--p-bg-page', themeBgLightMap[color])
+    root.style.removeProperty('--p-bg-page')
     root.style.setProperty('--p-bg-glass', themeGlassMap[color])
     root.style.setProperty('--p-bg-glass-table', themeTableGlassMap[color])
     root.style.setProperty('--p-glass-border', themeGlassBorderMap[color])
