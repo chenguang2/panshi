@@ -1356,3 +1356,16 @@ client._request("DELETE", f"/edge/panshi/static_resources")
 要想其他类似插件组的发布一样，要有进度条和发布的过程信息
 
 请复述后，我批准后再执行
+
+=============================================================
+建立 git 新分支，完成下面需求
+
+使用 openspc 的命令 /opsx-new 加入新插件和修改已有插件
+
+1. 根据 docs/edge/plugins/response_rewrite.md 文档，修改系统
+的现在的 backend/app/v1/plugins.py 的 response_rewrite 部分，于文档一致
+
+2. 探讨 traffic_split 这个插件,根据现在的实例，设计一个界面来将这个
+逻辑表现出来，其中 upstream_id ,通过选择系统的upstream来表示，而不是输入upstream id
+
+请复述后，我批准后再执行
