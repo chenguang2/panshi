@@ -45,6 +45,7 @@ logs/
 *.log
 !docs/edge/*.log
 backend/uvicorn.err
+backend/uvicorn.out
 
 # =============================================
 # commit 时不需要
