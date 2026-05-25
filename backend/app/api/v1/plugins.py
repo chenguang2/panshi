@@ -56,49 +56,70 @@ BUILTIN_PLUGINS = [
         "description": "响应体重写（修改状态码、Body、Header）",
         "enable_metadata": False,
         "schema": {
-            "status_code": {
+            "status": {
+                "type": "integer",
+                "description": "重写的 HTTP 响应状态码（支持 200-599）",
                 "examples": [200, 301, 302, 400, 404, 500],
-                "hints": "将响应状态码修改为指定值"
-            },
-            "body": {
-                "type": "string",
-                "description": "重写响应体",
-                "examples": ["{\"code\": 0, \"message\": \"success\"}", "static response text"],
-                "hints": "完全替换响应体内容，支持变量"
-            },
-            "headers": {
-                "type": "object",
-                "description": "Header 操作（设置/覆盖）",
-                "properties": {
-                    "set": {
-                        "type": "object",
-                        "description": "设置/覆盖 Header",
-                        "examples": [{"X-Custom": "value"}, {"Cache-Control": "no-cache"}],
-                        "hints": "已存在的 Header 会被覆盖"
-                    }
-                }
+                "hints": "将响应状态码修改为指定值，支持 200 到 599"
             },
             "add_headers": {
                 "type": "object",
-                "description": "追加 Header（不覆盖已有值）",
-                "examples": [{"X-Appended": "value"}],
-                "hints": "即使 Header 已存在也会追加新值"
+                "description": "在原有响应头基础上追加的标头键值对",
+                "examples": [{"X-Add-Header": "Edge"}],
+                "hints": "不覆盖已有标头，追加新标头"
+            },
+            "headers": {
+                "type": "object",
+                "description": "覆盖或设置的响应标头键值对（如果原来已有则修改）",
+                "examples": [{"Server": "Edge-Gateway"}],
+                "hints": "直接设置响应标头，已有标头会被覆盖"
+            },
+            "body": {
+                "type": "string",
+                "description": "用来替换原始后端响应体的内容，支持 Nginx/Edge 变量",
+                "examples": ["This request was intercepted and rewritten by Edge. Client IP: ${remote_addr}"],
+                "hints": "完全替换响应体内容，支持 ${host}、${remote_addr} 等变量"
             },
             "regex_body": {
                 "type": "array",
                 "items": {
                     "type": "array",
-                    "items": {"type": "string"}
+                    "items": {}
                 },
-                "description": "正则替换响应体",
-                "examples": [[["old_pattern", "new_value"]]],
-                "hints": "对响应体进行正则匹配替换"
+                "description": "正则替换响应体，每项格式为 [正则, 替换字符串, 替换次数]",
+                "examples": [[["World", "Edge", 1]]],
+                "hints": "对响应体进行正则匹配替换，每项 [reg, replacement, count]，count 默认 0 表示全部替换"
             },
             "plain_text": {
                 "type": "boolean",
-                "description": "响应体是否为纯文本",
+                "default": False,
+                "description": "响应体是否为纯文本，设为 true 时不对 body 中的变量进行解析",
                 "examples": [True, False],
-                "hints": "设为 true 时，响应体以纯文本方式处理"
+                "hints": "设为 true 时响应体以纯文本方式处理，变量不解析"
+            },
+            "include_add_headers_expr": {
+                "type": "array",
+                "description": "条件表达式，仅在满足条件时执行 add_headers",
+                "examples": [[["status", "==", 200]]],
+                "hints": "满足条件时才追加标头"
+            },
+            "include_headers_expr": {
+                "type": "array",
+                "description": "条件表达式，仅在满足条件时执行 headers 修改",
+                "examples": [[["status", "==", 200]]],
+                "hints": "满足条件时才修改标头"
+            },
+            "include_body_expr": {
+                "type": "array",
+                "description": "条件表达式，仅在满足条件时执行 body 和 regex_body 替换",
+                "examples": [[["status", "==", 200]]],
+                "hints": "满足条件时才替换响应体"
+            },
+            "method_override": {
+                "type": "object",
+                "description": "按请求方法指定不同的重写规则，键为方法名（如 GET、POST），值为包含 status/body/headers 等配置的对象",
+                "examples": [{"GET": {"status": 201}}],
+                "hints": "可以指定特定请求方法（如 GET、POST）作为键名，值为对应的重写配置"
             }
         }
     },
@@ -128,7 +149,8 @@ BUILTIN_PLUGINS = [
                                 "properties": {
                                     "upstream_id": {
                                         "type": "string",
-                                        "description": "上游 ID",
+                                        "component": "select",
+                                        "description": "上游 ID，从下拉列表中选择系统已注册的上游",
                                         "examples": ["ups_test1"],
                                         "hints": "未配置时使用当前路由的负载"
                                     },

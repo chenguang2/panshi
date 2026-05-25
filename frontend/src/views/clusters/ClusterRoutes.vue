@@ -168,6 +168,7 @@
           <PluginSelector
             v-model="routeForm.plugins"
             :plugins="availablePlugins"
+            :upstreams="upstreamOptions"
           />
         </a-tab-pane>
 
@@ -306,6 +307,12 @@ const {
   versionModalClusterId,
   versionModalResourceName,
   versionModalEdgeUuid,
+})
+
+// ── Upstream options for traffic_split plugin dropdown ────────────
+const upstreamOptions = computed(() => {
+  const upstreams = getClusterUpstreams(props.clusters)
+  return upstreams.map(u => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
 })
 
 // ── Version published callback ──────────────────────────────────────

@@ -86,6 +86,7 @@
       v-model:open="drawerVisible"
       :plugin="editingPlugin"
       :plugin-info="editingPluginInfo"
+      :upstreams="props.upstreams"
       @save="handleSavePlugin"
     />
   </div>
@@ -101,6 +102,7 @@ import PluginEditorDrawer from './PluginEditorDrawer.vue'
 const props = defineProps<{
   modelValue: RoutePlugin[]
   plugins: Plugin[]
+  upstreams?: { label: string; value: string }[]
 }>()
 
 const emit = defineEmits<{

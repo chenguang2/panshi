@@ -26,8 +26,35 @@
     <div v-else class="form-editor">
       <a-form layout="vertical">
         <template v-for="(schema, key) in visibleSchemaFields" :key="key">
+          <!-- select 类型：根据 schema.component 标记渲染下拉选择 -->
+          <template v-if="schema.component === 'select'">
+            <div class="field-block">
+              <div class="field-block-header">
+                <span class="field-block-title">{{ key }}</span>
+                <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
+              </div>
+              <a-select
+                v-model:value="formData[key]"
+                :placeholder="schema.description || `请选择 ${key}`"
+                :allow-clear="true"
+                class="field-input"
+              >
+                <a-select-option v-for="opt in upstreamOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </a-select-option>
+              </a-select>
+              <div v-if="schema.examples?.length" class="field-example">
+                示例：{{ formatExample(schema.examples[0]) }}
+              </div>
+              <div v-if="schema.hints" class="field-hints">
+                <InfoCircleOutlined class="hint-icon" />
+                {{ schema.hints }}
+              </div>
+            </div>
+          </template>
+
           <!-- object 类型：检测是否为 headers 字段 -->
-          <template v-if="getFieldType(schema) === 'object' && isHeadersField(schema)">
+          <template v-else-if="getFieldType(schema) === 'object' && isHeadersField(schema)">
             <div class="field-block headers-accordion">
               <!-- headers 标签 -->
               <div class="field-block-header">
@@ -332,10 +359,16 @@ import { Mode } from 'vanilla-jsoneditor'
 
 const textMode = Mode.text
 
+interface UpstreamOption {
+  label: string
+  value: string
+}
+
 const props = defineProps<{
   open: boolean
   plugin: RoutePlugin | null
   pluginInfo: Plugin | null
+  upstreams?: UpstreamOption[]
 }>()
 
 const emit = defineEmits<{
@@ -350,6 +383,8 @@ const visible = computed({
 
 const editingPlugin = computed(() => props.plugin)
 const currentSchema = computed(() => props.pluginInfo?.schema || {})
+
+const upstreamOptions = computed(() => props.upstreams || [])
 
 const hasFormFields = computed(() => Object.keys(currentSchema.value).length > 0)
 
