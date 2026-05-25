@@ -1,14 +1,5 @@
 <template>
   <div class="plugin-metadata">
-    <div class="search-wrapper">
-      <a-input-search
-        v-model:value="searchText"
-        placeholder="搜索插件..."
-        allow-clear
-        class="plugin-search"
-      />
-    </div>
-
     <div class="plugin-panels">
       <div class="panel available-panel">
         <div class="panel-header">
@@ -470,17 +461,6 @@ watch(() => props.clusterId, () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.search-wrapper {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-
-.plugin-search {
-  width: 100%;
-  max-width: 400px;
 }
 
 .plugin-panels {

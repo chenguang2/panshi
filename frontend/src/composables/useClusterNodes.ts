@@ -1,7 +1,8 @@
-import { ref, reactive, computed, type Ref } from 'vue'
+import { ref, reactive, computed, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 import { showDeleteConfirm } from './useClusterUtils'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
@@ -39,10 +40,37 @@ export function useClusterNodes(options: {
   const diffClusterId = ref(0)
   const diffNodeId = ref(0)
 
+  const authStore = useAuthStore()
+  const NODE_CFG_KEY = () => `node_cfg_${authStore.user?.id ?? 'guest'}`
+
+  function loadNodeConfig() {
+    try {
+      const raw = localStorage.getItem(NODE_CFG_KEY())
+      if (raw) {
+        const cfg = JSON.parse(raw)
+        if (cfg.columns) nodeColumnsSelected.value = cfg.columns
+        if (cfg.searchVisible !== undefined) nodeSearchVisible.value = cfg.searchVisible
+        if (cfg.actions) nodeActionsSelected.value = cfg.actions
+      }
+    } catch { /* ignore */ }
+  }
+  function saveNodeConfig() {
+    try {
+      localStorage.setItem(NODE_CFG_KEY(), JSON.stringify({
+        columns: nodeColumnsSelected.value,
+        searchVisible: nodeSearchVisible.value,
+        actions: nodeActionsSelected.value,
+      }))
+    } catch { /* ignore */ }
+  }
+
   const nodeColumnPopoverVisible = ref(false)
   const nodeColumnsSelected = ref(['ip', 'service_port', 'management_port', 'status', 'actions'])
   const nodeSearchVisible = ref(true)
   const nodeActionsSelected = ref(['start', 'stop', 'status'])
+
+  watch([nodeColumnsSelected, nodeSearchVisible, nodeActionsSelected], saveNodeConfig, { deep: true })
+  loadNodeConfig()
 
   const moreNodeActions = computed(() =>
     allNodeActionButtons.filter(b => !nodeActionsSelected.value.includes(b.key))

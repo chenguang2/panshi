@@ -31,27 +31,30 @@
         </template>
         <a-button size="small">列配置</a-button>
       </a-popover>
-    </div>
 
-    <!-- Search bar -->
-    <div v-if="routeSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
-      <a-input-search
-        v-model:value="cluster.routesSearch"
-        placeholder="搜索路由"
-        style="width: 150px;"
-        @search="() => { cluster.routesPagination!.page = 1; loadRoutes(cluster) }"
-        allow-clear
-      />
-      <a-select
-        v-model:value="cluster.routesSearchField"
-        placeholder="字段"
-        style="width: 100px;"
-        allow-clear
-      >
-        <a-select-option value="">全部</a-select-option>
-        <a-select-option value="name">名称</a-select-option>
-        <a-select-option value="uri">URI</a-select-option>
-      </a-select>
+      <div class="toolbar-right">
+        <template v-if="routeSearchVisible">
+          <a-input-search
+            v-model:value="cluster.routesSearch"
+            placeholder="搜索路由"
+            style="width: 150px;"
+            @search="() => { cluster.routesPagination!.page = 1; loadRoutes(cluster) }"
+            allow-clear
+            size="small"
+          />
+          <a-select
+            v-model:value="cluster.routesSearchField"
+            placeholder="字段"
+            style="width: 90px;"
+            allow-clear
+            size="small"
+          >
+            <a-select-option value="">全部</a-select-option>
+            <a-select-option value="name">名称</a-select-option>
+            <a-select-option value="uri">URI</a-select-option>
+          </a-select>
+        </template>
+      </div>
     </div>
 
     <!-- Route table -->
@@ -332,6 +335,14 @@ function onVersionPublished() {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
 }
 
 .node-table {

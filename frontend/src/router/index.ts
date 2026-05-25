@@ -53,11 +53,10 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to, _from) => {
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
-    next('/login')
-    return
+    return '/login'
   }
 
   // 权限检查：路由配置了 requiredPermission 时需要对应的权限
@@ -65,12 +64,9 @@ router.beforeEach((to, _from, next) => {
   if (requiredPermission) {
     const authStore = useAuthStore()
     if (!authStore.hasPermission(requiredPermission)) {
-      next('/')
-      return
+      return '/'
     }
   }
-
-  next()
 })
 
 export default router

@@ -125,10 +125,38 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   // ── column / search config ──────────────────────────────────────────
 
+  const ROUTE_CFG_KEY = () => `route_cfg_${authStore.user?.id ?? 'guest'}`
+
+  function loadRouteConfig() {
+    try {
+      const raw = localStorage.getItem(ROUTE_CFG_KEY())
+      if (raw) {
+        const cfg = JSON.parse(raw)
+        if (cfg.columns) routeColumnsSelected.value = cfg.columns
+        if (cfg.searchVisible !== undefined) routeSearchVisible.value = cfg.searchVisible
+        if (cfg.actions) routeActionsSelected.value = cfg.actions
+      }
+    } catch { /* ignore */ }
+  }
+
+  function saveRouteConfig() {
+    try {
+      localStorage.setItem(ROUTE_CFG_KEY(), JSON.stringify({
+        columns: routeColumnsSelected.value,
+        searchVisible: routeSearchVisible.value,
+        actions: routeActionsSelected.value,
+      }))
+    } catch { /* ignore */ }
+  }
+
   const routeColumnPopoverVisible = ref(false)
   const routeColumnsSelected = ref(['name', 'uri', 'publish_status', 'priority', 'actions'])
   const routeSearchVisible = ref(true)
   const routeActionsSelected = ref(['copy', 'edit', 'delete', 'publish', 'version'])
+
+  // 自动持久化
+  watch([routeColumnsSelected, routeSearchVisible, routeActionsSelected], saveRouteConfig, { deep: true })
+  loadRouteConfig()
 
   const visibleRouteColumns = computed(() => {
     const selected = new Set(routeColumnsSelected.value)

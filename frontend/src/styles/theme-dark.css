@@ -1,4 +1,5 @@
 html.theme-dark {
+  --p-bg-page: #0a0e27;
   --p-bg-container: rgba(255, 255, 255, 0.04);
   --p-bg-elevated: #1d1d1d;
   --p-bg-glass: rgba(255, 255, 255, 0.04);
