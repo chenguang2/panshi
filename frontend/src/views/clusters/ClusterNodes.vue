@@ -36,25 +36,30 @@
         </template>
         <a-button size="small">列配置</a-button>
       </a-popover>
-    </div>
-    <div v-if="nodeSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
-      <a-input-search
-        v-model:value="cluster.nodesSearch"
-        placeholder="搜索节点"
-        style="width: 150px;"
-        @search="() => { cluster.nodesPagination!.page = 1; loadNodes(cluster) }"
-        allow-clear
-      />
-      <a-select
-        v-model:value="cluster.nodesSearchField"
-        placeholder="字段"
-        style="width: 100px;"
-        allow-clear
-      >
-        <a-select-option value="">全部</a-select-option>
-        <a-select-option value="name">名称</a-select-option>
-        <a-select-option value="ip">IP</a-select-option>
-      </a-select>
+
+      <div class="toolbar-right">
+        <template v-if="nodeSearchVisible">
+          <a-input-search
+            v-model:value="cluster.nodesSearch"
+            placeholder="搜索节点"
+            style="width: 150px;"
+            @search="() => { cluster.nodesPagination!.page = 1; loadNodes(cluster) }"
+            allow-clear
+            size="small"
+          />
+          <a-select
+            v-model:value="cluster.nodesSearchField"
+            placeholder="字段"
+            style="width: 90px;"
+            allow-clear
+            size="small"
+          >
+            <a-select-option value="">全部</a-select-option>
+            <a-select-option value="name">名称</a-select-option>
+            <a-select-option value="ip">IP</a-select-option>
+          </a-select>
+        </template>
+      </div>
     </div>
     <a-table
       :columns="visibleNodeColumns"
@@ -204,6 +209,14 @@ const {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
 }
 
 .node-table {

@@ -36,6 +36,29 @@
         </template>
         <a-button size="small">列配置</a-button>
       </a-popover>
+
+      <div class="toolbar-right">
+        <template v-if="upstreamSearchVisible">
+          <a-input-search
+            v-model:value="cluster.upstreamsSearch"
+            placeholder="搜索上游"
+            style="width: 150px;"
+            @search="() => { cluster.upstreamsPagination!.page = 1; loadUpstreams(cluster) }"
+            allow-clear
+            size="small"
+          />
+          <a-select
+            v-model:value="cluster.upstreamsSearchField"
+            placeholder="字段"
+            style="width: 90px;"
+            allow-clear
+            size="small"
+          >
+            <a-select-option value="">全部</a-select-option>
+            <a-select-option value="name">名称</a-select-option>
+          </a-select>
+        </template>
+      </div>
     </div>
     <div v-if="upstreamSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
       <a-input-search
@@ -318,6 +341,14 @@ const versionModalOnPublished = async () => {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.toolbar-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
 }
 
 .node-table {

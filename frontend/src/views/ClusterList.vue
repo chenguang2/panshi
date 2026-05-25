@@ -924,9 +924,11 @@ onMounted(() => {
 .cb { font-size: 9px; color: var(--p-text-disabled); margin-left: 3px; }
 
 .expanded-area {
-  margin-top: 0;
+  margin-top: 20px;
   position: relative;
   z-index: 1;
+  border-top: 2px solid var(--p-border-default);
+  padding-top: 16px;
 }
 
 .card-expanded {
@@ -934,6 +936,7 @@ onMounted(() => {
   backdrop-filter: blur(var(--p-glass-blur));
   -webkit-backdrop-filter: blur(var(--p-glass-blur));
   border: 1px solid color-mix(in srgb, var(--p-color-primary) 30%, transparent);
+  border-top: 3px solid var(--p-color-primary);
   border-radius: var(--p-radius-lg);
   overflow: hidden;
   margin-bottom: 12px;
