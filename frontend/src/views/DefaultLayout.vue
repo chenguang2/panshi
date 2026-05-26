@@ -52,7 +52,7 @@
             <span>用户管理</span>
           </a-menu-item>
           <a-menu-item v-if="isAdmin" key="plugin-switches" @click="router.push('/plugin-switches')">
-            <span class="menu-icon">⚙</span>
+            <SettingOutlined />
             <span>插件管理</span>
           </a-menu-item>
           <a-menu-divider v-if="isAdmin" />
