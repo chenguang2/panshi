@@ -11,6 +11,12 @@
     <div class="two-columns">
       <!-- 左侧：分类树 + 网格 -->
       <div class="category-panel">
+        <div class="category-panel-header">
+          <span class="category-panel-title">可用插件</span>
+          <a-button size="small" type="link" @click="toggleAll">
+            {{ allExpanded ? '全部折叠' : '全部展开' }}
+          </a-button>
+        </div>
         <div
           v-for="category in filteredCategories"
           :key="category.key"
@@ -205,9 +211,9 @@ const getCategoryClass = (pluginName: string): string => {
 // 状态
 const searchText = ref('')
 const expanded = reactive<Record<string, boolean>>({
-  flow: true,
-  rewrite: true,
-  process: true
+  flow: false,
+  rewrite: false,
+  process: false
 })
 interface SelectedPlugin {
   plugin_name: string
@@ -221,13 +227,24 @@ const editingPlugin = ref<RoutePlugin | null>(null)
 const editingPluginIndex = ref(-1)
 const removingIndex = ref<number | null>(null)
 
-// 初始化展开状态
-const initExpanded = () => {
-  CATEGORIES.forEach(cat => {
-    expanded[cat.key] = true
-  })
+// 是否所有分类都已展开
+const allExpanded = computed(() => CATEGORIES.every(cat => expanded[cat.key]))
+
+// 全部展开/全部折叠
+const toggleAll = () => {
+  const target = !allExpanded.value
+  CATEGORIES.forEach(cat => { expanded[cat.key] = target })
 }
-initExpanded()
+
+// 有已选插件时自动展开对应分类
+const expandCategoryWithSelected = () => {
+  for (const cat of CATEGORIES) {
+    if (!expanded[cat.key] && selectedPlugins.value.some(p => cat.plugins.includes(p.plugin_name))) {
+      expanded[cat.key] = true
+    }
+  }
+}
+watch(selectedPlugins, expandCategoryWithSelected, { deep: true, immediate: true })
 
 // 监听 props.modelValue 变化
 watch(() => props.modelValue, (newVal) => {
@@ -417,7 +434,24 @@ const emitUpdate = () => {
   border-radius: 6px;
   background: var(--p-bg-page);
   overflow-y: auto;
-  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+.category-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--p-border-divider);
+  background: var(--p-bg-hover);
+  flex-shrink: 0;
+}
+
+.category-panel-title {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--p-text-primary);
 }
 
 .selected-panel {

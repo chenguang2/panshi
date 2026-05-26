@@ -561,7 +561,7 @@ async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConf
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        if key == "plugins" and value:
+        if key == "plugins" and value is not None:
             value = json.dumps(value)
         setattr(config, key, value)
     await db.commit()
