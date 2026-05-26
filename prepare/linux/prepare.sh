@@ -68,6 +68,10 @@ echo "  使用清华 PyPI 镜像..."
 "$PROJECT_ROOT/backend/.venv/bin/pip" install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$PROJECT_ROOT/backend"
 unset PYTHONHOME
 echo "  后端依赖安装完成"
+#
+
+chmod +x "$PROJECT_ROOT/frontend/node_modules/.bin/vue-tsc"
+chmod +x "$PROJECT_ROOT/frontend/node_modules/.bin/vite"
 
 # ---------- 4. 构建前端 ----------
 echo ""
