@@ -88,7 +88,7 @@ async function loadSwitches() {
   try {
     const res = await api.get('/plugin-switches')
     const existing = new Map(res.data.items.map((s: any) => [s.plugin_name, s.enabled]))
-    const builtin = await api.get('/plugins/builtin')
+    const builtin = await api.get('/plugins/builtin', { params: { all: 1 } })
     switchList.value = builtin.data.plugins.map((p: any) => ({
       plugin_name: p.name,
       enabled: existing.has(p.name) ? existing.get(p.name) : true,

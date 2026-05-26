@@ -1100,7 +1100,14 @@ BUILTIN_PLUGINS = [
 ]
 
 @router.get("/builtin")
-async def get_builtin_plugins(db: AsyncSession = Depends(get_db)):
+async def get_builtin_plugins(
+    all: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    # all=1 时返回全部，用于管理页面
+    if all:
+        return {"plugins": BUILTIN_PLUGINS}
+
     # 检查是否有插件开关记录，无记录则返回全部
     result = await db.execute(select(PluginEnabled))
     switches = result.scalars().all()
