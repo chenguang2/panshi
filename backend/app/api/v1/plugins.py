@@ -514,6 +514,583 @@ BUILTIN_PLUGINS = [
                 "hints": "设为 true 时，请求体超限则直接放行；设为 false 时，超限也检查，默认 true"
             }
         }
+    },
+    {
+        "name": "auth_basic",
+        "description": "Basic 认证",
+        "enable_metadata": False,
+        "schema": {
+            "hide_credentials": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否将认证信息透传给 Upstream",
+                "examples": [True, False],
+                "hints": "设为 true 时清除认证信息，不传递给上游，默认 false"
+            }
+        }
+    },
+    {
+        "name": "auth_key",
+        "description": "Key 认证",
+        "enable_metadata": False,
+        "schema": {
+            "header": {
+                "type": "string",
+                "default": "apikey",
+                "description": "从 Header 中获取 API Key 的字段名",
+                "examples": ["apikey", "x-apikey"],
+                "hints": "从指定 Header 字段获取 API Key，默认 apikey"
+            },
+            "query": {
+                "type": "string",
+                "default": "apikey",
+                "description": "从 URL 参数中获取 API Key 的字段名",
+                "examples": ["apikey", "x-apikey"],
+                "hints": "从指定 URL 参数获取 API Key，默认 apikey。优先级 header > query"
+            },
+            "hide_credentials": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否将 Key 透传给 Upstream",
+                "examples": [True, False],
+                "hints": "设为 true 时清除 Key，不传递给上游，默认 false"
+            }
+        }
+    },
+    {
+        "name": "cors",
+        "description": "跨域资源共享（CORS）",
+        "enable_metadata": False,
+        "schema": {
+            "allow_origins": {
+                "type": "string",
+                "default": "*",
+                "description": "允许跨域访问的 Origin，多个用逗号分隔",
+                "examples": ["*", "http://test.local"],
+                "hints": "使用 * 表示允许所有，格式为 scheme://host:port"
+            },
+            "allow_methods": {
+                "type": "string",
+                "default": "*",
+                "description": "允许跨域访问的 Method，多个用逗号分隔",
+                "examples": ["*", "GET, POST, OPTIONS"],
+                "hints": "使用 * 表示允许所有"
+            },
+            "allow_headers": {
+                "type": "string",
+                "default": "*",
+                "description": "允许跨域访问的 Header，多个用逗号分隔",
+                "examples": ["*", "Content-Type, Accept"],
+                "hints": "使用 * 表示允许所有"
+            },
+            "expose_headers": {
+                "type": "string",
+                "default": "*",
+                "description": "允许跨域访问时响应方携带的 Header，多个用逗号分隔",
+                "examples": ["*", "Content-Encoding"],
+                "hints": "使用 * 表示允许任意 Header"
+            },
+            "max_age": {
+                "type": "integer",
+                "default": 5,
+                "description": "浏览器缓存 CORS 结果的最大时间（秒），-1 表示不缓存",
+                "examples": [5, 60, -1],
+                "hints": "单位秒，默认 5"
+            },
+            "allow_credential": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否允许跨域访问的请求方携带凭据（如 Cookie）",
+                "examples": [True, False],
+                "hints": "设为 true 时 allow_origins 等属性不能使用 *"
+            },
+            "allow_origins_by_regex": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "使用正则表达式数组来匹配允许跨域访问的 Origin",
+                "examples": [[".*\\.test\\.local$"]],
+                "hints": "指定后忽略 allow_origins 属性"
+            }
+        }
+    },
+    {
+        "name": "security_common_args",
+        "description": "安全防护 - 请求参数检查（对请求参数进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配请求参数中的关键字，命中后拦截",
+                "examples": [["jndi\\:(?:ldap|rmi|iiop)", "\\.\\./", "\\$\\{"]],
+                "hints": "由正则表达式组成的黑名单列表"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request args is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            }
+        }
+    },
+    {
+        "name": "security_common_cookie",
+        "description": "安全防护 - Cookie 检查（对请求 Cookie 进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配 Cookie 中的关键字，命中后拦截",
+                "examples": [["jndi\\:(?:ldap|rmi|iiop)", "\\.\\./", "\\$\\{"]],
+                "hints": "由正则表达式组成的黑名单列表"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request cookie is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            },
+            "bypass_missing": {
+                "type": "boolean",
+                "default": True,
+                "description": "Cookie 请求头不存在或格式有误时是否绕过检查",
+                "examples": [True, False],
+                "hints": "默认 true"
+            }
+        }
+    },
+    {
+        "name": "security_common_referer",
+        "description": "安全防护 - Referer 检查（对请求 Referer 进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配 Referer 中的关键字，命中后拦截",
+                "examples": [["(?:(\\!\\=|\\&\\&|\\|\\||>>|<<|>=|<=|<>|<=>|xor|rlike|regexp|isnull)"]],
+                "hints": "匹配 Referer 正文的关键字"
+            },
+            "blacklist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Host 黑名单列表，匹配 Referer 中的 Host，命中后拦截",
+                "examples": [["*.zengbiao1.local"]],
+                "hints": "匹配 Referer 的 Host 部分"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request referer is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            },
+            "bypass_missing": {
+                "type": "boolean",
+                "default": True,
+                "description": "Referer 请求头不存在或格式有误时是否绕过检查",
+                "examples": [True, False],
+                "hints": "默认 true"
+            }
+        }
+    },
+    {
+        "name": "security_common_uri",
+        "description": "安全防护 - URI 检查（对请求 URI 进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配 URI 中的关键字，命中后拦截",
+                "examples": [["jndi\\:(?:ldap|rmi|iiop)", "\\.(?:svn|htaccess|bash_history)"]],
+                "hints": "由正则表达式组成的黑名单列表"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request uri is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            }
+        }
+    },
+    {
+        "name": "security_common_useragent",
+        "description": "安全防护 - User-Agent 检查（对请求 User-Agent 进行关键字匹配和拦截）",
+        "enable_metadata": False,
+        "schema": {
+            "denylist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "黑名单列表，匹配 User-Agent 中的关键字，命中后拦截",
+                "examples": [["jndi\\:(?:ldap|rmi|iiop)", "\\.(?:svn|htaccess|bash_history)"]],
+                "hints": "由正则表达式组成的黑名单列表"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request useragent is not allowed"],
+                "hints": "命中黑名单后返回的提示信息"
+            },
+            "bypass_missing": {
+                "type": "boolean",
+                "default": False,
+                "description": "User-Agent 请求头不存在或格式有误时是否绕过检查",
+                "examples": [True, False],
+                "hints": "默认 false"
+            }
+        }
+    },
+    {
+        "name": "security_restrict_ip",
+        "description": "安全防护 - IP 黑白名单（通过黑白名单限制 IP 访问）",
+        "enable_metadata": False,
+        "schema": {
+            "blacklist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IP 黑名单列表，匹配到的 IP 将被拦截",
+                "examples": [["192.168.1.1", "10.0.0.0/8"]],
+                "hints": "支持 IP 和 CIDR 格式"
+            },
+            "whitelist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "IP 白名单列表，不在其中的将被拦截",
+                "examples": [["192.168.1.0/24"]],
+                "hints": "黑白名单不应同时配置，优先按黑名单处理"
+            },
+            "key": {
+                "type": "string",
+                "default": "${remote_addr}",
+                "description": "指定 IP 的来源变量",
+                "examples": ["${remote_addr}", "${arg_client_ip}"],
+                "hints": "指定从何处获取客户端 IP"
+            },
+            "bypass_missing_key": {
+                "type": "boolean",
+                "default": True,
+                "description": "指定的 key 不存在时是否不进行卡控",
+                "examples": [True, False],
+                "hints": "默认 true"
+            },
+            "bypass_error_key": {
+                "type": "boolean",
+                "default": True,
+                "description": "指定的 key 异常时是否不进行卡控",
+                "examples": [True, False],
+                "hints": "默认 true"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request ip is not allowed"],
+                "hints": "命中后返回的提示信息"
+            }
+        }
+    },
+    {
+        "name": "security_restrict_uri",
+        "description": "安全防护 - URI 白名单（限制不在指定列表里的请求）",
+        "enable_metadata": False,
+        "schema": {
+            "whitelist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "URI 白名单列表，不在其中的将被拦截",
+                "examples": [["/hello1/h1", "/hello1/h2"]],
+                "hints": "只允许列表中的 URI 通过"
+            },
+            "key": {
+                "type": "string",
+                "default": "${uri}",
+                "description": "指定 URI 的来源变量",
+                "examples": ["${uri}", "${operationType}"],
+                "hints": "指定从何处获取 URI"
+            },
+            "bypass_missing_key": {
+                "type": "boolean",
+                "default": True,
+                "description": "指定的 key 不存在时是否不进行卡控",
+                "examples": [True, False],
+                "hints": "默认 true"
+            },
+            "bypass_error_key": {
+                "type": "boolean",
+                "default": True,
+                "description": "指定的 key 异常时是否不进行卡控",
+                "examples": [True, False],
+                "hints": "默认 true"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request uri is not allowed"],
+                "hints": "命中后返回的提示信息"
+            }
+        }
+    },
+    {
+        "name": "security_restrict_form",
+        "description": "安全防护 - 表单限制（限制 multipart/form-data 类型的请求）",
+        "enable_metadata": False,
+        "schema": {
+            "body_size": {
+                "type": "integer",
+                "default": -1,
+                "description": "允许发送的总请求体大小（字节），-1 表示不限制",
+                "examples": [-1, 1024, 4096],
+                "hints": "单位字节，-1 不限制"
+            },
+            "text_name": {
+                "type": "object",
+                "description": "允许发送的字段名，包含 blacklist/whitelist 规则",
+                "properties": {
+                    "blacklist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "字段名黑名单正则"
+                    },
+                    "whitelist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "字段名白名单正则"
+                    }
+                },
+                "examples": [{"blacklist": ["[+*?@#]+"]}],
+                "hints": "通过正则表达式限制字段名"
+            },
+            "text_body": {
+                "type": "object",
+                "description": "允许发送的字段内容，包含 blacklist/whitelist 规则",
+                "properties": {
+                    "blacklist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "字段内容黑名单正则"
+                    },
+                    "whitelist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "字段内容白名单正则"
+                    }
+                },
+                "examples": [{"blacklist": ["\\b(?:etc\\/\\W*passwd)"]}],
+                "hints": "通过正则表达式限制字段内容"
+            },
+            "text_size": {
+                "type": "integer",
+                "default": -1,
+                "description": "允许发送的每个字段的大小（字节），-1 表示不限制",
+                "examples": [-1, 1024],
+                "hints": "单位字节，-1 不限制"
+            },
+            "file_name": {
+                "type": "object",
+                "description": "允许发送的文件名，包含 blacklist/whitelist 规则",
+                "properties": {
+                    "blacklist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件名黑名单正则"
+                    },
+                    "whitelist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件名白名单正则"
+                    }
+                },
+                "examples": [{"blacklist": [".*\\.exe"]}],
+                "hints": "通过正则表达式限制文件名"
+            },
+            "file_type": {
+                "type": "object",
+                "description": "允许发送的文件类型（MIME），包含 blacklist/whitelist 规则",
+                "properties": {
+                    "blacklist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件类型黑名单正则"
+                    },
+                    "whitelist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件类型白名单正则"
+                    }
+                },
+                "examples": [{"blacklist": ["video/.*", "text/html"]}],
+                "hints": "通过正则表达式限制 MIME 类型"
+            },
+            "file_body": {
+                "type": "object",
+                "description": "允许发送的文件内容，包含 blacklist/whitelist 规则",
+                "properties": {
+                    "blacklist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件内容黑名单正则"
+                    },
+                    "whitelist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "文件内容白名单正则"
+                    }
+                },
+                "examples": [{"blacklist": ["\\bsleep\\((\\s*)(\\d*)(\\s*)\\)"]}],
+                "hints": "通过正则表达式限制文件内容"
+            },
+            "file_size": {
+                "type": "integer",
+                "default": -1,
+                "description": "允许发送的单个文件的大小（字节），-1 表示不限制",
+                "examples": [-1, 1000],
+                "hints": "单位字节，-1 不限制"
+            },
+            "bypass_wrong_method": {
+                "type": "boolean",
+                "default": True,
+                "description": "请求方法不是 POST 时是否允许访问",
+                "examples": [True, False],
+                "hints": "设为 false 时会限制非 POST 请求"
+            },
+            "bypass_mutil_content_type": {
+                "type": "boolean",
+                "default": True,
+                "description": "请求头中包含多个 Content-Type 时是否允许访问",
+                "examples": [True, False],
+                "hints": "设为 false 时会限制含多个 Content-Type 的请求"
+            },
+            "bypass_wrong_content_type": {
+                "type": "boolean",
+                "default": True,
+                "description": "Content-Type 不是 multipart/form-data 时是否允许访问",
+                "examples": [True, False],
+                "hints": "设为 false 时会限制非 multipart/form-data 请求"
+            },
+            "bypass_wrong_body": {
+                "type": "boolean",
+                "default": True,
+                "description": "请求体不满足 multipart/form-data 格式时是否允许访问",
+                "examples": [True, False],
+                "hints": "设为 false 时会限制格式错误的请求"
+            },
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "拦截后响应的状态码",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "拦截后响应的信息",
+                "examples": ["Your request is not allowed"],
+                "hints": "命中后返回的提示信息"
+            }
+        }
+    },
+    {
+        "name": "security_super_ip",
+        "description": "安全防护 - 高级 IP（指定 IP 不受其他插件限制）",
+        "enable_metadata": True,
+        "schema": {
+            "superlist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "高级 IP 列表，匹配到的 IP 不再检查指定的安全类插件",
+                "examples": [["192.168.1.1", "10.0.0.0/8"]],
+                "hints": "支持 IP 和 CIDR 格式"
+            },
+            "key": {
+                "type": "string",
+                "description": "指定 IP 的来源变量",
+                "examples": ["${remote_addr}"],
+                "hints": "指定从何处获取客户端 IP"
+            },
+            "ignore_plugins": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "匹配到的高级 IP 可以跳过哪些插件",
+                "examples": [["traffic_limit_count"]],
+                "hints": "只有优先级在此插件之后的才有效"
+            }
+        }
+    },
+    {
+        "name": "security_super_user",
+        "description": "安全防护 - 高级用户（指定用户不受其他插件限制）",
+        "enable_metadata": True,
+        "schema": {
+            "superlist": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "高级用户列表，匹配到的用户不再检查指定的安全类插件",
+                "examples": [["33bb", "44dd"]],
+                "hints": "通过 key 指定的来源匹配用户"
+            },
+            "key": {
+                "type": "string",
+                "description": "指定用户的来源变量",
+                "examples": ["${arg_username}"],
+                "hints": "指定从何处获取用户标识"
+            },
+            "ignore_plugins": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "匹配到的高级用户可以跳过哪些插件",
+                "examples": [["traffic_limit_count"]],
+                "hints": "只有优先级在此插件之后的才有效"
+            }
+        }
     }
 ]
 
