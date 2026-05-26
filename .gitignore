@@ -65,3 +65,5 @@ frontend/test-results/
 
 # Static resource uploads (dev)
 backend/data/static/
+
+pdf_extract.txt
