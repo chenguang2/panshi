@@ -325,7 +325,7 @@
                 <JsonEditorVue
                   v-if="expandedSplitExample"
                   :model-value="splitExampleData"
-                  mode="text"
+                  :mode="textMode"
                   read-only
                   :navigation-bar="false"
                   :status-bar="false"

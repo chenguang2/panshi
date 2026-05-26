@@ -64,7 +64,8 @@ echo ""
 echo "[3/4] 安装后端依赖..."
 # standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 强制指向拷贝后的 Python
 export PYTHONHOME="$TARGET_PYTHON_DIR"
-"$PROJECT_ROOT/backend/.venv/bin/pip" install -e "$PROJECT_ROOT/backend"
+echo "  使用清华 PyPI 镜像..."
+"$PROJECT_ROOT/backend/.venv/bin/pip" install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$PROJECT_ROOT/backend"
 unset PYTHONHOME
 echo "  后端依赖安装完成"
 
@@ -72,7 +73,8 @@ echo "  后端依赖安装完成"
 echo ""
 echo "[4/4] 构建前端..."
 cd "$PROJECT_ROOT/frontend"
-npm install
+echo "  使用清华 npm 镜像..."
+npm install --registry=https://registry.npmmirror.com
 npm run build
 echo "  前端构建完成 → frontend/dist/"
 
@@ -90,3 +92,5 @@ echo "     bash prepare/linux/start.sh"
 echo ""
 echo "目标机器不需要安装 uv、npm、Python、Node.js"
 echo "目标机器不需要公网访问"
+
+cd "$PROJECT_ROOT/prepare/linux"
