@@ -27,9 +27,7 @@ async def update_plugin_switches(
     db: AsyncSession = Depends(get_db),
 ):
     # 先清空所有记录
-    all_records = await db.execute(select(PluginEnabled))
-    for r in all_records.scalars().all():
-        await db.delete(r)
+    await db.execute(PluginEnabled.__table__.delete())
 
     # 再写入新的
     for sw in switches:
