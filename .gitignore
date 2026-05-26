@@ -54,7 +54,7 @@ uv.lock
 .sisyphus/
 session-*.md
 *.png
-prompt-*.txt
+#prompt-*.txt
 
 # =============================================
 # Test artifacts
