@@ -123,6 +123,7 @@ const allPermissions = ref([
   { key: 'plugin_groups', label: '插件组管理', desc: '允许创建和管理插件组，在路由中可关联插件组', checked: false },
   { key: 'global_rules', label: '全局规则管理', desc: '允许创建和管理全局规则', checked: false },
   { key: 'edge_nodes', label: '边缘节点管理', desc: '允许访问边缘节点调试页面', checked: false },
+  { key: 'plugin_management', label: '插件管理', desc: '允许管理系统插件启用/禁用', checked: false },
 ])
 
 const loadUserPermissions = async (userId: number) => {

@@ -47,7 +47,8 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'plugin-switches',
         name: 'PluginSwitches',
-        component: () => import('@/views/PluginSwitches.vue')
+        component: () => import('@/views/PluginSwitches.vue'),
+        meta: { permission: 'plugin_management' }
       }
     ]
   }

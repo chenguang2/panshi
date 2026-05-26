@@ -51,7 +51,7 @@
             <UserOutlined />
             <span>用户管理</span>
           </a-menu-item>
-          <a-menu-item v-if="isAdmin" key="plugin-switches" @click="router.push('/plugin-switches')">
+          <a-menu-item v-if="authStore.hasPermission('plugin_management')" key="plugin-switches" @click="router.push('/plugin-switches')">
             <SettingOutlined />
             <span>插件管理</span>
           </a-menu-item>
