@@ -13,7 +13,8 @@
       <div class="category-panel">
         <div class="category-panel-header">
           <span class="category-panel-title">可用插件</span>
-          <a-button size="small" type="link" @click="toggleAll">
+          <a-button size="small" class="toggle-all-btn" @click="toggleAll">
+            <template #icon><CaretDownOutlined v-if="allExpanded" /><CaretRightOutlined v-else /></template>
             {{ allExpanded ? '全部折叠' : '全部展开' }}
           </a-button>
         </div>
@@ -249,6 +250,8 @@ watch(selectedPlugins, expandCategoryWithSelected, { deep: true, immediate: true
 // 监听 props.modelValue 变化
 watch(() => props.modelValue, (newVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
+    // 重置展开状态：全部折叠，再自动展开有已选插件的分类
+    CATEGORIES.forEach(cat => { expanded[cat.key] = false })
     selectedPlugins.value = newVal.map(p => {
       const pluginInfo = props.plugins.find(pl => pl.name === p.plugin_name)
       let config: Record<string, any> = {}
@@ -452,6 +455,19 @@ const emitUpdate = () => {
   font-weight: 500;
   font-size: 13px;
   color: var(--p-text-primary);
+}
+
+.toggle-all-btn {
+  font-size: 12px;
+  border-radius: 10px;
+  padding: 0 10px;
+  opacity: 0.85;
+  transition: opacity 0.2s, background 0.2s;
+}
+.toggle-all-btn:hover {
+  opacity: 1;
+  background: var(--p-color-primary-bg);
+  border-color: var(--p-color-primary);
 }
 
 .selected-panel {
