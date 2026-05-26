@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, users, clusters, routes, plugins, dashboard, plugin_metadata, edge_client, edge_import, static_resources
+from app.api.v1 import auth, users, clusters, routes, plugins, dashboard, plugin_metadata, edge_client, edge_import, static_resources, plugin_switches
 
 api_router = APIRouter()
 
@@ -13,3 +13,4 @@ api_router.include_router(plugin_metadata.router)
 api_router.include_router(edge_client.router)
 api_router.include_router(edge_import.router)
 api_router.include_router(static_resources.router)
+api_router.include_router(plugin_switches.router)

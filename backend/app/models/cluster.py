@@ -19,6 +19,17 @@ class Cluster(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class PluginEnabled(Base):
+    """插件启用开关"""
+    __tablename__ = "ps_plugin_enabled"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plugin_name = Column(String(100), nullable=False, unique=True, index=True)
+    enabled = Column(Integer, nullable=False, default=1)  # 1=启用 0=禁用
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Upstream(Base):
     __tablename__ = "ps_upstream"
     __table_args__ = (

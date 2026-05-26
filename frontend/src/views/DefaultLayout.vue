@@ -51,6 +51,10 @@
             <UserOutlined />
             <span>用户管理</span>
           </a-menu-item>
+          <a-menu-item v-if="isAdmin" key="plugin-switches" @click="router.push('/plugin-switches')">
+            <span class="menu-icon">⚙</span>
+            <span>插件管理</span>
+          </a-menu-item>
           <a-menu-divider v-if="isAdmin" />
           <a-sub-menu key="layout-group" title="界面布局">
             <a-menu-item key="layout-sidebar" :class="{ active: themeStore.layoutMode === 'sidebar' }" @click="themeStore.setLayoutMode('sidebar')">
