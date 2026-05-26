@@ -18,9 +18,11 @@
               <div v-for="plugin in group.plugins" :key="plugin.name" class="tree-item">
                 <div class="tree-connector"></div>
                 <div class="plugin-card" :class="'border-' + group.key" @click="addPlugin(plugin)">
-                  <div class="plugin-card-name">{{ plugin.name }}</div>
-                  <div class="plugin-card-desc">{{ plugin.description }}</div>
-                  <a-button size="small" class="add-btn" @click.stop="addPlugin(plugin)">+ 添加</a-button>
+                  <div class="plugin-card-body">
+                    <div class="plugin-card-name">{{ plugin.name }}</div>
+                    <div class="plugin-card-desc">{{ plugin.description }}</div>
+                  </div>
+                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)">+ 添加</a-button>
                 </div>
               </div>
             </div>
@@ -509,11 +511,11 @@ watch(() => props.clusterId, () => {
 }
 
 .available-panel {
-  flex: 0 0 320px;
+  flex: 4;
 }
 
 .configured-panel {
-  flex: 1;
+  flex: 6;
 }
 
 .panel-header {
@@ -548,6 +550,22 @@ watch(() => props.clusterId, () => {
   width: calc(50% - 4px);
   margin-bottom: 0;
   box-sizing: border-box;
+}
+
+.plugin-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-bg-page);
+  transition: all 0.2s;
+}
+.plugin-item:hover {
+  border-color: var(--p-color-primary);
+  background: var(--p-bg-hover);
 }
 
 /* ── 分类树形结构 ── */
@@ -611,19 +629,31 @@ watch(() => props.clusterId, () => {
   box-shadow: 0 1px 4px var(--p-shadow-sm);
 }
 
+.plugin-card-body {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
 .plugin-card-name {
-  font-weight: 600; font-size: 13px;
+  font-weight: 600;
+  font-size: 15px;
   color: var(--p-color-primary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  flex-shrink: 0;
+  overflow-wrap: break-word;
 }
 .plugin-card-desc {
-  font-size: 11px; color: var(--p-text-tertiary);
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px;
+  color: var(--p-text-tertiary);
+  line-height: 1.4;
+  overflow-wrap: break-word;
 }
 .plugin-card .add-btn {
   flex-shrink: 0;
+  opacity: 0.85;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.plugin-card:hover .add-btn {
+  opacity: 1;
+  transform: scale(1.05);
 }
 
 .border-flow { border-left: 3px solid var(--p-color-primary); }
