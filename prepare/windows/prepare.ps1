@@ -102,7 +102,8 @@ Write-Host "[3/4] 安装后端依赖..."
 # standalone Python 内置了固定路径，设 PYTHONHOME 强制指向拷贝后的 Python
 $env:PYTHONHOME = $targetPythonDir
 $pip = Join-Path $venvDir "Scripts\pip.exe"
-& $pip install -e "$ProjectRoot\backend"
+Write-Host "  使用清华 PyPI 镜像..."
+& $pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$ProjectRoot\backend"
 Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
 Write-Host "  后端依赖安装完成"
 
@@ -110,7 +111,8 @@ Write-Host "  后端依赖安装完成"
 Write-Host ""
 Write-Host "[4/4] 构建前端..."
 Set-Location "$ProjectRoot\frontend"
-npm install
+Write-Host "  使用清华 npm 镜像..."
+npm install --registry=https://registry.npmmirror.com
 npm run build
 Write-Host "  前端构建完成 → frontend\dist\"
 
@@ -128,3 +130,5 @@ Write-Host "     .\prepare\windows\start.ps1"
 Write-Host ""
 Write-Host "目标机器不需要安装 uv、npm、Python、Node.js"
 Write-Host "目标机器不需要公网访问"
+
+Set-Location "$ProjectRoot\prepare\windows"

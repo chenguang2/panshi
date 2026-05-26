@@ -314,7 +314,7 @@ const {
 
 // ── Upstream options for traffic_split plugin dropdown ────────────
 const upstreamOptions = computed(() => {
-  const upstreams = getClusterUpstreams(props.clusters)
+  const upstreams = getClusterUpstreams()
   return upstreams.map(u => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
 })
 
