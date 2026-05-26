@@ -135,7 +135,12 @@ const CATEGORIES = [
   {
     key: 'rewrite',
     label: '请求/响应重写',
-    plugins: ['proxy_rewrite', 'response_rewrite']
+    plugins: ['proxy_rewrite', 'response_rewrite', 'cors']
+  },
+  {
+    key: 'auth',
+    label: '认证',
+    plugins: ['auth_basic', 'auth_key']
   },
   {
     key: 'process',
@@ -150,7 +155,19 @@ const CATEGORIES = [
   {
     key: 'security',
     label: '安全防护',
-    plugins: ['security_common_body']
+    plugins: [
+      'security_common_body',
+      'security_common_args',
+      'security_common_cookie',
+      'security_common_referer',
+      'security_common_uri',
+      'security_common_useragent',
+      'security_restrict_ip',
+      'security_restrict_uri',
+      'security_restrict_form',
+      'security_super_ip',
+      'security_super_user',
+    ]
   },
   {
     key: 'monitor',
@@ -441,6 +458,7 @@ const emitUpdate = () => {
 .cat-rewrite { border-left-color: var(--p-color-warning); }
 .cat-process { border-left-color: var(--p-color-success); }
 .cat-static { border-left-color: var(--p-color-info); }
+.cat-auth { border-left-color: var(--p-color-primary); }
 .cat-security { border-left-color: var(--p-color-danger); }
 .cat-monitor { border-left-color: var(--p-color-primary); }
 
@@ -571,6 +589,7 @@ const emitUpdate = () => {
 .border-rewrite { border-left: 3px solid var(--p-color-warning); }
 .border-process { border-left: 3px solid var(--p-color-success); }
 .border-static { border-left: 3px solid var(--p-color-info); }
+.border-auth { border-left: 3px solid var(--p-color-primary); }
 .border-security { border-left: 3px solid var(--p-color-danger); }
 .border-monitor { border-left: 3px solid var(--p-color-primary); }
 
