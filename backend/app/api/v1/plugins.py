@@ -1,4 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.core.database import get_db
+from app.models.cluster import PluginEnabled
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
 
@@ -477,7 +482,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_body",
         "description": "安全防护 - Body 检查（对请求体内容进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -616,7 +621,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_args",
         "description": "安全防护 - 请求参数检查（对请求参数进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -643,7 +648,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_cookie",
         "description": "安全防护 - Cookie 检查（对请求 Cookie 进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -677,7 +682,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_referer",
         "description": "安全防护 - Referer 检查（对请求 Referer 进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -718,7 +723,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_uri",
         "description": "安全防护 - URI 检查（对请求 URI 进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -745,7 +750,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_common_useragent",
         "description": "安全防护 - User-Agent 检查（对请求 User-Agent 进行关键字匹配和拦截）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -779,7 +784,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_restrict_ip",
         "description": "安全防护 - IP 黑白名单（通过黑白名单限制 IP 访问）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "blacklist": {
                 "type": "array",
@@ -834,7 +839,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_restrict_uri",
         "description": "安全防护 - URI 白名单（限制不在指定列表里的请求）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "whitelist": {
                 "type": "array",
@@ -882,7 +887,7 @@ BUILTIN_PLUGINS = [
     {
         "name": "security_restrict_form",
         "description": "安全防护 - 表单限制（限制 multipart/form-data 类型的请求）",
-        "enable_metadata": False,
+        "enable_metadata": True,
         "schema": {
             "body_size": {
                 "type": "integer",
@@ -1095,5 +1100,13 @@ BUILTIN_PLUGINS = [
 ]
 
 @router.get("/builtin")
-async def get_builtin_plugins():
-    return {"plugins": BUILTIN_PLUGINS}
+async def get_builtin_plugins(db: AsyncSession = Depends(get_db)):
+    # 检查是否有插件开关记录，无记录则返回全部
+    result = await db.execute(select(PluginEnabled))
+    switches = result.scalars().all()
+    if not switches:
+        return {"plugins": BUILTIN_PLUGINS}
+
+    enabled_names = {s.plugin_name for s in switches if s.enabled == 1}
+    filtered = [p for p in BUILTIN_PLUGINS if p["name"] in enabled_names]
+    return {"plugins": filtered}
