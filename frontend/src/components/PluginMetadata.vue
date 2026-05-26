@@ -7,18 +7,25 @@
           <span class="plugin-count">({{ availablePlugins.length }})</span>
         </div>
         <div class="plugin-list">
-          <div
-            v-for="plugin in availablePlugins"
-            :key="plugin.name"
-            class="plugin-item"
-          >
-            <div class="plugin-info">
-              <div class="plugin-name">{{ plugin.name }}</div>
-              <div class="plugin-desc">{{ plugin.description }}</div>
+          <template v-for="group in pluginGroups" :key="group.key">
+            <div class="category-header" :class="'cat-' + group.key" @click="toggleCategory(group.key)">
+              <CaretDownOutlined v-if="expandedCategories[group.key]" class="tree-toggle" />
+              <CaretRightOutlined v-else class="tree-toggle" />
+              <span class="category-label">{{ group.label }}</span>
+              <span class="category-count">({{ group.plugins.length }})</span>
             </div>
-            <a-button size="small" @click="addPlugin(plugin)">+ 添加</a-button>
-          </div>
-          <div v-if="availablePlugins.length === 0" class="empty-hint">
+            <div v-if="expandedCategories[group.key]" class="plugin-tree">
+              <div v-for="plugin in group.plugins" :key="plugin.name" class="tree-item">
+                <div class="tree-connector"></div>
+                <div class="plugin-card" :class="'border-' + group.key" @click="addPlugin(plugin)">
+                  <div class="plugin-card-name">{{ plugin.name }}</div>
+                  <div class="plugin-card-desc">{{ plugin.description }}</div>
+                  <a-button size="small" class="add-btn" @click.stop="addPlugin(plugin)">+ 添加</a-button>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-if="pluginGroups.length === 0" class="empty-hint">
             未找到可配置的插件
           </div>
         </div>
@@ -115,9 +122,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { EyeOutlined, EditOutlined, DeleteOutlined, CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -181,6 +188,36 @@ function handlePublishCancel() {
 
 const editingPluginName = ref<string>('')
 
+// 插件分类
+const CATEGORIES = [
+  { key: 'flow', label: '流量控制', plugins: ['traffic_split', 'traffic_limit_count'] },
+  { key: 'rewrite', label: '请求/响应重写', plugins: ['proxy_rewrite', 'response_rewrite', 'cors'] },
+  { key: 'auth', label: '认证', plugins: ['auth_basic', 'auth_key'] },
+  { key: 'process', label: '数据处理', plugins: ['log_process', 'data_center', 'pre_functions'] },
+  { key: 'static', label: '静态资源', plugins: ['static_resource'] },
+  { key: 'security', label: '安全防护', plugins: ['security_common_body', 'security_common_args', 'security_common_cookie', 'security_common_referer', 'security_common_uri', 'security_common_useragent', 'security_restrict_ip', 'security_restrict_uri', 'security_restrict_form', 'security_super_ip', 'security_super_user'] },
+  { key: 'monitor', label: '监控', plugins: ['monitor', 'traceid'] },
+]
+
+const expandedCategories = reactive<Record<string, boolean>>({
+  flow: true, rewrite: true, process: true, static: true, security: true, monitor: true, auth: true,
+})
+
+function toggleCategory(key: string) { expandedCategories[key] = !expandedCategories[key] }
+
+const pluginGroups = computed(() => {
+  const result: { key: string; label: string; plugins: Plugin[] }[] = []
+  for (const cat of CATEGORIES) {
+    const matched = availablePlugins.value.filter(p => cat.plugins.includes(p.name))
+    if (matched.length > 0) result.push({ key: cat.key, label: cat.label, plugins: matched })
+  }
+  // 未分类的归入"其他"
+  const allKnown = CATEGORIES.flatMap(c => c.plugins)
+  const others = availablePlugins.value.filter(p => !allKnown.includes(p.name))
+  if (others.length > 0) result.push({ key: 'other', label: '其他', plugins: others })
+  return result
+})
+
 const viewDrawerVisible = ref(false)
 const viewingPlugin = ref<ConfiguredPlugin | null>(null)
 
@@ -192,15 +229,8 @@ const versionModalVisible = ref(false)
 const versionModalPluginName = ref('')
 
 const availablePlugins = computed(() => {
-  const search = searchText.value.toLowerCase().trim()
   const configuredNames = new Set(configuredPlugins.value.map(p => p.plugin_name))
-
-  return allPlugins.value
-    .filter(p => p.enable_metadata === true && !configuredNames.has(p.name))
-    .filter(p => {
-      if (!search) return true
-      return p.name.toLowerCase().includes(search) || p.description.toLowerCase().includes(search)
-    })
+  return allPlugins.value.filter(p => p.enable_metadata === true && !configuredNames.has(p.name))
 })
 
 const loadPlugins = async () => {
@@ -520,34 +550,102 @@ watch(() => props.clusterId, () => {
   box-sizing: border-box;
 }
 
-.plugin-item {
+/* ── 分类树形结构 ── */
+.category-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  margin-bottom: 8px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
-  transition: all 0.2s;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: var(--p-bg-hover);
+  border-left: 3px solid transparent;
+  margin-top: 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.category-header:hover { background: var(--p-color-primary-bg); }
+.category-header .tree-toggle { font-size: 11px; color: var(--p-color-primary); opacity: 0.6; }
+.category-label { font-size: 13px; font-weight: 500; color: var(--p-text-primary); }
+.category-count { font-size: 11px; color: var(--p-text-tertiary); margin-left: auto; }
+
+.cat-flow { border-left-color: var(--p-color-primary); }
+.cat-rewrite { border-left-color: var(--p-color-warning); }
+.cat-process { border-left-color: var(--p-color-success); }
+.cat-auth { border-left-color: var(--p-color-primary); }
+.cat-static { border-left-color: var(--p-color-info); }
+.cat-security { border-left-color: var(--p-color-danger); }
+.cat-monitor { border-left-color: var(--p-color-primary); }
+.cat-other { border-left-color: var(--p-text-tertiary); }
+
+.plugin-tree { padding: 4px 0 4px 28px; position: relative; }
+.plugin-tree::before {
+  content: ''; position: absolute; left: 13px; top: 0; bottom: 0;
+  width: 2px; background: var(--p-color-primary); opacity: 0.3;
 }
 
-.plugin-item:hover {
-  border-color: var(--p-color-primary);
-  background: var(--p-bg-hover);
+.tree-item { position: relative; display: flex; margin-bottom: 6px; }
+.tree-item:last-child { margin-bottom: 0; }
+
+.tree-connector { position: absolute; left: -15px; top: 0; width: 13px; height: 100%; pointer-events: none; }
+.tree-connector::before {
+  content: ''; position: absolute; left: 0; top: 0;
+  width: 2px; height: 100%; background: var(--p-color-primary); opacity: 0.3;
 }
+.tree-connector::after {
+  content: ''; position: absolute; left: 0; top: 18px;
+  width: 11px; height: 2px; background: var(--p-color-primary); opacity: 0.3;
+}
+
+.plugin-card {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--p-border-default);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--p-bg-page);
+  transition: all 0.2s;
+  min-width: 0;
+}
+.plugin-card:hover {
+  border-color: var(--p-color-primary);
+  box-shadow: 0 1px 4px var(--p-shadow-sm);
+}
+
+.plugin-card-name {
+  font-weight: 600; font-size: 13px;
+  color: var(--p-color-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.plugin-card-desc {
+  font-size: 11px; color: var(--p-text-tertiary);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plugin-card .add-btn {
+  flex-shrink: 0;
+}
+
+.border-flow { border-left: 3px solid var(--p-color-primary); }
+.border-rewrite { border-left: 3px solid var(--p-color-warning); }
+.border-process { border-left: 3px solid var(--p-color-success); }
+.border-auth { border-left: 3px solid var(--p-color-primary); }
+.border-static { border-left: 3px solid var(--p-color-info); }
+.border-security { border-left: 3px solid var(--p-color-danger); }
+.border-monitor { border-left: 3px solid var(--p-color-primary); }
+.border-other { border-left: 3px solid var(--p-text-tertiary); }
 
 .plugin-item.configured {
   flex-direction: column;
   align-items: stretch;
 }
 
-.plugin-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
+/* 右侧面板样式 */
+.plugin-info { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: flex-start; }
+.plugin-right { text-align: right; flex-shrink: 0; }
+.plugin-name { font-weight: 500; color: var(--p-text-primary); }
+.plugin-desc { font-size: 12px; color: var(--p-text-tertiary); margin-top: 4px; }
+.plugin-meta { font-size: 12px; color: var(--p-text-tertiary); margin-top: 4px; }
 
 .plugin-right {
   text-align: right;
