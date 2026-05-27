@@ -82,6 +82,11 @@ async def init_db():
     async with _async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Run schema migrations to fix constraint mismatches
+    from app.core.migrate import run_migrations
+
+    run_migrations(_sync_engine)
+
 
 async def close_db():
     await _async_engine.dispose()
