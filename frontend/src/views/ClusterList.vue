@@ -21,7 +21,21 @@
       <a-button type="primary" @click="showAddModal">添加集群</a-button>
     </div>
 
-    <TransitionGroup v-if="gridClusters.length > 0" name="grid" tag="div" class="cluster-grid">
+    <!-- Mini-bar: compact cluster bar when in maximized mode -->
+    <div v-if="maximizedClusterId" class="cluster-mini-bar">
+      <div class="mini-scroll">
+        <div v-for="c in filteredClusters" :key="c.id"
+             class="mini-item" :class="{ active: maximizedClusterId === c.id }"
+             @click="switchMaximizedCluster(c.id)">
+          <span class="status-dot" :class="c.status === 1 ? 'green' : 'red'"></span>
+          <span class="mini-name">{{ c.display_name || c.name }}</span>
+          <span v-if="c.display_name" class="mini-hint">{{ c.name }}</span>
+        </div>
+      </div>
+      <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
+    </div>
+
+    <TransitionGroup v-if="!maximizedClusterId && gridClusters.length > 0" name="grid" tag="div" class="cluster-grid">
       <div v-for="cluster in gridClusters" :key="cluster.id"
            class="cluster-card">
 
@@ -71,7 +85,7 @@
     <!-- EXPANDED AREA: clusters removed from grid -->
     <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
       <div v-for="cluster in expandedClusters" :key="cluster.id"
-           class="card-expanded" :data-cluster-id="cluster.id">
+           class="card-expanded" :class="{ 'card-maximized': maximizedClusterId === cluster.id }" :data-cluster-id="cluster.id">
         <!-- Clickable row: name + drag handle + click-zone -->
         <div class="expand-row" draggable="true"
              @click="toggleExpand(cluster.id)"
@@ -88,6 +102,14 @@
           <div class="click-zone on">
             <span class="arrow">⬆</span>
             <span class="label">收回</span>
+          </div>
+          <div v-if="maximizedClusterId !== cluster.id" class="maximize-btn" title="最大化" @click.stop="maximizeCluster(cluster)">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+            <span>最大化</span>
+          </div>
+          <div v-else class="maximize-btn restore" title="退出最大化" @click.stop="restoreMaximize">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><line x1="3" y1="1.5" x2="3" y2="12.5" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="1.5" x2="7" y2="12.5" stroke="currentColor" stroke-width="1.2"/><line x1="11" y1="1.5" x2="11" y2="12.5" stroke="currentColor" stroke-width="1.2"/><line x1="1.5" y1="3" x2="12.5" y2="3" stroke="currentColor" stroke-width="1.2"/><line x1="1.5" y1="7" x2="12.5" y2="7" stroke="currentColor" stroke-width="1.2"/><line x1="1.5" y1="11" x2="12.5" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>
+            <span>还原</span>
           </div>
         </div>
         <!-- Stats + actions row -->
@@ -254,6 +276,27 @@ function handlePublishCancel() {
 
 const expandedIds = ref<Set<number>>(new Set())
 const expandedOrder = ref<number[]>([])
+const maximizedClusterId = ref<number | null>(null)
+
+function maximizeCluster(cluster: Cluster) {
+  // Collapse all other expanded clusters
+  const s = new Set<number>()
+  s.add(cluster.id)
+  expandedIds.value = s
+  expandedOrder.value = [cluster.id]
+  cluster.activeTab = cluster.activeTab || 'nodes'
+  maximizedClusterId.value = cluster.id
+}
+
+function restoreMaximize() {
+  maximizedClusterId.value = null
+}
+
+function switchMaximizedCluster(clusterId: number) {
+  const cluster = clusters.value.find(c => c.id === clusterId)
+  if (!cluster) return
+  maximizeCluster(cluster)
+}
 
 function toggleExpand(clusterId: number) {
   const s = new Set(expandedIds.value)
@@ -262,6 +305,10 @@ function toggleExpand(clusterId: number) {
     s.delete(clusterId)
     const idx = order.indexOf(clusterId)
     if (idx > -1) order.splice(idx, 1)
+    // If collapsing the maximized cluster, exit maximized mode
+    if (maximizedClusterId.value === clusterId) {
+      maximizedClusterId.value = null
+    }
   } else {
     s.add(clusterId)
     order.push(clusterId)
@@ -1166,6 +1213,139 @@ onMounted(() => {
 :deep(.ant-popover-title) { color: var(--p-text-primary) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
 :deep(.ant-popover-inner-content) { color: var(--p-text-secondary) !important; }
 :deep(.ant-checkbox-wrapper) { color: var(--p-text-secondary) !important; }
+
+/* ── Maximized mode: mini-bar ── */
+.cluster-mini-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  background: var(--p-bg-glass);
+  border: 1px solid var(--p-glass-border);
+  border-radius: var(--p-radius-lg);
+  position: relative;
+  z-index: 1;
+}
+
+.mini-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 2px 0;
+}
+
+.mini-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--p-radius-md);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  background: var(--p-bg-hover);
+  color: var(--p-text-secondary);
+  user-select: none;
+}
+.mini-item:hover {
+  border-color: var(--p-border-hover);
+  background: var(--p-color-primary-bg);
+  color: var(--p-color-primary);
+}
+.mini-item.active {
+  background: var(--p-color-primary);
+  color: #fff;
+  border-color: var(--p-color-primary);
+  font-weight: 500;
+}
+.mini-item .status-dot {
+  width: 7px; height: 7px;
+}
+.mini-name {
+  font-weight: 500;
+}
+.mini-hint {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.restore-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-sm);
+  background: var(--p-bg-hover);
+  color: var(--p-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.restore-btn:hover {
+  border-color: var(--p-color-primary);
+  color: var(--p-color-primary);
+  background: var(--p-color-primary-bg);
+}
+
+/* ── Maximize / Restore button ── */
+.maximize-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 6px;
+  border-radius: var(--p-radius-sm);
+  color: var(--p-text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: var(--p-bg-hover);
+  border: 1px solid var(--p-border-default);
+  transition: all 0.2s;
+  user-select: none;
+  margin-left: 4px;
+}
+.maximize-btn:hover {
+  background: var(--p-bg-hover);
+  border-color: var(--p-color-primary);
+  color: var(--p-color-primary);
+}
+.maximize-btn.restore {
+  background: var(--p-color-primary-bg);
+  border-color: var(--p-color-primary);
+  color: var(--p-color-primary);
+}
+
+/* ── Card maximized ── */
+.card-maximized {
+  border-color: var(--p-color-primary) !important;
+  box-shadow: 0 4px 24px color-mix(in srgb, var(--p-color-primary) 20%, transparent) !important;
+}
+.card-maximized .dbody {
+  min-height: 300px;
+}
+.card-maximized .dtabs {
+  overflow-x: visible;
+}
+.card-maximized .expand-row {
+  cursor: default;
+}
+.card-maximized .expand-row:active {
+  cursor: default;
+}
+
+/* ── Expanded area in maximized mode ── */
+.cluster-list:has(.cluster-mini-bar) .expanded-area {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
 </style>
 
 <style>
