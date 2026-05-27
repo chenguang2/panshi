@@ -10,6 +10,8 @@ wheels/
 .venv
 *.db
 *.db-old
+*.db-shm
+*.db-wal
 
 # Runtime state (port, PID)
 .port
