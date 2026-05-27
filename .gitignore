@@ -67,3 +67,6 @@ frontend/test-results/
 backend/data/static/
 
 pdf_extract.txt
+
+# AI tool internal tracking
+.omo/
