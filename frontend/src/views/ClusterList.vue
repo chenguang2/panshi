@@ -917,7 +917,8 @@ const deleteCluster = async (cluster: Cluster) => {
       }
 
       progressModal.update({ okButtonProps: { disabled: false } })
-    },
+      },
+    })
   })
 }
 
