@@ -302,6 +302,10 @@ const expandedOrder = ref<number[]>([])
 const maximizedClusterId = ref<number | null>(null)
 
 function maximizeCluster(cluster: Cluster) {
+  // Collapse all groups to save space
+  for (const key of Object.keys(expandedGroups)) {
+    expandedGroups[key] = false
+  }
   // Collapse all other expanded clusters
   const s = new Set<number>()
   s.add(cluster.id)
