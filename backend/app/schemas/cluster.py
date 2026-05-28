@@ -11,6 +11,7 @@ class ClusterBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="集群标识名")
     display_name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = None
+    group_name: Optional[str] = Field(None, max_length=100)
     status: int = Field(default=1)
 
     @field_validator('name')
@@ -30,6 +31,7 @@ class ClusterUpdate(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = None
     status: Optional[int] = None
+    group_name: Optional[str] = Field(None, max_length=100)
     admin_key: Optional[str] = Field(None, max_length=255)
 
     @field_validator('name')
@@ -47,6 +49,7 @@ class ClusterResponse(BaseModel):
     description: Optional[str] = None
     admin_key: Optional[str] = None
     status: int = 1
+    group_name: Optional[str] = None
     created_at: Optional[str] = None
     node_count: int = 0
     healthy_node_count: int = 0
