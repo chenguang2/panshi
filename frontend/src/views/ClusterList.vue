@@ -37,7 +37,8 @@
 
     <!-- 分组集群列表 -->
     <div v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
-      <template v-if="group.name">
+      <!-- 有分组名 -->
+      <div v-if="group.name">
         <div class="group-header" @click="toggleGroup(group.name)">
           <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
           <CaretRightOutlined v-else class="group-toggle" />
@@ -97,8 +98,8 @@
             </div>
           </div>
         </TransitionGroup>
+        </div>
       </div>
-    </template>
 
     <!-- EXPANDED AREA: clusters removed from grid -->
     <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
@@ -170,23 +171,22 @@
         </div>
       </div>
     </TransitionGroup>
-      </div>
-    </template>
 
-    <template v-else>
-      <div class="group-header ungrouped-hdr">
-        <span class="group-name ungrouped-label">未分组</span>
-        <span class="group-count">({{ group.clusters.length }})</span>
-        <div class="cluster-names">
-          <span v-for="c in group.clusters" :key="c.id"
-                class="cluster-name-item" :title="c.display_name || c.name"
-                @click.stop="maximizeCluster(c)">
-            <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
-            {{ c.display_name || c.name }}
-          </span>
+      <!-- 未分组 -->
+      <div v-else>
+        <div class="group-header ungrouped-hdr">
+          <span class="group-name ungrouped-label">未分组</span>
+          <span class="group-count">({{ group.clusters.length }})</span>
+          <div class="cluster-names">
+            <span v-for="c in group.clusters" :key="c.id"
+                  class="cluster-name-item" :title="c.display_name || c.name"
+                  @click.stop="maximizeCluster(c)">
+              <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
+              {{ c.display_name || c.name }}
+            </span>
+          </div>
         </div>
-      </div>
-      <div class="group-body">
+        <div class="group-body">
         <TransitionGroup name="grid" tag="div" class="cluster-grid">
           <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
             <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
@@ -228,9 +228,8 @@
             </div>
           </div>
         </TransitionGroup>
+        </div>
       </div>
-    </template>
-    </div>
 
     <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
       <a-empty description="暂无集群" />
