@@ -19,17 +19,26 @@ export function showDeleteConfirm(opts: {
   showResourceStats?: boolean
   stats?: Record<string, number>
   nodes?: { id: number; ip: string; management_port: number }[]
+  clusterName?: string
 }) {
   let deleteDb = false
   let deleteEdge = false
   const selectedNodeIds: Set<number> = new Set((opts.nodes || []).map(n => n.id))
   let confirmModal: any
+  let nameInput = ''
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
 
+  const nameConfirmed = () => !opts.clusterName || nameInput === opts.clusterName
+
   const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
+    const atLeastOne = (deleteDb || (deleteEdge && selectedNodeIds.size > 0)) && nameConfirmed()
     confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
+  }
+
+  const onNameInput = (e: any) => {
+    nameInput = e.target.value
+    updateOkDisabled()
   }
 
   const nodeCheckboxContent = (opts.nodes && opts.nodes.length > 0) ? h('div', {
@@ -54,6 +63,19 @@ export function showDeleteConfirm(opts: {
 
   const content = h('div', { style: 'font-size: 13px;' }, [
     h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
+
+    // Cluster name confirmation input
+    ...(opts.clusterName ? [
+      h('div', { style: 'margin-bottom: 12px;' }, [
+        h('div', { style: 'margin-bottom: 4px; color: #666;' }, `请输入集群名称 " ${opts.clusterName} " 以确认删除：`),
+        h('input', {
+          type: 'text',
+          placeholder: '请输入集群名称',
+          onInput: onNameInput,
+          style: 'width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; outline: none; box-sizing: border-box; font-size: 14px;',
+        }),
+      ])
+    ] : []),
 
     // Resource stats section (only for cluster)
     ...(opts.showResourceStats && opts.stats ? [
