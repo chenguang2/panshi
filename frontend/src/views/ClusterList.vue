@@ -35,71 +35,130 @@
       <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
     </div>
 
-    <!-- 分组集群列表 -->
+    <!-- 分组集群列表 + 展开区 -->
     <div v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
-      <!-- 有分组名 -->
-      <div v-if="group.name">
-        <div class="group-header" @click="toggleGroup(group.name)">
-          <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
-          <CaretRightOutlined v-else class="group-toggle" />
-          <span class="group-name">{{ group.name }}</span>
-          <span class="group-count">({{ group.clusters.length }})</span>
-          <div class="cluster-names">
-            <span v-for="c in group.clusters" :key="c.id"
-                  class="cluster-name-item" :title="c.display_name || c.name"
-                  @click.stop="maximizeCluster(c)">
-              <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
-              {{ c.display_name || c.name }}
-            </span>
+      <div class="group-inner">
+        <div v-if="group.name" class="group-head">
+          <div class="group-header" @click="toggleGroup(group.name)">
+            <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
+            <CaretRightOutlined v-else class="group-toggle" />
+            <span class="group-name">{{ group.name }}</span>
+            <span class="group-count">({{ group.clusters.length }})</span>
+            <div class="cluster-names">
+              <span v-for="c in group.clusters" :key="c.id"
+                    class="cluster-name-item" :title="c.display_name || c.name"
+                    @click.stop="maximizeCluster(c)">
+                <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
+                {{ c.display_name || c.name }}
+              </span>
+            </div>
+            <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup(group.name)">
+              {{ expandedGroups[group.name] !== false ? '收起' : '展开' }}
+            </a-button>
           </div>
-          <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup(group.name)">
-            {{ expandedGroups[group.name] !== false ? '收起' : '展开' }}
-          </a-button>
+          <div v-if="expandedGroups[group.name] !== false" class="group-body">
+            <TransitionGroup name="grid" tag="div" class="cluster-grid">
+              <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
+                <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+                  <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
+                  <div class="cname-wrap">
+                    <span class="cname">{{ cluster.display_name || cluster.name }}</span>
+                    <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+                  </div>
+                  <div class="click-zone">
+                    <span class="arrow">⬇</span>
+                    <span class="label">展开</span>
+                  </div>
+                  <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+                  </div>
+                </div>
+                <div class="card-header">
+                  <div class="stats-bar">
+                    <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
+                  </div>
+                  <div class="cactions">
+                    <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
+                    <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+                  </div>
+                </div>
+                <div class="chips-row">
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'nodes')">集群节点 <span class="cb">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
+                  <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组 <span class="cb">{{ cluster.plugin_config_count }}</span></span>
+                  <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则 <span class="cb">{{ cluster.global_rule_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
+                </div>
+              </div>
+            </TransitionGroup>
+          </div>
         </div>
-        <div v-if="expandedGroups[group.name] !== false" class="group-body">
-          <TransitionGroup name="grid" tag="div" class="cluster-grid">
-            <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-            <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
-              <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
-              <div class="cname-wrap">
-                <span class="cname">{{ cluster.display_name || cluster.name }}</span>
-                <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
-              </div>
-              <div class="click-zone">
-                <span class="arrow">⬇</span>
-                <span class="label">展开</span>
-              </div>
-              <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
-              </div>
-            </div>
-            <div class="card-header">
-              <div class="stats-bar">
-                <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
-                <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
-                <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
-                <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
-                <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
-                <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
-              </div>
-              <div class="cactions">
-                <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
-                <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
-              </div>
-            </div>
-            <div class="chips-row">
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'nodes')">集群节点 <span class="cb">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
-              <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组 <span class="cb">{{ cluster.plugin_config_count }}</span></span>
-              <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则 <span class="cb">{{ cluster.global_rule_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
+        <div v-else class="group-head">
+          <div class="group-header ungrouped-hdr">
+            <span class="group-name ungrouped-label">未分组</span>
+            <span class="group-count">({{ group.clusters.length }})</span>
+            <div class="cluster-names">
+              <span v-for="c in group.clusters" :key="c.id"
+                    class="cluster-name-item" :title="c.display_name || c.name"
+                    @click.stop="maximizeCluster(c)">
+                <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
+                {{ c.display_name || c.name }}
+              </span>
             </div>
           </div>
-        </TransitionGroup>
+          <div class="group-body">
+            <TransitionGroup name="grid" tag="div" class="cluster-grid">
+              <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
+                <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+                  <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
+                  <div class="cname-wrap">
+                    <span class="cname">{{ cluster.display_name || cluster.name }}</span>
+                    <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+                  </div>
+                  <div class="click-zone">
+                    <span class="arrow">⬇</span>
+                    <span class="label">展开</span>
+                  </div>
+                  <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+                  </div>
+                </div>
+                <div class="card-header">
+                  <div class="stats-bar">
+                    <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
+                    <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
+                  </div>
+                  <div class="cactions">
+                    <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
+                    <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+                  </div>
+                </div>
+                <div class="chips-row">
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'nodes')">集群节点 <span class="cb">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
+                  <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组 <span class="cb">{{ cluster.plugin_config_count }}</span></span>
+                  <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则 <span class="cb">{{ cluster.global_rule_count }}</span></span>
+                  <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
+                </div>
+              </div>
+            </TransitionGroup>
+          </div>
         </div>
       </div>
+    </div>
 
     <!-- EXPANDED AREA: clusters removed from grid -->
     <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
@@ -171,65 +230,6 @@
         </div>
       </div>
     </TransitionGroup>
-
-      <!-- 未分组 -->
-      <div v-else>
-        <div class="group-header ungrouped-hdr">
-          <span class="group-name ungrouped-label">未分组</span>
-          <span class="group-count">({{ group.clusters.length }})</span>
-          <div class="cluster-names">
-            <span v-for="c in group.clusters" :key="c.id"
-                  class="cluster-name-item" :title="c.display_name || c.name"
-                  @click.stop="maximizeCluster(c)">
-              <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
-              {{ c.display_name || c.name }}
-            </span>
-          </div>
-        </div>
-        <div class="group-body">
-        <TransitionGroup name="grid" tag="div" class="cluster-grid">
-          <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-            <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
-              <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
-              <div class="cname-wrap">
-                <span class="cname">{{ cluster.display_name || cluster.name }}</span>
-                <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
-              </div>
-              <div class="click-zone">
-                <span class="arrow">⬇</span>
-                <span class="label">展开</span>
-              </div>
-              <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
-              </div>
-            </div>
-            <div class="card-header">
-              <div class="stats-bar">
-                <div class="scell"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
-                <div class="scell"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
-                <div class="scell"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
-                <div class="scell"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
-                <div class="scell"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
-                <div class="scell"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
-              </div>
-              <div class="cactions">
-                <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
-                <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
-              </div>
-            </div>
-            <div class="chips-row">
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'nodes')">集群节点 <span class="cb">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'upstreams')">上游 <span class="cb">{{ cluster.upstream_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'routes')">路由 <span class="cb">{{ cluster.route_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalPlugins')">插件元数据</span>
-              <span v-if="authStore.hasPermission('plugin_groups')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'pluginConfigs')">插件组 <span class="cb">{{ cluster.plugin_config_count }}</span></span>
-              <span v-if="authStore.hasPermission('global_rules')" class="chip" @click.stop="expandAndSwitchTab(cluster, 'globalRules')">全局规则 <span class="cb">{{ cluster.global_rule_count }}</span></span>
-              <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
-            </div>
-          </div>
-        </TransitionGroup>
-        </div>
-      </div>
 
     <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
       <a-empty description="暂无集群" />
