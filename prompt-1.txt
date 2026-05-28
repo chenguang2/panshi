@@ -1413,3 +1413,18 @@ security_super_user.log
 backend\app\api\v1\plugins.py
 
 请复述后，我批准后再执行
+
+===============================================================
+
+建立 git 新分支，完成下面需求
+
+使用 openspc 的命令 /opsx-new 加入新插件
+
+1. 文档在 docs/edge/plugins/ 目录下，文档名称为
+
+security_corerule.md
+
+插件文件在：
+backend\app\api\v1\plugins.py
+
+请复述后，我批准后再执行
