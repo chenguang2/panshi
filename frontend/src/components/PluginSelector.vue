@@ -174,6 +174,7 @@ const CATEGORIES = [
       'security_restrict_form',
       'security_super_ip',
       'security_super_user',
+      'security_corerule',
     ]
   },
   {
