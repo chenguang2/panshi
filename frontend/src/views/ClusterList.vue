@@ -35,12 +35,23 @@
       <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
     </div>
 
-    <TransitionGroup v-if="!maximizedClusterId && gridClusters.length > 0" name="grid" tag="div" class="cluster-grid">
-      <div v-for="cluster in gridClusters" :key="cluster.id"
-           class="cluster-card">
-
-        <!-- Clickable expand row: status + name only -->
-        <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+    <!-- 分组集群卡片 -->
+    <div v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
+      <div v-if="group.name" class="group-header" @click="toggleGroup(group.name)">
+        <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
+        <CaretRightOutlined v-else class="group-toggle" />
+        <span class="group-name">{{ group.name }}</span>
+        <span class="group-count">({{ group.clusters.length }})</span>
+      </div>
+      <div v-if="!group.name || expandedGroups[group.name] !== false" class="group-body">
+        <div v-if="!group.name && group.clusters.length > 0" class="group-header ungrouped-hint">
+          <span class="group-name">未分组</span>
+          <span class="group-count">({{ group.clusters.length }})</span>
+        </div>
+        <TransitionGroup name="grid" tag="div" class="cluster-grid">
+          <div v-for="cluster in group.clusters" :key="cluster.id"
+               class="cluster-card">
+            <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
           <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
           <div class="cname-wrap">
             <span class="cname">{{ cluster.display_name || cluster.name }}</span>
@@ -79,8 +90,10 @@
           <span class="chip" @click.stop="expandAndSwitchTab(cluster, 'staticResources')">静态资源 <span class="cb">{{ cluster.static_resource_count }}</span></span>
         </div>
 
+        </div>
+        </TransitionGroup>
       </div>
-    </TransitionGroup>
+    </div>
 
     <!-- EXPANDED AREA: clusters removed from grid -->
     <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
@@ -163,6 +176,11 @@
         </a-form-item>
         <a-form-item label="显示名称" name="display_name">
           <a-input v-model:value="form.display_name" />
+        </a-form-item>
+        <a-form-item label="分组" name="group_name">
+          <a-select v-model:value="form.group_name" placeholder="选择或输入分组" allow-clear>
+            <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="描述" name="description">
           <a-textarea v-model:value="form.description" :rows="3" />
@@ -372,6 +390,29 @@ const expandedClusters = computed(() => {
   return expandedOrder.value.map(id => byId[id]).filter(Boolean)
 })
 
+// ── Group collapse state ──
+const expandedGroups = reactive<Record<string, boolean>>({})
+
+function toggleGroup(name: string) {
+  expandedGroups[name] = expandedGroups[name] === false ? true : false
+}
+
+const groupedClusters = computed(() => {
+  const groups: { name: string; clusters: Cluster[] }[] = []
+  const map = new Map<string, Cluster[]>()
+  for (const c of filteredClusters.value) {
+    if (expandedIds.value.has(c.id)) continue // 展开的单独显示
+    const key = c.group_name || ''
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(c)
+  }
+  // 有分组名在前，未分组在后
+  const named = Array.from(map.entries()).filter(([k]) => k).sort(([a],[b]) => a.localeCompare(b))
+  for (const [name, cls] of named) groups.push({ name, clusters: cls })
+  if (map.has('')) groups.push({ name: '', clusters: map.get('')! })
+  return groups
+})
+
 let draggedClusterId: number | null = null
 
 function onDragStart(event: DragEvent, clusterId: number) {
@@ -452,9 +493,18 @@ const validateName = () => {
 const form = reactive({
   name: '',
   display_name: '',
+  group_name: undefined as string | undefined,
   description: '',
   status: 1,
   admin_key: '',
+})
+
+const groupOptions = computed(() => {
+  const groups = new Set<string>()
+  for (const c of clusters.value) {
+    if (c.group_name) groups.add(c.group_name)
+  }
+  return Array.from(groups).sort()
 })
 
 // ── Shared state for composables ──
@@ -860,6 +910,33 @@ onMounted(() => {
 }
 .status-dot.green { background: var(--p-color-success); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-success) 50%, transparent); }
 .status-dot.red { background: var(--p-color-danger); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-danger) 50%, transparent); }
+
+.cluster-group {
+  margin-bottom: 16px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  border-radius: 6px;
+  background: var(--p-bg-hover);
+  transition: background 0.15s;
+  user-select: none;
+}
+.group-header:hover { background: var(--p-color-primary-bg); }
+.group-toggle { font-size: 11px; color: var(--p-color-primary); opacity: 0.6; }
+.group-name { font-weight: 600; font-size: 14px; color: var(--p-text-primary); }
+.group-count { font-size: 12px; color: var(--p-text-tertiary); margin-left: auto; }
+.ungrouped-hint { cursor: default; opacity: 0.7; }
+.ungrouped-hint:hover { background: var(--p-bg-hover); }
+
+.group-body {
+  position: relative;
+}
 
 .cluster-grid {
   display: grid;
