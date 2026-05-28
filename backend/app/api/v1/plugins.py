@@ -521,6 +521,70 @@ BUILTIN_PLUGINS = [
         }
     },
     {
+        "name": "security_corerule",
+        "description": "安全防护 - OWASP Core Rule Set 安全引擎（WAF）",
+        "enable_metadata": True,
+        "schema": {
+            "status": {
+                "type": "integer",
+                "default": 403,
+                "description": "被安全规则拦截后的 HTTP 响应状态码，支持 200-599",
+                "examples": [403, 406],
+                "hints": "默认 403"
+            },
+            "message": {
+                "type": "string",
+                "description": "被安全规则拦截后返回的错误信息",
+                "examples": ["Access Denied by WAF."],
+                "hints": "拦截后返回给客户端的提示信息"
+            },
+            "log_matched_maxsize": {
+                "type": "integer",
+                "default": 128,
+                "description": "最大写入日志的匹配内容大小",
+                "examples": [128, 256],
+                "hints": "默认 128"
+            },
+            "ignore_rule": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "忽略（不检查）的规则 ID 列表",
+                "examples": [["920420"]],
+                "hints": "跳过指定的规则 ID"
+            },
+            "ignore_ruleset": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "忽略的整个规则集名称列表",
+                "examples": [["REQUEST-920-PROTOCOL-ENFORCEMENT"]],
+                "hints": "跳过指定的规则集"
+            },
+            "parseargs_decoders": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": ["hex", "base64"],
+                "description": "用于参数解析的解码器列表",
+                "examples": [["hex", "base64"]],
+                "hints": "默认 hex, base64"
+            },
+            "parseargs_collections": {
+                "type": "array",
+                "items": {"type": "string"},
+                "default": ["URI_ARGS", "REQUEST_ARGS"],
+                "description": "参与参数解析的采集集合项",
+                "examples": [["REQUEST_ARGS"]],
+                "hints": "默认 URI_ARGS, REQUEST_ARGS"
+            },
+            "disable_parseargs_decoders": {
+                "type": "boolean",
+                "default": True,
+                "description": "是否完全禁用参数解码处理器",
+                "examples": [True, False],
+                "hints": "默认 true"
+            }
+        }
+    },
+    {
         "name": "auth_basic",
         "description": "Basic 认证",
         "enable_metadata": False,
