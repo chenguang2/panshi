@@ -180,6 +180,7 @@
         <a-form-item label="分组" name="group_name">
           <a-select v-model:value="form.group_name" placeholder="选择或输入分组" allow-clear>
             <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
+            <a-select-option value="__new__" style="border-top:1px solid var(--p-border-divider);color:var(--p-color-primary);font-weight:500;">+ 新建分组</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="描述" name="description">
@@ -505,6 +506,18 @@ const groupOptions = computed(() => {
     if (c.group_name) groups.add(c.group_name)
   }
   return Array.from(groups).sort()
+})
+
+// 新建分组：选中 __new__ 时弹出输入框
+watch(() => form.group_name, (val) => {
+  if (val === '__new__') {
+    const name = prompt('请输入新分组名称：')
+    if (name && name.trim()) {
+      form.group_name = name.trim()
+    } else {
+      form.group_name = undefined
+    }
+  }
 })
 
 // ── Shared state for composables ──
