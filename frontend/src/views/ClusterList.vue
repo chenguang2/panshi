@@ -170,6 +170,7 @@
         </div>
       </div>
     </TransitionGroup>
+      </div>
       </template>
 
       <!-- 未分组：始终显示卡片 -->
