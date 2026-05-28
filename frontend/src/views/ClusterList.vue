@@ -812,6 +812,7 @@ const deleteCluster = async (cluster: Cluster) => {
   showDeleteConfirm({
     title: `确定要删除集群 "${clusterName}" 吗？`,
     apiEndpoint: `/clusters/${cluster.id}`,
+    clusterName,
     showResourceStats: true,
     stats,
     onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
