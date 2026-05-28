@@ -61,6 +61,9 @@
             <span class="arrow">⬇</span>
             <span class="label">展开</span>
           </div>
+          <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+          </div>
         </div>
 
         <!-- Stats + actions row -->
@@ -112,6 +115,7 @@
             <span class="cname">{{ cluster.display_name || cluster.name }}</span>
             <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
           </div>
+          <span v-if="cluster.group_name" class="group-chip">{{ cluster.group_name }}</span>
           <div class="click-zone on">
             <span class="arrow">⬆</span>
             <span class="label">收回</span>
@@ -238,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 import api from '@/api'
@@ -944,6 +948,20 @@ onMounted(() => {
 .group-toggle { font-size: 11px; color: var(--p-color-primary); opacity: 0.6; }
 .group-name { font-weight: 600; font-size: 14px; color: var(--p-text-primary); }
 .group-count { font-size: 12px; color: var(--p-text-tertiary); margin-left: auto; }
+.group-chip {
+  font-size: 10px; padding: 1px 8px; border-radius: 8px;
+  background: var(--p-color-primary-bg); color: var(--p-color-primary);
+  margin-right: 4px; flex-shrink: 0;
+}
+.maximize-btn-sm {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 4px;
+  cursor: pointer; color: var(--p-text-tertiary);
+  transition: all 0.15s; flex-shrink: 0;
+}
+.maximize-btn-sm:hover {
+  background: var(--p-color-primary-bg); color: var(--p-color-primary);
+}
 .ungrouped-hint { cursor: default; opacity: 0.7; }
 .ungrouped-hint:hover { background: var(--p-bg-hover); }
 
