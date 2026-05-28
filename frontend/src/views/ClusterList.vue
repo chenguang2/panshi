@@ -304,7 +304,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
 import api from '@/api'
@@ -834,7 +834,7 @@ const deleteCluster = async (cluster: Cluster) => {
           }),
         ]),
         okText: '确认删除',
-        okButtonProps: { disabled: true, class: 'name-confirm-btn' },
+        okButtonProps: { disabled: true } as any,
         cancelText: '取消',
         onOk: async () => {
           if (!nameConfirmed) return false
@@ -919,6 +919,7 @@ const deleteCluster = async (cluster: Cluster) => {
       progressModal.update({ okButtonProps: { disabled: false } })
       },
     })
+    },
   })
 }
 
