@@ -67,7 +67,7 @@
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
                     <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
                   </div>
-                  <div class="click-zone">
+                  <div class="click-zone" @click.stop="toggleExpand(cluster.id)">
                     <span class="arrow">⬇</span>
                     <span class="label">展开</span>
                   </div>
@@ -129,7 +129,7 @@
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
                     <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
                   </div>
-                  <div class="click-zone">
+                  <div class="click-zone" @click.stop="toggleExpand(cluster.id)">
                     <span class="arrow">⬇</span>
                     <span class="label">展开</span>
                   </div>
