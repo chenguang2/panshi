@@ -321,7 +321,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, h } from 'vue'
+import { ref, reactive, computed, watch, onMounted, nextTick, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import api from '@/api'
@@ -411,13 +411,16 @@ function toggleExpand(clusterId: number) {
     s.delete(clusterId)
     const idx = order.indexOf(clusterId)
     if (idx > -1) order.splice(idx, 1)
-    // If collapsing the maximized cluster, exit maximized mode
     if (maximizedClusterId.value === clusterId) {
       maximizedClusterId.value = null
     }
   } else {
     s.add(clusterId)
     order.push(clusterId)
+    nextTick(() => {
+      const el = document.querySelector(`.card-expanded[data-cluster-id="${clusterId}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
   expandedIds.value = s
   expandedOrder.value = order
