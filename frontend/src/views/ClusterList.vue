@@ -61,7 +61,7 @@
           <div v-if="expandedGroups[group.name] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
               <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-                <div class="expand-row" @click="maximizeCluster(cluster)" title="点击最大化集群">
+                <div class="expand-row">
                   <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
                   <div class="cname-wrap">
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
@@ -123,7 +123,7 @@
           <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
               <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-                <div class="expand-row" @click="maximizeCluster(cluster)" title="点击最大化集群">
+                <div class="expand-row">
                   <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
                   <div class="cname-wrap">
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
@@ -173,8 +173,7 @@
            class="card-expanded" :class="{ 'card-maximized': maximizedClusterId === cluster.id }" :data-cluster-id="cluster.id">
         <!-- Clickable row: name + drag handle + click-zone -->
         <div class="expand-row" draggable="true"
-             @click="maximizedClusterId === cluster.id ? undefined : toggleExpand(cluster.id)"
-             title="点击收回 · 拖拽排序"
+             title="拖拽排序"
              @dragstart="onDragStart($event, cluster.id)"
              @dragover="onDragOver($event)"
              @drop="onDrop($event)"
