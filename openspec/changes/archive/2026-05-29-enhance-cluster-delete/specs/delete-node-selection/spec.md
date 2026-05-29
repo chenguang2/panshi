@@ -1,8 +1,4 @@
-## Purpose
-
-删除弹窗中 Edge 节点级联选择功能。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 删除弹窗中 Edge 节点可单独选择
 
