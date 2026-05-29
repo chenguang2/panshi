@@ -1195,7 +1195,7 @@ onMounted(() => {
   margin-top: 20px;
   position: relative;
   z-index: 1;
-  border-top: 2px solid var(--p-border-default);
+  border-top: 2px solid color-mix(in srgb, var(--p-color-primary) 40%, transparent);
   padding-top: 16px;
 }
 
