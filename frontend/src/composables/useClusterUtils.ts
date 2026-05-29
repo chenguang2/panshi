@@ -22,7 +22,7 @@ export function showDeleteConfirm(opts: {
 }) {
   let deleteDb = false
   let deleteEdge = false
-  const selectedNodeIds: Set<number> = new Set((opts.nodes || []).map(n => n.id))
+  const selectedNodeIds: Set<number> = new Set()
   let confirmModal: any
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
@@ -32,8 +32,16 @@ export function showDeleteConfirm(opts: {
     confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
   }
 
+  const toggleNodeSection = () => {
+    const wrap = document.querySelector('.ant-modal-confirm')
+    if (!wrap) return
+    const section = wrap.querySelector('.delete-node-section') as HTMLElement
+    if (section) section.style.display = deleteEdge ? 'block' : 'none'
+  }
+
   const nodeCheckboxContent = (opts.nodes && opts.nodes.length > 0) ? h('div', {
-    style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (deleteEdge ? 'block' : 'none'),
+    class: 'delete-node-section',
+    style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: none;',
   }, [
     h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
     ...opts.nodes.map(n =>
@@ -89,7 +97,7 @@ export function showDeleteConfirm(opts: {
           onInput: (e: any) => {
             deleteEdge = e.target.checked
             if (!deleteEdge) selectedNodeIds.clear()
-            confirmModal.update({ content: rebuildContent(true) })
+            toggleNodeSection()
             updateOkDisabled()
           },
           style: 'width: 16px; height: 16px; cursor: pointer;',
@@ -97,62 +105,9 @@ export function showDeleteConfirm(opts: {
         h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
         h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
       ]),
-      deleteEdge && opts.nodes ? nodeCheckboxContent : null,
+      opts.nodes ? nodeCheckboxContent : null,
     ]),
   ])
-
-  function rebuildContent(force?: boolean): any {
-    const showNodes = force !== undefined ? force : deleteEdge
-    const nc = (opts.nodes && opts.nodes.length > 0) ? h('div', {
-      style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: ' + (showNodes ? 'block' : 'none'),
-    }, [
-      h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
-      ...opts.nodes.map(n =>
-        h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
-          h('input', {
-            type: 'checkbox', checked: selectedNodeIds.has(n.id),
-            onInput: (e: any) => {
-              if (e.target.checked) selectedNodeIds.add(n.id)
-              else selectedNodeIds.delete(n.id)
-              updateOkDisabled()
-            },
-            style: 'width: 14px; height: 14px; cursor: pointer;',
-          }),
-          h('span', {}, `${n.ip}:${n.management_port}`),
-        ])
-      ),
-    ]) : null
-
-    return h('div', { style: 'font-size: 13px;' }, [
-      h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
-      h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-        h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteDb,
-          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, '数据库'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
-      ]),
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => {
-            deleteEdge = e.target.checked
-            if (!deleteEdge) selectedNodeIds.clear()
-            confirmModal.update({ content: rebuildContent(true) })
-            updateOkDisabled()
-          },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
-      ]),
-      showNodes ? nc : null,
-    ]),
-  ])
-  }
 
   confirmModal = Modal.confirm({
     title: '确认删除',
@@ -330,7 +285,13 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     const dbResult = data.results?.find((r: any) => r.scope === 'database')
     if (dbResult) {
       addLog('正在从数据库删除...')
-      addLog(`数据库: ${dbResult.message || '已删除'}`)
+      let dbDetail = ''
+      if (dbResult.details) {
+        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', nodes: '节点', config_versions: '版本历史' }
+        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details[k] ?? 0}`)
+        dbDetail = ` (${parts.join(' ')})`
+      }
+      addLog(`数据库: ${dbResult.message || '已删除'}${dbDetail}`)
     }
     addLog('')
 
@@ -346,7 +307,13 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
       for (const r of edgeResults) {
         if (r.status === 'success') successCount++
         else failCount++
-        addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+        let detail = ''
+        if (r.details) {
+          const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据' }
+          const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${(r.details as any)[k] ?? 0}`)
+          detail = ` (${parts.join(' ')})`
+        }
+        addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)
       }
       addLog('')
       addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)

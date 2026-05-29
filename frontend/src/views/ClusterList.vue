@@ -306,7 +306,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import { showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -802,6 +802,17 @@ const handleSubmit = async () => {
 const deleteCluster = async (cluster: Cluster) => {
   const clusterName = cluster.display_name || cluster.name
 
+  // 获取节点列表（用于第一个界面的节点选择）
+  let availableNodes: { id: number; ip: string; management_port: number }[] = []
+  console.log('[删除集群] cluster.id:', cluster.id, 'clusterName:', clusterName)
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: 100 } })
+    availableNodes = res.data.items || []
+    console.log('[删除集群] 获取到节点数:', availableNodes.length, JSON.stringify(availableNodes.map((n: any) => n.ip + ':' + n.management_port)))
+  } catch (e) {
+    console.error('[删除集群] 加载节点列表失败', e)
+  }
+
   // 加载资源统计
   let stats: Record<string, number> = {}
   try {
@@ -814,6 +825,7 @@ const deleteCluster = async (cluster: Cluster) => {
     apiEndpoint: `/clusters/${cluster.id}`,
     showResourceStats: true,
     stats,
+    nodes: availableNodes,
     onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
       // 第二步：输入集群名称确认
       let nameConfirmed = false
@@ -821,14 +833,15 @@ const deleteCluster = async (cluster: Cluster) => {
         title: '请输入集群名称确认删除',
         width: 400,
         content: h('div', { style: 'font-size: 13px;' }, [
-          h('div', { style: 'margin-bottom: 8px; color: #666;' }, `请输入集群名称 " ${clusterName} " 以确认删除：`),
+          h('div', { style: 'margin-bottom: 8px; color: #666;' }, `请输入集群名称 "${clusterName}" 以确认删除：`),
           h('input', {
             type: 'text',
             placeholder: '请输入集群名称',
             onInput: (e: any) => {
-              nameConfirmed = e.target.value === clusterName
-              const btnEl = document.querySelector('.name-confirm-btn .ant-btn') as HTMLButtonElement
-              if (btnEl) btnEl.disabled = !nameConfirmed
+              nameConfirmed = (e.target.value || '').trim() === (clusterName || '').trim()
+              if (nameModal) {
+                nameModal.update({ okButtonProps: { disabled: !nameConfirmed } })
+              }
             },
             style: 'width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; outline: none; box-sizing: border-box; font-size: 14px;',
           }),
@@ -838,87 +851,17 @@ const deleteCluster = async (cluster: Cluster) => {
         cancelText: '取消',
         onOk: async () => {
           if (!nameConfirmed) return false
-          // 第三步：进度提示
-          const logs: string[] = []
-          const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-          const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-          const progressModal = Modal.info({
+          await executeDeleteWithProgress({
             title: `删除集群: ${clusterName}`,
-            width: 600,
-            content: buildDeleteProgressContent(progress, logs),
-            okText: '确定',
-            okButtonProps: { disabled: true },
-            cancelText: '',
-            closable: true,
+            apiEndpoint: `/clusters/${cluster.id}`,
+            cluster,
+            deleteDb,
+            deleteEdge,
+            nodeIds,
+            refreshFn: () => loadClusters(),
           })
-      const updateContent = () => progressModal.update({ content: buildDeleteProgressContent(progress, logs) })
-
-      addLog(`开始删除集群: ${clusterName}`)
-      progress.percent = 20
-      updateContent()
-      await new Promise(r => setTimeout(r, 300))
-
-      try {
-        const actions = []
-        if (deleteDb) actions.push('数据库')
-        if (deleteEdge) actions.push('Edge 节点')
-        addLog(`删除范围: ${actions.join(' + ') || '无'}`)
-        progress.percent = 40
-        updateContent()
-
-        const res = await api.delete(`/clusters/${cluster.id}`, { data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined } })
-        const data = res.data
-
-        progress.percent = 60
-        const dbResult = data.results?.find((r: any) => r.scope === 'database')
-        if (dbResult) {
-          addLog(`数据库: ${dbResult.message || '已删除'}`)
-        } else if (deleteDb) {
-          addLog('数据库: 删除失败（无返回结果）')
-        }
-        addLog('')
-
-        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
-        if (edgeResults.length > 0) {
-          addLog('正在从 Edge 节点同步删除...')
-          addLog('Edge 节点删除结果:')
-          let successCount = 0
-          let failCount = 0
-          for (const r of edgeResults) {
-            if (r.status === 'success') successCount++
-            else failCount++
-            addLog(`  ${r.node}: ${r.status === 'success' ? '\u2705' : '\u274C'} ${r.error ? '- ' + r.error : ''}`)
-          }
-          addLog('')
-          addLog(`总计: ${edgeResults.length} 节点, 成功 ${successCount}, 失败 ${failCount}`)
-        } else if (deleteEdge) {
-          addLog('集群下没有活跃的 Edge 节点')
-        }
-
-        progress.percent = 100
-        addLog('')
-        if (edgeResults.some((r: any) => r.status === 'failed')) {
-          progress.status = 'exception'
-          addLog('\u26A0\uFE0F 部分节点删除失败，请在 Edge 节点上手动清理')
-        } else {
-          progress.status = 'success'
-          addLog('\u2705 操作完成！')
-        }
-        updateContent()
-
-        await loadClusters()
-      } catch (error: any) {
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
-        updateContent()
-      }
-
-      progressModal.update({ okButtonProps: { disabled: false } })
-      },
-    })
+        },
+      })
     },
   })
 }
