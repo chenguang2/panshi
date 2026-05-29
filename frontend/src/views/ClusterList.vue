@@ -101,7 +101,9 @@
           </div>
         </div>
         <div v-else class="group-head">
-          <div class="group-header ungrouped-hdr">
+          <div class="group-header" @click="toggleGroup('__ungrouped__')">
+            <CaretDownOutlined v-if="expandedGroups['__ungrouped__'] !== false" class="group-toggle" />
+            <CaretRightOutlined v-else class="group-toggle" />
             <span class="group-name ungrouped-label">未分组</span>
             <span class="group-count">({{ group.clusters.length }})</span>
             <div class="cluster-names">
@@ -112,8 +114,11 @@
                 {{ c.display_name || c.name }}
               </span>
             </div>
+            <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup('__ungrouped__')">
+              {{ expandedGroups['__ungrouped__'] !== false ? '收起' : '展开' }}
+            </a-button>
           </div>
-          <div class="group-body">
+          <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
               <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
                 <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
