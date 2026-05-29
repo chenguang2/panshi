@@ -383,7 +383,7 @@ const maximizedClusterId = ref<number | null>(null)
 function maximizeCluster(cluster: Cluster) {
   // Collapse all groups to save space
   for (const g of groupedClusters.value) {
-    if (g.name) expandedGroups[g.name] = false
+    expandedGroups[g.name || '__ungrouped__'] = false
   }
   // Collapse all other expanded clusters
   const s = new Set<number>()
