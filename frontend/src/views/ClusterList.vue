@@ -61,7 +61,7 @@
           <div v-if="expandedGroups[group.name] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
               <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-                <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+                <div class="expand-row" @click="maximizeCluster(cluster)" title="点击最大化集群">
                   <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
                   <div class="cname-wrap">
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
@@ -123,7 +123,7 @@
           <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
               <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
-                <div class="expand-row" @click="toggleExpand(cluster.id)" title="点击展开集群详情">
+                <div class="expand-row" @click="maximizeCluster(cluster)" title="点击最大化集群">
                   <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
                   <div class="cname-wrap">
                     <span class="cname">{{ cluster.display_name || cluster.name }}</span>
