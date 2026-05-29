@@ -233,29 +233,40 @@ async def delete_cluster(
         global_rules = (await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id))).scalars().all()
         plugin_metadatas = (await db.execute(select(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id))).scalars().all()
 
-        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
+        node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+        if body.node_ids:
+            node_query = node_query.where(Node.id.in_(body.node_ids))
+        nodes_result = await db.execute(node_query)
         active_nodes = nodes_result.scalars().all()
 
         if active_nodes:
             for node in active_nodes:
-                node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+                node_result = {
+                    "node": f"{node.ip}:{node.management_port}",
+                    "scope": "edge",
+                    "status": "pending",
+                    "details": {
+                        "routes": 0, "upstreams": 0, "plugin_configs": 0,
+                        "global_rules": 0, "plugin_metadatas": 0,
+                    },
+                }
                 try:
                     client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
                     errs = []
                     for r in routes:
-                        try: client.delete_route(r.edge_uuid)
+                        try: client.delete_route(r.edge_uuid); node_result["details"]["routes"] += 1
                         except: errs.append(f"route:{r.edge_uuid}")
                     for u in upstreams:
-                        try: client.delete_upstream(u.edge_uuid)
+                        try: client.delete_upstream(u.edge_uuid); node_result["details"]["upstreams"] += 1
                         except: errs.append(f"upstream:{u.edge_uuid}")
                     for p in plugin_configs:
-                        try: client.delete_plugin_config(p.edge_uuid)
+                        try: client.delete_plugin_config(p.edge_uuid); node_result["details"]["plugin_configs"] += 1
                         except: errs.append(f"plugin_config:{p.edge_uuid}")
                     for g in global_rules:
-                        try: client.delete_global_rule(g.edge_uuid)
+                        try: client.delete_global_rule(g.edge_uuid); node_result["details"]["global_rules"] += 1
                         except: errs.append(f"global_rule:{g.edge_uuid}")
                     for pm in plugin_metadatas:
-                        try: client.delete_plugin_metadata(pm.plugin_name)
+                        try: client.delete_plugin_metadata(pm.plugin_name); node_result["details"]["plugin_metadatas"] += 1
                         except: errs.append(f"plugin_metadata:{pm.plugin_name}")
                     if errs:
                         node_result["status"] = "failed"
@@ -268,6 +279,10 @@ async def delete_cluster(
                 results.append(node_result)
 
     if delete_db:
+        db_details = {"routes": 0, "upstreams": 0, "plugin_configs": 0, "global_rules": 0, "plugin_metadatas": 0, "nodes": 0, "config_versions": 0}
+
+        cv_result = await db.execute(select(func.count()).select_from(ConfigVersion).where(ConfigVersion.cluster_id == cluster_id))
+        db_details["config_versions"] = cv_result.scalar() or 0
         await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.cluster_id == cluster_id))
 
         sub_routes = select(Route.id).where(Route.cluster_id == cluster_id)
@@ -275,15 +290,34 @@ async def delete_cluster(
         sub_upstreams = select(Upstream.id).where(Upstream.cluster_id == cluster_id)
         await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id.in_(sub_upstreams)))
 
+        route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == cluster_id))
+        db_details["routes"] = route_result.scalar() or 0
         await db.execute(Route.__table__.delete().where(Route.cluster_id == cluster_id))
+
+        upstream_result = await db.execute(select(func.count()).select_from(Upstream).where(Upstream.cluster_id == cluster_id))
+        db_details["upstreams"] = upstream_result.scalar() or 0
         await db.execute(Upstream.__table__.delete().where(Upstream.cluster_id == cluster_id))
+
+        pc_result = await db.execute(select(func.count()).select_from(PluginConfig).where(PluginConfig.cluster_id == cluster_id))
+        db_details["plugin_configs"] = pc_result.scalar() or 0
         await db.execute(PluginConfig.__table__.delete().where(PluginConfig.cluster_id == cluster_id))
+
+        gr_result = await db.execute(select(func.count()).select_from(GlobalRule).where(GlobalRule.cluster_id == cluster_id))
+        db_details["global_rules"] = gr_result.scalar() or 0
         await db.execute(GlobalRule.__table__.delete().where(GlobalRule.cluster_id == cluster_id))
+
+        pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id))
+        db_details["plugin_metadatas"] = pm_result.scalar() or 0
         await db.execute(PluginMetadata.__table__.delete().where(PluginMetadata.cluster_id == cluster_id))
+
+        node_result = await db.execute(select(func.count()).select_from(Node).where(Node.cluster_id == cluster_id))
+        db_details["nodes"] = node_result.scalar() or 0
         await db.execute(Node.__table__.delete().where(Node.cluster_id == cluster_id))
 
         await db.delete(cluster)
         await db.commit()
+
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除", "details": db_details})
         return {"message": "集群已删除", "results": results}
 
     return {"message": "Edge 节点数据已清理", "results": results}
