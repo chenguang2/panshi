@@ -7,7 +7,7 @@ from .cluster import (
 )
 from .route import (
     RouteCreate, RouteUpdate, RouteResponse, RouteListResponse,
-    PluginConfig, PluginUpdateRequest, BuiltinPluginResponse
+    PluginConfig, PluginUpdateRequest,
 )
 __all__ = [
     "LoginRequest", "LoginResponse", "UserInfo", "ChangePasswordRequest",
@@ -15,5 +15,5 @@ __all__ = [
     "ClusterCreate", "ClusterUpdate", "ClusterResponse", "ClusterListResponse",
     "UpstreamCreate", "UpstreamUpdate", "UpstreamResponse", "UpstreamWithTargets", "UpstreamTargetSchema",
     "RouteCreate", "RouteUpdate", "RouteResponse", "RouteListResponse",
-    "PluginConfig", "PluginUpdateRequest", "BuiltinPluginResponse",
+    "PluginConfig", "PluginUpdateRequest",
 ]

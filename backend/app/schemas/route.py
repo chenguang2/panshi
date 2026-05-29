@@ -100,8 +100,3 @@ class PluginUpdateRequest(BaseModel):
     plugins: List[PluginConfig]
 
 
-class BuiltinPluginResponse(BaseModel):
-    model_config = {"protected_namespaces": ()}
-    name: str
-    description: str
-    schema: dict
