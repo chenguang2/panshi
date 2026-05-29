@@ -32,6 +32,7 @@ cat  ~/.config/uv/config.toml
 ## 转换格式
 
 ```
+yum install -y dos2unix git
 dos2unix prepare.sh
 ```
 

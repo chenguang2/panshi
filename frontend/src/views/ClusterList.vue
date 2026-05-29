@@ -16,6 +16,8 @@
             <a-radio-button value="offline">离线</a-radio-button>
           </a-radio-group>
           <span class="filter-count">共 {{ filteredClusters.length }} 个集群</span>
+          <a-button size="small" @click="expandAll" v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] === false)">全部展开</a-button>
+          <a-button size="small" @click="collapseAll" v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] !== false)">全部收起</a-button>
         </div>
       </div>
       <a-button type="primary" @click="showAddModal">添加集群</a-button>
@@ -481,6 +483,18 @@ const expandedGroups = reactive<Record<string, boolean>>({})
 
 function toggleGroup(name: string) {
   expandedGroups[name] = expandedGroups[name] === false ? true : false
+}
+
+function expandAll() {
+  for (const g of groupedClusters.value) {
+    expandedGroups[g.name || '__ungrouped__'] = true
+  }
+}
+
+function collapseAll() {
+  for (const g of groupedClusters.value) {
+    expandedGroups[g.name || '__ungrouped__'] = false
+  }
 }
 
 const groupedClusters = computed(() => {
