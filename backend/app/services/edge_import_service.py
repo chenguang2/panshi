@@ -46,7 +46,7 @@ def _get_sync_db() -> Session:
 def _load_builtin_names() -> set:
     global _BUILTIN_PLUGIN_NAMES
     if _BUILTIN_PLUGIN_NAMES is None:
-        from app.api.v1.plugins import BUILTIN_PLUGINS
+        from app.config.plugin_definitions import BUILTIN_PLUGINS
 
         _BUILTIN_PLUGIN_NAMES = set(p["name"] for p in BUILTIN_PLUGINS)
     return _BUILTIN_PLUGIN_NAMES

@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import { showDeleteConfirm } from './useClusterUtils'
+import { showDeleteConfirm, executeDeleteWithProgress } from './useClusterUtils'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
@@ -257,41 +257,16 @@ export function useClusterNodes(options: {
       title: `确定要删除节点 "${target.ip}" 吗？`,
       apiEndpoint: `/clusters/${cluster.id}/nodes/${target.id}`,
       onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
-        try {
-          await api.delete(`/clusters/${cluster.id}/nodes/${target.id}`, {
-            data: {
-              delete_db: deleteDb,
-              delete_edge: deleteEdge,
-              node_ids: nodeIds.length > 0 ? nodeIds : undefined
-            }
-          })
-          message.success('节点已删除')
-          const res = await api.get(`/clusters/${cluster.id}/nodes`)
-          cluster.nodes = res.data.items
-          cluster.node_count = cluster.nodes!.length
-          cluster.selectedNode = null
-          onRefresh()
-        } catch (error: unknown) {
-          const err = error as {
-            response?: {
-              data?: { detail?: unknown; message?: string }
-            }
-          }
-          const detail = err.response?.data?.detail
-          if (typeof detail === 'string') {
-            message.error(detail)
-          } else if (Array.isArray(detail)) {
-            message.error(
-              detail
-                .map((d: unknown) => (d as { msg?: string })?.msg || JSON.stringify(d))
-                .join('; ')
-            )
-          } else if (err.response?.data?.message) {
-            message.error(err.response.data.message)
-          } else {
-            message.error('操作失败')
-          }
-        }
+        await executeDeleteWithProgress({
+          title: `删除节点: ${target.ip}`,
+          apiEndpoint: `/clusters/${cluster.id}/nodes/${target.id}`,
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadNodes(cluster),
+          clearSelectedFn: () => { cluster.selectedNode = null },
+        })
       }
     })
   }
