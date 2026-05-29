@@ -184,7 +184,7 @@
             <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
           </div>
           <span v-if="cluster.group_name" class="group-chip">{{ cluster.group_name }}</span>
-          <div class="click-zone on">
+          <div class="click-zone on" @click.stop="toggleExpand(cluster.id)">
             <span class="arrow">⬆</span>
             <span class="label">收回</span>
           </div>
