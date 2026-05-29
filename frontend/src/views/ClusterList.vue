@@ -244,7 +244,8 @@
           <a-input v-model:value="form.display_name" />
         </a-form-item>
         <a-form-item label="分组" name="group_name">
-          <a-select v-model:value="form.group_name" placeholder="选择或输入分组" allow-clear>
+          <a-select v-model:value="form.group_name">
+            <a-select-option value="">未分类</a-select-option>
             <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
             <a-select-option value="__new__" style="border-top:1px solid var(--p-border-divider);color:var(--p-color-primary);font-weight:500;">+ 新建分组</a-select-option>
           </a-select>
@@ -564,7 +565,7 @@ const validateName = () => {
 const form = reactive({
   name: '',
   display_name: '',
-  group_name: undefined as string | undefined,
+  group_name: '',
   description: '',
   status: 1,
   admin_key: '',
@@ -585,7 +586,7 @@ watch(() => form.group_name, (val) => {
     if (name && name.trim()) {
       form.group_name = name.trim()
     } else {
-      form.group_name = undefined
+      form.group_name = ''
     }
   }
 })
@@ -762,6 +763,7 @@ const showAddModal = () => {
   Object.assign(form, {
     name: '',
     display_name: '',
+    group_name: '',
     description: '',
     status: 1,
     admin_key: '',
@@ -774,7 +776,7 @@ const editCluster = (cluster: Cluster) => {
   editingCluster.value = cluster
   form.name = cluster.name
   form.display_name = cluster.display_name || ''
-  form.group_name = cluster.group_name || undefined
+  form.group_name = cluster.group_name || ''
   form.description = cluster.description || ''
   form.status = cluster.status
   form.admin_key = (cluster as any).admin_key || ''
