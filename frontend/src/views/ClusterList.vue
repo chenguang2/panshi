@@ -445,13 +445,20 @@ function expandAndSwitchTab(cluster: Cluster, tab: string) {
   cluster.activeTab = tab
   const s = new Set(expandedIds.value)
   const order = [...expandedOrder.value]
-  if (!s.has(cluster.id)) {
+  const isNew = !s.has(cluster.id)
+  if (isNew) {
     s.add(cluster.id)
     order.push(cluster.id)
   }
   expandedIds.value = s
   expandedOrder.value = order
   handleTabClick(cluster, tab)
+  if (isNew) {
+    setTimeout(() => {
+      const el = document.querySelector(`.card-expanded[data-cluster-id="${cluster.id}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }
 }
 
 const filteredClusters = computed(() => {
