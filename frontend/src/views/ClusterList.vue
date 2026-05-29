@@ -774,6 +774,7 @@ const editCluster = (cluster: Cluster) => {
   editingCluster.value = cluster
   form.name = cluster.name
   form.display_name = cluster.display_name || ''
+  form.group_name = cluster.group_name || undefined
   form.description = cluster.description || ''
   form.status = cluster.status
   form.admin_key = (cluster as any).admin_key || ''
