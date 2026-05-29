@@ -245,9 +245,18 @@
         </a-form-item>
         <a-form-item label="分组" name="group_name">
           <a-select v-model:value="form.group_name">
+            <template #dropdownRender="{ menuNode }">
+              <div>
+                <component :is="menuNode" />
+                <a-divider style="margin: 4px 0" />
+                <div style="padding: 4px 8px; display: flex; gap: 4px;">
+                  <a-input v-model:value="newGroupName" placeholder="新建分组名称" size="small" @pressEnter="addNewGroup" />
+                  <a-button size="small" type="primary" @click="addNewGroup">添加</a-button>
+                </div>
+              </div>
+            </template>
             <a-select-option value="">未分类</a-select-option>
             <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
-            <a-select-option value="__new__" style="border-top:1px solid var(--p-border-divider);color:var(--p-color-primary);font-weight:500;">+ 新建分组</a-select-option>
           </a-select>
         </a-form-item>
         <a-form-item label="描述" name="description">
@@ -571,25 +580,25 @@ const form = reactive({
   admin_key: '',
 })
 
+const newGroupName = ref('')
+const pendingNewGroup = ref('')
+
 const groupOptions = computed(() => {
   const groups = new Set<string>()
   for (const c of clusters.value) {
     if (c.group_name) groups.add(c.group_name)
   }
+  if (pendingNewGroup.value) groups.add(pendingNewGroup.value)
   return Array.from(groups).sort()
 })
 
-// 新建分组：选中 __new__ 时弹出输入框
-watch(() => form.group_name, (val) => {
-  if (val === '__new__') {
-    const name = prompt('请输入新分组名称：')
-    if (name && name.trim()) {
-      form.group_name = name.trim()
-    } else {
-      form.group_name = ''
-    }
-  }
-})
+const addNewGroup = () => {
+  const name = newGroupName.value.trim()
+  if (!name) return
+  pendingNewGroup.value = name
+  form.group_name = name
+  newGroupName.value = ''
+}
 
 // ── Shared state for composables ──
 const availablePlugins = ref<Plugin[]>([])
