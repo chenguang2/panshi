@@ -36,7 +36,7 @@
     </div>
 
     <!-- 分组集群列表 + 展开区 -->
-    <div v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
+    <div v-if="!maximizedClusterId" v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
       <div class="group-inner">
         <div v-if="group.name" class="group-head">
           <div class="group-header" @click="toggleGroup(group.name)">
