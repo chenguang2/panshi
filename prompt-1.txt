@@ -1464,3 +1464,7 @@ backend\app\api\v1\plugins.py
 阶段三（低优先级）：
 8. EdgeClient 遗留方法清理（17 个包装器可删除）
 9. 后端集成测试覆盖 delete/publish/rollback
+
+
+==============================================================
+只有预存在的 BuiltinPluginResponse 警告

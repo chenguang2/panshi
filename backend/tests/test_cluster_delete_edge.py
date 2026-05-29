@@ -53,8 +53,11 @@ class TestClusterDeleteEdgeSync:
         with patch_ec(return_value=mock_client):
             result = await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
-        assert len(result["results"]) == 1
+        assert len(result["results"]) == 2
+        assert result["results"][0]["scope"] == "edge"
         assert result["results"][0]["status"] == "success"
+        assert result["results"][1]["scope"] == "database"
+        assert result["results"][1]["status"] == "success"
         assert mock_client.delete_route.call_count == 2
         assert mock_client.delete_upstream.call_count == 2
         assert mock_client.delete_plugin_config.call_count == 1
