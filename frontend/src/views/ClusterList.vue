@@ -173,7 +173,7 @@
            class="card-expanded" :class="{ 'card-maximized': maximizedClusterId === cluster.id }" :data-cluster-id="cluster.id">
         <!-- Clickable row: name + drag handle + click-zone -->
         <div class="expand-row" draggable="true"
-             @click="maximizedClusterId === cluster.id ? restoreMaximize() : toggleExpand(cluster.id)"
+             @click="maximizedClusterId === cluster.id ? undefined : toggleExpand(cluster.id)"
              title="点击收回 · 拖拽排序"
              @dragstart="onDragStart($event, cluster.id)"
              @dragover="onDragOver($event)"
