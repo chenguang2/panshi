@@ -1442,3 +1442,25 @@ backend\app\api\v1\plugins.py
 
 你有什么好建议，给出几个方案我看看
 =======================
+集群管理中，当一个集群最大化时，
+
+1. 是否应该隐藏集群组，这样可以增加显示面积， 当恢复时，再把集群组显示出来
+
+你看合适吗？ 对比一下
+
+============================================================
+现在又提交了很多功能
+前后端的需要重构，包括检查是否需要合并函数，拆分模块等, 请给出你的修改方案，我看看，我批准后再执行
+
+阶段一（高优先级）：
+1. clusters.py → 拆分为 5 个文件（cluster / upstream / plugin_config / global_rule / node）
+2. 抽取 edge_sync.py 消除 12 次 EdgeClient 重复
+3. 将 plugins.py 的数据定义移到配置文件
+4. 修复 useClusterNodes.ts 的删除不一致
+阶段二（中优先级）：
+5. 抽取前端共享模式（列配置、删除、发布、版本管理）
+6. 合并 PluginConfigs + GlobalRules composable
+7. EdgeClient.vue / ClusterList.vue 拆分
+阶段三（低优先级）：
+8. EdgeClient 遗留方法清理（17 个包装器可删除）
+9. 后端集成测试覆盖 delete/publish/rollback
