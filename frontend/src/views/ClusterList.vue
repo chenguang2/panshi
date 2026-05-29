@@ -72,7 +72,8 @@
                     <span class="label">展开</span>
                   </div>
                   <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 1H1v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 1l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 1h2v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 1l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 15H1v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 15l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 15h2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 15l-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <span style="font-size:11px;margin-left:3px;">最大化</span>
                   </div>
                 </div>
                 <div class="card-header">
@@ -134,7 +135,8 @@
                     <span class="label">展开</span>
                   </div>
                   <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 1H1v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 1l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 1h2v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 1l-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M3 15H1v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 15l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 15h2v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 15l-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    <span style="font-size:11px;margin-left:3px;">最大化</span>
                   </div>
                 </div>
                 <div class="card-header">
