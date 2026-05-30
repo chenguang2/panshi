@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,14 @@ class AnsibleRunnerService:
             tag, ip, _sanitize_for_log(ev),
         )
 
+        # Ensure ansible-playbook is findable in PATH even when the backend is
+        # started without uv run (e.g. prepare/linux/start.sh uses raw python).
+        _venv_bin = str(Path(sys.executable).parent.resolve())
+        _current_path = os.environ.get("PATH", "")
+        _runner_env = {"ANSIBLE_HOST_KEY_CHECKING": "False"}
+        if _venv_bin not in _current_path:
+            _runner_env["PATH"] = f"{_venv_bin}:{_current_path}"
+
         async with self._semaphore:
             try:
                 result = await asyncio.wait_for(
@@ -105,7 +114,7 @@ class AnsibleRunnerService:
                         playbook="edge.yml",
                         tags=tag,
                         extravars=ev,
-                        envvars={"ANSIBLE_HOST_KEY_CHECKING": "False"},
+                        envvars=_runner_env,
                         settings={"job_timeout": self._job_timeout},
                     ),
                     timeout=self._job_timeout + 10,
