@@ -1,0 +1,51 @@
+---
+######################构建edge服务########################
+- name: copy edge file directory
+  ansible.builtin.copy:
+    src: "{{ srcpath }}"
+    dest: "{{ destpath }}"
+  tags:
+    - edge_build
+
+- name: decompressing openresty files
+  shell: 
+    tar xf {{ destpath }}/soft/openresty-1.21.4.1.tar.gz -C {{ destpath }}/soft/;
+    tar xf {{ destpath }}/soft/openssl-1.1.1g.tar.gz -C {{ destpath }}/soft/;
+    tar xf {{ destpath }}/soft/zlib-1.2.11.tar.gz -C {{ destpath }}/soft/;
+    tar xf {{ destpath }}/soft/pcre-8.43.tar.gz -C {{ destpath }}/soft/;
+    tar xf {{ destpath }}/soft/nginx-sticky-module-ng.tar.gz -C {{ destpath }}/soft/;
+    tar xf {{ destpath }}/soft/uap-edge.tar.gz -C {{ destpath }}/soft/;
+  tags:
+    - edge_build
+
+- name: build edge server
+  shell: 
+    chdir: "{{ destpath }}soft/openresty-1.21.4.1/"
+    cmd: "source /etc/profile;./configure --prefix={{ item.1 }} --with-luajit --with-http_stub_status_module --with-http_gzip_static_module --with-http_realip_module --with-http_ssl_module --with-http_v2_module --with-stream --with-stream_realip_module --with-stream_ssl_module --with-stream_ssl_preread_module --with-pcre-jit --with-pcre={{ destpath }}soft/pcre-8.43 --with-openssl={{ destpath }}soft/openssl-1.1.1g --with-zlib={{ destpath }}soft/zlib-1.2.11 --add-module={{ destpath }}soft/module/nginx-sticky-module-ng"
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ prefix.split(',') }}"
+  tags:
+    - edge_build
+
+- name: make edge server
+  shell: 
+    chdir: "{{ destpath }}soft/openresty-1.21.4.1/"
+    cmd: "source /etc/profile;make && make install"
+  tags:
+    - edge_build
+
+- name: Link directory
+  shell:
+    source /etc/profile;
+    ln -s {{  destpath }}soft/uap-edge/edge {{ item.1 }}/nginx/edge;
+    ln -s {{  destpath }}soft/uap-edge/deps {{ item.1 }}/nginx/deps;
+    echo y | cp -r {{  destpath }}soft/uap-edge/conf/* {{ item.1 }}/nginx/conf/;
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ prefix.split(',') }}"
+  tags:
+    - edge_build
+

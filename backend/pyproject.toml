@@ -18,6 +18,7 @@ dependencies = [
     "cryptography>=41.0.0",
     "pyyaml>=6.0",
     "python-multipart>=0.0.28",
+    "ansible-runner>=2.3.0",
 ]
 
 [project.optional-dependencies]

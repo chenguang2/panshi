@@ -1,7 +1,10 @@
 import json
+from datetime import datetime, timezone
 from typing import Optional, Any
+from enum import Enum
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
@@ -15,12 +18,103 @@ from app.schemas.cluster import (
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.config_diff import EquivalenceRules
 from app.services import edge_sync
+from app.services.ansible_service import (
+    AnsibleRunnerService,
+    AnsibleExecutionError,
+    ALLOWED_TAGS,
+    NGINX_CMD_MAP,
+)
 from app.api.v1.clusters import get_current_user
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
 NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}
 NODE_ALLOWED_SEARCH_FIELDS = {"name", "ip"}
+
+
+# ── request / response schemas ────────────────────────────────
+
+
+class NginxAction(str, Enum):
+    start = "start"
+    stop = "stop"
+    restart = "restart"
+    check = "check"
+
+
+class BatchAction(str, Enum):
+    start = "start"
+    stop = "stop"
+    restart = "restart"
+    check = "check"
+    statistic = "statistic"
+
+
+class NodeActionRequest(BaseModel):
+    action: BatchAction
+    node_ids: list[int] = []
+
+
+class AnsibleRunRequest(BaseModel):
+    tag: str
+    extravars: dict[str, Any] = {}
+
+
+# ── shared helpers ───────────────────────────────────────────
+
+_ansible_service = AnsibleRunnerService()
+
+
+async def _verify_node(cluster_id: int, node_id: int, db: AsyncSession) -> Node:
+    result = await db.execute(
+        select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id)
+    )
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+    return node
+
+
+async def _update_status_detail(db: AsyncSession, node: Node, detail: dict[str, Any]) -> None:
+    node.status_detail = json.dumps(detail, ensure_ascii=False)
+    await db.commit()
+
+
+async def _run_and_update(
+    db: AsyncSession,
+    node: Node,
+    tag: str,
+    extravars: dict[str, Any],
+) -> dict[str, Any]:
+    """Execute ansible playbook and persist result to node.status_detail."""
+    try:
+        result = await _ansible_service.run_playbook(
+            ip=node.ip, tag=tag, extravars=extravars,
+        )
+        detail = _ansible_service.build_status_detail(tag, result)
+        await _update_status_detail(db, node, detail)
+        return result
+    except AnsibleExecutionError as e:
+        detail = {
+            "last_execution": datetime.now(timezone.utc).isoformat(),
+            "last_status": "failed",
+            "last_rc": e.rc,
+            "last_tag": tag,
+            "last_error": str(e),
+        }
+        await _update_status_detail(db, node, detail)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT if e.rc == -1
+            else status.HTTP_502_BAD_GATEWAY,
+            detail=f"操作失败: {e}",
+        )
+
+
+def _nginx_extravars(node: Node, ports: str = "") -> dict[str, Any]:
+    return {
+        "prefix": node.edge_path,
+        "ports": ports or str(node.management_port),
+    }
 
 
 @router.get("/{cluster_id}/nodes", response_model=dict)
@@ -125,29 +219,148 @@ async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest 
 
 @router.post("/{cluster_id}/nodes/{node_id}/start")
 async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
-    node = result.scalar_one_or_none()
-    if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
-    return {"status": "ok", "message": "节点已启动"}
+    node = await _verify_node(cluster_id, node_id, db)
+    result = await _run_and_update(
+        db, node, "nginx_cmd_run",
+        _nginx_extravars(node) | {"nginx_cmd": "nginx_start"},
+    )
+    return {"status": "ok", "message": "节点已启动", "rc": result.get("rc")}
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/stop")
 async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
-    node = result.scalar_one_or_none()
-    if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
-    return {"status": "ok", "message": "节点已停止"}
+    node = await _verify_node(cluster_id, node_id, db)
+    result = await _run_and_update(
+        db, node, "nginx_cmd_run",
+        _nginx_extravars(node) | {"nginx_cmd": "nginx_stop"},
+    )
+    return {"status": "ok", "message": "节点已停止", "rc": result.get("rc")}
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/restart")
+async def restart_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    node = await _verify_node(cluster_id, node_id, db)
+    result = await _run_and_update(
+        db, node, "nginx_cmd_run",
+        _nginx_extravars(node) | {"nginx_cmd": "nginx_reload"},
+    )
+    return {"status": "ok", "message": "节点已重启", "rc": result.get("rc")}
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/check")
+async def check_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+    node = await _verify_node(cluster_id, node_id, db)
+    result = await _run_and_update(
+        db, node, "nginx_cmd_run",
+        _nginx_extravars(node) | {"nginx_cmd": "nginx_check"},
+    )
+    return {
+        "status": "ok",
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+    }
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/statistic")
+async def statistic_node(
+    cluster_id: int, node_id: int,
+    ports: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    node = await _verify_node(cluster_id, node_id, db)
+    if not ports:
+        ports = str(node.management_port)
+    result = await _run_and_update(
+        db, node, "edge_statistic",
+        {"prefix": node.edge_path, "ports": ports},
+    )
+    detail = _ansible_service.build_status_detail("edge_statistic", result)
+    return {
+        "status": "ok",
+        "rc": result.get("rc"),
+        "statistic": detail.get("statistic", {}),
+    }
 
 
 @router.get("/{cluster_id}/nodes/{node_id}/status")
 async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
-    node = result.scalar_one_or_none()
-    if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
-    return {"status": "ok", "node_status": node.status, "message": "状态查询成功"}
+    node = await _verify_node(cluster_id, node_id, db)
+    detail: dict[str, Any] = {}
+    if node.status_detail:
+        try:
+            detail = json.loads(node.status_detail)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {
+        "status": "ok",
+        "node_status": node.status,
+        "status_detail": detail,
+        "last_heartbeat": detail.get("last_execution"),
+    }
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/ansible-run")
+async def ansible_run(
+    cluster_id: int, node_id: int,
+    body: AnsibleRunRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    node = await _verify_node(cluster_id, node_id, db)
+    if body.tag not in ALLOWED_TAGS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不允许的操作: {body.tag}",
+        )
+    result = await _run_and_update(db, node, body.tag, body.extravars)
+    return {
+        "status": "ok",
+        "tag": body.tag,
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+    }
+
+
+@router.post("/{cluster_id}/nodes/action")
+async def batch_node_action(
+    cluster_id: int,
+    body: NodeActionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    # resolve nodes
+    query = select(Node).where(Node.cluster_id == cluster_id)
+    if body.node_ids:
+        query = query.where(Node.id.in_(body.node_ids))
+    result = await db.execute(query)
+    nodes = result.scalars().all()
+
+    if not nodes:
+        raise HTTPException(status_code=404, detail="未找到节点")
+
+    # build per-node results
+    results: list[dict[str, Any]] = []
+    for node in nodes:
+        try:
+            if body.action == BatchAction.statistic:
+                r = await _run_and_update(
+                    db, node, "edge_statistic",
+                    {"prefix": node.edge_path, "ports": str(node.management_port)},
+                )
+            else:
+                r = await _run_and_update(
+                    db, node, "nginx_cmd_run",
+                    _nginx_extravars(node) | {"nginx_cmd": NGINX_CMD_MAP[body.action.value]},
+                )
+            results.append({
+                "node_id": node.id, "ip": node.ip,
+                "status": "success", "rc": r.get("rc"),
+            })
+        except HTTPException as e:
+            results.append({
+                "node_id": node.id, "ip": node.ip,
+                "status": "error", "detail": e.detail,
+            })
+
+    return {"action": body.action.value, "results": results}
 
 
 @router.get("/{cluster_id}/nodes/{node_id}/diff")

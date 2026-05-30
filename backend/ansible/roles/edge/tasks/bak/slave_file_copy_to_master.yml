@@ -1,0 +1,20 @@
+---
+###################### slave file copy to master    ########################
+###################### note: only file can transfer ########################
+- name: run
+  fetch:
+    src: "{{ item.1 }}"
+    dest: "{{ item.2 }}"
+    delegate_to: "{{ item.0 }}"
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ srcpath.split(',') }}"
+    - "{{ destpath.split(',') }}"
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: no
+  no_log: false    
+  tags:
+    - edge_slave_file_copy_to_master

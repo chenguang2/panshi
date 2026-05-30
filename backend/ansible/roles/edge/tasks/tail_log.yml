@@ -1,0 +1,32 @@
+###################### tail log ########################
+- name: tail
+  shell: "tail -n {{ number_line }} {{ item.1 }}"
+  register: tail_log
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ paths.split(',') }}"
+  failed_when: false
+  tags:
+    - edge_tail_log
+
+###################### gen log ########################
+- name: gen
+  set_fact:
+    log_messages: "{{ log_messages | default([]) + [item.stdout_lines] }}"
+  loop: "{{ tail_log.results | default([]) }}"
+  when:
+    - tail_log is defined
+    - tail_log.results is defined
+    - tail_log.results | length > 0
+    - item.stdout_lines is defined
+  tags:
+    - edge_tail_log
+
+###################### show log ########################
+- name: out
+  debug:
+    msg: "{{ log_messages }}"
+  when: log_messages is defined
+  tags:
+    - edge_tail_log

@@ -1,0 +1,13 @@
+---
+######################启动edge########################
+- name: with_together
+  shell: "{{ item.1 }}/nginx"
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ paths.split(',') }}"
+  changed_when: false
+  no_log: true
+  failed_when: false
+  tags:
+    - edge_start

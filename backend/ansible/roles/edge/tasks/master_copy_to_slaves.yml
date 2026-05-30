@@ -1,0 +1,18 @@
+---
+###################### master copy to slaves ########################
+- name: copy
+  ansible.builtin.copy:
+    src: "{{ item.1 }}"
+    dest: "{{ item.2 }}"
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ srcpath.split(',') }}"
+    - "{{ destpath.split(',') }}"
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  tags:
+    - edge_master_copy_to_slaves

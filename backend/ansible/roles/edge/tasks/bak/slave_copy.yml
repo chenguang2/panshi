@@ -1,0 +1,93 @@
+---
+- name: 创建临时目录
+  ansible.builtin.tempfile:
+    state: directory
+  register: temp_dir
+  tags:
+  - edge_slave_dir_copy_to_master  
+
+- name: 打印临时目录
+  debug:
+    var: temp_dir.path
+  tags:
+  - edge_slave_dir_copy_to_master  
+
+- name: 提取最后一个目录或文件名
+  set_fact:
+    last_path: "{{ srcpath | ansible.builtin.path('basename') }}"
+  tags:
+  - edge_slave_dir_copy_to_master  
+
+- name: 打印变量值
+  debug:
+    var: last_path  
+  tags:
+  - edge_slave_dir_copy_to_master      
+
+- name: 提取路径的最后一个目录或文件名之前的部分
+  set_fact:
+    pre_path: "{{ srcpath | ansible.builtin.path('dirname') }}"
+  tags:
+  - edge_slave_dir_copy_to_master 
+
+- name: 打印变量值
+  debug:
+    var: pre_path
+  tags:
+  - edge_slave_dir_copy_to_master     
+######################拷贝slave文件########################
+- name: 打包目录文件
+  shell: "tar -zcvf {{ temp_dir.path }}/{{ last_path }}.tar.gz -C{{ pre_path }}/ {{ last_path }}"
+  tags:
+  - edge_slave_dir_copy_to_master 
+
+- name: 拷贝压缩文件从 slave 到 Master
+  ansible.builtin.fetch:
+    src: "{{ temp_dir.path }}/{{ last_path }}.tar.gz"
+    dest: "{{ destpath }}"
+    flat: true
+  tags:
+  - edge_slave_dir_copy_to_master 
+
+# ######################拷贝slave文件########################
+# - name: 打包目录文件
+#   shell: "tar -zcvf {{ local_paths }}/{{ file_name }}.tar.gz -C{{ work_paths }}/ {{ dir_name }}"
+#   tags:
+#     - edge_slave_copy
+
+# - name: 拷贝压缩文件从slave到Master
+#   ansible.builtin.fetch:
+#     src: "{{ local_paths }}/{{ file_name }}.tar.gz"
+#     dest: "{{ destpath }}"
+#     flat: true
+#   tags:
+#     - edge_slave_copy
+
+#- name: 拷贝edge文件
+#  ansible.builtin.copy:
+#    src: "{{ inventory_hostname }}/{{ work_paths }}/{{ file_name }}.tar.gz/"
+#    dest: "{{ destpath }}"
+#    delegate_to: 192.168.100.141
+#  tags:
+#    - edge_slave_copy
+
+
+- name: 解压压缩文件
+ ansible.builtin.unarchive:
+   src: "{{ destpath }}/{{ inventory_hostname }}/{{ work_paths }}/{{ file_name }}.tar.gz"
+   dest: "{{ work_paths }}"  # 替换成ansible-runner主机上的目标目录
+   remote_src: yes
+   remote_user: root
+   delegate_to: 192.168.100.71
+ tags:
+   - edge_slave_copy
+
+#- name: 将解压后的目录复制到其他主机
+#  ansible.builtin.copy:
+#    src: "{{ destpath }}/{{ dir_name }}  # 替换成解压后的目录在ansible-runner主机上的路径
+#    dest: {{ work_paths }}  # 替换成其他主机上的目标目录
+#    remote_src: yes
+#    recursive: yes
+#  delegate_to: {{ destips }}
+#  tags:
+#    - edge_slave_copy

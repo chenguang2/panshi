@@ -1,0 +1,9 @@
+---
+###################### unzip tar bao on master  ########################
+- name: run
+  ansible.builtin.unarchive:
+    src: "{{ tar_path }}"
+    dest: "{{ destpath }}"
+  tags:
+  - edge_master_unzip
+

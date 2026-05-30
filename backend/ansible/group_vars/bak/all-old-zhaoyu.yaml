@@ -1,0 +1,14 @@
+edge_base: "/work/jboss/openresty/nginx"  #edge工作目录.
+edge_user: "jboss"
+srcip: "192.168.120.14"
+srcpath: "/root/ansible-runner-service/samples_nginx/project/soft"
+user: "jboss"
+destip: ""
+destpath: "/work/"
+autounzip: ""
+userpath: ""
+number_line: "10"
+#cmdline:
+#  ps -ef|grep nginx; 
+#  free -m;
+prefix: "/work/jboss"

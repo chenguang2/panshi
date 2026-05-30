@@ -124,6 +124,32 @@ def _fix_postgresql_table(engine: Engine, table: str, bad_col: str, compound_col
         )
 
 
+COLUMN_MIGRATIONS = [
+    ("ps_node", "status_detail", "TEXT"),
+]
+
+
+def _add_column(engine: Engine, table: str, column: str, col_type: str) -> bool:
+    """Add a column to table if it does not already exist."""
+    inspector = inspect(engine)
+    try:
+        columns = [c["name"] for c in inspector.get_columns(table)]
+    except Exception:
+        return False
+    if column in columns:
+        return False
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN {column} {col_type}'))
+            conn.commit()
+            logger.info("Added column %s.%s (%s)", table, column, col_type)
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Could not add column %s.%s: %s", table, column, e)
+            return False
+
+
 def run_migrations(engine: Engine) -> None:
     """Run all schema migrations after Base.metadata.create_all."""
     migrated_any = False
@@ -137,6 +163,10 @@ def run_migrations(engine: Engine) -> None:
                 _fix_sqlite_table(engine, table, bad_col, compound_cols)
             else:
                 _fix_postgresql_table(engine, table, bad_col, compound_cols)
+            migrated_any = True
+
+    for table, column, col_type in COLUMN_MIGRATIONS:
+        if _add_column(engine, table, column, col_type):
             migrated_any = True
 
     if not migrated_any:

@@ -1,3 +1,4 @@
+import json as _json
 import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
@@ -214,6 +215,7 @@ class NodeUpdate(BaseModel):
 class NodeResponse(NodeBase):
     id: int
     cluster_id: int
+    status_detail: Optional[dict] = None
     created_at: Optional[str] = None
 
     @field_validator('created_at', mode='before')
@@ -222,6 +224,22 @@ class NodeResponse(NodeBase):
         if isinstance(v, datetime):
             return v.isoformat() + 'Z'
         return v
+
+    @field_validator('status_detail', mode='before')
+    @classmethod
+    def convert_status_detail(cls, v):
+        if isinstance(v, str):
+            try:
+                return _json.loads(v)
+            except (_json.JSONDecodeError, TypeError):
+                return None
+        return v or None
+
+    @property
+    def last_heartbeat(self) -> Optional[str]:
+        if isinstance(self.status_detail, dict):
+            return self.status_detail.get("last_execution")
+        return None
 
     class Config:
         from_attributes = True

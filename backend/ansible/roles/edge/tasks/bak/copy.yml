@@ -1,0 +1,8 @@
+---
+######################拷贝edge文件########################
+- name: 拷贝edge文件
+  ansible.builtin.copy:
+    src: "{{ srcpath }}"
+    dest: "{{ destpath }}"
+  tags:
+    - edge_copy

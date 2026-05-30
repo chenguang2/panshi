@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# 检查参数是否为空
+if [[ $# -lt 2 ]]; then
+  echo "请提供待执行的命令和 Nginx 所在的父级目录"
+  exit 1
+fi
+
+command="$1"
+prefix="$2"
+
+# 根据 prefix 确定 Nginx 的安装路径和 pid 文件路径
+nginx_install_path="$prefix/nginx"
+nginx_pid_file="$nginx_install_path/logs/nginx.pid"
+
+# 获取 Nginx 进程的 pid
+get_nginx_pid() {
+  if [[ -f $nginx_pid_file ]]; then
+    cat "$nginx_pid_file"
+  else
+    echo ""
+  fi
+}
+
+# 检查给定 pid 的进程是否存在且为 Nginx 进程
+is_nginx_process() {
+  local pid="$1"
+  ps -p "$pid" -o cmd= | grep -q "nginx"
+}
+
+# 检查给定 pid 的进程是否正在运行
+is_pid_running() {
+  local pid="$1"
+  ps -p "$pid" >/dev/null 2>&1
+}
+
+# 启动 Nginx
+nginx_start() {
+  local nginx_pid=$(get_nginx_pid)
+  if [[ -n $nginx_pid ]]; then
+      if is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
+        echo "Nginx 进程已经在运行中（PID: $nginx_pid）"
+      else
+        echo "存在 Nginx 进程（PID: $nginx_pid），但不是有效的 Nginx 进程"
+      fi
+      return
+  fi
+
+  $nginx_install_path/sbin/nginx 2>&1
+  local start_result=$?
+
+  if [[ $start_result -eq 0 ]]; then
+    nginx_pid=$(get_nginx_pid)
+    if [[ -n $nginx_pid ]]; then
+      if is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
+        echo "Nginx 启动成功（PID: $nginx_pid）"
+      else
+        echo "Nginx 启动成功，但无法验证新的 Nginx 进程 PID 的有效性"
+      fi
+    else
+      echo "无法获取新的 Nginx 进程 PID"
+    fi
+  else
+    echo "Nginx 启动失败，错误信息：$start_result"
+  fi
+}
+
+
+# 停止 Nginx
+nginx_stop() {
+  local nginx_pid=$(get_nginx_pid)
+  if [[ -z $nginx_pid ]]; then
+    echo "Nginx 进程不存在"
+  elif is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
+    $nginx_install_path/sbin/nginx -s stop
+    echo "Nginx 进程已停止"
+  else
+    echo "Nginx 进程（PID: $nginx_pid）不存在或不是 Nginx 进程"
+  fi
+}
+
+
+# 重新加载 Nginx 配置
+nginx_reload() {
+  local nginx_pid=$(get_nginx_pid)
+  if [[ -z $nginx_pid ]]; then
+    echo "Nginx 进程不存在"
+  elif is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
+    $nginx_install_path/sbin/nginx -s reload
+    echo "Nginx 配置已重新加载"
+  else
+    echo "Nginx 进程（PID: $nginx_pid）不存在或不是 Nginx 进程"
+  fi
+}
+
+
+# 检查 Nginx 进程是否存在
+nginx_check() {
+  local nginx_pid=$(get_nginx_pid)
+  if [[ -z $nginx_pid ]]; then
+    echo "Nginx 进程不存在"
+  elif is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
+    echo "Nginx 进程（PID: $nginx_pid）正在运行"
+  else
+    echo "Nginx 进程（PID: $nginx_pid）不存在或不是 Nginx 进程"
+  fi
+}
+
+
+# 执行命令
+case $command in
+  "nginx_start")
+    nginx_start
+    ;;
+  "nginx_stop")
+    nginx_stop
+    ;;
+  "nginx_reload")
+    nginx_reload
+    ;;
+  "nginx_check")
+    nginx_check
+    ;;
+  *)
+    echo "无效的命令: $command"
+    ;;
+esac
+
+
+

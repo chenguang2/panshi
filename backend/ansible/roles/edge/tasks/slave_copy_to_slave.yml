@@ -1,0 +1,133 @@
+---
+- name: 创建 slave 临时目录
+  ansible.builtin.tempfile:
+    state: directory
+  register: temp_dir
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 打印 slave 临时目录
+  debug:
+    var: temp_dir.path
+  tags:
+  - edge_slave_copy_to_slave  
+
+
+- name: 获取 slave 路径属性
+  stat:
+    path: "{{ srcpath }}"
+  register: path_stat
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 调试 slave 路径属性
+  debug:
+    var: path_stat
+  tags:
+  - edge_slave_copy_to_slave      
+
+- name: 判断 slave 路径类型并提取名称
+  set_fact:
+    last_path: "{{ srcpath | basename }}"
+    pre_path: "{{ srcpath | dirname }}"
+  when: path_stat.stat.isdir == false
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 判断 slave 路径类型并提取名称
+  set_fact:
+    last_path: "{{ srcpath | dirname | basename }}"
+    pre_path: "{{ srcpath | dirname | dirname }}"
+  when: path_stat.stat.isdir == true
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 打印名称
+  debug:
+    var: last_path
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 打印前缀路径
+  debug:
+    var: pre_path
+  tags:
+  - edge_slave_copy_to_slave
+
+###################### copy slave to master ########################
+
+- name: 创建 master 临时目录
+  delegate_to: localhost
+  ansible.builtin.tempfile:
+    state: directory
+  register: master_temp_dir
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 打印 master 临时目录
+  debug:
+    var: master_temp_dir.path
+  tags:
+  - edge_slave_copy_to_slave  
+
+
+- name: 打包目录文件
+  shell: "tar -zcvf {{ temp_dir.path }}/{{ last_path }}.tar.gz -C{{ pre_path }}/ {{ last_path }}"
+  tags:
+  - edge_slave_copy_to_slave 
+
+- name: 拷贝压缩文件从 slave 到 Master
+  ansible.builtin.fetch:
+    src: "{{ temp_dir.path }}/{{ last_path }}.tar.gz"
+    dest: "{{ master_temp_dir.path }}/"
+    flat: true
+  tags:
+  - edge_slave_copy_to_slave 
+
+- name: 删除 slave 临时目录
+  command: rm -rf {{ temp_dir.path }}
+  tags:
+  - edge_slave_copy_to_slave     
+
+- name: 打印 master TAR 包路径
+  set_fact:
+    tar_path: "{{ master_temp_dir.path }}/{{ last_path }}.tar.gz"
+    untar_path: "{{ master_temp_dir.path }}/{{ last_path }}"
+  tags:
+  - edge_slave_copy_to_slave  
+
+- name: 调试 master TAR 包路径  
+  debug:
+    msg: "tar_path={{tar_path}},untar_path={{untar_path}}"
+  tags:
+  - edge_slave_copy_to_slave
+
+- name: 解压压缩文件
+  delegate_to: localhost
+  ansible.builtin.unarchive:
+    src: "{{ tar_path }}"
+    dest: "{{ master_temp_dir.path }}/"
+  tags:
+  - edge_slave_copy_to_slave
+
+###################### master copy to slaves ########################
+
+- name: 将解压后的目录复制到其他主机
+  delegate_to: "{{ destip }}"
+  ansible.builtin.copy:
+    src: "{{ untar_path }}"
+    dest: "{{ destpath }}"
+
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: no
+  no_log: false
+  tags:
+    - edge_slave_copy_to_slave
+
+- name: 删除 master 临时目录
+  delegate_to: localhost
+  command: rm -rf {{ master_temp_dir.path }}
+  tags:
+  - edge_slave_copy_to_slave  
