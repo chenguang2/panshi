@@ -14,13 +14,13 @@ port="$3"
 nginx_install_path="$prefix/nginx"
 nginx_pid_file="$nginx_install_path/logs/nginx.pid"
 
-cmd_nginx_start="$nginx_install_path/sbin/nginx 2>&1"
+cmd_nginx_start="$nginx_install_path/sbin/nginx"
 cmd_nginx_stop="$nginx_install_path/sbin/nginx -s stop"
 cmd_nginx_reload="$nginx_install_path/sbin/nginx -s reload"
 
 if [[ "$prefix" =~ "uap-edge"$ ]]; then
     nginx_pid_file="$prefix/logs/nginx.pid"
-    cmd_nginx_start="$prefix/bin/edge start 2>&1"
+    cmd_nginx_start="$prefix/bin/edge start"
     cmd_nginx_stop="$prefix/bin/edge stop"
     cmd_nginx_reload="$prefix/bin/edge reload"
 fi

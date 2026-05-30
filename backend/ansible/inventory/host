@@ -3,8 +3,8 @@ all:
     edge_cluster:
       hosts:
         192.168.100.235:
-          ansible_ssh_user: qcg
-          ansible_ssh_pass: 'qcg'
+          ansible_ssh_user: jboss
+          ansible_ssh_pass: 'jboss@12306'
         192.168.120.14:
 #          ansible_ssh_user: root
 #          ansible_ssh_pass: '1'
