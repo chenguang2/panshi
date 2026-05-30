@@ -1,14 +1,15 @@
 import { ref, reactive, computed, watch, type Ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import { showDeleteConfirm, executeDeleteWithProgress } from './useClusterUtils'
+import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
 export const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
+  { title: 'Edge版本', key: 'edge_version', width: 110 },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
   { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
@@ -65,7 +66,7 @@ export function useClusterNodes(options: {
   }
 
   const nodeColumnPopoverVisible = ref(false)
-  const nodeColumnsSelected = ref(['ip', 'service_port', 'management_port', 'status', 'actions'])
+  const nodeColumnsSelected = ref(['ip', 'edge_version', 'service_port', 'management_port', 'status', 'actions'])
   const nodeSearchVisible = ref(true)
   const nodeActionsSelected = ref(['start', 'stop', 'status'])
 
@@ -271,39 +272,251 @@ export function useClusterNodes(options: {
     })
   }
 
-  const startNode = async (node: Node) => {
+  /** Extract key lines from nginx_cmd.sh stdout for user-facing highlights. */
+  const extractKeyInfo = (stdout: string): string[] => {
+    const highlights: string[] = []
+    const lines = stdout.split('\n')
+    for (const line of lines) {
+      const trimmed = line.trim()
+      // Nginx process status
+      if (/Nginx process/i.test(trimmed) || /Nginx.*(PID|running|stopped|started|exist)/i.test(trimmed)) {
+        highlights.push(trimmed)
+      }
+      // Error / failure lines
+      if (/Failed to|Error|Invalid command/i.test(trimmed) && !highlights.includes(trimmed)) {
+        highlights.push(trimmed)
+      }
+      // prefix / port info
+      if (/^(prefix|port):/i.test(trimmed)) {
+        highlights.push(trimmed)
+      }
+    }
+    return highlights
+  }
+
+  const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart', actionLabel: string) => {
     const cluster = clusters.value.find(c => c.id === node.cluster_id)
     if (!cluster) return
+
+    const logs: string[] = []
+    const addLog = (text: string) => {
+      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+    }
+    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+      percent: 0, status: 'active',
+    }
+
+    const modal = Modal.info({
+      title: `节点 ${actionLabel}`,
+      width: 700,
+      content: buildDeleteProgressContent(progress, logs),
+      okText: '确定',
+      okButtonProps: { disabled: true },
+      cancelText: '',
+      closable: true,
+    })
+
+    const updateContent = () => {
+      modal.update({ content: buildDeleteProgressContent(progress, logs) })
+    }
+
+    addLog(`开始对节点 ${node.ip} 执行 ${actionLabel} 操作...`)
+    progress.percent = 5
+    updateContent()
+
+    await new Promise((r) => setTimeout(r, 300))
+
     try {
-      await api.post(`/clusters/${cluster.id}/nodes/${node.id}/start`)
-      message.success('节点已启动')
+      progress.percent = 20
+      updateContent()
+
+      const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
+      const data = res.data as Record<string, any>
+      progress.percent = 60
+
+      // 1. 显示完整命令（可复制）
+      addLog('')
+      addLog('═══════════════════════════════════════════')
+      addLog('执行命令 (可复制排查):')
+      addLog(data.command || '(无命令信息)')
+      addLog('═══════════════════════════════════════════')
+      addLog('')
+
+      // 2. 返回码
+      addLog(`返回码 (rc): ${data.rc}`)
+
+      // 3. 摘录关键信息
+      if (data.stdout) {
+        const highlights = extractKeyInfo(data.stdout)
+        if (highlights.length > 0) {
+          addLog('')
+          addLog('--- 关键信息 ---')
+          for (const h of highlights) {
+            addLog(`  ${h}`)
+          }
+        }
+      }
+
+      // 4. 完整 stdout
+      if (data.stdout) {
+        addLog('')
+        addLog('--- 完整输出 (stdout) ---')
+        addLog(data.stdout)
+      }
+      // 5. stderr
+      if (data.stderr) {
+        addLog('')
+        addLog('--- 错误输出 (stderr) ---')
+        addLog(data.stderr)
+      }
+
+      // 6. 最终结果
+      addLog('')
+      if (data.rc === 0) {
+        progress.status = 'success'
+        addLog(`✅ 节点 ${actionLabel} 成功`)
+      } else {
+        progress.status = 'exception'
+        addLog(`❌ 节点 ${actionLabel} 失败`)
+        addLog(`错误: ${data.stderr || data.stdout || '未知错误'}`)
+      }
+
+      progress.percent = 100
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
+
+      // 刷新节点列表，更新状态列和版本号
+      if (cluster) await loadNodes(cluster)
     } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-      message.error(typeof detail === 'string' ? detail : '启动节点失败')
+      const err = error as { response?: { data?: { detail?: string } }; message?: string }
+      const detail = err.response?.data?.detail || err.message || '未知错误'
+      progress.percent = 100
+      progress.status = 'exception'
+      addLog('')
+      addLog(`❌ 操作失败: ${detail}`)
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
     }
   }
 
+  const startNode = async (node: Node) => {
+    await executeNodeAction(node, 'start', '启动')
+  }
+
   const stopNode = async (node: Node) => {
-    const cluster = clusters.value.find(c => c.id === node.cluster_id)
-    if (!cluster) return
-    try {
-      await api.post(`/clusters/${cluster.id}/nodes/${node.id}/stop`)
-      message.success('节点已停止')
-    } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-      message.error(typeof detail === 'string' ? detail : '停止节点失败')
-    }
+    await executeNodeAction(node, 'stop', '停止')
   }
 
   const queryNodeStatus = async (node: Node) => {
     const cluster = clusters.value.find(c => c.id === node.cluster_id)
     if (!cluster) return
+
+    const logs: string[] = []
+    const addLog = (text: string) => {
+      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+    }
+    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+      percent: 0, status: 'active',
+    }
+
+    const modal = Modal.info({
+      title: '节点状态查询',
+      width: 700,
+      content: buildDeleteProgressContent(progress, logs),
+      okText: '确定',
+      okButtonProps: { disabled: true },
+      cancelText: '',
+      closable: true,
+    })
+
+    const updateContent = () => {
+      modal.update({ content: buildDeleteProgressContent(progress, logs) })
+    }
+
+    addLog(`开始查询节点 ${node.ip} 状态...`)
+    progress.percent = 10
+    updateContent()
+
+    await new Promise((r) => setTimeout(r, 300))
+
     try {
-      const res = await api.get(`/clusters/${cluster.id}/nodes/${node.id}/status`)
-      message.success(`节点状态: ${res.data.node_status === 1 ? '健康' : '离线'}`)
+      addLog('正在执行 edge_statistic...')
+      progress.percent = 30
+      updateContent()
+
+      const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, { ports: String(node.management_port) })
+      const data = res.data as Record<string, any>
+      progress.percent = 70
+
+      // 1. 完整命令
+      addLog('')
+      addLog('═══════════════════════════════════════════')
+      addLog('执行命令 (可复制排查):')
+      addLog(data.command || '(无命令信息)')
+      addLog('═══════════════════════════════════════════')
+      addLog('')
+
+      // 2. 返回码
+      addLog(`返回码 (rc): ${data.rc}`)
+
+      // 3. 关键统计信息
+      if (data.statistic && Object.keys(data.statistic).length > 0) {
+        addLog('')
+        addLog('--- 节点统计信息 ---')
+        const labelMap: Record<string, string> = {
+          cpu_usage: 'CPU 使用率 (Nginx)',
+          memory_usage: '内存使用率 (Nginx)',
+          system_cpu_usage: 'CPU 使用率 (系统)',
+          system_memory_usage: '内存使用率 (系统)',
+          edge_version: 'Edge 版本',
+        }
+        for (const [key, label] of Object.entries(labelMap)) {
+          const val = data.statistic[key]
+          if (val !== undefined && val !== null) {
+            addLog(`  ${label}: ${val}`)
+          }
+        }
+      }
+
+      // 4. stdout
+      if (data.stdout) {
+        addLog('')
+        addLog('--- 完整输出 (stdout) ---')
+        addLog(data.stdout)
+      }
+      // 5. stderr
+      if (data.stderr) {
+        addLog('')
+        addLog('--- 错误输出 (stderr) ---')
+        addLog(data.stderr)
+      }
+
+      // 6. 结果
+      addLog('')
+      if (data.rc === 0) {
+        progress.status = 'success'
+        addLog('✅ 状态查询成功')
+      } else {
+        progress.status = 'exception'
+        addLog('❌ 状态查询失败')
+        addLog(`错误: ${data.stderr || data.stdout || '未知错误'}`)
+      }
+
+      progress.percent = 100
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
+
+      // 刷新节点列表，更新状态列和版本号
+      await loadNodes(cluster)
     } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-      message.error(typeof detail === 'string' ? detail : '查询节点状态失败')
+      const err = error as { response?: { data?: { detail?: string } }; message?: string }
+      const detail = err.response?.data?.detail || err.message || '未知错误'
+      progress.percent = 100
+      progress.status = 'exception'
+      addLog('')
+      addLog(`❌ 状态查询失败: ${detail}`)
+      updateContent()
+      modal.update({ okButtonProps: { disabled: false } })
     }
   }
 

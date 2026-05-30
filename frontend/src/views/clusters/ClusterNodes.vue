@@ -82,8 +82,14 @@
       @change="(pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) => handleNodeTableChange(cluster, pag, sorter)"
     >
       <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'edge_version'">
+          {{ record.status_detail?.statistic?.edge_version || '-' }}
+        </template>
         <template v-if="column.key === 'status'">
-          <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '健康' : '离线'" />
+          <a-badge
+            :status="nginxRunning(record) ? 'success' : 'error'"
+            :text="nginxRunning(record) ? '健康' : '离线'"
+          />
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
@@ -141,10 +147,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { DownOutlined } from '@ant-design/icons-vue'
-import type { Cluster } from '@/types'
+import type { Cluster, Node } from '@/types'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
+
+/** Check whether nginx is actually running by analyzing parsed stdout. */
+function nginxRunning(node: Node): boolean {
+  const sd = node.status_detail
+  // Use nginx.nginx_running parsed from command stdout (more accurate than rc)
+  if (sd?.nginx?.nginx_running !== undefined) return sd.nginx.nginx_running
+  // Fallback: node.status (1=active/healthy, 0=offline)
+  return node.status === 1
+}
 
 const props = defineProps<{
   cluster: Cluster

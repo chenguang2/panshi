@@ -88,6 +88,7 @@ export interface Node {
   management_port: number
   edge_path?: string
   status: number
+  status_detail?: Record<string, any>
   created_at?: string
 }
 
