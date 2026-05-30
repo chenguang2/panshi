@@ -1,3 +1,3 @@
 .vscode/
 artifacts/
-soft/uap-edge.tar.gz
+soft/*.tar.gz
