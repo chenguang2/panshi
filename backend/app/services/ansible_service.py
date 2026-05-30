@@ -1,7 +1,9 @@
 import asyncio
+import io
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -114,10 +116,27 @@ class AnsibleRunnerService:
                     rc=-1, detail="timeout",
                 )
 
-        stdout = getattr(result, "stdout", "")
-        stderr = getattr(result, "stderr", "")
+        _raw_stdout = getattr(result, "stdout", "")
+        _raw_stderr = getattr(result, "stderr", "")
+        # ansible-runner may return file handles (TextIOWrapper / IOBase) instead of
+        # strings in some configurations; read them to avoid JSON serialization errors.
+        if isinstance(_raw_stdout, io.IOBase):
+            stdout = _raw_stdout.read() or ""
+        elif not isinstance(_raw_stdout, str):
+            stdout = str(_raw_stdout)
+        else:
+            stdout = _raw_stdout
+        if isinstance(_raw_stderr, io.IOBase):
+            stderr = _raw_stderr.read() or ""
+        elif not isinstance(_raw_stderr, str):
+            stderr = str(_raw_stderr)
+        else:
+            stderr = _raw_stderr
         rc = getattr(result, "rc", -1)
         status = getattr(result, "status", "failed")
+        # Capture the full ansible-playbook command for diagnostic display
+        command = getattr(result.config, "command", None)
+        command_str = " ".join(command) if isinstance(command, list) else (command or "")
 
         logger.info(
             "Ansible result tag=%s ip=%s rc=%d status=%s",
@@ -129,6 +148,7 @@ class AnsibleRunnerService:
             "status": status,
             "stdout": stdout,
             "stderr": stderr,
+            "command": command_str,
         }
 
     async def nginx_cmd(
@@ -172,6 +192,39 @@ class AnsibleRunnerService:
 
     # ── helpers ────────────────────────────────────────────────
 
+    @staticmethod
+    def _parse_nginx_status(stdout: str) -> dict[str, Any]:
+        """Parse nginx_cmd.sh stdout to determine nginx process status.
+
+        Returns a dict with ``nginx_running`` (bool) and ``nginx_status`` (str).
+        """
+        # Strip ANSI escape codes before matching
+        clean = _strip_ansi(stdout)
+        # Running indicators (rc may be 0/1 but nginx IS running)
+        if re.search(r"Nginx\s+process\s+.*\b running\b", clean, re.IGNORECASE):
+            pid_match = re.search(r"PID\s*:\s*(\d+)", clean)
+            return {
+                "nginx_running": True,
+                "nginx_status": "running",
+                "nginx_pid": pid_match.group(1) if pid_match else None,
+            }
+        if re.search(r"Nginx\s+started\s+successfully", clean, re.IGNORECASE):
+            pid_match = re.search(r"PID\s*:\s*(\d+)", clean)
+            return {
+                "nginx_running": True,
+                "nginx_status": "started",
+                "nginx_pid": pid_match.group(1) if pid_match else None,
+            }
+        # Stopped / not-running indicators
+        if re.search(r"Nginx\s+process\s+does\s+not\s+exist", clean, re.IGNORECASE):
+            return {"nginx_running": False, "nginx_status": "not_exist", "nginx_pid": None}
+        if re.search(r"Nginx\s+process\s+has\s+been\s+stopped", clean, re.IGNORECASE):
+            return {"nginx_running": False, "nginx_status": "stopped", "nginx_pid": None}
+        if re.search(r"Failed\s+to\s+start\s+Nginx", clean, re.IGNORECASE):
+            return {"nginx_running": False, "nginx_status": "start_failed", "nginx_pid": None}
+        # Fallback: unknown
+        return {"nginx_running": False, "nginx_status": "unknown", "nginx_pid": None}
+
     def build_status_detail(
         self,
         tag: str,
@@ -187,6 +240,10 @@ class AnsibleRunnerService:
                 result.get("stderr", "") or result.get("stdout", "")
             ),
         }
+        if tag in ("nginx_cmd_run", "edge_statistic"):
+            detail["nginx"] = self._parse_nginx_status(
+                result.get("stdout", "")
+            )
         if tag == "edge_statistic" and result.get("rc") == 0:
             detail["statistic"] = self._parse_statistic_stdout(
                 result.get("stdout", "")
@@ -196,24 +253,48 @@ class AnsibleRunnerService:
 
     @staticmethod
     def _parse_statistic_stdout(stdout: str) -> dict[str, str]:
-        """Extract CPU/memory/disk/version from cron_check.sh stdout."""
+        """Extract CPU/memory/disk/version from cron_check.sh stdout.
+
+        The input is the full playbook stdout (with ANSI codes + JSON formatting).
+        Strips ANSI codes and searches for target patterns across all lines.
+        """
+        clean = _strip_ansi(stdout)
         stats: dict[str, str] = {}
-        for line in stdout.splitlines():
-            line = line.strip()
-            if line.startswith("Total CPU usage for Nginx:"):
-                stats["cpu_usage"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Total memory usage for Nginx:"):
-                stats["memory_usage"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Total CPU usage for all processes:"):
-                stats["system_cpu_usage"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Total memory usage for all processes:"):
-                stats["system_memory_usage"] = line.split(":", 1)[1].strip()
-            elif line.startswith("Edge version:"):
-                stats["edge_version"] = line.split(":", 1)[1].strip()
+        for line in clean.splitlines():
+            # Remove JSON quoting / commas / indentation from playbook debug output
+            raw = line.strip().strip('",').strip()
+            if "Total CPU usage for Nginx:" in raw:
+                stats["cpu_usage"] = raw.split(":", 1)[1].strip().strip('",')
+            elif "Total memory usage for Nginx:" in raw:
+                stats["memory_usage"] = raw.split(":", 1)[1].strip().strip('",')
+            elif "Total CPU usage for all processes:" in raw:
+                stats["system_cpu_usage"] = raw.split(":", 1)[1].strip().strip('",')
+            elif "Total memory usage for all processes:" in raw:
+                stats["system_memory_usage"] = raw.split(":", 1)[1].strip().strip('",')
+            elif "Edge version:" in raw:
+                # Value is a JSON object like {"version":"2.7.5","boot_time":...}
+                # Playbook debug output repr-escapes inner quotes (\"), undo that first.
+                val = raw.split(":", 1)[1].strip().strip('",').replace('\\"', '"')
+                try:
+                    parsed = json.loads(val)
+                    if isinstance(parsed, dict) and "version" in parsed:
+                        stats["edge_version"] = parsed["version"]
+                    else:
+                        stats["edge_version"] = val
+                except (json.JSONDecodeError, TypeError):
+                    stats["edge_version"] = val
         return stats
 
 
 # ── module-level helpers ──────────────────────────────────────
+
+_ANSI_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from a string."""
+    return _ANSI_RE.sub("", text)
+
 
 def _sanitize_for_log(extravars: dict[str, Any]) -> dict[str, Any]:
     """Remove sensitive fields before logging."""

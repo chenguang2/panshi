@@ -76,6 +76,16 @@ async def _verify_node(cluster_id: int, node_id: int, db: AsyncSession) -> Node:
 
 
 async def _update_status_detail(db: AsyncSession, node: Node, detail: dict[str, Any]) -> None:
+    # Preserve nginx status from previous detail if new detail doesn't have it.
+    # nginx info comes from nginx_cmd_run tag; other tags (edge_statistic, etc.)
+    # should not overwrite it.
+    if "nginx" not in detail and node.status_detail:
+        try:
+            old = json.loads(node.status_detail) if isinstance(node.status_detail, str) else node.status_detail
+            if isinstance(old, dict) and "nginx" in old:
+                detail["nginx"] = old["nginx"]
+        except (json.JSONDecodeError, TypeError):
+            pass
     node.status_detail = json.dumps(detail, ensure_ascii=False)
     await db.commit()
 
@@ -224,7 +234,14 @@ async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(g
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_start"},
     )
-    return {"status": "ok", "message": "节点已启动", "rc": result.get("rc")}
+    return {
+        "status": "ok",
+        "message": "节点已启动",
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "command": result.get("command", ""),
+    }
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/stop")
@@ -234,7 +251,14 @@ async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(ge
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_stop"},
     )
-    return {"status": "ok", "message": "节点已停止", "rc": result.get("rc")}
+    return {
+        "status": "ok",
+        "message": "节点已停止",
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "command": result.get("command", ""),
+    }
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/restart")
@@ -244,7 +268,14 @@ async def restart_node(cluster_id: int, node_id: int, db: AsyncSession = Depends
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_reload"},
     )
-    return {"status": "ok", "message": "节点已重启", "rc": result.get("rc")}
+    return {
+        "status": "ok",
+        "message": "节点已重启",
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "command": result.get("command", ""),
+    }
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/check")
@@ -279,6 +310,9 @@ async def statistic_node(
         "status": "ok",
         "rc": result.get("rc"),
         "statistic": detail.get("statistic", {}),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "command": result.get("command", ""),
     }
 
 
