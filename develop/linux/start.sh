@@ -14,7 +14,13 @@ UV_BIN="${HOME}/.local/bin/uv"
 BACKEND_LOG="${PROJECT_ROOT}/backend.log"
 FRONTEND_LOG="${PROJECT_ROOT}/frontend.log"
 
-cd "$PROJECT_ROOT/backend" && $UV_BIN run uvicorn app.main:app --reload --port 9000 >> "$BACKEND_LOG" 2>&1 &
+#cd "$PROJECT_ROOT/backend" && $UV_BIN run uvicorn app.main:app --reload --port 9000 >> "$BACKEND_LOG" 2>&1 &
+#uv run --python /home/qcg/.local/bin/python3.11 uvicorn fastapi uvicorn main:app --reload --port 9000
+cd "$PROJECT_ROOT/backend" && $UV_BIN run --python /home/qcg/.local/bin/python3.11 uvicorn app.main:app --reload --port 9000 >> "$BACKEND_LOG" 2>&1 &
+
+
+
+
 BACKEND_PID=$!
 echo "Backend started (PID: $BACKEND_PID)"
 
