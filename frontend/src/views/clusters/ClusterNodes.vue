@@ -141,6 +141,16 @@
       :cluster-id="diffClusterId"
       :initial-node-id="diffNodeId"
     />
+
+    <NodeExecutionResultDrawer
+      v-model:visible="execDrawerVisible"
+      :title="execDrawerTitle"
+      :progress="execProgress"
+      :logs="execLogs"
+      :result="execResult"
+      :highlights="execHighlights"
+      :statistics="execStatistics"
+    />
   </div>
 </template>
 
@@ -150,6 +160,7 @@ import { DownOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 
 /** Check whether nginx is actually running by analyzing parsed stdout. */
@@ -203,6 +214,13 @@ const {
   startNode,
   stopNode,
   queryNodeStatus,
+  execDrawerVisible,
+  execDrawerTitle,
+  execProgress,
+  execLogs,
+  execResult,
+  execHighlights,
+  execStatistics,
 } = useClusterNodes({
   clusters,
   onRefresh,

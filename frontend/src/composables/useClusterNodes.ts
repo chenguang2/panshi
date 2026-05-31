@@ -41,6 +41,17 @@ export function useClusterNodes(options: {
   const diffClusterId = ref(0)
   const diffNodeId = ref(0)
 
+  // ── Execution Drawer state ─────────────────────────────────
+  const execDrawerVisible = ref(false)
+  const execDrawerTitle = ref('')
+  const execProgress = reactive<{ percent: number; status: 'active' | 'success' | 'exception' }>({
+    percent: 0, status: 'active',
+  })
+  const execLogs = ref<string[]>([])
+  const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
+  const execHighlights = ref<string[]>([])
+  const execStatistics = ref<Record<string, string> | null>(null)
+
   const authStore = useAuthStore()
   const NODE_CFG_KEY = () => `node_cfg_${authStore.user?.id ?? 'guest'}`
 
@@ -294,51 +305,67 @@ export function useClusterNodes(options: {
     return highlights
   }
 
+  /** Update Drawer content reactively. */
+  function updateDrawer() {
+    // Trigger reactivity by replacing the ref array
+    execLogs.value = [...execLogs.value]
+  }
+
+  /** Build ansible command string from known params (used before server responds). */
+  function buildCommandString(node: Node, actionLabel: string, extravars: Record<string, string>): string {
+    const evParts = Object.entries(extravars).map(([k, v]) => `${k}=${v}`)
+    return `ansible-playbook -i inventory edge.yml --tags nginx_cmd_run -e "${evParts.join(' ')}"`
+  }
+
   const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart', actionLabel: string) => {
     const cluster = clusters.value.find(c => c.id === node.cluster_id)
     if (!cluster) return
 
-    const logs: string[] = []
+    // Build command string upfront so it's available even on failure
+    const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', restart: 'nginx_reload' }
+    const nginxCmd = nginxCmdMap[action] || action
+    const cmdExtravars: Record<string, string> = {
+      ips: node.ip,
+      nginx_cmd: nginxCmd,
+      prefix: node.edge_path,
+      ports: String(node.management_port),
+    }
+    const pendingCommand = buildCommandString(node, actionLabel, cmdExtravars)
+
+    // Reset Drawer state
+    execDrawerTitle.value = `节点 ${actionLabel}`
+    execProgress.percent = 0
+    execProgress.status = 'active'
+    execLogs.value = []
+    execResult.value = null
+    execHighlights.value = []
+    execStatistics.value = null
+    execDrawerVisible.value = true
+
     const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-      percent: 0, status: 'active',
-    }
-
-    const modal = Modal.info({
-      title: `节点 ${actionLabel}`,
-      width: 700,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
-    })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
     }
 
     addLog(`开始对节点 ${node.ip} 执行 ${actionLabel} 操作...`)
-    progress.percent = 5
-    updateContent()
+    execProgress.percent = 5
+    updateDrawer()
 
     await new Promise((r) => setTimeout(r, 300))
 
     try {
-      progress.percent = 20
-      updateContent()
+      execProgress.percent = 20
+      updateDrawer()
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
       const data = res.data as Record<string, any>
-      progress.percent = 60
+      execProgress.percent = 60
 
-      // 1. 显示完整命令（可复制）
+      // 1. 显示完整命令（优先用服务端返回的精确命令，回退到本地构建）
+      const finalCommand = data.command || pendingCommand
       addLog('')
       addLog('═══════════════════════════════════════════')
       addLog('执行命令 (可复制排查):')
-      addLog(data.command || '(无命令信息)')
+      addLog(finalCommand)
       addLog('═══════════════════════════════════════════')
       addLog('')
 
@@ -346,16 +373,19 @@ export function useClusterNodes(options: {
       addLog(`返回码 (rc): ${data.rc}`)
 
       // 3. 摘录关键信息
+      const highlights: string[] = []
       if (data.stdout) {
-        const highlights = extractKeyInfo(data.stdout)
-        if (highlights.length > 0) {
+        const extracted = extractKeyInfo(data.stdout)
+        if (extracted.length > 0) {
+          highlights.push(...extracted)
           addLog('')
           addLog('--- 关键信息 ---')
-          for (const h of highlights) {
+          for (const h of extracted) {
             addLog(`  ${h}`)
           }
         }
       }
+      execHighlights.value = highlights
 
       // 4. 完整 stdout
       if (data.stdout) {
@@ -373,86 +403,110 @@ export function useClusterNodes(options: {
       // 6. 最终结果
       addLog('')
       if (data.rc === 0) {
-        progress.status = 'success'
+        execProgress.status = 'success'
         addLog(`✅ 节点 ${actionLabel} 成功`)
       } else {
-        progress.status = 'exception'
+        execProgress.status = 'exception'
         addLog(`❌ 节点 ${actionLabel} 失败`)
         addLog(`错误: ${data.stderr || data.stdout || '未知错误'}`)
       }
 
-      progress.percent = 100
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
+      // Set result for tabs
+      execResult.value = {
+        stdout: data.stdout || '',
+        stderr: data.stderr || '',
+        command: finalCommand,
+        rc: data.rc,
+      }
 
-      // 刷新节点列表，更新状态列和版本号
+      execProgress.percent = 100
+      updateDrawer()
+
+      // Refresh node list
       if (cluster) await loadNodes(cluster)
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
+      execProgress.percent = 100
+      execProgress.status = 'exception'
       addLog('')
       addLog(`❌ 操作失败: ${detail}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
+      // 请求失败时展示本地构建的命令（供排查）
+      execResult.value = {
+        stdout: '',
+        stderr: detail,
+        command: `# 请求异常：命令未成功投递到服务端\n# 错误: ${detail}\n# 操作: ${actionLabel}\n# 节点: ${node.ip}\n\n${pendingCommand}`,
+        rc: -1,
+      }
+      updateDrawer()
     }
   }
 
   const startNode = async (node: Node) => {
-    await executeNodeAction(node, 'start', '启动')
+    Modal.confirm({
+      title: '确认启动节点',
+      content: `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
+      okText: '确认启动',
+      okType: 'primary' as any,
+      cancelText: '取消',
+      onOk: () => executeNodeAction(node, 'start', '启动'),
+    })
   }
 
   const stopNode = async (node: Node) => {
-    await executeNodeAction(node, 'stop', '停止')
+    Modal.confirm({
+      title: '确认停止节点',
+      content: `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
+      okText: '确认停止',
+      okType: 'danger' as any,
+      cancelText: '取消',
+      onOk: () => executeNodeAction(node, 'stop', '停止'),
+    })
   }
 
   const queryNodeStatus = async (node: Node) => {
     const cluster = clusters.value.find(c => c.id === node.cluster_id)
     if (!cluster) return
 
-    const logs: string[] = []
+    // Build command string upfront
+    const statCmdExtravars = `ips=${node.ip} prefix=${node.edge_path} ports=${node.management_port}`
+    const pendingCommand = `ansible-playbook -i inventory edge.yml --tags edge_statistic -e "${statCmdExtravars}"`
+
+    // Reset Drawer state
+    execDrawerTitle.value = '节点状态查询'
+    execProgress.percent = 0
+    execProgress.status = 'active'
+    execLogs.value = []
+    execResult.value = null
+    execHighlights.value = []
+    execStatistics.value = null
+    execDrawerVisible.value = true
+
     const addLog = (text: string) => {
-      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-    }
-    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-      percent: 0, status: 'active',
-    }
-
-    const modal = Modal.info({
-      title: '节点状态查询',
-      width: 700,
-      content: buildDeleteProgressContent(progress, logs),
-      okText: '确定',
-      okButtonProps: { disabled: true },
-      cancelText: '',
-      closable: true,
-    })
-
-    const updateContent = () => {
-      modal.update({ content: buildDeleteProgressContent(progress, logs) })
+      execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
     }
 
     addLog(`开始查询节点 ${node.ip} 状态...`)
-    progress.percent = 10
-    updateContent()
+    execProgress.percent = 10
+    updateDrawer()
 
     await new Promise((r) => setTimeout(r, 300))
 
     try {
       addLog('正在执行 edge_statistic...')
-      progress.percent = 30
-      updateContent()
+      execProgress.percent = 30
+      updateDrawer()
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, { ports: String(node.management_port) })
       const data = res.data as Record<string, any>
-      progress.percent = 70
+      execProgress.percent = 70
 
-      // 1. 完整命令
+      // 1. 完整命令（优先用服务端返回的精确命令，回退到本地构建）
+      const finalCommand = data.command || pendingCommand
       addLog('')
       addLog('═══════════════════════════════════════════')
       addLog('执行命令 (可复制排查):')
-      addLog(data.command || '(无命令信息)')
+      addLog(finalCommand)
       addLog('═══════════════════════════════════════════')
       addLog('')
 
@@ -460,6 +514,7 @@ export function useClusterNodes(options: {
       addLog(`返回码 (rc): ${data.rc}`)
 
       // 3. 关键统计信息
+      const statistics: Record<string, string> = {}
       if (data.statistic && Object.keys(data.statistic).length > 0) {
         addLog('')
         addLog('--- 节点统计信息 ---')
@@ -474,9 +529,26 @@ export function useClusterNodes(options: {
           const val = data.statistic[key]
           if (val !== undefined && val !== null) {
             addLog(`  ${label}: ${val}`)
+            statistics[key] = String(val)
           }
         }
       }
+      execStatistics.value = Object.keys(statistics).length > 0 ? statistics : null
+
+      // 3.5 摘录关键信息（含 nginx 状态）
+      const highlights: string[] = []
+      if (data.stdout) {
+        const extracted = extractKeyInfo(data.stdout)
+        if (extracted.length > 0) {
+          highlights.push(...extracted)
+          addLog('')
+          addLog('--- 关键信息 ---')
+          for (const h of extracted) {
+            addLog(`  ${h}`)
+          }
+        }
+      }
+      execHighlights.value = highlights
 
       // 4. stdout
       if (data.stdout) {
@@ -494,29 +566,40 @@ export function useClusterNodes(options: {
       // 6. 结果
       addLog('')
       if (data.rc === 0) {
-        progress.status = 'success'
+        execProgress.status = 'success'
         addLog('✅ 状态查询成功')
       } else {
-        progress.status = 'exception'
+        execProgress.status = 'exception'
         addLog('❌ 状态查询失败')
         addLog(`错误: ${data.stderr || data.stdout || '未知错误'}`)
       }
 
-      progress.percent = 100
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
+      execResult.value = {
+        stdout: data.stdout || '',
+        stderr: data.stderr || '',
+        command: finalCommand,
+        rc: data.rc,
+      }
 
-      // 刷新节点列表，更新状态列和版本号
+      execProgress.percent = 100
+      updateDrawer()
+
+      // Refresh node list
       await loadNodes(cluster)
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      progress.percent = 100
-      progress.status = 'exception'
+      execProgress.percent = 100
+      execProgress.status = 'exception'
       addLog('')
       addLog(`❌ 状态查询失败: ${detail}`)
-      updateContent()
-      modal.update({ okButtonProps: { disabled: false } })
+      execResult.value = {
+        stdout: '',
+        stderr: detail,
+        command: `# 请求异常：命令未成功投递到服务端\n# 错误: ${detail}\n# 操作: 状态查询\n# 节点: ${node.ip}\n\n${pendingCommand}`,
+        rc: -1,
+      }
+      updateDrawer()
     }
   }
 
@@ -547,6 +630,14 @@ export function useClusterNodes(options: {
     deleteNode,
     startNode,
     stopNode,
-    queryNodeStatus
+    queryNodeStatus,
+    // Execution Drawer state
+    execDrawerVisible,
+    execDrawerTitle,
+    execProgress,
+    execLogs,
+    execResult,
+    execHighlights,
+    execStatistics,
   }
 }
