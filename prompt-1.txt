@@ -1475,3 +1475,13 @@ backend\app\api\v1\plugins.py
 1. 集群管理中，按 edge-cluster 的节点 192.168.100.235  的 启动按钮， 报 Object of type TextIOWrapper is not JSON serializable
 
 执行过程，要参考 路由的发布的弹窗，记录过程，包括执行的命令，和返回的结果等等
+
+==============================================================
+新功能：
+
+现在生成单独无依赖可以copy部署的程序，是 通过 product/linux/gen-linux.sh  来实现的
+但是还是生成在项目目录下，也其他的和在一起，不知道应该copy 哪些，只能全部项目 copy，
+
+需要修改 product/linux/gen-linux.sh 脚本，在 product/panshi 目录下生成所有的必要文件，我只copy 这个 product/panshi 目录就可以安装了
+
+你复述一下
