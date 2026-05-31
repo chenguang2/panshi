@@ -1,9 +1,4 @@
-# node-action-progress-dialog Specification
-
-## Purpose
-Node action execution progress dialog, showing commands and results in a Drawer with Tab-based organization.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Node action executes with progress dialog
 
