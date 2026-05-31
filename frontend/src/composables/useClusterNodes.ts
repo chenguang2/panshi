@@ -311,10 +311,10 @@ export function useClusterNodes(options: {
     execLogs.value = [...execLogs.value]
   }
 
-  /** Build ansible command string from known params (used before server responds). */
-  function buildCommandString(node: Node, actionLabel: string, extravars: Record<string, string>): string {
+  /** Build ansible command string from extra vars (used before server responds on failure). */
+  function buildCommandString(tag: string, extravars: Record<string, string>): string {
     const evParts = Object.entries(extravars).map(([k, v]) => `${k}=${v}`)
-    return `ansible-playbook -i inventory edge.yml --tags nginx_cmd_run -e "${evParts.join(' ')}"`
+    return `ansible-playbook -i inventory edge.yml --tags ${tag} -e "${evParts.join(' ')}"`
   }
 
   const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart', actionLabel: string) => {
@@ -327,10 +327,10 @@ export function useClusterNodes(options: {
     const cmdExtravars: Record<string, string> = {
       ips: node.ip,
       nginx_cmd: nginxCmd,
-      prefix: node.edge_path,
+      prefix: node.edge_path || '',
       ports: String(node.management_port),
     }
-    const pendingCommand = buildCommandString(node, actionLabel, cmdExtravars)
+    const pendingCommand = buildCommandString('nginx_cmd_run', cmdExtravars)
 
     // Reset Drawer state
     execDrawerTitle.value = `节点 ${actionLabel}`
@@ -469,8 +469,11 @@ export function useClusterNodes(options: {
     if (!cluster) return
 
     // Build command string upfront
-    const statCmdExtravars = `ips=${node.ip} prefix=${node.edge_path} ports=${node.management_port}`
-    const pendingCommand = `ansible-playbook -i inventory edge.yml --tags edge_statistic -e "${statCmdExtravars}"`
+    const pendingCommand = buildCommandString('edge_statistic', {
+      ips: node.ip,
+      prefix: node.edge_path || '',
+      ports: String(node.management_port),
+    })
 
     // Reset Drawer state
     execDrawerTitle.value = '节点状态查询'
