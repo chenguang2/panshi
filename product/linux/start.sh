@@ -2,8 +2,8 @@
 # ======================================================
 # 部署启动脚本 (Linux)
 # 功能：在目标 Linux 机器上启动磐石 Admin（离线环境）
-# 前提：已通过 prepare/linux/prepare.sh 准备好所有依赖
-# 用法：bash prepare/linux/start.sh
+# 前提：已通过 product/linux/gen-linux.sh 准备好所有依赖
+# 用法：bash start.sh
 # ======================================================
 set -e
 
@@ -25,7 +25,7 @@ if [ ! -f "$PYTHON" ]; then
 fi
 if [ ! -f "$PYTHON" ]; then
     echo "错误: 未找到 Python 解释器 ($PYTHON)"
-    echo "请先在开发机上运行 prepare/linux/prepare.sh"
+    echo "请先在开发机上运行 bash product/linux/gen-linux.sh"
     exit 1
 fi
 
@@ -75,4 +75,4 @@ if [ "$BK_CHECK" -eq 0 ]; then
     echo "   tail -50 $BACKEND_LOG"
 fi
 echo ""
-echo "停止服务: bash prepare/linux/stop.sh"
+echo "停止服务: bash stop.sh"

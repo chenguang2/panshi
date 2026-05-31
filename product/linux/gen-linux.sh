@@ -119,15 +119,11 @@ echo "  前端构建产物已拷贝到: $TARGET_DIR/frontend/dist/"
 # ---------- 拷贝启停脚本 ----------
 echo ""
 echo "拷贝启停脚本..."
-# 复制时修正 PROJECT_ROOT 路径：部署目录本身即项目根
 cp "$SCRIPT_DIR/start.sh" "$TARGET_DIR/"
 cp "$SCRIPT_DIR/stop.sh" "$TARGET_DIR/"
+# 修正 PROJECT_ROOT：部署目录本身即项目根（$(cd "$SCRIPT_DIR/../..") → $(cd "$SCRIPT_DIR")）
 sed -i 's|SCRIPT_DIR/\.\./\.\.|SCRIPT_DIR|' "$TARGET_DIR/start.sh"
 sed -i 's|SCRIPT_DIR/\.\./\.\.|SCRIPT_DIR|' "$TARGET_DIR/stop.sh"
-# 修正目标脚本中 prepare/linux/ 路径为当前目录
-sed -i 's|bash prepare/linux/stop.sh|bash stop.sh|' "$TARGET_DIR/start.sh"
-sed -i 's|prepare/linux/prepare.sh|product/linux/gen-linux.sh|' "$TARGET_DIR/start.sh"
-sed -i 's|用法：bash prepare/linux/start.sh|用法：bash start.sh|' "$TARGET_DIR/start.sh"
 echo "  启停脚本已拷贝到: $TARGET_DIR/"
 
 # 创建 data/.gitkeep（空目录占位）
