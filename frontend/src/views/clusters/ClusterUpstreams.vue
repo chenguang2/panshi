@@ -60,25 +60,6 @@
         </template>
       </div>
     </div>
-    <div v-if="upstreamSearchVisible" style="margin: 8px 0; display: flex; gap: 8px; align-items: center;">
-      <a-input-search
-        v-model:value="cluster.upstreamsSearch"
-        placeholder="搜索上游"
-        style="width: 150px;"
-        @search="() => { cluster.upstreamsPagination!.page = 1; loadUpstreams(cluster) }"
-        allow-clear
-      />
-      <a-select
-        v-model:value="cluster.upstreamsSearchField"
-        placeholder="字段"
-        style="width: 100px;"
-        allow-clear
-      >
-        <a-select-option value="">全部</a-select-option>
-        <a-select-option value="name">名称</a-select-option>
-        <a-select-option value="description">描述</a-select-option>
-      </a-select>
-    </div>
     <a-table
       :columns="visibleUpstreamColumns"
       :data-source="cluster.upstreams || []"
