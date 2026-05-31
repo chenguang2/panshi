@@ -51,6 +51,30 @@ export function useClusterNodes(options: {
   const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
   const execHighlights = ref<string[]>([])
   const execStatistics = ref<Record<string, string> | null>(null)
+  const execElapsed = ref<number | null>(null)
+
+  let _pulseTimer: ReturnType<typeof setInterval> | null = null
+  let _elapsedTimer: ReturnType<typeof setInterval> | null = null
+
+  function startTimers(progressCap: number) {
+    execElapsed.value = 0
+    // 进度脉冲：每 2s +5，不超过 cap
+    _pulseTimer = setInterval(() => {
+      if (execProgress.percent < progressCap) {
+        execProgress.percent = Math.min(execProgress.percent + 5, progressCap)
+      }
+    }, 2000)
+    // 秒数计时
+    _elapsedTimer = setInterval(() => {
+      execElapsed.value = (execElapsed.value ?? 0) + 1
+    }, 1000)
+  }
+
+  function stopTimers(finalPercent: number) {
+    if (_pulseTimer) { clearInterval(_pulseTimer); _pulseTimer = null }
+    if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null }
+    execProgress.percent = finalPercent
+  }
 
   const authStore = useAuthStore()
   const NODE_CFG_KEY = () => `node_cfg_${authStore.user?.id ?? 'guest'}`
@@ -352,11 +376,14 @@ export function useClusterNodes(options: {
 
     await new Promise((r) => setTimeout(r, 300))
 
+    startTimers(55) // 执行期间脉冲到 55%
+
     try {
       execProgress.percent = 20
       updateDrawer()
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
+      stopTimers(60)
       const data = res.data as Record<string, any>
       execProgress.percent = 60
 
@@ -419,7 +446,7 @@ export function useClusterNodes(options: {
         rc: data.rc,
       }
 
-      execProgress.percent = 100
+      stopTimers(100)
       updateDrawer()
 
       // Refresh node list
@@ -427,7 +454,7 @@ export function useClusterNodes(options: {
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      execProgress.percent = 100
+      stopTimers(100)
       execProgress.status = 'exception'
       addLog('')
       addLog(`❌ 操作失败: ${detail}`)
@@ -500,9 +527,11 @@ export function useClusterNodes(options: {
       execProgress.percent = 30
       updateDrawer()
 
+      startTimers(65) // 执行期间脉冲到 65%
+
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, { ports: String(node.management_port) })
       const data = res.data as Record<string, any>
-      execProgress.percent = 70
+      stopTimers(70)
 
       // 1. 完整命令（优先用服务端返回的精确命令，回退到本地构建）
       const finalCommand = data.command || pendingCommand
@@ -584,7 +613,7 @@ export function useClusterNodes(options: {
         rc: data.rc,
       }
 
-      execProgress.percent = 100
+      stopTimers(100)
       updateDrawer()
 
       // Refresh node list
@@ -592,7 +621,7 @@ export function useClusterNodes(options: {
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      execProgress.percent = 100
+      stopTimers(100)
       execProgress.status = 'exception'
       addLog('')
       addLog(`❌ 状态查询失败: ${detail}`)
@@ -642,5 +671,6 @@ export function useClusterNodes(options: {
     execResult,
     execHighlights,
     execStatistics,
+    execElapsed,
   }
 }

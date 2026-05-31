@@ -101,7 +101,11 @@ class AnsibleRunnerService:
         # started without uv run (e.g. prepare/linux/start.sh uses raw python).
         _venv_bin = str(Path(sys.executable).parent.resolve())
         _current_path = os.environ.get("PATH", "")
-        _runner_env = {"ANSIBLE_HOST_KEY_CHECKING": "False"}
+        _runner_env = {
+            "ANSIBLE_HOST_KEY_CHECKING": "False",
+            "ANSIBLE_SSH_ARGS": "-C -o ControlMaster=auto -o ControlPersist=600s -o ControlPath=~/.ansible/cp/%h-%p-%r",
+            "ANSIBLE_PIPELINING": "True",
+        }
         if _venv_bin not in _current_path:
             _runner_env["PATH"] = f"{_venv_bin}:{_current_path}"
 

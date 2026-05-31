@@ -150,6 +150,7 @@
       :result="execResult"
       :highlights="execHighlights"
       :statistics="execStatistics"
+      :elapsed="execElapsed"
     />
   </div>
 </template>
@@ -221,6 +222,7 @@ const {
   execResult,
   execHighlights,
   execStatistics,
+  execElapsed,
 } = useClusterNodes({
   clusters,
   onRefresh,

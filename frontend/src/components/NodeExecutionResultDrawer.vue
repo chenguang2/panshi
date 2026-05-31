@@ -21,6 +21,9 @@
         <a-progress :percent="progress.percent" :status="progress.status" size="small" style="flex:1;" />
         <span style="font-size:13px;color:#666;white-space:nowrap;">{{ progress.percent }}%</span>
       </div>
+      <div v-if="elapsed !== null" style="text-align:center;font-size:14px;color:#666;margin-top:4px;">
+        已用 {{ elapsed }} 秒
+      </div>
     </div>
 
     <!-- Tabs -->
@@ -126,6 +129,7 @@ const props = defineProps<{
   title: string
   progress: { percent: number; status: 'active' | 'success' | 'exception' }
   logs: string[]
+  elapsed: number | null
   result: { stdout: string; stderr: string; command: string; rc: number } | null
   highlights: string[]
   statistics: Record<string, string> | null
