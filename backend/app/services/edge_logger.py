@@ -39,6 +39,7 @@ class EdgeLogger:
             return None
 
     def _write_log(self, log_file: str, log_entry: list[str]) -> None:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
         with open(log_file, "a", encoding="utf-8-sig") as f:
             f.write("\n".join(log_entry) + "\n")
 
@@ -61,7 +62,13 @@ class EdgeLogger:
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
-        log_file = self.RESOURCE_LOG_CONFIG.get(resource_type, {}).get("file", "logs/edge/upstream.log")
+        # Allow instance-level attribute override (used in tests)
+        attr_name = f"{resource_type.upper()}_LOG_FILE"
+        log_file = (
+            getattr(self, attr_name, None)
+            or getattr(self, "LOG_FILE", None)
+            or self.RESOURCE_LOG_CONFIG.get(resource_type, {}).get("file", "logs/edge/upstream.log")
+        )
 
         log_entry = [
             f"[{timestamp}]",
