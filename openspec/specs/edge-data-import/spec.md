@@ -1,9 +1,7 @@
 ## Purpose
 
 Edge 节点数据导入功能，支持将已在运行（通过其他系统配置）的 APISIX Edge 节点上的路由、上游、插件配置等数据，通过 Admin API 拉取并导入到磐石 Admin 数据库，使其纳入磐石的管理体系。
-
 ## Requirements
-
 ### Requirement: 连接测试
 
 系统 SHALL 验证与 Edge 节点的 Admin API 连通性，并在导入前展示节点基本信息。
@@ -68,9 +66,12 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 
 ### Requirement: 路由数据转换与导入
 
-系统 SHALL 将从 Edge 节点拉取的路由数据转换为磐石格式并写入数据库。
+系统 SHALL 在导入路由时同时处理基础字段和高级匹配字段（`remote_addrs`、`vars`、`advanced_match_enabled`）。
+
+**变更说明**: 在原有的 uri、methods、hosts、priority 转换基础上，增加 remote_addrs、vars、advanced_match_enabled 三个高级匹配字段的导入支持。
 
 #### Scenario: 路由基础字段转换
+
 - **WHEN** Edge 节点返回 APISIX route 对象
 - **THEN** 系统 SHALL 将 `uri` 或 `uris` 写入 `ps_route.uri` 字段（多 URI 时取第一个）
 - **AND** 系统 SHALL 将 `methods` 数组转换为逗号分隔字符串写入 `ps_route.methods`
@@ -78,22 +79,17 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 - **AND** 系统 SHALL 将 `priority` 直接映射到 `ps_route.priority`
 - **AND** 系统 SHALL 保留 Edge 路由的 `id`（UUID）写入 `ps_route.edge_uuid`
 
-#### Scenario: 路由关联上游
-- **WHEN** Edge 路由包含 `upstream_id`（UUID 引用）
-- **THEN** 系统 SHALL 从已导入的 `ps_upstream` 中查找匹配 `edge_uuid` 的记录
-- **AND** 如果找到，将 `ps_upstream.id` 写入 `ps_route.upstream_id`
-- **AND** 如果未找到（该上游未导入），将 `ps_route.upstream_id` 设为 NULL
+#### Scenario: 导入高级匹配字段
 
-#### Scenario: 路由插件拆分
-- **WHEN** Edge 路由包含 `plugins` 字段
-- **THEN** 系统 SHALL 将每条插件配置写入一条 `ps_route_plugin` 记录
-- **AND** `plugin_name` 字段记录插件名称（如 `limit-req`、`cors`）
-- **AND** `config` 字段记录插件配置的 JSON 字符串
+- **WHEN** Edge 路由包含 `remote_addrs` 字段（客户端 IP 地址列表）
+- **THEN** 系统 SHALL 将 `remote_addrs` 数组转换为逗号分隔字符串写入 `ps_route.remote_addrs`
+- **AND** 系统 SHALL 将 `vars` 数组（高级匹配条件表达式）序列化为 JSON 字符串写入 `ps_route.vars`
+- **AND** 系统 SHALL 当 `vars` 为非空数组时将 `ps_route.advanced_match_enabled` 设为 1，否则为 0
 
-#### Scenario: 路由路径重名处理
-- **WHEN** 导入的路由 URI+methods 组合与数据库中已有记录重复
-- **THEN** 系统 SHALL 跳过该路由并记录到导入日志的冲突详情中
-- **AND** 前端预览 SHALL 显示该路由将被跳过及原因
+#### Scenario: 路由预览展示高级匹配信息
+
+- **WHEN** 用户查看导入预览中的路由列表
+- **THEN** 系统 SHALL 展示该路由的 `vars` 和 `remote_addrs` 信息
 
 ### Requirement: 插件配置导入
 
@@ -141,3 +137,4 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 - **THEN** 系统 SHALL 按时间倒序展示导入记录列表
 - **AND** 每条记录 SHALL 展示：导入时间、节点、状态、导入数量摘要
 - **AND** 用户 SHALL 可点击查看详情（冲突列表、错误信息）
+
