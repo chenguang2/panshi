@@ -315,6 +315,18 @@ class EdgeImportService:
         elif edge_plugin_config_single:
             plugin_config_ids = json.dumps([edge_plugin_config_single], ensure_ascii=False)
 
+        remote_addrs = edge_route.get("remote_addrs", [])
+        if isinstance(remote_addrs, list):
+            remote_addrs_str = ",".join(remote_addrs) or None
+        elif isinstance(remote_addrs, str):
+            remote_addrs_str = remote_addrs or None
+        else:
+            remote_addrs_str = None
+
+        edge_vars = edge_route.get("vars")
+        vars_json = json.dumps(edge_vars, ensure_ascii=False) if edge_vars else None
+        advanced_enabled = 1 if (edge_vars and isinstance(edge_vars, list) and len(edge_vars) > 0) else 0
+
         route_data = {
             "name": edge_route.get("name", ""),
             "edge_uuid": edge_route.get("id", ""),
@@ -323,6 +335,9 @@ class EdgeImportService:
             "uri": uri or "",
             "methods": methods_str,
             "hosts": hosts_str,
+            "remote_addrs": remote_addrs_str,
+            "vars": vars_json,
+            "advanced_match_enabled": advanced_enabled,
             "priority": edge_route.get("priority", 0),
             "status": edge_route.get("status", 1),
             "description": edge_route.get("desc"),
@@ -669,6 +684,8 @@ class EdgeImportService:
                 "uris": er.get("uris") if er else None,
                 "methods": er.get("methods") if er else None,
                 "hosts": er.get("hosts") if er else None,
+                "remote_addrs": er.get("remote_addrs") if er else None,
+                "vars": er.get("vars") if er else None,
                 "priority": r.get("priority", 0),
                 "upstream_id": er.get("upstream_id") if er else None,
                 "plugins": plugins_preview_list if plugins_preview_list else None,

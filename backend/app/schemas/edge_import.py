@@ -44,6 +44,8 @@ class RoutePreview(BaseModel):
     uris: Optional[List[str]] = None
     methods: Optional[List[str]] = None
     hosts: Optional[List[str]] = None
+    remote_addrs: Optional[str] = None
+    vars: Optional[List[List[Any]]] = None
     priority: int = 0
     upstream_id: Optional[str] = None
     plugins: Optional[List[PluginPreview]] = None
