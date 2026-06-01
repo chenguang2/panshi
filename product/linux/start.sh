@@ -30,6 +30,7 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 mkdir -p "$PROJECT_ROOT/backend/data"
+mkdir -p /tmp/panshi-cp
 
 cd "$PROJECT_ROOT"
 BACKEND_LOG="$PROJECT_ROOT/backend.log"
