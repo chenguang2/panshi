@@ -29,7 +29,6 @@ async def get_active_nodes(
 
 async def delete_on_nodes(
     cluster_id: int,
-    db: AsyncSession,
     active_nodes: list[Node],
     edge_uuid: str,
     edge_delete_fn: Callable[[EdgeClient, str], Any],
@@ -38,7 +37,6 @@ async def delete_on_nodes(
 
     Args:
         cluster_id: Cluster ID.
-        db: Database session.
         active_nodes: List of nodes to delete from.
         edge_uuid: Edge UUID of the resource to delete.
         edge_delete_fn: Function like `client.delete_route(edge_uuid)`.
@@ -57,7 +55,7 @@ async def delete_on_nodes(
             "status": "pending",
         }
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             response = edge_delete_fn(client, edge_uuid)
             node_result["status"] = "success"
             node_result["response"] = response
@@ -70,7 +68,6 @@ async def delete_on_nodes(
 
 async def publish_to_nodes(
     cluster_id: int,
-    db: AsyncSession,
     active_nodes: list[Node],
     edge_uuid: str,
     edge_data: dict,
@@ -106,7 +103,7 @@ async def publish_to_nodes(
             "status": "pending",
         }
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             encrypted = client._encrypt(__import__("json").dumps(edge_data).encode()) if encrypt_body else None
             response = edge_publish_fn(client, edge_uuid, edge_data)
 

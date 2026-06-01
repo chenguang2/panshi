@@ -164,7 +164,7 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
             for node in active_nodes:
                 node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
                 try:
-                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
                     response = client.delete_plugin_metadata(plugin_name)
                     node_result["status"] = "success"
                     node_result["response"] = response
@@ -244,7 +244,7 @@ async def publish_plugin_metadata(
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
             import base64
             import json as json_module

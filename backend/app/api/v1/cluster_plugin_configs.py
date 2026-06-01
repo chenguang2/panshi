@@ -100,7 +100,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     if body.delete_edge:
         active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
         edge_results = await edge_sync.delete_on_nodes(
-            cluster_id, db, active_nodes, config.edge_uuid,
+            cluster_id, active_nodes, config.edge_uuid,
             lambda client, uuid: client.delete_plugin_config(uuid)
         )
         results.extend(edge_results)
@@ -162,7 +162,7 @@ async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[P
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             encrypted = client._encrypt(json.dumps(event_data).encode())
             response = client.create_plugin_config(config.edge_uuid, edge_data)
 

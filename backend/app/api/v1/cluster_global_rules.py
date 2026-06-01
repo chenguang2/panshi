@@ -100,7 +100,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
     if body.delete_edge:
         active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
         edge_results = await edge_sync.delete_on_nodes(
-            cluster_id, db, active_nodes, rule.edge_uuid,
+            cluster_id, active_nodes, rule.edge_uuid,
             lambda client, uuid: client.delete_global_rule(uuid)
         )
         results.extend(edge_results)
@@ -146,7 +146,7 @@ async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[Publi
     for node in active_nodes:
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
             import base64
             import json as json_module

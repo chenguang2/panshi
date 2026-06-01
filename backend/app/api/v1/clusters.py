@@ -245,7 +245,7 @@ async def delete_cluster(
                     },
                 }
                 try:
-                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
                     errs = []
                     for r in routes:
                         try: client.delete_route(r.edge_uuid); node_result["details"]["routes"] += 1

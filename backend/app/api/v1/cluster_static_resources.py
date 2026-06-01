@@ -246,45 +246,31 @@ async def delete_static_resource(
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除，本地文件已清理"})
 
     if body.delete_edge and resource.edge_uuid:
-        sync_db = _get_sync_session()
-        try:
-            node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
-            if body.node_ids:
-                node_query = node_query.where(Node.id.in_(body.node_ids))
-            nodes_result = await db.execute(node_query)
-            nodes = nodes_result.scalars().all()
-            edge_log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "logs", "edge", "static_resources.log")
-            os.makedirs(os.path.dirname(edge_log_path), exist_ok=True)
-            for node in nodes:
-                try:
-                    client = EdgeClient(
-                        cluster_id=cluster_id,
-                        db=sync_db,
-                        node_ip=node.ip,
-                        node_port=node.management_port,
-                    )
-                    cluster_row = sync_db.execute(
-                        select(Cluster.admin_key).where(Cluster.id == cluster_id)
-                    ).first()
-                    admin_key = cluster_row[0] if cluster_row and cluster_row[0] else None
-                    if not admin_key:
-                        admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
-                    client.api_key = admin_key
-                    delete_url = f"/edge/panshi/admin_static_resources?edge_uuid={resource.edge_uuid}"
-                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} {delete_url}\n")
-                    client.raw_delete(delete_url)
-                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} success\n")
-                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
-                except (EdgeConnectionError, EdgeAPIError) as e:
-                    with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                        log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} failed: {e}\n")
-                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
-                except (EdgeConnectionError, EdgeAPIError) as e:
-                    results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
-        finally:
-            sync_db.close()
+        node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+        if body.node_ids:
+            node_query = node_query.where(Node.id.in_(body.node_ids))
+        nodes_result = await db.execute(node_query)
+        nodes = nodes_result.scalars().all()
+        edge_log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "logs", "edge", "static_resources.log")
+        os.makedirs(os.path.dirname(edge_log_path), exist_ok=True)
+        for node in nodes:
+            try:
+                client = EdgeClient(
+                    cluster_id=cluster_id,
+                    node_ip=node.ip,
+                    node_port=node.management_port,
+                )
+                delete_url = f"/edge/panshi/admin_static_resources?edge_uuid={resource.edge_uuid}"
+                with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} {delete_url}\n")
+                client.raw_delete(delete_url)
+                with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} success\n")
+                results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
+            except (EdgeConnectionError, EdgeAPIError) as e:
+                with open(edge_log_path, "a", encoding="utf-8") as log_f:
+                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} failed: {e}\n")
+                results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
 
     return {"message": "静态资源已删除", "results": results}
 
@@ -351,20 +337,6 @@ async def upload_static_resource_zip(
     return resource_to_response(resource)
 
 
-def _get_sync_session():
-    from sqlalchemy.orm import Session
-    from sqlalchemy import create_engine
-    from sqlalchemy.pool import StaticPool
-    from app.core.database import DATABASE_URL, is_sqlite
-
-    sync_url = DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://").replace("postgresql+asyncpg://", "postgresql://")
-    if is_sqlite(DATABASE_URL):
-        engine = create_engine(sync_url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    else:
-        engine = create_engine(sync_url)
-    return Session(engine)
-
-
 @router.post("/{resource_id}/publish")
 async def publish_static_resource(
     cluster_id: int,
@@ -403,37 +375,23 @@ async def publish_static_resource(
     with open(resource.storage_path, "rb") as f:
         zip_data = f.read()
 
-    sync_db = _get_sync_session()
     results = []
     all_success = True
 
-    try:
-        for node in nodes:
-            try:
-                client = EdgeClient(
-                    cluster_id=cluster_id,
-                    db=sync_db,
-                    node_ip=node.ip,
-                    node_port=node.management_port,
-                )
-                cluster_row = sync_db.execute(
-                    select(Cluster.admin_key).where(Cluster.id == cluster_id)
-                ).first()
-                admin_key = cluster_row[0] if cluster_row and cluster_row[0] else None
-                if not admin_key:
-                    admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
-                client.api_key = admin_key
+    for node in nodes:
+        try:
+            client = EdgeClient(
+                cluster_id=cluster_id,
+                node_ip=node.ip,
+                node_port=node.management_port,
+            )
+            edge_uuid = resource.edge_uuid or ""
+            client.raw_put(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}", zip_data)
 
-                edge_uuid = resource.edge_uuid or ""
-                client.raw_put(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}", zip_data)
-
-                results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
-                all_success = False
-
-    finally:
-        sync_db.close()
+            results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
+        except (EdgeConnectionError, EdgeAPIError) as e:
+            results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
+            all_success = False
 
     return {
         "success": all_success,

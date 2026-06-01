@@ -40,7 +40,7 @@ class EdgeClient:
     SM4_KEY = os.getenv("EDGE_SM4_KEY", "a16bc20453da220f").encode()
     BLOCK_SIZE = 16
 
-    def __init__(self, cluster_id: int, db: "Session", node_ip: str | None = None, node_port: int | None = None):
+    def __init__(self, cluster_id: int, db: "Session | None" = None, node_ip: str | None = None, node_port: int | None = None):
         self.cluster_id = cluster_id
         self.db = db
 
@@ -52,6 +52,11 @@ class EdgeClient:
         self._resolve_api_key()
 
     def _resolve_edge_url(self) -> None:
+        if self.db is None:
+            raise EdgeConnectionError(
+                f"node_ip/node_port not provided and no db session given "
+                f"for cluster {self.cluster_id}"
+            )
         from app.models.cluster import Node
 
         node = (
@@ -431,7 +436,7 @@ class EdgeClient:
         if upstream_edge_uuid:
             edge_route["upstream_id"] = upstream_edge_uuid
 
-        if priority is not None:
+        if priority:
             edge_route["priority"] = priority
 
         if vars_json:

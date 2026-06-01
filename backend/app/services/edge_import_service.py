@@ -9,11 +9,8 @@ import json
 import os
 from typing import Any, Optional
 
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select
 
-from app.core.database import DATABASE_URL, is_sqlite
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.models.cluster import (
     Cluster,
@@ -28,19 +25,6 @@ from app.models.cluster import (
     Node,
 )
 from app.models.edge_import import ImportLog
-
-
-def _get_sync_db() -> Session:
-    sync_url = DATABASE_URL.replace(
-        "sqlite+aiosqlite://", "sqlite://"
-    ).replace("postgresql+asyncpg://", "postgresql://")
-    if is_sqlite(DATABASE_URL):
-        engine = create_engine(
-            sync_url, connect_args={"check_same_thread": False}, poolclass=StaticPool
-        )
-    else:
-        engine = create_engine(sync_url)
-    return Session(engine)
 
 
 def _load_builtin_names() -> set:
@@ -69,14 +53,28 @@ class EdgeImportService:
         cluster_id: int,
         node_id: int,
         db_session: Any,
+        ip: str,
+        port: int,
+        edge_path: str,
+        client: EdgeClient,
     ):
         self.cluster_id = cluster_id
         self.node_id = node_id
         self.db_session = db_session
+        self.ip = ip
+        self.port = port
+        self.edge_path = edge_path
+        self.client = client
 
-        sync_db = _get_sync_db()
-        try:
-            node_row = sync_db.execute(
+    @classmethod
+    async def create(
+        cls,
+        cluster_id: int,
+        node_id: int,
+        db_session: Any,
+    ) -> "EdgeImportService":
+        node_row = (
+            await db_session.execute(
                 select(
                     Node.ip,
                     Node.management_port,
@@ -85,37 +83,36 @@ class EdgeImportService:
                     Node.id == node_id,
                     Node.cluster_id == cluster_id,
                 )
-            ).first()
-
-            if not node_row:
-                raise ValueError(
-                    f"Node id={node_id} not found in cluster {cluster_id}"
-                )
-
-            self.ip = node_row[0]
-            self.port = node_row[1]
-            self.edge_path = node_row[2]
-
-            cluster_row = sync_db.execute(
-                select(Cluster.admin_key).where(Cluster.id == cluster_id)
-            ).first()
-
-            admin_key: str | None = None
-            if cluster_row is not None and cluster_row[0] is not None:
-                admin_key = cluster_row[0]
-            if not admin_key:
-                admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
-
-            self.client = EdgeClient(
-                cluster_id=self.cluster_id,
-                db=sync_db,
-                node_ip=self.ip,
-                node_port=self.port,
             )
-            self.client.api_key = admin_key
-        except Exception:
-            sync_db.close()
-            raise
+        ).first()
+
+        if not node_row:
+            raise ValueError(
+                f"Node id={node_id} not found in cluster {cluster_id}"
+            )
+
+        ip, port, edge_path = node_row.tuple()
+
+        cluster_row = (
+            await db_session.execute(
+                select(Cluster.admin_key).where(Cluster.id == cluster_id)
+            )
+        ).first()
+
+        admin_key: str | None = None
+        if cluster_row is not None and cluster_row[0] is not None:
+            admin_key = cluster_row[0]
+        if not admin_key:
+            admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
+
+        client = EdgeClient(
+            cluster_id=cluster_id,
+            node_ip=ip,
+            node_port=port,
+        )
+        client.api_key = admin_key
+
+        return cls(cluster_id, node_id, db_session, ip, port, edge_path, client)
 
     def test_connection(self) -> dict:
         try:

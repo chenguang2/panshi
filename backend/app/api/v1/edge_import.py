@@ -19,7 +19,7 @@ async def test_connection(
     body: TestConnectionRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    service = EdgeImportService(
+    service = await EdgeImportService.create(
         cluster_id=body.cluster_id,
         node_id=body.node_id,
         db_session=db,
@@ -34,7 +34,7 @@ async def preview_import(
     node_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    service = EdgeImportService(
+    service = await EdgeImportService.create(
         cluster_id=cluster_id,
         node_id=node_id,
         db_session=db,
@@ -48,7 +48,7 @@ async def execute_import(
     body: ImportExecuteRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    service = EdgeImportService(
+    service = await EdgeImportService.create(
         cluster_id=body.cluster_id,
         node_id=body.node_id,
         db_session=db,

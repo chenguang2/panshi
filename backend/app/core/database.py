@@ -51,13 +51,7 @@ def _create_async_engine_fn():
         return _create_async_engine(async_database_url)
 
 
-_sync_engine = create_sync_engine()
 _async_engine = _create_async_engine_fn()
-
-SyncSessionLocal = async_sessionmaker(
-    bind=_sync_engine,
-    expire_on_commit=False,
-)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=_async_engine,
@@ -82,10 +76,10 @@ async def init_db():
     async with _async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Run schema migrations to fix constraint mismatches
+    # Run schema migrations (requires sync engine for ALTER TABLE)
     from app.core.migrate import run_migrations
 
-    run_migrations(_sync_engine)
+    run_migrations(create_sync_engine())
 
 
 async def close_db():

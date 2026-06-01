@@ -194,7 +194,7 @@ async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteCluster
     if body.delete_edge:
         active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
         edge_results = await edge_sync.delete_on_nodes(
-            cluster_id, db, active_nodes, upstream.edge_uuid,
+            cluster_id, active_nodes, upstream.edge_uuid,
             lambda client, uuid: client.delete_upstream(uuid)
         )
         results.extend(edge_results)
@@ -288,7 +288,7 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
 
         try:
-            client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
             import base64
             import json as json_module

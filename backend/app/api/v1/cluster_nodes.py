@@ -405,7 +405,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
 
-    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
     # ---------- 1. 从 DB 查询 ----------
     async def _get_all(model, **filters):

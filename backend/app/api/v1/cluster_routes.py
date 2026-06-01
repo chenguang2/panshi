@@ -287,7 +287,7 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
             for node in active_nodes:
                 node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
                 try:
-                    client = EdgeClient(cluster_id, db, node_ip=node.ip, node_port=node.management_port)
+                    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
                     response = client.delete_route(route.edge_uuid)
                     node_result["status"] = "success"
                     node_result["response"] = response
@@ -400,8 +400,7 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
 
         try:
-            sync_db = db
-            client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
             encrypted = client._encrypt(json.dumps(edge_data).encode())
 
@@ -620,8 +619,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
         node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
 
         try:
-            sync_db = db
-            client = EdgeClient(cluster_id, sync_db, node_ip=node.ip, node_port=node.management_port)
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
             encrypted = client._encrypt(json.dumps(edge_data).encode())
 

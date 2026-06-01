@@ -1,26 +1,15 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Any
 
-from app.core.database import get_db, is_sqlite, DATABASE_URL
+from app.core.database import get_db
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.models.cluster import Node, Cluster
 
 router = APIRouter(prefix="/edge-client", tags=["edge-client"])
-
-
-def get_sync_db():
-    sync_url = DATABASE_URL.replace("sqlite+aiosqlite://", "sqlite://").replace("postgresql+asyncpg://", "postgresql://")
-    if is_sqlite(DATABASE_URL):
-        engine = create_engine(sync_url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    else:
-        engine = create_engine(sync_url)
-    return Session(engine)
 
 
 async def run_edge_sync(call, timeout=10.0):
@@ -99,8 +88,7 @@ async def list_edge_nodes(db: AsyncSession = Depends(get_db)):
 
 @router.get("/nodes/{ip}/{port}/upstreams")
 async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_upstreams)
         if isinstance(result, list):
@@ -117,8 +105,7 @@ async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db))
 
 @router.get("/nodes/{ip}/{port}/upstreams/{upstream_id}")
 async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.get_upstream(upstream_id)
         return result
@@ -130,8 +117,7 @@ async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = 
 
 @router.post("/nodes/{ip}/{port}/upstreams")
 async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = client.create_upstream(payload)
@@ -144,8 +130,7 @@ async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSes
 
 @router.put("/nodes/{ip}/{port}/upstreams/{upstream_id}")
 async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUpdate, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = client.update_upstream(upstream_id, payload)
@@ -158,8 +143,7 @@ async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUp
 
 @router.patch("/nodes/{ip}/{port}/upstreams/{upstream_id}")
 async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.patch_upstream(upstream_id, data)
         return result
@@ -171,8 +155,7 @@ async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: di
 
 @router.delete("/nodes/{ip}/{port}/upstreams/{upstream_id}")
 async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.delete_upstream(upstream_id)
         return result
@@ -184,8 +167,7 @@ async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession
 
 @router.get("/nodes/{ip}/{port}/routes")
 async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_routes)
         return {"routes": result}
@@ -197,8 +179,7 @@ async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/nodes/{ip}/{port}/routes/{route_id}")
 async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.get_route(route_id)
         return result
@@ -210,8 +191,7 @@ async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depend
 
 @router.post("/nodes/{ip}/{port}/routes")
 async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = client.create_route(payload)
@@ -224,8 +204,7 @@ async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession =
 
 @router.put("/nodes/{ip}/{port}/routes/{route_id}")
 async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUpdate, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = client.update_route(route_id, payload)
@@ -238,8 +217,7 @@ async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUp
 
 @router.patch("/nodes/{ip}/{port}/routes/{route_id}")
 async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.patch_route(route_id, data)
         return result
@@ -251,8 +229,7 @@ async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db
 
 @router.delete("/nodes/{ip}/{port}/routes/{route_id}")
 async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.delete_route(route_id)
         return result
@@ -264,8 +241,7 @@ async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSess
 
 @router.get("/nodes/{ip}/{port}/plugins")
 async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_plugins)
         return {"plugins": result}
@@ -277,8 +253,7 @@ async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 
 @router.get("/nodes/{ip}/{port}/global_rules")
 async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_global_rules)
         return {"global_rules": result}
@@ -290,8 +265,7 @@ async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_d
 
 @router.get("/nodes/{ip}/{port}/global_rules/{rule_id}")
 async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.get_global_rule(rule_id)
         return result
@@ -303,8 +277,7 @@ async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = D
 
 @router.put("/nodes/{ip}/{port}/global_rules/{rule_id}")
 async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.create_global_rule(rule_id, data)
         return result
@@ -316,8 +289,7 @@ async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 
 @router.patch("/nodes/{ip}/{port}/global_rules/{rule_id}")
 async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.update_global_rule(rule_id, data)
         return result
@@ -329,8 +301,7 @@ async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 
 @router.delete("/nodes/{ip}/{port}/global_rules/{rule_id}")
 async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.delete_global_rule(rule_id)
         return result
@@ -342,8 +313,7 @@ async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession 
 
 @router.get("/nodes/{ip}/{port}/plugin_configs")
 async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_plugin_configs)
         return {"plugin_configs": result}
@@ -355,8 +325,7 @@ async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get
 
 @router.get("/nodes/{ip}/{port}/plugin_configs/{config_id}")
 async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.get_plugin_config(config_id)
         return result
@@ -368,8 +337,7 @@ async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession
 
 @router.put("/nodes/{ip}/{port}/plugin_configs/{config_id}")
 async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.create_plugin_config(config_id, data)
         return result
@@ -381,8 +349,7 @@ async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 
 @router.patch("/nodes/{ip}/{port}/plugin_configs/{config_id}")
 async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.update_plugin_config(config_id, data)
         return result
@@ -394,8 +361,7 @@ async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 
 @router.delete("/nodes/{ip}/{port}/plugin_configs/{config_id}")
 async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.delete_plugin_config(config_id)
         return result
@@ -407,8 +373,7 @@ async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSess
 
 @router.get("/nodes/{ip}/{port}/plugin_metadata")
 async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_plugin_metadata)
         return {"plugin_metadata": result}
@@ -420,8 +385,7 @@ async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(ge
 
 @router.get("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
 async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.get_plugin_metadata(plugin_name)
         return result
@@ -433,8 +397,7 @@ async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSes
 
 @router.put("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
 async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.create_plugin_metadata(plugin_name, data)
         return result
@@ -446,8 +409,7 @@ async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dic
 
 @router.patch("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
 async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.update_plugin_metadata(plugin_name, data)
         return result
@@ -459,8 +421,7 @@ async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, d
 
 @router.delete("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
 async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.delete_plugin_metadata(plugin_name)
         return result
@@ -472,8 +433,7 @@ async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: Async
 
 @router.get("/nodes/{ip}/{port}/plugins/list")
 async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_available_plugins)
         return {"plugins": result}
@@ -485,8 +445,7 @@ async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(
 
 @router.put("/nodes/{ip}/{port}/plugins/reload")
 async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    sync_db = get_sync_db()
-    client = EdgeClient(0, sync_db, node_ip=ip, node_port=port)
+    client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
         result = client.reload_plugins()
         return result
