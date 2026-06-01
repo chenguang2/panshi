@@ -72,4 +72,5 @@ backend/data/static/
 pdf_extract.txt
 
 # AI tool internal tracking
-.omo/backend/ansible/collections/ansible_collections/
+.omo/
+backend/ansible/collections/ansible_collections/
