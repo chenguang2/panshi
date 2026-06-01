@@ -83,6 +83,19 @@ echo "  使用清华 PyPI 镜像..."
 unset PYTHONHOME
 echo "  后端依赖安装完成"
 
+echo ""
+echo "[4.6/5] 安装 Ansible collections..."
+mkdir -p "$TARGET_DIR/backend/ansible/collections"
+cp "$PROJECT_ROOT/backend/ansible/collections/requirements.yml" "$TARGET_DIR/backend/ansible/collections/requirements.yml"
+if [ -f "$TARGET_DIR/backend/ansible/collections/requirements.yml" ]; then
+    "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+        -r "$TARGET_DIR/backend/ansible/collections/requirements.yml" \
+        -p "$TARGET_DIR/backend/ansible/collections"
+    echo "  Ansible collections 安装完成"
+else
+    echo "  警告: requirements.yml 不存在，跳过 collection 安装"
+fi
+
 # ---------- 4.5 修正 editable install 的 .pth 为相对路径 ----------
 # 使部署目录可以迁移到目标机器的任意路径，不依赖开发机绝对位置
 echo ""
