@@ -1,8 +1,8 @@
-## Context
+﻿## Context
 
 磐石Admin 通过 `Node` 模型管理 edge 网关节点，每个节点有 `ip`、`service_port`（默认 80）、`management_port`（默认 9180）、`edge_path`。节点管理页面已有启动/停止按钮，对应的 REST 端点是空壳（`cluster_nodes.py:126-141`），仅返回固定字符串。
 
-现有 `EdgeClient`（`backend/app/services/edge_client.py`）通过 SM4 加密 HTTP 通信管理 APISIX 的**运行时配置数据**（路由、上游、插件等），但没有能力管理 **APISIX 进程本身**（nginx start/stop/edge start/stop）。
+现有 `EdgeClient`（`backend/app/services/edge_client.py`）通过 SM4 加密 HTTP 通信管理 PANSHI 的**运行时配置数据**（路由、上游、插件等），但没有能力管理 **PANSHI 进程本身**（nginx start/stop/edge start/stop）。
 
 运维团队已有一套成熟的 Ansible 项目（`edge-ansible`），通过 tag 驱动 shell 脚本在远端执行。
 

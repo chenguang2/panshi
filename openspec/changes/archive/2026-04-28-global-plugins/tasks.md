@@ -1,9 +1,9 @@
-## 1. 后端 API
+﻿## 1. 后端 API
 
 - [ ] 1.1 确认 `/clusters/{cluster_id}/plugin-metadata` API 是否已实现
 - [ ] 1.2 如果不存在，创建集群插件 metadata API 端点
 - [ ] 1.3 实现 CRUD 接口（GET/POST/PUT/DELETE）
-- [ ] 1.4 实现发布接口（调用 APISIX Admin API）
+- [ ] 1.4 实现发布接口（调用 PANSHI Admin API）
 - [ ] 1.5 实现版本管理接口（历史记录、回滚）
 - [ ] 1.6 在 BUILTIN_PLUGINS 中添加 `enable_metadata` 字段
 
@@ -51,7 +51,7 @@
 ## 8. 前端 - 删除功能
 
 - [ ] 8.1 确认弹窗提示"删除会将插件状态实时重置为默认状态"
-- [ ] 8.2 删除后：metadata={}，同步 APISIX，插件回左侧
+- [ ] 8.2 删除后：metadata={}，同步 PANSHI，插件回左侧
 
 ## 9. 前端 - 版本管理
 

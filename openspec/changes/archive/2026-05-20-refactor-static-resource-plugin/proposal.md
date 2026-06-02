@@ -1,4 +1,4 @@
-## Why
+﻿## Why
 
 当前 `static_resource.lua` 插件代码存在变量引用未定义、Schema 校验缺失、不符合 Edge 插件规范等问题，无法在生产环境中正常工作。需要重构该插件使其遵循 Edge 插件的标准模式（`plugin.new`、`check_schema`、`access` 阶段返回状态码而非 `ngx.exit`），并修复所有功能性缺陷，确保满足已定义的静态资源服务需求。
 
@@ -13,7 +13,7 @@
 ## Capabilities
 
 ### New Capabilities
-- `static-resource-serving`: Edge 节点侧通过 APISIX 插件提供静态文件访问，含缓存控制（ETag、Cache-Control、304 条件请求）和 MIME 类型处理
+- `static-resource-serving`: Edge 节点侧通过 PANSHI 插件提供静态文件访问，含缓存控制（ETag、Cache-Control、304 条件请求）和 MIME 类型处理
 
 ### Modified Capabilities
 

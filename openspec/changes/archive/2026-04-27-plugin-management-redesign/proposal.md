@@ -1,4 +1,4 @@
-# 路由插件管理讨论
+﻿# 路由插件管理讨论
 
 ## 背景
 
@@ -10,9 +10,9 @@
 
 ## 参考方案
 
-### APISIX Dashboard 的做法
+### PANSHI Dashboard 的做法
 
-APISIX Dashboard 采用：
+PANSHI Dashboard 采用：
 - 左侧插件列表（可搜索），右侧插件配置面板
 - 点击插件后展开配置表单
 - 支持直接编辑 JSON
@@ -20,7 +20,7 @@ APISIX Dashboard 采用：
 
 ### 方案一：卡片式插件选择 + 通用 Schema 驱动表单
 
-**核心思路**：参考 APISIX Dashboard，将下拉选择改为卡片网格展示，基于插件 Schema 自动生成配置表单。
+**核心思路**：参考 PANSHI Dashboard，将下拉选择改为卡片网格展示，基于插件 Schema 自动生成配置表单。
 
 **UI 布局**：
 ```
@@ -145,7 +145,7 @@ Drawer 内容：
 
 ### 方案四：渐进式插件配置（最佳用户体验）
 
-**核心思路**：参考 Kong Dashboard 和 APISIX 的设计，分步骤引导用户完成插件配置。
+**核心思路**：参考 Kong Dashboard 和 PANSHI 的设计，分步骤引导用户完成插件配置。
 
 **阶段一：选择插件**
 ```

@@ -1,6 +1,6 @@
-## Purpose
+﻿## Purpose
 
-Edge 节点侧通过 APISIX 插件提供静态文件访问功能。
+Edge 节点侧通过 PANSHI 插件提供静态文件访问功能。
 
 ## Requirements
 

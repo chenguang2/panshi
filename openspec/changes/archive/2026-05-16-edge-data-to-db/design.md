@@ -1,6 +1,6 @@
-## Context
+﻿## Context
 
-当前磐石 Admin 管理 Edge 节点的方式是"由磐石发起所有配置变更"——用户在磐石 Admin 中创建/修改上游、路由，然后通过 EdgeClient 发布到 Edge 节点。但存在一批已经通过其他系统（APISIX Admin API 直调、Ansible、手工等）配置好的 Edge 节点，磐石 Admin 完全不掌握这些节点的配置数据。
+当前磐石 Admin 管理 Edge 节点的方式是"由磐石发起所有配置变更"——用户在磐石 Admin 中创建/修改上游、路由，然后通过 EdgeClient 发布到 Edge 节点。但存在一批已经通过其他系统（PANSHI Admin API 直调、Ansible、手工等）配置好的 Edge 节点，磐石 Admin 完全不掌握这些节点的配置数据。
 
 本设计解决的是：如何将"已在运行的 Edge 节点数据"导入到磐石 Admin 的数据库中，使其变为可管理状态。
 
@@ -10,7 +10,7 @@
 - `ps_route` / `ps_route_plugin` — 磐石侧"期望的"路由配置
 - `ps_node` — 已注册的 Edge 节点，关联到集群
 - EdgeClient — 提供对 Edge 节点 Admin API 的加密封装（SM4 加密）
-- Edge 节点数据格式（APISIX）与磐石格式之间已有映射关系（见 `config_diff.py` / `equivalence_rules.yaml`）
+- Edge 节点数据格式（PANSHI）与磐石格式之间已有映射关系（见 `config_diff.py` / `equivalence_rules.yaml`）
 
 ### 约束
 
@@ -23,7 +23,7 @@
 **Goals:**
 
 - 从 Edge 节点 Admin API 拉取 routes、upstreams、plugin_configs、global_rules
-- 将 APISIX 格式转换为磐石数据库格式并写入现有业务表
+- 将 PANSHI 格式转换为磐石数据库格式并写入现有业务表
 - 提供连接测试、数据预览（含冲突检测）、确认导入的三步流程
 - 导入后该节点纳入磐石管理，可通过现有 UI 查看和配置
 - 记录每次导入的来源节点、导入内容、冲突和处理结果
@@ -63,10 +63,10 @@
 | 复用 `sys_audit_log` | ❌ 字段不匹配，审计日志是通用操作日志 |
 | 新建 `ps_import_log` | ✅ **选择**：专表记录导入的节点、资源列表、冲突详情、导入结果 |
 
-### 5. 边缘数据（APISIX 响应）的处理
+### 5. 边缘数据（PANSHI 响应）的处理
 
 - 选择"导入到现有数据库表"（之前已讨论决定）
-- APISIX 返回的完整原始 JSON **不保存**在数据库中（避免膨胀）
+- PANSHI 返回的完整原始 JSON **不保存**在数据库中（避免膨胀）
 - 仅在 `ps_import_log.detail` 中记录摘要：导入了多少条路由/上游、跳过了多少条、冲突详情
 
 ### 6. 上游 UUID 关联重建
@@ -194,14 +194,14 @@ CREATE TABLE ps_import_log (
    ├──► POST /test-connection
    │    请求: { cluster_id, node_id }
    │    后端从DB读取: ps_node.ip/port, ps_cluster.admin_key
-   │    ─────────► GET /apisix/admin/routes
+   │    ─────────► GET /PANSHI/admin/routes
    │    ◄── 成功/失败                    ◄── 节点信息+版本号
    │
 2. 预览数据
    │
-   ├──► GET /preview ──────────────────► GET /apisix/admin/* (全部数据)
+   ├──► GET /preview ──────────────────► GET /PANSHI/admin/* (全部数据)
    │    │  拉取 routes, upstreams, plugin_configs, global_rules
-   │    │  数据转换（APISIX → 磐石格式）
+   │    │  数据转换（PANSHI → 磐石格式）
    │    │  插件分类：已知插件(BUILTIN_PLUGINS) vs 未知插件
    │    │  冲突检测（名称/路径/UUID）
    │    ◄── 预览结果 + 冲突列表 + 插件摘要

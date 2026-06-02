@@ -1,6 +1,6 @@
-## Why
+﻿## Why
 
-边缘节点调试页面（EdgeClient.vue）的插件组编辑表单中，Labels (JSON) 和 Hosts (JSON) 是 APISIX 原生字段，但在当前业务流程中不使用，造成界面冗余和用户困惑。
+边缘节点调试页面（EdgeClient.vue）的插件组编辑表单中，Labels (JSON) 和 Hosts (JSON) 是 PANSHI 原生字段，但在当前业务流程中不使用，造成界面冗余和用户困惑。
 
 ## What Changes
 

@@ -1,4 +1,4 @@
-# 静态资源发布功能 — 架构设计讨论
+﻿# 静态资源发布功能 — 架构设计讨论
 
 > 讨论日期：2026-05-14
 > 参与方：Sisyphus（AI 代理）, 用户
@@ -14,14 +14,14 @@
 管理平台（FastAPI + Vue）
       │
       ▼
-Edge 节点集群（Apache APISIX on OpenResty）
+Edge 节点集群（Apache PANSHI on OpenResty）
       │
       ▼
 下游客户端
 ```
 
 - 管理平台通过 SM4 加密的 HTTP API（`/edge/admin/...`）向 Edge 节点推送配置
-- Edge 节点基于 OpenResty（Nginx + LuaJIT），运行 APISIX 和自定义 Lua 插件
+- Edge 节点基于 OpenResty（Nginx + LuaJIT），运行 PANSHI 和自定义 Lua 插件
 - 已有资源类型：upstream、route、plugin_config、global_rule、plugin_metadata
 - 各资源均遵循 Model → Schema → API → 前端 Tab 的开发模式
 - 发布流程：版本递增 → ConfigVersion 记录 → 推送到所有活跃 Edge 节点 → 返回同步结果
@@ -66,7 +66,7 @@ Edge 节点集群（Apache APISIX on OpenResty）
 用户请求：
 浏览器 ──GET /static/{name}/index.html──► Edge 节点
                                             │
-                                   APISIX 路由匹配
+                                   PANSHI 路由匹配
                                             │
                                    static_resource 插件
                                    读取本地文件返回
@@ -80,7 +80,7 @@ DELETE /edge/admin/static_resources/{name}   # 删除静态资源
 GET    /edge/admin/static_resources           # 列出已部署资源
 ```
 
-### 新增 APISIX 插件：static_resource
+### 新增 PANSHI 插件：static_resource
 
 - 在 `access` 阶段拦截匹配的请求
 - 根据请求 URI 映射到本地文件

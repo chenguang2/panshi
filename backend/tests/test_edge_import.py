@@ -6,9 +6,9 @@ from app.models.cluster import Upstream, UpstreamTarget, Route, RoutePlugin, Plu
 from app.models.edge_import import ImportLog
 
 
-SAMPLE_APISIX_VALUE = lambda d: {"value": d, "key": f"/apisix/{d.get('id','')}"}
+SAMPLE_PANSHI_VALUE = lambda d: {"value": d, "key": f"/panshi/{d.get('id','')}"}
 
-SAMPLE_EDGE_UPSTREAMS = [SAMPLE_APISIX_VALUE(d) for d in [
+SAMPLE_EDGE_UPSTREAMS = [SAMPLE_PANSHI_VALUE(d) for d in [
     {
         "id": "uuid-upstream-1",
         "name": "user-service",
@@ -31,7 +31,7 @@ SAMPLE_EDGE_UPSTREAMS = [SAMPLE_APISIX_VALUE(d) for d in [
     },
 ]]
 
-SAMPLE_EDGE_ROUTES = [SAMPLE_APISIX_VALUE(d) for d in [
+SAMPLE_EDGE_ROUTES = [SAMPLE_PANSHI_VALUE(d) for d in [
     {
         "id": "uuid-route-1",
         "name": "get-users",
@@ -63,7 +63,7 @@ SAMPLE_EDGE_ROUTES = [SAMPLE_APISIX_VALUE(d) for d in [
 
 SAMPLE_EDGE_PLUGIN_CONFIGS = [
     {
-        "key": "/apisix/plugin_configs/uuid-pc-1",
+        "key": "/panshi/plugin_configs/uuid-pc-1",
         "value": {
             "plugins": {"cors": {"origins": "*"}, "my-ratelimit": {"rate": 100}},
             "desc": "Common CORS config",
@@ -73,7 +73,7 @@ SAMPLE_EDGE_PLUGIN_CONFIGS = [
 
 SAMPLE_EDGE_GLOBAL_RULES = [
     {
-        "key": "/apisix/global_rules/uuid-gr-1",
+        "key": "/panshi/global_rules/uuid-gr-1",
         "value": {
             "plugins": {"monitor": {"log_all": True}},
             "desc": "Global monitor",
@@ -138,24 +138,24 @@ class TestEdgeImportConverters:
         result = EdgeImportService._parse_resource_list([{"id": "u1"}])
         assert len(result) == 1
 
-    def test_unwrap_apisix_items_value_key(self):
+    def test_unwrap_panshi_items_value_key(self):
         from app.services.edge_import_service import EdgeImportService
 
-        items = [{"value": {"id": "u1", "name": "up1"}, "key": "/apisix/u1"}]
-        result = EdgeImportService._unwrap_apisix_items(items)
+        items = [{"value": {"id": "u1", "name": "up1"}, "key": "/panshi/u1"}]
+        result = EdgeImportService._unwrap_panshi_items(items)
         assert result == [{"id": "u1", "name": "up1"}]
 
-    def test_unwrap_apisix_items_already_unwrapped(self):
+    def test_unwrap_panshi_items_already_unwrapped(self):
         from app.services.edge_import_service import EdgeImportService
 
         items = [{"id": "u1", "name": "up1"}]
-        result = EdgeImportService._unwrap_apisix_items(items)
+        result = EdgeImportService._unwrap_panshi_items(items)
         assert result == items
 
-    def test_unwrap_apisix_items_empty(self):
+    def test_unwrap_panshi_items_empty(self):
         from app.services.edge_import_service import EdgeImportService
 
-        assert EdgeImportService._unwrap_apisix_items([]) == []
+        assert EdgeImportService._unwrap_panshi_items([]) == []
 
     @patch("app.services.edge_import_service._load_builtin_names")
     def test_classify_plugins_all_known(self, mock_load):
@@ -255,7 +255,7 @@ class TestEdgeImportConverters:
         service = object.__new__(EdgeImportService)
         service.cluster_id = 1
         edge_pm = {
-            "key": "/apisix/plugin_metadata/limit-req",
+            "key": "/panshi/plugin_metadata/limit-req",
             "value": {"rate": 10, "burst": 20},
         }
         result = service.convert_plugin_metadata(edge_pm)
@@ -268,7 +268,7 @@ class TestEdgeImportConverters:
         service = object.__new__(EdgeImportService)
         service.cluster_id = 1
         edge_pm = {
-            "key": "/apisix/plugin_metadata/log_process",
+            "key": "/panshi/plugin_metadata/log_process",
             "value": {"logs": {"logs/process.log": {"formats": ["${req_line}"]}}},
         }
         result = service.convert_plugin_metadata(edge_pm)
@@ -460,7 +460,7 @@ class TestEdgeImportExecute:
         mock_client.list_routes.return_value = SAMPLE_EDGE_ROUTES
         _mock_client_with_requests(
             mock_client, SAMPLE_EDGE_PLUGIN_CONFIGS, SAMPLE_EDGE_GLOBAL_RULES,
-            [{"key": "/apisix/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
+            [{"key": "/panshi/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
         )
         mock_client.api_key = "test-key"
 
@@ -472,7 +472,7 @@ class TestEdgeImportExecute:
             service.node_id = 1
             service.ip = "10.0.0.1"
             service.port = 9180
-            service.edge_path = "/usr/local/apisix"
+            service.edge_path = "/usr/local/panshi"
             service.db_session = test_db
 
             class MockSelections:
@@ -684,8 +684,8 @@ class TestEdgeImportExecute:
 @pytest.mark.asyncio
 async def test_execute_import_route_plugin_group_mapping(test_db):
     """Verify imported route's plugin_config_ids matches plugin_config's edge_uuid."""
-    SAMPLE_PC = [{"value": {"plugins": {"cors": {"origins": "*"}}, "desc": "test"}, "key": "/apisix/plugin_configs/pc-9100"}]
-    SAMPLE_ROUTE = [{"value": {"id": "route-1", "name": "test-route", "uri": "/9100", "plugin_config_ids": ["pc-9100"], "plugins": {}}, "key": "/apisix/routes/route-1"}]
+    SAMPLE_PC = [{"value": {"plugins": {"cors": {"origins": "*"}}, "desc": "test"}, "key": "/panshi/plugin_configs/pc-9100"}]
+    SAMPLE_ROUTE = [{"value": {"id": "route-1", "name": "test-route", "uri": "/9100", "plugin_config_ids": ["pc-9100"], "plugins": {}}, "key": "/panshi/routes/route-1"}]
 
     mock_client = MagicMock()
     mock_client.list_upstreams.return_value = []
@@ -702,7 +702,7 @@ async def test_execute_import_route_plugin_group_mapping(test_db):
         service.node_id = 1
         service.ip = "10.0.0.1"
         service.port = 9180
-        service.edge_path = "/usr/local/apisix"
+        service.edge_path = "/usr/local/panshi"
         service.db_session = test_db
 
         class MockSelections:
@@ -743,7 +743,7 @@ async def test_preview_import_with_mocked_client(test_db):
     mock_client.list_routes.return_value = SAMPLE_EDGE_ROUTES
     _mock_client_with_requests(
         mock_client, SAMPLE_EDGE_PLUGIN_CONFIGS, SAMPLE_EDGE_GLOBAL_RULES,
-        [{"key": "/apisix/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
+        [{"key": "/panshi/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
     )
     mock_client.list_plugins.return_value = SAMPLE_EDGE_PLUGINS_LIST
     mock_client.api_key = "test-key"

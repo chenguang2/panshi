@@ -1,10 +1,10 @@
-## REMOVED Requirements
+﻿## REMOVED Requirements
 
 ### Requirement: Labels and Hosts fields in plugin config edit form
 
-**Reason**: APISIX native fields not used in current business flow, causing UI clutter.
+**Reason**: PANSHI native fields not used in current business flow, causing UI clutter.
 
-**Migration**: Fields removed. Users needing labels/hosts configuration should contact support for direct APISIX API access.
+**Migration**: Fields removed. Users needing labels/hosts configuration should contact support for direct PANSHI API access.
 
 #### Scenario: Labels field no longer shown
 - **WHEN** the user opens the plugin config create/edit modal in EdgeClient.vue

@@ -1,4 +1,4 @@
-## Capability
+﻿## Capability
 
 `route-modal-tabs` - 将路由编辑弹窗拆分为 Tab 页
 
@@ -28,7 +28,7 @@
 - 支持四类匹配条件：请求头、查询参数、Cookie、客户端IP
 - 每条条件可设置：类型、键（header/query/cookie）、操作符（==/!=/~~/!~/~*/IN）、匹配值
 - 支持动态添加/删除条件
-- 构建输出为 APISIX 风格 `vars` 数组：`[[var_name, operator, value], ...]`
+- 构建输出为 PANSHI 风格 `vars` 数组：`[[var_name, operator, value], ...]`
 - IP 类型支持"等于"和"在范围内"两种匹配模式
 
 当 `advanced_match_enabled=false` 时：

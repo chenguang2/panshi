@@ -1,4 +1,4 @@
-## 1. 后端数据模型
+﻿## 1. 后端数据模型
 
 - [x] 1.1 创建 `app/models/edge_import.py`，定义 `ImportLog` 模型（`ps_import_log` 表）
 - [x] 1.2 在 `app/models/__init__.py` 注册新模型
@@ -10,10 +10,10 @@
 - [x] 2.2 实现 `test_connection()`：调用 Edge 节点 Admin API 验证连通性，返回节点信息
 - [x] 2.3 实现 `fetch_edge_data()`：从 Edge 节点拉取 routes、upstreams、plugin_configs、global_rules 原始数据
 - [x] 2.4 实现插件分类逻辑：将插件按 BUILTIN_PLUGINS 分为"已知插件"和"未知插件"
-- [x] 2.5 实现 `convert_upstream()`：APISIX upstream → 磐石 `ps_upstream` + `ps_upstream_target` 格式转换
-- [x] 2.6 实现 `convert_route()`：APISIX route → 磐石 `ps_route` + `ps_route_plugin` 格式转换，含 `upstream_id` 关联重建
-- [x] 2.7 实现 `convert_plugin_config()`：APISIX plugin_config → 磐石 `ps_plugin_config` 格式转换
-- [x] 2.8 实现 `convert_global_rule()`：APISIX global_rule → 磐石 `ps_global_rule` 格式转换
+- [x] 2.5 实现 `convert_upstream()`：PANSHI upstream → 磐石 `ps_upstream` + `ps_upstream_target` 格式转换
+- [x] 2.6 实现 `convert_route()`：PANSHI route → 磐石 `ps_route` + `ps_route_plugin` 格式转换，含 `upstream_id` 关联重建
+- [x] 2.7 实现 `convert_plugin_config()`：PANSHI plugin_config → 磐石 `ps_plugin_config` 格式转换
+- [x] 2.8 实现 `convert_global_rule()`：PANSHI global_rule → 磐石 `ps_global_rule` 格式转换
 - [x] 2.9 实现冲突检测逻辑：上游名称冲突、路由路径+方法冲突、Edge UUID 冲突
 
 ## 3. 后端导入流程与 API

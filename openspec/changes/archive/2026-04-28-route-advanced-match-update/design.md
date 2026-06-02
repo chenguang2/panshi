@@ -1,6 +1,6 @@
-## Context
+﻿## Context
 
-路由高级匹配功能位于 `RouteAdvancedMatch.vue` 组件中，负责构建 APISIX 条件匹配规则（vars）。vars 格式为 `[[变量名, 运算符, 值], ...]`，前端需要根据用户选择的参数位置添加不同的前缀。
+路由高级匹配功能位于 `RouteAdvancedMatch.vue` 组件中，负责构建 PANSHI 条件匹配规则（vars）。vars 格式为 `[[变量名, 运算符, 值], ...]`，前端需要根据用户选择的参数位置添加不同的前缀。
 
 ## Goals / Non-Goals
 

@@ -2,7 +2,7 @@
 Edge Data Import Service
 
 Handles importing upstreams, routes, plugin configs, and global rules
-from an APISIX Edge node into the panshi admin database.
+from an PANSHI Edge node into the panshi admin database.
 """
 
 import json
@@ -121,7 +121,7 @@ class EdgeImportService:
 
             raw_upstreams = self.client.list_upstreams()
             upstream_nodes = self._parse_resource_list(raw_upstreams)
-            upstream_list = self._unwrap_apisix_items(upstream_nodes)
+            upstream_list = self._unwrap_panshi_items(upstream_nodes)
             upstream_count = len(upstream_list)
 
             try:
@@ -149,7 +149,7 @@ class EdgeImportService:
             return {"success": False, "message": str(e)}
 
     @staticmethod
-    def _unwrap_apisix_items(items: list) -> list:
+    def _unwrap_panshi_items(items: list) -> list:
         result = []
         for item in items:
             if isinstance(item, dict):
@@ -186,13 +186,13 @@ class EdgeImportService:
 
     def fetch_edge_data(self) -> dict:
         raw_upstreams = self.client.list_upstreams()
-        upstreams = self._unwrap_apisix_items(
+        upstreams = self._unwrap_panshi_items(
             self._parse_resource_list(raw_upstreams)
         )
 
         routes = self.client.list_routes()
         if isinstance(routes, list):
-            routes = self._unwrap_apisix_items(routes)
+            routes = self._unwrap_panshi_items(routes)
         else:
             routes = []
 

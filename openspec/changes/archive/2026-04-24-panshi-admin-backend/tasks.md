@@ -1,4 +1,4 @@
-## 1. Project Setup
+﻿## 1. Project Setup
 
 - [x] 1.1 Initialize backend project with uv (`uv init --name panshi-admin`)
 - [x] 1.2 Add backend dependencies (fastapi, uvicorn, sqlalchemy, pydantic, python-jose, passlib, bcrypt, httpx, pytest, pytest-asyncio)
@@ -44,7 +44,7 @@
 - [x] 5.1 Create Cluster model (ps_cluster table)
 - [x] 5.2 Create cluster CRUD schemas
 - [x] 5.3 Implement cluster CRUD endpoints
-- [x] 5.4 Create APISIX client (app/core/apisix_client.py)
+- [x] 5.4 Create PANSHI client (app/core/PANSHI_client.py)
 - [x] 5.5 Implement POST /api/v1/clusters/{id}/test endpoint
 - [x] 5.6 Implement POST /api/v1/clusters/{id}/sync endpoint
 

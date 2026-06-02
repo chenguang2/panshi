@@ -1,6 +1,6 @@
-## Context
+﻿## Context
 
-APISIX Admin API 支持在集群级别设置插件的 metadata。当前系统的路由管理已有完整的插件管理 UI（PluginSelector 组件支持 Form/JSON 双模式），但缺少集群级别的全局插件 metadata 管理。
+PANSHI Admin API 支持在集群级别设置插件的 metadata。当前系统的路由管理已有完整的插件管理 UI（PluginSelector 组件支持 Form/JSON 双模式），但缺少集群级别的全局插件 metadata 管理。
 
 全局插件 metadata 与路由插件的区别：
 - 路由插件：绑定到特定路由，配置路由级别的插件参数
@@ -12,13 +12,13 @@ APISIX Admin API 支持在集群级别设置插件的 metadata。当前系统的
 - 在集群卡片中新增"全局插件" Tab 页
 - 支持添加/编辑/删除全局插件 metadata
 - 支持 Form 和 JSON 两种编辑模式切换
-- 支持单个插件发布到 APISIX
+- 支持单个插件发布到 PANSHI
 - 支持全局插件版本管理（查看历史、回滚到指定版本）
 - 支持搜索功能
 
 **Non-Goals:**
 - 不修改现有路由插件管理功能
-- 不修改 APISIX 插件 schema（使用后端定义的 BUILTIN_PLUGINS）
+- 不修改 PANSHI 插件 schema（使用后端定义的 BUILTIN_PLUGINS）
 - 不支持批量发布（太危险），插件只能一个一个发布
 
 ## Decisions
@@ -114,7 +114,7 @@ APISIX Admin API 支持在集群级别设置插件的 metadata。当前系统的
 
 **删除后执行：**
 1. 数据库：`metadata = {}`，`version` 设为该版本的版本号（不是递增）
-2. 调用 APISIX 将该插件的 metadata 重置为 `{}`
+2. 调用 PANSHI 将该插件的 metadata 重置为 `{}`
 3. 该插件从右侧消失，回到左侧可选列表
 
 ### 7. 版本管理（完全复制路由版本管理）
@@ -144,7 +144,7 @@ APISIX Admin API 支持在集群级别设置插件的 metadata。当前系统的
 | POST | `/clusters/{id}/plugin-metadata` | 添加插件（初始 metadata={}） |
 | PUT | `/clusters/{id}/plugin-metadata/{plugin_name}` | 更新插件 metadata |
 | DELETE | `/clusters/{id}/plugin-metadata/{plugin_name}` | 重置插件为默认 |
-| POST | `/clusters/{id}/plugin-metadata/{plugin_name}/publish` | 发布到 APISIX |
+| POST | `/clusters/{id}/plugin-metadata/{plugin_name}/publish` | 发布到 PANSHI |
 | GET | `/clusters/{id}/plugin-metadata/{plugin_name}/versions` | 获取版本历史 |
 | POST | `/clusters/{id}/plugin-metadata/{plugin_name}/rollback/{version}` | 回滚到指定版本 |
 
@@ -226,7 +226,7 @@ CREATE TABLE plugin_metadata_versions (
 ────────────────────────────────────────
 点击"发布"
 → POST /clusters/{id}/plugin-metadata/limit-req/publish
-→ APISIX 同步该插件 metadata
+→ PANSHI 同步该插件 metadata
 → is_published=true
 → 状态变为"已发布"
 
@@ -238,7 +238,7 @@ CREATE TABLE plugin_metadata_versions (
   1. DELETE /clusters/{id}/plugin-metadata/limit-req
      → 数据库 metadata={}, version=该版本号, is_published=false
      → 插入版本记录 action='reset'
-  2. 调用 APISIX 重置该插件 metadata
+  2. 调用 PANSHI 重置该插件 metadata
   3. 该插件从右侧消失，回到左侧
 
 
@@ -251,16 +251,16 @@ CREATE TABLE plugin_metadata_versions (
 回滚到 v2：
 → POST /clusters/{id}/plugin-metadata/limit-req/rollback/2
 → 数据库 version=2, metadata=旧值, is_published=false
-→ 调用 APISIX 同步
+→ 调用 PANSHI 同步
 ```
 
 ## Risks / Trade-offs
 
 - 后端 API 需要新增 `/clusters/{id}/plugin-metadata` 系列接口
-- 全局插件与路由插件的优先级关系需要 APISIX 层面保证
-- 删除操作会实时重置 APISIX 集群配置，需谨慎操作
+- 全局插件与路由插件的优先级关系需要 PANSHI 层面保证
+- 删除操作会实时重置 PANSHI 集群配置，需谨慎操作
 
 ## Open Questions
 
 1. 后端是否已有 plugin-metadata 相关接口？
-2. APISIX 的全局插件 metadata API 是什么？
+2. PANSHI 的全局插件 metadata API 是什么？

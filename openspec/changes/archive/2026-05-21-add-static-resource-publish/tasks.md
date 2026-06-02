@@ -1,7 +1,7 @@
-## 1. Edge 节点 Lua 插件
+﻿## 1. Edge 节点 Lua 插件
 
 - [ ] 1.1 实现 Admin API handler：接收加密 zip body，解压到 Edge 节点本地目录
-- [ ] 1.2 实现 static_resource APISIX 插件（access 阶段）：文件读取、MIME 类型、缓存控制、304 响应
+- [ ] 1.2 实现 static_resource PANSHI 插件（access 阶段）：文件读取、MIME 类型、缓存控制、304 响应
 
 ## 2. 后端 StaticResource 模型与 API
 

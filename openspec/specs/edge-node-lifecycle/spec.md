@@ -1,4 +1,4 @@
-# edge-node-lifecycle Specification
+﻿# edge-node-lifecycle Specification
 
 ## Purpose
 Edge node lifecycle management: start, stop, restart, check, statistic collection via ansible-runner.
@@ -6,7 +6,7 @@ Edge node lifecycle management: start, stop, restart, check, statistic collectio
 ## Requirements
 
 ### Requirement: Single node start
-The system SHALL support starting the APISIX/Edge process on a single node via `POST /clusters/{cluster_id}/nodes/{node_id}/start`. The system SHALL use ansible-runner to execute playbook `edge.yml` with tag `nginx_cmd_run` and extravar `nginx_cmd: nginx_start`. The ansible `script` module SHALL copy `cmd_scripts/nginx_cmd.sh` to the remote host and execute it with arguments `nginx_start`, `prefix`, `port`.
+The system SHALL support starting the PANSHI/Edge process on a single node via `POST /clusters/{cluster_id}/nodes/{node_id}/start`. The system SHALL use ansible-runner to execute playbook `edge.yml` with tag `nginx_cmd_run` and extravar `nginx_cmd: nginx_start`. The ansible `script` module SHALL copy `cmd_scripts/nginx_cmd.sh` to the remote host and execute it with arguments `nginx_start`, `prefix`, `port`.
 
 #### Scenario: Successful start
 - **WHEN** user sends `POST /clusters/1/nodes/5/start`
@@ -60,7 +60,7 @@ The system SHALL support reloading the process configuration via `POST /clusters
 - **THEN** the system SHALL return `{"status": "ok", "message": "节点已重启", "rc": 0}`
 
 ### Requirement: Single node process check
-The system SHALL support checking whether the APISIX/Edge process is running via `POST /clusters/{cluster_id}/nodes/{node_id}/check`. Tag: `nginx_cmd_run`, extravar: `nginx_cmd: nginx_check`.
+The system SHALL support checking whether the PANSHI/Edge process is running via `POST /clusters/{cluster_id}/nodes/{node_id}/check`. Tag: `nginx_cmd_run`, extravar: `nginx_cmd: nginx_check`.
 
 #### Scenario: Successful check
 - **WHEN** user sends `POST /clusters/1/nodes/5/check`

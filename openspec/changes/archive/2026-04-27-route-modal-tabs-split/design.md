@@ -1,4 +1,4 @@
-## Context
+﻿## Context
 
 现有 `RouteList.vue` 的路由编辑弹窗（`a-modal`）仅包含基础配置字段，宽度 `600px`。`RouteAdvancedMatch.vue`（匹配条件构建）和 `DraggablePluginGrid.vue` + `PluginEditorDrawer.vue`（插件管理）已作为独立组件存在，但未集成到路由编辑流程中。
 
@@ -24,7 +24,7 @@
 - 支持 `a-tab-pane` 锚点，无需自研
 
 ### 2. Tab 顺序：基础配置 → 高级匹配 → 插件管理
-**决定**：沿用「基础优先、扩展在后」的认知顺序，与 APISIX Dashboard 保持一致。
+**决定**：沿用「基础优先、扩展在后」的认知顺序，与 PANSHI Dashboard 保持一致。
 
 ### 3. 弹窗宽度：`600px` → `800px`
 **决定**：800px，理由：

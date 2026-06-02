@@ -1,4 +1,4 @@
-## Why
+﻿## Why
 
 路由编辑弹窗（添加/编辑路由）当前将所有字段混在一个表单里，高级匹配和插件管理两个复杂功能没有独立的配置入口，导致：
 1. 弹窗内容过于拥挤，用户找不到高级配置入口
@@ -11,7 +11,7 @@
 
 - 编辑路由弹窗从单表单改为 `a-tabs` 三 Tab 布局
 - **Tab 1 - 基础配置**：保留现有全部字段（名称/URI/请求方法/上游/优先级/描述/状态）
-- **Tab 2 - 高级匹配**：集成 `RouteAdvancedMatch.vue`，支持请求头/查询参数/Cookie/客户端IP 四种匹配条件构建，输出 APISIX 风格 `vars` 数组
+- **Tab 2 - 高级匹配**：集成 `RouteAdvancedMatch.vue`，支持请求头/查询参数/Cookie/客户端IP 四种匹配条件构建，输出 PANSHI 风格 `vars` 数组
 - **Tab 3 - 插件管理**：集成 `DraggablePluginGrid.vue`（插件选择/拖拽排序）+ `PluginEditorDrawer.vue`（JSON/表单双模式插件配置）
 - 弹窗宽度从 `600px` 扩大到 `800px`
 - 编辑路由时，高级匹配启用状态和 vars 值、已选插件列表应完整回填到对应 Tab

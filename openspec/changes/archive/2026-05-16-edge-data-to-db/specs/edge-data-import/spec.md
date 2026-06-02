@@ -1,4 +1,4 @@
-## ADDED Requirements
+﻿## ADDED Requirements
 
 ### Requirement: 连接测试
 
@@ -6,7 +6,7 @@
 
 #### Scenario: 连接成功
 - **WHEN** 用户输入 Edge 节点 IP、端口和 API Key 并点击"测试连接"
-- **THEN** 系统 SHALL 调用 Edge 节点 Admin API（`GET /apisix/admin/routes`）验证连通性
+- **THEN** 系统 SHALL 调用 Edge 节点 Admin API（`GET /PANSHI/admin/routes`）验证连通性
 - **AND** 系统 SHALL 返回节点版本号、已安装插件数量、路由数量和上游数量
 - **AND** 前端 SHALL 显示连接成功状态和节点概要信息
 
@@ -22,7 +22,7 @@
 #### Scenario: 展示预览数据
 - **WHEN** 用户通过连接测试后进入预览阶段
 - **THEN** 系统 SHALL 从 Edge 节点拉取 routes、upstreams、plugin_configs、global_rules 数据
-- **AND** 系统 SHALL 将 APISIX 格式转换为磐石数据库格式
+- **AND** 系统 SHALL 将 PANSHI 格式转换为磐石数据库格式
 - **AND** 系统 SHALL 按数据类型分组展示预览结果（上游、路由、插件配置、全局规则）
 - **AND** 前端 SHALL 可展开查看每种类型的详细条目列表
 
@@ -38,8 +38,8 @@
 
 系统 SHALL 将从 Edge 节点拉取的上游数据转换为磐石格式并写入数据库。
 
-#### Scenario: APISIX 上游转磐石上游
-- **WHEN** Edge 节点返回 APISIX upstream 对象
+#### Scenario: PANSHI 上游转磐石上游
+- **WHEN** Edge 节点返回 PANSHI upstream 对象
 - **THEN** 系统 SHALL 将 `type: roundrobin` 转换为 `load_balance: weighted_roundrobin`
 - **AND** 系统 SHALL 将 `type: chash` 转换为 `load_balance: chash`
 - **AND** 系统 SHALL 将 `type: least_conn` 转换为 `load_balance: least_conn`
@@ -67,7 +67,7 @@
 系统 SHALL 将从 Edge 节点拉取的路由数据转换为磐石格式并写入数据库。
 
 #### Scenario: 路由基础字段转换
-- **WHEN** Edge 节点返回 APISIX route 对象
+- **WHEN** Edge 节点返回 PANSHI route 对象
 - **THEN** 系统 SHALL 将 `uri` 或 `uris` 写入 `ps_route.uri` 字段（多 URI 时取第一个）
 - **AND** 系统 SHALL 将 `methods` 数组转换为逗号分隔字符串写入 `ps_route.methods`
 - **AND** 系统 SHALL 将 `hosts` 数组转换为逗号分隔字符串写入 `ps_route.hosts`

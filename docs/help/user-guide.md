@@ -1,8 +1,8 @@
-# Panshi Admin User Guide
+﻿# Panshi Admin User Guide
 
 ## Overview
 
-Panshi Admin is a multi-cluster gateway management platform that provides unified configuration management for multiple APISIX gateway clusters.
+Panshi Admin is a multi-cluster gateway management platform that provides unified configuration management for multiple PANSHI gateway clusters.
 
 ## Getting Started
 
@@ -66,8 +66,8 @@ Navigate to **Clusters** in the sidebar.
 2. Fill in the form:
    - Name: Unique identifier
    - Display Name: Human-readable name
-   - Admin URL: APISIX Admin API URL (e.g., http://apisix:9180)
-   - Admin Key: APISIX admin key
+   - Admin URL: PANSHI Admin API URL (e.g., http://PANSHI:9180)
+   - Admin Key: PANSHI admin key
    - Description: Optional description
    - Status: Active/Inactive
 3. Click **OK**

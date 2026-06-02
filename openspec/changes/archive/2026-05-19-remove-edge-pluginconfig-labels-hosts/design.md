@@ -1,6 +1,6 @@
-## Context
+﻿## Context
 
-边缘节点页面（EdgeClient.vue）的插件组编辑弹窗有 4 个字段：配置ID、描述、插件配置 JSON、Labels JSON、Hosts JSON。其中 Labels 和 Hosts 是 APISIX Plugin Config 的原生可选字段，在集群管理流程中并不使用，仅在直接操作边缘节点时暴露。
+边缘节点页面（EdgeClient.vue）的插件组编辑弹窗有 4 个字段：配置ID、描述、插件配置 JSON、Labels JSON、Hosts JSON。其中 Labels 和 Hosts 是 PANSHI Plugin Config 的原生可选字段，在集群管理流程中并不使用，仅在直接操作边缘节点时暴露。
 
 ## Goals / Non-Goals
 
@@ -13,7 +13,7 @@
 
 ## Decisions
 
-直接删除对应代码，不改动后端 APISIX 交互逻辑（后端仍可接收 labels/hosts 字段）。
+直接删除对应代码，不改动后端 PANSHI 交互逻辑（后端仍可接收 labels/hosts 字段）。
 
 ## Risks / Trade-offs
 

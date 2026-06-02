@@ -1,4 +1,4 @@
-# Global Plugins Spec
+﻿# Global Plugins Spec
 
 ## Overview
 
@@ -67,7 +67,7 @@
 ### 发布插件
 
 1. 选中插件，点击"发布"按钮
-2. 调用后端 API 同步到 APISIX
+2. 调用后端 API 同步到 PANSHI
 3. 显示成功/失败提示
 
 ### 版本管理

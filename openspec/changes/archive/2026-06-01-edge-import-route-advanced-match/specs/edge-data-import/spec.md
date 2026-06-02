@@ -1,4 +1,4 @@
-## MODIFIED Requirements
+﻿## MODIFIED Requirements
 
 ### Requirement: 路由数据转换与导入
 
@@ -8,7 +8,7 @@
 
 #### Scenario: 路由基础字段转换
 
-- **WHEN** Edge 节点返回 APISIX route 对象
+- **WHEN** Edge 节点返回 PANSHI route 对象
 - **THEN** 系统 SHALL 将 `uri` 或 `uris` 写入 `ps_route.uri` 字段（多 URI 时取第一个）
 - **AND** 系统 SHALL 将 `methods` 数组转换为逗号分隔字符串写入 `ps_route.methods`
 - **AND** 系统 SHALL 将 `hosts` 数组转换为逗号分隔字符串写入 `ps_route.hosts`

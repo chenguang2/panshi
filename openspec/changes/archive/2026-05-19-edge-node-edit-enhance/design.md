@@ -1,4 +1,4 @@
-## Context
+﻿## Context
 
 当前边缘节点管理界面（`EdgeClient.vue`）有 6 个 Tab：上游、路由、全局规则、插件组、插件元数据、插件列表。其中全局规则、插件组、插件元数据的编辑功能已完整实现（前端 PATCH 调用 + 后端端点均已就绪），但上游和路由的编辑功能未完成。
 
@@ -30,4 +30,4 @@
 
 - [前端提交数据格式] PUT 更新需要与 POST 创建使用相同的 payload 格式 → 复用已有 payload 构建逻辑，无需额外转换
 - [后端 PUT 是幂等的] PUT 更新覆盖全部字段，不会出现部分更新丢失字段的情况
-- [PATCH 端点在 Edge 端的支持] APISIX Admin API 是否支持 PATCH → 已确认全局规则和插件组的 PATCH 端点正常工作，上游和路由同理
+- [PATCH 端点在 Edge 端的支持] PANSHI Admin API 是否支持 PATCH → 已确认全局规则和插件组的 PATCH 端点正常工作，上游和路由同理

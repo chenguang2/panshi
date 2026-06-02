@@ -1,4 +1,4 @@
-# 静态资源发布功能 — Edge 节点实现
+﻿# 静态资源发布功能 — Edge 节点实现
 
 > 本文档记录 Edge 节点侧 Lua 代码的实现说明，供部署到 Edge 节点时参考。
 > 参考实现文件：`docs/edge/code/static_resource.lua`、`docs/edge/code/admin_static_resources.lua`
@@ -21,7 +21,7 @@
 用户请求：
 浏览器 ──GET /static/{name}/index.html──► Edge 节点
                                             │
-                                   APISIX 路由匹配
+                                   PANSHI 路由匹配
                                    （uri: /static/{name}/*）
                                             │
                                    static_resource 插件
@@ -93,10 +93,10 @@ end
 
 ---
 
-## 文件 2：APISIX 插件
+## 文件 2：PANSHI 插件
 
 **文件**：`static_resource.lua`
-**用途**：在 APISIX 请求处理 `access` 阶段拦截匹配路由，从本地文件系统读取文件返回
+**用途**：在 PANSHI 请求处理 `access` 阶段拦截匹配路由，从本地文件系统读取文件返回
 
 ### 注册方式
 
@@ -200,7 +200,7 @@ curl -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' \
   -H 'X-API-KEY: {admin_key}'
 ```
 
-### 在 APISIX 路由中启用
+### 在 PANSHI 路由中启用
 
 创建或更新路由时，在 `plugins` 字段中加入：
 
