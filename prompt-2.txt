@@ -5,3 +5,44 @@
 2. 合并分支到主分支
 3. 删除已经在主分支中的分支
 4. git push
+
+
+====================================================
+/brainstorming 请仔细阅读 openspec/changes/design-alert-db-tables/下的需求文档和设计文档，分
+析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认
+
+尤其是数据库设计的表，要逐一跟我
+确认。
+
+
+请读取 openspec/changes/design-alert-db-tables/tasks.md ，严格按照 Superpowers 的 TDD 技能，逐
+个完成任务。 要求：每个任务都执行“先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构”的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+基于spring jdbc，编写测试用例验证数据库表的逻辑(主要验证业务逻辑
+点，例如如何进行告警分组计算，非表创建插入更新本身)，不要链接到clickhouse，自己造数据进行测试。可
+以连接到pg数据库，测试过程中只能drop本模块的表，已经启动了。
+
+================================================================================
+1. /opsx-propose 开发clickhouse指标查询后端模块
+定义一个后端任务，定期从ClickHouse同步指标、标签的信息同步到alert_metric_label表。
+基于alert_metric_label表，可以模糊查询指标，并且根据指标查询它的标签以及查询所有的标签。
+clickhouse表的定义以及连接方式参考doc/draft/alert.md
+完成后在api/metrics下编写metric_label_api.md文档。模板要参考api-doc-template.md。
+2. /brainstorming 请仔细阅读 openspec/changes/clickhouse-metrics-backend/下的需求文档和设计文
+档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认
+3. 请读取 openspec/changes/clickhouse-metrics-backend/tasks.md ，严格按照 Superpowers 的 TDD 技
+能，逐个完成任务。 要求：每个任务都执行“先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重
+构”的循环，完成后在 tasks.md 中将对应项打勾。
+4. 执行完毕后，归档文档
+
+==============================================================
+2. /opsx-propose 实现一个指标标签管理功能
+1. 参考doc/ui/alert/metric_label_sync.md的UI设计
+2. pages/alert/metric-label编写相关UI代码。
+3. URL：alert/metric-label
+3. /brainstorming 请仔细阅读 openspec/changes/implement-metric-label-management/下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认
+4. 请读取 openspec/changes/implement-metric-label-management/tasks.md ，严格按照 Superpowers 的
+TDD 技能，逐个完成任务。 要求：每个任务都执行“先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过
+-> 重构”的循环，完成后在 tasks.md 中将对应项打勾。
