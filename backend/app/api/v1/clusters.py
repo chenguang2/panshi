@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
 from app.models.static_resource import StaticResource
-from app.models.user import User
+from app.models.user import User, UserCluster
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     DeleteClusterRequest,
@@ -54,7 +54,8 @@ async def list_my_clusters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = select(Cluster).where(Cluster.creator_id == current_user.id)
+    assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == current_user.id)
+    query = select(Cluster).where(Cluster.id.in_(assigned_ids))
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
@@ -141,6 +142,17 @@ async def create_cluster(
     db.add(db_cluster)
     await db.commit()
     await db.refresh(db_cluster)
+
+    existing = await db.execute(
+        select(UserCluster).where(
+            UserCluster.user_id == current_user.id,
+            UserCluster.cluster_id == db_cluster.id
+        )
+    )
+    if not existing.scalar_one_or_none():
+        db.add(UserCluster(user_id=current_user.id, cluster_id=db_cluster.id))
+        await db.commit()
+
     return ClusterResponse.model_validate(db_cluster)
 
 

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 选择集群</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .picker-modal { max-width: 640px; }
+    .picker-search { margin-bottom: 16px; }
+    .picker-search input { width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 13px; outline: none; }
+    .picker-search input:focus { border-color: var(--accent); }
+    .picker-group { margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+    .picker-group-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; background: var(--bg); cursor: pointer;
+      font-size: 12px; font-weight: 600; color: var(--fg); user-select: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .picker-group-header:hover { background: oklch(56% 0.16 210 / 6%); }
+    .picker-group-header .group-checkbox { width: 16px; height: 16px; accent-color: var(--accent); }
+    .picker-group-header .group-count { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 400; }
+    .picker-group-body { padding: 6px 14px 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px; }
+    .picker-cluster-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 8px; border-radius: var(--radius-sm);
+      cursor: pointer; font-size: 13px; color: var(--fg);
+      transition: background 0.1s;
+    }
+    .picker-cluster-item:hover { background: var(--bg); }
+    .picker-cluster-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); }
+    .picker-cluster-name { font-weight: 500; }
+    .picker-cluster-tag { font-size: 10px; color: var(--muted); margin-left: auto; font-family: var(--font-mono); }
+
+    /* 已选标签展示 */
+    .selected-clusters {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; min-height: 28px;
+    }
+    .selected-cluster-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 10px; border-radius: 12px; font-size: 12px;
+      border: 1px solid var(--accent); background: oklch(56% 0.16 210 / 8%); color: var(--accent);
+    }
+    .selected-cluster-tag .remove {
+      cursor: pointer; font-size: 14px; line-height: 1; opacity: 0.5;
+    }
+    .selected-cluster-tag .remove:hover { opacity: 1; }
+
+    .picker-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+    .select-clusters-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border: 1px dashed var(--border); border-radius: var(--radius-md);
+      font-size: 13px; color: var(--muted); cursor: pointer; background: transparent;
+      transition: all 0.15s;
+    }
+    .select-clusters-btn:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar"><!-- omitted for brevity --></aside>
+    <div class="main-area">
+      <div class="content-area">
+
+        <!-- 页面标题 -->
+        <div class="page-header">
+          <div>
+            <h1>用户管理</h1>
+            <p>管理系统用户、角色分配和资源权限</p>
+          </div>
+        </div>
+
+        <!-- 编辑用户 Modal 示意 -->
+        <div class="modal-overlay" style="position:relative;background:none;visibility:visible;opacity:1;">
+          <div class="modal picker-modal" style="transform:none;">
+
+            <div class="modal-header">
+              <h2>编辑用户 — qcg</h2>
+              <button class="modal-close">&times;</button>
+            </div>
+
+            <div class="modal-body">
+
+              <!-- 基本信息 -->
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">用户名</label>
+                  <input type="text" class="form-input" value="qcg" disabled>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">角色</label>
+                  <select class="form-input">
+                    <option>普通用户</option>
+                    <option>管理员</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" checked> <span>启用</span>
+                </label>
+              </div>
+
+              <!-- 资源权限 -->
+              <div class="permissions-section">
+                <h3>资源权限</h3>
+                <p class="text-muted text-sm" style="margin-bottom:8px;">分配用户可操作的资源模块</p>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;">
+                  <label><input type="checkbox" checked> <span>插件组管理</span></label>
+                  <label><input type="checkbox"> <span>全局规则管理</span></label>
+                  <label><input type="checkbox"> <span>Edge直连</span></label>
+                  <label><input type="checkbox"> <span>插件管理</span></label>
+                  <label><input type="checkbox"> <span>插件元数据</span></label>
+                </div>
+              </div>
+
+              <!-- 集群权限 -->
+              <div class="permissions-section">
+                <h3>集群权限</h3>
+                <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
+
+                <!-- 已选集群标签 -->
+                <div class="selected-clusters">
+                  <span class="selected-cluster-tag">公司服务器-205-jboss <span class="remove">&times;</span></span>
+                  <span class="selected-cluster-tag">qcg-测试集群 <span class="remove">&times;</span></span>
+                  <span class="selected-cluster-tag" style="cursor:pointer;border-style:dashed;">+ 选择集群</span>
+                </div>
+              </div>
+
+              <!-- 重置密码 -->
+              <div class="password-section">
+                <h3>重置密码</h3>
+                <div class="form-row" style="display:flex;gap:12px;">
+                  <div style="flex:0 0 auto;">
+                    <input type="password" class="form-input" placeholder="新密码（留空不修改）" style="width:200px">
+                  </div>
+                  <div style="display:flex;align-items:flex-end;">
+                    <button class="btn btn-secondary btn-sm" style="height:36px;">重置密码</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn btn-secondary">取消</button>
+              <button class="btn btn-primary">保存</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 选择集群 Modal ====== -->
+        <div class="modal-overlay" style="position:relative;background:none;visibility:visible;opacity:1;margin-top:24px;">
+          <div class="modal picker-modal" style="transform:none;">
+
+            <div class="modal-header">
+              <h2>选择集群</h2>
+              <button class="modal-close">&times;</button>
+            </div>
+
+            <div class="modal-body">
+
+              <!-- 搜索 -->
+              <div class="picker-search">
+                <input type="text" placeholder="搜索集群名称...">
+              </div>
+
+              <!-- 按组分组的集群列表 -->
+              <div class="picker-group">
+                <div class="picker-group-header">
+                  <input type="checkbox" class="group-checkbox" checked>
+                  <span>未分组</span>
+                  <span class="group-count">3 个集群</span>
+                </div>
+                <div class="picker-group-body">
+                  <label class="picker-cluster-item">
+                    <input type="checkbox" checked> <span class="picker-cluster-name">公司服务器-205-jboss</span>
+                    <span class="picker-cluster-tag">edge-cluster</span>
+                  </label>
+                  <label class="picker-cluster-item">
+                    <input type="checkbox" checked> <span class="picker-cluster-name">qcg-测试集群</span>
+                    <span class="picker-cluster-tag">qcg-test-1</span>
+                  </label>
+                  <label class="picker-cluster-item">
+                    <input type="checkbox"> <span class="picker-cluster-name">qqq-3</span>
+                    <span class="picker-cluster-tag">qqq-3</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="picker-group">
+                <div class="picker-group-header">
+                  <input type="checkbox" class="group-checkbox">
+                  <span>10.192.162.11</span>
+                  <span class="group-count">4 个集群</span>
+                </div>
+                <div class="picker-group-body">
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">11-50001</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">11-50002</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">11-50003</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">11-50008</span></label>
+                </div>
+              </div>
+
+              <div class="picker-group">
+                <div class="picker-group-header">
+                  <input type="checkbox" class="group-checkbox">
+                  <span>10.192.162.12</span>
+                  <span class="group-count">4 个集群</span>
+                </div>
+                <div class="picker-group-body">
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">12-50001</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">12-50002</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">12-50003</span></label>
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">12-50008</span></label>
+                </div>
+              </div>
+
+              <div class="picker-group">
+                <div class="picker-group-header">
+                  <input type="checkbox" class="group-checkbox">
+                  <span>APP集群</span>
+                  <span class="group-count">1 个集群</span>
+                </div>
+                <div class="picker-group-body">
+                  <label class="picker-cluster-item"><input type="checkbox"> <span class="picker-cluster-name">test</span></label>
+                </div>
+              </div>
+
+            </div>
+
+            <div class="picker-actions">
+              <span style="font-size:12px;color:var(--muted);margin-right:auto;">已选 2 个集群</span>
+              <button class="btn btn-secondary">取消</button>
+              <button class="btn btn-primary">确认</button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>

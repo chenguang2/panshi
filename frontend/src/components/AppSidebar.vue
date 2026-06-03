@@ -64,6 +64,7 @@ interface NavItem {
   label: string
   route: string
   icon: string
+  permission?: string
 }
 
 interface NavSection {
@@ -72,31 +73,36 @@ interface NavSection {
   visible?: boolean
 }
 
-const navSections = computed<NavSection[]>(() => [
-  {
-    title: '核心功能',
-    items: [
-      { label: '概览', route: '/', icon: '&#x25C9;' },
-      { label: '集群管理', route: '/clusters', icon: '&#x25C6;' },
-    ]
-  },
-  {
-    title: '系统管理',
-    visible: authStore.user?.role === 'admin',
-    items: [
-      { label: '插件管理', route: '/plugin-switches', icon: '&#x25B2;' },
-      { label: '用户管理', route: '/users', icon: '&#x25A0;' },
-    ]
-  },
-  {
-    title: 'Edge功能',
-    items: [
-      { label: 'Edge直连', route: '/edge-client', icon: '&#x2B21;', permission: 'edge_nodes' },
-      { label: '数据导入', route: '/edge-import', icon: '&#x2B22;' },
-      { label: '工具箱', route: '/tools', icon: '&#x25A3;' },
-    ]
-  }
-])
+const navSections = computed<NavSection[]>(() => {
+  const edgeItems = [
+    { label: 'Edge直连', route: '/edge-client', icon: '&#x2B21;', permission: 'edge_nodes' },
+    { label: '数据导入', route: '/edge-import', icon: '&#x2B22;' },
+    { label: '工具箱', route: '/tools', icon: '&#x25A3;' },
+  ].filter(item => !item.permission || authStore.hasPermission(item.permission))
+
+  return [
+    {
+      title: '核心功能',
+      items: [
+        { label: '概览', route: '/', icon: '&#x25C9;' },
+        { label: '集群管理', route: '/clusters', icon: '&#x25C6;' },
+      ]
+    },
+    {
+      title: '系统管理',
+      visible: authStore.user?.role === 'admin',
+      items: [
+        { label: '插件管理', route: '/plugin-switches', icon: '&#x25B2;' },
+        { label: '用户管理', route: '/users', icon: '&#x25A0;' },
+      ]
+    },
+    {
+      title: 'Edge功能',
+      visible: edgeItems.length > 0,
+      items: edgeItems,
+    },
+  ]
+})
 
 function isActive(item: NavItem): boolean {
   const name = route.name as string

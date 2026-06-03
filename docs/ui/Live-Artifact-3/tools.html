@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 工具箱</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .tools-grid { display: flex; flex-direction: column; gap: 20px; max-width: 960px; }
+    .tool-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+    .tool-card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+    .tool-card-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .tool-card-header .tool-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+    .tool-card-body { padding: 16px 20px; }
+    .tool-row { display: flex; gap: 12px; align-items: flex-start; }
+    .tool-input-area { flex: 1; min-width: 0; }
+    .tool-input-area textarea { width: 100%; min-height: 120px; max-height: 320px; resize: vertical; }
+    .tool-actions { display: flex; flex-direction: column; gap: 6px; padding-top: 24px; }
+    .tool-actions .btn { white-space: nowrap; justify-content: center; min-width: 72px; }
+    .tool-output-area { flex: 1; min-width: 0; }
+    .tool-output-area .output-box { width: 100%; min-height: 120px; max-height: 320px; overflow: auto; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: oklch(97% 0.005 250); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--fg); white-space: pre-wrap; word-break: break-all; }
+    .tool-output-area .output-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 11px; color: var(--muted); font-weight: 500; }
+    .tool-output-area .output-label .copy-btn { cursor: pointer; color: var(--accent); background: none; border: none; font-size: 11px; padding: 0; }
+    .tool-output-area .output-label .copy-btn:hover { text-decoration: underline; }
+    .tool-output-area textarea { width: 100%; min-height: 120px; max-height: 320px; resize: vertical; background: oklch(97% 0.005 250); }
+
+    /* SM4 extra controls */
+    .sm4-key-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .sm4-key-row label { font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .sm4-key-row input { flex: 1; max-width: 200px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 12px; font-family: var(--font-mono); color: var(--fg); outline: none; }
+    .sm4-key-row input:focus { border-color: var(--accent); }
+
+    .tool-extra-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+    @media (max-width: 700px) {
+      .tool-row { flex-direction: column; }
+      .tool-actions { flex-direction: row; padding-top: 0; }
+      .sm4-key-row { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><span class="nav-icon">◉</span><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><span class="nav-icon">◆</span><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><span class="nav-icon">◇</span><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><span class="nav-icon">◎</span><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><span class="nav-icon">●</span><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><span class="nav-icon">▣</span><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><span class="nav-icon">⚙</span><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><span class="nav-icon">▣</span><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><span class="nav-icon">▲</span><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><span class="nav-icon">■</span><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><span class="nav-icon">▣</span><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><span class="nav-icon">⬡</span><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><span class="nav-icon">⬢</span><span>数据导入</span></a>
+          <a class="nav-item active" href="tools.html"><span class="nav-icon">▣</span><span>工具箱</span></a>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">管</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">管理员</div>
+            <div class="sidebar-user-role">超级管理员</div>
+          </div>
+          <a href="login.html" class="sidebar-logout">退出</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-title">工具箱</div>
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a>
+          <span>/</span>
+          <span>Edge功能</span>
+          <span>/</span>
+          <span>工具箱</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>工具箱</h1>
+            <p>编码解码、加密解密、格式化等常用开发工具</p>
+          </div>
+        </div>
+
+        <div class="tools-grid">
+
+          <!-- ── Lua Encode / Decode ── -->
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <h3><span class="tool-icon" style="background:oklch(56% 0.16 210 / 12%);color:var(--accent);">L</span>Lua 编码 / 解码</h3>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-row">
+                <div class="tool-input-area">
+                  <label class="form-label">输入</label>
+                  <textarea class="form-input" id="luaInput" placeholder="输入 Lua 代码或编码后的字符串..."></textarea>
+                </div>
+                <div class="tool-actions">
+                  <button class="btn btn-primary btn-sm" onclick="encodeLua()">编码 →</button>
+                  <button class="btn btn-secondary btn-sm" onclick="decodeLua()">← 解码</button>
+                  <button class="btn btn-ghost btn-sm" onclick="clearTool('lua')">清空</button>
+                </div>
+                <div class="tool-output-area">
+                  <div class="output-label">
+                    <span>输出</span>
+                    <button class="copy-btn" onclick="copyOutput('luaOutput')">复制</button>
+                  </div>
+                  <div class="output-box" id="luaOutput"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── URL Encode / Decode ── -->
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <h3><span class="tool-icon" style="background:oklch(55% 0.15 145 / 12%);color:var(--success);">U</span>URL 编码 / 解码</h3>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-row">
+                <div class="tool-input-area">
+                  <label class="form-label">输入</label>
+                  <textarea class="form-input" id="urlInput" placeholder="输入 URL 或查询参数..."></textarea>
+                </div>
+                <div class="tool-actions">
+                  <button class="btn btn-primary btn-sm" onclick="encodeURL()">编码 →</button>
+                  <button class="btn btn-secondary btn-sm" onclick="decodeURL()">← 解码</button>
+                  <button class="btn btn-ghost btn-sm" onclick="clearTool('url')">清空</button>
+                </div>
+                <div class="tool-output-area">
+                  <div class="output-label">
+                    <span>输出</span>
+                    <button class="copy-btn" onclick="copyOutput('urlOutput')">复制</button>
+                  </div>
+                  <div class="output-box" id="urlOutput"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── JSON Format / Minify ── -->
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <h3><span class="tool-icon" style="background:oklch(65% 0.15 85 / 12%);color:var(--warning);">{</span>JSON 格式化 / 压缩</h3>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-row">
+                <div class="tool-input-area">
+                  <label class="form-label">输入</label>
+                  <textarea class="form-input" id="jsonInput" placeholder='输入 JSON 字符串，如 {"key":"value"}'></textarea>
+                </div>
+                <div class="tool-actions">
+                  <button class="btn btn-primary btn-sm" onclick="formatJSON()">格式化 →</button>
+                  <button class="btn btn-secondary btn-sm" onclick="minifyJSON()">压缩 →</button>
+                  <button class="btn btn-ghost btn-sm" onclick="clearTool('json')">清空</button>
+                </div>
+                <div class="tool-output-area">
+                  <div class="output-label">
+                    <span>输出</span>
+                    <button class="copy-btn" onclick="copyOutput('jsonOutput')">复制</button>
+                  </div>
+                  <div class="output-box" id="jsonOutput"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── SM4 Encrypt / Decrypt ── -->
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <h3><span class="tool-icon" style="background:oklch(55% 0.18 28 / 12%);color:var(--danger);">S</span>SM4 加密 / 解密</h3>
+              <span class="text-muted text-sm">ECB 模式 · PKCS7 填充</span>
+            </div>
+            <div class="tool-card-body">
+              <div class="sm4-key-row">
+                <label>密钥 (16进制, 16字节)</label>
+                <input type="text" id="sm4Key" value="a16bc20453da220f" placeholder="32位hex密钥，如 a16bc20453da220f">
+              </div>
+              <div class="tool-row">
+                <div class="tool-input-area">
+                  <label class="form-label">明文 / 密文</label>
+                  <textarea class="form-input" id="sm4Input" placeholder="输入要加密的文本或要解密的 Base64 密文..."></textarea>
+                </div>
+                <div class="tool-actions">
+                  <button class="btn btn-primary btn-sm" onclick="sm4Encrypt()">加密 →</button>
+                  <button class="btn btn-secondary btn-sm" onclick="sm4Decrypt()">← 解密</button>
+                  <button class="btn btn-ghost btn-sm" onclick="clearTool('sm4')">清空</button>
+                </div>
+                <div class="tool-output-area">
+                  <div class="output-label">
+                    <span>输出</span>
+                    <button class="copy-btn" onclick="copyOutput('sm4Output')">复制</button>
+                  </div>
+                  <div class="output-box" id="sm4Output"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Base64 Encode / Decode ── -->
+          <div class="tool-card">
+            <div class="tool-card-header">
+              <h3><span class="tool-icon" style="background:oklch(55% 0.12 240 / 12%);color:var(--info);">B</span>Base64 编码 / 解码</h3>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-row">
+                <div class="tool-input-area">
+                  <label class="form-label">输入</label>
+                  <textarea class="form-input" id="b64Input" placeholder="输入要编码的文本或要解码的 Base64 字符串..."></textarea>
+                </div>
+                <div class="tool-actions">
+                  <button class="btn btn-primary btn-sm" onclick="encodeB64()">编码 →</button>
+                  <button class="btn btn-secondary btn-sm" onclick="decodeB64()">← 解码</button>
+                  <button class="btn btn-ghost btn-sm" onclick="clearTool('b64')">清空</button>
+                </div>
+                <div class="tool-output-area">
+                  <div class="output-label">
+                    <span>输出</span>
+                    <button class="copy-btn" onclick="copyOutput('b64Output')">复制</button>
+                  </div>
+                  <div class="output-box" id="b64Output"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+  (function() {
+    'use strict';
+
+    // ── Lua encode/decode ──
+    window.encodeLua = function() {
+      var input = document.getElementById('luaInput').value;
+      if (!input) { showToast('请输入要编码的内容', 'warning'); return; }
+      var out = input.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t').replace(/\x00/g, '\\0');
+      document.getElementById('luaOutput').textContent = '"' + out + '"';
+    };
+
+    window.decodeLua = function() {
+      var input = document.getElementById('luaInput').value;
+      if (!input) { showToast('请输入要解码的内容', 'warning'); return; }
+      try {
+        var out = input.replace(/^"|"$/g, '').replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\0/g, '\x00').replace(/\\\\/g, '\\').replace(/\\"/g, '"');
+        document.getElementById('luaOutput').textContent = out;
+      } catch(e) {
+        document.getElementById('luaOutput').textContent = '解码失败: ' + e.message;
+      }
+    };
+
+    // ── URL encode/decode ──
+    window.encodeURL = function() {
+      var input = document.getElementById('urlInput').value;
+      if (!input) { showToast('请输入要编码的内容', 'warning'); return; }
+      document.getElementById('urlOutput').textContent = window.URLTools.encode(input);
+    };
+
+    window.decodeURL = function() {
+      var input = document.getElementById('urlInput').value;
+      if (!input) { showToast('请输入要解码的内容', 'warning'); return; }
+      document.getElementById('urlOutput').textContent = window.URLTools.decode(input);
+    };
+
+    // ── JSON format/minify ──
+    window.formatJSON = function() {
+      var input = document.getElementById('jsonInput').value;
+      if (!input) { showToast('请输入 JSON 字符串', 'warning'); return; }
+      var result = window.JSONTools.format(input);
+      if (result === input) { showToast('JSON 格式无效', 'error'); return; }
+      document.getElementById('jsonOutput').textContent = result;
+    };
+
+    window.minifyJSON = function() {
+      var input = document.getElementById('jsonInput').value;
+      if (!input) { showToast('请输入 JSON 字符串', 'warning'); return; }
+      var result = window.JSONTools.minify(input);
+      if (result === input && input.trim().indexOf('{') !== 0) { showToast('JSON 格式无效', 'error'); return; }
+      document.getElementById('jsonOutput').textContent = result;
+    };
+
+    // ── SM4 encrypt/decrypt ──
+    window.sm4Encrypt = function() {
+      var input = document.getElementById('sm4Input').value;
+      if (!input) { showToast('请输入要加密的文本', 'warning'); return; }
+      var key = document.getElementById('sm4Key').value.trim() || 'a16bc20453da220f';
+      try {
+        var result = window.SM4Tools.encrypt(input, key);
+        document.getElementById('sm4Output').textContent = result;
+      } catch(e) {
+        document.getElementById('sm4Output').textContent = '加密失败: ' + e.message;
+      }
+    };
+
+    window.sm4Decrypt = function() {
+      var input = document.getElementById('sm4Input').value;
+      if (!input) { showToast('请输入要解密的 Base64 密文', 'warning'); return; }
+      var key = document.getElementById('sm4Key').value.trim() || 'a16bc20453da220f';
+      try {
+        var result = window.SM4Tools.decrypt(input, key);
+        if (!result) { showToast('解密失败，请检查密钥和密文', 'error'); return; }
+        document.getElementById('sm4Output').textContent = result;
+      } catch(e) {
+        document.getElementById('sm4Output').textContent = '解密失败: ' + e.message;
+      }
+    };
+
+    // ── Base64 encode/decode ──
+    window.encodeB64 = function() {
+      var input = document.getElementById('b64Input').value;
+      if (!input) { showToast('请输入要编码的内容', 'warning'); return; }
+      document.getElementById('b64Output').textContent = window.Base64Tools.encode(input);
+    };
+
+    window.decodeB64 = function() {
+      var input = document.getElementById('b64Input').value;
+      if (!input) { showToast('请输入要解码的 Base64 字符串', 'warning'); return; }
+      var result = window.Base64Tools.decode(input);
+      if (!result) { showToast('Base64 解码失败', 'error'); return; }
+      document.getElementById('b64Output').textContent = result;
+    };
+
+    // ── Copy output ──
+    window.copyOutput = function(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var text = el.textContent || el.innerText || '';
+      window.copyToClipboard(text);
+    };
+
+    // ── Clear ──
+    window.clearTool = function(prefix) {
+      var input = document.getElementById(prefix + 'Input');
+      var output = document.getElementById(prefix + 'Output');
+      if (input) input.value = '';
+      if (output) output.textContent = '';
+    };
+
+  })();
+  </script>
+</body>
+</html>

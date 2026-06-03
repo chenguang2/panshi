@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 数据导入</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* ── Wizard steps ── */
+    .wizard { max-width: 900px; }
+    .wizard-steps { display: flex; gap: 4px; margin-bottom: 28px; }
+    .wizard-step { flex: 1; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 10px; transition: all 0.2s; }
+    .wizard-step.active { border-color: var(--accent); color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
+    .wizard-step.completed { border-color: var(--success); color: var(--success); background: oklch(55% 0.15 145 / 6%); }
+    .wizard-step .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--border); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+    .wizard-step.active .step-num { background: var(--accent); color: #fff; }
+    .wizard-step.completed .step-num { background: var(--success); color: #fff; }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    /* ── Connection test ── */
+    .conn-result { padding: 14px 18px; border-radius: var(--radius-md); margin-top: 12px; font-size: 13px; display: flex; align-items: flex-start; gap: 10px; }
+    .conn-result.success { background: oklch(55% 0.15 145 / 8%); border: 1px solid oklch(55% 0.15 145 / 20%); color: var(--success); }
+    .conn-result.error { background: oklch(55% 0.18 28 / 8%); border: 1px solid oklch(55% 0.18 28 / 20%); color: var(--danger); }
+    .conn-result.loading { background: oklch(65% 0.15 85 / 8%); border: 1px solid oklch(65% 0.15 85 / 20%); color: var(--warning); }
+    .conn-result .conn-icon { font-size: 18px; line-height: 1.3; }
+    .conn-result .conn-details { flex: 1; }
+    .conn-result .conn-details .conn-title { font-weight: 600; }
+    .conn-result .conn-details .conn-meta { font-size: 11px; margin-top: 4px; opacity: 0.8; }
+
+    /* ── Config type selection ── */
+    .config-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .config-type-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; cursor: pointer; transition: all 0.15s; user-select: none; }
+    .config-type-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+    .config-type-card.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
+    .config-type-card .ct-icon { font-size: 24px; margin-bottom: 8px; }
+    .config-type-card .ct-name { font-size: 14px; font-weight: 600; }
+    .config-type-card .ct-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .config-type-card .ct-check { display: none; float: right; color: var(--accent); font-size: 18px; }
+    .config-type-card.selected .ct-check { display: inline; }
+
+    /* ── Preview items ── */
+    .preview-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: var(--surface); }
+    .preview-item.conflict { border-color: var(--warning); background: oklch(65% 0.15 85 / 4%); }
+    .preview-item .pi-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .pi-status.new { background: var(--success); }
+    .pi-status.conflict { background: var(--warning); }
+    .pi-status.skip { background: var(--muted); }
+    .preview-item .pi-info { flex: 1; min-width: 0; }
+    .preview-item .pi-name { font-size: 13px; font-weight: 600; }
+    .preview-item .pi-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .preview-item .pi-tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; font-weight: 600; font-family: var(--font-mono); }
+    .pi-tag.new { background: oklch(55% 0.15 145 / 10%); color: var(--success); }
+    .pi-tag.conflict { background: oklch(65% 0.15 85 / 10%); color: var(--warning); }
+    .pi-tag.skip { background: oklch(50% 0.018 240 / 10%); color: var(--muted); }
+    .preview-item .pi-actions { display: flex; gap: 6px; }
+
+    /* ── Summary bar ── */
+    .summary-bar { display: flex; gap: 20px; padding: 14px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 16px; font-size: 13px; }
+    .summary-bar .sb-item { display: flex; align-items: center; gap: 6px; }
+    .summary-bar .sb-val { font-family: var(--font-mono); font-weight: 700; font-size: 16px; }
+    .summary-bar .sb-val.success { color: var(--success); }
+    .summary-bar .sb-val.warning { color: var(--warning); }
+    .summary-bar .sb-val.muted { color: var(--muted); }
+
+    /* ── Result modal ── */
+    .result-step { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius-md); margin-bottom: 6px; font-size: 13px; }
+    .result-step.done { background: oklch(55% 0.15 145 / 8%); color: var(--success); }
+    .result-step.fail { background: oklch(55% 0.18 28 / 8%); color: var(--danger); }
+    .result-step .rs-icon { font-size: 16px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) { .wizard-steps { flex-direction: column; } .config-types { grid-template-columns: 1fr 1fr; } .summary-bar { flex-wrap: wrap; gap: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><span class="nav-icon">◉</span><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><span class="nav-icon">◆</span><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><span class="nav-icon">◇</span><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><span class="nav-icon">◎</span><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><span class="nav-icon">●</span><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><span class="nav-icon">▣</span><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><span class="nav-icon">⚙</span><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><span class="nav-icon">▣</span><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><span class="nav-icon">▲</span><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><span class="nav-icon">■</span><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><span class="nav-icon">▣</span><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><span class="nav-icon">⬡</span><span>Edge直连</span></a>
+          <a class="nav-item active" href="edge-import.html"><span class="nav-icon">⬢</span><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><span class="nav-icon">▣</span><span>工具箱</span></a>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">管</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">管理员</div>
+            <div class="sidebar-user-role">超级管理员</div>
+          </div>
+          <a href="login.html" class="sidebar-logout">退出</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-title">数据导入</div>
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a>
+          <span>/</span>
+          <span>Edge功能</span>
+          <span>/</span>
+          <span>数据导入</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>数据导入</h1>
+            <p>从 Edge 节点导入配置数据到管理平台，支持预览、冲突检测和选择性导入</p>
+          </div>
+        </div>
+
+        <div class="wizard" id="importWizard">
+          <!-- Steps indicator -->
+          <div class="wizard-steps">
+            <div class="wizard-step active" data-step="0">
+              <span class="step-num">1</span>
+              <span>选择节点</span>
+            </div>
+            <div class="wizard-step" data-step="1">
+              <span class="step-num">2</span>
+              <span>选择配置</span>
+            </div>
+            <div class="wizard-step" data-step="2">
+              <span class="step-num">3</span>
+              <span>预览 & 导入</span>
+            </div>
+          </div>
+
+          <!-- Step 1: Select Node -->
+          <div class="step-panel active" data-step="0">
+            <div class="card">
+              <div class="card-header"><h3>选择源节点</h3></div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">所属集群</label>
+                    <select class="form-input" id="impCluster">
+                      <option value="">请选择集群...</option>
+                      <option value="prod-cluster">prod-cluster（生产集群）</option>
+                      <option value="staging-cluster">staging-cluster（预发集群）</option>
+                      <option value="dev-cluster">dev-cluster（开发集群）</option>
+                      <option value="dr-cluster">dr-cluster（灾备集群）</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">目标节点</label>
+                    <select class="form-input" id="impNode" disabled>
+                      <option value="">请先选择集群...</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">节点 Admin Key <span class="text-muted" style="font-weight:400;">（用于验证身份）</span></label>
+                  <div style="display:flex;gap:8px;">
+                    <input type="password" class="form-input" id="impAdminKey" placeholder="输入节点 Admin Key..." style="max-width:300px;">
+                    <button class="btn btn-secondary btn-sm" id="testConnBtn" onclick="testConnection()">测试连接</button>
+                  </div>
+                </div>
+                <div id="connResult"></div>
+              </div>
+            </div>
+            <div style="margin-top:20px;text-align:right;">
+              <button class="btn btn-primary" id="step1NextBtn" onclick="goToStep(1)" disabled>下一步</button>
+            </div>
+          </div>
+
+          <!-- Step 2: Select Config Types -->
+          <div class="step-panel" data-step="1">
+            <div class="card">
+              <div class="card-header"><h3>选择要导入的配置类型</h3></div>
+              <div class="card-body">
+                <p class="text-sm text-muted" style="margin-bottom:16px;">选择需要从 Edge 节点导入到管理平台的配置类型</p>
+                <div class="config-types" id="configTypes">
+                  <div class="config-type-card selected" data-type="upstreams" onclick="toggleConfigType(this)">
+                    <span class="ct-check">✓</span>
+                    <div class="ct-icon">◎</div>
+                    <div class="ct-name">上游服务</div>
+                    <div class="ct-count">6 个配置</div>
+                  </div>
+                  <div class="config-type-card selected" data-type="routes" onclick="toggleConfigType(this)">
+                    <span class="ct-check">✓</span>
+                    <div class="ct-icon">◇</div>
+                    <div class="ct-name">路由规则</div>
+                    <div class="ct-count">12 个配置</div>
+                  </div>
+                  <div class="config-type-card selected" data-type="global-rules" onclick="toggleConfigType(this)">
+                    <span class="ct-check">✓</span>
+                    <div class="ct-icon">⊡</div>
+                    <div class="ct-name">全局规则</div>
+                    <div class="ct-count">3 个配置</div>
+                  </div>
+                  <div class="config-type-card selected" data-type="plugin-configs" onclick="toggleConfigType(this)">
+                    <span class="ct-check">✓</span>
+                    <div class="ct-icon">▲</div>
+                    <div class="ct-name">插件配置</div>
+                    <div class="ct-count">8 个配置</div>
+                  </div>
+                  <div class="config-type-card selected" data-type="plugin-metadata" onclick="toggleConfigType(this)">
+                    <span class="ct-check">✓</span>
+                    <div class="ct-icon">▣</div>
+                    <div class="ct-name">插件元数据</div>
+                    <div class="ct-count">5 个配置</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:20px;display:flex;justify-content:space-between;">
+              <button class="btn btn-secondary" onclick="goToStep(0)">上一步</button>
+              <button class="btn btn-primary" onclick="goToStep(2)">下一步 — 预览</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Preview & Import -->
+          <div class="step-panel" data-step="2">
+            <div class="card">
+              <div class="card-header"><h3>预览导入内容</h3></div>
+              <div class="card-body">
+                <div class="summary-bar">
+                  <div class="sb-item"><span>新增</span><span class="sb-val success" id="previewNew">0</span></div>
+                  <div class="sb-item"><span>冲突</span><span class="sb-val warning" id="previewConflict">0</span></div>
+                  <div class="sb-item"><span>跳过</span><span class="sb-val muted" id="previewSkip">0</span></div>
+                  <div class="sb-item" style="margin-left:auto;"><span>总计</span><span class="sb-val" id="previewTotal">0</span></div>
+                </div>
+                <div id="previewConflictBar" style="display:none;margin-bottom:12px;">
+                  <div class="conn-result error">
+                    <span class="conn-icon">⚠</span>
+                    <div class="conn-details">
+                      <div class="conn-title">检测到配置冲突</div>
+                      <div class="conn-meta">已存在的配置将被覆盖。请确认后继续导入。</div>
+                    </div>
+                  </div>
+                </div>
+                <div id="previewList"></div>
+              </div>
+            </div>
+            <div style="margin-top:20px;display:flex;justify-content:space-between;">
+              <button class="btn btn-secondary" onclick="goToStep(1)">上一步</button>
+              <button class="btn btn-primary" onclick="executeImport()">开始导入</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- ════════ IMPORT RESULT MODAL ════════ -->
+  <div class="modal-overlay" id="importResultModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>导入结果</h2>
+        <button class="modal-close" onclick="closeModal('importResultModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="importResultSteps"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal('importResultModal')">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+  (function() {
+    'use strict';
+
+    var state = {
+      step: 0,
+      connected: false,
+      selectedTypes: ['upstreams','routes','global-rules','plugin-configs','plugin-metadata']
+    };
+
+    var nodeOptions = {
+      'prod-cluster': ['node-01:7900','node-02:7900','node-03:7900'],
+      'staging-cluster': ['staging-node-01:7900'],
+      'dev-cluster': ['dev-node-01:7900','dev-node-02:7900'],
+      'dr-cluster': ['dr-node-01:7900']
+    };
+
+    // ── Cluster change ──
+    document.getElementById('impCluster').addEventListener('change', function() {
+      var val = this.value;
+      var ns = document.getElementById('impNode');
+      ns.innerHTML = '';
+      if (!val) { ns.disabled = true; ns.innerHTML = '<option>请先选择集群...</option>'; return; }
+      ns.disabled = false;
+      var list = nodeOptions[val] || [];
+      list.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        ns.appendChild(opt);
+      });
+      // Reset connection
+      state.connected = false;
+      document.getElementById('step1NextBtn').disabled = true;
+      document.getElementById('connResult').innerHTML = '';
+    });
+
+    // ── Test connection ──
+    window.testConnection = function() {
+      var cluster = document.getElementById('impCluster').value;
+      var node = document.getElementById('impNode').value;
+      var key = document.getElementById('impAdminKey').value.trim();
+      if (!cluster || !node) { showToast('请选择集群和节点', 'warning'); return; }
+
+      var resultDiv = document.getElementById('connResult');
+      resultDiv.innerHTML = '<div class="conn-result loading"><span class="conn-icon">⟳</span><div class="conn-details"><div class="conn-title">正在连接...</div><div class="conn-meta">正在尝试连接到 ' + node + '</div></div></div>';
+
+      var btn = document.getElementById('testConnBtn');
+      btn.disabled = true;
+      btn.textContent = '连接中...';
+
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = '测试连接';
+
+        if (!key) {
+          resultDiv.innerHTML = '<div class="conn-result error"><span class="conn-icon">✕</span><div class="conn-details"><div class="conn-title">连接失败</div><div class="conn-meta">Admin Key 不能为空</div></div></div>';
+          state.connected = false;
+          document.getElementById('step1NextBtn').disabled = true;
+          return;
+        }
+
+        // Simulate success
+        state.connected = true;
+        resultDiv.innerHTML = '<div class="conn-result success"><span class="conn-icon">✓</span><div class="conn-details"><div class="conn-title">连接成功</div><div class="conn-meta">节点: ' + node + ' · 集群: ' + cluster + ' · 版本: v3.2.1 · 响应时间: 12ms</div></div></div>';
+        document.getElementById('step1NextBtn').disabled = false;
+        showToast('连接测试成功', 'success');
+      }, 1200);
+    };
+
+    // ── Step navigation ──
+    window.goToStep = function(step) {
+      if (step === 1 && !state.connected) { showToast('请先测试连接', 'warning'); return; }
+      if (step === 2) generatePreview();
+
+      state.step = step;
+      document.querySelectorAll('.wizard-step').forEach(function(s, i) {
+        s.classList.remove('active', 'completed');
+        if (i < step) s.classList.add('completed');
+        if (i === step) s.classList.add('active');
+      });
+      document.querySelectorAll('.step-panel').forEach(function(p) {
+        p.classList.remove('active');
+      });
+      document.querySelector('.step-panel[data-step="' + step + '"]').classList.add('active');
+    };
+
+    // ── Toggle config type ──
+    window.toggleConfigType = function(el) {
+      el.classList.toggle('selected');
+      var type = el.getAttribute('data-type');
+      var idx = state.selectedTypes.indexOf(type);
+      if (idx >= 0) state.selectedTypes.splice(idx, 1);
+      else state.selectedTypes.push(type);
+    };
+
+    // ── Preview data ──
+    var previewData = {
+      upstreams: [
+        { name: 'api-backend-v1', type: 'HTTP', targets: 3, conflict: false },
+        { name: 'websocket-srv', type: 'HTTP', targets: 2, conflict: false },
+        { name: 'grpc-service', type: 'gRPC', targets: 5, conflict: false },
+        { name: 'user-center', type: 'HTTP', targets: 4, conflict: true },
+        { name: 'log-collector', type: 'HTTP', targets: 2, conflict: false },
+        { name: 'static-assets', type: 'HTTP', targets: 3, conflict: false }
+      ],
+      routes: [
+        { name: 'api-v1-proxy', path: '/api/v1/**', conflict: false },
+        { name: 'user-login', path: '/api/v1/auth/login', conflict: false },
+        { name: 'ws-connect', path: '/ws/**', conflict: false },
+        { name: 'grpc-gateway', path: '/grpc/**', conflict: false },
+        { name: 'static-files', path: '/static/*', conflict: false },
+        { name: 'health-check', path: '/health', conflict: true },
+        { name: 'order-api', path: '/api/v1/orders/**', conflict: false },
+        { name: 'payment-callback', path: '/api/v1/payments/callback', conflict: false },
+        { name: 'user-profile', path: '/api/v1/users/profile', conflict: false },
+        { name: 'admin-api', path: '/admin/**', conflict: true },
+        { name: 'log-upload', path: '/api/v1/logs/upload', conflict: false },
+        { name: 'websocket-event', path: '/ws/events/**', conflict: false }
+      ],
+      'global-rules': [
+        { name: 'IP黑名单', desc: '全局 IP 黑名单过滤', conflict: false },
+        { name: 'WAF防护', desc: 'Web 应用防火墙', conflict: false },
+        { name: '访问日志', desc: '全局访问日志', conflict: true }
+      ],
+      'plugin-configs': [
+        { name: '限流配置-API', plugin: 'limit-req', conflict: false },
+        { name: 'JWT认证', plugin: 'jwt-auth', conflict: false },
+        { name: 'CORS跨域', plugin: 'cors', conflict: false },
+        { name: '请求体限大', plugin: 'client-body-limit', conflict: false },
+        { name: 'Prometheus', plugin: 'prometheus', conflict: true },
+        { name: 'URL重写', plugin: 'uri-rewriter', conflict: false },
+        { name: 'gzip压缩', plugin: 'gzip', conflict: false },
+        { name: '请求ID', plugin: 'request-id', conflict: false }
+      ],
+      'plugin-metadata': [
+        { name: 'limit-req', version: '3.1.0', conflict: false },
+        { name: 'jwt-auth', version: '3.2.0', conflict: false },
+        { name: 'prometheus', version: '3.0.0', conflict: false },
+        { name: 'cors', version: '3.1.1', conflict: false },
+        { name: 'uri-rewriter', version: '2.0.0', conflict: true }
+      ]
+    };
+
+    window.generatePreview = function() {
+      var container = document.getElementById('previewList');
+      var html = '';
+      var total = 0, newCount = 0, conflictCount = 0, skipCount = 0;
+
+      state.selectedTypes.forEach(function(type) {
+        var items = previewData[type] || [];
+        if (items.length === 0) return;
+        var labelMap = { upstreams: '上游服务', routes: '路由规则', 'global-rules': '全局规则', 'plugin-configs': '插件配置', 'plugin-metadata': '插件元数据' };
+        html += '<h4 style="font-size:14px;margin:16px 0 8px;display:flex;align-items:center;gap:6px;"><span class="badge badge-neutral">' + items.length + '</span>' + (labelMap[type] || type) + '</h4>';
+
+        items.forEach(function(item) {
+          total++;
+          var status = item.conflict ? 'conflict' : 'new';
+          var statusLabel = item.conflict ? '冲突' : '新增';
+          var statusClass = item.conflict ? 'conflict' : 'new';
+          if (item.conflict) conflictCount++;
+          else newCount++;
+
+          var detail = '';
+          if (type === 'upstreams') detail = '类型: ' + item.type + ' · ' + item.targets + ' 个目标节点';
+          else if (type === 'routes') detail = '路径: ' + item.path;
+          else if (type === 'global-rules') detail = item.desc;
+          else if (type === 'plugin-configs') detail = '插件: ' + item.plugin;
+          else if (type === 'plugin-metadata') detail = '版本: v' + item.version;
+
+          html += '<div class="preview-item' + (item.conflict ? ' conflict' : '') + '"><span class="pi-status ' + status + '"></span><div class="pi-info"><div class="pi-name">' + item.name + '</div><div class="pi-detail">' + detail + '</div></div><span class="pi-tag ' + statusClass + '">' + statusLabel + '</span></div>';
+        });
+      });
+
+      container.innerHTML = html || '<div class="empty-state"><span class="empty-state-icon">⊡</span><p>请至少选择一种配置类型</p></div>';
+
+      document.getElementById('previewNew').textContent = newCount;
+      document.getElementById('previewConflict').textContent = conflictCount;
+      document.getElementById('previewSkip').textContent = skipCount;
+      document.getElementById('previewTotal').textContent = total;
+      document.getElementById('previewConflictBar').style.display = conflictCount > 0 ? '' : 'none';
+    };
+
+    // ── Execute import ──
+    window.executeImport = function() {
+      var totalNew = parseInt(document.getElementById('previewNew').textContent);
+      var totalConflict = parseInt(document.getElementById('previewConflict').textContent);
+
+      var steps = document.getElementById('importResultSteps');
+      steps.innerHTML = '';
+
+      function addResultStep(label, success) {
+        var div = document.createElement('div');
+        div.className = 'result-step ' + (success ? 'done' : 'fail');
+        div.innerHTML = '<span class="rs-icon">' + (success ? '✓' : '✕') + '</span>' + label;
+        steps.appendChild(div);
+      }
+
+      // Simulate sequential steps
+      var resultModal = document.getElementById('importResultModal');
+      openModal('importResultModal');
+      steps.innerHTML = '<div style="text-align:center;padding:20px;"><div class="loading-spinner"></div><p style="margin-top:12px;color:var(--muted);">正在导入配置...</p></div>';
+
+      setTimeout(function() {
+        steps.innerHTML = '';
+        addResultStep('连接节点 prod-cluster/node-01:7900', true);
+
+        setTimeout(function() {
+          var typeNames = [];
+          state.selectedTypes.forEach(function(t) {
+            var m = { upstreams: '上游服务', routes: '路由规则', 'global-rules': '全局规则', 'plugin-configs': '插件配置', 'plugin-metadata': '插件元数据' };
+            typeNames.push(m[t] || t);
+          });
+          addResultStep('读取配置: ' + typeNames.join('、'), true);
+
+          setTimeout(function() {
+            addResultStep('检测配置冲突: 发现 ' + totalConflict + ' 个冲突', true);
+
+            setTimeout(function() {
+              addResultStep('导入配置: 成功导入 ' + totalNew + ' 个新配置', true);
+
+              if (totalConflict > 0) {
+                setTimeout(function() {
+                  addResultStep('覆盖 ' + totalConflict + ' 个冲突配置', true);
+                }, 400);
+              }
+
+              setTimeout(function() {
+                var finalStep = document.createElement('div');
+                finalStep.style.cssText = 'padding:14px 18px;background:oklch(55% 0.15 145 / 8%);border-radius:var(--radius-md);margin-top:12px;text-align:center;color:var(--success);font-weight:600;';
+                finalStep.textContent = '✓ 导入完成 — 共处理 ' + (totalNew + totalConflict) + ' 个配置';
+                steps.appendChild(finalStep);
+                showToast('数据导入完成', 'success');
+              }, totalConflict > 0 ? 1000 : 600);
+
+            }, 500);
+          }, 500);
+        }, 600);
+      }, 500);
+    };
+  })();
+  </script>
+</body>
+</html>

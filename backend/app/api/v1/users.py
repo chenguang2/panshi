@@ -5,7 +5,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import User, UserPermission
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
 
@@ -108,7 +108,36 @@ async def list_users(
     result = await db.execute(query)
     users = result.scalars().all()
 
-    return UserListResponse(total=total, items=[UserResponse.model_validate(u) for u in users])
+    items = []
+    for u in users:
+        user_data = UserResponse.model_validate(u)
+        items.append(user_data)
+
+    if users:
+        user_ids = [u.id for u in users]
+        perm_query = select(UserPermission).where(
+            UserPermission.user_id.in_(user_ids),
+            UserPermission.enabled == 1
+        )
+        perm_result = await db.execute(perm_query)
+        for p in perm_result.scalars().all():
+            for item in items:
+                if item.id == p.user_id:
+                    item.permissions.append(p.resource_type)
+                    break
+
+        from app.models.user import UserCluster
+        cluster_query = select(UserCluster).where(
+            UserCluster.user_id.in_(user_ids)
+        )
+        cluster_result = await db.execute(cluster_query)
+        for uc in cluster_result.scalars().all():
+            for item in items:
+                if item.id == uc.user_id:
+                    item.cluster_ids.append(uc.cluster_id)
+                    break
+
+    return UserListResponse(total=total, items=items)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -212,7 +241,7 @@ async def get_user_clusters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.cluster import UserCluster
+    from app.models.user import UserCluster
     result = await db.execute(select(UserCluster).where(UserCluster.user_id == user_id))
     clusters = result.scalars().all()
     return {"cluster_ids": [c.cluster_id for c in clusters]}
@@ -225,7 +254,7 @@ async def assign_clusters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.cluster import UserCluster
+    from app.models.user import UserCluster
     result = await db.execute(select(User).where(User.id == user_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")

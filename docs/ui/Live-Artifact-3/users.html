@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 用户管理</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .user-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .user-filter-bar .search-input-wrap input { width: 240px; }
+    .role-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
+    .role-badge.admin { background: oklch(56% 0.16 210 / 10%); color: var(--accent); }
+    .role-badge.user { background: oklch(55% 0.15 145 / 10%); color: var(--success); }
+    .perm-tag { display: inline-block; padding: 1px 7px; margin: 1px; border-radius: 3px; font-size: 10px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); }
+    .perm-tag.active { border-color: oklch(56% 0.16 210 / 30%); background: oklch(56% 0.16 210 / 6%); color: var(--accent); }
+    .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; margin-top: 8px; }
+    .perm-grid label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+    .password-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .cluster-perm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .cluster-perm-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 12px; font-size: 12px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; user-select: none; }
+    .cluster-perm-tag.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 8%); color: var(--accent); }
+    @media (max-width: 768px) {
+      .user-filter-bar { flex-direction: column; align-items: stretch; }
+      .user-filter-bar .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><span class="nav-icon">◉</span><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><span class="nav-icon">◆</span><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><span class="nav-icon">◇</span><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><span class="nav-icon">◎</span><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><span class="nav-icon">●</span><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><span class="nav-icon">▣</span><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><span class="nav-icon">⚙</span><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><span class="nav-icon">▣</span><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><span class="nav-icon">▲</span><span>插件管理</span></a>
+          <a class="nav-item active" href="users.html"><span class="nav-icon">■</span><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><span class="nav-icon">▣</span><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><span class="nav-icon">⬡</span><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><span class="nav-icon">⬢</span><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><span class="nav-icon">▣</span><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>用户管理</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>用户管理</h1>
+            <p>管理系统用户、角色分配和资源权限</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary" onclick="openUserModal()">+ 新建用户</button>
+          </div>
+        </div>
+
+        <div class="user-filter-bar">
+          <div class="search-input-wrap">
+            <input type="text" id="userSearch" placeholder="搜索用户名..." oninput="renderUsers()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <select class="form-input" style="width:120px;height:32px;font-size:12px;" id="roleFilter" onchange="renderUsers()">
+            <option value="all">全部角色</option>
+            <option value="admin">管理员</option>
+            <option value="user">普通用户</option>
+          </select>
+          <select class="form-input" style="width:120px;height:32px;font-size:12px;" id="statusFilter" onchange="renderUsers()">
+            <option value="all">全部状态</option>
+            <option value="1">启用</option>
+            <option value="0">禁用</option>
+          </select>
+          <span class="text-muted text-sm" id="userCount">共 8 个用户</span>
+        </div>
+
+        <div class="table-container" id="userTable"></div>
+
+        <div class="table-footer">
+          <span class="text-muted text-sm" id="paginationInfo">第 1 页，共 1 页</span>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- User Modal -->
+  <div class="modal-overlay" id="userModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="userModalTitle">新建用户</h2>
+        <button class="modal-close" onclick="closeModal('userModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">用户名 <span class="required">*</span></label>
+            <input type="text" id="uUsername" class="form-input" placeholder="newuser">
+          </div>
+          <div class="form-group">
+            <label class="form-label">角色</label>
+            <select id="uRole" class="form-input" onchange="togglePermissions()">
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="passwordField">
+          <label class="form-label">密码 <span class="required">*</span></label>
+          <input type="password" id="uPassword" class="form-input" placeholder="6-50 位字符，需包含字母和数字">
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label"><input type="checkbox" id="uStatus" checked> <span>启用</span></label>
+        </div>
+
+        <!-- Permissions (only for non-admin) -->
+        <div id="permissionsSection">
+          <h3 style="font-size:14px;font-weight:600;margin:16px 0 8px;">资源权限</h3>
+          <p class="text-muted text-sm" style="margin-bottom:8px;">分配用户可操作的资源模块</p>
+          <div class="perm-grid">
+            <label><input type="checkbox" class="perm-cb" value="route" checked> <span>路由管理</span></label>
+            <label><input type="checkbox" class="perm-cb" value="upstream" checked> <span>上游管理</span></label>
+            <label><input type="checkbox" class="perm-cb" value="plugin"> <span>插件管理</span></label>
+            <label><input type="checkbox" class="perm-cb" value="node"> <span>节点管理</span></label>
+            <label><input type="checkbox" class="perm-cb" value="cluster"> <span>集群管理</span></label>
+            <label><input type="checkbox" class="perm-cb" value="user"> <span>用户管理</span></label>
+          </div>
+
+          <h3 style="font-size:14px;font-weight:600;margin:16px 0 8px;">集群权限</h3>
+          <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
+          <div class="cluster-perm-list">
+            <span class="cluster-perm-tag selected" onclick="this.classList.toggle('selected')">生产集群</span>
+            <span class="cluster-perm-tag selected" onclick="this.classList.toggle('selected')">预发集群</span>
+            <span class="cluster-perm-tag" onclick="this.classList.toggle('selected')">开发集群</span>
+            <span class="cluster-perm-tag" onclick="this.classList.toggle('selected')">灾备集群</span>
+          </div>
+        </div>
+
+        <!-- Password Reset (edit mode) -->
+        <div class="password-section" id="passwordResetSection" style="display:none;">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:8px;">重置密码</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <input type="password" id="uNewPassword" class="form-input" placeholder="新密码（留空不修改）">
+            </div>
+            <div style="display:flex;align-items:flex-end;">
+              <button class="btn btn-secondary btn-sm" onclick="resetPassword()">重置密码</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('userModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveUser()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      var users = [
+        { id: 1, username: 'admin', role: 'admin', status: 1, permissions: [], clusters: [1,2,3,4], created_at: '2024-01-01T00:00:00Z' },
+        { id: 2, username: 'zhangsan', role: 'user', status: 1, permissions: ['route', 'upstream'], clusters: [1,2], created_at: '2024-02-01T00:00:00Z' },
+        { id: 3, username: 'lisi', role: 'user', status: 1, permissions: ['route', 'upstream', 'plugin'], clusters: [1], created_at: '2024-02-15T00:00:00Z' },
+        { id: 4, username: 'wangwu', role: 'user', status: 1, permissions: ['node', 'cluster'], clusters: [1,2,3], created_at: '2024-03-01T00:00:00Z' },
+        { id: 5, username: 'zhaoliu', role: 'user', status: 0, permissions: ['route'], clusters: [3], created_at: '2024-03-15T00:00:00Z' },
+        { id: 6, username: 'sunqi', role: 'user', status: 1, permissions: ['route', 'upstream', 'node', 'plugin'], clusters: [1,2], created_at: '2024-04-01T00:00:00Z' },
+        { id: 7, username: 'zhouba', role: 'admin', status: 1, permissions: [], clusters: [1,2,3,4], created_at: '2024-04-15T00:00:00Z' },
+        { id: 8, username: 'wujiu', role: 'user', status: 1, permissions: ['route'], clusters: [2], created_at: '2024-05-01T00:00:00Z' }
+      ];
+
+      var editingId = null;
+      var currentPage = 1;
+      var pageSize = 10;
+      var clusterNames = ['', '生产集群', '预发集群', '开发集群', '灾备集群'];
+
+      window.togglePermissions = function() {
+        var isAdmin = document.getElementById('uRole').value === 'admin';
+        document.getElementById('permissionsSection').style.display = isAdmin ? 'none' : 'block';
+      };
+
+      function getFiltered() {
+        var q = (document.getElementById('userSearch').value || '').toLowerCase();
+        var roleF = document.getElementById('roleFilter').value;
+        var statusF = document.getElementById('statusFilter').value;
+        return users.filter(function(u) {
+          if (roleF !== 'all' && u.role !== roleF) return false;
+          if (statusF !== 'all' && u.status !== parseInt(statusF)) return false;
+          if (q && u.username.toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      window.renderUsers = function() {
+        var filtered = getFiltered();
+        var total = filtered.length;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        var start = (currentPage - 1) * pageSize;
+        var page = filtered.slice(start, start + pageSize);
+
+        document.getElementById('userCount').textContent = '共 ' + total + ' 个用户';
+        document.getElementById('paginationInfo').textContent = '第 ' + currentPage + ' 页，共 ' + totalPages + ' 页';
+
+        var html = '<table><thead><tr><th style="width:30px;"><input type="checkbox"></th><th>用户名</th><th>角色</th><th>状态</th><th>权限</th><th>可访问集群</th><th>创建时间</th><th style="width:80px;">操作</th></tr></thead><tbody>';
+        if (page.length === 0) {
+          html += '<tr><td colspan="8"><div class="empty-state" style="padding:32px;"><div class="empty-state-icon">■</div><p>暂无用户</p></div></td></tr>';
+        } else {
+          page.forEach(function(u) {
+            var roleHtml = '<span class="role-badge ' + u.role + '">' + (u.role === 'admin' ? '管理员' : '普通用户') + '</span>';
+            var statusHtml = u.status === 1
+              ? '<span class="badge badge-success"><span class="status-dot online"></span>启用</span>'
+              : '<span class="badge badge-danger"><span class="status-dot offline"></span>禁用</span>';
+            var permHtml = u.permissions.length > 0
+              ? u.permissions.map(function(p) { return '<span class="perm-tag active">' + p + '</span>'; }).join('')
+              : '<span class="text-muted text-sm">—</span>';
+            var clusterHtml = u.clusters.length > 0
+              ? u.clusters.map(function(c) { return '<span class="perm-tag">' + (clusterNames[c] || c) + '</span>'; }).join('')
+              : '<span class="text-muted text-sm">—</span>';
+            html += '<tr>' +
+              '<td><input type="checkbox"></td>' +
+              '<td><div class="cell-primary">' + u.username + '</div></td>' +
+              '<td>' + roleHtml + '</td>' +
+              '<td>' + statusHtml + '</td>' +
+              '<td>' + permHtml + '</td>' +
+              '<td>' + clusterHtml + '</td>' +
+              '<td><span class="cell-secondary">' + window.formatDate(u.created_at) + '</span></td>' +
+              '<td><div class="action-menu">' +
+                '<button class="action-btn" onclick="toggleActionMenu(this)">⋯</button>' +
+                '<div class="action-dropdown">' +
+                  '<button class="action-dropdown-item" onclick="window.editUser(' + u.id + ')">编辑</button>' +
+                  '<button class="action-dropdown-item" onclick="window.toggleUser(' + u.id + ')">' + (u.status === 1 ? '禁用' : '启用') + '</button>' +
+                  '<button class="action-dropdown-item danger" onclick="window.deleteUser(' + u.id + ')">删除</button>' +
+                '</div></div></td>' +
+            '</tr>';
+          });
+        }
+        html += '</tbody></table>';
+        document.getElementById('userTable').innerHTML = html;
+        window.renderPagination(document.getElementById('pagination'), currentPage, totalPages);
+      };
+
+      window.goPage = function(p) { currentPage = p; renderUsers(); };
+
+      // ----- CRUD -----
+      window.openUserModal = function() {
+        editingId = null;
+        document.getElementById('userModalTitle').textContent = '新建用户';
+        document.getElementById('uUsername').value = '';
+        document.getElementById('uRole').value = 'user';
+        document.getElementById('uPassword').value = '';
+        document.getElementById('passwordField').style.display = 'block';
+        document.getElementById('passwordResetSection').style.display = 'none';
+        document.getElementById('uStatus').checked = true;
+        document.querySelectorAll('.perm-cb').forEach(function(cb) { cb.checked = cb.value === 'route' || cb.value === 'upstream'; });
+        document.querySelectorAll('.cluster-perm-tag').forEach(function(t) { t.classList.toggle('selected', t.textContent === '生产集群' || t.textContent === '预发集群'); });
+        document.getElementById('permissionsSection').style.display = 'block';
+        window.openModal('userModal');
+      };
+
+      window.editUser = function(id) {
+        var u = users.find(function(x) { return x.id === id; });
+        if (!u) return;
+        editingId = id;
+        document.getElementById('userModalTitle').textContent = '编辑用户 — ' + u.username;
+        document.getElementById('uUsername').value = u.username;
+        document.getElementById('uRole').value = u.role;
+        document.getElementById('uPassword').value = '';
+        document.getElementById('passwordField').style.display = 'none';
+        document.getElementById('passwordResetSection').style.display = 'block';
+        document.getElementById('uNewPassword').value = '';
+        document.getElementById('uStatus').checked = u.status === 1;
+        document.querySelectorAll('.perm-cb').forEach(function(cb) { cb.checked = u.permissions.indexOf(cb.value) >= 0; });
+        document.querySelectorAll('.cluster-perm-tag').forEach(function(t) {
+          var idx = clusterNames.indexOf(t.textContent);
+          t.classList.toggle('selected', idx >= 0 && u.clusters.indexOf(idx) >= 0);
+        });
+        document.getElementById('permissionsSection').style.display = u.role === 'admin' ? 'none' : 'block';
+        window.openModal('userModal');
+      };
+
+      window.saveUser = function() {
+        var username = document.getElementById('uUsername').value.trim();
+        if (!username) { showToast('请输入用户名', 'error'); return; }
+        var role = document.getElementById('uRole').value;
+        var status = document.getElementById('uStatus').checked ? 1 : 0;
+
+        var permissions = [];
+        document.querySelectorAll('.perm-cb:checked').forEach(function(cb) { permissions.push(cb.value); });
+        var clusters = [];
+        document.querySelectorAll('.cluster-perm-tag.selected').forEach(function(t) {
+          var idx = clusterNames.indexOf(t.textContent);
+          if (idx > 0) clusters.push(idx);
+        });
+
+        if (editingId) {
+          var u = users.find(function(x) { return x.id === editingId; });
+          if (u) {
+            u.role = role; u.status = status;
+            u.permissions = role === 'admin' ? [] : permissions;
+            u.clusters = clusters;
+            showToast('用户已更新', 'success');
+          }
+        } else {
+          var password = document.getElementById('uPassword').value;
+          if (!password || password.length < 6) { showToast('密码至少 6 位字符', 'error'); return; }
+          users.push({
+            id: users.length + 1, username: username, role: role, status: status,
+            permissions: role === 'admin' ? [] : permissions,
+            clusters: clusters, created_at: new Date().toISOString()
+          });
+          showToast('用户已创建', 'success');
+        }
+        window.closeModal('userModal');
+        renderUsers();
+      };
+
+      window.deleteUser = function(id) {
+        var u = users.find(function(x) { return x.id === id; });
+        if (!u) return;
+        if (u.role === 'admin' && u.id === 1) { showToast('不能删除初始管理员', 'error'); return; }
+        if (!confirm('确定删除用户 ' + u.username + '？')) return;
+        users = users.filter(function(x) { return x.id !== id; });
+        showToast('用户已删除', 'info');
+        renderUsers();
+      };
+
+      window.toggleUser = function(id) {
+        var u = users.find(function(x) { return x.id === id; });
+        if (u) {
+          if (u.role === 'admin' && u.id === 1 && u.status === 1) { showToast('不能禁用初始管理员', 'error'); return; }
+          u.status = u.status === 1 ? 0 : 1;
+          showToast('用户已' + (u.status === 1 ? '启用' : '禁用'), 'success');
+          renderUsers();
+        }
+      };
+
+      window.resetPassword = function() {
+        var pwd = document.getElementById('uNewPassword').value;
+        if (!pwd || pwd.length < 6) { showToast('密码至少 6 位字符', 'error'); return; }
+        showToast('密码重置成功', 'success');
+        document.getElementById('uNewPassword').value = '';
+      };
+
+      // ----- Init -----
+      renderUsers();
+
+    })();
+  </script>
+</body>
+</html>

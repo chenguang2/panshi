@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 静态资源</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .sr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .sr-header-actions .cluster-select { min-width: 200px; }
+    .sr-header-actions .search-input-wrap input { width: 240px; }
+    .sr-summary { display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px; color: var(--muted); }
+    .sr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+    .sr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+    .sr-card:hover { box-shadow: var(--shadow-md); }
+    .sr-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .sr-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .sr-card-path { font-size: 12px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px; }
+    .sr-card-meta { text-align: right; }
+    .sr-card-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+    .sr-card-stats { display: flex; gap: 16px; font-size: 11px; color: var(--muted); margin-bottom: 10px; font-family: var(--font-mono); }
+    .sr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+    .sr-card-route { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .sr-card-route strong { color: var(--fg); }
+    .sr-version-box { display: none; margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; font-family: var(--font-mono); font-size: 11px; max-height: 200px; overflow-y: auto; }
+    .sr-version-box.visible { display: block; }
+    .sr-version-item { padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .sr-version-item:last-child { border-bottom: none; }
+    .sr-version-actions { display: flex; gap: 4px; }
+    .upload-progress-section { margin: 12px 0; }
+    .upload-progress-bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+    .upload-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; width: 0%; }
+    .upload-progress-fill.success { background: var(--success); }
+    .upload-progress-fill.error { background: var(--danger); }
+    .upload-log { background: #1a1b1e; color: #e0e0e0; border-radius: var(--radius-md); padding: 12px; font-family: var(--font-mono); font-size: 11px; max-height: 250px; overflow-y: auto; line-height: 1.6; margin-top: 8px; }
+    .upload-log .log-success { color: #4caf50; }
+    .upload-log .log-error { color: #f44336; }
+    .upload-log .log-info { color: #90caf9; }
+    .sr-route-valid { font-size: 12px; margin-top: 6px; }
+    .sr-route-valid .valid-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; padding: 4px 8px; border-radius: var(--radius-sm); }
+    .sr-route-valid .valid-item.pass { color: var(--success); background: oklch(55% 0.15 145 / 6%); }
+    .sr-route-valid .valid-item.fail { color: var(--danger); background: oklch(55% 0.18 28 / 6%); }
+    .sr-cluster-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--bg); border: 1px solid var(--border); }
+    .publish-result-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px 12px; margin: 4px 0; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+    .publish-result-card.success { border-color: oklch(55% 0.15 145 / 20%); }
+    .publish-result-card.error { border-color: oklch(55% 0.18 28 / 20%); }
+    @media (max-width: 768px) {
+      .sr-grid { grid-template-columns: 1fr; }
+      .sr-header-actions { flex-direction: column; align-items: stretch; }
+      .sr-header-actions .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><span class="nav-icon">◉</span><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><span class="nav-icon">◆</span><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><span class="nav-icon">◇</span><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><span class="nav-icon">◎</span><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><span class="nav-icon">●</span><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><span class="nav-icon">▣</span><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><span class="nav-icon">⚙</span><span>全局规则</span></a>
+          <a class="nav-item active" href="static-resources.html"><span class="nav-icon">▣</span><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><span class="nav-icon">▲</span><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><span class="nav-icon">■</span><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><span class="nav-icon">▣</span><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><span class="nav-icon">⬡</span><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><span class="nav-icon">⬢</span><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><span class="nav-icon">▣</span><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ========== MAIN AREA ========== -->
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>静态资源</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>静态资源</h1>
+            <p>管理网关的静态资源文件，每个静态资源需要关联一个已发布且路径以 <code>/*</code> 结尾的路由</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary" onclick="openAddSRModal()">+ 添加静态资源</button>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="sr-header-actions">
+          <div class="cluster-select">
+            <select class="form-input" id="clusterSelect" onchange="onClusterChange()">
+              <option value="">-- 选择集群 --</option>
+            </select>
+          </div>
+          <div class="search-input-wrap">
+            <input type="text" id="srSearch" placeholder="搜索资源名称或路径..." oninput="filterSR()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <span class="text-muted text-sm" id="srCount">共 0 个资源</span>
+        </div>
+
+        <!-- Static Resource Grid -->
+        <div class="sr-grid" id="srGrid"></div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- ========== CREATE/EDIT STATIC RESOURCE MODAL ========== -->
+  <div class="modal-overlay" id="srModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="srModalTitle">添加静态资源</h2>
+        <button class="modal-close" onclick="closeModal('srModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" id="srRouteGroup">
+          <label class="form-label">选择路由 <span class="required">*</span></label>
+          <select class="form-input" id="srRouteSelect" onchange="onSRRouteChange()">
+            <option value="">-- 请选择路由 --</option>
+          </select>
+          <div class="sr-route-valid" id="srRouteValid">
+            <div class="valid-item fail" id="srValidUri">❌ 路由路径必须以 /* 结尾</div>
+            <div class="valid-item fail" id="srValidPublished">❌ 路由必须已发布到 Edge 节点</div>
+            <div class="valid-item fail" id="srValidPlugin">❌ 路由必须挂载 static_resource 插件</div>
+          </div>
+        </div>
+        <div class="form-group" id="srRouteDisplay" style="display:none;">
+          <label class="form-label">关联路由</label>
+          <div style="padding:6px 0;font-size:13px;" id="srRouteInfo"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea class="form-input" id="srFormDesc" placeholder="可选描述" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('srModal')">取消</button>
+        <button class="btn btn-primary" id="srSubmitBtn" onclick="submitSR()" disabled>创建</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== UPLOAD ZIP MODAL ========== -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="uploadModalTitle">上传静态资源 ZIP</h2>
+        <button class="modal-close" onclick="closeUploadModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">ZIP 文件</label>
+          <input type="file" id="zipFileInput" accept=".zip" style="width:100%;padding:8px 0;">
+          <div class="form-hint">支持 .zip 格式的压缩包，最大 100MB</div>
+        </div>
+        <div class="upload-progress-section" id="uploadProgressSection" style="display:none;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;">
+            <span id="uploadStatusText">准备上传...</span>
+            <span id="uploadPercent">0%</span>
+          </div>
+          <div class="upload-progress-bar">
+            <div class="upload-progress-fill" id="uploadProgressFill"></div>
+          </div>
+          <div class="upload-log" id="uploadLog"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeUploadModal()" id="uploadCloseBtn">关闭</button>
+        <button class="btn btn-primary" id="uploadStartBtn" onclick="startUpload()">开始上传</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== PUBLISH MODAL ========== -->
+  <div class="modal-overlay" id="publishModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="publishModalTitle">发布静态资源</h2>
+        <button class="modal-close" onclick="closeModal('publishModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;margin-bottom:12px;" id="publishDesc">选择要发布到的 Edge 节点</p>
+        <div id="publishNodeList"></div>
+        <div id="publishResult" style="display:none;margin-top:12px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">发布结果</div>
+          <div id="publishResultList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('publishModal')">关闭</button>
+        <button class="btn btn-primary" id="publishExecBtn" onclick="executePublishSR()">发布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== VERSION HISTORY MODAL ========== -->
+  <div class="modal-overlay" id="versionModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="versionModalTitle">版本历史</h2>
+        <button class="modal-close" onclick="closeModal('versionModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="versionList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('versionModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== DELETE CONFIRM MODAL ========== -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="deleteModalTitle">删除静态资源</h2>
+        <button class="modal-close" onclick="closeModal('deleteModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;margin-bottom:12px;" id="deleteDesc">确定要删除该静态资源吗？</p>
+        <div class="cluster-delete-section" style="display:block;border-color:var(--border);">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label"><input type="checkbox" id="deleteDb" checked> <span>删除数据库记录</span></label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label"><input type="checkbox" id="deleteEdge"> <span>删除 Edge 节点数据</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('deleteModal')">取消</button>
+        <button class="btn btn-danger" id="deleteExecBtn" onclick="executeDeleteSR()">确定删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      // ── Mock Data ──
+      var clusters = [
+        { id: 1, name: 'prod-cluster', display_name: '生产集群', nodes: [{ip:'10.0.0.1',port:9180,status:1},{ip:'10.0.0.2',port:9180,status:1},{ip:'10.0.0.3',port:9180,status:1}] },
+        { id: 2, name: 'staging-cluster', display_name: '预发集群', nodes: [{ip:'10.0.1.1',port:9180,status:1},{ip:'10.0.1.2',port:9180,status:0},{ip:'10.0.1.3',port:9180,status:1}] },
+        { id: 3, name: 'dev-cluster', display_name: '开发集群', nodes: [{ip:'10.0.2.1',port:9180,status:1},{ip:'10.0.2.2',port:9180,status:1}] },
+      ];
+
+      var routes = [
+        { id: 1, cluster_id: 1, name: 'static-assets', uri: '/static/*', status: 1, current_version: 2, plugins: [{plugin_name: 'static_resource'}] },
+        { id: 2, cluster_id: 1, name: 'api-route', uri: '/api/*', status: 1, current_version: 3, plugins: [{plugin_name: 'static_resource'}] },
+        { id: 3, cluster_id: 1, name: 'admin-route', uri: '/admin/*', status: 1, current_version: 1, plugins: [] },
+        { id: 4, cluster_id: 2, name: 'stg-static', uri: '/static/*', status: 1, current_version: 1, plugins: [{plugin_name: 'static_resource'}] },
+        { id: 5, cluster_id: 3, name: 'dev-static', uri: '/assets/*', status: 1, current_version: 0, plugins: [{plugin_name: 'static_resource'}] },
+      ];
+
+      var staticResources = [
+        { id: 1, cluster_id: 1, route_id: 1, edge_uuid: 'uuid-abc-001', name: 'static-assets', url_path: '/static/*', description: 'Web 前端静态资源', file_size: 2097152, storage_path: 'data/static/uuid-abc-001/1.zip', current_version: 3, created_at: '2024-01-15T00:00:00Z', updated_at: '2024-06-01T00:00:00Z' },
+        { id: 2, cluster_id: 1, route_id: 2, edge_uuid: 'uuid-abc-002', name: 'api-route', url_path: '/api/*', description: 'API 文档静态页面', file_size: 524288, storage_path: 'data/static/uuid-abc-002/2.zip', current_version: 2, created_at: '2024-03-10T00:00:00Z', updated_at: '2024-05-20T00:00:00Z' },
+        { id: 3, cluster_id: 2, route_id: 4, edge_uuid: 'uuid-abc-003', name: 'stg-static', url_path: '/static/*', description: '预发环境前端资源', file_size: 1572864, storage_path: 'data/static/uuid-abc-003/1.zip', current_version: 1, created_at: '2024-04-01T00:00:00Z', updated_at: '2024-04-01T00:00:00Z' },
+      ];
+
+      var versionHistory = [
+        { id: 1, version: 3, config: JSON.stringify({file_size: 2097152, storage_path: 'data/static/uuid-abc-001/3.zip'}), created_at: '2024-06-01T00:00:00Z', created_by: 'admin' },
+        { id: 2, version: 2, config: JSON.stringify({file_size: 1048576, storage_path: 'data/static/uuid-abc-001/2.zip'}), created_at: '2024-04-15T00:00:00Z', created_by: 'admin' },
+        { id: 3, version: 1, config: JSON.stringify({file_size: 524288, storage_path: 'data/static/uuid-abc-001/1.zip'}), created_at: '2024-01-15T00:00:00Z', created_by: 'system' },
+      ];
+
+      // ── State ──
+      var selectedClusterId = null;
+      var editingSR = null;
+      var editingClusterId = null;
+      var uploadingSRId = null;
+      var publishingSRId = null;
+      var publishingClusterId = null;
+      var deletingSRId = null;
+      var deletingClusterId = null;
+
+      // ── Init ──
+      function init() {
+        populateClusterSelect();
+        renderSRGrid();
+      }
+
+      function populateClusterSelect() {
+        var sel = document.getElementById('clusterSelect');
+        clusters.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.display_name + ' (' + c.name + ')';
+          sel.appendChild(opt);
+        });
+      }
+
+      function getCluster(id) { return clusters.find(function(c) { return c.id === id; }); }
+      function getSR(id) { return staticResources.find(function(s) { return s.id === id; }); }
+      function getClusterSRs(clusterId) { return staticResources.filter(function(s) { return s.cluster_id === clusterId; }); }
+
+      // ── Cluster Change ──
+      window.onClusterChange = function() {
+        var val = document.getElementById('clusterSelect').value;
+        selectedClusterId = val ? parseInt(val) : null;
+        renderSRGrid();
+      };
+
+      // ── Filter ──
+      window.filterSR = function() {
+        renderSRGrid();
+      };
+
+      // ── Render ──
+      function renderSRGrid() {
+        var grid = document.getElementById('srGrid');
+        var list;
+
+        if (selectedClusterId) {
+          list = getClusterSRs(selectedClusterId);
+        } else {
+          list = staticResources;
+        }
+
+        var q = (document.getElementById('srSearch').value || '').toLowerCase();
+        if (q) {
+          list = list.filter(function(s) {
+            return (s.name && s.name.toLowerCase().indexOf(q) >= 0) ||
+                   (s.url_path && s.url_path.toLowerCase().indexOf(q) >= 0) ||
+                   (s.description && s.description.toLowerCase().indexOf(q) >= 0);
+          });
+        }
+
+        document.getElementById('srCount').textContent = '共 ' + list.length + ' 个资源';
+
+        if (!list || list.length === 0) {
+          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">▣</div><p>' +
+            (selectedClusterId ? '该集群暂无静态资源' : '请先选择集群') +
+            '</p></div>';
+          return;
+        }
+
+        var html = '';
+        list.forEach(function(sr) {
+          var cluster = getCluster(sr.cluster_id);
+          var clusterName = cluster ? cluster.display_name : '未知集群';
+          var versionTag = sr.current_version
+            ? '<span class="badge badge-success" style="font-size:10px;">v' + sr.current_version + '</span>'
+            : '<span class="badge badge-warning" style="font-size:10px;">未发布</span>';
+          var sizeStr = window.formatFileSize(sr.file_size);
+          var dateStr = sr.updated_at ? window.formatDate(sr.updated_at) : '-';
+
+          html += '<div class="sr-card">' +
+            '<div class="sr-card-header">' +
+              '<div>' +
+                '<div class="sr-card-name">' +
+                  window.escapeHtml(sr.name) +
+                  '<span class="sr-cluster-badge">' + window.escapeHtml(clusterName) + '</span>' +
+                '</div>' +
+                '<div class="sr-card-path">' + window.escapeHtml(sr.url_path || '-') + '</div>' +
+              '</div>' +
+              '<div class="sr-card-meta">' +
+                '<div>' + versionTag + '</div>' +
+                '<div style="font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--font-mono);">' + dateStr + '</div>' +
+              '</div>' +
+            '</div>' +
+            (sr.description ? '<div class="sr-card-desc">' + window.escapeHtml(sr.description) + '</div>' : '') +
+            '<div class="sr-card-stats">' +
+              '<span>📦 ' + sizeStr + '</span>' +
+              (sr.storage_path ? '<span>📁 ' + window.escapeHtml(sr.storage_path) + '</span>' : '') +
+            '</div>' +
+            '<div class="sr-card-actions">' +
+              '<button class="btn btn-secondary btn-sm" onclick="window.editSR(' + sr.id + ')">编辑</button>' +
+              '<button class="btn btn-secondary btn-sm" onclick="window.uploadSRZip(' + sr.id + ')" ' + (sr.id ? '' : 'disabled') + '>上传 ZIP</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="window.publishSR(' + sr.id + ')" ' + (sr.file_size ? '' : 'disabled') + '>发布</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="window.viewVersionHistory(' + sr.id + ')" ' + (sr.current_version ? '' : 'disabled') + '>版本管理</button>' +
+              '<span style="flex:1"></span>' +
+              '<div class="action-menu">' +
+                '<button class="action-btn" onclick="toggleActionMenu(this)">⋯</button>' +
+                '<div class="action-dropdown">' +
+                  '<button class="action-dropdown-item danger" onclick="window.deleteSR(' + sr.id + ')">删除</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        });
+        grid.innerHTML = html;
+      }
+
+      // ── Add / Edit SR ──
+      window.openAddSRModal = function() {
+        if (!selectedClusterId) {
+          window.showToast('请先选择一个集群', 'warning');
+          return;
+        }
+        editingSR = null;
+        document.getElementById('srModalTitle').textContent = '添加静态资源';
+        document.getElementById('srSubmitBtn').textContent = '创建';
+        document.getElementById('srRouteGroup').style.display = 'block';
+        document.getElementById('srRouteDisplay').style.display = 'none';
+        document.getElementById('srFormDesc').value = '';
+        document.getElementById('srSubmitBtn').disabled = true;
+
+        // Populate route select
+        populateRouteSelect(selectedClusterId);
+        window.openModal('srModal');
+      };
+
+      window.editSR = function(id) {
+        var sr = getSR(id);
+        if (!sr) return;
+        editingSR = sr;
+        document.getElementById('srModalTitle').textContent = '编辑静态资源 — ' + sr.name;
+        document.getElementById('srSubmitBtn').textContent = '保存';
+        document.getElementById('srRouteGroup').style.display = 'none';
+        document.getElementById('srRouteDisplay').style.display = 'block';
+        document.getElementById('srRouteInfo').innerHTML = '<strong>' + window.escapeHtml(sr.name) + '</strong> <span style="color:var(--accent);font-family:var(--font-mono);">' + (sr.url_path || '') + '</span>';
+        document.getElementById('srFormDesc').value = sr.description || '';
+        document.getElementById('srSubmitBtn').disabled = false;
+        window.openModal('srModal');
+      };
+
+      function populateRouteSelect(clusterId) {
+        var sel = document.getElementById('srRouteSelect');
+        sel.innerHTML = '<option value="">-- 请选择路由 --</option>';
+        var clusterRoutes = routes.filter(function(r) { return r.cluster_id === clusterId; });
+        clusterRoutes.forEach(function(r) {
+          var opt = document.createElement('option');
+          opt.value = r.id;
+          opt.textContent = r.name + ' (' + r.uri + ')';
+          sel.appendChild(opt);
+        });
+        // Reset validation
+        document.getElementById('srValidUri').className = 'valid-item fail';
+        document.getElementById('srValidUri').innerHTML = '❌ 路由路径必须以 /* 结尾';
+        document.getElementById('srValidPublished').className = 'valid-item fail';
+        document.getElementById('srValidPublished').innerHTML = '❌ 路由必须已发布到 Edge 节点';
+        document.getElementById('srValidPlugin').className = 'valid-item fail';
+        document.getElementById('srValidPlugin').innerHTML = '❌ 路由必须挂载 static_resource 插件';
+        document.getElementById('srSubmitBtn').disabled = true;
+      }
+
+      window.onSRRouteChange = function() {
+        var routeId = parseInt(document.getElementById('srRouteSelect').value);
+        if (!routeId) {
+          document.getElementById('srSubmitBtn').disabled = true;
+          return;
+        }
+        var route = routes.find(function(r) { return r.id === routeId; });
+        if (!route) return;
+
+        var uriValid = (route.uri || '').trim().endsWith('/*');
+        var publishedValid = !!(route.current_version || route.published_at);
+        var pluginValid = (route.plugins || []).some(function(p) { return p.plugin_name === 'static_resource'; });
+
+        document.getElementById('srValidUri').className = 'valid-item ' + (uriValid ? 'pass' : 'fail');
+        document.getElementById('srValidUri').innerHTML = (uriValid ? '✅' : '❌') + ' 路由路径必须以 /* 结尾';
+        document.getElementById('srValidPublished').className = 'valid-item ' + (publishedValid ? 'pass' : 'fail');
+        document.getElementById('srValidPublished').innerHTML = (publishedValid ? '✅' : '❌') + ' 路由必须已发布到 Edge 节点';
+        document.getElementById('srValidPlugin').className = 'valid-item ' + (pluginValid ? 'pass' : 'fail');
+        document.getElementById('srValidPlugin').innerHTML = (pluginValid ? '✅' : '❌') + ' 路由必须挂载 static_resource 插件';
+
+        document.getElementById('srSubmitBtn').disabled = !(uriValid && publishedValid && pluginValid);
+      };
+
+      window.submitSR = function() {
+        if (editingSR) {
+          // Edit mode — update description
+          editingSR.description = document.getElementById('srFormDesc').value.trim();
+          window.showToast('静态资源已更新', 'success');
+          closeModal('srModal');
+          renderSRGrid();
+          return;
+        }
+
+        // Add mode
+        var routeId = parseInt(document.getElementById('srRouteSelect').value);
+        if (!routeId) { window.showToast('请选择路由', 'warning'); return; }
+        var route = routes.find(function(r) { return r.id === routeId; });
+        if (!route) return;
+
+        var desc = document.getElementById('srFormDesc').value.trim();
+        var newId = staticResources.length > 0 ? Math.max.apply(null, staticResources.map(function(s) { return s.id; })) + 1 : 1;
+
+        staticResources.push({
+          id: newId,
+          cluster_id: selectedClusterId,
+          route_id: routeId,
+          edge_uuid: 'uuid-new-' + newId,
+          name: route.name,
+          url_path: route.uri,
+          description: desc,
+          file_size: null,
+          storage_path: null,
+          current_version: null,
+          created_at: new Date().toISOString(),
+          updated_at: null,
+        });
+
+        window.showToast('静态资源已创建', 'success');
+        closeModal('srModal');
+        renderSRGrid();
+      };
+
+      // ── Upload ZIP ──
+      window.uploadSRZip = function(id) {
+        var sr = getSR(id);
+        if (!sr) return;
+        uploadingSRId = id;
+        document.getElementById('uploadModalTitle').textContent = '上传静态资源 — ' + sr.name;
+        document.getElementById('zipFileInput').value = '';
+        document.getElementById('uploadProgressSection').style.display = 'none';
+        document.getElementById('uploadStartBtn').style.display = '';
+        document.getElementById('uploadStartBtn').disabled = false;
+        document.getElementById('uploadCloseBtn').textContent = '取消';
+        window.openModal('uploadModal');
+      };
+
+      window.closeUploadModal = function() {
+        closeModal('uploadModal');
+        uploadingSRId = null;
+      };
+
+      window.startUpload = function() {
+        var fileInput = document.getElementById('zipFileInput');
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) { window.showToast('请选择 ZIP 文件', 'warning'); return; }
+        if (!file.name.endsWith('.zip')) { window.showToast('仅支持 .zip 格式', 'warning'); return; }
+
+        document.getElementById('uploadStartBtn').disabled = true;
+        document.getElementById('uploadProgressSection').style.display = 'block';
+        document.getElementById('uploadCloseBtn').textContent = '关闭';
+
+        var progressFill = document.getElementById('uploadProgressFill');
+        var statusText = document.getElementById('uploadStatusText');
+        var percentText = document.getElementById('uploadPercent');
+        var logEl = document.getElementById('uploadLog');
+
+        function addLog(text, cls) {
+          logEl.innerHTML += '<div class="' + (cls || '') + '">' + text + '</div>';
+          logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function setProgress(pct, status) {
+          progressFill.style.width = pct + '%';
+          progressFill.className = 'upload-progress-fill' + (status ? ' ' + status : '');
+          percentText.textContent = pct + '%';
+        }
+
+        logEl.innerHTML = '';
+        var sr = getSR(uploadingSRId);
+        addLog('文件: ' + window.escapeHtml(file.name) + ' (' + window.formatFileSize(file.size) + ')');
+        setProgress(5);
+
+        // Simulate upload (in production, this would be a real multipart POST)
+        addLog('正在上传...', 'log-info');
+        setProgress(20);
+
+        setTimeout(function() {
+          setProgress(50);
+          addLog('上传进度: ' + window.formatFileSize(Math.round(file.size * 0.5)) + ' / ' + window.formatFileSize(file.size));
+          statusText.textContent = '上传中...';
+
+          setTimeout(function() {
+            setProgress(80);
+            addLog('上传进度: ' + window.formatFileSize(file.size) + ' / ' + window.formatFileSize(file.size));
+            statusText.textContent = '处理中...';
+
+            setTimeout(function() {
+              if (sr) {
+                sr.file_size = file.size;
+                sr.current_version = (sr.current_version || 0) + 1;
+                sr.storage_path = 'data/static/' + sr.edge_uuid + '/' + sr.current_version + '.zip';
+                sr.updated_at = new Date().toISOString();
+              }
+
+              setProgress(100, 'success');
+              statusText.textContent = '上传完成';
+              addLog('');
+              addLog('── 上传结果 ──');
+              addLog('管理端文件: ' + (sr ? sr.storage_path : '—'));
+              addLog('文件大小: ' + window.formatFileSize(file.size));
+              addLog('当前版本: v' + (sr ? sr.current_version : '?'));
+              addLog('');
+              addLog('✅ 上传成功', 'log-success');
+
+              renderSRGrid();
+              window.showToast('上传成功', 'success');
+            }, 800);
+          }, 800);
+        }, 800);
+      };
+
+      // ── Publish ──
+      window.publishSR = function(id) {
+        var sr = getSR(id);
+        if (!sr) return;
+        if (!sr.file_size) { window.showToast('请先上传 ZIP 文件', 'warning'); return; }
+
+        publishingSRId = id;
+        publishingClusterId = sr.cluster_id;
+        document.getElementById('publishModalTitle').textContent = '发布静态资源 — ' + sr.name;
+        document.getElementById('publishDesc').textContent = '选择要发布到的 Edge 节点';
+        document.getElementById('publishResult').style.display = 'none';
+        document.getElementById('publishExecBtn').disabled = false;
+
+        var cluster = getCluster(sr.cluster_id);
+        var nodeList = document.getElementById('publishNodeList');
+        nodeList.innerHTML = '';
+
+        if (cluster && cluster.nodes) {
+          cluster.nodes.forEach(function(n) {
+            var div = document.createElement('div');
+            div.style.cssText = 'margin:6px 0;display:flex;align-items:center;gap:8px;';
+            div.innerHTML = '<label class="checkbox-label"><input type="checkbox" class="publish-node-cb" value="' + n.ip + ':' + n.management_port + '" ' + (n.status === 1 ? 'checked' : 'disabled') + '> <span>' + n.ip + (n.management_port ? ':' + n.management_port : '') + ' <span class="text-muted" style="font-size:11px;">(' + (n.status === 1 ? '在线' : '离线') + ')</span></span></label>';
+            nodeList.appendChild(div);
+          });
+        } else {
+          nodeList.innerHTML = '<div class="text-muted">该集群没有节点</div>';
+        }
+
+        window.openModal('publishModal');
+      };
+
+      window.executePublishSR = function() {
+        var sr = getSR(publishingSRId);
+        if (!sr) return;
+
+        var cbs = document.querySelectorAll('.publish-node-cb:checked');
+        var selectedNodes = [];
+        cbs.forEach(function(cb) { selectedNodes.push(cb.value); });
+
+        if (selectedNodes.length === 0) {
+          window.showToast('请选择至少一个节点', 'warning');
+          return;
+        }
+
+        document.getElementById('publishExecBtn').disabled = true;
+        document.getElementById('publishResult').style.display = 'block';
+        var resultList = document.getElementById('publishResultList');
+        resultList.innerHTML = '';
+        document.getElementById('publishDesc').textContent = '正在发布...';
+
+        selectedNodes.forEach(function(node, idx) {
+          setTimeout(function() {
+            var success = Math.random() > 0.15;
+            resultList.innerHTML += '<div class="publish-result-card ' + (success ? 'success' : 'error') + '">' +
+              '<span>' + (success ? '✅' : '❌') + '</span>' +
+              '<span><strong>' + window.escapeHtml(node) + '</strong></span>' +
+              '<span style="color:var(--muted);font-size:11px;">' + (success ? '发布成功' : '连接超时') + '</span>' +
+            '</div>';
+
+            if (idx === selectedNodes.length - 1) {
+              sr.current_version = (sr.current_version || 0);
+              sr.published_at = new Date().toISOString();
+              document.getElementById('publishDesc').textContent = '发布完成';
+              document.getElementById('publishExecBtn').disabled = false;
+              renderSRGrid();
+              window.showToast('发布完成，已同步到 ' + selectedNodes.length + ' 个节点', 'success');
+            }
+          }, idx * 500);
+        });
+      };
+
+      // ── Version History ──
+      window.viewVersionHistory = function(id) {
+        var sr = getSR(id);
+        if (!sr) return;
+        document.getElementById('versionModalTitle').textContent = '版本历史 — ' + sr.name;
+        var listEl = document.getElementById('versionList');
+
+        if (!sr.current_version) {
+          listEl.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;">暂无版本历史</div>';
+          window.openModal('versionModal');
+          return;
+        }
+
+        var html = '<div style="margin-bottom:12px;font-size:13px;">当前版本: <strong>v' + sr.current_version + '</strong></div>';
+        var versions = versionHistory.filter(function(v) { return v.id <= sr.current_version; }) || [];
+
+        if (versions.length === 0) {
+          // Generate mock history
+          for (var i = sr.current_version; i >= 1; i--) {
+            html += '<div class="sr-version-item">' +
+              '<div><strong>v' + i + '</strong> <span class="text-muted" style="font-size:11px;">由 ' + (i === 1 ? 'system' : 'admin') + ' 于 ' + window.formatDate(new Date(Date.now() - (sr.current_version - i) * 86400000).toISOString()) + '</span></div>' +
+              '<div class="sr-version-actions">' +
+                (i < sr.current_version ? '<button class="btn btn-ghost btn-sm" onclick="window.rollbackSR(' + id + ',' + i + ')">回滚</button>' : '<span class="badge badge-info" style="font-size:10px;">当前</span>') +
+                '<button class="btn btn-ghost btn-sm" onclick="window.deleteVersionSR(' + id + ',' + i + ')">删除</button>' +
+              '</div>' +
+            '</div>';
+          }
+        } else {
+          versions.forEach(function(v) {
+            var isCurrent = v.version === sr.current_version;
+            html += '<div class="sr-version-item">' +
+              '<div><strong>v' + v.version + '</strong> <span class="text-muted" style="font-size:11px;">由 ' + (v.created_by || 'system') + ' 于 ' + window.formatDate(v.created_at) + '</span></div>' +
+              '<div class="sr-version-actions">' +
+                (!isCurrent ? '<button class="btn btn-ghost btn-sm" onclick="window.rollbackSR(' + id + ',' + v.version + ')">回滚</button>' : '<span class="badge badge-info" style="font-size:10px;">当前</span>') +
+                '<button class="btn btn-ghost btn-sm" onclick="window.deleteVersionSR(' + id + ',' + v.version + ')">删除</button>' +
+              '</div>' +
+            '</div>';
+          });
+        }
+
+        listEl.innerHTML = html;
+        window.openModal('versionModal');
+      };
+
+      window.rollbackSR = function(id, version) {
+        if (!confirm('确定回滚到 v' + version + ' 吗？')) return;
+        var sr = getSR(id);
+        if (sr) {
+          sr.current_version = version;
+          sr.updated_at = new Date().toISOString();
+          window.showToast('已回滚到 v' + version, 'success');
+          closeModal('versionModal');
+          renderSRGrid();
+        }
+      };
+
+      window.deleteVersionSR = function(id, version) {
+        if (!confirm('确定删除 v' + version + ' 的历史记录吗？')) return;
+        window.showToast('历史版本 v' + version + ' 已删除', 'info');
+        window.viewVersionHistory(id);
+      };
+
+      // ── Delete ──
+      window.deleteSR = function(id) {
+        var sr = getSR(id);
+        if (!sr) return;
+        deletingSRId = id;
+        deletingClusterId = sr.cluster_id;
+        document.getElementById('deleteModalTitle').textContent = '删除静态资源';
+        document.getElementById('deleteDesc').textContent = '确定要删除静态资源 "' + sr.name + '" 吗？';
+        document.getElementById('deleteDb').checked = true;
+        document.getElementById('deleteEdge').checked = false;
+        window.openModal('deleteModal');
+      };
+
+      window.executeDeleteSR = function() {
+        var deleteDb = document.getElementById('deleteDb').checked;
+        var deleteEdge = document.getElementById('deleteEdge').checked;
+
+        var idx = staticResources.findIndex(function(s) { return s.id === deletingSRId; });
+        if (idx >= 0) staticResources.splice(idx, 1);
+
+        window.showToast('静态资源已删除', 'info');
+        closeModal('deleteModal');
+        renderSRGrid();
+      };
+
+      // ── Init ──
+      init();
+
+    })();
+  </script>
+</body>
+</html>

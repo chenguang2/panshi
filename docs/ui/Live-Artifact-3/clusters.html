@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 集群管理</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* Cluster-specific styles */
+    .cluster-tabs { margin-bottom: 20px; }
+    .cluster-filter-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .cluster-filter-bar .search-input-wrap input { width: 240px; }
+    .cluster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+    .cluster-node-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .cluster-node-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 10px; font-size: 11px;
+      background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono);
+    }
+    .cluster-node-tag.online { border-color: oklch(55% 0.15 145 / 25%); }
+    .cluster-node-tag.offline { border-color: oklch(55% 0.18 28 / 25%); }
+    .cluster-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+    .cluster-meta { display: flex; gap: 16px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+    .cluster-meta span { display: flex; align-items: center; gap: 4px; }
+    .cluster-delete-section { border: 1px solid oklch(55% 0.18 28 / 25%); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; }
+    .cluster-delete-section .form-label { color: var(--danger); }
+    .test-result { margin-top: 8px; padding: 8px 12px; border-radius: var(--radius-md); font-size: 12px; display: none; }
+    .test-result.success { display: block; background: oklch(55% 0.15 145 / 8%); color: var(--success); border: 1px solid oklch(55% 0.15 145 / 20%); }
+    .test-result.error { display: block; background: oklch(55% 0.18 28 / 8%); color: var(--danger); border: 1px solid oklch(55% 0.18 28 / 20%); }
+    @media (max-width: 768px) {
+      .cluster-grid { grid-template-columns: 1fr; }
+      .cluster-filter-bar { flex-direction: column; align-items: stretch; }
+      .cluster-filter-bar .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><span class="nav-icon">◉</span><span>概览</span></a>
+          <a class="nav-item active" href="clusters.html"><span class="nav-icon">◆</span><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><span class="nav-icon">◇</span><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><span class="nav-icon">◎</span><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><span class="nav-icon">●</span><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><span class="nav-icon">▣</span><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><span class="nav-icon">⚙</span><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><span class="nav-icon">▣</span><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><span class="nav-icon">▲</span><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><span class="nav-icon">■</span><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><span class="nav-icon">▣</span><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><span class="nav-icon">⬡</span><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><span class="nav-icon">⬢</span><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><span class="nav-icon">▣</span><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ========== MAIN AREA ========== -->
+    <div class="main-area">
+
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>集群管理</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+
+        <div class="page-header">
+          <div>
+            <h1>集群管理</h1>
+            <p>管理网关集群，每个集群包含一组 Edge 节点和对应的路由、上游等资源配置</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary" onclick="openClusterModal()">+ 新建集群</button>
+          </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="cluster-filter-bar">
+          <div class="search-input-wrap">
+            <input type="text" id="clusterSearch" placeholder="搜索集群名称..." oninput="filterClusters()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <span class="text-muted text-sm" id="clusterCount">共 5 个集群</span>
+        </div>
+
+        <!-- Cluster Grid -->
+        <div class="cluster-grid" id="clusterGrid"></div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- ========== CREATE/EDIT CLUSTER MODAL ========== -->
+  <div class="modal-overlay" id="clusterModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="clusterModalTitle">新建集群</h2>
+        <button class="modal-close" onclick="closeModal('clusterModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">集群名称 <span class="required">*</span></label>
+          <input type="text" id="formName" class="form-input" placeholder="prod-cluster（小写字母、数字、中划线）">
+          <div class="form-hint">只能包含小写字母、数字和中划线，不能以中划线开头或结尾</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">显示名称 <span class="required">*</span></label>
+          <input type="text" id="formDisplay" class="form-input" placeholder="生产集群">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea id="formDesc" class="form-input" placeholder="集群用途描述" rows="3"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">分组名称</label>
+            <input type="text" id="formGroup" class="form-input" placeholder="production">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Admin Key</label>
+            <input type="password" id="formAdminKey" class="form-input" placeholder="Edge 管理员密钥">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <label class="checkbox-label" style="margin-top:4px;">
+            <input type="checkbox" id="formStatus" checked>
+            <span>启用</span>
+          </label>
+        </div>
+        <!-- Delete options (edit mode only) -->
+        <div class="cluster-delete-section" id="deleteSection" style="display:none;">
+          <div class="form-label" style="margin-bottom:8px;">删除选项</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label"><input type="checkbox" id="deleteDb"> <span>删除数据库记录</span></label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label"><input type="checkbox" id="deleteEdge"> <span>删除 Edge 节点数据</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('clusterModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveCluster()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== CLUSTER DETAIL MODAL ========== -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="detailTitle">集群详情</h2>
+        <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('detailModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      // ----- Mock Data -----
+      var clusters = [
+        { id: 1, name: 'prod-cluster', display_name: '生产集群', description: '生产环境主集群，承载所有线上业务流量', group_name: 'production', status: 1, node_count: 5, healthy_node_count: 5, route_count: 18, upstream_count: 12, plugin_config_count: 6, global_rule_count: 2, static_resource_count: 1, admin_key: '****', created_at: '2024-01-01T00:00:00Z', nodes: [
+          { ip: '10.0.0.1', port: 80, status: 1 }, { ip: '10.0.0.2', port: 80, status: 1 }, { ip: '10.0.0.3', port: 80, status: 1 }, { ip: '10.0.0.4', port: 80, status: 1 }, { ip: '10.0.0.5', port: 80, status: 1 }
+        ]},
+        { id: 2, name: 'staging-cluster', display_name: '预发集群', description: '预发布环境集群，用于上线前灰度验证', group_name: 'staging', status: 1, node_count: 4, healthy_node_count: 3, route_count: 22, upstream_count: 10, plugin_config_count: 4, global_rule_count: 1, static_resource_count: 0, admin_key: '****', created_at: '2024-02-01T00:00:00Z', nodes: [
+          { ip: '10.0.1.1', port: 80, status: 1 }, { ip: '10.0.1.2', port: 80, status: 0 }, { ip: '10.0.1.3', port: 80, status: 1 }, { ip: '10.0.1.4', port: 80, status: 1 }
+        ]},
+        { id: 3, name: 'dev-cluster', display_name: '开发集群', description: '开发测试环境集群，用于日常开发联调', group_name: 'development', status: 1, node_count: 3, healthy_node_count: 3, route_count: 10, upstream_count: 8, plugin_config_count: 2, global_rule_count: 0, static_resource_count: 0, admin_key: '****', created_at: '2024-03-01T00:00:00Z', nodes: [
+          { ip: '10.0.2.1', port: 80, status: 1 }, { ip: '10.0.2.2', port: 80, status: 1 }, { ip: '10.0.2.3', port: 80, status: 1 }
+        ]},
+        { id: 4, name: 'dr-cluster', display_name: '灾备集群', description: '异地灾备集群，生产故障时接管流量', group_name: 'production', status: 1, node_count: 2, healthy_node_count: 2, route_count: 5, upstream_count: 4, plugin_config_count: 1, global_rule_count: 0, static_resource_count: 0, admin_key: '****', created_at: '2024-04-01T00:00:00Z', nodes: [
+          { ip: '10.0.3.1', port: 80, status: 1 }, { ip: '10.0.3.2', port: 80, status: 1 }
+        ]},
+        { id: 5, name: 'api-cluster', display_name: 'API 集群', description: '对外开放 API 集群', group_name: 'api', status: 0, node_count: 2, healthy_node_count: 0, route_count: 8, upstream_count: 5, plugin_config_count: 3, global_rule_count: 1, static_resource_count: 0, admin_key: '****', created_at: '2024-05-01T00:00:00Z', nodes: [
+          { ip: '10.0.4.1', port: 80, status: 0 }, { ip: '10.0.4.2', port: 80, status: 0 }
+        ]}
+      ];
+
+      // ----- Render -----
+      var editingId = null;
+
+      function renderClusters(list) {
+        var grid = document.getElementById('clusterGrid');
+        if (!list || list.length === 0) {
+          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">◆</div><p>暂无集群，点击"新建集群"开始创建</p></div>';
+          return;
+        }
+        var html = '';
+        list.forEach(function(c) {
+          var statusClass = c.status === 1 ? 'success' : 'danger';
+          var statusText = c.status === 1 ? '运行中' : '已禁用';
+          var healthPct = c.node_count > 0 ? Math.round(c.healthy_node_count / c.node_count * 100) : 0;
+          html += '<div class="cluster-card">' +
+            '<div class="cluster-card-header">' +
+              '<span class="cluster-card-name">' + c.display_name + '</span>' +
+              '<span class="badge badge-' + statusClass + '"><span class="status-dot ' + (c.status === 1 ? 'online' : 'offline') + '"></span>' + statusText + '</span>' +
+            '</div>' +
+            '<div class="cluster-meta">' +
+              '<span>📁 ' + c.name + '</span>' +
+              '<span>📂 ' + c.group_name + '</span>' +
+              '<span>🆔 ' + c.id + '</span>' +
+            '</div>' +
+            '<div class="cluster-card-desc">' + (c.description || '—') + '</div>' +
+            '<div class="cluster-card-stats">' +
+              '<div class="cluster-card-stat"><div class="cluster-card-stat-value">' + c.node_count + '</div><div class="cluster-card-stat-label">节点</div></div>' +
+              '<div class="cluster-card-stat"><div class="cluster-card-stat-value">' + c.route_count + '</div><div class="cluster-card-stat-label">路由</div></div>' +
+              '<div class="cluster-card-stat"><div class="cluster-card-stat-value">' + c.upstream_count + '</div><div class="cluster-card-stat-label">上游</div></div>' +
+            '</div>' +
+            '<div class="cluster-node-list">' +
+              (c.nodes ? c.nodes.map(function(n) {
+                return '<span class="cluster-node-tag ' + (n.status === 1 ? 'online' : 'offline') + '">' +
+                  '<span class="status-dot ' + (n.status === 1 ? 'online' : 'offline') + '"></span>' +
+                  n.ip + ':' + n.port + '</span>';
+              }).join('') : '') +
+            '</div>' +
+            '<div class="cluster-actions">' +
+              '<button class="btn btn-secondary btn-sm" onclick="window.viewCluster(' + c.id + ')">详情</button>' +
+              '<button class="btn btn-secondary btn-sm" onclick="window.editCluster(' + c.id + ')">编辑</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="window.testCluster(' + c.id + ')">测试</button>' +
+              '<button class="btn btn-ghost btn-sm" onclick="window.syncCluster(' + c.id + ')">同步</button>' +
+              '<div class="action-menu">' +
+                '<button class="action-btn" onclick="toggleActionMenu(this)">⋯</button>' +
+                '<div class="action-dropdown">' +
+                  '<button class="action-dropdown-item danger" onclick="window.deleteCluster(' + c.id + ')">删除集群</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="test-result" id="testResult-' + c.id + '"></div>' +
+          '</div>';
+        });
+        grid.innerHTML = html;
+        document.getElementById('clusterCount').textContent = '共 ' + list.length + ' 个集群';
+      }
+
+      // ----- Filter -----
+      window.filterClusters = function() {
+        var q = (document.getElementById('clusterSearch').value || '').toLowerCase();
+        var filtered = clusters.filter(function(c) {
+          return c.name.toLowerCase().indexOf(q) >= 0 || c.display_name.toLowerCase().indexOf(q) >= 0 || (c.description && c.description.toLowerCase().indexOf(q) >= 0);
+        });
+        renderClusters(filtered);
+      };
+
+      // ----- CRUD -----
+      window.openClusterModal = function(data) {
+        editingId = null;
+        document.getElementById('clusterModalTitle').textContent = '新建集群';
+        document.getElementById('formName').value = '';
+        document.getElementById('formDisplay').value = '';
+        document.getElementById('formDesc').value = '';
+        document.getElementById('formGroup').value = '';
+        document.getElementById('formAdminKey').value = '';
+        document.getElementById('formStatus').checked = true;
+        document.getElementById('deleteSection').style.display = 'none';
+        window.openModal('clusterModal');
+      };
+
+      window.editCluster = function(id) {
+        var c = clusters.find(function(x) { return x.id === id; });
+        if (!c) return;
+        editingId = id;
+        document.getElementById('clusterModalTitle').textContent = '编辑集群 — ' + c.display_name;
+        document.getElementById('formName').value = c.name;
+        document.getElementById('formDisplay').value = c.display_name;
+        document.getElementById('formDesc').value = c.description || '';
+        document.getElementById('formGroup').value = c.group_name || '';
+        document.getElementById('formAdminKey').value = c.admin_key === '****' ? '' : c.admin_key;
+        document.getElementById('formStatus').checked = c.status === 1;
+        document.getElementById('deleteSection').style.display = 'block';
+        document.getElementById('deleteDb').checked = false;
+        document.getElementById('deleteEdge').checked = false;
+        window.openModal('clusterModal');
+      };
+
+      window.saveCluster = function() {
+        var name = document.getElementById('formName').value.trim();
+        var display = document.getElementById('formDisplay').value.trim();
+        var desc = document.getElementById('formDesc').value.trim();
+        var group = document.getElementById('formGroup').value.trim();
+        var adminKey = document.getElementById('formAdminKey').value;
+        var status = document.getElementById('formStatus').checked ? 1 : 0;
+
+        if (!name) { showToast('请输入集群名称', 'error'); return; }
+        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(name)) { showToast('集群名称格式无效', 'error'); return; }
+        if (!display) { showToast('请输入显示名称', 'error'); return; }
+
+        if (editingId) {
+          var c = clusters.find(function(x) { return x.id === editingId; });
+          if (c) {
+            c.display_name = display;
+            c.description = desc;
+            c.group_name = group;
+            if (adminKey) c.admin_key = adminKey;
+            c.status = status;
+            // Handle delete
+            if (document.getElementById('deleteDb').checked || document.getElementById('deleteEdge').checked) {
+              var idx = clusters.indexOf(c);
+              if (idx >= 0) clusters.splice(idx, 1);
+              showToast('集群已删除', 'info');
+            } else {
+              showToast('集群已更新', 'success');
+            }
+          }
+        } else {
+          clusters.push({
+            id: clusters.length + 1,
+            name: name,
+            display_name: display,
+            description: desc,
+            group_name: group || '',
+            status: status,
+            node_count: 0,
+            healthy_node_count: 0,
+            route_count: 0,
+            upstream_count: 0,
+            plugin_config_count: 0,
+            global_rule_count: 0,
+            static_resource_count: 0,
+            admin_key: adminKey || '****',
+            created_at: new Date().toISOString(),
+            nodes: []
+          });
+          showToast('集群已创建', 'success');
+        }
+        window.closeModal('clusterModal');
+        window.filterClusters();
+      };
+
+      window.deleteCluster = function(id) {
+        if (!confirm('确定删除该集群？将级联删除关联资源。')) return;
+        var idx = clusters.findIndex(function(x) { return x.id === id; });
+        if (idx >= 0) clusters.splice(idx, 1);
+        showToast('集群已删除', 'info');
+        window.filterClusters();
+      };
+
+      // ----- Actions -----
+      window.testCluster = function(id) {
+        var el = document.getElementById('testResult-' + id);
+        if (el) {
+          el.className = 'test-result success';
+          el.textContent = '✅ 连接测试成功 — 节点可达，API 响应正常';
+          setTimeout(function() { el.className = 'test-result'; }, 4000);
+        }
+        showToast('测试连接已发送', 'info');
+      };
+
+      window.syncCluster = function(id) {
+        var el = document.getElementById('testResult-' + id);
+        if (el) {
+          el.className = 'test-result success';
+          el.textContent = '🔄 同步成功 — 配置已下发到所有 Edge 节点';
+          setTimeout(function() { el.className = 'test-result'; }, 4000);
+        }
+        showToast('同步任务已触发', 'info');
+      };
+
+      // ----- Detail -----
+      window.viewCluster = function(id) {
+        var c = clusters.find(function(x) { return x.id === id; });
+        if (!c) return;
+        document.getElementById('detailTitle').textContent = '集群详情 — ' + c.display_name;
+        var statusClass = c.status === 1 ? 'success' : 'danger';
+        var statusText = c.status === 1 ? '运行中' : '已禁用';
+        var healthPct = c.node_count > 0 ? Math.round(c.healthy_node_count / c.node_count * 100) : 0;
+        document.getElementById('detailBody').innerHTML =
+          '<div class="detail-grid">' +
+            '<div class="detail-label">集群名称</div><div class="detail-value">' + c.name + '</div>' +
+            '<div class="detail-label">显示名称</div><div class="detail-value">' + c.display_name + '</div>' +
+            '<div class="detail-label">分组</div><div class="detail-value">' + (c.group_name || '-') + '</div>' +
+            '<div class="detail-label">描述</div><div class="detail-value">' + (c.description || '-') + '</div>' +
+            '<div class="detail-label">状态</div><div class="detail-value"><span class="badge badge-' + statusClass + '">' + statusText + '</span></div>' +
+            '<div class="detail-label">Admin Key</div><div class="detail-value">' + c.admin_key + '</div>' +
+            '<div class="detail-label">创建时间</div><div class="detail-value">' + window.formatDate(c.created_at) + '</div>' +
+          '</div>' +
+          '<h3 style="font-size:14px;font-weight:600;margin:20px 0 12px;">资源统计</h3>' +
+          '<div class="stats-grid" style="margin-bottom:0;">' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">节点</div><div class="stat-value" style="font-size:20px;">' + c.node_count + ' <span class="text-muted text-sm" style="font-weight:400;">(健康 ' + c.healthy_node_count + ')</span></div></div>' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">路由</div><div class="stat-value" style="font-size:20px;">' + c.route_count + '</div></div>' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">上游</div><div class="stat-value" style="font-size:20px;">' + c.upstream_count + '</div></div>' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">插件配置</div><div class="stat-value" style="font-size:20px;">' + c.plugin_config_count + '</div></div>' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">全局规则</div><div class="stat-value" style="font-size:20px;">' + c.global_rule_count + '</div></div>' +
+            '<div class="stat-card" style="padding:12px;"><div class="stat-label">静态资源</div><div class="stat-value" style="font-size:20px;">' + c.static_resource_count + '</div></div>' +
+          '</div>' +
+          '<h3 style="font-size:14px;font-weight:600;margin:20px 0 12px;">节点列表</h3>' +
+          '<div>' + (c.nodes && c.nodes.length > 0 ? c.nodes.map(function(n) {
+            return '<span class="cluster-node-tag ' + (n.status === 1 ? 'online' : 'offline') + '" style="margin:0 6px 6px 0;">' +
+              '<span class="status-dot ' + (n.status === 1 ? 'online' : 'offline') + '"></span>' +
+              n.ip + ':' + n.port + '</span>';
+          }).join('') : '<span class="text-muted">无节点</span>') + '</div>';
+        window.openModal('detailModal');
+      };
+
+      // ----- Init -----
+      window.filterClusters();
+
+    })();
+  </script>
+</body>
+</html>

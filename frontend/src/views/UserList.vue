@@ -12,12 +12,12 @@
         <input v-model="searchText" type="text" placeholder="搜索用户名..." class="form-input" @input="onFilterChange">
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="roleFilter" class="form-input filter-select" @change="onFilterChange">
+      <select v-model="roleFilter" class="form-input" style="width:120px;height:32px;font-size:12px;" @change="onFilterChange">
         <option value="all">全部角色</option>
         <option value="admin">管理员</option>
         <option value="user">普通用户</option>
       </select>
-      <select v-model="statusFilter" class="form-input filter-select" @change="onFilterChange">
+      <select v-model="statusFilter" class="form-input" style="width:120px;height:32px;font-size:12px;" @change="onFilterChange">
         <option value="all">全部状态</option>
         <option value="1">启用</option>
         <option value="0">禁用</option>
@@ -45,13 +45,23 @@
         </template>
         <template v-if="column.key === 'permissions'">
           <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
-          <span v-else class="text-muted text-sm">在编辑中设置</span>
+          <template v-else-if="record.permissions?.length">
+            <span v-for="p in record.permissions" :key="p" class="perm-tag active">{{ permissionKeyToLabel[p] || p }}</span>
+          </template>
+          <span v-else class="text-muted text-sm">—</span>
         </template>
         <template v-if="column.key === 'clusters'">
-          <span v-if="(record as any).clusters?.length" class="text-muted text-sm">
-            <span v-for="c in (record as any).clusters" :key="c" class="perm-tag">{{ getClusterName(c) }}</span>
+          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部集群</span>
+          <span v-else-if="(record as any).cluster_ids?.length" class="text-muted text-sm">
+            <span v-for="c in (record as any).cluster_ids.slice(0, 3)" :key="c" class="perm-tag">{{ getClusterName(c) }}</span>
+            <a-tooltip v-if="(record as any).cluster_ids.length > 3">
+              <template #title>
+                <div>{{ ((record as any).cluster_ids as number[]).map(c => getClusterName(c)).join('、') }}</div>
+              </template>
+              <span class="perm-tag more-tag">+{{ (record as any).cluster_ids.length - 3 }}</span>
+            </a-tooltip>
           </span>
-          <span v-else class="text-muted text-sm">{{ record.role === 'admin' ? '全部集群' : '—' }}</span>
+          <span v-else class="text-muted text-sm">—</span>
         </template>
         <template v-if="column.key === 'created_at'">
           <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
@@ -125,15 +135,29 @@
             </div>
           </div>
 
+          <!-- Cluster permissions (only for non-admin) -->
+          <div v-if="form.role !== 'admin'" class="permissions-section">
+            <h3>集群权限</h3>
+            <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
+            <div class="selected-clusters">
+              <span v-for="cid in selectedClusterIds" :key="cid" class="selected-cluster-tag">
+                {{ getClusterName(cid) }}
+                <span class="remove" @click="toggleCluster(cid)">&times;</span>
+              </span>
+              <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding:4px 0;">暂未选择集群</span>
+              <span class="select-clusters-btn" @click="clusterPickerVisible = true">+ 选择集群</span>
+            </div>
+          </div>
+
           <!-- Password reset (edit mode) -->
           <div v-if="editingUser" class="password-section">
             <h3>重置密码</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <input v-model="resetPwdValue" type="password" class="form-input" placeholder="新密码（留空不修改）">
+            <div class="form-row" style="display:flex;gap:12px;">
+              <div class="form-group" style="flex:0 0 auto;margin-bottom:0;">
+                <input v-model="resetPwdValue" type="password" class="form-input" placeholder="新密码（留空不修改）" style="width:200px">
               </div>
-              <div style="display:flex;align-items:flex-end;">
-                <button class="btn btn-secondary btn-sm" @click="handleResetPassword">重置密码</button>
+              <div style="display:flex;align-items:flex-end;flex-shrink:0;">
+                <button class="btn btn-secondary btn-sm" style="height:36px;" @click="handleResetPassword">重置密码</button>
               </div>
             </div>
           </div>
@@ -141,6 +165,40 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
           <button class="btn btn-primary" @click="handleSave">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cluster Picker Modal -->
+    <div v-if="clusterPickerVisible" class="modal-overlay" @click.self="clusterPickerVisible = false">
+      <div class="modal picker-modal">
+        <div class="modal-header">
+          <h2>选择集群</h2>
+          <button class="modal-close" @click="clusterPickerVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="picker-search">
+            <input v-model="clusterSearchText" type="text" placeholder="搜索集群名称...">
+          </div>
+          <div v-for="group in filteredGroupedClusters" :key="group.name" class="picker-group">
+            <div class="picker-group-header" @click="toggleGroup(group.clusters)">
+              <input type="checkbox" class="group-checkbox" :checked="isGroupAllSelected(group.clusters)" @click.stop="toggleGroup(group.clusters)">
+              <span>{{ group.name }}</span>
+              <span class="group-count">{{ group.clusters.length }} 个集群</span>
+            </div>
+            <div class="picker-group-body">
+              <label v-for="c in group.clusters" :key="c.id" class="picker-cluster-item">
+                <input type="checkbox" :checked="isClusterSelected(c.id)" @change="toggleCluster(c.id)">
+                <span class="picker-cluster-name">{{ c.display_name || c.name }}</span>
+                <span v-if="c.display_name" class="picker-cluster-tag">{{ c.name }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="picker-actions">
+          <span style="font-size:12px;color:var(--p-text-tertiary);margin-right:auto;">已选 {{ selectedClusterIds.length }} 个集群</span>
+          <button class="btn btn-secondary" @click="clusterPickerVisible = false">取消</button>
+          <button class="btn btn-primary" @click="clusterPickerVisible = false">确认</button>
         </div>
       </div>
     </div>
@@ -172,7 +230,54 @@ const editingUser = ref<User | null>(null)
 const resetPwdValue = ref('')
 
 const isAdmin = computed(() => authStore.user?.role === 'admin')
-const clusters = ref<{id: number; name: string; display_name?: string}[]>([])
+const clusters = ref<{id: number; name: string; display_name?: string; group_name?: string}[]>([])
+
+const selectedClusterIds = ref<number[]>([])
+const clusterPickerVisible = ref(false)
+const clusterSearchText = ref('')
+
+const groupedClusters = computed(() => {
+  const map = new Map<string, typeof clusters.value>()
+  for (const c of clusters.value) {
+    const key = c.group_name || '未分组'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(c)
+  }
+  const groups: { name: string; clusters: typeof clusters.value }[] = []
+  for (const [name, list] of map) groups.push({ name, clusters: list })
+  return groups
+})
+
+const filteredGroupedClusters = computed(() => {
+  const q = clusterSearchText.value.toLowerCase()
+  if (!q) return groupedClusters.value
+  return groupedClusters.value
+    .map(g => ({ ...g, clusters: g.clusters.filter(c => (c.display_name || c.name).toLowerCase().includes(q)) }))
+    .filter(g => g.clusters.length > 0)
+})
+
+function isClusterSelected(id: number) {
+  return selectedClusterIds.value.includes(id)
+}
+
+function toggleCluster(id: number) {
+  const idx = selectedClusterIds.value.indexOf(id)
+  if (idx >= 0) selectedClusterIds.value.splice(idx, 1)
+  else selectedClusterIds.value.push(id)
+}
+
+function isGroupAllSelected(group: typeof clusters.value) {
+  return group.every(c => selectedClusterIds.value.includes(c.id))
+}
+
+function toggleGroup(group: typeof clusters.value) {
+  const allSelected = isGroupAllSelected(group)
+  for (const c of group) {
+    const idx = selectedClusterIds.value.indexOf(c.id)
+    if (allSelected && idx >= 0) selectedClusterIds.value.splice(idx, 1)
+    else if (!allSelected && idx < 0) selectedClusterIds.value.push(c.id)
+  }
+}
 
 function getClusterName(clusterId: number): string {
   const c = clusters.value.find(c => c.id === clusterId)
@@ -182,8 +287,9 @@ function getClusterName(clusterId: number): string {
 const allPermissions = ref([
   { key: 'plugin_groups', label: '插件组管理', checked: false },
   { key: 'global_rules', label: '全局规则管理', checked: false },
-  { key: 'edge_nodes', label: '边缘节点管理', checked: false },
+  { key: 'edge_nodes', label: 'Edge直连', checked: false },
   { key: 'plugin_management', label: '插件管理', checked: false },
+  { key: 'plugin_metadata', label: '插件元数据', checked: false },
 ])
 
 const form = reactive({
@@ -203,8 +309,9 @@ function formatDate(dateStr: string): string {
 const permissionKeyToLabel: Record<string, string> = {
   plugin_groups: '插件组管理',
   global_rules: '全局规则管理',
-  edge_nodes: '边缘节点管理',
+  edge_nodes: 'Edge直连',
   plugin_management: '插件管理',
+  plugin_metadata: '插件元数据',
 }
 
 const tableColumns = computed(() => {
@@ -306,6 +413,15 @@ async function loadUserPermissions(userId: number) {
   }
 }
 
+async function loadUserClusters(userId: number) {
+  try {
+    const res = await api.get(`/admin/users/${userId}/clusters`)
+    selectedClusterIds.value = res.data.cluster_ids || []
+  } catch {
+    selectedClusterIds.value = []
+  }
+}
+
 function openAddModal() {
   editingUser.value = null
   form.username = ''
@@ -324,7 +440,9 @@ function editUser(user: User) {
   form.status = user.status
   form.password = ''
   resetPwdValue.value = ''
+  clusterSearchText.value = ''
   loadUserPermissions(user.id)
+  loadUserClusters(user.id)
   modalVisible.value = true
   openMenuId.value = null
 }
@@ -337,6 +455,7 @@ function onRoleChange() {
 
 function closeModal() {
   modalVisible.value = false
+  clusterPickerVisible.value = false
   editingUser.value = null
 }
 
@@ -350,13 +469,14 @@ async function handleSave() {
     return
   }
   try {
-    if (editingUser.value) {
-      await api.put(`/admin/users/${editingUser.value.id}`, { role: form.role, status: form.status })
-      if (form.role !== 'admin') {
-        const perms = allPermissions.value.filter(p => p.checked).map(p => p.key)
-        await api.put(`/admin/users/${editingUser.value.id}/permissions`, { permissions: perms })
-      }
-      message.success('用户已更新')
+      if (editingUser.value) {
+        await api.put(`/admin/users/${editingUser.value.id}`, { role: form.role, status: form.status })
+        if (form.role !== 'admin') {
+          const perms = allPermissions.value.filter(p => p.checked).map(p => p.key)
+          await api.put(`/admin/users/${editingUser.value.id}/permissions`, { permissions: perms })
+        }
+        await api.put(`/admin/users/${editingUser.value.id}/clusters`, { cluster_ids: selectedClusterIds.value })
+        message.success('用户已更新')
     } else {
       await api.post('/admin/users', { username: form.username, password: form.password, role: form.role, status: form.status })
       message.success('用户已创建')
@@ -457,7 +577,7 @@ async function handleResetPassword() {
 }
 
 .filter-select {
-  width: 130px;
+  width: 100px;
   height: 32px;
   font-size: 12px;
 }
@@ -502,6 +622,15 @@ async function handleResetPassword() {
   border: 1px solid var(--p-border-default);
   font-family: var(--font-mono, var(--p-mono));
   color: var(--p-text-secondary);
+}
+.perm-tag.active {
+  border-color: color-mix(in srgb, var(--p-color-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--p-color-primary) 6%, transparent);
+  color: var(--p-color-primary);
+}
+.more-tag {
+  cursor: pointer;
+  border-style: dashed;
 }
 
 .action-menu-wrap {
@@ -802,15 +931,157 @@ async function handleResetPassword() {
 }
 
 .btn-secondary {
-  background: var(--p-bg-hover);
+  background: var(--p-bg-page);
   border: 1px solid var(--p-border-default);
-  color: var(--p-text-secondary);
+  color: var(--p-text-primary);
 }
 
 .btn-sm {
   height: 28px;
   padding: 0 12px;
   font-size: 12px;
+}
+
+.picker-modal {
+  max-width: 640px;
+}
+.picker-search {
+  margin-bottom: 16px;
+}
+.picker-search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-md);
+  font-size: 13px;
+  outline: none;
+  background: var(--p-bg-input);
+  color: var(--p-text-primary);
+}
+.picker-search input:focus {
+  border-color: var(--p-color-primary);
+}
+.picker-group {
+  margin-bottom: 12px;
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-lg);
+  overflow: hidden;
+}
+.picker-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--p-bg-hover);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--p-text-primary);
+  user-select: none;
+  border-bottom: 1px solid var(--p-border-default);
+}
+.picker-group-header:hover {
+  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
+}
+.picker-group-header .group-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--p-color-primary);
+}
+.picker-group-header .group-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--p-text-tertiary);
+  font-weight: 400;
+}
+.picker-group-body {
+  padding: 6px 14px 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px;
+}
+.picker-cluster-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--p-radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--p-text-primary);
+  transition: background 0.1s;
+}
+.picker-cluster-item:hover {
+  background: var(--p-bg-hover);
+}
+.picker-cluster-item input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--p-color-primary);
+}
+.picker-cluster-name {
+  font-weight: 500;
+}
+.picker-cluster-tag {
+  font-size: 10px;
+  color: var(--p-text-tertiary);
+  margin-left: auto;
+  font-family: var(--font-mono, var(--p-mono));
+}
+
+.selected-clusters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  min-height: 28px;
+  align-items: center;
+}
+.selected-cluster-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  border: 1px solid var(--p-color-primary);
+  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
+  color: var(--p-color-primary);
+}
+.selected-cluster-tag .remove {
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.5;
+}
+.selected-cluster-tag .remove:hover {
+  opacity: 1;
+}
+.select-clusters-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px;
+  border: 1px dashed var(--p-border-default);
+  border-radius: var(--p-radius-md);
+  font-size: 12px;
+  color: var(--p-text-tertiary);
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.15s;
+  height: 28px;
+}
+.select-clusters-btn:hover {
+  border-color: var(--p-color-primary);
+  color: var(--p-color-primary);
+}
+.picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--p-border-divider);
 }
 
 @media (max-width: 768px) {

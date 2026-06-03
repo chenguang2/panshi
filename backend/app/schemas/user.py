@@ -35,6 +35,8 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     id: int
     created_at: Optional[str] = None
+    permissions: List[str] = []
+    cluster_ids: List[int] = []
 
     @field_validator('created_at', mode='before')
     @classmethod
