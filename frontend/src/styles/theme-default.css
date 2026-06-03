@@ -52,4 +52,7 @@ html.theme-default {
   --p-shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08);
   --p-shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.12);
   --p-shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  --font-display: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
 }

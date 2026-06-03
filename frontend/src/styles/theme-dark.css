@@ -48,4 +48,7 @@ html.theme-dark {
   --p-shadow-md: 0 2px 12px rgba(0, 0, 0, 0.3);
   --p-shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.4);
   --p-shadow-glass: 0 4px 24px rgba(0, 0, 0, 0.15);
+
+  --font-display: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
 }
