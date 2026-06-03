@@ -3,7 +3,6 @@ import { ref, computed, watch } from 'vue'
 
 export type ThemeColor = 'blue' | 'green' | 'purple' | 'orange' | 'red'
 export type ThemeStyle = 'modern' | 'default'
-export type LayoutMode = 'sidebar' | 'topnav' | 'fullwidth'
 
 const THEME_STORAGE_KEY = 'panshi_theme_prefs'
 
@@ -11,7 +10,6 @@ interface ThemePrefs {
   themeColor: ThemeColor
   darkMode: boolean
   style: ThemeStyle
-  layoutMode: LayoutMode
   sidebarCollapsed: boolean
 }
 
@@ -25,7 +23,7 @@ function loadPrefs(): ThemePrefs {
       return parsed
     }
   } catch { /* ignore */ }
-  return { themeColor: 'blue', darkMode: false, style: 'default', layoutMode: 'sidebar', sidebarCollapsed: false }
+  return { themeColor: 'blue', darkMode: false, style: 'default', sidebarCollapsed: false }
 }
 
 function savePrefs(prefs: ThemePrefs) {
@@ -82,7 +80,6 @@ export const useThemeStore = defineStore('theme', () => {
   const style = ref<ThemeStyle>(prefs.style)
   const themeColor = ref<ThemeColor>(prefs.themeColor)
   const darkMode = ref<boolean>(prefs.darkMode)
-  const layoutMode = ref<LayoutMode>(prefs.layoutMode)
   const sidebarCollapsed = ref<boolean>(prefs.sidebarCollapsed)
 
   /** The class to set on <html>: 'theme-light', 'theme-dark', or 'theme-default' */
@@ -95,11 +92,10 @@ export const useThemeStore = defineStore('theme', () => {
     themeColor: themeColor.value,
     darkMode: darkMode.value,
     style: style.value,
-    layoutMode: layoutMode.value,
     sidebarCollapsed: sidebarCollapsed.value,
   })
 
-  watch([themeColor, darkMode, style, layoutMode, sidebarCollapsed], persist, { deep: true })
+  watch([themeColor, darkMode, style, sidebarCollapsed], persist, { deep: true })
 
   // Sync html class with themeClass
   watch(themeClass, (cls) => {
@@ -111,7 +107,6 @@ export const useThemeStore = defineStore('theme', () => {
   const setThemeColor = (color: ThemeColor) => { themeColor.value = color }
   const toggleDarkMode = () => { darkMode.value = !darkMode.value }
   const setDarkMode = (val: boolean) => { darkMode.value = val }
-  const setLayoutMode = (mode: LayoutMode) => { layoutMode.value = mode }
   const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value }
   const setThemeStyle = (s: ThemeStyle) => { style.value = s }
 
@@ -119,13 +114,11 @@ export const useThemeStore = defineStore('theme', () => {
     style,
     themeColor,
     darkMode,
-    layoutMode,
     sidebarCollapsed,
     themeClass,
     setThemeColor,
     toggleDarkMode,
     setDarkMode,
-    setLayoutMode,
     toggleSidebar,
     setThemeStyle,
   }
