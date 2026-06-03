@@ -1,17 +1,15 @@
 <template>
   <div class="user-list">
-    <div class="header-actions">
-      <h2>用户管理</h2>
-      <a-button v-if="isAdmin" type="primary" @click="showAddModal">添加用户</a-button>
-    </div>
+    <PageHeader title="用户管理" description="管理系统用户账号和权限">
+      <template #actions>
+        <a-button v-if="isAdmin" type="primary" @click="showAddModal">添加用户</a-button>
+      </template>
+    </PageHeader>
 
-    <div class="table-wrapper">
-    <a-table :dataSource="users" :columns="columns" :loading="loading" :pagination="pagination">
+    <TableCard :columns="columns" :data-source="users" :loading="loading" :pagination="pagination">
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'status'">
-          <a-tag :color="record.status === 1 ? 'green' : 'red'">
-            {{ record.status === 1 ? '正常' : '禁用' }}
-          </a-tag>
+          <BadgeStatus :text="record.status === 1 ? '正常' : '禁用'" :status="record.status === 1 ? 'online' : 'offline'" />
         </template>
         <template v-if="column.key === 'action'">
           <a-space>
@@ -21,8 +19,7 @@
           </a-space>
         </template>
       </template>
-    </a-table>
-    </div>
+    </TableCard>
     <a-modal v-model:open="modalVisible" :title="editingUser ? '编辑用户' : '添加用户'" @ok="handleSubmit" width="700px">
       <a-tabs v-if="editingUser && form.role !== 'admin'" v-model:activeKey="userModalActiveTab">
         <a-tab-pane key="basic" tab="基本信息">
@@ -90,6 +87,9 @@ import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import PageHeader from '@/components/PageHeader.vue'
+import TableCard from '@/components/TableCard.vue'
+import BadgeStatus from '@/components/BadgeStatus.vue'
 
 const authStore = useAuthStore()
 

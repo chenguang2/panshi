@@ -1,21 +1,17 @@
 <template>
   <div class="plugin-switches">
-    <div class="header-actions">
-      <h2>插件管理</h2>
-      <a-button type="primary" @click="saveSwitches" :loading="saving">保存设置</a-button>
-    </div>
+    <PageHeader title="插件管理" description="开关控制各插件的启用状态，未勾选的插件在路由和插件组中不可见">
+      <template #actions>
+        <a-button type="primary" @click="saveSwitches" :loading="saving">保存设置</a-button>
+      </template>
+    </PageHeader>
 
-    <div class="hint">
-      勾选需要启用的插件。未勾选的插件在路由和插件组中不可见。<br/>
-      如果下方列表为空，系统会显示全部插件。
-    </div>
-
-    <a-table
-      :dataSource="switchList"
+    <TableCard
       :columns="columns"
+      :data-source="switchList"
       :loading="loading"
       :pagination="false"
-      rowKey="plugin_name"
+      row-key="plugin_name"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'enabled'">
@@ -29,7 +25,7 @@
           <span class="plugin-desc">{{ getPluginDescription(record.plugin_name) }}</span>
         </template>
       </template>
-    </a-table>
+    </TableCard>
   </div>
 </template>
 
@@ -37,6 +33,8 @@
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import PageHeader from '@/components/PageHeader.vue'
+import TableCard from '@/components/TableCard.vue'
 
 interface SwitchItem {
   plugin_name: string
