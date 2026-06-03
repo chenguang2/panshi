@@ -44,11 +44,14 @@
           />
         </template>
         <template v-if="column.key === 'permissions'">
-          <span v-if="record.role === 'admin'" class="text-muted text-sm">—</span>
-          <template v-else>
-            <span v-for="p in getUserPermLabels(record)" :key="p" class="perm-tag">{{ p }}</span>
-            <span v-if="!getUserPermLabels(record).length" class="text-muted text-sm">—</span>
-          </template>
+          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
+          <span v-else class="text-muted text-sm">在编辑中设置</span>
+        </template>
+        <template v-if="column.key === 'clusters'">
+          <span v-if="(record as any).clusters?.length" class="text-muted text-sm">
+            <span v-for="c in (record as any).clusters" :key="c" class="perm-tag">{{ getClusterName(c) }}</span>
+          </span>
+          <span v-else class="text-muted text-sm">{{ record.role === 'admin' ? '全部集群' : '—' }}</span>
         </template>
         <template v-if="column.key === 'created_at'">
           <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
@@ -169,6 +172,12 @@ const editingUser = ref<User | null>(null)
 const resetPwdValue = ref('')
 
 const isAdmin = computed(() => authStore.user?.role === 'admin')
+const clusters = ref<{id: number; name: string; display_name?: string}[]>([])
+
+function getClusterName(clusterId: number): string {
+  const c = clusters.value.find(c => c.id === clusterId)
+  return c?.display_name || c?.name || `集群#${clusterId}`
+}
 
 const allPermissions = ref([
   { key: 'plugin_groups', label: '插件组管理', checked: false },
@@ -191,18 +200,6 @@ function formatDate(dateStr: string): string {
   } catch { return dateStr }
 }
 
-const permLabelMap: Record<string, string> = {
-  plugin_groups: '插件组管理',
-  global_rules: '全局规则管理',
-  edge_nodes: '边缘节点管理',
-  plugin_management: '插件管理',
-}
-
-function getUserPermLabels(user: User): string[] {
-  if (user.role === 'admin') return []
-  return (user as any).permissions?.map((p: string) => permLabelMap[p] || p) || []
-}
-
 const permissionKeyToLabel: Record<string, string> = {
   plugin_groups: '插件组管理',
   global_rules: '全局规则管理',
@@ -217,6 +214,7 @@ const tableColumns = computed(() => {
     { title: '角色', key: 'role' },
     { title: '状态', key: 'status' },
     { title: '权限', key: 'permissions' },
+    { title: '可访问集群', key: 'clusters' },
     { title: '创建时间', key: 'created_at' },
   ]
   if (isAdmin.value) {
@@ -285,13 +283,12 @@ onUnmounted(() => {
 async function loadUsers() {
   loading.value = true
   try {
-    if (isAdmin.value) {
-      const res = await api.get('/admin/users')
-      allUsers.value = res.data.items || []
-    } else {
-      const res = await api.get('/admin/users/me')
-      allUsers.value = [res.data]
-    }
+    const [userRes, clusterRes] = await Promise.all([
+      isAdmin.value ? api.get('/admin/users') : api.get('/admin/users/me'),
+      api.get('/clusters').catch(() => ({ data: { items: [] } })),
+    ])
+    allUsers.value = userRes.data.items || (userRes.data.items === undefined ? [userRes.data] : [])
+    clusters.value = clusterRes.data.items || []
   } catch {
     message.error('加载用户列表失败')
   } finally {
@@ -437,7 +434,7 @@ async function handleResetPassword() {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .search-input-wrap {

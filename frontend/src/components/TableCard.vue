@@ -32,7 +32,6 @@ defineOptions({ inheritAttrs: false })
   border: 1px solid var(--p-glass-border);
   border-radius: var(--p-radius-lg);
   box-shadow: var(--p-shadow-glass);
-  overflow: hidden;
 }
 
 .table-card-header {
