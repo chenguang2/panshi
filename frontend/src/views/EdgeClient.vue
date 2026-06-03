@@ -1,5 +1,6 @@
 <template>
   <div class="edge-client">
+    <PageHeader title="Edge 直连" description="直接连接边缘节点进行调试和数据查询" />
     <a-alert
       message="调试模式"
       description="此处操作绕过正常同步流程，直接修改边缘节点数据"
@@ -9,7 +10,7 @@
       style="margin-bottom: 16px;"
     />
 
-    <a-card>
+    <a-card class="node-selector-card">
       <div class="node-selector">
         <a-radio-group v-model:value="inputMode" style="margin-right: 16px;">
           <a-radio value="cluster">按集群选择</a-radio>
@@ -242,7 +243,7 @@
                 <span style="font-size: 12px;">{{ record.key?.split('/').pop() || '-' }}</span>
               </template>
               <template v-if="column.key === 'config'">
-                <pre style="max-width: 400px; overflow: auto; font-size: 11px;">{{ JSON.stringify(record.value, null, 2) }}</pre>
+                <pre class="json-viewer-inline">{{ JSON.stringify(record.value, null, 2) }}</pre>
               </template>
               <template v-if="column.key === 'actions'">
                 <a-space>
@@ -415,7 +416,7 @@
       :footer="null"
       width="700px"
     >
-      <pre style="max-height: 500px; overflow: auto; background: var(--p-bg-hover); padding: 16px; border-radius: 4px; font-size: 12px;">{{ jsonContent }}</pre>
+      <pre class="json-viewer">{{ jsonContent }}</pre>
     </a-modal>
 
     <a-modal
@@ -479,6 +480,7 @@ import { h, ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
 import { message, Modal, Progress } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
+import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
@@ -1617,5 +1619,48 @@ watch(selectedNode, async (_newNode) => {
 .edge-client .plugin-card.selected {
   border-color: var(--p-color-primary) !important;
   background: var(--p-color-primary-bg) !important;
+}
+
+.node-selector-card {
+  border-radius: var(--p-radius-lg);
+  box-shadow: var(--p-shadow-glass);
+  margin-bottom: 16px;
+}
+
+.json-viewer {
+  max-height: 500px;
+  overflow: auto;
+  background: #1a1b1e;
+  color: #e0e0e0;
+  padding: 16px;
+  border-radius: var(--p-radius-md);
+  font-size: 12px;
+  font-family: var(--font-mono, var(--p-mono));
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.json-viewer-inline {
+  max-width: 400px;
+  overflow: auto;
+  font-size: 11px;
+  font-family: var(--font-mono, var(--p-mono));
+  background: transparent;
+  color: var(--p-text-secondary);
+}
+
+:deep(.json-viewer) {
+  max-height: 500px;
+  overflow: auto;
+  background: #1a1b1e;
+  color: #e0e0e0;
+  padding: 16px;
+  border-radius: var(--p-radius-md);
+  font-size: 12px;
+  font-family: var(--font-mono, var(--p-mono));
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

@@ -222,14 +222,19 @@ watch(() => props.visible, async (val) => {
   display: flex;
   gap: 24px;
   padding: 16px;
-  background: var(--p-bg-hover);
-  border: 1px solid var(--p-border-default);
+  background: var(--p-bg-glass);
+  border: 1px solid var(--p-glass-border);
   border-radius: var(--p-radius-lg);
+  box-shadow: var(--p-shadow-glass);
   margin-bottom: 12px;
 }
 .summary-bar :deep(.ant-statistic) {
   flex: 1;
   text-align: center;
+}
+.summary-bar :deep(.ant-statistic-content) {
+  font-family: var(--font-mono, var(--p-mono));
+  font-size: 22px;
 }
 
 .node-addr-info {

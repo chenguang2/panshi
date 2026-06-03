@@ -1,7 +1,6 @@
 <template>
   <div class="edge-import">
-    <h2>Edge 数据导入</h2>
-
+    <PageHeader title="Edge 数据导入" description="从 Edge 节点批量导入配置数据到本地数据库" />
     <a-steps :current="currentStep" style="margin-bottom: 24px;">
       <a-step title="选择集群" />
       <a-step title="选择节点" />
@@ -473,6 +472,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
+import PageHeader from '@/components/PageHeader.vue'
 import type {
   TestConnectionResponse,
   PreviewResponse,
@@ -842,5 +842,51 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   padding: 48px 0;
+}
+
+/* Wizard steps card style */
+:deep(.ant-steps .ant-steps-item) {
+  flex: 1;
+}
+:deep(.ant-steps .ant-steps-item-container) {
+  background: var(--p-bg-glass);
+  border: 1px solid var(--p-border-default);
+  border-radius: var(--p-radius-md);
+  padding: 12px 16px;
+  transition: all 0.2s;
+}
+:deep(.ant-steps .ant-steps-item-process .ant-steps-item-container) {
+  border-color: var(--p-color-primary);
+  background: color-mix(in srgb, var(--p-color-primary) 6%, transparent);
+}
+:deep(.ant-steps .ant-steps-item-finish .ant-steps-item-container) {
+  border-color: var(--p-color-success);
+  background: color-mix(in srgb, var(--p-color-success) 6%, transparent);
+}
+:deep(.ant-steps .ant-steps-item-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+:deep(.ant-steps .ant-steps-item-process .ant-steps-item-icon) {
+  background: var(--p-color-primary);
+  border-color: var(--p-color-primary);
+}
+:deep(.ant-steps .ant-steps-item-finish .ant-steps-item-icon) {
+  background: var(--p-color-success);
+  border-color: var(--p-color-success);
+}
+:deep(.ant-steps .ant-steps-item-content .ant-steps-item-title) {
+  font-size: 13px;
+  font-weight: 500;
+}
+:deep(.ant-steps .ant-steps-item-tail) {
+  display: none;
 }
 </style>

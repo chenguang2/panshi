@@ -279,6 +279,14 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   color: var(--p-text-inverse);
 }
 
+.tool-panel {
+  background: var(--p-bg-glass-table);
+  border: 1px solid var(--p-glass-border);
+  border-radius: var(--p-radius-lg);
+  box-shadow: var(--p-shadow-glass);
+  padding: 24px;
+}
+
 .tools-content {
   padding: 24px;
   overflow-y: auto;
