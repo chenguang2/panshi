@@ -88,7 +88,7 @@
           </a-tag>
         </template>
         <template v-if="column.key === 'status'">
-          <a-badge :status="record.status === 1 ? 'success' : 'error'" :text="record.status === 1 ? '正常' : '禁用'" />
+          <BadgeStatus :text="record.status === 1 ? '正常' : '禁用'" :status="record.status === 1 ? 'online' : 'offline'" />
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in routeActionsSelected" :key="btnKey">
@@ -232,6 +232,7 @@ import { ref, computed, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
 import type { Cluster } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
+import BadgeStatus from '@/components/BadgeStatus.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'

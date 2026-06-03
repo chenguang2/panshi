@@ -86,9 +86,9 @@
           {{ record.status_detail?.statistic?.edge_version || '-' }}
         </template>
         <template v-if="column.key === 'status'">
-          <a-badge
-            :status="nginxRunning(record) ? 'success' : 'error'"
+          <BadgeStatus
             :text="nginxRunning(record) ? '健康' : '离线'"
+            :status="nginxRunning(record) ? 'online' : 'offline'"
           />
         </template>
         <template v-if="column.key === 'actions'">
@@ -159,6 +159,7 @@
 import { computed } from 'vue'
 import { DownOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
+import BadgeStatus from '@/components/BadgeStatus.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
