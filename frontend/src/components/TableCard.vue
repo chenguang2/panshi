@@ -4,7 +4,17 @@
       <slot name="header" />
     </div>
     <div class="table-card-body">
-      <a-table v-bind="$attrs" />
+      <a-table v-bind="$attrs">
+        <template #bodyCell="args">
+          <slot name="bodyCell" v-bind="args" />
+        </template>
+        <template #headerCell="args">
+          <slot name="headerCell" v-bind="args" />
+        </template>
+        <template #customFilterDropdown="args">
+          <slot name="customFilterDropdown" v-bind="args" />
+        </template>
+      </a-table>
     </div>
     <div v-if="$slots.footer" class="table-card-footer">
       <slot name="footer" />

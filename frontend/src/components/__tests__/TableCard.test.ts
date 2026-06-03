@@ -3,7 +3,12 @@ import { mount } from '@vue/test-utils'
 import TableCard from '../TableCard.vue'
 
 describe('TableCard.vue', () => {
-  const stubs = { ATable: { template: '<div class="mock-table" />' } }
+  const stubs = {
+    ATable: {
+      template: '<div class="mock-table"><slot name="bodyCell" /><slot name="headerCell" /></div>',
+      props: ['columns', 'dataSource', 'loading', 'pagination', 'rowKey']
+    }
+  }
 
   it('renders with table-card wrapper class', () => {
     const wrapper = mount(TableCard, {
@@ -27,5 +32,26 @@ describe('TableCard.vue', () => {
       global: { stubs }
     })
     expect(wrapper.find('.custom-footer').exists()).toBe(true)
+  })
+
+  it('forwards bodyCell slot to inner a-table', () => {
+    const wrapper = mount(TableCard, {
+      props: { columns: [], dataSource: [] },
+      slots: { bodyCell: '<div class="custom-bodycell">cell</div>' },
+      global: { stubs }
+    })
+    expect(wrapper.find('.custom-bodycell').exists()).toBe(true)
+  })
+
+  it('does not forward header slot to inner a-table', () => {
+    const wrapper = mount(TableCard, {
+      props: { columns: [], dataSource: [] },
+      slots: { header: '<div class="custom-hdr">hdr</div>', bodyCell: '<div class="custom-bc">bc</div>' },
+      global: { stubs }
+    })
+    // header should be rendered by TableCard itself (outside the mock-table)
+    expect(wrapper.find('.custom-hdr').exists()).toBe(true)
+    // bodyCell should be forwarded to the mock-table
+    expect(wrapper.find('.custom-bc').exists()).toBe(true)
   })
 })

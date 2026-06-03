@@ -4,13 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [
-    vue({
-      template: {
-        compilerOptions: {
-          isCustomElement: (tag) => tag.startsWith('a-')
-        }
-      }
-    })
+    vue()
   ],
   resolve: {
     alias: {
