@@ -1,127 +1,67 @@
 <template>
   <div class="dashboard">
-    <!-- Background tech elements (matching login page style) -->
-    <div class="bg-grid"></div>
-    <div class="bg-orb bg-orb-1"></div>
-    <div class="bg-orb bg-orb-2"></div>
-    <div class="bg-orb bg-orb-3"></div>
+    <PageHeader title="概览" description="网关运行状态概览" />
 
-    <div class="dash-content">
-      <h2>仪表盘</h2>
+    <div class="stats-grid">
+      <StatCard :value="String(stats.clusters)" label="集群" subtitle="多集群管理" accent="cluster">
+        <template #icon><span class="stat-icon cluster">&#x25C6;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.routes)" label="路由" subtitle="API 路由规则" accent="route">
+        <template #icon><span class="stat-icon route">&#x25C7;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.upstreams)" label="上游" subtitle="后端服务" accent="upstream">
+        <template #icon><span class="stat-icon upstream">&#x25CE;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.plugin_configs)" label="插件组" subtitle="插件配置" accent="plugin">
+        <template #icon><span class="stat-icon plugin">&#x25B2;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.global_rules)" label="全局规则" subtitle="全局插件规则" accent="global">
+        <template #icon><span class="stat-icon global">&#x229E;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.static_resources)" label="静态资源" subtitle="ZIP 资源文件" accent="node">
+        <template #icon><span class="stat-icon resource">&#x25A3;</span></template>
+      </StatCard>
+      <StatCard :value="String(stats.users)" label="用户" subtitle="系统用户" accent="user">
+        <template #icon><span class="stat-icon user">&#x25A0;</span></template>
+      </StatCard>
+    </div>
 
-      <a-row :gutter="16" class="stats-row">
-        <a-col :span="3">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">集群总数</div>
-              <div class="stat-value">{{ stats.clusters }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="3">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">上游总数</div>
-              <div class="stat-value">{{ stats.upstreams }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="3">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">路由总数</div>
-              <div class="stat-value">{{ stats.routes }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="3">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">用户总数</div>
-              <div class="stat-value">{{ stats.users }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="4">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">插件组</div>
-              <div class="stat-value">{{ stats.plugin_configs }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="4">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">全局规则</div>
-              <div class="stat-value">{{ stats.global_rules }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="4">
-          <div class="glass-stat-card">
-            <div class="stat-card-body">
-              <div class="stat-label">静态资源</div>
-              <div class="stat-value">{{ stats.static_resources }}</div>
-              <div class="stat-accent"></div>
-            </div>
-          </div>
-        </a-col>
-      </a-row>
+    <div class="dashboard-columns">
+      <TableCard :columns="routeColumns" :data-source="recentRoutes" :pagination="false" size="small">
+        <template #header>
+          <span class="table-card-title">最近路由</span>
+          <span class="table-card-count">共 {{ recentRoutes.length }} 条</span>
+        </template>
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <BadgeStatus
+              :text="record.status === 1 ? '启用' : '禁用'"
+              :status="record.status === 1 ? 'online' : 'offline'"
+            />
+          </template>
+        </template>
+        <template #footer>
+          <router-link to="/clusters" class="table-card-link">查看全部路由 &rarr;</router-link>
+        </template>
+      </TableCard>
 
-      <a-row :gutter="16" class="content-row">
-        <a-col :span="12">
-          <div class="glass-table-card">
-            <div class="table-card-header">最近路由</div>
-            <div class="table-card-body">
-              <a-table
-                :dataSource="recentRoutes"
-                :columns="routeColumns"
-                :pagination="false"
-                size="small"
-                class="dark-table"
-              >
-                <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'status'">
-                    <a-tag :color="record.status === 1 ? '#237804' : '#a8071a'">
-                      {{ record.status === 1 ? '正常' : '禁用' }}
-                    </a-tag>
-                  </template>
-                </template>
-              </a-table>
-            </div>
-          </div>
-        </a-col>
-        <a-col :span="12">
-          <div class="glass-table-card">
-            <div class="table-card-header">集群状态</div>
-            <div class="table-card-body">
-              <a-table
-                :dataSource="clusterStatus"
-                :columns="clusterColumns"
-                :pagination="false"
-                size="small"
-                class="dark-table"
-              >
-                <template #bodyCell="{ column, record }">
-                  <template v-if="column.key === 'status'">
-                    <span :class="record.status === 1 ? 'status-ok' : 'status-err'">
-                      <span class="status-dot" :class="record.status === 1 ? 'dot-ok' : 'dot-err'"></span>
-                      {{ record.status === 1 ? '健康' : '离线' }}
-                    </span>
-                  </template>
-                </template>
-              </a-table>
-            </div>
-          </div>
-        </a-col>
-      </a-row>
+      <TableCard :columns="clusterColumns" :data-source="clusterStatus" :pagination="false" size="small">
+        <template #header>
+          <span class="table-card-title">集群状态</span>
+          <span class="table-card-count">共 {{ clusterStatus.length }} 个</span>
+        </template>
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'status'">
+            <BadgeStatus
+              :text="record.status === 1 ? '正常运行' : '离线'"
+              :status="record.status === 1 ? 'online' : 'offline'"
+            />
+          </template>
+        </template>
+        <template #footer>
+          <router-link to="/clusters" class="table-card-link">查看全部集群 &rarr;</router-link>
+        </template>
+      </TableCard>
     </div>
   </div>
 </template>
@@ -129,6 +69,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
+import TableCard from '@/components/TableCard.vue'
+import BadgeStatus from '@/components/BadgeStatus.vue'
 
 const stats = ref({
   clusters: 0,
@@ -175,218 +119,67 @@ onMounted(async () => {
 <style scoped>
 .dashboard {
   position: relative;
-  min-height: calc(100vh - 56px - 40px);
-  margin: -20px -24px;
-  padding: 20px 24px;
-  overflow: hidden;
-  background: var(--p-bg-page);
 }
 
-.ambient {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 0;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.ambient-1 {
-  width: 600px;
-  height: 600px;
-  left: -200px;
-  top: -100px;
-  background: radial-gradient(circle, var(--p-color-primary-bg) 0%, transparent 60%);
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--p-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
-.ambient-2 {
-  width: 500px;
-  height: 500px;
-  right: -150px;
-  bottom: -50px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--p-color-info) 8%, transparent) 0%, transparent 60%);
+.stat-icon.cluster { background: color-mix(in srgb, var(--p-color-primary) 12%, transparent); color: var(--p-color-primary); }
+.stat-icon.route { background: color-mix(in srgb, var(--p-color-success) 12%, transparent); color: var(--p-color-success); }
+.stat-icon.upstream { background: color-mix(in srgb, var(--p-color-warning) 12%, transparent); color: var(--p-color-warning); }
+.stat-icon.plugin { background: color-mix(in srgb, #7c3aed 12%, transparent); color: #7c3aed; }
+.stat-icon.global { background: color-mix(in srgb, #52c41a 12%, transparent); color: #52c41a; }
+.stat-icon.resource { background: color-mix(in srgb, var(--p-color-info) 12%, transparent); color: var(--p-color-info); }
+.stat-icon.user { background: color-mix(in srgb, var(--p-color-danger) 12%, transparent); color: var(--p-color-danger); }
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
-.dash-content {
-  position: relative;
-  z-index: 1;
-}
-
-h2 {
-  margin-bottom: 16px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--p-text-primary);
-}
-
-.stats-row {
-  margin-bottom: 16px;
-}
-
-.glass-stat-card {
-  height: 100%;
-  background: transparent;
-  border-radius: var(--p-radius-lg);
-  background: var(--p-bg-glass);
-  backdrop-filter: blur(var(--p-glass-blur));
-  -webkit-backdrop-filter: blur(var(--p-glass-blur));
-  border: 1px solid var(--p-glass-border);
-  box-shadow: var(--p-shadow-glass);
-  transition: transform 0.25s, box-shadow 0.25s;
-  overflow: hidden;
-  position: relative;
-}
-
-.glass-stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--p-shadow-lg);
-  border-color: var(--p-color-primary);
-}
-
-.stat-card-body {
-  padding: 22px 24px 26px;
-  position: relative;
-}
-
-.stat-card-body::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--p-color-primary), var(--p-color-info));
-  opacity: 0.5;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: var(--p-text-secondary);
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-}
-
-.stat-value {
-  font-size: 30px;
-  font-weight: 700;
-  color: var(--p-color-primary);
-  line-height: 1.2;
-  letter-spacing: 1px;
-}
-
-.stat-accent {
-  position: absolute;
-  bottom: 0;
-  left: 24px;
-  right: 24px;
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--p-color-primary), var(--p-color-info), transparent);
-  opacity: 0.4;
-}
-
-.glass-table-card {
-  height: 100%;
-  border-radius: var(--p-radius-lg);
-  background: var(--p-bg-glass-table);
-  backdrop-filter: blur(var(--p-glass-blur));
-  -webkit-backdrop-filter: blur(var(--p-glass-blur));
-  border: 1px solid var(--p-glass-border);
-  box-shadow: var(--p-shadow-glass);
-  overflow: hidden;
-}
-
-.table-card-header {
-  position: relative;
-  padding: 16px 20px;
+.table-card-title {
   font-size: 14px;
   font-weight: 600;
   color: var(--p-text-primary);
-  letter-spacing: 0.3px;
 }
 
-.table-card-header::after {
-  content: '';
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 0;
-  height: 1px;
-  background: linear-gradient(90deg, var(--p-border-divider), transparent);
-}
-
-.table-card-body {
-  padding: 0;
-}
-
-.content-row {
-  margin-top: 16px;
-}
-
-:deep(.dark-table) .ant-table {
-  background: transparent !important;
-}
-
-:deep(.dark-table) .ant-table-thead > tr > th {
-  background: var(--p-color-primary-bg) !important;
-  border-bottom: 2px solid var(--p-color-primary) !important;
-  color: var(--p-text-primary) !important;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 10px 16px;
-}
-
-:deep(.dark-table) .ant-table-thead > tr > th:not(:last-child)::after {
-  display: none !important;
-}
-
-:deep(.dark-table) .ant-table-tbody > tr > td {
-  background: transparent !important;
-  border-bottom: none !important;
-  padding: 10px 16px;
-  color: var(--p-text-secondary);
-}
-
-:deep(.dark-table) .ant-table-tbody > tr:nth-child(even) > td {
-  background: var(--p-bg-hover) !important;
-}
-
-:deep(.dark-table) .ant-table-tbody > tr:hover > td {
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent) !important;
-}
-
-:deep(.dark-table) .ant-tag {
-  border: none;
+.table-card-count {
+  font-size: 11px;
+  color: var(--p-text-tertiary);
+  font-family: var(--font-mono, var(--p-mono));
   font-weight: 500;
-  border-radius: var(--p-radius-sm);
-  padding: 1px 8px;
-  line-height: 20px;
-  height: 22px;
 }
 
-:deep(.dark-table) .ant-table-placeholder .ant-empty-description {
-  color: var(--p-text-disabled) !important;
+.table-card-link {
+  font-size: 12px;
+  color: var(--p-color-primary);
+  text-decoration: none;
+  font-weight: 500;
 }
 
-.status-ok { color: var(--p-color-success); }
-.status-err { color: var(--p-color-danger); }
-
-.status-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 6px;
-  vertical-align: middle;
-  position: relative;
-  top: -1px;
+.table-card-link:hover {
+  text-decoration: underline;
 }
 
-.dot-ok {
-  background: var(--p-color-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-success) 50%, transparent);
-}
-
-.dot-err {
-  background: var(--p-color-danger);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-danger) 50%, transparent);
+@media (max-width: 900px) {
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
