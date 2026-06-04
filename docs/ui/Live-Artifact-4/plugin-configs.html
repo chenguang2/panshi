@@ -1,0 +1,766 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 插件组</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* ===========================
+       Plugin Configs Specific
+       =========================== */
+    .pc-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .pc-header-actions .cluster-select { min-width: 200px; }
+    .pc-header-actions .search-input-wrap input { width: 240px; }
+    .pc-summary { display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px; color: var(--muted); }
+    .pc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+    .pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+    .pc-card:hover { box-shadow: var(--shadow-md); }
+    .pc-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .pc-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .pc-card-meta { text-align: right; }
+    .pc-card-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+    .pc-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .pc-plugin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); cursor: pointer; font-family: var(--font-mono); }
+    .pc-plugin-tag:hover { background: oklch(56% 0.16 210 / 18%); }
+    .pc-no-plugins { font-size: 11px; color: var(--muted); font-style: italic; }
+    .pc-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+    .pc-version-box { display: none; margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; font-family: var(--font-mono); font-size: 11px; max-height: 200px; overflow-y: auto; }
+    .pc-version-box.visible { display: block; }
+    .pc-version-item { padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .pc-version-item:last-child { border-bottom: none; }
+    .pc-version-actions { display: flex; gap: 4px; }
+    .pc-preview { font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: var(--radius-md); max-height: 400px; overflow-y: auto; color: var(--muted); border: 1px solid var(--border); font-family: var(--font-mono); line-height: 1.5; }
+    .pc-tab-content { padding: 16px 0; }
+    .pc-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
+    .pc-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
+    .pc-empty-text { font-size: 14px; color: var(--muted); }
+    @media (max-width: 768px) {
+      .pc-grid { grid-template-columns: 1fr; }
+      .pc-header-actions { flex-direction: column; align-items: stretch; }
+      .pc-header-actions .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- =========================== -->
+  <!-- SIDEBAR                      -->
+  <!-- =========================== -->
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item active" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- =========================== -->
+    <!-- MAIN AREA                   -->
+    <!-- =========================== -->
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>插件组</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- =========================== -->
+        <!-- Page Header                 -->
+        <!-- =========================== -->
+        <div class="page-header">
+          <div>
+            <h1>插件组</h1>
+            <p>管理集群级的插件组配置。插件组是一组可复用的插件配置集合，可被多个路由引用。</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary" onclick="openAddPC()">+ 添加插件组</button>
+          </div>
+        </div>
+
+        <!-- =========================== -->
+        <!-- Filter Bar + Cluster Select -->
+        <!-- =========================== -->
+        <div class="pc-header-actions">
+          <div class="form-group" style="margin:0;min-width:200px;">
+            <select class="form-input" id="clusterSelect" onchange="onClusterChange()">
+              <option value="">— 选择集群 —</option>
+            </select>
+          </div>
+          <div class="search-input-wrap">
+            <input type="text" id="pcSearch" placeholder="搜索插件组名称..." oninput="filterPC()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <span class="text-sm text-muted" id="pcCount"></span>
+        </div>
+
+        <!-- =========================== -->
+        <!-- Plugin Config Grid          -->
+        <!-- =========================== -->
+        <div class="pc-grid" id="pcGrid"></div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- ADD / EDIT PLUGIN CONFIG     -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="pcModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="pcModalTitle">添加插件组</h2>
+        <button class="modal-close" onclick="closeModal('pcModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tabs" id="pcFormTabs">
+          <div class="tab-list">
+            <button class="tab-item active" data-tab="pc-basic" onclick="switchTab(this, 'pc-basic')">基础配置</button>
+            <button class="tab-item" data-tab="pc-plugins" onclick="switchTab(this, 'pc-plugins')">插件配置</button>
+          </div>
+          <div class="tab-panel active" id="pc-basic">
+            <div class="form-group">
+              <label class="form-label">名称 <span class="required">*</span></label>
+              <input type="text" id="pcFormName" class="form-input" placeholder="rate-limit-config">
+              <div class="form-hint">1-100 字符，标识插件组的名称</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">描述</label>
+              <textarea id="pcFormDesc" class="form-input" placeholder="限流配置组，用于 API 路由" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="tab-panel" id="pc-plugins">
+            <div class="form-hint" style="margin-bottom:12px;">选择插件并为每个插件填写配置（JSON 格式）</div>
+            <div id="pcPluginSelector"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('pcModal')">取消</button>
+        <button class="btn btn-primary" onclick="savePC()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VIEW PLUGIN CONFIG DRAWER   -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="viewPcModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="viewPcTitle">查看插件组</h2>
+        <button class="modal-close" onclick="closeModal('viewPcModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="viewPcBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('viewPcModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- DELETE CONFIRM              -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="deletePcModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>确认删除</h2>
+        <button class="modal-close" onclick="closeModal('deletePcModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="deletePcText" style="margin-bottom:12px;"></p>
+        <div class="form-group">
+          <label class="checkbox-label" style="margin-bottom:8px;">
+            <input type="checkbox" id="deletePcDb" checked> <span>删除数据库记录</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="deletePcEdge"> <span>删除 Edge 节点数据</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('deletePcModal')">取消</button>
+        <button class="btn btn-danger" onclick="confirmDeletePC()">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- PUBLISH MODAL               -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="publishPcModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="publishPcTitle">发布插件组</h2>
+        <button class="modal-close" onclick="closeModal('publishPcModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;font-size:13px;color:var(--muted);">选择要发布到的 Edge 节点：</p>
+        <div id="publishPcNodeList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('publishPcModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmPublishPC()">发布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VERSION MANAGEMENT MODAL    -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="versionPcModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="versionPcTitle">版本管理</h2>
+        <button class="modal-close" onclick="closeModal('versionPcModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="versionPcBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('versionPcModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VIEW PLUGIN CONFIG MODAL   -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="viewPluginConfigModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="viewPluginConfigTitle">查看插件配置</h2>
+        <button class="modal-close" onclick="closeModal('viewPluginConfigModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre id="viewPluginConfigBody" class="pc-preview"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('viewPluginConfigModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      // ===========================
+      // Mock Data
+      // ===========================
+      var clusters = [
+        { id: 1, name: 'prod-cluster', display_name: '生产集群', nodes: [
+          { ip: '10.0.0.1', port: 9180 }, { ip: '10.0.0.2', port: 9180 }, { ip: '10.0.0.3', port: 9180 }
+        ]},
+        { id: 2, name: 'staging-cluster', display_name: '预发集群', nodes: [
+          { ip: '10.0.1.1', port: 9180 }, { ip: '10.0.1.2', port: 9180 }
+        ]},
+        { id: 3, name: 'dev-cluster', display_name: '开发集群', nodes: [
+          { ip: '10.0.2.1', port: 9180 }
+        ]}
+      ];
+
+      var availablePlugins = [
+        { name: 'limit-req', display_name: '限流', category: 'security' },
+        { name: 'cors', display_name: '跨域', category: 'security' },
+        { name: 'rate-limiting', display_name: '速率限制', category: 'traffic' },
+        { name: 'key-auth', display_name: '密钥认证', category: 'auth' },
+        { name: 'jwt-auth', display_name: 'JWT 认证', category: 'auth' },
+        { name: 'basic-auth', display_name: '基础认证', category: 'auth' },
+        { name: 'ip-restriction', display_name: 'IP 限制', category: 'security' },
+        { name: 'ua-restriction', display_name: 'UA 限制', category: 'security' },
+        { name: 'referer-restriction', display_name: 'Referer 限制', category: 'security' },
+        { name: 'proxy-cache', display_name: '代理缓存', category: 'cache' },
+        { name: 'body-transformer', display_name: '请求体转换', category: 'transform' },
+        { name: 'response-transformer', display_name: '响应转换', category: 'transform' },
+        { name: 'traceid', display_name: '链路追踪 ID', category: 'observability' },
+        { name: 'monitor', display_name: '监控', category: 'observability' },
+        { name: 'prometheus', display_name: 'Prometheus', category: 'observability' },
+        { name: 'syslog', display_name: 'Syslog', category: 'logging' },
+        { name: 'loggly', display_name: 'Loggly', category: 'logging' },
+        { name: 'http-log', display_name: 'HTTP 日志', category: 'logging' },
+        { name: 'datadog', display_name: 'Datadog', category: 'observability' },
+        { name: 'aws-lambda', display_name: 'AWS Lambda', category: 'serverless' },
+        { name: 'azure-functions', display_name: 'Azure Functions', category: 'serverless' },
+        { name: 'openwhisk', display_name: 'OpenWhisk', category: 'serverless' },
+        { name: 'serverless-pre-function', display_name: 'Serverless Pre-Func', category: 'serverless' },
+        { name: 'serverless-post-function', display_name: 'Serverless Post-Func', category: 'serverless' },
+        { name: 'kafka-log', display_name: 'Kafka 日志', category: 'logging' },
+        { name: 'kafka-upstream', display_name: 'Kafka 上游', category: 'integration' },
+        { name: 'sentry', display_name: 'Sentry', category: 'observability' },
+        { name: 'zipkin', display_name: 'Zipkin', category: 'observability' },
+        { name: 'opentelemetry', display_name: 'OpenTelemetry', category: 'observability' },
+        { name: 'acme', display_name: 'ACME', category: 'security' },
+        { name: 'real-ip', display_name: '真实 IP', category: 'security' },
+        { name: 'static-resource', display_name: '静态资源', category: 'serve' }
+      ];
+
+      var mockPCs = [
+        { id: 1, cluster_id: 1, edge_uuid: 'pc-uuid-001', name: 'rate-limit-config', description: 'API 限流配置，限制每个用户每秒最多 100 请求', plugins: { 'limit-req': { rate: 100, burst: 200 } }, current_version: 3, published_at: '2024-03-15T10:30:00Z', created_at: '2024-01-10T08:00:00Z' },
+        { id: 2, cluster_id: 1, edge_uuid: 'pc-uuid-002', name: 'cors-config', description: '全局 CORS 跨域配置，允许所有来源', plugins: { 'cors': { allow_origins: '*', allow_methods: 'GET,POST,PUT,DELETE', allow_headers: '*' } }, current_version: 1, published_at: null, created_at: '2024-02-05T09:00:00Z' },
+        { id: 3, cluster_id: 1, edge_uuid: 'pc-uuid-003', name: 'auth-combo', description: '认证组合配置：JWT + IP 限制', plugins: { 'jwt-auth': { token_type: 'Bearer' }, 'ip-restriction': { whitelist: ['10.0.0.0/8', '172.16.0.0/12'] } }, current_version: 2, published_at: '2024-03-20T14:00:00Z', created_at: '2024-02-20T11:00:00Z' },
+        { id: 4, cluster_id: 2, edge_uuid: 'pc-uuid-004', name: 'staging-monitor', description: '预发环境监控配置', plugins: { 'prometheus': { metrics: ['latency', 'qps', 'error_rate'] }, 'monitor': { report_interval: 60 } }, current_version: 1, published_at: null, created_at: '2024-03-01T08:00:00Z' },
+        { id: 5, cluster_id: 2, edge_uuid: 'pc-uuid-005', name: 'logging-config', description: '日志采集配置', plugins: { 'http-log': { uri: 'http://log-collector:9200/logs', batch_size: 100 }, 'syslog': { facility: 'local0', severity: 'info' } }, current_version: 2, published_at: '2024-04-01T12:00:00Z', created_at: '2024-03-10T09:00:00Z' },
+        { id: 6, cluster_id: 3, edge_uuid: 'pc-uuid-006', name: 'dev-cache', description: '开发环境缓存配置', plugins: { 'proxy-cache': { cache_ttl: 300, cache_zone: 'dev_cache' } }, current_version: 1, published_at: null, created_at: '2024-04-10T10:00:00Z' }
+      ];
+
+      var versionHistory = [
+        { id: 1, version: 1, config: '{"limit-req":{"rate":50,"burst":100}}', created_at: '2024-01-10T08:00:00Z', created_by: 'admin' },
+        { id: 2, version: 2, config: '{"limit-req":{"rate":80,"burst":150}}', created_at: '2024-02-15T10:00:00Z', created_by: 'admin' },
+        { id: 3, version: 3, config: '{"limit-req":{"rate":100,"burst":200}}', created_at: '2024-03-15T10:30:00Z', created_by: 'admin' }
+      ];
+
+      // ===========================
+      // State
+      // ===========================
+      var selectedClusterId = null;
+      var editingPCId = null;
+      var editingClusterId = null;
+      var viewingPC = null;
+      var publishingPC = null;
+      var versionPC = null;
+
+      // ===========================
+      // Init Cluster Select
+      // ===========================
+      function initClusterSelect() {
+        var sel = document.getElementById('clusterSelect');
+        sel.innerHTML = '<option value="">— 选择集群 —</option>';
+        clusters.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.display_name + ' (' + c.name + ')';
+          sel.appendChild(opt);
+        });
+      }
+
+      // ===========================
+      // Plugin Selector Render
+      // ===========================
+      var selectedPlugins = {};
+
+      function renderPluginSelector() {
+        var container = document.getElementById('pcPluginSelector');
+        var cats = {};
+        availablePlugins.forEach(function(p) {
+          if (!cats[p.category]) cats[p.category] = [];
+          cats[p.category].push(p);
+        });
+        var html = '<div style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;">';
+        Object.keys(cats).forEach(function(cat) {
+          html += '<div style="margin-bottom:8px;"><strong style="font-size:12px;color:var(--muted);text-transform:capitalize;">' + cat + '</strong></div>';
+          html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">';
+          cats[cat].forEach(function(p) {
+            var checked = selectedPlugins[p.name] ? 'checked' : '';
+            html += '<label class="checkbox-label plugin-check-item" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;' + (checked ? 'background:oklch(56% 0.16 210 / 8%);border-color:var(--accent);' : '') + '">';
+            html += '<input type="checkbox" value="' + p.name + '" onchange="togglePlugin(\'' + p.name + '\', this)" ' + checked + '> ';
+            html += '<span>' + p.display_name + '</span>';
+            html += '</label>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+
+        // Config editors for selected plugins
+        html += '<div style="margin-top:12px;" id="pcPluginConfigs">';
+        Object.keys(selectedPlugins).forEach(function(pname) {
+          var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+          var cfg = selectedPlugins[pname] || '{}';
+          var cfgStr = typeof cfg === 'object' ? JSON.stringify(cfg, null, 2) : cfg;
+          html += '<div class="form-group" style="margin-bottom:8px;">';
+          html += '<label class="form-label">' + (plugin ? plugin.display_name : pname) + ' 配置</label>';
+          html += '<textarea class="form-input" rows="4" style="font-family:var(--font-mono);font-size:11px;" onchange="updatePluginConfig(\'' + pname + '\', this.value)">' + cfgStr + '</textarea>';
+          html += '</div>';
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+      }
+
+      window.togglePlugin = function(name, cb) {
+        if (cb.checked) {
+          selectedPlugins[name] = {};
+        } else {
+          delete selectedPlugins[name];
+        }
+        renderPluginSelector();
+      };
+
+      window.updatePluginConfig = function(name, val) {
+        try { selectedPlugins[name] = JSON.parse(val); }
+        catch(e) { selectedPlugins[name] = val; }
+      };
+
+      // ===========================
+      // Tab switching
+      // ===========================
+      window.switchTab = function(btn, tabId) {
+        var parent = btn.closest('.tabs');
+        parent.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
+        parent.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+      };
+
+      // ===========================
+      // Cluster Change
+      // ===========================
+      window.onClusterChange = function() {
+        var val = document.getElementById('clusterSelect').value;
+        selectedClusterId = val ? parseInt(val) : null;
+        filterPC();
+      };
+
+      // ===========================
+      // Filter & Render
+      // ===========================
+      function getFilteredPCs() {
+        var q = (document.getElementById('pcSearch').value || '').toLowerCase();
+        return mockPCs.filter(function(pc) {
+          if (selectedClusterId && pc.cluster_id !== selectedClusterId) return false;
+          if (q && pc.name.toLowerCase().indexOf(q) < 0 && (pc.description || '').toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      function renderPCs(list) {
+        var grid = document.getElementById('pcGrid');
+        document.getElementById('pcCount').textContent = '共 ' + list.length + ' 个插件组';
+        if (!list || list.length === 0) {
+          grid.innerHTML = '<div class="pc-empty"><div class="pc-empty-icon">▣</div><div class="pc-empty-text">' +
+            (selectedClusterId ? '暂无插件组，点击"添加插件组"创建' : '请先选择一个集群') + '</div></div>';
+          return;
+        }
+        var html = '';
+        list.forEach(function(pc) {
+          var published = pc.current_version && pc.published_at;
+          var pluginNames = Object.keys(pc.plugins || {});
+          html += '<div class="pc-card">';
+          html += '<div class="pc-card-header">';
+          html += '<div class="pc-card-name">' + pc.name + '</div>';
+          html += '<div class="pc-card-meta">';
+          html += '<span class="badge badge-' + (published ? 'success' : 'warning') + '" style="font-size:10px;">' + (published ? '已发布' : '未发布') + '</span>';
+          if (pc.current_version) {
+            html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;font-family:var(--font-mono);">v' + pc.current_version + (pc.published_at ? ' · ' + window.formatDate(pc.published_at) : ' · 未同步') + '</div>';
+          }
+          html += '</div></div>';
+          if (pc.description) {
+            html += '<div class="pc-card-desc">' + pc.description + '</div>';
+          }
+          html += '<div class="pc-card-plugins">';
+          if (pluginNames.length > 0) {
+            pluginNames.forEach(function(pname) {
+              var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+              html += '<span class="pc-plugin-tag" onclick="viewPluginConfigDetail(\'' + pname + '\')" title="查看配置">' + (plugin ? plugin.display_name : pname) + '</span>';
+            });
+          } else {
+            html += '<span class="pc-no-plugins">无插件</span>';
+          }
+          html += '</div>';
+          html += '<div class="pc-card-actions">';
+          html += '<button class="btn btn-ghost btn-sm" onclick="viewPC(' + pc.id + ')" title="查看">👁</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="editPC(' + pc.id + ')" title="编辑">✎</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="deletePC(' + pc.id + ')" title="删除">✕</button>';
+          html += '<span style="flex:1"></span>';
+          html += '<button class="btn btn-secondary btn-sm" onclick="publishPC(' + pc.id + ')">发布</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="versionPCManager(' + pc.id + ')">版本管理</button>';
+          html += '</div></div>';
+        });
+        grid.innerHTML = html;
+      }
+
+      window.filterPC = function() {
+        renderPCs(getFilteredPCs());
+      };
+
+      // ===========================
+      // CRUD
+      // ===========================
+      window.openAddPC = function() {
+        if (!selectedClusterId) { showToast('请先选择一个集群', 'warning'); return; }
+        var cluster = clusters.find(function(c) { return c.id === selectedClusterId; });
+        if (!cluster) { showToast('集群不存在', 'error'); return; }
+        editingPCId = null;
+        editingClusterId = selectedClusterId;
+        selectedPlugins = {};
+        document.getElementById('pcModalTitle').textContent = '添加插件组 — ' + cluster.display_name;
+        document.getElementById('pcFormName').value = '';
+        document.getElementById('pcFormDesc').value = '';
+        renderPluginSelector();
+        // Reset tabs
+        var tabs = document.getElementById('pcFormTabs');
+        tabs.querySelectorAll('.tab-item')[0].click();
+        openModal('pcModal');
+      };
+
+      window.editPC = function(id) {
+        var pc = mockPCs.find(function(p) { return p.id === id; });
+        if (!pc) return;
+        if (!selectedClusterId) { showToast('请先选择一个集群', 'warning'); return; }
+        editingPCId = id;
+        editingClusterId = selectedClusterId;
+        selectedPlugins = {};
+        if (pc.plugins) {
+          Object.keys(pc.plugins).forEach(function(k) { selectedPlugins[k] = pc.plugins[k]; });
+        }
+        document.getElementById('pcModalTitle').textContent = '编辑插件组 — ' + pc.name;
+        document.getElementById('pcFormName').value = pc.name || '';
+        document.getElementById('pcFormDesc').value = pc.description || '';
+        renderPluginSelector();
+        var tabs = document.getElementById('pcFormTabs');
+        tabs.querySelectorAll('.tab-item')[0].click();
+        openModal('pcModal');
+      };
+
+      window.savePC = function() {
+        var name = document.getElementById('pcFormName').value.trim();
+        var desc = document.getElementById('pcFormDesc').value.trim();
+        if (!name) { showToast('请输入插件组名称', 'error'); return; }
+
+        var plugins = {};
+        Object.keys(selectedPlugins).forEach(function(k) {
+          var v = selectedPlugins[k];
+          if (typeof v === 'string') { try { plugins[k] = JSON.parse(v); } catch(e) { plugins[k] = v; } }
+          else { plugins[k] = v; }
+        });
+
+        if (editingPCId) {
+          var pc = mockPCs.find(function(p) { return p.id === editingPCId; });
+          if (pc) {
+            pc.name = name;
+            pc.description = desc;
+            pc.plugins = plugins;
+            showToast('插件组已更新', 'success');
+          }
+        } else {
+          mockPCs.push({
+            id: mockPCs.length + 1,
+            cluster_id: editingClusterId,
+            edge_uuid: 'pc-uuid-new-' + Date.now(),
+            name: name,
+            description: desc,
+            plugins: plugins,
+            current_version: 0,
+            published_at: null,
+            created_at: new Date().toISOString()
+          });
+          showToast('插件组已创建', 'success');
+        }
+        closeModal('pcModal');
+        filterPC();
+      };
+
+      window.deletePC = function(id) {
+        var pc = mockPCs.find(function(p) { return p.id === id; });
+        if (!pc) return;
+        document.getElementById('deletePcText').textContent = '确定要删除插件组 "' + pc.name + '" 吗？';
+        document.getElementById('deletePcDb').checked = true;
+        document.getElementById('deletePcEdge').checked = false;
+        document.getElementById('deletePcText').dataset.id = id;
+        openModal('deletePcModal');
+      };
+
+      window.confirmDeletePC = function() {
+        var id = parseInt(document.getElementById('deletePcText').dataset.id);
+        var idx = mockPCs.findIndex(function(p) { return p.id === id; });
+        if (idx >= 0) {
+          var deleted = mockPCs.splice(idx, 1)[0];
+          var msg = '插件组 "' + deleted.name + '" 已删除';
+          if (document.getElementById('deletePcEdge').checked) msg += '，Edge 节点数据已清理';
+          showToast(msg, 'info');
+        }
+        closeModal('deletePcModal');
+        filterPC();
+      };
+
+      // ===========================
+      // View
+      // ===========================
+      window.viewPC = function(id) {
+        var pc = mockPCs.find(function(p) { return p.id === id; });
+        if (!pc) return;
+        viewingPC = pc;
+        document.getElementById('viewPcTitle').textContent = '查看插件组 — ' + pc.name;
+        var statusHtml = pc.current_version && pc.published_at
+          ? '<span class="badge badge-success">已发布</span>'
+          : '<span class="badge badge-warning">未发布</span>';
+        document.getElementById('viewPcBody').innerHTML =
+          '<div class="detail-grid">' +
+            '<div class="detail-label">名称</div><div class="detail-value">' + pc.name + '</div>' +
+            '<div class="detail-label">描述</div><div class="detail-value">' + (pc.description || '-') + '</div>' +
+            '<div class="detail-label">状态</div><div class="detail-value">' + statusHtml + '</div>' +
+            (pc.current_version ? '<div class="detail-label">当前版本</div><div class="detail-value">v' + pc.current_version + '</div>' : '') +
+            (pc.published_at ? '<div class="detail-label">发布时间</div><div class="detail-value">' + window.formatDate(pc.published_at) + '</div>' : '') +
+            '<div class="detail-label">创建时间</div><div class="detail-value">' + window.formatDate(pc.created_at) + '</div>' +
+          '</div>' +
+          '<h3 style="font-size:14px;font-weight:600;margin:20px 0 12px;">插件配置</h3>' +
+          '<pre class="pc-preview">' + JSON.stringify(pc.plugins, null, 2) + '</pre>';
+        openModal('viewPcModal');
+      };
+
+      window.viewPluginConfigDetail = function(pname) {
+        var pc = viewingPC;
+        var cfg = pc && pc.plugins ? pc.plugins[pname] : null;
+        if (!cfg) { showToast('配置不可用', 'warning'); return; }
+        var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+        document.getElementById('viewPluginConfigTitle').textContent = (plugin ? plugin.display_name : pname) + ' 配置';
+        document.getElementById('viewPluginConfigBody').textContent = JSON.stringify(cfg, null, 2);
+        openModal('viewPluginConfigModal');
+      };
+
+      // ===========================
+      // Publish
+      // ===========================
+      window.publishPC = function(id) {
+        var pc = mockPCs.find(function(p) { return p.id === id; });
+        if (!pc) return;
+        var cluster = clusters.find(function(c) { return c.id === pc.cluster_id; });
+        if (!cluster) { showToast('集群不存在', 'error'); return; }
+        publishingPC = pc;
+        document.getElementById('publishPcTitle').textContent = '发布插件组: ' + pc.name;
+        var html = '';
+        (cluster.nodes || []).forEach(function(n, i) {
+          html += '<label class="checkbox-label" style="display:flex;align-items:center;gap:8px;padding:6px 0;">';
+          html += '<input type="checkbox" class="publish-node-cb" value="' + i + '" checked>';
+          html += '<span class="status-dot online"></span> ' + n.ip + ':' + n.port;
+          html += '</label>';
+        });
+        if (!cluster.nodes || cluster.nodes.length === 0) {
+          html = '<div class="text-muted" style="padding:20px;text-align:center;">该集群下无可用节点</div>';
+        }
+        document.getElementById('publishPcNodeList').innerHTML = html;
+        openModal('publishPcModal');
+      };
+
+      window.confirmPublishPC = function() {
+        if (!publishingPC) { closeModal('publishPcModal'); return; }
+        var cbs = document.querySelectorAll('.publish-node-cb:checked');
+        if (cbs.length === 0) { showToast('请选择至少一个节点', 'warning'); return; }
+        var nodeCount = cbs.length;
+        publishingPC.current_version = (publishingPC.current_version || 0) + 1;
+        publishingPC.published_at = new Date().toISOString();
+        showToast('插件组 "' + publishingPC.name + '" 发布成功，已同步到 ' + nodeCount + ' 个节点', 'success');
+        closeModal('publishPcModal');
+        filterPC();
+      };
+
+      // ===========================
+      // Version Management
+      // ===========================
+      window.versionPCManager = function(id) {
+        var pc = mockPCs.find(function(p) { return p.id === id; });
+        if (!pc) return;
+        versionPC = pc;
+        document.getElementById('versionPcTitle').textContent = '版本管理 — ' + pc.name;
+        renderVersionHistory(pc);
+        openModal('versionPcModal');
+      };
+
+      function renderVersionHistory(pc) {
+        var versions = versionHistory.filter(function(v) { return v.version <= (pc.current_version || 0); });
+        var html = '<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">当前版本: <strong>v' + (pc.current_version || 0) + '</strong></p>';
+        if (versions.length === 0) {
+          html += '<div class="text-muted" style="padding:20px;text-align:center;">暂无版本记录</div>';
+        } else {
+          html += '<div style="border:1px solid var(--border);border-radius:var(--radius-md);">';
+          versions.sort(function(a, b) { return b.version - a.version; }).forEach(function(v) {
+            var isCurrent = v.version === pc.current_version;
+            html += '<div class="pc-version-item" style="padding:10px 12px;' + (isCurrent ? 'background:oklch(56% 0.16 210 / 6%);' : '') + '">';
+            html += '<div><strong>v' + v.version + '</strong> ' + (isCurrent ? '<span class="badge badge-success" style="font-size:10px;">当前</span>' : '') + '</div>';
+            html += '<div style="font-size:11px;color:var(--muted);">' + window.formatDate(v.created_at) + ' · ' + v.created_by + '</div>';
+            html += '<div class="pc-version-actions" style="margin-top:6px;">';
+            if (!isCurrent) {
+              html += '<button class="btn btn-ghost btn-sm" onclick="rollbackPC(' + v.version + ')">回滚到此版本</button>';
+            }
+            html += '<button class="btn btn-ghost btn-sm" onclick="viewVersionConfig(' + v.id + ')">查看配置</button>';
+            html += '<button class="btn btn-ghost btn-sm" onclick="deleteVersion(' + v.id + ')">删除</button>';
+            html += '</div></div>';
+          });
+          html += '</div>';
+        }
+        document.getElementById('versionPcBody').innerHTML = html;
+      }
+
+      window.rollbackPC = function(version) {
+        if (!versionPC) return;
+        if (!confirm('确定将 "' + versionPC.name + '" 回滚到 v' + version + ' 吗？')) return;
+        versionPC.current_version = version;
+        versionPC.published_at = new Date().toISOString();
+        showToast('插件组 "' + versionPC.name + '" 已回滚到 v' + version, 'success');
+        renderVersionHistory(versionPC);
+      };
+
+      window.viewVersionConfig = function(versionId) {
+        var v = versionHistory.find(function(v) { return v.id === versionId; });
+        if (!v) { showToast('版本配置不可用', 'warning'); return; }
+        document.getElementById('viewPluginConfigTitle').textContent = '版本 v' + v.version + ' 配置';
+        try {
+          var formatted = JSON.stringify(JSON.parse(v.config), null, 2);
+          document.getElementById('viewPluginConfigBody').textContent = formatted;
+        } catch(e) {
+          document.getElementById('viewPluginConfigBody').textContent = v.config;
+        }
+        openModal('viewPluginConfigModal');
+      };
+
+      window.deleteVersion = function(versionId) {
+        if (!confirm('确定删除此历史版本吗？')) return;
+        var idx = versionHistory.findIndex(function(v) { return v.id === versionId; });
+        if (idx >= 0) {
+          versionHistory.splice(idx, 1);
+          showToast('历史版本已删除', 'info');
+          if (versionPC) renderVersionHistory(versionPC);
+        }
+      };
+
+      // ===========================
+      // Init
+      // ===========================
+      initClusterSelect();
+      renderPCs([]);
+
+    })();
+  </script>
+</body>
+</html>

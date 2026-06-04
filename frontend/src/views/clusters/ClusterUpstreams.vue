@@ -146,8 +146,10 @@
               </a-button>
             </a-form-item>
             <a-form-item label="高级配置">
-              <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
-              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
+                <span style="color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
+              </div>
             </a-form-item>
           </a-form>
         </a-tab-pane>

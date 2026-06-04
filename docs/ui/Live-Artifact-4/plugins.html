@@ -1,0 +1,277 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 插件管理</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .plugin-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .plugin-filter-bar .search-input-wrap input { width: 240px; }
+    .plugin-categories { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+    .plugin-cat { padding: 5px 14px; border-radius: 16px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--muted); transition: all 0.15s; user-select: none; }
+    .plugin-cat:hover { border-color: var(--accent); color: var(--accent); }
+    .plugin-cat.active { background: oklch(56% 0.16 210 / 10%); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+    .plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .plugin-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+    .plugin-card:hover { box-shadow: var(--shadow-md); }
+    .plugin-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+    .plugin-card-info { flex: 1; }
+    .plugin-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .plugin-card-category { font-size: 10px; padding: 1px 7px; border-radius: 8px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; background: var(--bg); color: var(--muted); border: 1px solid var(--border); margin-left: 6px; }
+    .plugin-card-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; flex: 1; }
+    .plugin-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .plugin-card-actions { display: flex; gap: 6px; align-items: center; }
+    .plugin-version { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
+    .plugin-schema-toggle { font-size: 11px; color: var(--accent); cursor: pointer; }
+    .plugin-schema-toggle:hover { text-decoration: underline; }
+    .plugin-schema-box { display: none; margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; font-family: var(--font-mono); font-size: 11px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
+    .plugin-schema-box.visible { display: block; }
+    .switch-status-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 20px; }
+    .switch-status-bar .ssb-left { display: flex; align-items: center; gap: 12px; }
+    .switch-status-bar .ssb-count { font-size: 13px; }
+    .switch-status-bar .ssb-count strong { font-family: var(--font-mono); }
+    @media (max-width: 768px) {
+      .plugin-grid { grid-template-columns: 1fr; }
+      .plugin-filter-bar { flex-direction: column; align-items: stretch; }
+      .plugin-filter-bar .search-input-wrap input { width: 100%; }
+      .plugin-categories { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+      .switch-status-bar { flex-direction: column; gap: 8px; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item active" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>插件管理</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>插件管理</h1>
+            <p>管理内置插件的启用/禁用状态，查看插件配置 schema</p>
+          </div>
+        </div>
+
+        <!-- Global Switch Summary -->
+        <div class="switch-status-bar">
+          <div class="ssb-left">
+            <span class="ssb-count">已启用 <strong id="enabledCount">12</strong> / <strong id="totalCount">18</strong> 个插件</span>
+          </div>
+          <div class="page-header-actions" style="margin:0;">
+            <button class="btn btn-secondary btn-sm" onclick="enableAllPlugins()">全部启用</button>
+            <button class="btn btn-ghost btn-sm" onclick="disableAllPlugins()">全部禁用</button>
+          </div>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="plugin-categories" id="categoryFilter">
+          <span class="plugin-cat active" data-cat="all" onclick="filterByCategory('all')">全部</span>
+          <span class="plugin-cat" data-cat="security" onclick="filterByCategory('security')">安全</span>
+          <span class="plugin-cat" data-cat="traffic" onclick="filterByCategory('traffic')">流量控制</span>
+          <span class="plugin-cat" data-cat="observability" onclick="filterByCategory('observability')">可观测</span>
+          <span class="plugin-cat" data-cat="protocol" onclick="filterByCategory('protocol')">协议</span>
+          <span class="plugin-cat" data-cat="transformation" onclick="filterByCategory('transformation')">转换</span>
+          <span class="plugin-cat" data-cat="other" onclick="filterByCategory('other')">其他</span>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="plugin-filter-bar">
+          <div class="search-input-wrap">
+            <input type="text" id="pluginSearch" placeholder="搜索插件名称..." oninput="renderPlugins()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <select class="form-input" style="width:120px;height:32px;font-size:12px;" id="statusFilter" onchange="renderPlugins()">
+            <option value="all">全部状态</option>
+            <option value="enabled">已启用</option>
+            <option value="disabled">已禁用</option>
+          </select>
+          <span class="text-muted text-sm" id="pluginCount">共 18 个插件</span>
+        </div>
+
+        <!-- Plugin Grid -->
+        <div class="plugin-grid" id="pluginGrid"></div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      var categoryFilter = 'all';
+
+      var plugins = [
+        { name: 'limit-req', display_name: '限流', description: '基于漏桶算法的请求速率限制，支持按 IP、接口等维度限流', category: 'traffic', enabled: true, schema: '{"rate": 100, "burst": 200, "key": "remote_addr"}' },
+        { name: 'limit-conn', display_name: '连接限制', description: '限制并发连接数，防止后端资源被过度占用', category: 'traffic', enabled: true, schema: '{"conn": 100, "burst": 50, "default_conn_delay": 0.1}' },
+        { name: 'limit-count', display_name: '计数限制', description: '基于计数器的请求频率限制，支持滑动窗口', category: 'traffic', enabled: true, schema: '{"count": 1000, "time_window": 60, "key": "remote_addr"}' },
+        { name: 'cors', display_name: 'CORS', description: '跨域资源共享配置，支持自定义允许来源和方法', category: 'security', enabled: true, schema: '{"allow_origins": "*", "allow_methods": "GET,POST", "allow_headers": "*"}' },
+        { name: 'ip-restriction', display_name: 'IP 限制', description: '基于 IP 黑白名单的访问控制', category: 'security', enabled: true, schema: '{"blacklist": [], "whitelist": ["10.0.0.0/8"]}' },
+        { name: 'ua-restriction', display_name: 'UA 限制', description: '基于 User-Agent 的请求过滤', category: 'security', enabled: false, schema: '{"deny_agents": ["curl", "wget"], "allow_agents": []}' },
+        { name: 'referer-restriction', display_name: 'Referer 限制', description: '基于 Referer 的防盗链配置', category: 'security', enabled: false, schema: '{"allow_empty": false, "allow_domains": ["*.example.com"]}' },
+        { name: 'key-auth', display_name: '密钥认证', description: 'API 密钥认证，支持多密钥轮换', category: 'security', enabled: true, schema: '{"key": "apikey-xxx", "header": "X-API-Key"}' },
+        { name: 'jwt-auth', display_name: 'JWT 认证', description: 'JWT Token 认证和验证', category: 'security', enabled: true, schema: '{"signing_key": "xxx", "algorithm": "HS256"}' },
+        { name: 'basic-auth', display_name: 'Basic 认证', description: 'HTTP Basic 认证支持', category: 'security', enabled: false, schema: '{"username": "admin", "password": "****"}' },
+        { name: 'prometheus', display_name: 'Prometheus', description: 'Prometheus 指标暴露，支持自定义标签', category: 'observability', enabled: true, schema: '{"prefer_name": true, "enable_latency": true}' },
+        { name: 'syslog', display_name: 'Syslog', description: '请求日志通过 Syslog 协议输出', category: 'observability', enabled: false, schema: '{"host": "127.0.0.1", "port": 514, "facility": "local0"}' },
+        { name: 'log-rotate', display_name: '日志轮转', description: '本地日志文件轮转和归档', category: 'observability', enabled: true, schema: '{"max_size": 100, "max_age": 7, "compress": true}' },
+        { name: 'grpc-transcode', display_name: 'gRPC 转码', description: 'gRPC 与 HTTP/JSON 协议转换', category: 'protocol', enabled: false, schema: '{"proto_path": "/path/to/proto", "service": "my.Service"}' },
+        { name: 'response-rewrite', display_name: '响应重写', description: '修改上游响应的状态码、头部和 Body', category: 'transformation', enabled: true, schema: '{"status_code": 200, "headers": {"X-Custom": "value"}}' },
+        { name: 'proxy-rewrite', display_name: '代理重写', description: '修改转发请求的路径、Host 和头部', category: 'transformation', enabled: true, schema: '{"uri": "/new-path", "host": "new-host.com"}' },
+        { name: 'fault-injection', display_name: '故障注入', description: '注入延迟和错误用于混沌工程测试', category: 'traffic', enabled: false, schema: '{"delay": {"percent": 10, "duration": 5}, "abort": {"percent": 5, "status": 500}}' },
+        { name: 'static-resource', display_name: '静态资源', description: '为路由提供静态文件服务的能力', category: 'other', enabled: true, schema: '{"dir": "/data/static", "index": "index.html"}' }
+      ];
+
+      var categoryLabels = {
+        security: '安全', traffic: '流量控制', observability: '可观测',
+        protocol: '协议', transformation: '转换', other: '其他'
+      };
+
+      function getFiltered() {
+        var q = (document.getElementById('pluginSearch').value || '').toLowerCase();
+        var statusF = document.getElementById('statusFilter').value;
+        return plugins.filter(function(p) {
+          if (categoryFilter !== 'all' && p.category !== categoryFilter) return false;
+          if (statusF === 'enabled' && !p.enabled) return false;
+          if (statusF === 'disabled' && p.enabled) return false;
+          if (q && p.display_name.toLowerCase().indexOf(q) < 0 && p.name.toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      window.filterByCategory = function(cat) {
+        categoryFilter = cat;
+        document.querySelectorAll('.plugin-cat').forEach(function(el) {
+          el.classList.toggle('active', el.dataset.cat === cat);
+        });
+        renderPlugins();
+      };
+
+      window.renderPlugins = function() {
+        var filtered = getFiltered();
+        document.getElementById('pluginCount').textContent = '共 ' + filtered.length + ' 个插件';
+        updateCounts();
+
+        var grid = document.getElementById('pluginGrid');
+        if (filtered.length === 0) {
+          grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon">▲</div><p>暂无匹配的插件</p></div>';
+          return;
+        }
+        grid.innerHTML = filtered.map(function(p) {
+          return '<div class="plugin-card">' +
+            '<div class="plugin-card-header">' +
+              '<div class="plugin-card-info">' +
+                '<div class="plugin-card-name">' +
+                  p.display_name +
+                  '<span class="plugin-card-category">' + (categoryLabels[p.category] || p.category) + '</span>' +
+                '</div>' +
+                '<div class="plugin-card-desc">' + p.description + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="plugin-card-footer">' +
+              '<div class="plugin-card-actions">' +
+                '<span class="plugin-version">' + p.name + '</span>' +
+                ' <span class="plugin-schema-toggle" onclick="toggleSchema(this)">⚙ schema</span>' +
+              '</div>' +
+              '<label class="toggle">' +
+                '<input type="checkbox" ' + (p.enabled ? 'checked' : '') + ' onchange="togglePlugin(\'' + p.name + '\', this.checked)">' +
+                '<span class="toggle-slider"></span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="plugin-schema-box">' + p.schema + '</div>' +
+          '</div>';
+        }).join('');
+      };
+
+      window.togglePlugin = function(name, enabled) {
+        var p = plugins.find(function(x) { return x.name === name; });
+        if (p) {
+          p.enabled = enabled;
+          var label = p.display_name + (enabled ? ' 已启用' : ' 已禁用');
+          showToast(label, enabled ? 'success' : 'warning');
+          updateCounts();
+        }
+      };
+
+      window.toggleSchema = function(el) {
+        var box = el.parentElement.parentElement.nextElementSibling;
+        if (box) box.classList.toggle('visible');
+      };
+
+      function updateCounts() {
+        var enabled = plugins.filter(function(p) { return p.enabled; }).length;
+        document.getElementById('enabledCount').textContent = enabled;
+        document.getElementById('totalCount').textContent = plugins.length;
+      }
+
+      window.enableAllPlugins = function() {
+        plugins.forEach(function(p) { p.enabled = true; });
+        renderPlugins();
+        showToast('所有插件已启用', 'success');
+      };
+
+      window.disableAllPlugins = function() {
+        plugins.forEach(function(p) { p.enabled = false; });
+        renderPlugins();
+        showToast('所有插件已禁用', 'info');
+      };
+
+      // ----- Init -----
+      updateCounts();
+      renderPlugins();
+
+    })();
+  </script>
+</body>
+</html>

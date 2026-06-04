@@ -1,0 +1,669 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - Edge直连</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* ── Node Selector ── */
+    .node-selector { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow-sm); }
+    .node-selector .form-group { margin-bottom: 0; min-width: 180px; }
+    .node-selector .node-selector-mode { display: flex; gap: 6px; margin-bottom: 8px; }
+    .node-selector-mode .mode-btn { padding: 3px 12px; font-size: 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-weight: 500; transition: all 0.15s; }
+    .node-selector-mode .mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .node-connection { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: oklch(97% 0.005 250); border-radius: var(--radius-md); font-size: 12px; min-width: 200px; }
+    .node-connection .conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .conn-dot.connected { background: var(--success); }
+    .conn-dot.disconnected { background: var(--muted); }
+    .conn-dot.connecting { background: var(--warning); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ── Sub tabs ── */
+    .edge-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .edge-tab { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; user-select: none; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .edge-tab:hover { color: var(--fg); }
+    .edge-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .edge-tab .tab-badge { background: oklch(56% 0.16 210 / 10%); color: var(--accent); font-size: 10px; padding: 1px 6px; border-radius: 8px; font-family: var(--font-mono); }
+
+    /* ── JSON viewer ── */
+    .json-viewer { background: oklch(22% 0.02 250); color: oklch(82% 0.01 250); padding: 16px; border-radius: var(--radius-md); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; overflow: auto; max-height: 400px; white-space: pre-wrap; word-break: break-all; }
+    .json-viewer .jkey { color: oklch(70% 0.15 210); }
+    .json-viewer .jstr { color: oklch(65% 0.15 145); }
+    .json-viewer .jnum { color: oklch(70% 0.15 85); }
+    .json-viewer .jbool { color: oklch(65% 0.18 28); }
+    .json-viewer .jnull { color: var(--muted); }
+    .json-viewer-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .json-viewer-toolbar .jvt-title { font-size: 13px; font-weight: 600; }
+    .json-viewer-toolbar .jvt-actions { display: flex; gap: 6px; }
+
+    /* ── Plugin card (for plugin list tab) ── */
+    .ec-plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .ec-plugin-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-sm); }
+    .ec-plugin-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .ec-plugin-card-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .ec-plugin-card-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+    .ec-plugin-card-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+
+    /* ── Config rows ── */
+    .config-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; }
+    .config-row-info { flex: 1; min-width: 0; }
+    .config-row-name { font-size: 13px; font-weight: 600; }
+    .config-row-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .config-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── Rule row ── */
+    .rule-row { padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; }
+    .rule-row-top { display: flex; align-items: center; justify-content: space-between; }
+    .rule-row-priority { font-size: 11px; font-family: var(--font-mono); color: var(--muted); }
+    .rule-row-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Modal wide-extended ── */
+    .modal-xwide { max-width: 880px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) { .node-selector { flex-direction: column; align-items: stretch; } .node-selector .form-group { min-width: 0; } .edge-tabs { overflow-x: auto; } }
+    @media (max-width: 600px) { .edge-tab { padding: 8px 12px; font-size: 12px; } }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item active" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">管</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">管理员</div>
+            <div class="sidebar-user-role">超级管理员</div>
+          </div>
+          <a href="login.html" class="sidebar-logout">退出</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-title">Edge直连</div>
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a>
+          <span>/</span>
+          <span>Edge功能</span>
+          <span>/</span>
+          <span>Edge直连</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+
+        <!-- ── Node Selector ── -->
+        <div class="node-selector" id="nodeSelector">
+          <div class="form-group" style="flex:1;min-width:220px;">
+            <label class="form-label" style="margin-bottom:6px;">
+              连接方式
+              <span class="mode-btn active" data-mode="cluster" onclick="switchConnMode('cluster')">选择集群节点</span>
+              <span class="mode-btn" data-mode="manual" onclick="switchConnMode('manual')">手动输入地址</span>
+            </label>
+            <div id="clusterMode">
+              <div class="form-row" style="gap:8px;grid-template-columns:1fr 1fr;">
+                <select class="form-input" id="clusterSelect" onchange="onClusterChange()">
+                  <option value="">选择集群...</option>
+                  <option value="prod-cluster">prod-cluster（生产集群）</option>
+                  <option value="staging-cluster">staging-cluster（预发集群）</option>
+                  <option value="dev-cluster">dev-cluster（开发集群）</option>
+                  <option value="dr-cluster">dr-cluster（灾备集群）</option>
+                </select>
+                <select class="form-input" id="nodeSelect" disabled>
+                  <option value="">先选择集群...</option>
+                </select>
+              </div>
+            </div>
+            <div id="manualMode" style="display:none;">
+              <div class="form-row" style="gap:8px;grid-template-columns:1fr auto auto;">
+                <input type="text" class="form-input" id="manualAddr" placeholder="节点地址，如 192.168.1.100:7900">
+                <input type="text" class="form-input" id="manualToken" placeholder="Admin Key" style="width:160px;">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-end;padding-bottom:2px;">
+            <button class="btn btn-primary btn-sm" onclick="connectNode()">连接</button>
+            <button class="btn btn-secondary btn-sm" onclick="disconnectNode()">断开</button>
+          </div>
+          <div class="node-connection" id="connStatus">
+            <span class="conn-dot disconnected" id="connDot"></span>
+            <span id="connText">未连接</span>
+          </div>
+        </div>
+
+        <!-- ── Sub Tabs ── -->
+        <div class="edge-tabs" id="edgeTabs">
+          <div class="edge-tab active" data-tab="upstreams" onclick="switchEdgeTab('upstreams')">
+            <span>上游管理</span>
+            <span class="tab-badge">6</span>
+          </div>
+          <div class="edge-tab" data-tab="routes" onclick="switchEdgeTab('routes')">
+            <span>路由管理</span>
+            <span class="tab-badge">12</span>
+          </div>
+          <div class="edge-tab" data-tab="global-rules" onclick="switchEdgeTab('global-rules')">
+            <span>全局规则</span>
+            <span class="tab-badge">3</span>
+          </div>
+          <div class="edge-tab" data-tab="plugin-configs" onclick="switchEdgeTab('plugin-configs')">
+            <span>插件配置</span>
+            <span class="tab-badge">8</span>
+          </div>
+          <div class="edge-tab" data-tab="plugin-metadata" onclick="switchEdgeTab('plugin-metadata')">
+            <span>插件元数据</span>
+            <span class="tab-badge">5</span>
+          </div>
+          <div class="edge-tab" data-tab="plugin-list" onclick="switchEdgeTab('plugin-list')">
+            <span>已装插件</span>
+            <span class="tab-badge">14</span>
+          </div>
+        </div>
+
+        <!-- ── Tab Panel: Upstreams ── -->
+        <div class="tab-panel" data-tab="upstreams">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">共 <strong>6</strong> 个上游服务</span>
+            </div>
+            <div class="table-toolbar-right">
+              <div class="search-input-wrap"><input type="text" placeholder="搜索上游名称..." oninput="filterTabTable('upstreams',this.value)"><span class="search-icon">🔍</span></div>
+              <button class="btn btn-primary btn-sm" onclick="openEdgeModal('upstream', null)">+ 添加上游</button>
+            </div>
+          </div>
+          <div class="table-container"><table>
+            <thead><tr>
+              <th style="width:28px"><input type="checkbox"></th>
+              <th>名称</th>
+              <th>类型</th>
+              <th>负载均衡</th>
+              <th>目标节点</th>
+              <th>健康检查</th>
+              <th>状态</th>
+              <th style="width:60px"></th>
+            </tr></thead>
+            <tbody id="edgeUpstreamBody"></tbody>
+          </table></div>
+          <div class="table-footer">
+            <span>1-6 / 共 6 条</span>
+            <div class="pagination">
+              <button class="btn btn-ghost btn-sm" disabled>‹</button>
+              <button class="btn btn-primary btn-sm">1</button>
+              <button class="btn btn-ghost btn-sm" disabled>›</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Tab Panel: Routes ── -->
+        <div class="tab-panel hidden" data-tab="routes">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">共 <strong>12</strong> 条路由规则</span>
+            </div>
+            <div class="table-toolbar-right">
+              <div class="search-input-wrap"><input type="text" placeholder="搜索路由名称..." oninput="filterTabTable('routes',this.value)"><span class="search-icon">🔍</span></div>
+              <button class="btn btn-primary btn-sm" onclick="openEdgeModal('route', null)">+ 创建路由</button>
+            </div>
+          </div>
+          <div class="table-container"><table>
+            <thead><tr>
+              <th style="width:28px"><input type="checkbox"></th>
+              <th>名称</th>
+              <th>路径</th>
+              <th>方法</th>
+              <th>上游</th>
+              <th>插件数</th>
+              <th>优先级</th>
+              <th>状态</th>
+              <th style="width:60px"></th>
+            </tr></thead>
+            <tbody id="edgeRouteBody"></tbody>
+          </table></div>
+          <div class="table-footer">
+            <span>1-12 / 共 12 条</span>
+            <div class="pagination">
+              <button class="btn btn-ghost btn-sm" disabled>‹</button>
+              <button class="btn btn-primary btn-sm">1</button>
+              <button class="btn btn-ghost btn-sm" disabled>›</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Tab Panel: Global Rules ── -->
+        <div class="tab-panel hidden" data-tab="global-rules">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">共 <strong>3</strong> 条全局规则</span>
+            </div>
+            <div class="table-toolbar-right">
+              <button class="btn btn-primary btn-sm" onclick="openEdgeModal('global-rule', null)">+ 添加规则</button>
+            </div>
+          </div>
+          <div id="edgeGlobalRules"></div>
+        </div>
+
+        <!-- ── Tab Panel: Plugin Configs ── -->
+        <div class="tab-panel hidden" data-tab="plugin-configs">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">共 <strong>8</strong> 个插件配置</span>
+            </div>
+            <div class="table-toolbar-right">
+              <div class="search-input-wrap"><input type="text" placeholder="搜索配置名称..."><span class="search-icon">🔍</span></div>
+              <button class="btn btn-primary btn-sm" onclick="openEdgeModal('plugin-config', null)">+ 新建配置</button>
+            </div>
+          </div>
+          <div id="edgePluginConfigs"></div>
+        </div>
+
+        <!-- ── Tab Panel: Plugin Metadata ── -->
+        <div class="tab-panel hidden" data-tab="plugin-metadata">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">共 <strong>5</strong> 条插件元数据</span>
+            </div>
+            <div class="table-toolbar-right">
+              <button class="btn btn-primary btn-sm" onclick="openEdgeModal('plugin-meta', null)">+ 新建元数据</button>
+            </div>
+          </div>
+          <div id="edgePluginMetas"></div>
+        </div>
+
+        <!-- ── Tab Panel: Plugin List ── -->
+        <div class="tab-panel hidden" data-tab="plugin-list">
+          <div class="table-toolbar">
+            <div class="table-toolbar-left">
+              <span class="text-sm text-muted">已安装 <strong>14</strong> 个插件</span>
+            </div>
+            <div class="table-toolbar-right">
+              <span class="text-sm text-muted">节点版本：v3.2.1</span>
+            </div>
+          </div>
+          <div class="ec-plugin-grid" id="edgePluginList"></div>
+        </div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- ════════ MODAL: CRUD (upstream/route/rule/config/meta) ════════ -->
+  <div class="modal-overlay" id="edgeCrudModal">
+    <div class="modal modal-xwide">
+      <div class="modal-header">
+        <h2 id="edgeCrudTitle">新建</h2>
+        <button class="modal-close" onclick="closeModal('edgeCrudModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="edgeCrudBody">
+        <!-- dynamically rendered -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('edgeCrudModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveEdgeCrud()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ MODAL: JSON Viewer ════════ -->
+  <div class="modal-overlay" id="jsonViewModal">
+    <div class="modal modal-xwide">
+      <div class="modal-header">
+        <h2 id="jsonViewTitle">配置查看</h2>
+        <button class="modal-close" onclick="closeModal('jsonViewModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="json-viewer-toolbar">
+          <span class="jvt-title" id="jsonViewSubtitle">完整配置</span>
+          <div class="jvt-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyJsonView()">复制</button>
+            <button class="btn btn-ghost btn-sm" onclick="formatJsonView()">格式化</button>
+          </div>
+        </div>
+        <div class="json-viewer" id="jsonViewContent"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('jsonViewModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+  (function() {
+    'use strict';
+
+    // ── Connection state ──
+    var connState = { connected: false, mode: 'cluster', cluster: '', node: '', address: '' };
+
+    // ── Mock upstreams ──
+    var upstreams = [
+      { id: 1, name: 'api-backend-v1', type: 'HTTP', lb: 'weighted_roundrobin', targets: '3 个节点', health: true, status: true },
+      { id: 2, name: 'websocket-srv', type: 'HTTP', lb: 'least_conn', targets: '2 个节点', health: true, status: true },
+      { id: 3, name: 'grpc-service', type: 'gRPC', lb: 'weighted_roundrobin', targets: '5 个节点', health: true, status: true },
+      { id: 4, name: 'user-center', type: 'HTTP', lb: 'chash', targets: '4 个节点', health: false, status: true },
+      { id: 5, name: 'log-collector', type: 'HTTP', lb: 'ewma', targets: '2 个节点', health: true, status: false },
+      { id: 6, name: 'static-assets', type: 'HTTP', lb: 'weighted_roundrobin', targets: '3 个节点', health: true, status: true }
+    ];
+    var routes = [
+      { id: 1, name: 'api-v1-proxy', path: '/api/v1/**', methods: 'GET,POST,PUT,DELETE', upstream: 'api-backend-v1', plugins: 3, priority: 100, status: true },
+      { id: 2, name: 'user-login', path: '/api/v1/auth/login', methods: 'POST', upstream: 'user-center', plugins: 1, priority: 200, status: true },
+      { id: 3, name: 'ws-connect', path: '/ws/**', methods: 'GET', upstream: 'websocket-srv', plugins: 0, priority: 150, status: true },
+      { id: 4, name: 'grpc-gateway', path: '/grpc/**', methods: 'POST,GET', upstream: 'grpc-service', plugins: 2, priority: 120, status: true },
+      { id: 5, name: 'static-files', path: '/static/*', methods: 'GET', upstream: 'static-assets', plugins: 0, priority: 50, status: true },
+      { id: 6, name: 'health-check', path: '/health', methods: 'GET', upstream: 'api-backend-v1', plugins: 0, priority: 250, status: true },
+      { id: 7, name: 'order-api', path: '/api/v1/orders/**', methods: 'GET,POST', upstream: 'api-backend-v1', plugins: 2, priority: 110, status: true },
+      { id: 8, name: 'payment-callback', path: '/api/v1/payments/callback', methods: 'POST', upstream: 'api-backend-v1', plugins: 1, priority: 180, status: false },
+      { id: 9, name: 'user-profile', path: '/api/v1/users/profile', methods: 'GET,PUT', upstream: 'user-center', plugins: 1, priority: 130, status: true },
+      { id: 10, name: 'admin-api', path: '/admin/**', methods: 'GET,POST,PUT,DELETE', upstream: 'api-backend-v1', plugins: 4, priority: 90, status: true },
+      { id: 11, name: 'log-upload', path: '/api/v1/logs/upload', methods: 'POST', upstream: 'log-collector', plugins: 1, priority: 80, status: false },
+      { id: 12, name: 'websocket-event', path: '/ws/events/**', methods: 'GET', upstream: 'websocket-srv', plugins: 0, priority: 140, status: true }
+    ];
+    var globalRules = [
+      { id: 1, name: 'IP黑名单', desc: '全局 IP 黑名单过滤', priority: 999, plugin: 'ip-restriction', config: '{"deny":["10.0.0.0/8","192.168.0.0/16"]}', status: true },
+      { id: 2, name: 'WAF防护', desc: 'Web 应用防火墙全局规则', priority: 800, plugin: 'waf', config: '{"mode":"block","level":"medium"}', status: true },
+      { id: 3, name: '访问日志', desc: '全局访问日志记录', priority: 500, plugin: 'file-logger', config: '{"path":"/var/log/edge/access.log","format":"json"}', status: true }
+    ];
+    var pluginConfigs = [
+      { id: 1, name: '限流配置-API', plugin: 'limit-req', desc: 'API 接口限流', scope: 'route', config: '{"rate":100,"burst":200,"key":"remote_addr"}', status: true },
+      { id: 2, name: 'JWT认证', plugin: 'jwt-auth', desc: 'JWT 鉴权配置', scope: 'route', config: '{"secret":"***","algorithm":"HS256"}', status: true },
+      { id: 3, name: 'CORS跨域', plugin: 'cors', desc: '跨域资源共享配置', scope: 'route', config: '{"origins":"*","methods":"GET,POST"}', status: true },
+      { id: 4, name: '请求体限大', plugin: 'client-body-limit', desc: '客户端请求大小限制', scope: 'global', config: '{"max_body_size":10485760}', status: true },
+      { id: 5, name: 'Prometheus', plugin: 'prometheus', desc: 'Prometheus 监控指标', scope: 'global', config: '{"path":"/metrics","namespace":"gateway"}', status: true },
+      { id: 6, name: 'URL重写', plugin: 'uri-rewriter', desc: 'URL 路径重写规则', scope: 'route', config: '{"rules":[{"match":"^/old","replacement":"/new"}]}', status: true },
+      { id: 7, name: 'gzip压缩', plugin: 'gzip', desc: '响应 gzip 压缩', scope: 'global', config: '{"level":6,"min_length":1024}', status: false },
+      { id: 8, name: '请求ID', plugin: 'request-id', desc: '为请求添加唯一 ID', scope: 'global', config: '{"header_name":"X-Request-Id","algorithm":"uuid"}', status: true }
+    ];
+    var pluginMetas = [
+      { id: 1, name: 'limit-req', version: '3.1.0', desc: '请求限流插件，基于漏桶算法', author: 'Apache APISIX', deps: '无' },
+      { id: 2, name: 'jwt-auth', version: '3.2.0', desc: 'JWT 认证插件，支持 HS256/RS256', author: 'Apache APISIX', deps: '无' },
+      { id: 3, name: 'prometheus', version: '3.0.0', desc: 'Prometheus 指标收集插件', author: 'Apache APISIX', deps: '无' },
+      { id: 4, name: 'cors', version: '3.1.1', desc: '跨域资源共享 CORS 插件', author: 'Apache APISIX', deps: '无' },
+      { id: 5, name: 'uri-rewriter', version: '2.0.0', desc: 'URI 重写插件，支持正则匹配替换', author: 'Apache APISIX', deps: '无' }
+    ];
+    var pluginListData = [
+      { name: 'limit-req', version: '3.1.0', desc: '请求限流，基于漏桶算法', type: 'traffic', enabled: true },
+      { name: 'limit-conn', version: '3.0.0', desc: '并发连接限制', type: 'traffic', enabled: true },
+      { name: 'limit-count', version: '3.0.0', desc: '计数限流，基于 Redis', type: 'traffic', enabled: true },
+      { name: 'jwt-auth', version: '3.2.0', desc: 'JWT 认证', type: 'auth', enabled: true },
+      { name: 'basic-auth', version: '3.0.0', desc: 'HTTP Basic 认证', type: 'auth', enabled: false },
+      { name: 'key-auth', version: '3.1.0', desc: 'API Key 认证', type: 'auth', enabled: true },
+      { name: 'cors', version: '3.1.1', desc: '跨域资源共享', type: 'security', enabled: true },
+      { name: 'ip-restriction', version: '3.0.0', desc: 'IP 黑白名单', type: 'security', enabled: true },
+      { name: 'waf', version: '2.0.0', desc: 'Web 应用防火墙', type: 'security', enabled: true },
+      { name: 'uri-rewriter', version: '2.0.0', desc: 'URI 重写', type: 'traffic', enabled: true },
+      { name: 'file-logger', version: '3.0.0', desc: '文件日志记录', type: 'log', enabled: true },
+      { name: 'syslog', version: '3.0.0', desc: 'Syslog 日志发送', type: 'log', enabled: false },
+      { name: 'prometheus', version: '3.0.0', desc: 'Prometheus 指标', type: 'log', enabled: true },
+      { name: 'request-id', version: '2.0.0', desc: '请求唯一 ID', type: 'traffic', enabled: true }
+    ];
+
+    // ── Connection mode switch ──
+    window.switchConnMode = function(mode) {
+      connState.mode = mode;
+      document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+      document.querySelector('.mode-btn[data-mode="' + mode + '"]').classList.add('active');
+      document.getElementById('clusterMode').style.display = mode === 'cluster' ? '' : 'none';
+      document.getElementById('manualMode').style.display = mode === 'manual' ? '' : 'none';
+    };
+
+    window.onClusterChange = function() {
+      var val = document.getElementById('clusterSelect').value;
+      var ns = document.getElementById('nodeSelect');
+      ns.innerHTML = '';
+      if (!val) { ns.disabled = true; ns.innerHTML = '<option>先选择集群...</option>'; return; }
+      ns.disabled = false;
+      var nodes = { 'prod-cluster': ['node-01:7900','node-02:7900','node-03:7900'], 'staging-cluster': ['staging-node-01:7900'], 'dev-cluster': ['dev-node-01:7900','dev-node-02:7900'], 'dr-cluster': ['dr-node-01:7900'] };
+      var list = nodes[val] || [];
+      list.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        ns.appendChild(opt);
+      });
+    };
+
+    window.connectNode = function() {
+      var addr = '';
+      if (connState.mode === 'cluster') {
+        var cluster = document.getElementById('clusterSelect').value;
+        var node = document.getElementById('nodeSelect').value;
+        if (!cluster || !node) { showToast('请选择集群和节点', 'warning'); return; }
+        addr = node;
+      } else {
+        addr = document.getElementById('manualAddr').value.trim();
+        if (!addr) { showToast('请输入节点地址', 'warning'); return; }
+      }
+      var dot = document.getElementById('connDot');
+      var text = document.getElementById('connText');
+      dot.className = 'conn-dot connecting';
+      text.textContent = '正在连接 ' + addr + ' ...';
+      setTimeout(function() {
+        connState.connected = true;
+        connState.address = addr;
+        dot.className = 'conn-dot connected';
+        text.textContent = '已连接 ' + addr;
+        showToast('成功连接到节点 ' + addr, 'success');
+      }, 800);
+    };
+
+    window.disconnectNode = function() {
+      connState.connected = false;
+      connState.address = '';
+      var dot = document.getElementById('connDot');
+      var text = document.getElementById('connText');
+      dot.className = 'conn-dot disconnected';
+      text.textContent = '未连接';
+      showToast('已断开连接', 'info');
+    };
+
+    // ── Tab switching ──
+    window.switchEdgeTab = function(tabName) {
+      document.querySelectorAll('.edge-tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.add('hidden'); });
+      document.querySelector('.edge-tab[data-tab="' + tabName + '"]').classList.add('active');
+      document.querySelector('.tab-panel[data-tab="' + tabName + '"]').classList.remove('hidden');
+    };
+
+    // ── Render upstreams ──
+    function renderUpstreams(data) {
+      var tbody = document.getElementById('edgeUpstreamBody');
+      if (!tbody) return;
+      var list = data || upstreams;
+      tbody.innerHTML = list.map(function(u) {
+        var uJson = JSON.stringify(u).replace(/'/g,"\\'");
+        return '<tr data-row-id="' + u.id + '"><td><input type="checkbox"></td><td><span class="cell-primary">' + u.name + '</span><div class="cell-secondary">Type: ' + u.type + '</div></td><td>' + u.type + '</td><td><span class="badge badge-neutral">' + (window.loadBalanceLabel ? loadBalanceLabel(u.lb) : u.lb) + '</span></td><td>' + u.targets + '</td><td>' + (u.health ? '<span class="badge badge-success">正常</span>' : '<span class="badge badge-danger">异常</span>') + '</td><td>' + (u.status ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-danger">禁用</span>') + '</td><td><div class="action-menu"><button class="action-btn" onclick="toggleActionMenu(this)">⋮</button><div class="action-dropdown"><button class="action-dropdown-item" onclick="openEdgeModal(\'upstream\',' + u.id + ')">编辑</button><button class="action-dropdown-item" onclick="viewJson(\'上游\',' + uJson + ')">查看JSON</button><button class="action-dropdown-item danger" onclick="confirmDelete(\'确认删除上游 ' + u.name + '？\')">删除</button></div></div></td></tr>';
+      }).join('');
+    }
+
+    // ── Render routes ──
+    function renderRoutes(data) {
+      var tbody = document.getElementById('edgeRouteBody');
+      if (!tbody) return;
+      var list = data || routes;
+      tbody.innerHTML = list.map(function(r) {
+        return '<tr data-row-id="' + r.id + '"><td><input type="checkbox"></td><td><span class="cell-primary">' + r.name + '</span></td><td><code style="font-size:12px;background:var(--bg);padding:2px 6px;border-radius:3px;">' + r.path + '</code></td><td>' + (window.methodTags ? methodTags(r.methods) : r.methods) + '</td><td>' + r.upstream + '</td><td><span class="badge badge-neutral">' + r.plugins + '</span></td><td><span class="badge badge-neutral">' + r.priority + '</span></td><td>' + (r.status ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-danger">禁用</span>') + '</td><td><div class="action-menu"><button class="action-btn" onclick="toggleActionMenu(this)">⋮</button><div class="action-dropdown"><button class="action-dropdown-item" onclick="openEdgeModal(\'route\',' + r.id + ')">编辑</button><button class="action-dropdown-item" onclick="viewJson(\'路由\',' + JSON.stringify(r).replace(/'/g,"\\'") + ')">查看JSON</button><button class="action-dropdown-item danger" onclick="confirmDelete(\'确认删除路由 ' + r.name + '？\')">删除</button></div></div></td></tr>';
+      }).join('');
+    }
+
+    // ── Render global rules ──
+    function renderGlobalRules(data) {
+      var container = document.getElementById('edgeGlobalRules');
+      if (!container) return;
+      var list = data || globalRules;
+      container.innerHTML = list.map(function(r) {
+        return '<div class="rule-row"><div class="rule-row-top"><div><strong>' + r.name + '</strong><span class="rule-row-priority" style="margin-left:8px;">优先级 ' + r.priority + '</span></div><div style="display:flex;gap:6px;">' + (r.status ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-danger">禁用</span>') + '<div class="action-menu"><button class="action-btn" onclick="toggleActionMenu(this)">⋮</button><div class="action-dropdown"><button class="action-dropdown-item" onclick="openEdgeModal(\'global-rule\',' + r.id + ')">编辑</button><button class="action-dropdown-item" onclick="viewJson(\'全局规则\',' + JSON.stringify(r).replace(/'/g,"\\'") + ')">查看JSON</button><button class="action-dropdown-item danger">删除</button></div></div></div></div><div class="rule-row-meta">' + r.desc + ' · 插件: ' + r.plugin + '</div></div>';
+      }).join('');
+    }
+
+    // ── Render plugin configs ──
+    function renderPluginConfigs(data) {
+      var container = document.getElementById('edgePluginConfigs');
+      if (!container) return;
+      var list = data || pluginConfigs;
+      container.innerHTML = list.map(function(p) {
+        return '<div class="config-row"><div class="config-row-info"><div class="config-row-name">' + p.name + '</div><div class="config-row-desc">' + p.desc + ' · 插件: ' + p.plugin + ' · 作用域: ' + p.scope + '</div></div><div class="config-row-actions">' + (p.status ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-danger">禁用</span>') + '<button class="btn btn-ghost btn-sm" onclick="viewJson(\'配置\',' + JSON.stringify(p).replace(/'/g,"\\'") + ')">查看</button><button class="btn btn-ghost btn-sm" onclick="openEdgeModal(\'plugin-config\',' + p.id + ')">编辑</button></div></div>';
+      }).join('');
+    }
+
+    // ── Render plugin metas ──
+    function renderPluginMetas(data) {
+      var container = document.getElementById('edgePluginMetas');
+      if (!container) return;
+      var list = data || pluginMetas;
+      container.innerHTML = list.map(function(m) {
+        return '<div class="config-row"><div class="config-row-info"><div class="config-row-name">' + m.name + ' <span class="badge badge-neutral">v' + m.version + '</span></div><div class="config-row-desc">' + m.desc + ' · 作者: ' + m.author + ' · 依赖: ' + m.deps + '</div></div><div class="config-row-actions"><button class="btn btn-ghost btn-sm" onclick="viewJson(\'元数据\',' + JSON.stringify(m).replace(/'/g,"\\'") + ')">查看</button><button class="btn btn-ghost btn-sm" onclick="openEdgeModal(\'plugin-meta\',' + m.id + ')">编辑</button></div></div>';
+      }).join('');
+    }
+
+    // ── Render plugin list ──
+    function renderPluginList(data) {
+      var container = document.getElementById('edgePluginList');
+      if (!container) return;
+      var list = data || pluginListData;
+      container.innerHTML = list.map(function(p) {
+        return '<div class="ec-plugin-card"><div class="ec-plugin-card-top"><div class="ec-plugin-card-name">' + p.name + ' <span class="badge badge-neutral">v' + p.version + '</span></div><label class="toggle"><input type="checkbox" ' + (p.enabled ? 'checked' : '') + ' onchange="togglePlugin(this,\'' + p.name + '\')"><span class="toggle-slider"></span></label></div><div class="ec-plugin-card-desc">' + p.desc + '</div><div class="ec-plugin-card-meta"><span class="badge badge-neutral">' + p.type + '</span></div></div>';
+      }).join('');
+    }
+
+    window.togglePlugin = function(el, name) {
+      showToast(name + ' 已' + (el.checked ? '启用' : '禁用'), 'info');
+    };
+
+    // ── Filter tab table ──
+    window.filterTabTable = function(tab, val) {
+      var q = (val || '').toLowerCase();
+      if (tab === 'upstreams') renderUpstreams(q ? upstreams.filter(function(u) { return u.name.indexOf(q) >= 0; }) : upstreams);
+      else if (tab === 'routes') renderRoutes(q ? routes.filter(function(r) { return r.name.indexOf(q) >= 0 || r.path.indexOf(q) >= 0; }) : routes);
+    };
+
+    // ── Open CRUD modal ──
+    window.openEdgeModal = function(type, id) {
+      var title = '';
+      var bodyHtml = '';
+      var item = null;
+
+      if (type === 'upstream') {
+        item = id ? upstreams.find(function(u) { return u.id === id; }) : null;
+        title = item ? '编辑上游：' + item.name : '添加上游';
+        bodyHtml = '<div class="form-group"><label class="form-label">名称 <span class="required">*</span></label><input type="text" class="form-input" id="ecName" value="' + (item ? item.name : '') + '" placeholder="上游服务名称"></div><div class="form-row"><div class="form-group"><label class="form-label">类型</label><select class="form-input" id="ecType"><option value="HTTP"' + (item && item.type==='HTTP'?' selected':'') + '>HTTP</option><option value="gRPC"' + (item && item.type==='gRPC'?' selected':'') + '>gRPC</option><option value="Dubbo"' + (item && item.type==='Dubbo'?' selected':'') + '>Dubbo</option></select></div><div class="form-group"><label class="form-label">负载均衡</label><select class="form-input" id="ecLb"><option value="weighted_roundrobin"' + (item && item.lb==='weighted_roundrobin'?' selected':'') + '>加权轮询</option><option value="chash"' + (item && item.lb==='chash'?' selected':'') + '>一致性哈希</option><option value="least_conn"' + (item && item.lb==='least_conn'?' selected':'') + '>最少连接</option><option value="ewma"' + (item && item.lb==='ewma'?' selected':'') + '>延迟最小</option></select></div></div><div class="form-group"><label class="form-label">目标节点</label><textarea class="form-input" rows="3" id="ecTargets" placeholder="每行一个节点，格式：address:port:weight">' + (item ? '192.168.1.10:8080:10\n192.168.1.11:8080:10' : '') + '</textarea></div>';
+      } else if (type === 'route') {
+        item = id ? routes.find(function(r) { return r.id === id; }) : null;
+        title = item ? '编辑路由：' + item.name : '创建路由';
+        bodyHtml = '<div class="form-group"><label class="form-label">名称 <span class="required">*</span></label><input type="text" class="form-input" id="ecName" value="' + (item ? item.name : '') + '" placeholder="路由名称"></div><div class="form-row"><div class="form-group"><label class="form-label">路径 <span class="required">*</span></label><input type="text" class="form-input" id="ecPath" value="' + (item ? item.path : '') + '" placeholder="/api/v1/**"></div><div class="form-group"><label class="form-label">优先级</label><input type="number" class="form-input" id="ecPriority" value="' + (item ? item.priority : '100') + '"></div></div><div class="form-group"><label class="form-label">方法</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">' + ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS'].map(function(m) { return '<label class="checkbox-label"><input type="checkbox" value="' + m + '" ' + (item && item.methods.indexOf(m) >= 0 ? 'checked' : '') + ' onchange="updateRouteMethods()"> <span>' + m + '</span></label>'; }).join('') + '</div><input type="hidden" id="ecMethods" value="' + (item ? item.methods : 'GET') + '"></div><div class="form-group"><label class="form-label">上游服务</label><select class="form-input" id="ecUpstream"><option value="">选择上游...</option>' + upstreams.map(function(u) { return '<option value="' + u.name + '"' + (item && item.upstream === u.name ? ' selected' : '') + '>' + u.name + '</option>'; }).join('') + '</select></div>';
+      } else if (type === 'global-rule') {
+        item = id ? globalRules.find(function(r) { return r.id === id; }) : null;
+        title = item ? '编辑全局规则：' + item.name : '添加全局规则';
+        bodyHtml = '<div class="form-group"><label class="form-label">名称 <span class="required">*</span></label><input type="text" class="form-input" id="ecName" value="' + (item ? item.name : '') + '" placeholder="规则名称"></div><div class="form-group"><label class="form-label">描述</label><textarea class="form-input" rows="2" id="ecDesc">' + (item ? item.desc : '') + '</textarea></div><div class="form-row"><div class="form-group"><label class="form-label">插件</label><input type="text" class="form-input" id="ecPlugin" value="' + (item ? item.plugin : '') + '"></div><div class="form-group"><label class="form-label">优先级</label><input type="number" class="form-input" id="ecPriority" value="' + (item ? item.priority : '500') + '"></div></div><div class="form-group"><label class="form-label">配置 (JSON)</label><textarea class="form-input" rows="4" id="ecConfig">' + (item ? JSON.stringify(JSONTools.parse(item.config), null, 2) : '') + '</textarea></div>';
+      } else if (type === 'plugin-config') {
+        item = id ? pluginConfigs.find(function(p) { return p.id === id; }) : null;
+        title = item ? '编辑插件配置：' + item.name : '新建插件配置';
+        bodyHtml = '<div class="form-group"><label class="form-label">名称 <span class="required">*</span></label><input type="text" class="form-input" id="ecName" value="' + (item ? item.name : '') + '" placeholder="配置名称"></div><div class="form-row"><div class="form-group"><label class="form-label">插件</label><input type="text" class="form-input" id="ecPlugin" value="' + (item ? item.plugin : '') + '"></div><div class="form-group"><label class="form-label">作用域</label><select class="form-input" id="ecScope"><option value="route"' + (item && item.scope==='route'?' selected':'') + '>路由</option><option value="global"' + (item && item.scope==='global'?' selected':'') + '>全局</option></select></div></div><div class="form-group"><label class="form-label">描述</label><textarea class="form-input" rows="2" id="ecDesc">' + (item ? item.desc : '') + '</textarea></div><div class="form-group"><label class="form-label">配置 (JSON)</label><textarea class="form-input" rows="6" id="ecConfig">' + (item ? JSON.stringify(JSONTools.parse(item.config), null, 2) : '{\n  \n}') + '</textarea></div>';
+      } else if (type === 'plugin-meta') {
+        item = id ? pluginMetas.find(function(m) { return m.id === id; }) : null;
+        title = item ? '编辑元数据：' + item.name : '新建插件元数据';
+        bodyHtml = '<div class="form-group"><label class="form-label">插件名称 <span class="required">*</span></label><input type="text" class="form-input" id="ecName" value="' + (item ? item.name : '') + '" placeholder="插件名"></div><div class="form-row"><div class="form-group"><label class="form-label">版本</label><input type="text" class="form-input" id="ecVersion" value="' + (item ? item.version : '1.0.0') + '"></div><div class="form-group"><label class="form-label">作者</label><input type="text" class="form-input" id="ecAuthor" value="' + (item ? item.author : '') + '"></div></div><div class="form-group"><label class="form-label">描述</label><textarea class="form-input" rows="2" id="ecDesc">' + (item ? item.desc : '') + '</textarea></div><div class="form-group"><label class="form-label">依赖</label><input type="text" class="form-input" id="ecDeps" value="' + (item ? item.deps : '') + '"></div>';
+      }
+
+      document.getElementById('edgeCrudTitle').textContent = title;
+      document.getElementById('edgeCrudBody').innerHTML = bodyHtml;
+      window._edgeCrudType = type;
+      window._edgeCrudId = id;
+      openModal('edgeCrudModal');
+    };
+
+    window.updateRouteMethods = function() {
+      var checks = document.querySelectorAll('#edgeCrudBody input[type="checkbox"][value]');
+      var vals = [];
+      checks.forEach(function(c) { if (c.checked) vals.push(c.value); });
+      var el = document.getElementById('ecMethods');
+      if (el) el.value = vals.join(',');
+    };
+
+    window.saveEdgeCrud = function() {
+      var name = document.getElementById('ecName');
+      if (name && !name.value.trim()) { showToast('请输入名称', 'warning'); return; }
+      closeModal('edgeCrudModal');
+      showToast('保存成功', 'success');
+    };
+
+    // ── JSON Viewer ──
+    window.viewJson = function(title, data) {
+      document.getElementById('jsonViewTitle').textContent = title + ' - 完整配置';
+      var str = (typeof data === 'string') ? data : JSON.stringify(data, null, 2);
+      var formatted = syntaxHighlight(str);
+      document.getElementById('jsonViewContent').innerHTML = formatted;
+      window._jsonViewRaw = str;
+      openModal('jsonViewModal');
+    };
+
+    function syntaxHighlight(json) {
+      if (!json) return '';
+      return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/("(?:[^"\\]|\\.)*")\s*:/g,'<span class="jkey">$1</span>:').replace(/"((?:[^"\\]|\\.)*)"/g,'<span class="jstr">"$1"</span>').replace(/\b(-?\d+\.?\d*)\b/g,'<span class="jnum">$1</span>').replace(/\b(true|false)\b/g,'<span class="jbool">$1</span>').replace(/\bnull\b/g,'<span class="jnull">null</span>');
+    }
+
+    window.copyJsonView = function() {
+      copyToClipboard(window._jsonViewRaw || '');
+    };
+
+    window.formatJsonView = function() {
+      try {
+        var parsed = JSON.parse(window._jsonViewRaw);
+        window._jsonViewRaw = JSON.stringify(parsed, null, 2);
+        document.getElementById('jsonViewContent').innerHTML = syntaxHighlight(window._jsonViewRaw);
+        showToast('已格式化', 'success');
+      } catch(e) { showToast('JSON 格式无效', 'error'); }
+    };
+
+    // ── Init ──
+    renderUpstreams();
+    renderRoutes();
+    renderGlobalRules();
+    renderPluginConfigs();
+    renderPluginMetas();
+    renderPluginList();
+  })();
+  </script>
+</body>
+</html>

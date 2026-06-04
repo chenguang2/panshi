@@ -439,7 +439,7 @@ const handleRepublish = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
-    message.success('已切换并发布到版本 v' + selectedVersion.value)
+    message.success('已切换到版本 v' + selectedVersion.value)
     emit('published', { plugin_name: props.resourceName })
     await loadHistory()
     if (versions.value.some(v => v.version === versionToSelect)) {

@@ -1,0 +1,437 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 概览</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* ── Stat card accent bar ── */
+    .stat-card {
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+    .stat-card.accent-cluster::before  { background: var(--accent); }
+    .stat-card.accent-route::before    { background: var(--success); }
+    .stat-card.accent-upstream::before { background: var(--warning); }
+    .stat-card.accent-node::before     { background: var(--info); }
+    .stat-card.accent-user::before     { background: var(--danger); }
+    .stat-card.accent-plugin::before   { background: oklch(55% 0.14 300); }
+    .stat-card.accent-global::before   { background: oklch(45% 0.12 120); }
+
+    /* ── Stat card inner layout ── */
+    .stat-card-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-top: 3px;
+    }
+    .stat-card-icon-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .stat-card-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .stat-card-value {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
+      line-height: 1.1;
+    }
+    .stat-card-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .stat-card-sub {
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.6;
+      margin-top: -2px;
+    }
+
+    /* ── Two-column dashboard layout ── */
+    .dashboard-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 24px;
+    }
+
+    /* ── Table card header ── */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .table-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .table-card-count {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+    .table-card-body {
+      padding: 0;
+    }
+
+    /* ── In-card table adjustments ── */
+    .table-card-body table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .table-card-body thead th {
+      background: oklch(97% 0.005 250);
+      padding: 8px 14px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .table-card-body tbody td {
+      padding: 10px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+    .table-card-body tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .table-card-body tbody tr:hover {
+      background: oklch(97% 0.005 250 / 60%);
+    }
+    .table-card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .table-card-footer a {
+      font-size: 12px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .table-card-footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1100px) {
+      .dashboard-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <!-- Section: 核心功能 -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item active" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+
+        <!-- Section: 系统管理 -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+        </div>
+
+        <!-- Section: Edge功能 -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- ========== MAIN AREA ========== -->
+    <div class="main-area">
+
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a>
+          <span>/</span>
+          <span>概览</span>
+        </div>
+
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">&#x2315;</span>
+          </div>
+
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <div class="content-area">
+
+        <!-- Page Header -->
+        <div class="page-header">
+          <div>
+            <h1>概览</h1>
+            <p>欢迎回来，以下是网关管理系统的运行概览</p>
+          </div>
+        </div>
+
+        <!-- Stats Grid — 7 cards -->
+        <div class="stats-grid">
+          <div class="stat-card accent-cluster">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon cluster">◆</div>
+              </div>
+              <div class="stat-card-value">5</div>
+              <div class="stat-card-label">集群</div>
+              <div class="stat-card-sub">3 在线 / 1 维护 / 1 离线</div>
+            </div>
+          </div>
+          <div class="stat-card accent-route">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon route">◇</div>
+              </div>
+              <div class="stat-card-value">50</div>
+              <div class="stat-card-label">路由</div>
+              <div class="stat-card-sub">46 启用 / 4 禁用</div>
+            </div>
+          </div>
+          <div class="stat-card accent-upstream">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon upstream">◎</div>
+              </div>
+              <div class="stat-card-value">30</div>
+              <div class="stat-card-label">上游</div>
+              <div class="stat-card-sub">26 启用 / 4 禁用</div>
+            </div>
+          </div>
+          <div class="stat-card accent-node">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon node">●</div>
+              </div>
+              <div class="stat-card-value">12</div>
+              <div class="stat-card-label">节点</div>
+              <div class="stat-card-sub">10 正常 / 2 异常</div>
+            </div>
+          </div>
+          <div class="stat-card accent-user">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon user">■</div>
+              </div>
+              <div class="stat-card-value">10</div>
+              <div class="stat-card-label">用户</div>
+              <div class="stat-card-sub">2 管理员 / 8 普通用户</div>
+            </div>
+          </div>
+          <div class="stat-card accent-plugin">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon stat-icon plugin">▲</div>
+              </div>
+              <div class="stat-card-value">18</div>
+              <div class="stat-card-label">插件组</div>
+              <div class="stat-card-sub">14 已启用</div>
+            </div>
+          </div>
+          <div class="stat-card accent-global">
+            <div class="stat-card-inner">
+              <div class="stat-card-icon-row">
+                <div class="stat-card-icon" style="background: oklch(45% 0.12 120 / 12%); color: oklch(45% 0.12 120);">⊞</div>
+              </div>
+              <div class="stat-card-value">8</div>
+              <div class="stat-card-label">全局规则</div>
+              <div class="stat-card-sub">6 启用 / 2 禁用</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Two side-by-side table cards -->
+        <div class="dashboard-columns">
+
+          <!-- 最近路由 -->
+          <div class="table-card">
+            <div class="table-card-header">
+              <span class="table-card-title">最近路由</span>
+              <span class="table-card-count">共 50 条</span>
+            </div>
+            <div class="table-card-body">
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>URI</th>
+                    <th>集群</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="cell-primary">用户API</span></td>
+                    <td><span class="cell-secondary">/api/v1/users</span></td>
+                    <td>生产集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>启用</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">订单服务</span></td>
+                    <td><span class="cell-secondary">/api/v1/orders</span></td>
+                    <td>生产集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>启用</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">支付网关</span></td>
+                    <td><span class="cell-secondary">/api/v1/payments</span></td>
+                    <td>生产集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>启用</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">商品搜索</span></td>
+                    <td><span class="cell-secondary">/api/v1/products/search</span></td>
+                    <td>预发集群</td>
+                    <td><span class="badge badge-warning"><span class="status-dot warning"></span>维护中</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">健康检查</span></td>
+                    <td><span class="cell-secondary">/api/v1/health</span></td>
+                    <td>开发集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>启用</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">库存同步</span></td>
+                    <td><span class="cell-secondary">/api/v1/inventory/sync</span></td>
+                    <td>预发集群</td>
+                    <td><span class="badge badge-danger"><span class="status-dot offline"></span>禁用</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-card-footer">
+              <a href="routes.html">查看全部路由 →</a>
+            </div>
+          </div>
+
+          <!-- 集群状态 -->
+          <div class="table-card">
+            <div class="table-card-header">
+              <span class="table-card-title">集群状态</span>
+              <span class="table-card-count">共 5 个</span>
+            </div>
+            <div class="table-card-body">
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>显示名称</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="cell-primary">prod-primary</span></td>
+                    <td>生产集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>正常运行</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">staging</span></td>
+                    <td>预发集群</td>
+                    <td><span class="badge badge-warning"><span class="status-dot warning"></span>维护中</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">dev-sandbox</span></td>
+                    <td>开发集群</td>
+                    <td><span class="badge badge-success"><span class="status-dot online"></span>正常运行</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-primary">dr-backup</span></td>
+                    <td>灾备集群</td>
+                    <td><span class="badge badge-info"><span class="status-dot online"></span>待命中</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-card-footer">
+              <a href="clusters.html">查看全部集群 →</a>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Toast Container -->
+      <div id="toast-container" class="toast-container"></div>
+
+    </div>
+
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

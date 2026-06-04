@@ -75,25 +75,26 @@ interface NavSection {
 
 const navSections = computed<NavSection[]>(() => {
   const edgeItems = [
-    { label: 'Edge直连', route: '/edge-client', icon: '&#x2B21;', permission: 'edge_nodes' },
-    { label: '数据导入', route: '/edge-import', icon: '&#x2B22;' },
-    { label: '工具箱', route: '/tools', icon: '&#x25A3;' },
+    { label: 'Edge直连', route: '/edge-client', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg>', permission: 'edge_nodes' },
+    { label: '数据导入', route: '/edge-import', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>' },
+    { label: '工具箱', route: '/tools', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>' },
   ].filter(item => !item.permission || authStore.hasPermission(item.permission))
 
   return [
     {
       title: '核心功能',
       items: [
-        { label: '概览', route: '/', icon: '&#x25C9;' },
-        { label: '集群管理', route: '/clusters', icon: '&#x25C6;' },
+        { label: '概览', route: '/', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg>' },
+        { label: '集群管理', route: '/clusters', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg>' },
+        { label: '上游管理', route: '/upstreams', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>' },
       ]
     },
     {
       title: '系统管理',
       visible: authStore.user?.role === 'admin',
       items: [
-        { label: '插件开关', route: '/plugin-switches', icon: '&#x25B2;' },
-        { label: '用户管理', route: '/users', icon: '&#x25A0;' },
+        { label: '插件开关', route: '/plugin-switches', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>' },
+        { label: '用户管理', route: '/users', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>' },
       ]
     },
     {
@@ -113,6 +114,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/edge-import') return name === 'EdgeImport'
   if (item.route === '/tools') return name === 'Tools'
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
+  if (item.route === '/upstreams') return name === 'UpstreamList'
   return false
 }
 
@@ -224,10 +226,16 @@ const handleLogout = async () => {
 }
 
 .nav-icon {
-  font-size: 14px;
   width: 20px;
-  text-align: center;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+}
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .nav-label {

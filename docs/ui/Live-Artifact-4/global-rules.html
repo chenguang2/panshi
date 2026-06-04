@@ -1,0 +1,755 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 全局规则</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    /* ===========================
+       Global Rules Specific
+       =========================== */
+    .gr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .gr-header-actions .cluster-select { min-width: 200px; }
+    .gr-header-actions .search-input-wrap input { width: 240px; }
+    .gr-summary { display: flex; gap: 20px; margin-bottom: 16px; font-size: 13px; color: var(--muted); }
+    .gr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+    .gr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+    .gr-card:hover { box-shadow: var(--shadow-md); }
+    .gr-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .gr-card-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .gr-card-meta { text-align: right; }
+    .gr-card-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+    .gr-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .gr-plugin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(55% 0.15 145 / 10%); color: var(--success); border: 1px solid oklch(55% 0.15 145 / 20%); cursor: pointer; font-family: var(--font-mono); }
+    .gr-plugin-tag:hover { background: oklch(55% 0.15 145 / 18%); }
+    .gr-no-plugins { font-size: 11px; color: var(--muted); font-style: italic; }
+    .gr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+    .gr-version-box { display: none; margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; font-family: var(--font-mono); font-size: 11px; max-height: 200px; overflow-y: auto; }
+    .gr-version-box.visible { display: block; }
+    .gr-version-item { padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .gr-version-item:last-child { border-bottom: none; }
+    .gr-version-actions { display: flex; gap: 4px; }
+    .gr-preview { font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: var(--radius-md); max-height: 400px; overflow-y: auto; color: var(--muted); border: 1px solid var(--border); font-family: var(--font-mono); line-height: 1.5; }
+    .gr-tab-content { padding: 16px 0; }
+    .gr-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; }
+    .gr-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
+    .gr-empty-text { font-size: 14px; color: var(--muted); }
+    @media (max-width: 768px) {
+      .gr-grid { grid-template-columns: 1fr; }
+      .gr-header-actions { flex-direction: column; align-items: stretch; }
+      .gr-header-actions .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- =========================== -->
+  <!-- SIDEBAR                      -->
+  <!-- =========================== -->
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item active" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- =========================== -->
+    <!-- MAIN AREA                   -->
+    <!-- =========================== -->
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>全局规则</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- =========================== -->
+        <!-- Page Header                 -->
+        <!-- =========================== -->
+        <div class="page-header">
+          <div>
+            <h1>全局规则</h1>
+            <p>管理集群级的全局规则。全局规则对所有路由生效，通常用于全局 CORS、IP 黑名单、通用日志等场景。</p>
+          </div>
+          <div class="page-header-actions">
+            <button class="btn btn-primary" onclick="openAddGR()">+ 添加全局规则</button>
+          </div>
+        </div>
+
+        <!-- =========================== -->
+        <!-- Filter Bar + Cluster Select -->
+        <!-- =========================== -->
+        <div class="gr-header-actions">
+          <div class="form-group" style="margin:0;min-width:200px;">
+            <select class="form-input" id="clusterSelect" onchange="onClusterChange()">
+              <option value="">— 选择集群 —</option>
+            </select>
+          </div>
+          <div class="search-input-wrap">
+            <input type="text" id="grSearch" placeholder="搜索规则名称..." oninput="filterGR()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <span class="text-sm text-muted" id="grCount"></span>
+        </div>
+
+        <!-- =========================== -->
+        <!-- Global Rules Grid           -->
+        <!-- =========================== -->
+        <div class="gr-grid" id="grGrid"></div>
+
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- ADD / EDIT GLOBAL RULE      -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="grModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="grModalTitle">添加全局规则</h2>
+        <button class="modal-close" onclick="closeModal('grModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tabs" id="grFormTabs">
+          <div class="tab-list">
+            <button class="tab-item active" data-tab="gr-basic" onclick="switchTab(this, 'gr-basic')">基础配置</button>
+            <button class="tab-item" data-tab="gr-plugins" onclick="switchTab(this, 'gr-plugins')">插件配置</button>
+          </div>
+          <div class="tab-panel active" id="gr-basic">
+            <div class="form-group">
+              <label class="form-label">名称 <span class="required">*</span></label>
+              <input type="text" id="grFormName" class="form-input" placeholder="global-cors">
+              <div class="form-hint">1-100 字符，标识全局规则的名称</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">描述</label>
+              <textarea id="grFormDesc" class="form-input" placeholder="全局 CORS 规则，允许所有来源跨域访问" rows="3"></textarea>
+            </div>
+          </div>
+          <div class="tab-panel" id="gr-plugins">
+            <div class="form-hint" style="margin-bottom:12px;">选择插件并为每个插件填写配置（JSON 格式）</div>
+            <div id="grPluginSelector"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('grModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveGR()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VIEW GLOBAL RULE DRAWER     -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="viewGrModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="viewGrTitle">查看全局规则</h2>
+        <button class="modal-close" onclick="closeModal('viewGrModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="viewGrBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('viewGrModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- DELETE CONFIRM              -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="deleteGrModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>确认删除</h2>
+        <button class="modal-close" onclick="closeModal('deleteGrModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="deleteGrText" style="margin-bottom:12px;"></p>
+        <div class="form-group">
+          <label class="checkbox-label" style="margin-bottom:8px;">
+            <input type="checkbox" id="deleteGrDb" checked> <span>删除数据库记录</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="deleteGrEdge"> <span>删除 Edge 节点数据</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('deleteGrModal')">取消</button>
+        <button class="btn btn-danger" onclick="confirmDeleteGR()">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- PUBLISH MODAL               -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="publishGrModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="publishGrTitle">发布全局规则</h2>
+        <button class="modal-close" onclick="closeModal('publishGrModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;font-size:13px;color:var(--muted);">选择要发布到的 Edge 节点：</p>
+        <div id="publishGrNodeList"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('publishGrModal')">取消</button>
+        <button class="btn btn-primary" onclick="confirmPublishGR()">发布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VERSION MANAGEMENT MODAL    -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="versionGrModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="versionGrTitle">版本管理</h2>
+        <button class="modal-close" onclick="closeModal('versionGrModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="versionGrBody"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('versionGrModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================== -->
+  <!-- VIEW PLUGIN CONFIG MODAL   -->
+  <!-- =========================== -->
+  <div class="modal-overlay" id="viewPluginConfigModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="viewPluginConfigTitle">查看插件配置</h2>
+        <button class="modal-close" onclick="closeModal('viewPluginConfigModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre id="viewPluginConfigBody" class="gr-preview"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('viewPluginConfigModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      // ===========================
+      // Mock Data
+      // ===========================
+      var clusters = [
+        { id: 1, name: 'prod-cluster', display_name: '生产集群', nodes: [
+          { ip: '10.0.0.1', port: 9180 }, { ip: '10.0.0.2', port: 9180 }, { ip: '10.0.0.3', port: 9180 }
+        ]},
+        { id: 2, name: 'staging-cluster', display_name: '预发集群', nodes: [
+          { ip: '10.0.1.1', port: 9180 }, { ip: '10.0.1.2', port: 9180 }
+        ]},
+        { id: 3, name: 'dev-cluster', display_name: '开发集群', nodes: [
+          { ip: '10.0.2.1', port: 9180 }
+        ]}
+      ];
+
+      // Global rules can use a subset of plugins (typically observability, security, logging)
+      var availablePlugins = [
+        { name: 'cors', display_name: '跨域', category: 'security' },
+        { name: 'ip-restriction', display_name: 'IP 黑白名单', category: 'security' },
+        { name: 'ua-restriction', display_name: 'UA 限制', category: 'security' },
+        { name: 'referer-restriction', display_name: 'Referer 限制', category: 'security' },
+        { name: 'limit-req', display_name: '限流', category: 'security' },
+        { name: 'rate-limiting', display_name: '速率限制', category: 'traffic' },
+        { name: 'real-ip', display_name: '真实 IP', category: 'security' },
+        { name: 'traceid', display_name: '链路追踪 ID', category: 'observability' },
+        { name: 'monitor', display_name: '监控', category: 'observability' },
+        { name: 'prometheus', display_name: 'Prometheus', category: 'observability' },
+        { name: 'http-log', display_name: 'HTTP 日志', category: 'logging' },
+        { name: 'syslog', display_name: 'Syslog', category: 'logging' },
+        { name: 'loggly', display_name: 'Loggly', category: 'logging' },
+        { name: 'kafka-log', display_name: 'Kafka 日志', category: 'logging' },
+        { name: 'sentry', display_name: 'Sentry', category: 'observability' },
+        { name: 'zipkin', display_name: 'Zipkin', category: 'observability' },
+        { name: 'opentelemetry', display_name: 'OpenTelemetry', category: 'observability' },
+        { name: 'datadog', display_name: 'Datadog', category: 'observability' },
+        { name: 'body-transformer', display_name: '请求体转换', category: 'transform' },
+        { name: 'response-transformer', display_name: '响应转换', category: 'transform' },
+        { name: 'proxy-cache', display_name: '代理缓存', category: 'cache' }
+      ];
+
+      var mockGRs = [
+        { id: 1, cluster_id: 1, edge_uuid: 'gr-uuid-001', name: 'global-cors', description: '全局 CORS 配置，允许所有来源跨域访问', plugins: { 'cors': { allow_origins: '*', allow_methods: 'GET,POST,PUT,DELETE,PATCH', allow_headers: '*', expose_headers: 'X-Request-Id', max_age: 86400 } }, current_version: 2, published_at: '2024-03-15T10:30:00Z', created_at: '2024-01-10T08:00:00Z' },
+        { id: 2, cluster_id: 1, edge_uuid: 'gr-uuid-002', name: 'global-ip-block', description: '全局 IP 黑名单，封禁恶意来源', plugins: { 'ip-restriction': { blacklist: ['1.2.3.0/24', '10.0.0.0/8'], message: 'Access denied' } }, current_version: 3, published_at: '2024-04-01T14:00:00Z', created_at: '2024-01-15T09:00:00Z' },
+        { id: 3, cluster_id: 1, edge_uuid: 'gr-uuid-003', name: 'global-trace', description: '全链路追踪配置', plugins: { 'traceid': { generate_new: true, traceid_header: 'X-Trace-Id' }, 'zipkin': { endpoint: 'http://zipkin:9411/api/v2/spans', sample_ratio: 0.1 } }, current_version: 1, published_at: null, created_at: '2024-02-01T10:00:00Z' },
+        { id: 4, cluster_id: 2, edge_uuid: 'gr-uuid-004', name: 'staging-log', description: '预发环境全量日志', plugins: { 'http-log': { uri: 'http://log-collector:9200/global-logs', batch_size: 200, batch_delay: 5 }, 'syslog': { facility: 'local0', severity: 'info' } }, current_version: 2, published_at: '2024-03-20T11:00:00Z', created_at: '2024-02-10T08:00:00Z' },
+        { id: 5, cluster_id: 2, edge_uuid: 'gr-uuid-005', name: 'staging-monitor', description: '预发环境全局监控', plugins: { 'prometheus': { metrics: ['latency', 'qps', 'error_rate', 'bandwidth'] }, 'monitor': { report_interval: 60, detailed: true } }, current_version: 1, published_at: null, created_at: '2024-03-05T09:00:00Z' },
+        { id: 6, cluster_id: 3, edge_uuid: 'gr-uuid-006', name: 'dev-cache', description: '开发环境全局缓存', plugins: { 'proxy-cache': { cache_ttl: 60, cache_zone: 'dev_global_cache', cache_key: '$uri$is_args$args' } }, current_version: 1, published_at: null, created_at: '2024-04-10T10:00:00Z' },
+        { id: 7, cluster_id: 1, edge_uuid: 'gr-uuid-007', name: 'global-transform', description: '全局响应头处理', plugins: { 'response-transformer': { add: { headers: { 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'X-XSS-Protection': '1; mode=block' } }, remove: { headers: ['X-Powered-By', 'Server'] } } }, current_version: 1, published_at: '2024-04-15T08:00:00Z', created_at: '2024-04-15T08:00:00Z' }
+      ];
+
+      var versionHistory = [
+        { id: 1, version: 1, config: '{"cors":{"allow_origins":"*"}}', created_at: '2024-01-10T08:00:00Z', created_by: 'admin' },
+        { id: 2, version: 2, config: '{"cors":{"allow_origins":"*","allow_methods":"GET,POST,PUT,DELETE,PATCH","allow_headers":"*"}}', created_at: '2024-03-15T10:30:00Z', created_by: 'admin' },
+        { id: 3, version: 3, config: '{"ip-restriction":{"blacklist":["1.2.3.0/24"],"message":"Access denied"}}', created_at: '2024-02-01T09:00:00Z', created_by: 'admin' }
+      ];
+
+      // ===========================
+      // State
+      // ===========================
+      var selectedClusterId = null;
+      var editingGRId = null;
+      var editingClusterId = null;
+      var viewingGR = null;
+      var publishingGR = null;
+      var versionGR = null;
+
+      // ===========================
+      // Init Cluster Select
+      // ===========================
+      function initClusterSelect() {
+        var sel = document.getElementById('clusterSelect');
+        sel.innerHTML = '<option value="">— 选择集群 —</option>';
+        clusters.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.display_name + ' (' + c.name + ')';
+          sel.appendChild(opt);
+        });
+      }
+
+      // ===========================
+      // Plugin Selector Render
+      // ===========================
+      var selectedPlugins = {};
+
+      function renderPluginSelector() {
+        var container = document.getElementById('grPluginSelector');
+        var cats = {};
+        availablePlugins.forEach(function(p) {
+          if (!cats[p.category]) cats[p.category] = [];
+          cats[p.category].push(p);
+        });
+        var html = '<div style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;">';
+        Object.keys(cats).forEach(function(cat) {
+          html += '<div style="margin-bottom:8px;"><strong style="font-size:12px;color:var(--muted);text-transform:capitalize;">' + cat + '</strong></div>';
+          html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">';
+          cats[cat].forEach(function(p) {
+            var checked = selectedPlugins[p.name] ? 'checked' : '';
+            html += '<label class="checkbox-label plugin-check-item" style="padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;' + (checked ? 'background:oklch(56% 0.16 210 / 8%);border-color:var(--accent);' : '') + '">';
+            html += '<input type="checkbox" value="' + p.name + '" onchange="togglePlugin(\'' + p.name + '\', this)" ' + checked + '> ';
+            html += '<span>' + p.display_name + '</span>';
+            html += '</label>';
+          });
+          html += '</div>';
+        });
+        html += '</div>';
+
+        html += '<div style="margin-top:12px;" id="grPluginConfigs">';
+        Object.keys(selectedPlugins).forEach(function(pname) {
+          var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+          var cfg = selectedPlugins[pname] || '{}';
+          var cfgStr = typeof cfg === 'object' ? JSON.stringify(cfg, null, 2) : cfg;
+          html += '<div class="form-group" style="margin-bottom:8px;">';
+          html += '<label class="form-label">' + (plugin ? plugin.display_name : pname) + ' 配置</label>';
+          html += '<textarea class="form-input" rows="4" style="font-family:var(--font-mono);font-size:11px;" onchange="updatePluginConfig(\'' + pname + '\', this.value)">' + cfgStr + '</textarea>';
+          html += '</div>';
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+      }
+
+      window.togglePlugin = function(name, cb) {
+        if (cb.checked) {
+          selectedPlugins[name] = {};
+        } else {
+          delete selectedPlugins[name];
+        }
+        renderPluginSelector();
+      };
+
+      window.updatePluginConfig = function(name, val) {
+        try { selectedPlugins[name] = JSON.parse(val); }
+        catch(e) { selectedPlugins[name] = val; }
+      };
+
+      // ===========================
+      // Tab switching
+      // ===========================
+      window.switchTab = function(btn, tabId) {
+        var parent = btn.closest('.tabs');
+        parent.querySelectorAll('.tab-item').forEach(function(t) { t.classList.remove('active'); });
+        parent.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+      };
+
+      // ===========================
+      // Cluster Change
+      // ===========================
+      window.onClusterChange = function() {
+        var val = document.getElementById('clusterSelect').value;
+        selectedClusterId = val ? parseInt(val) : null;
+        filterGR();
+      };
+
+      // ===========================
+      // Filter & Render
+      // ===========================
+      function getFilteredGRs() {
+        var q = (document.getElementById('grSearch').value || '').toLowerCase();
+        return mockGRs.filter(function(gr) {
+          if (selectedClusterId && gr.cluster_id !== selectedClusterId) return false;
+          if (q && gr.name.toLowerCase().indexOf(q) < 0 && (gr.description || '').toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      function renderGRs(list) {
+        var grid = document.getElementById('grGrid');
+        document.getElementById('grCount').textContent = '共 ' + list.length + ' 个全局规则';
+        if (!list || list.length === 0) {
+          grid.innerHTML = '<div class="gr-empty"><div class="gr-empty-icon">⚙</div><div class="gr-empty-text">' +
+            (selectedClusterId ? '暂无全局规则，点击"添加全局规则"创建' : '请先选择一个集群') + '</div></div>';
+          return;
+        }
+        var html = '';
+        list.forEach(function(gr) {
+          var published = gr.current_version && gr.published_at;
+          var pluginNames = Object.keys(gr.plugins || {});
+          html += '<div class="gr-card">';
+          html += '<div class="gr-card-header">';
+          html += '<div class="gr-card-name">' + gr.name + '</div>';
+          html += '<div class="gr-card-meta">';
+          html += '<span class="badge badge-' + (published ? 'success' : 'warning') + '" style="font-size:10px;">' + (published ? '已发布' : '未发布') + '</span>';
+          if (gr.current_version) {
+            html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;font-family:var(--font-mono);">v' + gr.current_version + (gr.published_at ? ' · ' + window.formatDate(gr.published_at) : ' · 未同步') + '</div>';
+          }
+          html += '</div></div>';
+          if (gr.description) {
+            html += '<div class="gr-card-desc">' + gr.description + '</div>';
+          }
+          html += '<div class="gr-card-plugins">';
+          if (pluginNames.length > 0) {
+            pluginNames.forEach(function(pname) {
+              var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+              html += '<span class="gr-plugin-tag" onclick="viewPluginConfigDetail(\'' + pname + '\')" title="查看配置">' + (plugin ? plugin.display_name : pname) + '</span>';
+            });
+          } else {
+            html += '<span class="gr-no-plugins">无插件</span>';
+          }
+          html += '</div>';
+          html += '<div class="gr-card-actions">';
+          html += '<button class="btn btn-ghost btn-sm" onclick="viewGR(' + gr.id + ')" title="查看">👁</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="editGR(' + gr.id + ')" title="编辑">✎</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="deleteGR(' + gr.id + ')" title="删除">✕</button>';
+          html += '<span style="flex:1"></span>';
+          html += '<button class="btn btn-secondary btn-sm" onclick="publishGR(' + gr.id + ')">发布</button>';
+          html += '<button class="btn btn-ghost btn-sm" onclick="versionGRManager(' + gr.id + ')">版本管理</button>';
+          html += '</div></div>';
+        });
+        grid.innerHTML = html;
+      }
+
+      window.filterGR = function() {
+        renderGRs(getFilteredGRs());
+      };
+
+      // ===========================
+      // CRUD
+      // ===========================
+      window.openAddGR = function() {
+        if (!selectedClusterId) { showToast('请先选择一个集群', 'warning'); return; }
+        var cluster = clusters.find(function(c) { return c.id === selectedClusterId; });
+        if (!cluster) { showToast('集群不存在', 'error'); return; }
+        editingGRId = null;
+        editingClusterId = selectedClusterId;
+        selectedPlugins = {};
+        document.getElementById('grModalTitle').textContent = '添加全局规则 — ' + cluster.display_name;
+        document.getElementById('grFormName').value = '';
+        document.getElementById('grFormDesc').value = '';
+        renderPluginSelector();
+        var tabs = document.getElementById('grFormTabs');
+        tabs.querySelectorAll('.tab-item')[0].click();
+        openModal('grModal');
+      };
+
+      window.editGR = function(id) {
+        var gr = mockGRs.find(function(g) { return g.id === id; });
+        if (!gr) return;
+        if (!selectedClusterId) { showToast('请先选择一个集群', 'warning'); return; }
+        editingGRId = id;
+        editingClusterId = selectedClusterId;
+        selectedPlugins = {};
+        if (gr.plugins) {
+          Object.keys(gr.plugins).forEach(function(k) { selectedPlugins[k] = gr.plugins[k]; });
+        }
+        document.getElementById('grModalTitle').textContent = '编辑全局规则 — ' + gr.name;
+        document.getElementById('grFormName').value = gr.name || '';
+        document.getElementById('grFormDesc').value = gr.description || '';
+        renderPluginSelector();
+        var tabs = document.getElementById('grFormTabs');
+        tabs.querySelectorAll('.tab-item')[0].click();
+        openModal('grModal');
+      };
+
+      window.saveGR = function() {
+        var name = document.getElementById('grFormName').value.trim();
+        var desc = document.getElementById('grFormDesc').value.trim();
+        if (!name) { showToast('请输入全局规则名称', 'error'); return; }
+
+        var plugins = {};
+        Object.keys(selectedPlugins).forEach(function(k) {
+          var v = selectedPlugins[k];
+          if (typeof v === 'string') { try { plugins[k] = JSON.parse(v); } catch(e) { plugins[k] = v; } }
+          else { plugins[k] = v; }
+        });
+
+        if (editingGRId) {
+          var gr = mockGRs.find(function(g) { return g.id === editingGRId; });
+          if (gr) {
+            gr.name = name;
+            gr.description = desc;
+            gr.plugins = plugins;
+            showToast('全局规则已更新', 'success');
+          }
+        } else {
+          mockGRs.push({
+            id: mockGRs.length + 1,
+            cluster_id: editingClusterId,
+            edge_uuid: 'gr-uuid-new-' + Date.now(),
+            name: name,
+            description: desc,
+            plugins: plugins,
+            current_version: 0,
+            published_at: null,
+            created_at: new Date().toISOString()
+          });
+          showToast('全局规则已创建', 'success');
+        }
+        closeModal('grModal');
+        filterGR();
+      };
+
+      window.deleteGR = function(id) {
+        var gr = mockGRs.find(function(g) { return g.id === id; });
+        if (!gr) return;
+        document.getElementById('deleteGrText').textContent = '确定要删除全局规则 "' + gr.name + '" 吗？';
+        document.getElementById('deleteGrDb').checked = true;
+        document.getElementById('deleteGrEdge').checked = false;
+        document.getElementById('deleteGrText').dataset.id = id;
+        openModal('deleteGrModal');
+      };
+
+      window.confirmDeleteGR = function() {
+        var id = parseInt(document.getElementById('deleteGrText').dataset.id);
+        var idx = mockGRs.findIndex(function(g) { return g.id === id; });
+        if (idx >= 0) {
+          var deleted = mockGRs.splice(idx, 1)[0];
+          var msg = '全局规则 "' + deleted.name + '" 已删除';
+          if (document.getElementById('deleteGrEdge').checked) msg += '，Edge 节点数据已清理';
+          showToast(msg, 'info');
+        }
+        closeModal('deleteGrModal');
+        filterGR();
+      };
+
+      // ===========================
+      // View
+      // ===========================
+      window.viewGR = function(id) {
+        var gr = mockGRs.find(function(g) { return g.id === id; });
+        if (!gr) return;
+        viewingGR = gr;
+        document.getElementById('viewGrTitle').textContent = '查看全局规则 — ' + gr.name;
+        var statusHtml = gr.current_version && gr.published_at
+          ? '<span class="badge badge-success">已发布</span>'
+          : '<span class="badge badge-warning">未发布</span>';
+        document.getElementById('viewGrBody').innerHTML =
+          '<div class="detail-grid">' +
+            '<div class="detail-label">名称</div><div class="detail-value">' + gr.name + '</div>' +
+            '<div class="detail-label">描述</div><div class="detail-value">' + (gr.description || '-') + '</div>' +
+            '<div class="detail-label">状态</div><div class="detail-value">' + statusHtml + '</div>' +
+            (gr.current_version ? '<div class="detail-label">当前版本</div><div class="detail-value">v' + gr.current_version + '</div>' : '') +
+            (gr.published_at ? '<div class="detail-label">发布时间</div><div class="detail-value">' + window.formatDate(gr.published_at) + '</div>' : '') +
+            '<div class="detail-label">创建时间</div><div class="detail-value">' + window.formatDate(gr.created_at) + '</div>' +
+          '</div>' +
+          '<h3 style="font-size:14px;font-weight:600;margin:20px 0 12px;">插件配置</h3>' +
+          '<pre class="gr-preview">' + JSON.stringify(gr.plugins, null, 2) + '</pre>';
+        openModal('viewGrModal');
+      };
+
+      window.viewPluginConfigDetail = function(pname) {
+        var gr = viewingGR;
+        var cfg = gr && gr.plugins ? gr.plugins[pname] : null;
+        if (!cfg) { showToast('配置不可用', 'warning'); return; }
+        var plugin = availablePlugins.find(function(p) { return p.name === pname; });
+        document.getElementById('viewPluginConfigTitle').textContent = (plugin ? plugin.display_name : pname) + ' 配置';
+        document.getElementById('viewPluginConfigBody').textContent = JSON.stringify(cfg, null, 2);
+        openModal('viewPluginConfigModal');
+      };
+
+      // ===========================
+      // Publish
+      // ===========================
+      window.publishGR = function(id) {
+        var gr = mockGRs.find(function(g) { return g.id === id; });
+        if (!gr) return;
+        var cluster = clusters.find(function(c) { return c.id === gr.cluster_id; });
+        if (!cluster) { showToast('集群不存在', 'error'); return; }
+        publishingGR = gr;
+        document.getElementById('publishGrTitle').textContent = '发布全局规则: ' + gr.name;
+        var html = '';
+        (cluster.nodes || []).forEach(function(n, i) {
+          html += '<label class="checkbox-label" style="display:flex;align-items:center;gap:8px;padding:6px 0;">';
+          html += '<input type="checkbox" class="publish-node-cb" value="' + i + '" checked>';
+          html += '<span class="status-dot online"></span> ' + n.ip + ':' + n.port;
+          html += '</label>';
+        });
+        if (!cluster.nodes || cluster.nodes.length === 0) {
+          html = '<div class="text-muted" style="padding:20px;text-align:center;">该集群下无可用节点</div>';
+        }
+        document.getElementById('publishGrNodeList').innerHTML = html;
+        openModal('publishGrModal');
+      };
+
+      window.confirmPublishGR = function() {
+        if (!publishingGR) { closeModal('publishGrModal'); return; }
+        var cbs = document.querySelectorAll('.publish-node-cb:checked');
+        if (cbs.length === 0) { showToast('请选择至少一个节点', 'warning'); return; }
+        var nodeCount = cbs.length;
+        publishingGR.current_version = (publishingGR.current_version || 0) + 1;
+        publishingGR.published_at = new Date().toISOString();
+        showToast('全局规则 "' + publishingGR.name + '" 发布成功，已同步到 ' + nodeCount + ' 个节点', 'success');
+        closeModal('publishGrModal');
+        filterGR();
+      };
+
+      // ===========================
+      // Version Management
+      // ===========================
+      window.versionGRManager = function(id) {
+        var gr = mockGRs.find(function(g) { return g.id === id; });
+        if (!gr) return;
+        versionGR = gr;
+        document.getElementById('versionGrTitle').textContent = '版本管理 — ' + gr.name;
+        renderVersionHistory(gr);
+        openModal('versionGrModal');
+      };
+
+      function renderVersionHistory(gr) {
+        var versions = versionHistory.filter(function(v) { return v.version <= (gr.current_version || 0); });
+        var html = '<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">当前版本: <strong>v' + (gr.current_version || 0) + '</strong></p>';
+        if (versions.length === 0) {
+          html += '<div class="text-muted" style="padding:20px;text-align:center;">暂无版本记录</div>';
+        } else {
+          html += '<div style="border:1px solid var(--border);border-radius:var(--radius-md);">';
+          versions.sort(function(a, b) { return b.version - a.version; }).forEach(function(v) {
+            var isCurrent = v.version === gr.current_version;
+            html += '<div class="gr-version-item" style="padding:10px 12px;' + (isCurrent ? 'background:oklch(56% 0.16 210 / 6%);' : '') + '">';
+            html += '<div><strong>v' + v.version + '</strong> ' + (isCurrent ? '<span class="badge badge-success" style="font-size:10px;">当前</span>' : '') + '</div>';
+            html += '<div style="font-size:11px;color:var(--muted);">' + window.formatDate(v.created_at) + ' · ' + v.created_by + '</div>';
+            html += '<div class="gr-version-actions" style="margin-top:6px;">';
+            if (!isCurrent) {
+              html += '<button class="btn btn-ghost btn-sm" onclick="rollbackGR(' + v.version + ')">回滚到此版本</button>';
+            }
+            html += '<button class="btn btn-ghost btn-sm" onclick="viewVersionConfig(' + v.id + ')">查看配置</button>';
+            html += '<button class="btn btn-ghost btn-sm" onclick="deleteVersion(' + v.id + ')">删除</button>';
+            html += '</div></div>';
+          });
+          html += '</div>';
+        }
+        document.getElementById('versionGrBody').innerHTML = html;
+      }
+
+      window.rollbackGR = function(version) {
+        if (!versionGR) return;
+        if (!confirm('确定将 "' + versionGR.name + '" 回滚到 v' + version + ' 吗？')) return;
+        versionGR.current_version = version;
+        versionGR.published_at = new Date().toISOString();
+        showToast('全局规则 "' + versionGR.name + '" 已回滚到 v' + version, 'success');
+        renderVersionHistory(versionGR);
+      };
+
+      window.viewVersionConfig = function(versionId) {
+        var v = versionHistory.find(function(v) { return v.id === versionId; });
+        if (!v) { showToast('版本配置不可用', 'warning'); return; }
+        document.getElementById('viewPluginConfigTitle').textContent = '版本 v' + v.version + ' 配置';
+        try {
+          var formatted = JSON.stringify(JSON.parse(v.config), null, 2);
+          document.getElementById('viewPluginConfigBody').textContent = formatted;
+        } catch(e) {
+          document.getElementById('viewPluginConfigBody').textContent = v.config;
+        }
+        openModal('viewPluginConfigModal');
+      };
+
+      window.deleteVersion = function(versionId) {
+        if (!confirm('确定删除此历史版本吗？')) return;
+        var idx = versionHistory.findIndex(function(v) { return v.id === versionId; });
+        if (idx >= 0) {
+          versionHistory.splice(idx, 1);
+          showToast('历史版本已删除', 'info');
+          if (versionGR) renderVersionHistory(versionGR);
+        }
+      };
+
+      // ===========================
+      // Init
+      // ===========================
+      initClusterSelect();
+      renderGRs([]);
+
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,450 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 上游管理</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .upstream-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .upstream-filter-bar .search-input-wrap input { width: 240px; }
+    .target-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .target-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 10px; font-size: 11px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); }
+    .target-tag .weight { color: var(--muted); font-size: 10px; }
+    .lb-badge { font-size: 11px; padding: 1px 7px; border-radius: 10px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 8%); color: var(--accent); }
+    .publish-result-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; margin-top: 8px; font-size: 12px; max-height: 180px; overflow-y: auto; display: none; }
+    .publish-result-box.visible { display: block; }
+    .publish-result-box .node-result { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-family: var(--font-mono); }
+    .publish-result-box .node-result .success { color: var(--success); }
+    .publish-result-box .node-result .error { color: var(--danger); }
+    .history-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .history-item:last-child { border-bottom: none; }
+    @media (max-width: 768px) {
+      .upstream-filter-bar { flex-direction: column; align-items: stretch; }
+      .upstream-filter-bar .search-input-wrap input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item active" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>上游管理</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>上游管理</h1>
+            <p>管理后端上游服务，配置负载均衡和目标节点</p>
+          </div>
+          <div class="page-header-actions">
+            <select class="form-input" style="width:160px;height:32px;font-size:12px;" id="clusterFilter" onchange="renderUpstreams()">
+              <option value="all">全部集群</option>
+              <option value="1">生产集群</option>
+              <option value="2">预发集群</option>
+              <option value="3">开发集群</option>
+            </select>
+            <button class="btn btn-primary" onclick="openUpstreamModal()">+ 新建上游</button>
+          </div>
+        </div>
+
+        <div class="upstream-filter-bar">
+          <div class="search-input-wrap">
+            <input type="text" id="upstreamSearch" placeholder="搜索名称或描述..." oninput="renderUpstreams()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <select class="form-input" style="width:140px;height:32px;font-size:12px;" id="lbFilter" onchange="renderUpstreams()">
+            <option value="all">全部算法</option>
+            <option value="weighted_roundrobin">加权轮询</option>
+            <option value="chash">一致性哈希</option>
+            <option value="ewma">EWMA</option>
+            <option value="least_conn">最少连接</option>
+          </select>
+          <span class="text-muted text-sm" id="upstreamCount">共 8 个上游</span>
+        </div>
+
+        <div class="table-container" id="upstreamTable"></div>
+
+        <div class="table-footer">
+          <span class="text-muted text-sm" id="paginationInfo">第 1 页，共 1 页</span>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- Upstream Modal -->
+  <div class="modal-overlay" id="upstreamModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="upstreamModalTitle">新建上游</h2>
+        <button class="modal-close" onclick="closeModal('upstreamModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">名称 <span class="required">*</span></label>
+          <input type="text" id="usName" class="form-input" placeholder="backend-api">
+        </div>
+        <div class="form-group">
+          <label class="form-label">所属集群</label>
+          <select id="usCluster" class="form-input">
+            <option value="1">生产集群</option>
+            <option value="2">预发集群</option>
+            <option value="3">开发集群</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">负载均衡算法</label>
+            <select id="usLB" class="form-input">
+              <option value="weighted_roundrobin">加权轮询 (weighted_roundrobin)</option>
+              <option value="chash">一致性哈希 (chash)</option>
+              <option value="ewma">EWMA</option>
+              <option value="least_conn">最少连接 (least_conn)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">协议</label>
+            <select id="usScheme" class="form-input">
+              <option value="http">HTTP</option>
+              <option value="https">HTTPS</option>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea id="usDesc" class="form-input" placeholder="服务描述" rows="2"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Pass Host</label>
+            <select id="usPassHost" class="form-input">
+              <option value="pass">pass（透传）</option>
+              <option value="node">node（节点）</option>
+              <option value="rewrite">rewrite（重写）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">重试次数</label>
+            <input type="number" id="usRetries" class="form-input" value="3" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">目标节点 <span class="required">*</span></label>
+          <div id="targetList">
+            <div class="form-row" style="margin-bottom:8px;">
+              <input type="text" class="form-input target-ip" placeholder="10.0.0.1:8080" style="grid-column:1;">
+              <input type="number" class="form-input target-weight" placeholder="权重" value="100" min="1" style="grid-column:2;">
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="addTargetRow()">+ 添加目标</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('upstreamModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveUpstream()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Publish Modal -->
+  <div class="modal-overlay" id="publishModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>发布上游</h2>
+        <button class="modal-close" onclick="closeModal('publishModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom:12px;">选择要发布到的 Edge 节点：</p>
+        <div id="publishNodeList"></div>
+        <div class="publish-result-box" id="publishResult"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('publishModal')">取消</button>
+        <button class="btn btn-primary" onclick="executePublish()">发布</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      var upstreams = [
+        { id: 1, cluster_id: 1, name: 'user-service', description: '用户服务', load_balance: 'weighted_roundrobin', scheme: 'http', pass_host: 'pass', retries: 3, targets: [{ target: '10.0.0.1:8080', weight: 100 }, { target: '10.0.0.2:8080', weight: 80 }, { target: '10.0.0.3:8080', weight: 60 }], current_version: 5, created_at: '2024-01-15T10:30:00Z' },
+        { id: 2, cluster_id: 1, name: 'order-service', description: '订单服务', load_balance: 'weighted_roundrobin', scheme: 'http', pass_host: 'pass', retries: 3, targets: [{ target: '10.0.0.4:8080', weight: 100 }, { target: '10.0.0.5:8080', weight: 100 }], current_version: 3, created_at: '2024-02-10T14:20:00Z' },
+        { id: 3, cluster_id: 1, name: 'payment-gateway', description: '支付网关', load_balance: 'chash', scheme: 'https', pass_host: 'pass', retries: 2, targets: [{ target: '10.0.0.6:8443', weight: 100 }], current_version: 7, created_at: '2024-03-05T09:00:00Z' },
+        { id: 4, cluster_id: 1, name: 'inventory-svc', description: '库存服务', load_balance: 'least_conn', scheme: 'http', pass_host: 'pass', retries: 3, targets: [{ target: '10.0.0.7:8080', weight: 100 }, { target: '10.0.0.8:8080', weight: 100 }, { target: '10.0.0.9:8080', weight: 100 }], current_version: 2, created_at: '2024-03-20T16:45:00Z' },
+        { id: 5, cluster_id: 2, name: 'search-service', description: '搜索服务', load_balance: 'ewma', scheme: 'http', pass_host: 'node', retries: 2, targets: [{ target: '10.0.1.1:8080', weight: 100 }, { target: '10.0.1.2:8080', weight: 80 }], current_version: 4, created_at: '2024-04-01T11:00:00Z' },
+        { id: 6, cluster_id: 2, name: 'recommend-api', description: '推荐 API', load_balance: 'weighted_roundrobin', scheme: 'http', pass_host: 'pass', retries: 3, targets: [{ target: '10.0.1.3:8080', weight: 100 }], current_version: 1, created_at: '2024-04-15T08:30:00Z' },
+        { id: 7, cluster_id: 3, name: 'dev-backend', description: '开发后端', load_balance: 'weighted_roundrobin', scheme: 'http', pass_host: 'pass', retries: 1, targets: [{ target: '10.0.2.1:8080', weight: 100 }], current_version: 6, created_at: '2024-05-01T13:00:00Z' },
+        { id: 8, cluster_id: 3, name: 'cache-service', description: '缓存服务', load_balance: 'chash', scheme: 'tcp', pass_host: 'pass', retries: 2, targets: [{ target: '10.0.2.2:6379', weight: 100 }, { target: '10.0.2.3:6379', weight: 100 }], current_version: 3, created_at: '2024-05-10T10:15:00Z' }
+      ];
+
+      var editingId = null;
+      var publishingId = null;
+      var currentPage = 1;
+      var pageSize = 10;
+
+      var clusterNames = { 1: '生产集群', 2: '预发集群', 3: '开发集群' };
+
+      function getFiltered() {
+        var q = (document.getElementById('upstreamSearch').value || '').toLowerCase();
+        var lb = document.getElementById('lbFilter').value;
+        var cluster = document.getElementById('clusterFilter').value;
+        return upstreams.filter(function(u) {
+          if (cluster !== 'all' && u.cluster_id !== parseInt(cluster)) return false;
+          if (lb !== 'all' && u.load_balance !== lb) return false;
+          if (q && u.name.toLowerCase().indexOf(q) < 0 && u.description.toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      window.renderUpstreams = function() {
+        var filtered = getFiltered();
+        var total = filtered.length;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        var start = (currentPage - 1) * pageSize;
+        var page = filtered.slice(start, start + pageSize);
+
+        document.getElementById('upstreamCount').textContent = '共 ' + total + ' 个上游';
+        document.getElementById('paginationInfo').textContent = '第 ' + currentPage + ' 页，共 ' + totalPages + ' 页';
+
+        var html = '<table><thead><tr><th style="width:30px;"><input type="checkbox"></th><th>名称</th><th>集群</th><th>负载均衡</th><th>目标节点</th><th>协议</th><th>版本</th><th>创建时间</th><th style="width:80px;">操作</th></tr></thead><tbody>';
+        if (page.length === 0) {
+          html += '<tr><td colspan="9"><div class="empty-state" style="padding:32px;"><div class="empty-state-icon">◎</div><p>暂无上游服务</p></div></td></tr>';
+        } else {
+          page.forEach(function(u) {
+            html += '<tr>' +
+              '<td><input type="checkbox"></td>' +
+              '<td><div class="cell-primary">' + u.name + '</div><div class="cell-secondary">' + (u.description || '-') + '</div></td>' +
+              '<td>' + (clusterNames[u.cluster_id] || '-') + '</td>' +
+              '<td><span class="lb-badge">' + u.load_balance.replace(/_/g, ' ') + '</span></td>' +
+              '<td><div class="target-list">' + u.targets.map(function(t) {
+                return '<span class="target-tag">' + t.target + ' <span class="weight">(' + t.weight + ')</span></span>';
+              }).join('') + '</div></td>' +
+              '<td><span class="text-mono text-sm">' + u.scheme + '</span></td>' +
+              '<td><span class="text-mono text-sm">v' + u.current_version + '</span></td>' +
+              '<td><span class="cell-secondary">' + window.formatDate(u.created_at) + '</span></td>' +
+              '<td><div class="action-menu">' +
+                '<button class="action-btn" onclick="toggleActionMenu(this)">⋯</button>' +
+                '<div class="action-dropdown">' +
+                  '<button class="action-dropdown-item" onclick="window.editUpstream(' + u.id + ')">编辑</button>' +
+                  '<button class="action-dropdown-item" onclick="window.publishUpstream(' + u.id + ')">发布</button>' +
+                  '<button class="action-dropdown-item" onclick="window.rollbackUpstream(' + u.id + ')">回滚</button>' +
+                  '<button class="action-dropdown-item danger" onclick="window.deleteUpstream(' + u.id + ')">删除</button>' +
+                '</div></div></td>' +
+            '</tr>';
+          });
+        }
+        html += '</tbody></table>';
+        document.getElementById('upstreamTable').innerHTML = html;
+        window.renderPagination(document.getElementById('pagination'), currentPage, totalPages);
+      };
+
+      window.goPage = function(p) { currentPage = p; window.renderUpstreams(); };
+
+      // ----- CRUD -----
+      function addTargetRow() {
+        var container = document.getElementById('targetList');
+        var row = document.createElement('div');
+        row.className = 'form-row';
+        row.style.marginBottom = '8px';
+        row.innerHTML = '<input type="text" class="form-input target-ip" placeholder="10.0.0.1:8080">' +
+          '<div style="display:flex;gap:8px;"><input type="number" class="form-input target-weight" placeholder="权重" value="100" min="1" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="this.parentElement.parentElement.parentElement.removeChild(this.parentElement.parentElement.parentElement)" style="flex-shrink:0;">✕</button></div>';
+        container.appendChild(row);
+      }
+      window.addTargetRow = addTargetRow;
+
+      window.openUpstreamModal = function(data) {
+        editingId = null;
+        document.getElementById('upstreamModalTitle').textContent = '新建上游';
+        document.getElementById('usName').value = '';
+        document.getElementById('usCluster').value = '1';
+        document.getElementById('usLB').value = 'weighted_roundrobin';
+        document.getElementById('usScheme').value = 'http';
+        document.getElementById('usDesc').value = '';
+        document.getElementById('usPassHost').value = 'pass';
+        document.getElementById('usRetries').value = '3';
+        document.getElementById('targetList').innerHTML =
+          '<div class="form-row" style="margin-bottom:8px;">' +
+          '<input type="text" class="form-input target-ip" placeholder="10.0.0.1:8080" style="grid-column:1;">' +
+          '<input type="number" class="form-input target-weight" placeholder="权重" value="100" min="1" style="grid-column:2;">' +
+          '</div>';
+        window.openModal('upstreamModal');
+      };
+
+      window.editUpstream = function(id) {
+        var u = upstreams.find(function(x) { return x.id === id; });
+        if (!u) return;
+        editingId = id;
+        document.getElementById('upstreamModalTitle').textContent = '编辑上游 — ' + u.name;
+        document.getElementById('usName').value = u.name;
+        document.getElementById('usCluster').value = u.cluster_id;
+        document.getElementById('usLB').value = u.load_balance;
+        document.getElementById('usScheme').value = u.scheme;
+        document.getElementById('usDesc').value = u.description || '';
+        document.getElementById('usPassHost').value = u.pass_host;
+        document.getElementById('usRetries').value = u.retries;
+        document.getElementById('targetList').innerHTML = u.targets.map(function(t) {
+          return '<div class="form-row" style="margin-bottom:8px;">' +
+            '<input type="text" class="form-input target-ip" value="' + t.target + '" style="grid-column:1;">' +
+            '<div style="display:flex;gap:8px;"><input type="number" class="form-input target-weight" value="' + t.weight + '" min="1" style="flex:1;"><button class="btn btn-ghost btn-sm" onclick="this.parentElement.parentElement.parentElement.removeChild(this.parentElement.parentElement.parentElement)" style="flex-shrink:0;">✕</button></div>' +
+            '</div>';
+        }).join('');
+        window.openModal('upstreamModal');
+      };
+
+      window.saveUpstream = function() {
+        var name = document.getElementById('usName').value.trim();
+        if (!name) { showToast('请输入上游名称', 'error'); return; }
+        var cluster = parseInt(document.getElementById('usCluster').value);
+        var lb = document.getElementById('usLB').value;
+        var scheme = document.getElementById('usScheme').value;
+        var desc = document.getElementById('usDesc').value.trim();
+        var passHost = document.getElementById('usPassHost').value;
+        var retries = parseInt(document.getElementById('usRetries').value) || 0;
+        var ipEls = document.querySelectorAll('.target-ip');
+        var wEls = document.querySelectorAll('.target-weight');
+        var targets = [];
+        for (var i = 0; i < ipEls.length; i++) {
+          var t = ipEls[i].value.trim();
+          var w = parseInt(wEls[i].value) || 1;
+          if (t) targets.push({ target: t, weight: w });
+        }
+        if (targets.length === 0) { showToast('请添加至少一个目标节点', 'error'); return; }
+
+        if (editingId) {
+          var u = upstreams.find(function(x) { return x.id === editingId; });
+          if (u) {
+            u.name = name; u.cluster_id = cluster; u.load_balance = lb; u.scheme = scheme;
+            u.description = desc; u.pass_host = passHost; u.retries = retries; u.targets = targets;
+            u.current_version++;
+            showToast('上游已更新，当前版本 v' + u.current_version, 'success');
+          }
+        } else {
+          upstreams.push({
+            id: upstreams.length + 1,
+            cluster_id: cluster,
+            name: name, load_balance: lb, scheme: scheme, description: desc,
+            pass_host: passHost, retries: retries, targets: targets,
+            current_version: 1, created_at: new Date().toISOString()
+          });
+          showToast('上游已创建', 'success');
+        }
+        window.closeModal('upstreamModal');
+        window.renderUpstreams();
+      };
+
+      window.deleteUpstream = function(id) {
+        if (!confirm('确定删除该上游服务？')) return;
+        upstreams = upstreams.filter(function(x) { return x.id !== id; });
+        showToast('上游已删除', 'info');
+        window.renderUpstreams();
+      };
+
+      // ----- Publish -----
+      window.publishUpstream = function(id) {
+        publishingId = id;
+        document.getElementById('publishNodeList').innerHTML =
+          '<label class="checkbox-label" style="margin-bottom:8px;"><input type="checkbox" id="publishAllNodes" checked onchange="togglePublishNodes()"> <span>全部节点</span></label>' +
+          '<div id="publishNodes">' +
+            '<label class="checkbox-label" style="margin-left:20px;margin-bottom:4px;"><input type="checkbox" class="publish-node-cb" checked> <span>10.0.0.1:9180</span></label>' +
+            '<label class="checkbox-label" style="margin-left:20px;margin-bottom:4px;"><input type="checkbox" class="publish-node-cb" checked> <span>10.0.0.2:9180</span></label>' +
+            '<label class="checkbox-label" style="margin-left:20px;margin-bottom:4px;"><input type="checkbox" class="publish-node-cb" checked> <span>10.0.0.3:9180</span></label>' +
+          '</div>';
+        document.getElementById('publishResult').className = 'publish-result-box';
+        document.getElementById('publishResult').innerHTML = '';
+        window.openModal('publishModal');
+      };
+
+      window.togglePublishNodes = function() {
+        var checked = document.getElementById('publishAllNodes').checked;
+        document.querySelectorAll('.publish-node-cb').forEach(function(cb) { cb.checked = checked; });
+      };
+
+      window.executePublish = function() {
+        var resultEl = document.getElementById('publishResult');
+        resultEl.className = 'publish-result-box visible';
+        resultEl.innerHTML = '<div class="loading-spinner" style="margin-right:8px;"></div> 正在发布...';
+        setTimeout(function() {
+          resultEl.innerHTML =
+            '<div style="font-weight:600;margin-bottom:8px;">✅ 发布成功 — v' + (Math.floor(Math.random() * 10) + 1) + '</div>' +
+            '<div class="node-result"><span class="success">✓</span> 10.0.0.1:9180 — success</div>' +
+            '<div class="node-result"><span class="success">✓</span> 10.0.0.2:9180 — success</div>' +
+            '<div class="node-result"><span class="error">✗</span> 10.0.0.3:9180 — connection timeout</div>';
+          showToast('上游发布完成（2/3 节点成功）', 'info');
+        }, 1500);
+      };
+
+      // ----- Rollback -----
+      window.rollbackUpstream = function(id) {
+        var u = upstreams.find(function(x) { return x.id === id; });
+        if (!u || u.current_version <= 1) {
+          showToast('没有可回滚的历史版本', 'warning');
+          return;
+        }
+        u.current_version--;
+        showToast('上游 ' + u.name + ' 已回滚到 v' + u.current_version, 'success');
+        window.renderUpstreams();
+      };
+
+      // ----- Init -----
+      window.renderUpstreams();
+
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 插件开关</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .switch-list { display: flex; flex-direction: column; gap: 12px; }
+    .switch-item { display: flex; align-items: center; gap: 16px; padding: 16px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; }
+    .switch-item:hover { box-shadow: var(--shadow-md); }
+    .switch-item.disabled-state { opacity: 0.55; }
+    .switch-item-info { flex: 1; min-width: 0; }
+    .switch-item-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .switch-item-category { font-size: 10px; padding: 1px 8px; border-radius: 8px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+    .switch-item-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    .switch-item-version { font-size: 10px; color: var(--muted); font-family: var(--font-mono); margin-top: 3px; }
+    .switch-item-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .switch-item-status { font-size: 11px; font-weight: 500; }
+    .switch-item-status.on { color: var(--success); }
+    .switch-item-status.off { color: var(--muted); }
+    .switch-item-control { flex-shrink: 0; display: flex; align-items: center; gap: 12px; }
+    .switch-label-text { font-size: 12px; color: var(--muted); user-select: none; font-weight: 500; min-width: 28px; text-align: right; }
+    .switch-label-text.on { color: var(--success); }
+    .switch-label-text.off { color: var(--muted); }
+    .switch-status-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 20px; }
+    .switch-status-bar .ssb-left { display: flex; align-items: center; gap: 12px; }
+    .switch-status-bar .ssb-count { font-size: 13px; }
+    .switch-status-bar .ssb-count strong { font-family: var(--font-mono); }
+    .switch-actions-save { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 20px; margin-top: 4px; border-top: 1px solid var(--border); }
+    .sidebar-bottom { border-top: 1px solid oklch(100% 0 0 / 8%); padding: 12px 16px; flex-shrink: 0; }
+    .sidebar-user-row { display: flex; align-items: center; gap: 10px; }
+    .sidebar-user-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--sidebar-active); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+    .sidebar-user-info { flex: 1; min-width: 0; }
+    .sidebar-user-name { font-size: 13px; font-weight: 500; color: #fff; }
+    .sidebar-user-role { font-size: 10px; color: oklch(100% 0 0 / 35%); }
+    .sidebar-logout { font-size: 11px; color: oklch(100% 0 0 / 40%); cursor: pointer; text-decoration: none; white-space: nowrap; transition: color 0.15s; }
+    .sidebar-logout:hover { color: oklch(100% 0 0 / 70%); }
+    @media (max-width: 768px) {
+      .switch-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .switch-item-control { width: 100%; justify-content: space-between; }
+      .switch-status-bar { flex-direction: column; gap: 8px; align-items: stretch; }
+      .switch-actions-save { flex-direction: column; }
+      .switch-actions-save .btn { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item active" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar">管</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">管理员</div>
+            <div class="sidebar-user-role">系统管理员</div>
+          </div>
+          <a href="login.html" class="sidebar-logout">退出</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>插件开关</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>插件开关</h1>
+            <p>管理 OpenResty Edge 内置插件的全局启用/禁用状态</p>
+          </div>
+        </div>
+
+        <!-- Status bar with batch actions -->
+        <div class="switch-status-bar">
+          <div class="ssb-left">
+            <span class="ssb-count">已启用 <strong id="enabledCount">0</strong> / <strong id="totalCount">0</strong> 个插件</span>
+          </div>
+          <div class="page-header-actions" style="margin:0;">
+            <button class="btn btn-secondary btn-sm" onclick="enableAllPlugins()">全部启用</button>
+            <button class="btn btn-ghost btn-sm" onclick="disableAllPlugins()">全部禁用</button>
+          </div>
+        </div>
+
+        <!-- Plugin Switch List -->
+        <div class="switch-list" id="switchList"></div>
+
+        <!-- Save button area -->
+        <div class="switch-actions-save">
+          <span class="text-muted text-sm" id="unsavedHint" style="display:none;">有未保存的更改</span>
+          <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      var categoryLabels = {
+        traffic: '流量控制', security: '安全', observability: '可观测',
+        protocol: '协议', transformation: '转换', other: '其他'
+      };
+
+      // Original plugin state (loaded from server / defaults)
+      var originalPlugins = [
+        { name: 'limit-req', display_name: '限流', description: '基于漏桶算法的请求速率限制，支持按 IP、接口等维度限流，防止后端服务被突发流量击垮', category: 'traffic', version: '2.1.0', enabled: true },
+        { name: 'limit-conn', display_name: '连接限制', description: '限制单个客户端并发连接数，防止连接资源被单个来源过度占用', category: 'traffic', version: '2.0.1', enabled: true },
+        { name: 'limit-count', display_name: '计数限制', description: '基于计数器的请求频率限制，支持滑动时间窗口和自定义计数键', category: 'traffic', version: '2.2.0', enabled: true },
+        { name: 'key-auth', display_name: '密钥认证', description: '基于 API 密钥的身份认证，支持多密钥管理和密钥轮换策略', category: 'security', version: '2.1.0', enabled: true },
+        { name: 'jwt-auth', display_name: 'JWT 认证', description: 'JSON Web Token 认证与校验，支持 RS256/HS256 算法和声明验证', category: 'security', version: '2.0.0', enabled: true },
+        { name: 'basic-auth', display_name: 'Basic 认证', description: 'HTTP Basic 认证机制，适用于内部系统间的简单身份验证', category: 'security', version: '1.1.0', enabled: false },
+        { name: 'cors', display_name: 'CORS', description: '跨域资源共享配置，支持自定义允许来源、方法和响应头', category: 'security', version: '1.2.0', enabled: true },
+        { name: 'ip-restriction', display_name: 'IP 限制', description: '基于 IP 黑白名单的访问控制，支持 CIDR 网段和精确匹配', category: 'security', version: '2.0.0', enabled: true },
+        { name: 'ua-restriction', display_name: 'UA 限制', description: '基于 User-Agent 的请求过滤，可配置允许或拒绝特定客户端类型', category: 'security', version: '1.0.0', enabled: false },
+        { name: 'prometheus', display_name: 'Prometheus', description: '暴露 Prometheus 格式的指标数据，支持自定义标签和直方图配置', category: 'observability', version: '2.1.0', enabled: true },
+        { name: 'syslog', display_name: 'Syslog', description: '通过 Syslog 协议将请求日志输出到集中式日志服务', category: 'observability', version: '1.3.0', enabled: false },
+        { name: 'file-logger', display_name: '文件日志', description: '将请求和响应日志写入本地文件，支持日志轮转和自定义格式', category: 'observability', version: '2.0.0', enabled: true },
+        { name: 'grpc-transcode', display_name: 'gRPC 转码', description: '在 HTTP/JSON 和 gRPC 协议之间进行双向转换，使 REST 客户端可调用 gRPC 服务', category: 'protocol', version: '1.5.0', enabled: false },
+        { name: 'response-rewrite', display_name: '响应重写', description: '修改上游返回的 HTTP 状态码、响应头和响应体内容', category: 'transformation', version: '2.0.1', enabled: true },
+        { name: 'proxy-rewrite', display_name: '代理重写', description: '重写转发给上游的请求路径、Host 头部及其他请求头', category: 'transformation', version: '2.1.0', enabled: true },
+        { name: 'redirect', display_name: '重定向', description: 'HTTP 重定向插件，支持 301/302 状态码和自定义目标 URL', category: 'transformation', version: '1.2.0', enabled: false }
+      ];
+
+      // Working copy (mutated by toggles)
+      var plugins = originalPlugins.map(function(p) { return Object.assign({}, p); });
+
+      function hasUnsavedChanges() {
+        for (var i = 0; i < plugins.length; i++) {
+          if (plugins[i].enabled !== originalPlugins[i].enabled) return true;
+        }
+        return false;
+      }
+
+      function updateUnsavedHint() {
+        var hint = document.getElementById('unsavedHint');
+        if (hint) {
+          hint.style.display = hasUnsavedChanges() ? 'inline' : 'none';
+        }
+      }
+
+      function updateCounts() {
+        var enabled = plugins.filter(function(p) { return p.enabled; }).length;
+        document.getElementById('enabledCount').textContent = enabled;
+        document.getElementById('totalCount').textContent = plugins.length;
+      }
+
+      function renderSwitches() {
+        var list = document.getElementById('switchList');
+        list.innerHTML = plugins.map(function(p) {
+          var isOn = p.enabled;
+          return '<div class="switch-item' + (isOn ? '' : ' disabled-state') + '" data-plugin="' + p.name + '">' +
+            '<div class="switch-item-info">' +
+              '<div class="switch-item-name">' +
+                p.display_name +
+                '<span class="switch-item-category">' + (categoryLabels[p.category] || p.category) + '</span>' +
+              '</div>' +
+              '<div class="switch-item-desc">' + p.description + '</div>' +
+              '<div class="switch-item-meta">' +
+                '<span class="switch-item-version">v' + p.version + '</span>' +
+                '<span class="switch-item-status ' + (isOn ? 'on' : 'off') + '">' + (isOn ? '已启用' : '已禁用') + '</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="switch-item-control">' +
+              '<span class="switch-label-text ' + (isOn ? 'on' : 'off') + '">' + (isOn ? '开' : '关') + '</span>' +
+              '<label class="toggle">' +
+                '<input type="checkbox" ' + (isOn ? 'checked' : '') + ' onchange="toggleSwitch(\'' + p.name + '\', this.checked)">' +
+                '<span class="toggle-slider"></span>' +
+              '</label>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+        updateCounts();
+        updateUnsavedHint();
+      }
+
+      window.toggleSwitch = function(name, enabled) {
+        var p = plugins.find(function(x) { return x.name === name; });
+        if (!p) return;
+        p.enabled = enabled;
+        renderSwitches();
+      };
+
+      window.enableAllPlugins = function() {
+        plugins.forEach(function(p) { p.enabled = true; });
+        renderSwitches();
+        showToast('所有插件已切换为启用状态', 'info');
+      };
+
+      window.disableAllPlugins = function() {
+        plugins.forEach(function(p) { p.enabled = false; });
+        renderSwitches();
+        showToast('所有插件已切换为禁用状态', 'warning');
+      };
+
+      window.saveConfig = function() {
+        if (!hasUnsavedChanges()) {
+          showToast('配置未更改，无需保存', 'info');
+          return;
+        }
+        // Save working state back to originals (simulates backend persistence)
+        for (var i = 0; i < plugins.length; i++) {
+          originalPlugins[i].enabled = plugins[i].enabled;
+        }
+        renderSwitches();
+        showToast('插件配置已保存，共 ' + plugins.length + ' 个插件状态已更新', 'success');
+      };
+
+      // Init
+      renderSwitches();
+
+    })();
+  </script>
+</body>
+</html>

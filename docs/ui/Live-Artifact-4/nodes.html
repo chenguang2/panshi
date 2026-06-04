@@ -1,0 +1,394 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>磐石网关管理平台 - 节点管理</title>
+  <link rel="stylesheet" href="styles/theme.css">
+  <style>
+    .node-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .node-filter-bar .search-input-wrap input { width: 240px; }
+    .node-actions-group { display: flex; gap: 4px; flex-wrap: wrap; }
+    .node-actions-group .btn { padding: 3px 8px; font-size: 11px; }
+    .node-detail-grid { display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; font-size: 13px; }
+    .node-detail-grid .nd-label { color: var(--muted); font-weight: 500; }
+    .node-detail-grid .nd-value { font-family: var(--font-mono); word-break: break-all; }
+    .operation-log { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; max-height: 200px; overflow-y: auto; font-size: 12px; display: none; }
+    .operation-log.visible { display: block; }
+    .operation-log .log-line { font-family: var(--font-mono); padding: 2px 0; white-space: pre-wrap; }
+    .operation-log .log-line.success { color: var(--success); }
+    .operation-log .log-line.error { color: var(--danger); }
+    .batch-actions-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: oklch(56% 0.16 210 / 4%); border-bottom: 1px solid var(--border); }
+    .batch-actions-bar .btn { padding: 3px 10px; font-size: 11px; }
+    .node-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }
+    .node-stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; text-align: center; }
+    .node-stat-card .ns-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+    .node-stat-card .ns-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+    @media (max-width: 768px) {
+      .node-filter-bar { flex-direction: column; align-items: stretch; }
+      .node-filter-bar .search-input-wrap input { width: 100%; }
+      .node-detail-grid { grid-template-columns: 1fr; gap: 2px 0; }
+      .node-detail-grid .nd-label { margin-top: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">磐</div>
+        <span class="sidebar-logo-text">磐石</span>
+        <span class="sidebar-logo-version">v1.0</span>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">核心功能</div>
+          <a class="nav-item" href="index.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+          <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+          <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+          <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+          <a class="nav-item active" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+          <a class="nav-item" href="plugin-configs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+          <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+          <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">系统管理</div>
+          <a class="nav-item" href="plugins.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+          <a class="nav-item" href="users.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+          <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Edge功能</div>
+          <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+          <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+          <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="top-header-breadcrumb">
+          <a href="index.html">首页</a> <span>/</span> <span>节点管理</span>
+        </div>
+        <div class="top-header-actions">
+          <div class="header-search">
+            <input type="text" placeholder="搜索功能或页面...">
+            <span class="search-icon">🔍</span>
+          </div>
+          <div class="header-user">
+            <div class="header-avatar">管</div>
+            <span>管理员</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="page-header">
+          <div>
+            <h1>节点管理</h1>
+            <p>管理 Edge 网关节点，监控运行状态并执行操作</p>
+          </div>
+          <div class="page-header-actions">
+            <select class="form-input" style="width:160px;height:32px;font-size:12px;" id="clusterFilter" onchange="renderNodes()">
+              <option value="all">全部集群</option>
+              <option value="1">生产集群</option>
+              <option value="2">预发集群</option>
+              <option value="3">开发集群</option>
+            </select>
+            <button class="btn btn-primary" onclick="openNodeModal()">+ 添加节点</button>
+          </div>
+        </div>
+
+        <div class="node-filter-bar">
+          <div class="search-input-wrap">
+            <input type="text" id="nodeSearch" placeholder="搜索 IP 或名称..." oninput="renderNodes()">
+            <span class="search-icon">🔍</span>
+          </div>
+          <select class="form-input" style="width:120px;height:32px;font-size:12px;" id="statusFilter" onchange="renderNodes()">
+            <option value="all">全部状态</option>
+            <option value="1">运行中</option>
+            <option value="0">已停止</option>
+          </select>
+          <span class="text-muted text-sm" id="nodeCount">共 12 个节点</span>
+        </div>
+
+        <div class="table-container" id="nodeTable"></div>
+
+        <div class="table-footer">
+          <span class="text-muted text-sm" id="paginationInfo">第 1 页，共 1 页</span>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+  </div>
+
+  <!-- Node Modal -->
+  <div class="modal-overlay" id="nodeModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="nodeModalTitle">添加节点</h2>
+        <button class="modal-close" onclick="closeModal('nodeModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">IP 地址 <span class="required">*</span></label>
+            <input type="text" id="nIp" class="form-input" placeholder="10.0.0.1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">所属集群</label>
+            <select id="nCluster" class="form-input">
+              <option value="1">生产集群</option>
+              <option value="2">预发集群</option>
+              <option value="3">开发集群</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">服务端口</label>
+            <input type="number" id="nSvcPort" class="form-input" value="80">
+          </div>
+          <div class="form-group">
+            <label class="form-label">管理端口</label>
+            <input type="number" id="nMgmtPort" class="form-input" value="9180">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Edge 路径</label>
+          <input type="text" id="nEdgePath" class="form-input" placeholder="/usr/local/edge">
+          <div class="form-hint">必须以 / 开头</div>
+        </div>
+        <div class="form-group">
+          <label class="checkbox-label"><input type="checkbox" id="nStatus" checked> <span>启用</span></label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('nodeModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveNode()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Node Detail Modal -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="detailTitle">节点详情</h2>
+        <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('detailModal')">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script>
+    (function() {
+      'use strict';
+
+      var nodes = [
+        { id: 1, cluster_id: 1, ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:30:00', created_at: '2024-01-01T00:00:00Z' },
+        { id: 2, cluster_id: 1, ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:29:00', created_at: '2024-01-01T00:00:00Z' },
+        { id: 3, cluster_id: 1, ip: '10.0.0.3', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: false, last_heartbeat: '2026-06-02T22:00:00', created_at: '2024-01-02T00:00:00Z' },
+        { id: 4, cluster_id: 1, ip: '10.0.0.4', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:28:00', created_at: '2024-01-05T00:00:00Z' },
+        { id: 5, cluster_id: 1, ip: '10.0.0.5', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:30:00', created_at: '2024-02-01T00:00:00Z' },
+        { id: 6, cluster_id: 2, ip: '10.0.1.1', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:27:00', created_at: '2024-02-10T00:00:00Z' },
+        { id: 7, cluster_id: 2, ip: '10.0.1.2', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 0, nginx_running: false, last_heartbeat: '2026-06-01T15:00:00', created_at: '2024-02-10T00:00:00Z' },
+        { id: 8, cluster_id: 2, ip: '10.0.1.3', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:25:00', created_at: '2024-02-15T00:00:00Z' },
+        { id: 9, cluster_id: 2, ip: '10.0.1.4', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:20:00', created_at: '2024-03-01T00:00:00Z' },
+        { id: 10, cluster_id: 3, ip: '10.0.2.1', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:30:00', created_at: '2024-03-10T00:00:00Z' },
+        { id: 11, cluster_id: 3, ip: '10.0.2.2', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1, nginx_running: true, last_heartbeat: '2026-06-03T10:28:00', created_at: '2024-03-10T00:00:00Z' },
+        { id: 12, cluster_id: 3, ip: '10.0.2.3', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 0, nginx_running: false, last_heartbeat: '2026-05-30T12:00:00', created_at: '2024-03-15T00:00:00Z' }
+      ];
+
+      var editingId = null;
+      var currentPage = 1;
+      var pageSize = 10;
+      var clusterNames = { 1: '生产集群', 2: '预发集群', 3: '开发集群' };
+
+      function getFiltered() {
+        var q = (document.getElementById('nodeSearch').value || '').toLowerCase();
+        var statusF = document.getElementById('statusFilter').value;
+        var cluster = document.getElementById('clusterFilter').value;
+        return nodes.filter(function(n) {
+          if (cluster !== 'all' && n.cluster_id !== parseInt(cluster)) return false;
+          if (statusF !== 'all' && n.status !== parseInt(statusF)) return false;
+          if (q && n.ip.toLowerCase().indexOf(q) < 0) return false;
+          return true;
+        });
+      }
+
+      function getNodeStatus(node) {
+        if (node.status === 0) return { badge: 'danger', dot: 'offline', text: '已停止' };
+        if (node.nginx_running) return { badge: 'success', dot: 'online', text: '运行中' };
+        return { badge: 'warning', dot: 'warning', text: '异常' };
+      }
+
+      function nodeAction(id, action, label) {
+        var n = nodes.find(function(x) { return x.id === id; });
+        if (!n) return;
+        showToast(label + ' 操作已发送至节点 ' + n.ip, 'info');
+        var opLog = document.getElementById('opLog-' + id);
+        if (opLog) {
+          opLog.className = 'operation-log visible';
+          opLog.innerHTML = '<div class="log-line">$ ansible-playbook -i ' + n.ip + ' --tag ' + label + '</div>' +
+            '<div class="log-line success">✓ ' + label + ' 执行成功 (rc=0)</div>';
+          setTimeout(function() {
+            if (action === 'start' || action === 'restart') { n.status = 1; n.nginx_running = true; }
+            if (action === 'stop') { n.status = 0; n.nginx_running = false; }
+            renderNodes();
+          }, 1500);
+        }
+      }
+
+      window.renderNodes = function() {
+        var filtered = getFiltered();
+        var total = filtered.length;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        var start = (currentPage - 1) * pageSize;
+        var page = filtered.slice(start, start + pageSize);
+
+        document.getElementById('nodeCount').textContent = '共 ' + total + ' 个节点';
+        document.getElementById('paginationInfo').textContent = '第 ' + currentPage + ' 页，共 ' + totalPages + ' 页';
+
+        var html = '<div class="batch-actions-bar">' +
+          '<input type="checkbox" id="selectAllNodes" onchange="toggleAllNodes()">' +
+          '<span class="text-sm">全选</span>' +
+          '<button class="btn btn-ghost btn-sm" onclick="batchNodeAction(\'start\')">▶ 批量启动</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="batchNodeAction(\'stop\')">⏹ 批量停止</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="batchNodeAction(\'restart\')">🔄 批量重启</button>' +
+          '<button class="btn btn-ghost btn-sm" onclick="batchNodeAction(\'check\')">✓ 批量检查</button>' +
+        '</div>' +
+        '<table><thead><tr><th style="width:30px;"></th><th>IP</th><th>集群</th><th>服务端口</th><th>管理端口</th><th>状态</th><th>Nginx</th><th>心跳时间</th><th style="width:200px;">操作</th></tr></thead><tbody>';
+        if (page.length === 0) {
+          html += '<tr><td colspan="9"><div class="empty-state" style="padding:32px;"><div class="empty-state-icon">●</div><p>暂无节点</p></div></td></tr>';
+        } else {
+          page.forEach(function(n) {
+            var s = getNodeStatus(n);
+            var nginxStatus = n.nginx_running
+              ? '<span class="badge badge-success"><span class="status-dot online"></span>运行中</span>'
+              : '<span class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>';
+            html += '<tr>' +
+              '<td><input type="checkbox" class="node-cb" value="' + n.id + '"></td>' +
+              '<td><div class="cell-primary text-mono">' + n.ip + '</div></td>' +
+              '<td>' + (clusterNames[n.cluster_id] || '-') + '</td>' +
+              '<td><span class="text-mono text-sm">' + n.service_port + '</span></td>' +
+              '<td><span class="text-mono text-sm">' + n.management_port + '</span></td>' +
+              '<td><span class="badge badge-' + s.badge + '"><span class="status-dot ' + s.dot + '"></span>' + s.text + '</span></td>' +
+              '<td>' + nginxStatus + '</td>' +
+              '<td><span class="cell-secondary text-sm">' + window.formatDate(n.last_heartbeat) + '</span></td>' +
+              '<td>' +
+                '<div class="node-actions-group">' +
+                  '<button class="btn btn-secondary btn-sm" onclick="window.viewNode(' + n.id + ')">详情</button>' +
+                  '<button class="btn btn-ghost btn-sm" onclick="nodeAction(' + n.id + ', \'start\', \'nginx_start\')">▶ 启动</button>' +
+                  '<button class="btn btn-ghost btn-sm" onclick="nodeAction(' + n.id + ', \'stop\', \'nginx_stop\')">⏹ 停止</button>' +
+                  '<button class="btn btn-ghost btn-sm" onclick="nodeAction(' + n.id + ', \'restart\', \'nginx_reload\')">🔄 重启</button>' +
+                '</div>' +
+                '<div class="operation-log" id="opLog-' + n.id + '"></div>' +
+              '</td>' +
+            '</tr>';
+          });
+        }
+        html += '</tbody></table>';
+        document.getElementById('nodeTable').innerHTML = html;
+        window.renderPagination(document.getElementById('pagination'), currentPage, totalPages);
+      };
+
+      window.goPage = function(p) { currentPage = p; renderNodes(); };
+
+      window.toggleAllNodes = function() {
+        var checked = document.getElementById('selectAllNodes').checked;
+        document.querySelectorAll('.node-cb').forEach(function(cb) { cb.checked = checked; });
+      };
+
+      window.batchNodeAction = function(action) {
+        var ids = [];
+        document.querySelectorAll('.node-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+        if (ids.length === 0) { showToast('请先选择节点', 'warning'); return; }
+        var label = { start: 'nginx_start', stop: 'nginx_stop', restart: 'nginx_reload', check: 'nginx_check' }[action] || action;
+        showToast('批量 ' + label + ' 操作已发送至 ' + ids.length + ' 个节点', 'info');
+        ids.forEach(function(id) {
+          var n = nodes.find(function(x) { return x.id === id; });
+          if (n) {
+            if (action === 'start' || action === 'restart') { n.status = 1; n.nginx_running = true; }
+            if (action === 'stop') { n.status = 0; n.nginx_running = false; }
+          }
+        });
+        setTimeout(renderNodes, 1000);
+      };
+
+      // ----- CRUD -----
+      window.openNodeModal = function() {
+        editingId = null;
+        document.getElementById('nodeModalTitle').textContent = '添加节点';
+        document.getElementById('nIp').value = '';
+        document.getElementById('nCluster').value = '1';
+        document.getElementById('nSvcPort').value = '80';
+        document.getElementById('nMgmtPort').value = '9180';
+        document.getElementById('nEdgePath').value = '/usr/local/edge';
+        document.getElementById('nStatus').checked = true;
+        window.openModal('nodeModal');
+      };
+
+      window.saveNode = function() {
+        var ip = document.getElementById('nIp').value.trim();
+        if (!ip) { showToast('请输入 IP 地址', 'error'); return; }
+        var cluster = parseInt(document.getElementById('nCluster').value);
+        var svcPort = parseInt(document.getElementById('nSvcPort').value) || 80;
+        var mgmtPort = parseInt(document.getElementById('nMgmtPort').value) || 9180;
+        var edgePath = document.getElementById('nEdgePath').value.trim() || '/usr/local/edge';
+        if (edgePath.charAt(0) !== '/') { showToast('Edge 路径必须以 / 开头', 'error'); return; }
+        var status = document.getElementById('nStatus').checked ? 1 : 0;
+
+        nodes.push({
+          id: nodes.length + 1, cluster_id: cluster, ip: ip,
+          service_port: svcPort, management_port: mgmtPort, edge_path: edgePath,
+          status: status, nginx_running: status === 1,
+          last_heartbeat: new Date().toISOString(), created_at: new Date().toISOString()
+        });
+        showToast('节点已添加', 'success');
+        window.closeModal('nodeModal');
+        renderNodes();
+      };
+
+      window.viewNode = function(id) {
+        var n = nodes.find(function(x) { return x.id === id; });
+        if (!n) return;
+        document.getElementById('detailTitle').textContent = '节点详情 — ' + n.ip;
+        var s = getNodeStatus(n);
+        document.getElementById('detailBody').innerHTML =
+          '<div class="node-detail-grid">' +
+            '<div class="nd-label">IP 地址</div><div class="nd-value">' + n.ip + '</div>' +
+            '<div class="nd-label">所属集群</div><div class="nd-value">' + (clusterNames[n.cluster_id] || '-') + '</div>' +
+            '<div class="nd-label">服务端口</div><div class="nd-value">' + n.service_port + '</div>' +
+            '<div class="nd-label">管理端口</div><div class="nd-value">' + n.management_port + '</div>' +
+            '<div class="nd-label">Edge 路径</div><div class="nd-value">' + n.edge_path + '</div>' +
+            '<div class="nd-label">节点状态</div><div class="nd-value"><span class="badge badge-' + s.badge + '">' + s.text + '</span></div>' +
+            '<div class="nd-label">Nginx 状态</div><div class="nd-value">' + (n.nginx_running ? '运行中' : '已停止') + '</div>' +
+            '<div class="nd-label">心跳时间</div><div class="nd-value">' + window.formatDate(n.last_heartbeat) + '</div>' +
+            '<div class="nd-label">创建时间</div><div class="nd-value">' + window.formatDate(n.created_at) + '</div>' +
+          '</div>' +
+          '<div class="node-stats">' +
+            '<div class="node-stat-card"><div class="ns-value">20</div><div class="ns-label">路由</div></div>' +
+            '<div class="node-stat-card"><div class="ns-value">10</div><div class="ns-label">上游</div></div>' +
+            '<div class="node-stat-card"><div class="ns-value">5</div><div class="ns-label">插件</div></div>' +
+            '<div class="node-stat-card"><div class="ns-value">2</div><div class="ns-label">全局规则</div></div>' +
+          '</div>';
+        window.openModal('detailModal');
+      };
+
+      // ----- Init -----
+      renderNodes();
+
+    })();
+  </script>
+</body>
+</html>

@@ -1592,18 +1592,28 @@ users.html 文件
 2. 编辑中，也要有选择可以使用的集群
 ==========================================================================
 
-1. 使用 /opsx-propose 命令，重构插件管理功能
+1. 使用 /opsx-propose 命令，增加上游管理列表页功能
 
 需要按照设计稿
-docs/ui/Live-Artifact-3/plugin-switches.html
+docs/ui/Live-Artifact-4/upstreams.html  来设计和实现上游管理的主页面
 
-插件管理页面，重构和设计稿的一样的功能，包括界面和功能
+其中：
+新建上游，采用现在的集群管理中的添加上游的功能，需要额外加上：所属集群
+操作的菜单中：   编辑：调用集群管理中的编辑上游的功能，需要额外加上：所属集群
+                删除：调用集群管理中的删除上游的功能
+                发布：调用集群管理中的上游的发布的功能
+                没有回滚菜单
+                增加版本管理菜单项：调用集群管理中的上游的版本管理功能
 
-3. /brainstorming 请仔细阅读 openspec/changes/refactor-plugin-switches/ 下的需求文档和
+
+
+3. /brainstorming 请仔细阅读 openspec/changes/add-upstream-page/ 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认
 
 
-4. 请读取 openspec/changes/refactor-plugin-switches/tasks.md ，严格按照 Superpowers 的
-TDD 技能，逐个完成任务。 要求：每个任务都执行“先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构”的循环，
+4. 请读取 openspec/changes/add-upstream-page/tasks.md ，严格按照 Superpowers 的
+TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+=====================================================================
 
