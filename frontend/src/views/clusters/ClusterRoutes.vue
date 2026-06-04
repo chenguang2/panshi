@@ -121,11 +121,13 @@
                 <a-select-option value="DELETE">DELETE</a-select-option>
                 <a-select-option value="PATCH">PATCH</a-select-option>
                 <a-select-option value="HEAD">HEAD</a-select-option>
-                <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-              </a-select>
-              <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
-                {{ allMethodsSelected ? '取消全选' : '全选' }}
-              </a>
+              <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+              <a-select-option value="CONNECT">CONNECT</a-select-option>
+              <a-select-option value="TRACE">TRACE</a-select-option>
+            </a-select>
+            <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
+              {{ allMethodsSelected ? '取消全选' : '全选' }}
+            </a>
             </a-form-item>
             <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
               <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>

@@ -23,6 +23,8 @@
               <a-select-option value="PATCH">PATCH</a-select-option>
               <a-select-option value="HEAD">HEAD</a-select-option>
               <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+              <a-select-option value="CONNECT">CONNECT</a-select-option>
+              <a-select-option value="TRACE">TRACE</a-select-option>
             </a-select>
             <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
               {{ allMethodsSelected ? '取消全选' : '全选' }}
@@ -135,7 +137,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: []; saved: [] }>()
 
-const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 
 const modalOpen = computed({ get: () => props.visible, set: (v) => { if (!v) emit('close') } })
 const formRef = ref()
@@ -249,19 +251,22 @@ async function handleSubmit() {
     if (form.advancedEnabled) data.vars = form.advancedMatch.vars
     data.plugin_config_ids = pluginConfigIds.value
     const cid = form.cluster_id
+    let routeId: number | null = null
     if (props.editingRoute && !props.copyingRoute) {
       await api.put(`/clusters/${cid}/routes/${props.editingRoute.id}`, data)
+      routeId = props.editingRoute.id
       message.success('路由已更新')
     } else {
       // copy or create - always POST
       if (props.copyingRoute) {
         data.name = form.name // use the prefilled name (user can modify)
       }
-      await api.post(`/clusters/${cid}/routes`, data)
+      const res = await api.post(`/clusters/${cid}/routes`, data)
+      routeId = res.data.id
       message.success(props.copyingRoute ? '路由已复制' : '路由已创建')
     }
-    if (form.plugins.length > 0 && props.editingRoute?.id && !props.copyingRoute) {
-      await api.put(`/clusters/${cid}/routes/${props.editingRoute.id}/plugins`, {
+    if (form.plugins.length > 0 && routeId) {
+      await api.put(`/clusters/${cid}/routes/${routeId}/plugins`, {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
     }

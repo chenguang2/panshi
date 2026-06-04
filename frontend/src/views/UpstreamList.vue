@@ -340,7 +340,7 @@ onUnmounted(() => {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
   box-shadow: var(--shadow-sm);
 }
 table { width: 100%; border-collapse: collapse; }
@@ -363,7 +363,6 @@ tbody tr:hover { background: oklch(97% 0.005 250 / 60%); }
 tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
 
 /* ── Action Menu ── */
-td:last-child { position: relative; }
 .action-menu { position: relative; display: inline-block; z-index: 10; }
 .action-btn {
   width: 28px; height: 28px;

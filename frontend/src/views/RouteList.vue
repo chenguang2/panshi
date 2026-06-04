@@ -94,7 +94,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteFormModal from '@/components/RouteFormModal.vue'
@@ -132,6 +132,8 @@ const methodFilters = [
   { label: 'PUT', value: 'PUT' },
   { label: 'DELETE', value: 'DELETE' },
   { label: 'PATCH', value: 'PATCH' },
+  { label: 'CONNECT', value: 'CONNECT' },
+  { label: 'TRACE', value: 'TRACE' },
 ]
 
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
@@ -194,15 +196,28 @@ async function onPublish(nodeIds: number[]) {
   await executePublish({ title: `发布路由: ${r.name}`, apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}/publish`, nodeIds, refreshFn: loadRoutes })
 }
 
-function deleteRoute(r: any) {
-  Modal.confirm({
-    title: '删除路由', content: `确定删除路由 "${r.name}" 吗？`,
-    okText: '删除', okType: 'danger',
-    onOk: async () => {
-      try {
-        await api.delete(`/clusters/${r.cluster_id}/routes/${r.id}`, { data: { delete_db: true, delete_edge: false } })
-        message.success('路由已删除'); loadRoutes()
-      } catch (e: any) { message.error(e?.response?.data?.detail || '删除失败') }
+async function deleteRoute(r: any) {
+  // Load cluster nodes for delete options
+  let nodes: { id: number; ip: string; management_port: number }[] = []
+  try {
+    const res = await api.get(`/clusters/${r.cluster_id}/nodes`)
+    nodes = res.data?.items || []
+  } catch { /* ignore */ }
+
+  showDeleteConfirm({
+    title: `确定要删除路由 "${r.name}" 吗？`,
+    apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}`,
+    nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      await executeDeleteWithProgress({
+        title: `删除路由: ${r.name}`,
+        apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}`,
+        cluster: { id: r.cluster_id, nodes } as any,
+        deleteDb,
+        deleteEdge,
+        nodeIds,
+        refreshFn: loadRoutes,
+      })
     },
   })
 }
@@ -239,13 +254,15 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
 .method-tag.PUT { border-color: oklch(65% 0.15 85 / 30%); color: var(--warning); }
 .method-tag.DELETE { border-color: oklch(55% 0.18 28 / 30%); color: var(--danger); }
 .method-tag.PATCH { border-color: oklch(55% 0.12 240 / 30%); color: var(--info); }
+.method-tag.CONNECT { border-color: oklch(55% 0.15 280 / 30%); color: oklch(55% 0.15 280); }
+.method-tag.TRACE { border-color: oklch(55% 0.10 200 / 30%); color: oklch(55% 0.10 200); }
 .priority-badge { font-family: var(--font-mono); font-size: 11px; }
 .uri-cell { font-family: var(--font-mono); font-size: 12px; }
 .text-mono { font-family: var(--font-mono); }
 .text-sm { font-size: 12px; }
 .cell-primary { font-weight: 600; color: var(--fg); }
 .cell-secondary { font-size: 12px; color: var(--muted); }
-.table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+.table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: visible; box-shadow: var(--shadow-sm); }
 table { width: 100%; border-collapse: collapse; }
 thead th { background: oklch(97% 0.005 250); padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; user-select: none; }
 tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }

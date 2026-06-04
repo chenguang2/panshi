@@ -341,8 +341,10 @@
             <a-select-option value="DELETE">DELETE</a-select-option>
             <a-select-option value="PATCH">PATCH</a-select-option>
             <a-select-option value="HEAD">HEAD</a-select-option>
-            <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-          </a-select>
+              <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+              <a-select-option value="CONNECT">CONNECT</a-select-option>
+              <a-select-option value="TRACE">TRACE</a-select-option>
+            </a-select>
           <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
             {{ allMethodsSelected ? '取消全选' : '全选' }}
           </a>
@@ -556,7 +558,7 @@ const routeForm = reactive({
   advancedMatch: { vars: [] as [string, string, string][] }
 })
 
-const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 const allMethodsSelected = computed(() => ALL_METHODS.every(m => routeForm.methods.includes(m)))
 const toggleAllMethods = () => {
   routeForm.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]

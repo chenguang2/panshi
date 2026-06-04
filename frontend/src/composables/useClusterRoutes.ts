@@ -7,7 +7,7 @@ import { executePublish, executeDeleteWithProgress, publishStatusRender, formatP
 
 // ── helpers ────────────────────────────────────────────────────────────
 
-const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 
 function getFieldName(name: string): string {
   const nameMap: Record<string, string> = {

@@ -5,7 +5,7 @@ from typing import List, Optional
 import json
 
 from app.core.database import get_db
-from app.models.cluster import Route, RoutePlugin, ConfigVersion, Upstream, Node
+from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, PublishRequest
@@ -150,10 +150,14 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
     db.add(audit)
     await db.commit()
 
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     return RouteResponse(
         id=db_route.id,
         edge_uuid=db_route.edge_uuid,
         cluster_id=db_route.cluster_id,
+        cluster_name=cluster.name if cluster else str(cluster_id),
         name=db_route.name,
         uri=db_route.uri,
         methods=db_route.methods,
@@ -177,10 +181,14 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
 
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     return RouteResponse(
         id=route.id,
         edge_uuid=route.edge_uuid,
         cluster_id=route.cluster_id,
+        cluster_name=cluster.name if cluster else str(cluster_id),
         name=route.name,
         uri=route.uri,
         methods=route.methods,
@@ -234,10 +242,14 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
     db.add(audit)
     await db.commit()
 
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     return RouteResponse(
         id=route.id,
         edge_uuid=route.edge_uuid,
         cluster_id=route.cluster_id,
+        cluster_name=cluster.name if cluster else str(cluster_id),
         name=route.name,
         uri=route.uri,
         methods=route.methods,

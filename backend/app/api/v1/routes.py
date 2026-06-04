@@ -97,9 +97,9 @@ async def list_all_routes(
     cluster_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {r[0]: r[1] for r in c_result.all()}
+        cluster_map = {r[0]: r[1] or r[2] for r in c_result.all()}
 
     # Batch publish time
     route_ids = [r.id for r in routes]

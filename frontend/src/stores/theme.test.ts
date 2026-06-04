@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockStorage: Record<string, string> = {}
@@ -6,7 +6,6 @@ const origStorage = globalThis.localStorage
 
 beforeEach(() => {
   Object.keys(mockStorage).forEach(k => delete mockStorage[k])
-  // @ts-expect-error: test mock
   globalThis.localStorage = {
     getItem: (key: string) => mockStorage[key] ?? null,
     setItem: (key: string, value: string) => { mockStorage[key] = value },
