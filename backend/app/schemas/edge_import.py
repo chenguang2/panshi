@@ -102,6 +102,7 @@ class ImportSelection(BaseModel):
     routes: bool = True
     plugin_configs: bool = True
     global_rules: bool = True
+    plugin_metadata: bool = True
 
 
 class ImportExecuteRequest(BaseModel):

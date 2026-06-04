@@ -26,60 +26,67 @@
     </div>
 
     <!-- Table -->
-    <TableCard :columns="tableColumns" :data-source="pagedUsers" :loading="loading" :pagination="false" row-key="id">
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'checkbox'">
-          <input type="checkbox">
-        </template>
-        <template v-if="column.key === 'username'">
-          <span class="cell-primary">{{ record.username }}</span>
-        </template>
-        <template v-if="column.key === 'role'">
-          <span class="role-badge" :class="record.role">{{ record.role === 'admin' ? '管理员' : '普通用户' }}</span>
-        </template>
-        <template v-if="column.key === 'status'">
-          <BadgeStatus
-            :text="record.status === 1 ? '启用' : '禁用'"
-            :status="record.status === 1 ? 'online' : 'offline'"
-          />
-        </template>
-        <template v-if="column.key === 'permissions'">
-          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
-          <template v-else-if="record.permissions?.length">
-            <span v-for="p in record.permissions" :key="p" class="perm-tag active">{{ permissionKeyToLabel[p] || p }}</span>
-          </template>
-          <span v-else class="text-muted text-sm">—</span>
-        </template>
-        <template v-if="column.key === 'clusters'">
-          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部集群</span>
-          <span v-else-if="(record as any).cluster_ids?.length" class="text-muted text-sm">
-            <span v-for="c in (record as any).cluster_ids.slice(0, 3)" :key="c" class="perm-tag">{{ getClusterName(c) }}</span>
-            <a-tooltip v-if="(record as any).cluster_ids.length > 3">
-              <template #title>
-                <div>{{ ((record as any).cluster_ids as number[]).map(c => getClusterName(c)).join('、') }}</div>
+    <div class="table-container">
+      <div v-if="loading" class="table-loading-mask"><div class="table-spinner"></div></div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30px;"><input type="checkbox"></th>
+            <th>用户名</th>
+            <th>角色</th>
+            <th>状态</th>
+            <th>权限</th>
+            <th>可访问集群</th>
+            <th>创建时间</th>
+            <th v-if="isAdmin" style="width:80px;">操作</th>
+          </tr>
+        </thead>
+        <tbody v-if="pagedUsers.length === 0">
+          <tr><td :colspan="isAdmin ? 8 : 7"><div class="empty-state" style="padding:32px;"><div class="empty-state-icon">◎</div><p>暂无用户</p></div></td></tr>
+        </tbody>
+        <tbody v-else>
+          <tr v-for="record in pagedUsers" :key="record.id">
+            <td><input type="checkbox"></td>
+            <td><span class="cell-primary">{{ record.username }}</span></td>
+            <td><span class="role-badge" :class="record.role">{{ record.role === 'admin' ? '管理员' : '普通用户' }}</span></td>
+            <td><BadgeStatus :text="record.status === 1 ? '启用' : '禁用'" :status="record.status === 1 ? 'online' : 'offline'" /></td>
+            <td>
+              <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
+              <template v-else-if="(record as any).permissions?.length">
+                <span v-for="p in (record as any).permissions" :key="p" class="perm-tag active">{{ permissionKeyToLabel[p] || p }}</span>
               </template>
-              <span class="perm-tag more-tag">+{{ (record as any).cluster_ids.length - 3 }}</span>
-            </a-tooltip>
-          </span>
-          <span v-else class="text-muted text-sm">—</span>
-        </template>
-        <template v-if="column.key === 'created_at'">
-          <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
-        </template>
-        <template v-if="column.key === 'action' && isAdmin">
-          <div class="action-menu-wrap" @click.stop>
-            <button class="action-btn" @click="toggleActionMenu(record.id)">⋯</button>
-            <div v-if="openMenuId === record.id" class="action-dropdown" @click.stop>
-              <button class="action-dropdown-item" @click="editUser(record)">编辑</button>
-              <button class="action-dropdown-item" @click="toggleUserStatus(record)">
-                {{ record.status === 1 ? '禁用' : '启用' }}
-              </button>
-              <button class="action-dropdown-item danger" @click="deleteUser(record)">删除</button>
-            </div>
-          </div>
-        </template>
-      </template>
-    </TableCard>
+              <span v-else class="text-muted text-sm">—</span>
+            </td>
+            <td>
+              <span v-if="record.role === 'admin'" class="text-muted text-sm">全部集群</span>
+              <span v-else-if="(record as any).cluster_ids?.length" class="text-muted text-sm">
+                <span v-for="c in (record as any).cluster_ids.slice(0, 3)" :key="c" class="perm-tag">{{ getClusterName(c) }}</span>
+                <a-tooltip v-if="(record as any).cluster_ids.length > 3">
+                  <template #title>
+                    <div>{{ ((record as any).cluster_ids as number[]).map(c => getClusterName(c)).join('、') }}</div>
+                  </template>
+                  <span class="perm-tag more-tag">+{{ (record as any).cluster_ids.length - 3 }}</span>
+                </a-tooltip>
+              </span>
+              <span v-else class="text-muted text-sm">—</span>
+            </td>
+            <td><span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span></td>
+            <td v-if="isAdmin">
+              <div class="action-menu-wrap" @click.stop>
+                <button class="action-btn" @click="toggleActionMenu(record.id)">⋯</button>
+                <div v-if="openMenuId === record.id" class="action-dropdown" @click.stop>
+                  <button class="action-dropdown-item" @click="editUser(record)">编辑</button>
+                  <button class="action-dropdown-item" @click="toggleUserStatus(record)">
+                    {{ record.status === 1 ? '禁用' : '启用' }}
+                  </button>
+                  <button class="action-dropdown-item danger" @click="deleteUser(record)">删除</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Pagination -->
     <div class="table-footer" v-if="totalPages > 1">
@@ -207,12 +214,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PageHeader from '@/components/PageHeader.vue'
-import TableCard from '@/components/TableCard.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 
 const authStore = useAuthStore()
@@ -311,22 +317,6 @@ const permissionKeyToLabel: Record<string, string> = {
   plugin_metadata: '插件元数据',
   edge_nodes: 'Edge直连',
 }
-
-const tableColumns = computed(() => {
-  const cols: any[] = [
-    { title: '', key: 'checkbox', width: 30 },
-    { title: '用户名', dataIndex: 'username', key: 'username' },
-    { title: '角色', key: 'role' },
-    { title: '状态', key: 'status' },
-    { title: '权限', key: 'permissions' },
-    { title: '可访问集群', key: 'clusters' },
-    { title: '创建时间', key: 'created_at' },
-  ]
-  if (isAdmin.value) {
-    cols.push({ title: '操作', key: 'action', width: 80 })
-  }
-  return cols
-})
 
 const filteredUsers = computed(() => {
   let list = allUsers.value
@@ -427,6 +417,7 @@ function openAddModal() {
   form.role = 'user'
   form.status = 1
   allPermissions.value.forEach(p => { p.checked = false })
+  selectedClusterIds.value = []
   resetPwdValue.value = ''
   modalVisible.value = true
 }
@@ -514,16 +505,23 @@ async function deleteUser(user: User) {
     message.error('不能删除初始管理员')
     return
   }
-  if (!confirm(`确定删除用户 ${user.username}？`)) return
-  try {
-    await api.delete(`/admin/users/${user.id}`)
-    message.success('用户已删除')
-    openMenuId.value = null
-    loadUsers()
-  } catch (error: any) {
-    const detail = error.response?.data?.detail
-    message.error(typeof detail === 'string' ? detail : '删除用户失败')
-  }
+  Modal.confirm({
+    title: '删除用户',
+    content: `确定删除用户 "${user.username}" 吗？`,
+    okText: '删除',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await api.delete(`/admin/users/${user.id}`)
+        message.success('用户已删除')
+        openMenuId.value = null
+        loadUsers()
+      } catch (error: any) {
+        const detail = error.response?.data?.detail
+        message.error(typeof detail === 'string' ? detail : '删除用户失败')
+      }
+    },
+  })
 }
 
 async function handleResetPassword() {
@@ -552,36 +550,39 @@ async function handleResetPassword() {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: nowrap;
-}
-
-.search-input-wrap {
-  position: relative;
-}
-
-.search-input-wrap input {
-  width: 240px;
-  padding-left: 32px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 13px;
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.filter-select {
-  width: 100px;
-  height: 32px;
-  font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
+
+/* ── Table ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: oklch(97% 0.005 250);
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+}
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: oklch(97% 0.005 250 / 60%); }
+tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
 
 .cell-primary {
   font-weight: 500;
@@ -817,26 +818,6 @@ async function handleResetPassword() {
 }
 
 .required { color: var(--danger); }
-
-.form-input {
-  width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  font-size: 13px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--fg);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.form-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-.form-input::placeholder {
-  color: var(--muted);
-}
 
 .checkbox-label {
   display: flex;
@@ -1088,9 +1069,6 @@ async function handleResetPassword() {
     align-items: stretch;
   }
   .search-input-wrap input {
-    width: 100%;
-  }
-  .filter-select {
     width: 100%;
   }
   .form-row {

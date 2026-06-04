@@ -18,6 +18,7 @@ export interface ImportSelections {
   routes: boolean
   plugin_configs: boolean
   global_rules: boolean
+  plugin_metadata: boolean
 }
 
 // ---- Response Types ----

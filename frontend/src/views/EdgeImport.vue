@@ -345,6 +345,7 @@
         <!-- 插件元数据 -->
         <div class="section-card">
           <div class="section-header">
+            <a-checkbox v-model:checked="selections.plugin_metadata" />
             <span class="section-title">插件元数据（{{ previewData?.plugin_metadata?.length || 0 }} 个）</span>
             <a-button size="small" @click="expandedSections.plugin_metadata = !expandedSections.plugin_metadata">
               {{ expandedSections.plugin_metadata ? '收起详情' : '预览详情' }}
@@ -501,7 +502,8 @@ const selections = reactive({
   upstreams: true,
   routes: true,
   plugin_configs: true,
-  global_rules: true
+  global_rules: true,
+  plugin_metadata: true,
 })
 
 const expandedSections = reactive({
@@ -678,6 +680,7 @@ const handleCancel = () => {
   selections.routes = true
   selections.plugin_configs = true
   selections.global_rules = true
+  selections.plugin_metadata = true
 }
 
 // ---- Import ----
@@ -697,7 +700,8 @@ const handleImport = async () => {
       upstreams: selections.upstreams,
       routes: selections.routes,
       plugin_configs: selections.plugin_configs,
-      global_rules: selections.global_rules
+      global_rules: selections.global_rules,
+      plugin_metadata: selections.plugin_metadata,
     })
     importResult.value = res.data
     resultModalVisible.value = true

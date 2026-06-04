@@ -818,39 +818,40 @@ class EdgeImportService:
             )
             existing_route_names = set(row[0] for row in result.all())
 
-            for cpm in converted_plugin_metadata:
-                pm_data = cpm["plugin_metadata"]
-                raw_plugins = cpm.get("raw_plugins", {})
-                stmt = select(PluginMetadata).where(
-                    PluginMetadata.cluster_id == self.cluster_id,
-                    PluginMetadata.plugin_name == pm_data["plugin_name"],
-                )
-                existing = (await session.execute(stmt)).scalar_one_or_none()
-                if existing:
-                    existing.config_data = pm_data["config_data"]
-                    existing.current_version = (existing.current_version or 0) + 1
-                    new_version = existing.current_version
-                else:
-                    pm_data["current_version"] = 1
-                    new_version = 1
-                    session.add(PluginMetadata(**pm_data))
-                await session.flush()
-                if existing:
-                    pm_id = existing.id
-                else:
-                    pm_id = (await session.execute(
-                        select(PluginMetadata.id).where(
-                            PluginMetadata.cluster_id == self.cluster_id,
-                            PluginMetadata.plugin_name == pm_data["plugin_name"],
-                        )
-                    )).scalar_one()
-                session.add(ConfigVersion(
-                    cluster_id=self.cluster_id, resource_type="plugin_metadata",
-                    resource_id=pm_id, version=new_version,
-                    config=json.dumps(raw_plugins, ensure_ascii=False),
-                    created_by="system",
-                ))
-                imported_counts["plugin_metadata"] = imported_counts.get("plugin_metadata", 0) + 1
+            if selections.plugin_metadata:
+                for cpm in converted_plugin_metadata:
+                    pm_data = cpm["plugin_metadata"]
+                    raw_plugins = cpm.get("raw_plugins", {})
+                    stmt = select(PluginMetadata).where(
+                        PluginMetadata.cluster_id == self.cluster_id,
+                        PluginMetadata.plugin_name == pm_data["plugin_name"],
+                    )
+                    existing = (await session.execute(stmt)).scalar_one_or_none()
+                    if existing:
+                        existing.config_data = pm_data["config_data"]
+                        existing.current_version = (existing.current_version or 0) + 1
+                        new_version = existing.current_version
+                    else:
+                        pm_data["current_version"] = 1
+                        new_version = 1
+                        session.add(PluginMetadata(**pm_data))
+                    await session.flush()
+                    if existing:
+                        pm_id = existing.id
+                    else:
+                        pm_id = (await session.execute(
+                            select(PluginMetadata.id).where(
+                                PluginMetadata.cluster_id == self.cluster_id,
+                                PluginMetadata.plugin_name == pm_data["plugin_name"],
+                            )
+                        )).scalar_one()
+                    session.add(ConfigVersion(
+                        cluster_id=self.cluster_id, resource_type="plugin_metadata",
+                        resource_id=pm_id, version=new_version,
+                        config=json.dumps(raw_plugins, ensure_ascii=False),
+                        created_by="system",
+                    ))
+                    imported_counts["plugin_metadata"] = imported_counts.get("plugin_metadata", 0) + 1
             await session.flush()
 
             if selections.plugin_configs:
