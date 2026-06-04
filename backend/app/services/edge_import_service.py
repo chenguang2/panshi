@@ -72,6 +72,7 @@ class EdgeImportService:
         cluster_id: int,
         node_id: int,
         db_session: Any,
+        admin_key: str | None = None,
     ) -> "EdgeImportService":
         node_row = (
             await db_session.execute(
@@ -93,17 +94,17 @@ class EdgeImportService:
 
         ip, port, edge_path = node_row.tuple()
 
-        cluster_row = (
-            await db_session.execute(
-                select(Cluster.admin_key).where(Cluster.id == cluster_id)
-            )
-        ).first()
-
-        admin_key: str | None = None
-        if cluster_row is not None and cluster_row[0] is not None:
-            admin_key = cluster_row[0]
         if not admin_key:
-            admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
+            cluster_row = (
+                await db_session.execute(
+                    select(Cluster.admin_key).where(Cluster.id == cluster_id)
+                )
+            ).first()
+
+            if cluster_row is not None and cluster_row[0] is not None:
+                admin_key = cluster_row[0]
+            if not admin_key:
+                admin_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
 
         client = EdgeClient(
             cluster_id=cluster_id,
@@ -114,10 +115,15 @@ class EdgeImportService:
 
         return cls(cluster_id, node_id, db_session, ip, port, edge_path, client)
 
+    def _count_list(self, items: list | None) -> int:
+        return len(items) if isinstance(items, list) else 0
+
     def test_connection(self) -> dict:
+        import time
         try:
+            start = time.time()
             routes_data = self.client.list_routes()
-            route_count = len(routes_data) if isinstance(routes_data, list) else 0
+            route_count = self._count_list(routes_data)
 
             raw_upstreams = self.client.list_upstreams()
             upstream_nodes = self._parse_resource_list(raw_upstreams)
@@ -126,9 +132,27 @@ class EdgeImportService:
 
             try:
                 plugins_list = self.client.list_available_plugins()
-                plugin_count = len(plugins_list) if isinstance(plugins_list, list) else 0
+                plugin_count = self._count_list(plugins_list)
             except Exception:
                 plugin_count = 0
+
+            try:
+                pc_data = self.client.list_plugin_configs()
+                plugin_config_count = self._count_list(pc_data)
+            except Exception:
+                plugin_config_count = 0
+
+            try:
+                gr_data = self.client.list_global_rules()
+                global_rule_count = self._count_list(gr_data)
+            except Exception:
+                global_rule_count = 0
+
+            try:
+                pm_data = self.client.list_plugin_metadata()
+                plugin_metadata_count = self._count_list(pm_data)
+            except Exception:
+                plugin_metadata_count = 0
 
             version = "unknown"
             try:
@@ -138,12 +162,19 @@ class EdgeImportService:
             except Exception:
                 pass
 
+            elapsed = int((time.time() - start) * 1000)
+
             return {
                 "success": True,
                 "version": str(version),
                 "plugin_count": plugin_count,
                 "route_count": route_count,
                 "upstream_count": upstream_count,
+                "plugin_config_count": plugin_config_count,
+                "global_rule_count": global_rule_count,
+                "plugin_metadata_count": plugin_metadata_count,
+                "node": f"{self.ip}:{self.port}",
+                "response_time_ms": elapsed,
             }
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -439,7 +470,7 @@ class EdgeImportService:
                         "resource_type": "upstream",
                         "resource_name": name,
                         "reason": f"上游名称 '{name}' 已存在",
-                        "resolution": "将自动添加 '-imported' 后缀",
+                        "resolution": "将跳过该记录",
                     })
 
         route_names = [
@@ -573,7 +604,7 @@ class EdgeImportService:
                         "resource_type": "route",
                         "resource_name": rd.get("name", ""),
                         "reason": f"路由 URI '{uri}' 已存在 (已有路由: {er_name})",
-                        "resolution": "将覆盖已有路由",
+                        "resolution": "将跳过该路由",
                     })
 
         return conflicts
@@ -752,16 +783,6 @@ class EdgeImportService:
             "plugin_summary": plugin_summary,
         }
 
-    @staticmethod
-    def _resolve_upstream_name(base_name: str, existing_names: set) -> str:
-        if base_name not in existing_names:
-            return base_name
-        for i in range(1, 1000):
-            candidate = f"{base_name}-imported-{i}"
-            if candidate not in existing_names:
-                return candidate
-        return f"{base_name}-imported-fallback"
-
     async def execute_import(
         self,
         selections: Any,
@@ -793,12 +814,12 @@ class EdgeImportService:
             upstream_uuid_map: dict = {}
             plugin_config_uuid_map: dict = {}
 
-            imported_counts = {
+            imported_counts: dict[str, int] = {
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
                 "plugin_metadata": 0,
             }
-            skipped_counts = {
+            skipped_counts: dict[str, int] = {
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
                 "plugin_metadata": 0,
@@ -822,32 +843,26 @@ class EdgeImportService:
                 for cpm in converted_plugin_metadata:
                     pm_data = cpm["plugin_metadata"]
                     raw_plugins = cpm.get("raw_plugins", {})
-                    stmt = select(PluginMetadata).where(
+                    stmt = select(PluginMetadata.id).where(
                         PluginMetadata.cluster_id == self.cluster_id,
                         PluginMetadata.plugin_name == pm_data["plugin_name"],
                     )
-                    existing = (await session.execute(stmt)).scalar_one_or_none()
-                    if existing:
-                        existing.config_data = pm_data["config_data"]
-                        existing.current_version = (existing.current_version or 0) + 1
-                        new_version = existing.current_version
-                    else:
-                        pm_data["current_version"] = 1
-                        new_version = 1
-                        session.add(PluginMetadata(**pm_data))
+                    existing = (await session.execute(stmt)).first()
+                    if existing is not None:
+                        skipped_counts["plugin_metadata"] = skipped_counts.get("plugin_metadata", 0) + 1
+                        continue
+                    pm_data["current_version"] = 1
+                    session.add(PluginMetadata(**pm_data))
                     await session.flush()
-                    if existing:
-                        pm_id = existing.id
-                    else:
-                        pm_id = (await session.execute(
-                            select(PluginMetadata.id).where(
-                                PluginMetadata.cluster_id == self.cluster_id,
-                                PluginMetadata.plugin_name == pm_data["plugin_name"],
-                            )
-                        )).scalar_one()
+                    pm_id = (await session.execute(
+                        select(PluginMetadata.id).where(
+                            PluginMetadata.cluster_id == self.cluster_id,
+                            PluginMetadata.plugin_name == pm_data["plugin_name"],
+                        )
+                    )).scalar_one()
                     session.add(ConfigVersion(
                         cluster_id=self.cluster_id, resource_type="plugin_metadata",
-                        resource_id=pm_id, version=new_version,
+                        resource_id=pm_id, version=1,
                         config=json.dumps(raw_plugins, ensure_ascii=False),
                         created_by="system",
                     ))
@@ -950,11 +965,10 @@ class EdgeImportService:
                         continue
                     existing_upstream_uuids.add(u_data["edge_uuid"])
 
-                    resolved_name = self._resolve_upstream_name(
-                        u_data["name"], existing_upstream_names
-                    )
-                    u_data["name"] = resolved_name
-                    existing_upstream_names.add(resolved_name)
+                    if u_data["name"] in existing_upstream_names:
+                        skipped_counts["upstreams"] += 1
+                        continue
+                    existing_upstream_names.add(u_data["name"])
 
                     new_upstream = Upstream(**u_data)
                     session.add(new_upstream)
@@ -1002,15 +1016,30 @@ class EdgeImportService:
                 )
                 for cr in converted_routes:
                     r_data = cr["route"]
+
+                    # Skip on UUID conflict
                     if r_data["edge_uuid"] in existing_route_uuids:
                         skipped_counts["routes"] += 1
                         continue
                     existing_route_uuids.add(r_data["edge_uuid"])
-                    resolved_name = self._resolve_upstream_name(
-                        r_data["name"], existing_route_names
-                    )
-                    r_data["name"] = resolved_name
-                    existing_route_names.add(resolved_name)
+
+                    # Skip on name conflict (no suffix)
+                    if r_data["name"] in existing_route_names:
+                        skipped_counts["routes"] += 1
+                        continue
+                    existing_route_names.add(r_data["name"])
+
+                    # Skip on URI conflict
+                    if r_data.get("uri"):
+                        uri_result = await session.execute(
+                            select(Route.id).where(
+                                Route.cluster_id == self.cluster_id,
+                                Route.uri == r_data["uri"],
+                            )
+                        )
+                        if uri_result.first() is not None:
+                            skipped_counts["routes"] += 1
+                            continue
 
                     new_route = Route(**r_data)
                     session.add(new_route)

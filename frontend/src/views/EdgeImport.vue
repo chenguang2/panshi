@@ -2,19 +2,19 @@
   <div class="edge-import">
     <PageHeader title="Edge 数据导入" description="从 Edge 节点批量导入配置数据到本地数据库" />
     <a-steps :current="currentStep" style="margin-bottom: 24px;">
-      <a-step title="选择集群" />
       <a-step title="选择节点" />
+      <a-step title="选择配置" />
       <a-step title="预览导入" />
     </a-steps>
 
-    <!-- Step 1: 选择集群 -->
+    <!-- Step 0: 选择节点 -->
     <div v-if="currentStep === 0">
-      <a-card title="选择目标集群">
+      <a-card title="选择源节点">
         <a-form layout="vertical">
-          <a-form-item label="集群" required>
+          <a-form-item label="所属集群" required>
             <a-select
               v-model:value="selectedClusterId"
-              placeholder="请选择集群"
+              placeholder="请选择集群..."
               style="width: 400px;"
               @change="onClusterChange"
             >
@@ -27,28 +27,14 @@
               </a-select-option>
             </a-select>
           </a-form-item>
-        </a-form>
-        <div v-if="clusters.length === 0 && !loadingClusters" style="margin-top: 8px;">
-          <router-link to="/clusters">如果没有集群，先去集群管理创建</router-link>
-        </div>
-      </a-card>
-      <div class="step-actions">
-        <a-button type="primary" :disabled="!selectedClusterId" @click="goToStep(1)">
-          下一步
-        </a-button>
-      </div>
-    </div>
 
-    <!-- Step 2: 选择 Edge 节点 -->
-    <div v-if="currentStep === 1">
-      <a-card title="选择 Edge 节点">
-        <a-form layout="vertical">
-          <a-form-item label="节点" required>
+          <a-form-item label="目标节点" required>
             <a-select
               v-model:value="selectedNodeId"
-              placeholder="请选择节点"
+              placeholder="请选择节点..."
               style="width: 400px;"
               :loading="loadingNodes"
+              :disabled="!selectedClusterId"
             >
               <a-select-option
                 v-for="node in nodes"
@@ -60,15 +46,18 @@
             </a-select>
           </a-form-item>
 
-          <a-form-item>
-            <a-button
-              type="primary"
-              :loading="testingConnection"
-              :disabled="!selectedNodeId"
-              @click="handleTestConnection"
-            >
-              测试连接
-            </a-button>
+          <a-form-item label="节点 Admin Key">
+            <div style="display:flex;gap:8px;">
+              <a-input-password v-model:value="adminKey" placeholder="输入节点 Admin Key..." style="max-width:300px;" />
+              <a-button
+                type="primary"
+                :loading="testingConnection"
+                :disabled="!selectedNodeId"
+                @click="handleTestConnection"
+              >
+                测试连接
+              </a-button>
+            </div>
           </a-form-item>
         </a-form>
 
@@ -80,14 +69,17 @@
           style="margin-top: 8px;"
         >
           <template #message>
-            <strong>连接成功</strong> — {{ connectionResult?.version }}
+            <strong>连接成功</strong>
           </template>
           <template #description>
-            <div>插件: {{ connectionResult?.plugin_count }} 个</div>
-            <div>路由: {{ connectionResult?.route_count }} 条</div>
-            <div>上游: {{ connectionResult?.upstream_count }} 个</div>
-            <div style="margin-top: 4px; color: var(--muted); font-size: 12px;">
-              {{ connectionResult?.message }}
+            <div>节点: {{ connectionResult?.node || '-' }} · 版本: {{ connectionResult?.version || '-' }} · 响应时间: {{ connectionResult?.response_time_ms || '-' }}ms</div>
+            <div style="margin-top:4px;">
+              路由: {{ connectionResult?.route_count }} 条 ·
+              上游: {{ connectionResult?.upstream_count }} 个 ·
+              插件: {{ connectionResult?.plugin_count }} 个 ·
+              插件组: {{ connectionResult?.plugin_config_count }} 个 ·
+              全局规则: {{ connectionResult?.global_rule_count }} 个 ·
+              插件元数据: {{ connectionResult?.plugin_metadata_count }} 个
             </div>
           </template>
         </a-alert>
@@ -109,19 +101,39 @@
       </a-card>
 
       <div class="step-actions">
-        <a-button @click="goToStep(0)">上一步</a-button>
-        <a-button
-          type="primary"
-          :disabled="!connectionTested"
-          :loading="loadingPreview"
-          @click="goToStep(2)"
-        >
+        <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)">
           下一步
         </a-button>
       </div>
     </div>
 
-    <!-- Step 3: 预览导入 -->
+    <!-- Step 1: 选择配置 -->
+    <div v-if="currentStep === 1">
+      <a-card title="选择要导入的配置类型">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">选择需要从 Edge 节点导入到管理平台的配置类型</p>
+        <div class="config-types">
+          <div
+            v-for="ct in configTypes"
+            :key="ct.key"
+            class="config-type-card"
+            :class="{ selected: selections[ct.key as keyof typeof selections] }"
+            @click="toggleConfigType(ct.key)"
+          >
+            <span class="ct-check">✓</span>
+            <component :is="ct.icon" class="ct-icon" />
+            <div class="ct-name">{{ ct.label }}</div>
+          </div>
+        </div>
+      </a-card>
+      <div class="step-actions" style="justify-content:space-between;">
+        <a-button @click="goToStep(0)">上一步</a-button>
+        <a-button type="primary" :disabled="!hasSelection" @click="goToStep(2)">
+          下一步 — 预览
+        </a-button>
+      </div>
+    </div>
+
+    <!-- Step 2: 预览导入 -->
     <div v-if="currentStep === 2">
       <!-- 插件摘要 -->
       <a-alert
@@ -469,8 +481,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import { CloudUploadOutlined, BranchesOutlined, PropertySafetyOutlined, BlockOutlined, AppstoreOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
 import PageHeader from '@/components/PageHeader.vue'
@@ -490,6 +503,7 @@ const loadingClusters = ref(false)
 const selectedNodeId = ref<number | null>(null)
 const nodes = ref<any[]>([])
 const loadingNodes = ref(false)
+const adminKey = ref('')
 const testingConnection = ref(false)
 const connectionResult = ref<TestConnectionResponse | null>(null)
 const connectionError = ref('')
@@ -515,6 +529,22 @@ const expandedSections = reactive({
 })
 
 const showConflicts = ref(false)
+
+const configTypes = [
+  { key: 'upstreams', label: '上游服务', icon: CloudUploadOutlined },
+  { key: 'routes', label: '路由规则', icon: BranchesOutlined },
+  { key: 'plugin_configs', label: '插件组', icon: BlockOutlined },
+  { key: 'global_rules', label: '全局规则', icon: PropertySafetyOutlined },
+  { key: 'plugin_metadata', label: '插件元数据', icon: AppstoreOutlined },
+]
+
+function toggleConfigType(key: string) {
+  (selections as any)[key] = !(selections as any)[key]
+}
+
+const hasSelection = computed(() => {
+  return configTypes.some(ct => (selections as any)[ct.key])
+})
 
 const importing = ref(false)
 const resultModalVisible = ref(false)
@@ -595,6 +625,7 @@ const onClusterChange = () => {
   connectionResult.value = null
   connectionError.value = ''
   connectionTested.value = false
+  adminKey.value = ''
   if (selectedClusterId.value) {
     loadNodes(selectedClusterId.value)
   }
@@ -613,7 +644,7 @@ const handleTestConnection = async () => {
   connectionError.value = ''
 
   try {
-    const res = await testConnection(selectedClusterId.value, selectedNodeId.value)
+    const res = await testConnection(selectedClusterId.value!, selectedNodeId.value!, adminKey.value)
     connectionResult.value = res.data
     connectionTested.value = true
   } catch (error: any) {
@@ -627,30 +658,26 @@ const handleTestConnection = async () => {
 // ---- Navigation ----
 
 const goToStep = async (step: number) => {
-  // Going back to step 1 from step 2: clear preview
-  if (step === 1 && currentStep.value === 2) {
-    previewData.value = null
-  }
-
   // Going back to step 0: clear node selection and connection test
-  if (step === 0) {
+  if (step === 0 && currentStep.value > 0) {
     selectedNodeId.value = null
     nodes.value = []
     connectionResult.value = null
     connectionError.value = ''
     connectionTested.value = false
+    adminKey.value = ''
     previewData.value = null
   }
 
-  // Entering step 3: fetch preview
-  if (step === 2 && !previewData.value) {
+  // Entering step 2 (preview): fetch preview
+  if (step === 2) {
     if (!selectedClusterId.value || !selectedNodeId.value) {
       message.warning('请先选择集群和节点')
       return
     }
     loadingPreview.value = true
     try {
-      const res = await getPreview(selectedClusterId.value, selectedNodeId.value)
+      const res = await getPreview(selectedClusterId.value, selectedNodeId.value, adminKey.value)
       previewData.value = res.data
       // Auto-expand conflict section if conflicts exist
       if (res.data.conflicts && res.data.conflicts.length > 0) {
@@ -670,12 +697,14 @@ const goToStep = async (step: number) => {
 
 const handleCancel = () => {
   currentStep.value = 0
+  selectedClusterId.value = null
   selectedNodeId.value = null
   nodes.value = []
   connectionResult.value = null
   connectionError.value = ''
   connectionTested.value = false
   previewData.value = null
+  adminKey.value = ''
   selections.upstreams = true
   selections.routes = true
   selections.plugin_configs = true
@@ -702,7 +731,7 @@ const handleImport = async () => {
       plugin_configs: selections.plugin_configs,
       global_rules: selections.global_rules,
       plugin_metadata: selections.plugin_metadata,
-    })
+    }, adminKey.value)
     importResult.value = res.data
     resultModalVisible.value = true
   } catch (error: any) {
@@ -840,6 +869,35 @@ onMounted(() => {
 :deep(.ant-select-selection-item) {
   color: var(--fg) !important;
 }
+
+.config-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.config-type-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  position: relative;
+}
+.config-type-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.config-type-card.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
+.config-type-card .ct-check {
+  display: none;
+  float: right;
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+}
+.config-type-card.selected .ct-check { display: inline; }
+.config-type-card .ct-icon { font-size: 24px; margin-bottom: 8px; display: block; }
+.config-type-card .ct-name { font-size: 14px; font-weight: 600; }
 
 .loading-overlay {
   display: flex;

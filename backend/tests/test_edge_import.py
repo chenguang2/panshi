@@ -424,34 +424,6 @@ class TestEdgeImportConflictDetection:
         assert len(uuid_conflicts) == 1
         assert uuid_conflicts[0]["resource_name"] == "user-service"
 
-    def test_resolve_upstream_name_no_conflict(self):
-        from app.services.edge_import_service import EdgeImportService
-
-        name = EdgeImportService._resolve_upstream_name("my-service", {"other-service"})
-        assert name == "my-service"
-
-    def test_resolve_upstream_name_with_conflict(self):
-        from app.services.edge_import_service import EdgeImportService
-
-        name = EdgeImportService._resolve_upstream_name(
-            "my-service", {"my-service", "other-service"}
-        )
-        assert name == "my-service-imported-1"
-        assert name not in {"my-service"}
-
-    def test_resolve_upstream_name_multiple_conflicts(self):
-        from app.services.edge_import_service import EdgeImportService
-
-        name = EdgeImportService._resolve_upstream_name(
-            "my-service",
-            {"my-service", "my-service-imported-1", "my-service-imported-2"},
-        )
-        assert name == "my-service-imported-3"
-
-
-class TestEdgeImportExecute:
-    """Test full execute_import flow with mocked EdgeClient."""
-
     @pytest.mark.asyncio
     async def test_execute_import_success(self, test_db):
         mock_client = MagicMock()
@@ -480,6 +452,7 @@ class TestEdgeImportExecute:
                 routes = True
                 plugin_configs = True
                 global_rules = True
+                plugin_metadata = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -533,6 +506,7 @@ class TestEdgeImportExecute:
                 routes = True
                 plugin_configs = False
                 global_rules = False
+                plugin_metadata = False
 
             result = await service.execute_import(
                 selections=MockSelectionsPartial(),
@@ -584,6 +558,7 @@ class TestEdgeImportExecute:
                 routes = False
                 plugin_configs = False
                 global_rules = False
+                plugin_metadata = False
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -591,14 +566,11 @@ class TestEdgeImportExecute:
             )
 
         assert result["success"] is True
-        assert result["imported_counts"]["upstreams"] == 1
+        assert result["imported_counts"]["upstreams"] == 0
 
         upstreams = (await test_db.execute(select(Upstream))).scalars().all()
         names = [u.name for u in upstreams]
-        assert "user-service" in names
-        imported_name = [n for n in names if n != "user-service"]
-        assert len(imported_name) == 1
-        assert imported_name[0] != "user-service"
+        assert names == ["user-service"]
 
     @pytest.mark.asyncio
     async def test_execute_import_rollback_on_failure(self, test_db):
@@ -623,6 +595,7 @@ class TestEdgeImportExecute:
                 routes = True
                 plugin_configs = True
                 global_rules = True
+                plugin_metadata = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -672,6 +645,7 @@ class TestEdgeImportExecute:
                 routes = False
                 plugin_configs = False
                 global_rules = False
+                plugin_metadata = False
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -710,6 +684,7 @@ async def test_execute_import_route_plugin_group_mapping(test_db):
             routes = True
             plugin_configs = True
             global_rules = False
+            plugin_metadata = False
 
         result = await service.execute_import(
             selections=MockSelections(),
@@ -781,3 +756,67 @@ async def test_preview_import_with_mocked_client(test_db):
     ps = preview["plugin_summary"]
     assert ps["unknown_count"] > 0
     assert "custom-auth" in ps["unknown_plugin_names"]
+
+
+class TestConnectionResponse:
+    def test_test_connection_response_includes_all_counts(self):
+        from app.schemas.edge_import import TestConnectionResponse
+        resp = TestConnectionResponse(
+            success=True, version="1.0",
+            plugin_count=5, route_count=3, upstream_count=2,
+            plugin_config_count=4, global_rule_count=1, plugin_metadata_count=6,
+        )
+        assert resp.plugin_config_count == 4
+        assert resp.global_rule_count == 1
+        assert resp.plugin_metadata_count == 6
+
+    def test_test_connection_response_includes_extra_fields(self):
+        resp = {
+            "success": True,
+            "version": "v3.2.1",
+            "plugin_count": 10,
+            "route_count": 5,
+            "upstream_count": 3,
+            "node": "10.0.0.1:9180",
+            "cluster_name": "prod-cluster",
+            "response_time_ms": 12,
+        }
+        from app.schemas.edge_import import TestConnectionResponse
+        validated = TestConnectionResponse(**resp)
+        assert validated.node == "10.0.0.1:9180"
+        assert validated.cluster_name == "prod-cluster"
+        assert validated.response_time_ms == 12
+
+
+class TestAdminKeyOverride:
+    """Test admin_key override in request schemas and service."""
+
+    def test_test_connection_request_accepts_admin_key(self):
+        from app.schemas.edge_import import TestConnectionRequest
+        req = TestConnectionRequest(cluster_id=1, node_id=2, admin_key="my-key")
+        assert req.admin_key == "my-key"
+        req2 = TestConnectionRequest(cluster_id=1, node_id=2)
+        assert req2.admin_key is None
+
+    def test_import_execute_request_accepts_admin_key(self):
+        from app.schemas.edge_import import ImportExecuteRequest
+        req = ImportExecuteRequest(cluster_id=1, node_id=2, admin_key="my-key")
+        assert req.admin_key == "my-key"
+        req2 = ImportExecuteRequest(cluster_id=1, node_id=2)
+        assert req2.admin_key is None
+
+    def test_preview_request_schema(self):
+        from app.schemas.edge_import import PreviewRequest
+        req = PreviewRequest(cluster_id=1, node_id=2, admin_key="custom-key")
+        assert req.admin_key == "custom-key"
+        assert req.cluster_id == 1
+        assert req.node_id == 2
+        req2 = PreviewRequest(cluster_id=1, node_id=2)
+        assert req2.admin_key is None
+
+    @pytest.mark.asyncio
+    async def test_edge_import_service_create_accepts_admin_key(self, test_db):
+        import inspect
+        from app.services.edge_import_service import EdgeImportService
+        sig = inspect.signature(EdgeImportService.create)
+        assert "admin_key" in sig.parameters

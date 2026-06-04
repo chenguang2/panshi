@@ -9,6 +9,7 @@ from app.schemas.edge_import import (
     ImportPreviewResponse,
     ImportExecuteRequest,
     ImportExecuteResponse,
+    PreviewRequest,
 )
 
 router = APIRouter(prefix="/edge-import", tags=["edge-import"])
@@ -23,21 +24,22 @@ async def test_connection(
         cluster_id=body.cluster_id,
         node_id=body.node_id,
         db_session=db,
+        admin_key=body.admin_key,
     )
     result = service.test_connection()
     return result
 
 
-@router.get("/preview", response_model=ImportPreviewResponse)
+@router.post("/preview", response_model=ImportPreviewResponse)
 async def preview_import(
-    cluster_id: int = Query(...),
-    node_id: int = Query(...),
+    body: PreviewRequest,
     db: AsyncSession = Depends(get_db),
 ):
     service = await EdgeImportService.create(
-        cluster_id=cluster_id,
-        node_id=node_id,
+        cluster_id=body.cluster_id,
+        node_id=body.node_id,
         db_session=db,
+        admin_key=body.admin_key,
     )
     result = await service.preview_import()
     return result
@@ -52,6 +54,7 @@ async def execute_import(
         cluster_id=body.cluster_id,
         node_id=body.node_id,
         db_session=db,
+        admin_key=body.admin_key,
     )
     result = await service.execute_import(
         selections=body.selections,

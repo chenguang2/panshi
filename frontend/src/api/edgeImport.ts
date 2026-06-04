@@ -5,11 +5,13 @@ import api from '@/api/index'
 export interface TestConnectionRequest {
   cluster_id: number
   node_id: number
+  admin_key?: string
 }
 
 export interface ImportRequest {
   cluster_id: number
   node_id: number
+  admin_key?: string
   selections: ImportSelections
 }
 
@@ -25,11 +27,17 @@ export interface ImportSelections {
 
 export interface TestConnectionResponse {
   success: boolean
-  version: string
-  plugin_count: number
-  route_count: number
-  upstream_count: number
-  message: string
+  version?: string
+  plugin_count?: number
+  route_count?: number
+  upstream_count?: number
+  plugin_config_count?: number
+  global_rule_count?: number
+  plugin_metadata_count?: number
+  node?: string
+  cluster_name?: string
+  response_time_ms?: number
+  message?: string
 }
 
 export interface PluginSummary {
@@ -79,14 +87,20 @@ export interface ImportResponse {
 
 // ---- API Functions ----
 
-export function testConnection(clusterId: number, nodeId: number) {
-  return api.post<TestConnectionResponse>('/edge-import/test-connection', { cluster_id: clusterId, node_id: nodeId })
+export function testConnection(clusterId: number, nodeId: number, adminKey?: string) {
+  const body: TestConnectionRequest = { cluster_id: clusterId, node_id: nodeId }
+  if (adminKey) body.admin_key = adminKey
+  return api.post<TestConnectionResponse>('/edge-import/test-connection', body)
 }
 
-export function getPreview(clusterId: number, nodeId: number) {
-  return api.get<PreviewResponse>('/edge-import/preview', { params: { cluster_id: clusterId, node_id: nodeId } })
+export function getPreview(clusterId: number, nodeId: number, adminKey?: string) {
+  const body: Record<string, any> = { cluster_id: clusterId, node_id: nodeId }
+  if (adminKey) body.admin_key = adminKey
+  return api.post<PreviewResponse>('/edge-import/preview', body)
 }
 
-export function executeImport(clusterId: number, nodeId: number, selections: ImportSelections) {
-  return api.post<ImportResponse>('/edge-import/execute', { cluster_id: clusterId, node_id: nodeId, selections })
+export function executeImport(clusterId: number, nodeId: number, selections: ImportSelections, adminKey?: string) {
+  const body: ImportRequest = { cluster_id: clusterId, node_id: nodeId, selections }
+  if (adminKey) body.admin_key = adminKey
+  return api.post<ImportResponse>('/edge-import/execute', body)
 }

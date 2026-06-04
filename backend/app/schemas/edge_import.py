@@ -3,9 +3,16 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
+class PreviewRequest(BaseModel):
+    cluster_id: int
+    node_id: int
+    admin_key: Optional[str] = None
+
+
 class TestConnectionRequest(BaseModel):
     cluster_id: int
     node_id: int
+    admin_key: Optional[str] = None
 
 
 class TestConnectionResponse(BaseModel):
@@ -14,6 +21,12 @@ class TestConnectionResponse(BaseModel):
     plugin_count: Optional[int] = None
     route_count: Optional[int] = None
     upstream_count: Optional[int] = None
+    plugin_config_count: Optional[int] = None
+    global_rule_count: Optional[int] = None
+    plugin_metadata_count: Optional[int] = None
+    node: Optional[str] = None
+    cluster_name: Optional[str] = None
+    response_time_ms: Optional[int] = None
     message: Optional[str] = None
 
 
@@ -108,6 +121,7 @@ class ImportSelection(BaseModel):
 class ImportExecuteRequest(BaseModel):
     cluster_id: int
     node_id: int
+    admin_key: Optional[str] = None
     selections: ImportSelection = ImportSelection()
 
 
