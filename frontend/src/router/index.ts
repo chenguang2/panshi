@@ -45,6 +45,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/UpstreamList.vue'),
       },
       {
+        path: 'routes',
+        name: 'RouteList',
+        component: () => import('@/views/RouteList.vue'),
+      },
+      {
         path: 'tools',
         name: 'Tools',
         component: () => import('@/views/Tools.vue')

@@ -145,8 +145,10 @@
               <a-textarea v-model:value="routeForm.description" :rows="2" />
             </a-form-item>
             <a-form-item label="高级匹配" name="advancedMatch">
-              <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
-              <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级匹配"页配置请求条件</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
+                <span style="color:#999;font-size:12px;">开启后在"高级匹配"页配置请求条件</span>
+              </div>
             </a-form-item>
           </a-form>
         </a-tab-pane>

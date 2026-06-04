@@ -1,0 +1,65 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+const mockApiGet = vi.fn()
+
+vi.mock('@/api', () => ({
+  default: { get: (...args: any[]) => mockApiGet(...args) }
+}))
+
+vi.mock('vue-router', () => ({
+  onBeforeRouteLeave: vi.fn(),
+  useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ name: 'RouteList' }),
+}))
+
+const stubs = {
+  PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  RouteFormModal: { template: '<div class="mock-route-form" />', props: ['visible', 'editingRoute', 'clusters'] },
+  VersionManagementModal: { template: '<div class="mock-version-modal" />' },
+  PublishConfirmModal: { template: '<div class="mock-publish-modal" />' },
+}
+
+const MOCK_ROUTES = {
+  total: 2, page: 1, page_size: 20,
+  items: [
+    { id: 1, name: '用户API', uri: '/api/v1/users/*', methods: 'GET,POST', cluster_id: 1, cluster_name: '生产集群', priority: 0, current_version: 5, created_at: '2024-01-15T10:30:00Z', status: 1 },
+    { id: 2, name: '订单服务', uri: '/api/v1/orders/*', methods: 'GET,PUT', cluster_id: 1, cluster_name: '生产集群', priority: 0, current_version: 3, created_at: '2024-02-10T14:20:00Z', status: 1 },
+  ]
+}
+
+describe('RouteList.vue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('renders page header', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.page-header').exists()).toBe(true)
+  })
+
+  it('loads routes on mount', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    expect(mockApiGet).toHaveBeenCalledWith('/routes', expect.any(Object))
+  })
+
+  it('renders method filter chips', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('GET')
+    expect(wrapper.text()).toContain('POST')
+  })
+})
