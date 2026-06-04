@@ -29,7 +29,7 @@ defineProps<{
 .page-header-info h1 {
   font-size: 22px;
   font-weight: 700;
-  color: var(--p-text-primary);
+  color: var(--fg);
   margin: 0;
   line-height: 1.3;
 }
@@ -37,7 +37,7 @@ defineProps<{
 .page-header-info p {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   line-height: 1.5;
 }
 

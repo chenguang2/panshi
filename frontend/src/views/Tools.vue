@@ -25,7 +25,7 @@
             <div class="panel-label">Lua 函数体</div>
             <a-textarea
               v-model:value="luaInput"
-              :rows="16"
+              :rows="20"
               placeholder="输入完整 Lua 函数定义，例如：function(conf, ctx) ngx.log(ngx.ERR, 'hello') end"
             />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(luaInput)">复制</a-button>
@@ -39,7 +39,7 @@
             <div class="panel-label">配置字符串</div>
             <a-textarea
               v-model:value="luaOutput"
-              :rows="16"
+              :rows="20"
               placeholder="或在此粘贴配置字符串进行反向转换"
             />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(luaOutput)">复制</a-button>
@@ -54,7 +54,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">原文</div>
-            <a-textarea v-model:value="urlInput" :rows="14" placeholder="输入要编码或解码的内容" />
+            <a-textarea v-model:value="urlInput" :rows="20" placeholder="输入要编码或解码的内容" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(urlInput)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => urlInput = v)">粘贴</a-button>
           </div>
@@ -64,7 +64,7 @@
           </div>
           <div class="panel-right">
             <div class="panel-label">结果</div>
-            <a-textarea v-model:value="urlOutput" :rows="14" placeholder="结果将显示在此" />
+            <a-textarea v-model:value="urlOutput" :rows="20" placeholder="结果将显示在此" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(urlOutput)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => urlOutput = v)">粘贴</a-button>
           </div>
@@ -77,7 +77,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">输入</div>
-            <a-textarea v-model:value="jsonInput" :rows="14" placeholder='输入 JSON 字符串，例如：{"name":"test"}' />
+            <a-textarea v-model:value="jsonInput" :rows="20" placeholder='输入 JSON 字符串，例如：{"name":"test"}' />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(jsonInput)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => jsonInput = v)">粘贴</a-button>
           </div>
@@ -87,7 +87,7 @@
           </div>
           <div class="panel-right">
             <div class="panel-label">结果</div>
-            <a-textarea v-model:value="jsonOutput" :rows="14" readonly placeholder="格式化或压缩结果将显示在此" />
+            <a-textarea v-model:value="jsonOutput" :rows="20" readonly placeholder="格式化或压缩结果将显示在此" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(jsonOutput)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => jsonOutput = v)">粘贴</a-button>
           </div>
@@ -105,7 +105,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">明文</div>
-            <a-textarea v-model:value="sm4Plaintext" :rows="12" placeholder="输入明文" />
+            <a-textarea v-model:value="sm4Plaintext" :rows="18" placeholder="输入明文" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(sm4Plaintext)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => sm4Plaintext = v)">粘贴</a-button>
           </div>
@@ -115,7 +115,7 @@
           </div>
           <div class="panel-right">
             <div class="panel-label">密文（Base64）</div>
-            <a-textarea v-model:value="sm4Ciphertext" :rows="12" placeholder="输入 Base64 密文" />
+            <a-textarea v-model:value="sm4Ciphertext" :rows="18" placeholder="输入 Base64 密文" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(sm4Ciphertext)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => sm4Ciphertext = v)">粘贴</a-button>
           </div>
@@ -128,7 +128,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">原文</div>
-            <a-textarea v-model:value="base64Input" :rows="14" placeholder="输入要编码或解码的内容" />
+            <a-textarea v-model:value="base64Input" :rows="20" placeholder="输入要编码或解码的内容" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Input)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => base64Input = v)">粘贴</a-button>
           </div>
@@ -138,7 +138,7 @@
           </div>
           <div class="panel-right">
             <div class="panel-label">结果</div>
-            <a-textarea v-model:value="base64Output" :rows="14" placeholder="结果将显示在此" />
+            <a-textarea v-model:value="base64Output" :rows="20" placeholder="结果将显示在此" />
             <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Output)">复制</a-button>
             <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => base64Output = v)">粘贴</a-button>
           </div>
@@ -244,8 +244,8 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 }
 
 .tools-sider {
-  background: var(--p-bg-hover) !important;
-  border-right: 1px solid var(--p-border-default);
+  background: var(--bg) !important;
+  border-right: 1px solid var(--border);
   padding-top: 12px;
 }
 
@@ -264,26 +264,26 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   justify-content: center;
   border-radius: 8px;
   cursor: pointer;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   font-size: 20px;
   transition: all 0.2s;
 }
 
 .icon-item:hover {
-  background: var(--p-color-primary-bg);
-  color: var(--p-color-primary);
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--accent);
 }
 
 .icon-item.active {
-  background: var(--p-color-primary);
-  color: var(--p-text-inverse);
+  background: var(--accent);
+  color: #fff;
 }
 
 .tool-panel {
-  background: var(--p-bg-glass-table);
-  border: 1px solid var(--p-glass-border);
-  border-radius: var(--p-radius-lg);
-  box-shadow: var(--p-shadow-glass);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: 24px;
 }
 
@@ -297,8 +297,8 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   font-weight: 500;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--p-border-divider);
-  color: var(--p-text-primary);
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
 }
 
 .dual-panel {
@@ -315,7 +315,7 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 
 .panel-label {
   font-size: 13px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-bottom: 6px;
 }
 
@@ -341,19 +341,19 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 
 .key-label {
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   white-space: nowrap;
 }
 
 :deep(.ant-card) {
-  background: var(--p-bg-glass) !important;
-  border-color: var(--p-glass-border) !important;
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
 }
 :deep(.ant-select-selector) {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-border-default) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
 }
 :deep(.ant-select-selection-item) {
-  color: var(--p-text-primary) !important;
+  color: var(--fg) !important;
 }
 </style>

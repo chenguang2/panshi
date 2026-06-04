@@ -208,7 +208,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         'pre',
         {
           style:
-            'font-size: 12px; white-space: pre-wrap; background: var(--p-bg-hover); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--p-text-primary);',
+            'font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--fg);',
         },
         configStr,
       ),

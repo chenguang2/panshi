@@ -7,7 +7,7 @@
     @close="handleClose"
   >
     <template #extra>
-      <a-switch v-if="hasFormFields" v-model:checked="isJsonMode" checked-children="JSON" un-checked-children="表单" />
+      <label class="toggle" v-if="hasFormFields"><input type="checkbox" :checked="isJsonMode" @change="isJsonMode = !isJsonMode" /><span class="toggle-slider"></span></label>
     </template>
 
     <!-- JSON 模式 -->
@@ -227,7 +227,7 @@
                 <span class="field-block-title">{{ key }}</span>
                 <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
               </div>
-              <a-switch v-model:checked="formData[key]" class="field-input" />
+              <label class="toggle field-input"><input type="checkbox" :checked="formData[key]" @change="formData[key] = !formData[key]" /><span class="toggle-slider"></span></label>
               <div v-if="schema.examples?.length" class="field-example">
                 示例：{{ schema.examples[0] }}
               </div>
@@ -1103,7 +1103,7 @@ const handleClose = () => {
 }
 
 .json-error {
-  color: var(--p-color-danger);
+  color: var(--danger);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -1115,8 +1115,8 @@ const handleClose = () => {
 .field-block {
   margin-bottom: 20px;
   padding: 12px;
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 
@@ -1128,14 +1128,14 @@ const handleClose = () => {
   display: block;
   font-size: 16px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
   margin-bottom: 2px;
 }
 
 .field-block-desc {
   display: block;
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .field-input {
@@ -1144,10 +1144,10 @@ const handleClose = () => {
 
 .field-example {
   font-size: 12px;
-  color: var(--p-color-primary);
-  background: var(--p-color-primary-bg);
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 10%);
   padding: 4px 8px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   margin-bottom: 4px;
 }
 
@@ -1158,7 +1158,7 @@ const handleClose = () => {
 
 .field-hints {
   font-size: 12px;
-  color: var(--p-color-warning);
+  color: var(--warning);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1169,7 +1169,7 @@ const handleClose = () => {
 }
 
 .headers-accordion {
-  background: var(--p-bg-hover);
+  background: var(--bg);
   padding: 8px;
 }
 
@@ -1186,9 +1186,9 @@ const handleClose = () => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s;
@@ -1196,39 +1196,39 @@ const handleClose = () => {
 }
 
 .accordion-header:hover {
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 
 .accordion-header.set {
-  border-left: 3px solid var(--p-color-success);
+  border-left: 3px solid var(--success);
 }
 
 .accordion-header.add {
-  border-left: 3px solid var(--p-color-primary);
+  border-left: 3px solid var(--accent);
 }
 
 .accordion-header.remove {
-  border-left: 3px solid var(--p-color-danger);
+  border-left: 3px solid var(--danger);
 }
 
 .accordion-header.expanded {
-  border-radius: var(--p-radius-sm) var(--p-radius-sm) 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .count-badge {
   margin-left: auto;
-  background: var(--p-bg-hover);
+  background: var(--bg);
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .accordion-content {
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-top: none;
-  border-radius: 0 0 var(--p-radius-sm) var(--p-radius-sm);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   padding: 12px;
 }
 
@@ -1256,23 +1256,23 @@ const handleClose = () => {
 }
 
 .delete-btn {
-  color: var(--p-color-danger);
+  color: var(--danger);
   cursor: pointer;
   font-size: 16px;
   flex-shrink: 0;
 }
 
 .delete-btn:hover {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 
 .add-row-btn {
   padding-left: 0;
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .nested-fields {
-  background: var(--p-bg-hover);
+  background: var(--bg);
   border-radius: 6px;
   padding: 12px;
 }
@@ -1293,16 +1293,16 @@ const handleClose = () => {
 
 .nested-field-name {
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .nested-field-desc {
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .nested-field-hint {
-  color: var(--p-color-warning);
+  color: var(--warning);
   font-size: 12px;
   margin-top: 4px;
   display: flex;
@@ -1312,10 +1312,10 @@ const handleClose = () => {
 
 /* ── traffic_split 卡片编辑器 ── */
 .split-card {
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 8px;
   margin-bottom: 12px;
-  background: var(--p-bg-page);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -1324,14 +1324,14 @@ const handleClose = () => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: var(--p-bg-hover);
-  border-bottom: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .split-card-title {
   font-weight: 600;
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .split-card-actions {
@@ -1342,7 +1342,7 @@ const handleClose = () => {
 
 .split-section {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--p-border-secondary);
+  border-bottom: 1px solid var(--border);
 }
 
 .split-section:last-child {
@@ -1352,7 +1352,7 @@ const handleClose = () => {
 .section-title {
   font-size: 12px;
   font-weight: 500;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
@@ -1378,7 +1378,7 @@ const handleClose = () => {
 .upstream-row .weight-input { width: 80px; }
 .upstream-row .weight-label {
   font-size: 11px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .add-split-btn {

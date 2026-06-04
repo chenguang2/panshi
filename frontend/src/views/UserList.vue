@@ -196,7 +196,7 @@
           </div>
         </div>
         <div class="picker-actions">
-          <span style="font-size:12px;color:var(--p-text-tertiary);margin-right:auto;">已选 {{ selectedClusterIds.length }} 个集群</span>
+          <span style="font-size:12px;color:var(--muted);margin-right:auto;">已选 {{ selectedClusterIds.length }} 个集群</span>
           <button class="btn btn-secondary" @click="clusterPickerVisible = false">取消</button>
           <button class="btn btn-primary" @click="clusterPickerVisible = false">确认</button>
         </div>
@@ -287,9 +287,8 @@ function getClusterName(clusterId: number): string {
 const allPermissions = ref([
   { key: 'plugin_groups', label: '插件组管理', checked: false },
   { key: 'global_rules', label: '全局规则管理', checked: false },
-  { key: 'edge_nodes', label: 'Edge直连', checked: false },
-  { key: 'plugin_management', label: '插件管理', checked: false },
   { key: 'plugin_metadata', label: '插件元数据', checked: false },
+  { key: 'edge_nodes', label: 'Edge直连', checked: false },
 ])
 
 const form = reactive({
@@ -309,9 +308,8 @@ function formatDate(dateStr: string): string {
 const permissionKeyToLabel: Record<string, string> = {
   plugin_groups: '插件组管理',
   global_rules: '全局规则管理',
-  edge_nodes: 'Edge直连',
-  plugin_management: '插件管理',
   plugin_metadata: '插件元数据',
+  edge_nodes: 'Edge直连',
 }
 
 const tableColumns = computed(() => {
@@ -582,17 +580,17 @@ async function handleResetPassword() {
   font-size: 12px;
 }
 
-.text-muted { color: var(--p-text-tertiary); }
+.text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
 
 .cell-primary {
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .cell-secondary {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .role-badge {
@@ -601,15 +599,15 @@ async function handleResetPassword() {
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
 }
 .role-badge.admin {
-  background: color-mix(in srgb, var(--p-color-primary) 10%, transparent);
-  color: var(--p-color-primary);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
 }
 .role-badge.user {
-  background: color-mix(in srgb, var(--p-color-success) 10%, transparent);
-  color: var(--p-color-success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
 }
 
 .perm-tag {
@@ -618,15 +616,15 @@ async function handleResetPassword() {
   margin: 1px;
   border-radius: 3px;
   font-size: 10px;
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  font-family: var(--font-mono, var(--p-mono));
-  color: var(--p-text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono, var(--font-mono));
+  color: var(--muted);
 }
 .perm-tag.active {
-  border-color: color-mix(in srgb, var(--p-color-primary) 30%, transparent);
-  background: color-mix(in srgb, var(--p-color-primary) 6%, transparent);
-  color: var(--p-color-primary);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--accent);
 }
 .more-tag {
   cursor: pointer;
@@ -643,16 +641,16 @@ async function handleResetPassword() {
   height: 28px;
   border: none;
   background: transparent;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   transition: all 0.15s;
 }
 .action-btn:hover {
-  background: var(--p-bg-hover);
-  color: var(--p-color-primary);
+  background: var(--bg);
+  color: var(--accent);
 }
 
 .action-dropdown {
@@ -660,10 +658,10 @@ async function handleResetPassword() {
   right: 0;
   top: 100%;
   z-index: 100;
-  background: var(--p-bg-elevated);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-md);
-  box-shadow: var(--p-shadow-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   min-width: 100px;
   padding: 4px 0;
 }
@@ -677,18 +675,18 @@ async function handleResetPassword() {
   text-align: left;
   cursor: pointer;
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
   white-space: nowrap;
   transition: background 0.1s;
 }
 .action-dropdown-item:hover {
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 .action-dropdown-item.danger {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 .action-dropdown-item.danger:hover {
-  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .table-footer {
@@ -707,21 +705,21 @@ async function handleResetPassword() {
 .page-btn {
   min-width: 28px;
   height: 28px;
-  border: 1px solid var(--p-border-default);
-  background: var(--p-bg-container);
-  border-radius: var(--p-radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   transition: all 0.15s;
 }
 .page-btn:hover:not(:disabled):not(.active) {
-  border-color: var(--p-color-primary);
-  color: var(--p-color-primary);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .page-btn.active {
-  background: var(--p-color-primary);
-  border-color: var(--p-color-primary);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #fff;
 }
 .page-btn:disabled {
@@ -732,7 +730,7 @@ async function handleResetPassword() {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: var(--p-bg-mask);
+  background: oklch(0% 0 0 / 40%);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -740,10 +738,10 @@ async function handleResetPassword() {
 }
 
 .modal {
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-lg);
-  box-shadow: var(--p-shadow-lg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 600px;
   max-height: 80vh;
@@ -760,14 +758,14 @@ async function handleResetPassword() {
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--p-border-divider);
-  background: var(--p-color-primary-bg);
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
 }
 .modal-header h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .modal-close {
@@ -777,12 +775,12 @@ async function handleResetPassword() {
   background: transparent;
   font-size: 20px;
   cursor: pointer;
-  color: var(--p-text-tertiary);
-  border-radius: var(--p-radius-sm);
+  color: var(--muted);
+  border-radius: var(--radius-sm);
 }
 .modal-close:hover {
-  background: var(--p-bg-hover);
-  color: var(--p-text-primary);
+  background: var(--bg);
+  color: var(--fg);
 }
 
 .modal-body {
@@ -796,7 +794,7 @@ async function handleResetPassword() {
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 20px;
-  border-top: 1px solid var(--p-border-divider);
+  border-top: 1px solid var(--border);
 }
 
 .form-row {
@@ -814,30 +812,30 @@ async function handleResetPassword() {
   display: block;
   margin-bottom: 6px;
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   font-weight: 500;
 }
 
-.required { color: var(--p-color-danger); }
+.required { color: var(--danger); }
 
 .form-input {
   width: 100%;
   height: 36px;
   padding: 0 12px;
   font-size: 13px;
-  background: var(--p-bg-input);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-md);
-  color: var(--p-text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
   outline: none;
   transition: border-color 0.2s;
 }
 .form-input:focus {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--p-color-primary) 20%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .form-input::placeholder {
-  color: var(--p-text-disabled);
+  color: var(--muted);
 }
 
 .checkbox-label {
@@ -845,25 +843,25 @@ async function handleResetPassword() {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   cursor: pointer;
 }
 .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--p-color-primary);
+  accent-color: var(--accent);
 }
 
 .permissions-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid var(--p-border-divider);
+  border-top: 1px solid var(--border);
 }
 .permissions-section h3 {
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 4px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .perm-grid {
@@ -878,22 +876,22 @@ async function handleResetPassword() {
   gap: 6px;
   font-size: 13px;
   cursor: pointer;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 .perm-grid label:hover {
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .password-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid var(--p-border-divider);
+  border-top: 1px solid var(--border);
 }
 .password-section h3 {
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 8px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .btn {
@@ -905,35 +903,35 @@ async function handleResetPassword() {
   height: 32px;
   font-size: 13px;
   font-weight: 500;
-  border-radius: var(--p-radius-md);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s;
-  border: 1px solid var(--p-border-default);
-  background: var(--p-bg-hover);
-  color: var(--p-text-secondary);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
   white-space: nowrap;
 }
 .btn:hover {
-  border-color: var(--p-color-primary);
-  color: var(--p-color-primary);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info));
+  background: linear-gradient(135deg, var(--accent), var(--info));
   border: none;
   color: #fff;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--p-color-primary) 30%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .btn-primary:hover {
   opacity: 0.92;
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--p-color-primary) 40%, transparent);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 40%, transparent);
   color: #fff;
 }
 
 .btn-secondary {
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  color: var(--p-text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
 }
 
 .btn-sm {
@@ -952,20 +950,20 @@ async function handleResetPassword() {
   width: 100%;
   height: 36px;
   padding: 0 12px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-size: 13px;
   outline: none;
-  background: var(--p-bg-input);
-  color: var(--p-text-primary);
+  background: var(--bg);
+  color: var(--fg);
 }
 .picker-search input:focus {
-  border-color: var(--p-color-primary);
+  border-color: var(--accent);
 }
 .picker-group {
   margin-bottom: 12px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .picker-group-header {
@@ -973,26 +971,26 @@ async function handleResetPassword() {
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: var(--p-bg-hover);
+  background: var(--bg);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
   user-select: none;
-  border-bottom: 1px solid var(--p-border-default);
+  border-bottom: 1px solid var(--border);
 }
 .picker-group-header:hover {
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .picker-group-header .group-checkbox {
   width: 16px;
   height: 16px;
-  accent-color: var(--p-color-primary);
+  accent-color: var(--accent);
 }
 .picker-group-header .group-count {
   margin-left: auto;
   font-size: 11px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-weight: 400;
 }
 .picker-group-body {
@@ -1006,28 +1004,28 @@ async function handleResetPassword() {
   align-items: center;
   gap: 6px;
   padding: 5px 8px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
   transition: background 0.1s;
 }
 .picker-cluster-item:hover {
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 .picker-cluster-item input[type="checkbox"] {
   width: 15px;
   height: 15px;
-  accent-color: var(--p-color-primary);
+  accent-color: var(--accent);
 }
 .picker-cluster-name {
   font-weight: 500;
 }
 .picker-cluster-tag {
   font-size: 10px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-left: auto;
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
 }
 
 .selected-clusters {
@@ -1045,9 +1043,9 @@ async function handleResetPassword() {
   padding: 2px 10px;
   border-radius: 12px;
   font-size: 12px;
-  border: 1px solid var(--p-color-primary);
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
-  color: var(--p-color-primary);
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
 }
 .selected-cluster-tag .remove {
   cursor: pointer;
@@ -1063,25 +1061,25 @@ async function handleResetPassword() {
   align-items: center;
   gap: 6px;
   padding: 2px 12px;
-  border: 1px dashed var(--p-border-default);
-  border-radius: var(--p-radius-md);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   cursor: pointer;
   background: transparent;
   transition: all 0.15s;
   height: 28px;
 }
 .select-clusters-btn:hover {
-  border-color: var(--p-color-primary);
-  color: var(--p-color-primary);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .picker-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 20px;
-  border-top: 1px solid var(--p-border-divider);
+  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 768px) {

@@ -145,7 +145,7 @@
               <a-textarea v-model:value="routeForm.description" :rows="2" />
             </a-form-item>
             <a-form-item label="高级匹配" name="advancedMatch">
-              <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
+              <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
               <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级匹配"页配置请求条件</span>
             </a-form-item>
           </a-form>
@@ -199,7 +199,7 @@
                   <a-tag
                     v-for="(pcfg, pname) in pg.plugins"
                     :key="pname"
-                    color="var(--p-color-primary)"
+                    color="var(--accent)"
                     style="font-size: 11px; cursor: pointer;"
                     @click.stop="viewPluginConfigDetail(pg, pname as string, pcfg)"
                   >
@@ -365,25 +365,25 @@ function onVersionPublished() {
 }
 
 .plugin-config-card:hover {
-  border-color: var(--p-color-primary) !important;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--p-color-primary) 20%, transparent);
+  border-color: var(--accent) !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .plugin-config-card.selected {
-  border-color: var(--p-color-primary) !important;
-  background: var(--p-color-primary-bg) !important;
+  border-color: var(--accent) !important;
+  background: oklch(56% 0.16 210 / 10%) !important;
 }
 
 /* Plugin group tab inside route modal */
 .pg-empty {
   padding: 40px 0;
   text-align: center;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 .pg-desc {
   margin-bottom: 12px;
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 .pg-list {
   display: flex;
@@ -392,16 +392,16 @@ function onVersionPublished() {
 }
 .plugin-config-card {
   width: 280px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  background: var(--p-bg-page);
+  background: var(--bg);
 }
 .plugin-config-card:hover {
-  border-color: var(--p-border-hover);
-  box-shadow: var(--p-shadow-sm);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 .pg-item-header {
   display: flex;
@@ -411,11 +411,11 @@ function onVersionPublished() {
 }
 .pg-item-name {
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 .pg-item-version {
   font-size: 11px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 .pg-item-plugins {
   display: flex;
@@ -425,6 +425,6 @@ function onVersionPublished() {
 }
 .pg-item-desc {
   font-size: 11px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 </style>

@@ -131,7 +131,7 @@ onMounted(async () => {
 .stat-icon {
   width: 36px;
   height: 36px;
-  border-radius: var(--p-radius-md);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,13 +139,13 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.stat-icon.cluster { background: color-mix(in srgb, var(--p-color-primary) 12%, transparent); color: var(--p-color-primary); }
-.stat-icon.route { background: color-mix(in srgb, var(--p-color-success) 12%, transparent); color: var(--p-color-success); }
-.stat-icon.upstream { background: color-mix(in srgb, var(--p-color-warning) 12%, transparent); color: var(--p-color-warning); }
+.stat-icon.cluster { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.stat-icon.route { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+.stat-icon.upstream { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
 .stat-icon.plugin { background: color-mix(in srgb, #7c3aed 12%, transparent); color: #7c3aed; }
 .stat-icon.global { background: color-mix(in srgb, #52c41a 12%, transparent); color: #52c41a; }
-.stat-icon.resource { background: color-mix(in srgb, var(--p-color-info) 12%, transparent); color: var(--p-color-info); }
-.stat-icon.user { background: color-mix(in srgb, var(--p-color-danger) 12%, transparent); color: var(--p-color-danger); }
+.stat-icon.resource { background: color-mix(in srgb, var(--info) 12%, transparent); color: var(--info); }
+.stat-icon.user { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
 
 .dashboard-columns {
   display: grid;
@@ -156,19 +156,19 @@ onMounted(async () => {
 .table-card-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .table-card-count {
   font-size: 11px;
-  color: var(--p-text-tertiary);
-  font-family: var(--font-mono, var(--p-mono));
+  color: var(--muted);
+  font-family: var(--font-mono, var(--font-mono));
   font-weight: 500;
 }
 
 .table-card-link {
   font-size: 12px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   text-decoration: none;
   font-weight: 500;
 }

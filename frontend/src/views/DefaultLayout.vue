@@ -92,17 +92,17 @@ const handleLogout = async () => {
 }
 
 .app-header {
-  background: var(--p-header-bg);
+  background: var(--surface);
   padding: 0 24px;
   display: flex;
   align-items: center;
   height: 56px;
   line-height: 56px;
-  box-shadow: 0 1px 4px var(--p-shadow-sm);
+  box-shadow: 0 1px 4px var(--shadow-sm);
   position: sticky;
   top: 0;
   z-index: 50;
-  border-bottom: 2px solid var(--p-color-primary);
+  border-bottom: 2px solid var(--accent);
   flex-shrink: 0;
 }
 
@@ -115,11 +115,11 @@ const handleLogout = async () => {
 .trigger {
   font-size: 18px;
   cursor: pointer;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   transition: color 0.2s;
 }
 .trigger:hover {
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .header-breadcrumb {
@@ -129,14 +129,14 @@ const handleLogout = async () => {
   font-size: 13px;
 }
 .crumb-item {
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 .crumb-item.crumb-current {
-  color: var(--p-color-primary);
+  color: var(--accent);
   font-weight: 600;
 }
 .crumb-sep {
-  color: var(--p-border-default);
+  color: var(--border);
 }
 
 .header-right {
@@ -149,24 +149,24 @@ const handleLogout = async () => {
 .user-info {
   cursor: pointer;
   padding: 4px 10px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   transition: all 0.2s;
 }
 .user-info:hover {
-  background: var(--p-bg-hover);
-  color: var(--p-color-primary);
+  background: var(--bg);
+  color: var(--accent);
 }
 
 .app-content {
   padding: 20px 24px;
   min-height: calc(100vh - 56px);
-  background: var(--p-bg-page);
+  background: var(--bg);
 }
 
 :deep(.ant-dropdown-menu-item.active) {
-  color: var(--p-color-primary) !important;
+  color: var(--accent) !important;
   font-weight: 500;
 }
 </style>

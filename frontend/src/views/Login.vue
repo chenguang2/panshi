@@ -121,7 +121,7 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-body {
-  background: var(--p-sidebar-bg);
+  background: var(--sidebar-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -134,15 +134,15 @@ const handleLogin = async () => {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 600px 400px at 50% 40%, color-mix(in srgb, var(--p-color-primary) 6%, transparent), transparent);
+  background: radial-gradient(ellipse 600px 400px at 50% 40%, color-mix(in srgb, var(--accent) 6%, transparent), transparent);
   pointer-events: none;
 }
 
 .login-card {
   position: relative;
-  background: var(--p-bg-container);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
   width: 100%;
   max-width: 400px;
@@ -163,8 +163,8 @@ const handleLogin = async () => {
 .login-brand-icon {
   width: 52px;
   height: 52px;
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info));
-  border-radius: var(--p-radius-md);
+  background: linear-gradient(135deg, var(--accent), var(--info));
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,21 +172,21 @@ const handleLogin = async () => {
   font-weight: 700;
   color: #fff;
   margin-bottom: 14px;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--p-color-primary) 25%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .login-brand-name {
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--p-text-primary);
+  color: var(--fg);
   display: block;
   line-height: 1.3;
 }
 
 .login-brand-sub {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-top: 4px;
   font-weight: 400;
   letter-spacing: 0.03em;
@@ -195,7 +195,7 @@ const handleLogin = async () => {
 .login-divider {
   width: 32px;
   height: 2px;
-  background: var(--p-color-primary);
+  background: var(--accent);
   border-radius: 2px;
   margin: 16px auto 20px;
   opacity: 0.5;
@@ -205,13 +205,13 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--p-color-danger) 18%, transparent);
-  border-radius: var(--p-radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 18%, transparent);
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   margin-bottom: 16px;
   font-size: 12px;
-  color: var(--p-color-danger);
+  color: var(--danger);
   line-height: 1.4;
 }
 
@@ -234,35 +234,35 @@ const handleLogin = async () => {
   display: block;
   margin-bottom: 6px;
   font-size: 13px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   font-weight: 500;
 }
 
 .required {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 
 .form-input {
   width: 100%;
-  background: var(--p-bg-input);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-md);
-  color: var(--p-text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg);
   outline: none;
   transition: border-color 0.25s, box-shadow 0.25s;
 }
 
 .form-input::placeholder {
-  color: var(--p-text-disabled);
+  color: var(--muted);
 }
 
 .form-input:hover {
-  border-color: var(--p-border-hover);
+  border-color: var(--accent);
 }
 
 .form-input:focus {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-color-primary) 20%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .login-input-wrap {
@@ -274,7 +274,7 @@ const handleLogin = async () => {
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-size: 15px;
   pointer-events: none;
   opacity: 0.5;
@@ -296,7 +296,7 @@ const handleLogin = async () => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   cursor: pointer;
   user-select: none;
 }
@@ -304,14 +304,14 @@ const handleLogin = async () => {
 .checkbox-label input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--p-color-primary);
+  accent-color: var(--accent);
   cursor: pointer;
   border-radius: 3px;
 }
 
 .forgot-link {
   font-size: 12px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   text-decoration: none;
   font-weight: 500;
 }
@@ -328,19 +328,19 @@ const handleLogin = async () => {
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  border-radius: var(--p-radius-md);
+  border-radius: var(--radius-md);
   transition: all 0.15s;
   cursor: pointer;
   letter-spacing: 0.02em;
   border: none;
   color: #fff;
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info));
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--p-color-primary) 30%, transparent);
+  background: linear-gradient(135deg, var(--accent), var(--info));
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .login-btn:hover {
   opacity: 0.92;
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--p-color-primary) 40%, transparent);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .login-btn:active {
@@ -381,8 +381,8 @@ const handleLogin = async () => {
   gap: 6px;
   margin-top: 18px;
   font-size: 11px;
-  color: color-mix(in srgb, var(--p-text-tertiary) 50%, transparent);
-  font-family: var(--font-mono, var(--p-mono));
+  color: color-mix(in srgb, var(--muted) 50%, transparent);
+  font-family: var(--font-mono, var(--font-mono));
 }
 
 .token-dot {
@@ -398,20 +398,20 @@ const handleLogin = async () => {
   text-align: center;
   margin-top: 28px;
   padding-top: 16px;
-  border-top: 1px solid var(--p-border-default);
+  border-top: 1px solid var(--border);
 }
 
 .login-footer-version {
   font-size: 11px;
-  color: var(--p-text-tertiary);
-  font-family: var(--font-mono, var(--p-mono));
+  color: var(--muted);
+  font-family: var(--font-mono, var(--font-mono));
   font-weight: 500;
   letter-spacing: 0.02em;
 }
 
 .login-footer-copy {
   font-size: 10px;
-  color: color-mix(in srgb, var(--p-text-tertiary) 50%, transparent);
+  color: color-mix(in srgb, var(--muted) 50%, transparent);
   margin-top: 4px;
 }
 </style>

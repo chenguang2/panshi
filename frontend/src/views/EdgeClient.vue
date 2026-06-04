@@ -305,7 +305,7 @@
         </a-form-item>
         <a-form-item v-if="upstreamForm.type === 'chash'" label="Key" name="key">
           <a-input v-model:value="upstreamForm.key" placeholder="remote_addr" />
-          <div style="font-size:12px;color:var(--p-text-tertiary);margin-top:4px">
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
             hash_on=内置变量时: remote_addr / uri / host / server_name / query_string / arg_xxx
           </div>
         </a-form-item>
@@ -360,8 +360,8 @@
           <a-textarea v-model:value="routeForm.pluginsJson" :rows="4" placeholder='{"proxy_rewrite": {...}}' />
         </a-form-item>
         <a-form-item label="高级匹配">
-          <a-switch v-model:checked="routeForm.advancedMatchEnabled" checked-children="开" un-checked-children="关" />
-          <span style="margin-left: 12px; color: var(--p-text-tertiary); font-size: 12px;">开启后配置请求匹配条件</span>
+          <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
+          <span style="margin-left: 12px; color: var(--muted); font-size: 12px;">开启后配置请求匹配条件</span>
         </a-form-item>
         <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
           <RouteAdvancedMatch
@@ -371,13 +371,13 @@
           />
         </div>
         <div v-else-if="routeForm.advancedMatchEnabled === false && routeForm.advancedMatch.vars.length > 0" style="margin-bottom: 12px;">
-          <WarningOutlined style="color: var(--p-color-warning); margin-right: 8px;" />
-          <span style="color: var(--p-text-tertiary); font-size: 12px;">高级匹配已配置，但未启用</span>
+          <WarningOutlined style="color: var(--warning); margin-right: 8px;" />
+          <span style="color: var(--muted); font-size: 12px;">高级匹配已配置，但未启用</span>
         </div>
 
         <a-divider style="margin: 8px 0;" />
         <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
-        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: var(--p-text-tertiary); font-size: 12px;">
+        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: var(--muted); font-size: 12px;">
           暂无插件组
         </div>
         <div v-else style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 240px; overflow-y: auto;">
@@ -387,12 +387,12 @@
             class="plugin-config-card"
             :class="{ selected: isPluginGroupSelected(pg.value?.id || pg.key) }"
             @click="togglePluginGroup(pg)"
-            style="width: 100%; border: 1px solid var(--p-border-default); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: var(--p-bg-page);"
+            style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: var(--bg);"
           >
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <a-checkbox :checked="isPluginGroupSelected(pg.value?.id || pg.key)" @click.stop="togglePluginGroup(pg)" />
               <strong style="font-size: 13px; flex: 1; margin-left: 8px;">{{ pg.value?.id || pg.key }}</strong>
-              <span style="font-size: 11px; color: var(--p-text-tertiary);">v{{ pg.value?.current_version || 0 }}</span>
+              <span style="font-size: 11px; color: var(--muted);">v{{ pg.value?.current_version || 0 }}</span>
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
               <a-tag
@@ -404,7 +404,7 @@
                 {{ pname }}
               </a-tag>
             </div>
-            <div v-if="pg.value?.desc" style="font-size: 11px; color: var(--p-text-tertiary); margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
+            <div v-if="pg.value?.desc" style="font-size: 11px; color: var(--muted); margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
           </div>
         </div>
       </a-form>
@@ -1558,44 +1558,44 @@ watch(selectedNode, async (_newNode) => {
   min-height: calc(100vh - 56px - 40px);
   margin: -20px -24px;
   padding: 20px 24px;
-  background: var(--p-bg-page);
+  background: var(--bg);
 }
 
 :deep(.ant-table) {
   background: transparent !important;
 }
 :deep(.ant-table-thead > tr > th) {
-  background: var(--p-color-primary-bg) !important;
-  border-bottom: 2px solid var(--p-color-primary) !important;
-  color: var(--p-text-primary) !important;
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 2px solid var(--accent) !important;
+  color: var(--fg) !important;
   font-weight: 600;
 }
 :deep(.ant-table-tbody > tr > td) {
   background: transparent !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-primary);
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--fg);
 }
 :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--p-bg-hover) !important;
+  background: var(--bg) !important;
 }
 
 :deep(.ant-card) {
-  background: var(--p-bg-glass) !important;
-  border-color: var(--p-glass-border) !important;
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
 }
 :deep(.ant-card .ant-card-head) {
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-primary) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--fg) !important;
 }
 :deep(.ant-card .ant-card-body) {
-  color: var(--p-text-secondary) !important;
+  color: var(--muted) !important;
 }
 :deep(.ant-select-selector) {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-border-default) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
 }
 :deep(.ant-select-selection-item) {
-  color: var(--p-text-primary) !important;
+  color: var(--fg) !important;
 }
 
 .node-selector {
@@ -1614,16 +1614,16 @@ watch(selectedNode, async (_newNode) => {
 }
 
 .plugin-config-card:hover {
-  border-color: var(--p-color-primary) !important;
+  border-color: var(--accent) !important;
 }
 .edge-client .plugin-card.selected {
-  border-color: var(--p-color-primary) !important;
-  background: var(--p-color-primary-bg) !important;
+  border-color: var(--accent) !important;
+  background: oklch(56% 0.16 210 / 10%) !important;
 }
 
 .node-selector-card {
-  border-radius: var(--p-radius-lg);
-  box-shadow: var(--p-shadow-glass);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   margin-bottom: 16px;
 }
 
@@ -1633,9 +1633,9 @@ watch(selectedNode, async (_newNode) => {
   background: #1a1b1e;
   color: #e0e0e0;
   padding: 16px;
-  border-radius: var(--p-radius-md);
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1645,9 +1645,9 @@ watch(selectedNode, async (_newNode) => {
   max-width: 400px;
   overflow: auto;
   font-size: 11px;
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
   background: transparent;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 :deep(.json-viewer) {
@@ -1656,9 +1656,9 @@ watch(selectedNode, async (_newNode) => {
   background: #1a1b1e;
   color: #e0e0e0;
   padding: 16px;
-  border-radius: var(--p-radius-md);
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;

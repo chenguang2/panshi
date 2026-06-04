@@ -174,13 +174,13 @@ const handleOpenChange = (open: boolean): void => {
 
 .modal-state .state-text {
   margin: 0;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   font-size: 14px;
 }
 
 .modal-state .error-text {
   margin: 0 0 8px;
-  color: var(--p-color-danger);
+  color: var(--danger);
   font-size: 14px;
 }
 
@@ -190,7 +190,7 @@ const handleOpenChange = (open: boolean): void => {
   justify-content: space-between;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--p-border-divider);
+  border-bottom: 1px solid var(--border);
 }
 
 .selection-links {
@@ -200,7 +200,7 @@ const handleOpenChange = (open: boolean): void => {
 }
 
 .action-link {
-  color: var(--p-color-primary);
+  color: var(--accent);
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
@@ -209,11 +209,11 @@ const handleOpenChange = (open: boolean): void => {
 }
 
 .action-link:hover {
-  color: var(--p-color-primary-hover);
+  color: var(--accent);
 }
 
 .selection-count {
-  color: var(--p-text-secondary);
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -227,12 +227,12 @@ const handleOpenChange = (open: boolean): void => {
   display: flex;
   align-items: center;
   padding: 8px 4px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   transition: background-color 0.2s;
 }
 
 .node-row:not(.node-row--offline):hover {
-  background-color: var(--p-bg-hover);
+  background-color: var(--bg);
 }
 
 .node-row--offline {
@@ -240,12 +240,12 @@ const handleOpenChange = (open: boolean): void => {
 }
 
 .node-row--offline .node-address {
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .node-address {
   font-size: 14px;
-  font-family: var(--p-mono);
+  font-family: var(--font-mono);
   margin-right: 8px;
 }
 
@@ -256,7 +256,7 @@ const handleOpenChange = (open: boolean): void => {
 
 .hint-text {
   margin-top: 8px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-size: 13px;
   text-align: center;
 }

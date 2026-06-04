@@ -86,7 +86,7 @@
             <div>插件: {{ connectionResult?.plugin_count }} 个</div>
             <div>路由: {{ connectionResult?.route_count }} 条</div>
             <div>上游: {{ connectionResult?.upstream_count }} 个</div>
-            <div style="margin-top: 4px; color: var(--p-text-tertiary); font-size: 12px;">
+            <div style="margin-top: 4px; color: var(--muted); font-size: 12px;">
               {{ connectionResult?.message }}
             </div>
           </template>
@@ -728,21 +728,21 @@ onMounted(() => {
   min-height: calc(100vh - 56px - 40px);
   margin: -20px -24px;
   padding: 20px 24px;
-  background: var(--p-bg-page);
+  background: var(--bg);
 }
 
 .edge-import h2 {
   margin-bottom: 24px;
   font-size: 20px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .section-card {
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--p-bg-glass);
+  background: var(--surface);
 }
 
 .section-header {
@@ -750,15 +750,15 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--p-color-primary-bg);
-  border-bottom: 1px solid var(--p-border-default);
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 1px solid var(--border);
 }
 
 .section-title {
   flex: 1;
   font-weight: 500;
   font-size: 14px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .step-actions {
@@ -776,7 +776,7 @@ onMounted(() => {
 }
 
 .section-card {
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -786,8 +786,8 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--p-bg-hover);
-  border-bottom: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .section-title {
@@ -804,37 +804,37 @@ onMounted(() => {
   background: transparent !important;
 }
 :deep(.ant-table-thead > tr > th) {
-  background: var(--p-color-primary-bg) !important;
-  border-bottom: 2px solid var(--p-color-primary) !important;
-  color: var(--p-text-primary) !important;
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 2px solid var(--accent) !important;
+  color: var(--fg) !important;
   font-weight: 600;
 }
 :deep(.ant-table-tbody > tr > td) {
   background: transparent !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-primary);
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--fg);
 }
 :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--p-bg-hover) !important;
+  background: var(--bg) !important;
 }
 
 :deep(.ant-card) {
-  background: var(--p-bg-glass) !important;
-  border-color: var(--p-glass-border) !important;
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
 }
 :deep(.ant-card .ant-card-head) {
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-primary) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--fg) !important;
 }
 :deep(.ant-card .ant-card-body) {
-  color: var(--p-text-secondary) !important;
+  color: var(--muted) !important;
 }
 :deep(.ant-select-selector) {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-border-default) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
 }
 :deep(.ant-select-selection-item) {
-  color: var(--p-text-primary) !important;
+  color: var(--fg) !important;
 }
 
 .loading-overlay {
@@ -849,19 +849,19 @@ onMounted(() => {
   flex: 1;
 }
 :deep(.ant-steps .ant-steps-item-container) {
-  background: var(--p-bg-glass);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   transition: all 0.2s;
 }
 :deep(.ant-steps .ant-steps-item-process .ant-steps-item-container) {
-  border-color: var(--p-color-primary);
-  background: color-mix(in srgb, var(--p-color-primary) 6%, transparent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 :deep(.ant-steps .ant-steps-item-finish .ant-steps-item-container) {
-  border-color: var(--p-color-success);
-  background: color-mix(in srgb, var(--p-color-success) 6%, transparent);
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
 }
 :deep(.ant-steps .ant-steps-item-icon) {
   display: inline-flex;
@@ -875,12 +875,12 @@ onMounted(() => {
   margin-right: 8px;
 }
 :deep(.ant-steps .ant-steps-item-process .ant-steps-item-icon) {
-  background: var(--p-color-primary);
-  border-color: var(--p-color-primary);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 :deep(.ant-steps .ant-steps-item-finish .ant-steps-item-icon) {
-  background: var(--p-color-success);
-  border-color: var(--p-color-success);
+  background: var(--success);
+  border-color: var(--success);
 }
 :deep(.ant-steps .ant-steps-item-content .ant-steps-item-title) {
   font-size: 13px;

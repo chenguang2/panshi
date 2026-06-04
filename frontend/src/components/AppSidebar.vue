@@ -92,7 +92,7 @@ const navSections = computed<NavSection[]>(() => {
       title: '系统管理',
       visible: authStore.user?.role === 'admin',
       items: [
-        { label: '插件管理', route: '/plugin-switches', icon: '&#x25B2;' },
+        { label: '插件开关', route: '/plugin-switches', icon: '&#x25B2;' },
         { label: '用户管理', route: '/users', icon: '&#x25A0;' },
       ]
     },
@@ -127,7 +127,7 @@ const handleLogout = async () => {
 .sidebar {
   width: 240px;
   min-height: 100vh;
-  background: var(--p-sidebar-bg);
+  background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
   transition: width 0.2s;
@@ -152,8 +152,8 @@ const handleLogout = async () => {
 .sidebar-logo-icon {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info));
-  border-radius: var(--p-radius-md);
+  background: linear-gradient(135deg, var(--accent), var(--info));
+  border-radius: var(--radius-md);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -166,13 +166,13 @@ const handleLogout = async () => {
 .sidebar-logo-text {
   font-size: 16px;
   font-weight: 700;
-  color: var(--p-text-sidebar-active);
+  color: #fff;
   white-space: nowrap;
 }
 
 .sidebar-logo-version {
   font-size: 10px;
-  color: var(--p-text-sidebar);
+  color: var(--sidebar-fg);
   opacity: 0.5;
   font-family: var(--font-mono);
 }
@@ -193,7 +193,7 @@ const handleLogout = async () => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--p-text-sidebar);
+  color: var(--sidebar-fg);
   opacity: 0.5;
 }
 
@@ -203,8 +203,8 @@ const handleLogout = async () => {
   gap: 10px;
   padding: 8px 16px;
   margin: 1px 8px;
-  border-radius: var(--p-radius-md);
-  color: var(--p-text-sidebar);
+  border-radius: var(--radius-md);
+  color: var(--sidebar-fg);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
@@ -215,11 +215,11 @@ const handleLogout = async () => {
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.06);
-  color: var(--p-text-sidebar-active);
+  color: #fff;
 }
 
 .nav-item.active {
-  background: var(--p-color-primary);
+  background: var(--accent);
   color: #fff;
 }
 
@@ -257,7 +257,7 @@ const handleLogout = async () => {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--p-color-primary);
+  background: var(--accent);
   color: #fff;
   display: flex;
   align-items: center;
@@ -275,20 +275,20 @@ const handleLogout = async () => {
 .sidebar-user-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--p-text-sidebar-active);
+  color: #fff;
   line-height: 1.3;
 }
 
 .sidebar-user-role {
   font-size: 10px;
-  color: var(--p-text-sidebar);
+  color: var(--sidebar-fg);
   opacity: 0.6;
   line-height: 1.3;
 }
 
 .sidebar-logout {
   font-size: 11px;
-  color: var(--p-text-sidebar);
+  color: var(--sidebar-fg);
   opacity: 0.5;
   cursor: pointer;
   text-decoration: none;
@@ -297,6 +297,6 @@ const handleLogout = async () => {
 
 .sidebar-logout:hover {
   opacity: 1;
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 </style>

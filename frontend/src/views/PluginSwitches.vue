@@ -1,97 +1,221 @@
 <template>
   <div class="plugin-switches">
-    <PageHeader title="插件管理" description="开关控制各插件的启用状态，未勾选的插件在路由和插件组中不可见">
-      <template #actions>
-        <a-button type="primary" @click="saveSwitches" :loading="saving">保存设置</a-button>
-      </template>
-    </PageHeader>
+    <PageHeader title="插件开关" description="管理内置插件的启用/禁用状态，查看插件配置 schema" />
 
-    <TableCard
-      :columns="columns"
-      :data-source="switchList"
-      :loading="loading"
-      :pagination="false"
-      row-key="plugin_name"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'enabled'">
-          <a-switch
-            v-model:checked="record.enabled"
-            checked-children="启用"
-            un-checked-children="禁用"
-          />
-        </template>
-        <template v-if="column.key === 'description'">
-          <span class="plugin-desc">{{ getPluginDescription(record.plugin_name) }}</span>
-        </template>
-      </template>
-    </TableCard>
+    <!-- Status Bar -->
+    <div class="switch-status-bar">
+      <div class="ssb-left">
+        <span class="ssb-count">已启用 <strong>{{ totalEnabled }}</strong> / <strong>{{ allPlugins.length }}</strong> 个插件</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a-button size="small" @click="enableAll">全部启用</a-button>
+        <a-button size="small" @click="disableAll">全部禁用</a-button>
+      </div>
+    </div>
+
+    <!-- Category Pills -->
+    <div class="plugin-categories">
+      <span
+        class="plugin-cat"
+        :class="{ active: activeCategory === 'all' }"
+        @click="activeCategory = 'all'"
+      >全部</span>
+      <span
+        v-for="cat in categoryList"
+        :key="cat.key"
+        class="plugin-cat"
+        :class="{ active: activeCategory === cat.key }"
+        @click="activeCategory = cat.key"
+      >{{ cat.label }}</span>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="plugin-filter-bar">
+      <div class="search-input-wrap">
+        <a-input-search v-model:value="searchText" placeholder="搜索插件名称..." />
+      </div>
+      <a-select v-model:value="statusFilter" style="width:120px;">
+        <a-select-option value="all">全部状态</a-select-option>
+        <a-select-option value="enabled">已启用</a-select-option>
+        <a-select-option value="disabled">已禁用</a-select-option>
+      </a-select>
+      <span class="plugin-count">共 {{ filteredPlugins.length }} 个插件</span>
+    </div>
+
+    <!-- Loading -->
+    <div v-if="loading" class="loading-state">加载中...</div>
+
+    <!-- Empty -->
+    <div v-else-if="filteredPlugins.length === 0" class="empty-state">
+      <div class="empty-state-icon">▲</div>
+      <p>暂无匹配的插件</p>
+    </div>
+
+    <!-- Grid -->
+    <div v-else class="plugin-grid">
+      <div
+        v-for="item in filteredPlugins"
+        :key="item.plugin_name"
+        class="plugin-card"
+        :class="{ 'disabled-state': !item.enabled }"
+      >
+        <div class="plugin-card-header">
+          <div class="plugin-card-info">
+            <div class="plugin-card-name">
+              {{ item.display_name || item.plugin_name }}
+              <span class="plugin-card-category">{{ getCategoryLabel(item.category) }}</span>
+            </div>
+            <div class="plugin-card-desc">{{ item.description }}</div>
+          </div>
+        </div>
+
+        <div class="plugin-card-footer">
+          <div class="plugin-card-actions">
+            <span class="plugin-version">{{ item.plugin_name }}</span>
+            <span
+              v-if="item.schema && item.schema !== '{}'"
+              class="plugin-schema-toggle"
+              @click="toggleSchema(item.plugin_name)"
+            >⚙ schema</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" :checked="item.enabled" @change="(e) => toggleSwitch(item, (e.target as HTMLInputElement).checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div
+          v-if="openSchemas[item.plugin_name]"
+          class="plugin-schema-box visible"
+        >{{ formatSchema(item.schema) }}</div>
+      </div>
+    </div>
+
+    <!-- Save Area -->
+    <div class="switch-actions-save">
+      <span v-if="hasUnsavedChanges" class="unsaved-hint">有未保存的更改</span>
+      <a-button type="primary" @click="saveSwitches" :loading="saving">保存配置</a-button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, computed, reactive, onMounted, h } from 'vue'
+import { message, Modal } from 'ant-design-vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
-import TableCard from '@/components/TableCard.vue'
 
-interface SwitchItem {
+interface PluginItem {
   plugin_name: string
+  display_name?: string
+  category: string
+  description: string
+  schema?: string
   enabled: boolean
 }
 
 const loading = ref(false)
 const saving = ref(false)
-const switchList = ref<SwitchItem[]>([])
+const allPlugins = ref<PluginItem[]>([])
+const originalPlugins = ref<PluginItem[]>([])
 
-const columns = [
-  { title: '插件名称', dataIndex: 'plugin_name', key: 'plugin_name', width: 250 },
-  { title: '说明', key: 'description' },
-  { title: '状态', key: 'enabled', width: 120 },
-]
+const searchText = ref('')
+const activeCategory = ref('all')
+const statusFilter = ref('all')
+const openSchemas = reactive<Record<string, boolean>>({})
 
-function getPluginDescription(name: string): string {
-  const map: Record<string, string> = {
-    proxy_rewrite: '代理重写（修改请求 URI、Header、Host、协议）',
-    response_rewrite: '响应体重写（修改状态码、Body、Header）',
-    traffic_split: '流量分发（按条件将请求分发到不同的上游）',
-    data_center: '数据中心（集中管理其他插件的数据属性）',
-    log_process: '日志记录（将请求信息按指定格式记录到文件）',
-    traffic_limit_count: '时间窗口请求数限制（按 key 计数限流）',
-    pre_functions: '自定义预处理方法（在指定阶段执行 Lua 函数）',
-    traceid: 'TraceID 追踪（在请求头中注入唯一追踪 ID）',
-    monitor: '监控统计（收集请求指标数据）',
-    static_resource: '静态资源服务',
-    security_common_body: '安全 - Body 检查',
-    auth_basic: 'Basic 认证',
-    auth_key: 'Key 认证',
-    cors: '跨域资源共享（CORS）',
-    security_common_args: '安全 - 请求参数检查',
-    security_common_cookie: '安全 - Cookie 检查',
-    security_common_referer: '安全 - Referer 检查',
-    security_common_uri: '安全 - URI 检查',
-    security_common_useragent: '安全 - User-Agent 检查',
-    security_restrict_ip: '安全 - IP 黑白名单',
-    security_restrict_uri: '安全 - URI 白名单',
-    security_restrict_form: '安全 - 表单限制',
-    security_super_ip: '安全 - 高级 IP',
-    security_super_user: '安全 - 高级用户',
+const CATEGORY_CONFIG: Record<string, string> = {
+  flow: '流量控制',
+  rewrite: '请求/响应重写',
+  auth: '认证',
+  process: '数据处理',
+  static: '静态资源',
+  security: '安全防护',
+  monitor: '监控',
+}
+
+const categoryList = computed(() => {
+  const seen = new Set<string>()
+  const list: { key: string; label: string }[] = []
+  for (const p of allPlugins.value) {
+    if (p.category && !seen.has(p.category)) {
+      seen.add(p.category)
+      list.push({ key: p.category, label: CATEGORY_CONFIG[p.category] || p.category })
+    }
   }
-  return map[name] || name
+  return list
+})
+
+function getCategoryLabel(cat: string): string {
+  return CATEGORY_CONFIG[cat] || cat
+}
+
+const filteredPlugins = computed(() => {
+  return allPlugins.value.filter(p => {
+    if (activeCategory.value !== 'all' && p.category !== activeCategory.value) return false
+    if (statusFilter.value === 'enabled' && !p.enabled) return false
+    if (statusFilter.value === 'disabled' && p.enabled) return false
+    if (searchText.value) {
+      const q = searchText.value.toLowerCase()
+      const name = (p.display_name || p.plugin_name).toLowerCase()
+      if (!name.includes(q) && !p.plugin_name.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+})
+
+const totalEnabled = computed(() => allPlugins.value.filter(p => p.enabled).length)
+const hasUnsavedChanges = computed(() => {
+  if (allPlugins.value.length !== originalPlugins.value.length) return false
+  return allPlugins.value.some((p, i) => p.enabled !== originalPlugins.value[i]?.enabled)
+})
+
+function toggleSwitch(item: PluginItem, val: boolean) {
+  item.enabled = val
+}
+
+function toggleSchema(name: string) {
+  openSchemas[name] = !openSchemas[name]
+}
+
+function formatSchema(schema?: string): string {
+  if (!schema || schema === '{}') return '{}'
+  try {
+    return JSON.stringify(JSON.parse(schema), null, 2)
+  } catch {
+    return schema
+  }
+}
+
+function enableAll() {
+  allPlugins.value.forEach(p => { p.enabled = true })
+}
+
+function disableAll() {
+  allPlugins.value.forEach(p => { p.enabled = false })
 }
 
 async function loadSwitches() {
   loading.value = true
   try {
-    const res = await api.get('/plugin-switches')
-    const existing = new Map(res.data.items.map((s: any) => [s.plugin_name, s.enabled]))
-    const builtin = await api.get('/plugins/builtin', { params: { all: 1 } })
-    switchList.value = builtin.data.plugins.map((p: any) => ({
+    const [swRes, builtinRes] = await Promise.all([
+      api.get('/plugin-switches'),
+      api.get('/plugins/builtin', { params: { all: 1 } }),
+    ])
+    const existing = new Map<string, boolean>(
+      swRes.data.items.map((s: any) => [s.plugin_name, s.enabled])
+    )
+    allPlugins.value = builtinRes.data.plugins.map((p: any) => ({
       plugin_name: p.name,
-      enabled: existing.has(p.name) ? existing.get(p.name) : true,
+      display_name: p.display_name || p.name,
+      category: p.category || '',
+      description: p.description || '',
+      schema: p.schema ? JSON.stringify(p.schema) : '{}',
+      enabled: existing.has(p.name) ? existing.get(p.name)! : true,
     }))
-  } catch (e) {
+    originalPlugins.value = allPlugins.value.map(p => ({ ...p, schema: p.schema }))
+  } catch {
     message.error('加载插件列表失败')
   } finally {
     loading.value = false
@@ -101,31 +225,248 @@ async function loadSwitches() {
 async function saveSwitches() {
   saving.value = true
   try {
-    await api.put('/plugin-switches', switchList.value.map(s => ({
+    const res = await api.put('/plugin-switches', allPlugins.value.map(s => ({
       plugin_name: s.plugin_name,
       enabled: s.enabled,
     })))
-    message.success('插件设置已保存')
-  } catch (e) {
+    originalPlugins.value = allPlugins.value.map(p => ({ ...p, schema: p.schema }))
+    const warnings = res.data?.warnings
+    if (warnings && warnings.length > 0) {
+      const warningHtml = warnings.map((w: any) => {
+        const refs = Object.entries(w.refs)
+          .filter(([, count]) => (count as number) > 0)
+          .map(([type, count]) => `${type === 'routes' ? '路由' : type === 'plugin_configs' ? '插件组' : '全局规则'}: ${count} 个`)
+          .join('，')
+        return `<div style="margin-bottom:8px;"><strong>${w.plugin}</strong>：${refs}</div>`
+      }).join('')
+      Modal.warning({
+        title: '插件引用警告',
+        content: h('div', { innerHTML: `<p style="margin-bottom:12px;color:var(--muted);">以下插件已被禁用，但仍有配置引用：</p>${warningHtml}` }),
+        okText: '知道了',
+      })
+    } else {
+      Modal.success({
+        title: '保存成功',
+        content: '插件配置已保存',
+        okText: '知道了',
+      })
+    }
+  } catch {
     message.error('保存失败')
   } finally {
     saving.value = false
   }
 }
 
+onBeforeRouteLeave((_to, _from, next) => {
+  if (hasUnsavedChanges.value) {
+    if (!window.confirm('有未保存的更改，确定要离开吗？')) {
+      next(false)
+      return
+    }
+  }
+  next()
+})
+
 onMounted(loadSwitches)
 </script>
 
 <style scoped>
 .plugin-switches { padding: 20px 24px; }
-.header-actions {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
+
+.switch-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
 }
-.header-actions h2 { margin: 0; }
-.hint {
-  font-size: 12px; color: var(--p-text-tertiary);
-  background: var(--p-bg-hover); padding: 10px 14px;
-  border-radius: 6px; margin-bottom: 16px; line-height: 1.6;
+
+.ssb-left { display: flex; align-items: center; gap: 12px; }
+.ssb-count { font-size: 13px; color: var(--muted); }
+.ssb-count strong { font-family: var(--font-mono); }
+
+.plugin-categories {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
-.plugin-desc { font-size: 12px; color: var(--p-text-secondary); }
+
+.plugin-cat {
+  padding: 5px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.plugin-cat:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.plugin-cat.active {
+  background: oklch(56% 0.16 210 / 10%);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.plugin-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.plugin-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+
+.plugin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.plugin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.plugin-card:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.plugin-card.disabled-state { opacity: 0.55; }
+
+.plugin-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.plugin-card-info { flex: 1; }
+
+.plugin-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-card-category {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-weight: 500;
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plugin-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.plugin-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.plugin-card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.plugin-version {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.plugin-schema-toggle {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.plugin-schema-toggle:hover { text-decoration: underline; }
+
+.plugin-schema-box {
+  display: none;
+  margin-top: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.plugin-schema-box.visible { display: block; }
+
+.switch-actions-save {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.unsaved-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  .plugin-grid { grid-template-columns: 1fr; }
+  .plugin-filter-bar { flex-direction: column; align-items: stretch; }
+  .plugin-categories { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .switch-status-bar { flex-direction: column; gap: 8px; align-items: stretch; }
+}
 </style>

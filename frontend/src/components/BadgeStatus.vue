@@ -21,10 +21,10 @@ defineProps<{
   font-weight: 500;
 }
 
-.badge-online { color: var(--p-color-success); }
-.badge-offline { color: var(--p-color-danger); }
-.badge-warning { color: var(--p-color-warning); }
-.badge-info { color: var(--p-color-info); }
+.badge-online { color: var(--success); }
+.badge-offline { color: var(--danger); }
+.badge-warning { color: var(--warning); }
+.badge-info { color: var(--info); }
 
 .status-dot {
   display: inline-block;
@@ -34,8 +34,8 @@ defineProps<{
   flex-shrink: 0;
 }
 
-.status-dot.online { background: var(--p-color-success); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-success) 50%, transparent); }
-.status-dot.offline { background: var(--p-color-danger); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-danger) 50%, transparent); }
-.status-dot.warning { background: var(--p-color-warning); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-warning) 50%, transparent); }
-.status-dot.info { background: var(--p-color-info); box-shadow: 0 0 6px color-mix(in srgb, var(--p-color-info) 50%, transparent); }
+.status-dot.online { background: var(--success); box-shadow: 0 0 6px color-mix(in srgb, var(--success) 50%, transparent); }
+.status-dot.offline { background: var(--danger); box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent); }
+.status-dot.warning { background: var(--warning); box-shadow: 0 0 6px color-mix(in srgb, var(--warning) 50%, transparent); }
+.status-dot.info { background: var(--info); box-shadow: 0 0 6px color-mix(in srgb, var(--info) 50%, transparent); }
 </style>

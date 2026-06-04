@@ -28,10 +28,10 @@ defineOptions({ inheritAttrs: false })
 
 <style scoped>
 .table-card {
-  background: var(--p-bg-glass-table);
-  border: 1px solid var(--p-glass-border);
-  border-radius: var(--p-radius-lg);
-  box-shadow: var(--p-shadow-glass);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .table-card-header {
@@ -39,10 +39,10 @@ defineOptions({ inheritAttrs: false })
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--p-border-divider);
+  border-bottom: 1px solid var(--border);
   font-size: 14px;
   font-weight: 600;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .table-card-body {
@@ -54,7 +54,7 @@ defineOptions({ inheritAttrs: false })
   align-items: center;
   justify-content: center;
   padding: 10px 16px;
-  border-top: 1px solid var(--p-border-divider);
+  border-top: 1px solid var(--border);
 }
 
 :deep(.ant-table) {
@@ -62,9 +62,9 @@ defineOptions({ inheritAttrs: false })
 }
 
 :deep(.ant-table-thead > tr > th) {
-  background: var(--p-color-primary-bg) !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-secondary) !important;
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--muted) !important;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -78,8 +78,8 @@ defineOptions({ inheritAttrs: false })
 
 :deep(.ant-table-tbody > tr > td) {
   padding: 10px 14px !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
-  color: var(--p-text-secondary);
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -88,6 +88,6 @@ defineOptions({ inheritAttrs: false })
 }
 
 :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--p-bg-hover) !important;
+  background: var(--bg) !important;
 }
 </style>

@@ -53,7 +53,7 @@
                   :class="'border-' + category.key + (isSelected(plugin) ? ' selected' : '')"
                   @click="addPlugin(plugin)"
                 >
-                  <div class="plugin-name">{{ plugin.name }}</div>
+                  <div class="plugin-name">{{ plugin.display_name || plugin.name }}</div>
                   <div class="plugin-desc">{{ plugin.description }}</div>
                   <a-tag v-if="isSelected(plugin)" color="processing" class="selected-tag">已选 ✓</a-tag>
                   <span v-if="isSelected(plugin)" class="remove-badge" @click.stop="confirmRemove(plugin.name, selectedPlugins.findIndex(p => p.plugin_name === plugin.name))">× 移除</span>
@@ -132,75 +132,39 @@ const emit = defineEmits<{
   'edit': [plugin: RoutePlugin, index: number]
 }>()
 
-// 插件分类定义
-const CATEGORIES = [
-  {
-    key: 'flow',
-    label: '流量控制',
-    plugins: ['traffic_split', 'traffic_limit_count']
-  },
-  {
-    key: 'rewrite',
-    label: '请求/响应重写',
-    plugins: ['proxy_rewrite', 'response_rewrite', 'cors']
-  },
-  {
-    key: 'auth',
-    label: '认证',
-    plugins: ['auth_basic', 'auth_key']
-  },
-  {
-    key: 'process',
-    label: '数据处理',
-    plugins: ['log_process', 'data_center', 'pre_functions']
-  },
-  {
-    key: 'static',
-    label: '静态资源',
-    plugins: ['static_resource']
-  },
-  {
-    key: 'security',
-    label: '安全防护',
-    plugins: [
-      'security_common_body',
-      'security_common_args',
-      'security_common_cookie',
-      'security_common_referer',
-      'security_common_uri',
-      'security_common_useragent',
-      'security_restrict_ip',
-      'security_restrict_uri',
-      'security_restrict_form',
-      'security_super_ip',
-      'security_super_user',
-      'security_corerule',
-    ]
-  },
-  {
-    key: 'monitor',
-    label: '监控',
-    plugins: ['monitor', 'traceid']
-  }
-]
-
-// 获取未分类插件的动态"其他"分组
-// (保留以备后续使用)
-/*
-function getFallbackCategoryName(pluginNames: string[]): string | null {
-  const allKnown = CATEGORIES.flatMap(c => c.plugins)
-  const hasUncategorized = pluginNames.some(n => !allKnown.includes(n))
-  return hasUncategorized ? '其他' : null
+// 分类标签和颜色映射（通用配置，不绑定具体插件名）
+const CATEGORY_META: Record<string, { label: string }> = {
+  flow: { label: '流量控制' },
+  rewrite: { label: '请求/响应重写' },
+  auth: { label: '认证' },
+  process: { label: '数据处理' },
+  static: { label: '静态资源' },
+  security: { label: '安全防护' },
+  monitor: { label: '监控' },
 }
-*/
 
-// 插件名称 → 分类 key 映射
+// 动态从插件数据中构建分类列表
+const availableCategories = computed(() => {
+  const catMap: Record<string, { key: string; label: string; plugins: Plugin[] }> = {}
+  for (const plugin of props.plugins) {
+    const key = plugin.category || 'other'
+    if (!catMap[key]) {
+      catMap[key] = {
+        key,
+        label: CATEGORY_META[key]?.label || key,
+        plugins: [],
+      }
+    }
+    catMap[key].plugins.push(plugin)
+  }
+  return Object.values(catMap)
+})
+
+// 插件名称 → 分类 key
 const pluginCategoryMap = computed(() => {
   const map: Record<string, string> = {}
-  for (const cat of CATEGORIES) {
-    for (const name of cat.plugins) {
-      map[name] = cat.key
-    }
+  for (const plugin of props.plugins) {
+    map[plugin.name] = plugin.category || 'other'
   }
   return map
 })
@@ -212,11 +176,7 @@ const getCategoryClass = (pluginName: string): string => {
 
 // 状态
 const searchText = ref('')
-const expanded = reactive<Record<string, boolean>>({
-  flow: false,
-  rewrite: false,
-  process: false
-})
+const expanded = reactive<Record<string, boolean>>({})
 interface SelectedPlugin {
   plugin_name: string
   config: string | Record<string, any>
@@ -230,18 +190,18 @@ const editingPluginIndex = ref(-1)
 const removingIndex = ref<number | null>(null)
 
 // 是否所有分类都已展开
-const allExpanded = computed(() => CATEGORIES.every(cat => expanded[cat.key]))
+const allExpanded = computed(() => availableCategories.value.every(cat => expanded[cat.key]))
 
 // 全部展开/全部折叠
 const toggleAll = () => {
   const target = !allExpanded.value
-  CATEGORIES.forEach(cat => { expanded[cat.key] = target })
+  availableCategories.value.forEach(cat => { expanded[cat.key] = target })
 }
 
 // 有已选插件时自动展开对应分类
 const expandCategoryWithSelected = () => {
-  for (const cat of CATEGORIES) {
-    if (!expanded[cat.key] && selectedPlugins.value.some(p => cat.plugins.includes(p.plugin_name))) {
+  for (const cat of availableCategories.value) {
+    if (!expanded[cat.key] && selectedPlugins.value.some(p => cat.plugins.some(pl => pl.name === p.plugin_name))) {
       expanded[cat.key] = true
     }
   }
@@ -252,7 +212,7 @@ watch(selectedPlugins, expandCategoryWithSelected, { deep: true, immediate: true
 watch(() => props.modelValue, (newVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
     // 重置展开状态：全部折叠，再自动展开有已选插件的分类
-    CATEGORIES.forEach(cat => { expanded[cat.key] = false })
+    availableCategories.value.forEach(cat => { expanded[cat.key] = false })
     selectedPlugins.value = newVal.map(p => {
       const pluginInfo = props.plugins.find(pl => pl.name === p.plugin_name)
       let config: Record<string, any> = {}
@@ -268,17 +228,17 @@ watch(() => props.modelValue, (newVal) => {
   }
 }, { immediate: true, deep: true })
 
-// 过滤后的分类
+// 过滤后的分类（搜索）
 const filteredCategories = computed(() => {
   const search = searchText.value.toLowerCase().trim()
-  const allKnown = CATEGORIES.flatMap(c => c.plugins)
 
-  const results = CATEGORIES.map(category => {
-    let plugins = props.plugins.filter(p => category.plugins.includes(p.name))
+  const results = availableCategories.value.map(category => {
+    let plugins = category.plugins
 
     if (search) {
       plugins = plugins.filter(p =>
         p.name.toLowerCase().includes(search) ||
+        (p.display_name || '').toLowerCase().includes(search) ||
         p.description.toLowerCase().includes(search)
       )
     }
@@ -289,22 +249,7 @@ const filteredCategories = computed(() => {
     }
   }).filter(category => category.plugins.length > 0)
 
-  // 其他未分类插件
-  const uncategorized = props.plugins.filter(p => !allKnown.includes(p.name))
-  if (uncategorized.length > 0) {
-    if (!expanded.other) expanded.other = true
-    results.push({
-      key: 'other',
-      label: '其他',
-      plugins: search
-        ? uncategorized.filter(p =>
-            p.name.toLowerCase().includes(search) ||
-            p.description.toLowerCase().includes(search))
-        : uncategorized
-    })
-  }
-
-  return results.filter(category => category.plugins.length > 0)
+  return results
 })
 
 // 检查插件是否已选
@@ -416,10 +361,10 @@ const emitUpdate = () => {
 
 <style scoped>
 .plugin-selector {
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 16px;
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 
 .plugin-search {
@@ -434,9 +379,9 @@ const emitUpdate = () => {
 
 .category-panel {
   flex: 1.5;
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--p-bg-page);
+  background: var(--bg);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -447,15 +392,15 @@ const emitUpdate = () => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--p-border-divider);
-  background: var(--p-bg-hover);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
   flex-shrink: 0;
 }
 
 .category-panel-title {
   font-weight: 500;
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .toggle-all-btn {
@@ -467,22 +412,22 @@ const emitUpdate = () => {
 }
 .toggle-all-btn:hover {
   opacity: 1;
-  background: var(--p-color-primary-bg);
-  border-color: var(--p-color-primary);
+  background: oklch(56% 0.16 210 / 10%);
+  border-color: var(--accent);
 }
 
 .selected-panel {
   flex: 1;
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--p-bg-page);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .category-group {
-  border-bottom: 1px solid var(--p-border-divider);
+  border-bottom: 1px solid var(--border);
 }
 
 .category-group:last-child {
@@ -495,23 +440,23 @@ const emitUpdate = () => {
   gap: 8px;
   padding: 10px 12px;
   cursor: pointer;
-  background: var(--p-bg-hover);
+  background: var(--bg);
   transition: background 0.2s;
   border-left: 3px solid transparent;
 }
 
 .category-header:hover {
-  background: var(--p-color-primary-bg);
+  background: oklch(56% 0.16 210 / 10%);
 }
 
 /* 分类颜色 — 左色条（跟随主题） */
-.cat-flow { border-left-color: var(--p-color-primary); }
-.cat-rewrite { border-left-color: var(--p-color-warning); }
-.cat-process { border-left-color: var(--p-color-success); }
-.cat-static { border-left-color: var(--p-color-info); }
-.cat-auth { border-left-color: var(--p-color-primary); }
-.cat-security { border-left-color: var(--p-color-danger); }
-.cat-monitor { border-left-color: var(--p-color-primary); }
+.cat-flow { border-left-color: var(--accent); }
+.cat-rewrite { border-left-color: var(--warning); }
+.cat-process { border-left-color: var(--success); }
+.cat-static { border-left-color: var(--info); }
+.cat-auth { border-left-color: var(--accent); }
+.cat-security { border-left-color: var(--danger); }
+.cat-monitor { border-left-color: var(--accent); }
 
 .category-content {
   padding: 4px 0;
@@ -523,26 +468,26 @@ const emitUpdate = () => {
   gap: 8px;
   padding: 6px 12px;
   cursor: pointer;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
-  background: var(--p-bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   margin: 4px 8px;
   transition: all 0.2s;
 }
 
 .plugin-item:hover {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 2px 8px var(--p-shadow-sm);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px var(--shadow-sm);
 }
 
 .plugin-item.selected {
-  border-color: var(--p-color-primary);
-  background: var(--p-color-primary-bg);
+  border-color: var(--accent);
+  background: oklch(56% 0.16 210 / 10%);
 }
 
 .plugin-item.installed {
-  border-color: var(--p-color-success);
-  background: color-mix(in srgb, var(--p-color-success) 8%, transparent);
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 /* 树形列表容器 */
@@ -558,7 +503,7 @@ const emitUpdate = () => {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--p-color-primary);
+  background: var(--accent);
   opacity: 0.35;
 }
 
@@ -594,7 +539,7 @@ const emitUpdate = () => {
   top: 0;
   width: 2px;
   height: 100%;
-  background: var(--p-color-primary);
+  background: var(--accent);
   opacity: 0.35;
 }
 
@@ -605,14 +550,14 @@ const emitUpdate = () => {
   top: 18px;
   width: 14px;
   height: 2px;
-  background: var(--p-color-primary);
+  background: var(--accent);
   opacity: 0.35;
 }
 
 /* 树形切换图标 — 与树线对齐 */
 .tree-toggle {
   font-size: 12px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   opacity: 0.6;
   margin-left: -2px;
 }
@@ -622,38 +567,38 @@ const emitUpdate = () => {
   position: relative;
   flex: 1;
   padding: 8px 10px;
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  background: var(--p-bg-page);
+  background: var(--bg);
   transition: all 0.2s;
   min-width: 0;
 }
 
 .plugin-card:hover {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 2px 8px var(--p-shadow-sm);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px var(--shadow-sm);
 }
 
 /* 插件卡片左色条（跟随主题） */
-.border-flow { border-left: 3px solid var(--p-color-primary); }
-.border-rewrite { border-left: 3px solid var(--p-color-warning); }
-.border-process { border-left: 3px solid var(--p-color-success); }
-.border-static { border-left: 3px solid var(--p-color-info); }
-.border-auth { border-left: 3px solid var(--p-color-primary); }
-.border-security { border-left: 3px solid var(--p-color-danger); }
-.border-monitor { border-left: 3px solid var(--p-color-primary); }
+.border-flow { border-left: 3px solid var(--accent); }
+.border-rewrite { border-left: 3px solid var(--warning); }
+.border-process { border-left: 3px solid var(--success); }
+.border-static { border-left: 3px solid var(--info); }
+.border-auth { border-left: 3px solid var(--accent); }
+.border-security { border-left: 3px solid var(--danger); }
+.border-monitor { border-left: 3px solid var(--accent); }
 
 .plugin-card.selected {
   position: relative;
   overflow: hidden;
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent) !important;
-  border-color: var(--p-color-primary) !important;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--p-color-primary) 15%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .plugin-card.selected .plugin-name {
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .plugin-card.selected .plugin-desc {
@@ -676,7 +621,7 @@ const emitUpdate = () => {
   bottom: 4px;
   right: 6px;
   font-size: 11px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.2s;
@@ -689,43 +634,43 @@ const emitUpdate = () => {
 }
 
 .remove-badge:hover {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 
 .plugin-name {
   font-weight: 600;
   font-size: 13px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   margin-bottom: 4px;
 }
 
 .plugin-item.selected .plugin-name {
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .plugin-item.installed .plugin-name {
-  color: var(--p-color-success);
+  color: var(--success);
 }
 
 .plugin-item-meta {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .selected-header {
   padding: 8px 12px;
-  background: var(--p-bg-hover);
-  border-bottom: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .selected-list {
   flex: 1;
   overflow-y: auto;
-  background: var(--p-bg-hover);
-  border-bottom: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
 .selected-item {
@@ -733,16 +678,16 @@ const emitUpdate = () => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px 6px 14px;
-  border-bottom: 1px solid var(--p-border-divider);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
   border-left: 3px solid transparent;
   transition: background 0.15s, border-color 0.15s;
   cursor: default;
 }
 
 .selected-item:hover {
-  background: color-mix(in srgb, var(--p-color-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .selected-item:last-child {
@@ -750,22 +695,22 @@ const emitUpdate = () => {
 }
 
 /* 颜色条继承左侧分类色 */
-.selected-item.border-flow { border-left-color: var(--p-color-primary); }
-.selected-item.border-rewrite { border-left-color: var(--p-color-warning); }
-.selected-item.border-process { border-left-color: var(--p-color-success); }
-.selected-item.border-static { border-left-color: var(--p-color-info); }
-.selected-item.border-security { border-left-color: var(--p-color-danger); }
-.selected-item.border-monitor { border-left-color: var(--p-color-primary); }
+.selected-item.border-flow { border-left-color: var(--accent); }
+.selected-item.border-rewrite { border-left-color: var(--warning); }
+.selected-item.border-process { border-left-color: var(--success); }
+.selected-item.border-static { border-left-color: var(--info); }
+.selected-item.border-security { border-left-color: var(--danger); }
+.selected-item.border-monitor { border-left-color: var(--accent); }
 
 .selected-item-name {
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .selected-empty,
 .selected-hint {
   text-align: center;
   padding: 24px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -778,12 +723,12 @@ const emitUpdate = () => {
 }
 
 .config-badge.configured {
-  color: var(--p-color-primary);
+  color: var(--accent);
   font-weight: 500;
 }
 
 .config-badge.default {
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .badge-icon {
@@ -795,7 +740,7 @@ const emitUpdate = () => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 
 .duplicate-hint-shake {
@@ -803,15 +748,15 @@ const emitUpdate = () => {
 }
 
 @keyframes shakeHint {
-  0% { background-color: var(--p-bg-hover); }
-  50% { background-color: color-mix(in srgb, var(--p-color-danger) 8%, transparent); border-color: var(--p-color-danger); }
-  100% { background-color: var(--p-bg-hover); }
+  0% { background-color: var(--bg); }
+  50% { background-color: color-mix(in srgb, var(--danger) 8%, transparent); border-color: var(--danger); }
+  100% { background-color: var(--bg); }
 }
 
 /* 右侧项高亮（持续到下次添加） */
 .selected-item.flashing {
-  background-color: color-mix(in srgb, var(--p-color-primary) 12%, transparent);
-  border-left: 3px solid var(--p-color-primary);
+  background-color: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-left: 3px solid var(--accent);
   border-radius: 0;
 }
 
@@ -826,14 +771,14 @@ const emitUpdate = () => {
   cursor: pointer;
   font-size: 15px;
   transition: color 0.2s;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .selected-actions :deep(.action-edit:hover) {
-  color: var(--p-color-primary);
+  color: var(--accent);
 }
 
 .selected-actions :deep(.action-delete:hover) {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 </style>

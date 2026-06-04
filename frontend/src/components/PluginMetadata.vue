@@ -51,7 +51,7 @@
                   <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
                   <a-tag v-else color="orange" size="small">未发布</a-tag>
                 </div>
-                <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--p-color-success)' : 'var(--p-text-tertiary)' }">
+                <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--success)' : 'var(--muted)' }">
                   {{ item.current_version && item.updated_at ? `v${item.current_version} · ${formatDate(item.updated_at)}` : item.current_version ? `v${item.current_version} · 未同步` : '' }}
                 </div>
               </div>
@@ -522,13 +522,13 @@ watch(() => props.clusterId, () => {
   font-weight: 500;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--p-border-divider);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .plugin-count {
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-weight: normal;
   margin-left: 4px;
 }
@@ -558,14 +558,14 @@ watch(() => props.clusterId, () => {
   align-items: center;
   padding: 10px 12px;
   margin-bottom: 8px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
-  background: var(--p-bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   transition: all 0.2s;
 }
 .plugin-item:hover {
-  border-color: var(--p-color-primary);
-  background: var(--p-bg-hover);
+  border-color: var(--accent);
+  background: var(--bg);
 }
 
 /* ── 分类树形结构 ── */
@@ -575,30 +575,30 @@ watch(() => props.clusterId, () => {
   gap: 6px;
   padding: 8px 10px;
   cursor: pointer;
-  background: var(--p-bg-hover);
+  background: var(--bg);
   border-left: 3px solid transparent;
   margin-top: 4px;
   border-radius: 4px;
   transition: background 0.15s;
 }
-.category-header:hover { background: var(--p-color-primary-bg); }
-.category-header .tree-toggle { font-size: 11px; color: var(--p-color-primary); opacity: 0.6; }
-.category-label { font-size: 13px; font-weight: 500; color: var(--p-text-primary); }
-.category-count { font-size: 11px; color: var(--p-text-tertiary); margin-left: auto; }
+.category-header:hover { background: oklch(56% 0.16 210 / 10%); }
+.category-header .tree-toggle { font-size: 11px; color: var(--accent); opacity: 0.6; }
+.category-label { font-size: 13px; font-weight: 500; color: var(--fg); }
+.category-count { font-size: 11px; color: var(--muted); margin-left: auto; }
 
-.cat-flow { border-left-color: var(--p-color-primary); }
-.cat-rewrite { border-left-color: var(--p-color-warning); }
-.cat-process { border-left-color: var(--p-color-success); }
-.cat-auth { border-left-color: var(--p-color-primary); }
-.cat-static { border-left-color: var(--p-color-info); }
-.cat-security { border-left-color: var(--p-color-danger); }
-.cat-monitor { border-left-color: var(--p-color-primary); }
-.cat-other { border-left-color: var(--p-text-tertiary); }
+.cat-flow { border-left-color: var(--accent); }
+.cat-rewrite { border-left-color: var(--warning); }
+.cat-process { border-left-color: var(--success); }
+.cat-auth { border-left-color: var(--accent); }
+.cat-static { border-left-color: var(--info); }
+.cat-security { border-left-color: var(--danger); }
+.cat-monitor { border-left-color: var(--accent); }
+.cat-other { border-left-color: var(--muted); }
 
 .plugin-tree { padding: 4px 0 4px 28px; position: relative; }
 .plugin-tree::before {
   content: ''; position: absolute; left: 13px; top: 0; bottom: 0;
-  width: 2px; background: var(--p-color-primary); opacity: 0.3;
+  width: 2px; background: var(--accent); opacity: 0.3;
 }
 
 .tree-item { position: relative; display: flex; margin-bottom: 6px; }
@@ -607,26 +607,26 @@ watch(() => props.clusterId, () => {
 .tree-connector { position: absolute; left: -15px; top: 0; width: 13px; height: 100%; pointer-events: none; }
 .tree-connector::before {
   content: ''; position: absolute; left: 0; top: 0;
-  width: 2px; height: 100%; background: var(--p-color-primary); opacity: 0.3;
+  width: 2px; height: 100%; background: var(--accent); opacity: 0.3;
 }
 .tree-connector::after {
   content: ''; position: absolute; left: 0; top: 18px;
-  width: 11px; height: 2px; background: var(--p-color-primary); opacity: 0.3;
+  width: 11px; height: 2px; background: var(--accent); opacity: 0.3;
 }
 
 .plugin-card {
   flex: 1; display: flex; align-items: center; gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  background: var(--p-bg-page);
+  background: var(--bg);
   transition: all 0.2s;
   min-width: 0;
 }
 .plugin-card:hover {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 1px 4px var(--p-shadow-sm);
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .plugin-card-body {
@@ -637,12 +637,12 @@ watch(() => props.clusterId, () => {
 .plugin-card-name {
   font-weight: 600;
   font-size: 15px;
-  color: var(--p-color-primary);
+  color: var(--accent);
   overflow-wrap: break-word;
 }
 .plugin-card-desc {
   font-size: 14px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   line-height: 1.4;
   overflow-wrap: break-word;
 }
@@ -656,14 +656,14 @@ watch(() => props.clusterId, () => {
   transform: scale(1.05);
 }
 
-.border-flow { border-left: 3px solid var(--p-color-primary); }
-.border-rewrite { border-left: 3px solid var(--p-color-warning); }
-.border-process { border-left: 3px solid var(--p-color-success); }
-.border-auth { border-left: 3px solid var(--p-color-primary); }
-.border-static { border-left: 3px solid var(--p-color-info); }
-.border-security { border-left: 3px solid var(--p-color-danger); }
-.border-monitor { border-left: 3px solid var(--p-color-primary); }
-.border-other { border-left: 3px solid var(--p-text-tertiary); }
+.border-flow { border-left: 3px solid var(--accent); }
+.border-rewrite { border-left: 3px solid var(--warning); }
+.border-process { border-left: 3px solid var(--success); }
+.border-auth { border-left: 3px solid var(--accent); }
+.border-static { border-left: 3px solid var(--info); }
+.border-security { border-left: 3px solid var(--danger); }
+.border-monitor { border-left: 3px solid var(--accent); }
+.border-other { border-left: 3px solid var(--muted); }
 
 .plugin-item.configured {
   flex-direction: column;
@@ -673,9 +673,9 @@ watch(() => props.clusterId, () => {
 /* 右侧面板样式 */
 .plugin-info { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: flex-start; }
 .plugin-right { text-align: right; flex-shrink: 0; }
-.plugin-name { font-weight: 500; color: var(--p-text-primary); }
-.plugin-desc { font-size: 12px; color: var(--p-text-tertiary); margin-top: 4px; }
-.plugin-meta { font-size: 12px; color: var(--p-text-tertiary); margin-top: 4px; }
+.plugin-name { font-weight: 500; color: var(--fg); }
+.plugin-desc { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.plugin-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
 .plugin-right {
   text-align: right;
@@ -684,18 +684,18 @@ watch(() => props.clusterId, () => {
 
 .plugin-name {
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .plugin-desc {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-top: 4px;
 }
 
 .plugin-meta {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-top: 4px;
   min-height: 18px;
 }
@@ -713,16 +713,16 @@ watch(() => props.clusterId, () => {
 
 .empty-hint {
   text-align: center;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   padding: 32px;
 }
 
 .config-preview {
-  background: var(--p-bg-hover);
+  background: var(--bg);
   padding: 12px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   overflow-x: auto;
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 </style>

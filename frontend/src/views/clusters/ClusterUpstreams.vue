@@ -146,7 +146,7 @@
               </a-button>
             </a-form-item>
             <a-form-item label="高级配置">
-              <a-switch v-model:checked="upstreamForm.advancedEnabled" checked-children="开" un-checked-children="关" />
+              <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
               <span style="margin-left: 12px; color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
             </a-form-item>
           </a-form>

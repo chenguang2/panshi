@@ -2,41 +2,30 @@ import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 
-describe('CSS design tokens', () => {
-  const tokensPath = path.resolve(__dirname, 'tokens.css')
-  const tokens = fs.readFileSync(tokensPath, 'utf-8')
-
-  it('should declare --font-display variable', () => {
-    expect(tokens).toContain('--font-display')
-  })
-
-  it('should declare --font-mono variable', () => {
-    expect(tokens).toContain('--font-mono')
-  })
-})
-
-describe('theme-default.css', () => {
-  const cssPath = path.resolve(__dirname, 'theme-default.css')
+describe('theme.css design tokens', () => {
+  const cssPath = path.resolve(__dirname, 'theme.css')
   const css = fs.readFileSync(cssPath, 'utf-8')
 
-  it('should set --font-display value', () => {
-    expect(css).toMatch(/--font-display\s*:/)
+  it('should declare OKLCH background token', () => {
+    expect(css).toContain('--bg')
+    expect(css).toContain('oklch')
   })
 
-  it('should set --font-mono value', () => {
-    expect(css).toMatch(/--font-mono\s*:/)
-  })
-})
-
-describe('theme-dark.css', () => {
-  const cssPath = path.resolve(__dirname, 'theme-dark.css')
-  const css = fs.readFileSync(cssPath, 'utf-8')
-
-  it('should set --font-display value', () => {
-    expect(css).toMatch(/--font-display\s*:/)
+  it('should declare --surface token', () => {
+    expect(css).toContain('--surface')
   })
 
-  it('should set --font-mono value', () => {
-    expect(css).toMatch(/--font-mono\s*:/)
+  it('should declare --accent token', () => {
+    expect(css).toContain('--accent')
+  })
+
+  it('should declare --font-mono token', () => {
+    expect(css).toContain('--font-mono')
+  })
+
+  it('should declare shadow tokens', () => {
+    expect(css).toContain('--shadow-sm')
+    expect(css).toContain('--shadow-md')
+    expect(css).toContain('--shadow-lg')
   })
 })

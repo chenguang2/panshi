@@ -183,7 +183,7 @@ export function useClusterPluginConfigs(deps: PluginConfigDeps) {
     const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
     Modal.info({
       title: `${pg.name} - ${pname}`,
-      content: h('pre', { style: 'font-size: 12px; white-space: pre-wrap; background: var(--p-bg-hover); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--p-text-primary);' }, configStr),
+      content: h('pre', { style: 'font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--fg);' }, configStr),
       okText: '关闭',
       width: 560
     })

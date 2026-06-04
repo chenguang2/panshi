@@ -24,17 +24,17 @@ defineProps<{
 .stat-card {
   position: relative;
   overflow: hidden;
-  background: var(--p-bg-glass);
-  border: 1px solid var(--p-glass-border);
-  border-radius: var(--p-radius-lg);
-  box-shadow: var(--p-shadow-glass);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   transition: transform 0.25s, box-shadow 0.25s;
 }
 
 .stat-card:hover {
   transform: translateY(-3px);
-  box-shadow: var(--p-shadow-lg);
-  border-color: var(--p-color-primary);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent);
 }
 
 .stat-card::before {
@@ -44,14 +44,14 @@ defineProps<{
   left: 0;
   right: 0;
   height: 3px;
-  border-radius: var(--p-radius-lg) var(--p-radius-lg) 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
-.stat-card.accent-cluster::before { background: var(--p-color-primary); }
-.stat-card.accent-route::before { background: var(--p-color-success); }
-.stat-card.accent-upstream::before { background: var(--p-color-warning); }
-.stat-card.accent-node::before { background: var(--p-color-info); }
-.stat-card.accent-user::before { background: var(--p-color-danger); }
+.stat-card.accent-cluster::before { background: var(--accent); }
+.stat-card.accent-route::before { background: var(--success); }
+.stat-card.accent-upstream::before { background: var(--warning); }
+.stat-card.accent-node::before { background: var(--info); }
+.stat-card.accent-user::before { background: var(--danger); }
 .stat-card.accent-plugin::before { background: #7c3aed; }
 .stat-card.accent-global::before { background: #52c41a; }
 
@@ -70,24 +70,24 @@ defineProps<{
 }
 
 .stat-card-value {
-  font-family: var(--font-mono, var(--p-mono));
+  font-family: var(--font-mono, var(--font-mono));
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--p-text-primary);
+  color: var(--fg);
   line-height: 1.1;
 }
 
 .stat-card-label {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   font-weight: 500;
   letter-spacing: 0.02em;
 }
 
 .stat-card-sub {
   font-size: 10px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   opacity: 0.6;
   margin-top: -2px;
 }

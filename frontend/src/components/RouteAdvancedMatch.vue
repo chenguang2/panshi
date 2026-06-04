@@ -276,10 +276,10 @@ watch(() => props.modelValue, (val) => {
 
 <style scoped>
 .route-advanced-match {
-  border: 1px solid var(--p-border-default);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 
 .match-content {
@@ -287,14 +287,14 @@ watch(() => props.modelValue, (val) => {
 }
 
 .match-rules {
-  background: var(--p-bg-page);
+  background: var(--bg);
   border-radius: 6px;
   padding: 16px;
 }
 
 .match-rule {
-  background: var(--p-bg-hover);
-  border: 1px solid var(--p-border-default);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 12px;
@@ -310,17 +310,17 @@ watch(() => props.modelValue, (val) => {
 .rule-index {
   font-weight: 500;
   font-size: 13px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .delete-rule {
-  color: var(--p-color-danger);
+  color: var(--danger);
   cursor: pointer;
   font-size: 14px;
 }
 
 .delete-rule:hover {
-  color: var(--p-color-danger);
+  color: var(--danger);
 }
 
 .rule-body {
@@ -337,14 +337,14 @@ watch(() => props.modelValue, (val) => {
 .match-hints {
   margin-top: 20px;
   padding: 12px;
-  background: var(--p-color-primary-bg);
+  background: oklch(56% 0.16 210 / 10%);
   border-radius: 6px;
   font-size: 12px;
 }
 
 .hint-title {
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
   margin-bottom: 8px;
 }
 
@@ -353,23 +353,23 @@ watch(() => props.modelValue, (val) => {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .hint-type {
-  background: var(--p-color-primary-bg);
-  color: var(--p-color-primary);
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--accent);
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 11px;
 }
 
 .hint-op {
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .hint-desc {
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-left: 8px;
 }
 </style>

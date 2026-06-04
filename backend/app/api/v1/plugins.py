@@ -24,6 +24,6 @@ async def get_builtin_plugins(
     if not switches:
         return {"plugins": BUILTIN_PLUGINS}
 
-    enabled_names = {s.plugin_name for s in switches if s.enabled == 1}
-    filtered = [p for p in BUILTIN_PLUGINS if p["name"] in enabled_names]
+    disabled_names = {s.plugin_name for s in switches if s.enabled == 0}
+    filtered = [p for p in BUILTIN_PLUGINS if p["name"] not in disabled_names]
     return {"plugins": filtered}

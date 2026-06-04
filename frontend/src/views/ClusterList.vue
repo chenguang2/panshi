@@ -928,7 +928,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 12px;
   position: relative;
@@ -936,10 +936,11 @@ onMounted(() => {
 }
 
 .header-section h2 {
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
   color: var(--p-text-primary);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .header-left {
@@ -952,41 +953,46 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 
 .filter-count {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--p-text-tertiary);
   white-space: nowrap;
 }
 
+/* ── Ant Design overrides in header ── */
 :deep(.header-section) .ant-input-affix-wrapper {
   background: var(--p-bg-glass) !important;
   border: 1px solid var(--p-border-default) !important;
-  border-radius: 6px;
+  border-radius: 6px !important;
   box-shadow: none !important;
+  height: 32px;
 }
 :deep(.header-section) .ant-input-affix-wrapper .ant-input {
   background: transparent !important;
   border: none !important;
   color: var(--p-text-primary) !important;
+  font-size: 13px;
 }
 :deep(.header-section) .ant-input-affix-wrapper .ant-input::placeholder {
   color: var(--p-text-disabled) !important;
 }
 :deep(.header-section) .ant-input-search-button {
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important;
+  background: transparent !important;
   border: none !important;
-  color: var(--p-text-inverse) !important;
+  color: var(--p-text-tertiary) !important;
   border-radius: 0 6px 6px 0 !important;
-}
-:deep(.header-section) .ant-input-search-button:hover {
-  opacity: 0.92;
+  height: 32px;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper {
   background: var(--p-bg-glass) !important;
   border-color: var(--p-border-default) !important;
   color: var(--p-text-secondary) !important;
+  font-size: 12px;
+  height: 32px;
+  line-height: 32px;
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper-checked {
   background: var(--p-color-primary) !important;
@@ -995,6 +1001,11 @@ onMounted(() => {
 }
 :deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:not(:first-child)::before {
   background: var(--p-border-default) !important;
+}
+:deep(.header-section .ant-btn-primary) {
+  height: 32px;
+  font-size: 13px;
+  border-radius: 6px;
 }
 
 .status-dot {
@@ -1351,16 +1362,6 @@ onMounted(() => {
 @keyframes expandWaterfall { 0% { opacity: 0; max-height: 0; margin-bottom: 0; overflow: hidden; transform: translateY(-250px); } 25% { opacity: 1; } 85% { max-height: 500px; transform: translateY(8px); } 100% { opacity: 1; max-height: 500px; margin-bottom: 12px; transform: translateY(0); } }
 .expand-leave-active { animation: expandFlyUp 0.3s ease-in forwards; overflow: hidden; }
 @keyframes expandFlyUp { 0% { opacity: 1; max-height: 500px; margin-bottom: 12px; transform: translateY(0); } 40% { opacity: 1; } 100% { opacity: 0; max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; transform: translateY(-120px); } }
-
-:deep(.header-section .ant-btn-primary) {
-  background: linear-gradient(135deg, var(--p-color-primary), var(--p-color-info)) !important;
-  border: none !important;
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--p-color-primary) 30%, transparent) !important;
-}
-:deep(.header-section .ant-btn-primary:hover) {
-  opacity: 0.92;
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--p-color-primary) 40%, transparent) !important;
-}
 
 :deep(.node-table) .ant-table { background: transparent !important; }
 :deep(.node-table) .ant-table-thead > tr > th {

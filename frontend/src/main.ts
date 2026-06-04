@@ -5,10 +5,7 @@ import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
 import App from './App.vue'
 import './style.css'
-import './styles/tokens.css'
-import './styles/theme-light.css'
-import './styles/theme-dark.css'
-import './styles/theme-default.css'
+import './styles/theme.css'
 
 const app = createApp(App)
 

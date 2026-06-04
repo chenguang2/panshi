@@ -493,7 +493,7 @@ const handleClose = () => {
 .empty-hint {
   text-align: center;
   padding: 60px 0;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 
 .version-content {
@@ -505,7 +505,7 @@ const handleClose = () => {
 .version-list-panel {
   width: 200px;
   flex-shrink: 0;
-  border-right: 1px solid var(--p-border-divider);
+  border-right: 1px solid var(--border);
   padding-right: 12px;
 }
 
@@ -515,7 +515,7 @@ const handleClose = () => {
   align-items: center;
   margin-bottom: 12px;
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .version-list {
@@ -526,23 +526,23 @@ const handleClose = () => {
 .version-item {
   padding: 8px;
   margin-bottom: 4px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   border: 1px solid transparent;
 }
 
 .version-item:hover {
-  background: var(--p-bg-hover);
+  background: var(--bg);
 }
 
 .version-item--current {
-  background: color-mix(in srgb, var(--p-color-success) 12%, transparent);
-  border-color: color-mix(in srgb, var(--p-color-success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
 }
 
 .version-item--selected {
-  background: var(--p-color-primary-bg);
-  border-color: color-mix(in srgb, var(--p-color-primary) 30%, transparent);
+  background: oklch(56% 0.16 210 / 10%);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .version-item-main {
@@ -553,7 +553,7 @@ const handleClose = () => {
 
 .version-number {
   font-weight: 500;
-  color: var(--p-color-primary);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -563,7 +563,7 @@ const handleClose = () => {
 
 .version-item-meta {
   font-size: 12px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   margin-top: 4px;
   margin-left: 20px;
 }
@@ -589,20 +589,20 @@ const handleClose = () => {
   align-items: center;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: var(--p-bg-hover);
-  border-radius: var(--p-radius-sm);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
 }
 
 .version-info {
   font-weight: 500;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .detail-config {
   flex: 1;
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 12px;
   overflow: auto;
 }
@@ -613,7 +613,7 @@ const handleClose = () => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .json-textarea {
@@ -623,21 +623,21 @@ const handleClose = () => {
   border: none;
   background: transparent;
   resize: none;
-  font-family: var(--p-mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
   outline: none;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .diff-container {
   flex: 1;
   overflow: auto;
-  background: var(--p-bg-page);
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 12px;
 }
 
@@ -648,39 +648,39 @@ const handleClose = () => {
 }
 
 .diff-tree :deep(.diff-key) {
-  color: var(--p-text-primary);
+  color: var(--fg);
   font-weight: 500;
 }
 
 .diff-tree :deep(.diff-same) {
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .diff-tree :deep(.diff-added) {
-  color: var(--p-color-danger);
-  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
 
 .diff-tree :deep(.diff-removed) {
-  color: var(--p-color-primary);
-  background: var(--p-color-primary-bg);
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 10%);
   padding: 0 4px;
   border-radius: 2px;
   text-decoration: line-through;
 }
 
 .diff-tree :deep(.diff-changed-a) {
-  color: var(--p-color-primary);
-  background: var(--p-color-primary-bg);
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 10%);
   padding: 0 4px;
   border-radius: 2px;
 }
 
 .diff-tree :deep(.diff-changed-b) {
-  color: var(--p-color-danger);
-  background: color-mix(in srgb, var(--p-color-danger) 8%, transparent);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
@@ -688,6 +688,6 @@ const handleClose = () => {
 .select-hint {
   text-align: center;
   padding: 60px 20px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
 }
 </style>

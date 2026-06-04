@@ -23,38 +23,14 @@ afterEach(() => {
 
 import { useThemeStore } from './theme'
 
-describe('theme store (after layoutMode removal)', () => {
+describe('theme store (simplified)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
   })
 
-  it('should initialize with default values', () => {
+  it('should initialize with sidebarCollapsed false', () => {
     const store = useThemeStore()
-    expect(store.themeColor).toBe('blue')
-    expect(store.darkMode).toBe(false)
-    expect(store.style).toBe('default')
     expect(store.sidebarCollapsed).toBe(false)
-  })
-
-  it('should NOT have layoutMode or setLayoutMode', () => {
-    const store = useThemeStore()
-    expect((store as any).layoutMode).toBeUndefined()
-    expect((store as any).setLayoutMode).toBeUndefined()
-  })
-
-  it('should toggle dark mode', () => {
-    const store = useThemeStore()
-    expect(store.darkMode).toBe(false)
-    store.toggleDarkMode()
-    expect(store.darkMode).toBe(true)
-    store.toggleDarkMode()
-    expect(store.darkMode).toBe(false)
-  })
-
-  it('should set theme color', () => {
-    const store = useThemeStore()
-    store.setThemeColor('green')
-    expect(store.themeColor).toBe('green')
   })
 
   it('should toggle sidebar', () => {
@@ -62,28 +38,14 @@ describe('theme store (after layoutMode removal)', () => {
     expect(store.sidebarCollapsed).toBe(false)
     store.toggleSidebar()
     expect(store.sidebarCollapsed).toBe(true)
-  })
-
-  it('should compute themeClass correctly', () => {
-    const store = useThemeStore()
-    expect(store.themeClass).toBe('theme-default')
-  })
-
-  it('should persist and reload preferences', async () => {
-    const store = useThemeStore()
-    store.setThemeColor('purple')
-    store.toggleDarkMode()
     store.toggleSidebar()
+    expect(store.sidebarCollapsed).toBe(false)
+  })
 
-    // Flush Vue watchers so persist fires synchronously
-    await new Promise(resolve => setTimeout(resolve, 0))
-
-    const raw = mockStorage['panshi_theme_prefs']
-    expect(raw).toBeTruthy()
-    const parsed = JSON.parse(raw!)
-    expect(parsed.themeColor).toBe('purple')
-    expect(parsed.darkMode).toBe(true)
-    expect(parsed.sidebarCollapsed).toBe(true)
-    expect(parsed.layoutMode).toBeUndefined()
+  it('should not have old theme properties', () => {
+    const store = useThemeStore()
+    expect((store as any).themeColor).toBeUndefined()
+    expect((store as any).darkMode).toBeUndefined()
+    expect((store as any).themeClass).toBeUndefined()
   })
 })

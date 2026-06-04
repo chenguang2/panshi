@@ -145,6 +145,8 @@ export interface MatchRule {
 
 export interface Plugin {
   name: string
+  display_name?: string
+  category?: string
   description: string
   schema: Record<string, any>
   metadata_schema?: Record<string, any>

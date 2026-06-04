@@ -30,7 +30,7 @@
           <a-tag
             v-for="(pcfg, pname) in pc.plugins"
             :key="pname"
-            color="var(--p-color-primary)"
+            color="var(--accent)"
             class="pcc-plugin-tag"
             @click.stop="viewPluginConfigDetail(pc, pname, pcfg)"
           >
@@ -194,34 +194,34 @@ function onVersionPublished() {
 .config-preview {
   font-size: 12px;
   white-space: pre-wrap;
-  background: var(--p-bg-hover);
+  background: var(--bg);
   padding: 12px;
-  border-radius: var(--p-radius-sm);
+  border-radius: var(--radius-sm);
   max-height: 400px;
   overflow-y: auto;
-  color: var(--p-text-secondary);
-  border: 1px solid var(--p-border-default);
+  color: var(--muted);
+  border: 1px solid var(--border);
 }
 
 .plugin-config-card {
   width: 320px;
-  border: 1px solid var(--p-glass-border);
-  border-radius: var(--p-radius-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 16px;
   cursor: pointer;
   transition: all 0.2s;
-  background: var(--p-bg-glass-table);
+  background: var(--surface);
 }
 
 .plugin-config-card:hover {
-  box-shadow: var(--p-shadow-md);
-  border-color: var(--p-border-hover);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
 }
 
 .plugin-config-card.selected {
-  border-color: var(--p-color-primary);
-  box-shadow: 0 2px 12px var(--p-shadow-glass);
-  background: var(--p-color-primary-bg);
+  border-color: var(--accent);
+  box-shadow: 0 2px 12px var(--shadow-sm);
+  background: oklch(56% 0.16 210 / 10%);
 }
 
 .pcc-header {
@@ -234,7 +234,7 @@ function onVersionPublished() {
 
 .pcc-title {
   font-size: 14px;
-  color: var(--p-text-primary);
+  color: var(--fg);
 }
 
 .pcc-meta {
@@ -247,12 +247,12 @@ function onVersionPublished() {
 
 .pcc-version {
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
 }
 
 .pcc-desc {
   font-size: 12px;
-  color: var(--p-text-secondary);
+  color: var(--muted);
   margin-bottom: 12px;
 }
 
@@ -269,7 +269,7 @@ function onVersionPublished() {
 
 .pcc-no-plugins {
   font-size: 12px;
-  color: var(--p-text-disabled);
+  color: var(--muted);
 }
 
 .pcc-actions {
