@@ -25,6 +25,7 @@
     </div>
     <div v-else class="gr-grid">
       <div v-for="pc in rules" :key="pc.id" class="gr-card">
+        <div class="gr-card-topbar">{{ pc.cluster_name || '-' }}</div>
         <div class="gr-card-header">
           <div class="gr-card-info">
             <div class="gr-card-name">{{ pc.name }}</div>
@@ -196,18 +197,19 @@ onMounted(() => { loadClusters(); loadRules() })
 .gr-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
 .gr-empty-text { font-size: 14px; color: var(--muted); }
 .gr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.gr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+.gr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
 .gr-card:hover { box-shadow: var(--shadow-md); }
-.gr-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.gr-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
 .gr-card-info { flex: 1; }
 .gr-card-name { font-size: 15px; font-weight: 600; }
 .gr-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
 .gr-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
 .gr-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
-.gr-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.gr-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); }
+.gr-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 20px; }
 .gr-plugin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
 .gr-no-plugins { font-size: 11px; color: var(--muted); font-style: italic; }
-.gr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.gr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .gr-action-btn { background: none !important; background-color: transparent !important; }
 .gr-action-btn:hover { background: var(--bg) !important; }
 .text-sm { font-size: 12px; }

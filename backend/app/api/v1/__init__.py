@@ -5,6 +5,7 @@ from app.api.v1 import (
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
     plugins, dashboard, edge_client, edge_import, plugin_switches,
     upstreams, routes, plugin_configs, global_rules, nodes, static_resources,
+    plugin_metadata,
 )
 
 api_router = APIRouter()
@@ -30,3 +31,4 @@ api_router.include_router(plugin_configs.router)
 api_router.include_router(global_rules.router)
 api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
+api_router.include_router(plugin_metadata.router)

@@ -48,8 +48,8 @@
               <div class="plugin-name">{{ item.plugin_name }}</div>
               <div class="plugin-right">
                 <div>
-                  <a-tag v-if="item.current_version" color="green" size="small">已发布</a-tag>
-                  <a-tag v-else color="orange" size="small">未发布</a-tag>
+                  <span v-if="item.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+                  <span v-else class="badge badge-neutral">未发布</span>
                 </div>
                 <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--success)' : 'var(--muted)' }">
                   {{ item.current_version && item.updated_at ? `v${item.current_version} · ${formatDate(item.updated_at)}` : item.current_version ? `v${item.current_version} · 未同步` : '' }}
@@ -83,8 +83,8 @@
           <a-descriptions-item label="插件名称">{{ viewingPlugin.plugin_name }}</a-descriptions-item>
           <a-descriptions-item label="版本">v{{ viewingPlugin.current_version || '未发布' }}</a-descriptions-item>
           <a-descriptions-item label="状态">
-            <a-tag v-if="viewingPlugin.is_published" color="green">已发布</a-tag>
-            <a-tag v-else color="orange">未发布</a-tag>
+            <span v-if="viewingPlugin.is_published" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+            <span v-else class="badge badge-neutral">未发布</span>
           </a-descriptions-item>
           <a-descriptions-item label="创建时间">{{ formatDate(viewingPlugin.created_at) }}</a-descriptions-item>
           <a-descriptions-item label="更新时间">{{ formatDate(viewingPlugin.updated_at) }}</a-descriptions-item>
@@ -479,6 +479,11 @@ const openVersionManagement = (item: ConfiguredPlugin) => {
 
 watch(() => props.clusterId, () => {
   if (props.clusterId) {
+    // 关闭所有弹窗
+    viewDrawerVisible.value = false
+    editorDrawerVisible.value = false
+    versionModalVisible.value = false
+    publishModalVisible.value = false
     loadPlugins()
     loadConfiguredPlugins()
   }

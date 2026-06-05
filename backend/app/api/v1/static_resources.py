@@ -54,9 +54,9 @@ async def list_all_static_resources(
     cluster_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {row[0]: row[1] for row in c_result.all()}
+        cluster_map = {row[0]: row[1] or row[2] for row in c_result.all()}
 
     items = []
     for r in resources:

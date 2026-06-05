@@ -25,6 +25,7 @@
     </div>
     <div v-else class="pc-grid">
       <div v-for="pc in configs" :key="pc.id" class="pc-card">
+        <div class="pc-card-topbar">{{ pc.cluster_name || '-' }}</div>
         <div class="pc-card-header">
           <div class="pc-card-info">
             <div class="pc-card-name">{{ pc.name }}</div>
@@ -196,18 +197,19 @@ onMounted(() => { loadClusters(); loadConfigs() })
 .pc-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
 .pc-empty-text { font-size: 14px; color: var(--muted); }
 .pc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+.pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
 .pc-card:hover { box-shadow: var(--shadow-md); }
-.pc-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.pc-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
+.pc-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); }
 .pc-card-info { flex: 1; }
 .pc-card-name { font-size: 15px; font-weight: 600; }
 .pc-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
 .pc-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
 .pc-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
-.pc-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.pc-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 20px; }
 .pc-plugin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
 .pc-no-plugins { font-size: 11px; color: var(--muted); font-style: italic; }
-.pc-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.pc-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .pc-action-btn { background: none !important; background-color: transparent !important; }
 .pc-action-btn:hover { background: var(--bg) !important; }
 .text-sm { font-size: 12px; }

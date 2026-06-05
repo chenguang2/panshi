@@ -25,6 +25,7 @@
     </div>
     <div v-else class="sr-grid">
       <div v-for="sr in resources" :key="sr.id" class="sr-card">
+        <div class="sr-card-topbar">{{ sr.cluster_name || '-' }}</div>
         <div class="sr-card-header">
           <div>
             <strong class="sr-card-name">{{ sr.name }}</strong>
@@ -296,16 +297,17 @@ onMounted(() => { loadClusters(); loadResources() })
 .sr-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
 .sr-empty-text { font-size: 14px; color: var(--muted); }
 .sr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.sr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; }
+.sr-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
 .sr-card:hover { box-shadow: var(--shadow-md); }
-.sr-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.sr-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); }
+.sr-card-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 20px 0; margin-bottom: 8px; }
 .sr-card-name { font-size: 15px; font-weight: 600; }
 .sr-card-path { font-size: 12px; color: var(--accent); font-family: var(--font-mono); margin-top: 2px; }
 .sr-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
 .sr-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
-.sr-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
-.sr-size { font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-bottom: 8px; }
-.sr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+.sr-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; padding: 0 20px; }
+.sr-size { font-size: 11px; color: var(--muted); font-family: var(--font-mono); padding: 0 20px; margin-bottom: 8px; }
+.sr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .text-sm { font-size: 12px; }
 .text-muted { color: var(--muted); }
 @media (max-width: 768px) { .sr-grid { grid-template-columns: 1fr; } }
