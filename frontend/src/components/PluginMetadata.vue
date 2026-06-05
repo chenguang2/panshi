@@ -190,16 +190,11 @@ function handlePublishCancel() {
 
 const editingPluginName = ref<string>('')
 
-// 插件分类
-const CATEGORIES = [
-  { key: 'flow', label: '流量控制', plugins: ['traffic_split', 'traffic_limit_count'] },
-  { key: 'rewrite', label: '请求/响应重写', plugins: ['proxy_rewrite', 'response_rewrite', 'cors'] },
-  { key: 'auth', label: '认证', plugins: ['auth_basic', 'auth_key'] },
-  { key: 'process', label: '数据处理', plugins: ['log_process', 'data_center', 'pre_functions'] },
-  { key: 'static', label: '静态资源', plugins: ['static_resource'] },
-  { key: 'security', label: '安全防护', plugins: ['security_common_body', 'security_common_args', 'security_common_cookie', 'security_common_referer', 'security_common_uri', 'security_common_useragent', 'security_restrict_ip', 'security_restrict_uri', 'security_restrict_form', 'security_super_ip', 'security_super_user'] },
-  { key: 'monitor', label: '监控', plugins: ['monitor', 'traceid'] },
-]
+// 插件分类元数据（标签映射）
+const CATEGORY_CONFIG: Record<string, string> = {
+  flow: '流量控制', rewrite: '请求/响应重写', auth: '认证',
+  process: '数据处理', static: '静态资源', security: '安全防护', monitor: '监控',
+}
 
 const expandedCategories = reactive<Record<string, boolean>>({
   flow: true, rewrite: true, process: true, static: true, security: true, monitor: true, auth: true,
@@ -209,14 +204,17 @@ function toggleCategory(key: string) { expandedCategories[key] = !expandedCatego
 
 const pluginGroups = computed(() => {
   const result: { key: string; label: string; plugins: Plugin[] }[] = []
-  for (const cat of CATEGORIES) {
-    const matched = availablePlugins.value.filter(p => cat.plugins.includes(p.name))
-    if (matched.length > 0) result.push({ key: cat.key, label: cat.label, plugins: matched })
+  const catMap: Record<string, { key: string; label: string; plugins: Plugin[] }> = {}
+  for (const plugin of availablePlugins.value) {
+    const key = plugin.category || 'other'
+    if (!catMap[key]) {
+      catMap[key] = { key, label: CATEGORY_CONFIG[key] || key, plugins: [] }
+    }
+    catMap[key].plugins.push(plugin)
   }
-  // 未分类的归入"其他"
-  const allKnown = CATEGORIES.flatMap(c => c.plugins)
-  const others = availablePlugins.value.filter(p => !allKnown.includes(p.name))
-  if (others.length > 0) result.push({ key: 'other', label: '其他', plugins: others })
+  for (const key of Object.keys(catMap).sort()) {
+    if (catMap[key].plugins.length > 0) result.push(catMap[key])
+  }
   return result
 })
 
