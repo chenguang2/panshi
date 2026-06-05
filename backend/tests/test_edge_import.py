@@ -392,8 +392,7 @@ class TestEdgeImportConflictDetection:
 
         conflicts = await service.detect_conflicts(preview_data)
         name_conflicts = [c for c in conflicts if c["type"] == "name_conflict"]
-        assert len(name_conflicts) == 1
-        assert name_conflicts[0]["resource_name"] == "user-service"
+        assert len(name_conflicts) == 0  # name conflicts no longer block import
 
     @pytest.mark.asyncio
     async def test_detect_uuid_conflict(self, test_db):
@@ -566,11 +565,12 @@ class TestEdgeImportConflictDetection:
             )
 
         assert result["success"] is True
-        assert result["imported_counts"]["upstreams"] == 0
+        assert result["imported_counts"]["upstreams"] == 1  # name conflict no longer blocks
 
-        upstreams = (await test_db.execute(select(Upstream))).scalars().all()
+        upstreams = (await test_db.execute(select(Upstream).order_by(Upstream.id))).scalars().all()
         names = [u.name for u in upstreams]
-        assert names == ["user-service"]
+        assert "user-service" in names
+        assert len(names) == 2  # existing + Edge (same name, different UUID)
 
     @pytest.mark.asyncio
     async def test_execute_import_rollback_on_failure(self, test_db):

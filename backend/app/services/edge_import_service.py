@@ -450,52 +450,6 @@ class EdgeImportService:
         conflicts: list[dict] = []
         db = self.db_session
 
-        upstream_names = [
-            u["upstream"]["name"]
-            for u in preview_data.get("converted_upstreams", [])
-        ]
-        if upstream_names:
-            result = await db.execute(
-                select(Upstream.name).where(
-                    Upstream.cluster_id == self.cluster_id,
-                    Upstream.name.in_(upstream_names),
-                )
-            )
-            existing_names = set(row[0] for row in result.all())
-            for u in preview_data.get("converted_upstreams", []):
-                name = u["upstream"]["name"]
-                if name in existing_names:
-                    conflicts.append({
-                        "type": "name_conflict",
-                        "resource_type": "upstream",
-                        "resource_name": name,
-                        "reason": f"上游名称 '{name}' 已存在",
-                        "resolution": "将跳过该记录",
-                    })
-
-        route_names = [
-            r["route"]["name"]
-            for r in preview_data.get("converted_routes", [])
-        ]
-        if route_names:
-            result = await db.execute(
-                select(Route.name).where(
-                    Route.cluster_id == self.cluster_id,
-                    Route.name.in_(route_names),
-                )
-            )
-            existing_names = set(row[0] for row in result.all())
-            for r in preview_data.get("converted_routes", []):
-                name = r["route"]["name"]
-                if name in existing_names:
-                    conflicts.append({
-                        "type": "name_conflict",
-                        "resource_type": "route",
-                        "resource_name": name,
-                        "reason": f"路由名称 '{name}' 已存在",
-                        "resolution": "将跳过该路由",
-                    })
-
         upstream_uuids = [
             u["upstream"]["edge_uuid"]
             for u in preview_data.get("converted_upstreams", [])
@@ -515,7 +469,7 @@ class EdgeImportService:
                         "type": "uuid_conflict",
                         "resource_type": "upstream",
                         "resource_name": u["upstream"]["name"],
-                        "reason": f"Edge UUID '{euuid}' 已存在于数据库中",
+                        "reason": f"上游 '{u['upstream']['name']}' (uuid: {euuid}) 已存在于数据库中",
                         "resolution": "将跳过该记录",
                     })
 
@@ -538,8 +492,8 @@ class EdgeImportService:
                         "type": "uuid_conflict",
                         "resource_type": "route",
                         "resource_name": r["route"]["name"],
-                        "reason": f"Edge UUID '{euuid}' 已存在于数据库中",
-                        "resolution": "将跳过该记录",
+                        "reason": f"路由 '{r['route']['name']}' (uuid: {euuid}) 已存在于数据库中",
+                        "resolution": "将跳过该路由",
                     })
 
         pc_uuids = [
@@ -561,7 +515,7 @@ class EdgeImportService:
                         "type": "uuid_conflict",
                         "resource_type": "plugin_config",
                         "resource_name": pc["plugin_config"]["name"],
-                        "reason": f"Edge UUID '{euuid}' 已存在于数据库中",
+                        "reason": f"插件组 '{pc['plugin_config']['name']}' (uuid: {euuid}) 已存在于数据库中",
                         "resolution": "将跳过该记录",
                     })
 
@@ -584,27 +538,31 @@ class EdgeImportService:
                         "type": "uuid_conflict",
                         "resource_type": "global_rule",
                         "resource_name": gr["global_rule"]["name"],
-                        "reason": f"Edge UUID '{euuid}' 已存在于数据库中",
+                        "reason": f"全局规则 '{gr['global_rule']['name']}' (uuid: {euuid}) 已存在于数据库中",
                         "resolution": "将跳过该记录",
                     })
 
-        for r in preview_data.get("converted_routes", []):
-            rd = r["route"]
-            uri = rd.get("uri", "")
-            if uri:
-                stmt = select(Route.id, Route.name).where(
-                    Route.cluster_id == self.cluster_id,
-                    Route.uri == uri,
+        pm_names = [
+            pm["plugin_metadata"]["plugin_name"]
+            for pm in preview_data.get("converted_plugin_metadata", [])
+        ]
+        if pm_names:
+            result = await db.execute(
+                select(PluginMetadata.plugin_name).where(
+                    PluginMetadata.cluster_id == self.cluster_id,
+                    PluginMetadata.plugin_name.in_(pm_names),
                 )
-                result = await db.execute(stmt)
-                existing_routes = result.all()
-                for er_id, er_name in existing_routes:
+            )
+            existing_pm_names = set(row[0] for row in result.all())
+            for pm in preview_data.get("converted_plugin_metadata", []):
+                pname = pm["plugin_metadata"]["plugin_name"]
+                if pname in existing_pm_names:
                     conflicts.append({
-                        "type": "route_conflict",
-                        "resource_type": "route",
-                        "resource_name": rd.get("name", ""),
-                        "reason": f"路由 URI '{uri}' 已存在 (已有路由: {er_name})",
-                        "resolution": "将跳过该路由",
+                        "type": "uuid_conflict",
+                        "resource_type": "plugin_metadata",
+                        "resource_name": pname,
+                        "reason": f"插件元数据 '{pname}' 已存在于数据库中",
+                        "resolution": "将跳过该记录",
                     })
 
         return conflicts
@@ -642,6 +600,7 @@ class EdgeImportService:
             "converted_routes": converted_routes,
             "converted_plugin_configs": converted_plugin_configs,
             "converted_global_rules": converted_global_rules,
+            "converted_plugin_metadata": converted_plugin_metadata,
         }
 
         conflicts = await self.detect_conflicts(preview_data)
@@ -791,21 +750,19 @@ class EdgeImportService:
         try:
             edge_data = self.fetch_edge_data()
 
+            # Convert all data first (no DB queries)
             converted_plugin_metadata = [
                 self.convert_plugin_metadata(epm)
                 for epm in edge_data.get("plugin_metadata", [])
             ]
-
             converted_plugin_configs = [
                 self.convert_plugin_config(epc)
                 for epc in edge_data.get("plugin_configs", [])
             ]
-
             converted_global_rules = [
                 self.convert_global_rule(egr)
                 for egr in edge_data.get("global_rules", [])
             ]
-
             converted_upstreams = [
                 self.convert_upstream(eu)
                 for eu in edge_data.get("upstreams", [])
@@ -829,28 +786,54 @@ class EdgeImportService:
             unknown_plugin_count = 0
             unknown_plugin_names: set = set()
 
-            result = await session.execute(
-                select(Upstream.name).where(Upstream.cluster_id == self.cluster_id)
+            # ── Phase 1: Load existing identifiers from DB (one query per type) ──
+            existing_upstream_uuids = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(Upstream.edge_uuid).where(Upstream.cluster_id == self.cluster_id)
+                    )
+                ).all()
             )
-            existing_upstream_names = set(row[0] for row in result.all())
+            existing_route_uuids = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(Route.edge_uuid).where(Route.cluster_id == self.cluster_id)
+                    )
+                ).all()
+            )
+            existing_pc_uuids = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(PluginConfig.edge_uuid).where(PluginConfig.cluster_id == self.cluster_id)
+                    )
+                ).all()
+            )
+            existing_gr_uuids = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(GlobalRule.edge_uuid).where(GlobalRule.cluster_id == self.cluster_id)
+                    )
+                ).all()
+            )
+            existing_pm_names = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(PluginMetadata.plugin_name).where(
+                            PluginMetadata.cluster_id == self.cluster_id
+                        )
+                    )
+                ).all()
+            )
 
-            result = await session.execute(
-                select(Route.name).where(Route.cluster_id == self.cluster_id)
-            )
-            existing_route_names = set(row[0] for row in result.all())
+            # ── Phase 2: Insert (conflict check only against DB, not within Edge batch) ──
 
             if selections.plugin_metadata:
                 for cpm in converted_plugin_metadata:
                     pm_data = cpm["plugin_metadata"]
-                    raw_plugins = cpm.get("raw_plugins", {})
-                    stmt = select(PluginMetadata.id).where(
-                        PluginMetadata.cluster_id == self.cluster_id,
-                        PluginMetadata.plugin_name == pm_data["plugin_name"],
-                    )
-                    existing = (await session.execute(stmt)).first()
-                    if existing is not None:
-                        skipped_counts["plugin_metadata"] = skipped_counts.get("plugin_metadata", 0) + 1
+                    if pm_data["plugin_name"] in existing_pm_names:
+                        skipped_counts["plugin_metadata"] += 1
                         continue
+                    existing_pm_names.add(pm_data["plugin_name"])
                     pm_data["current_version"] = 1
                     session.add(PluginMetadata(**pm_data))
                     await session.flush()
@@ -863,26 +846,18 @@ class EdgeImportService:
                     session.add(ConfigVersion(
                         cluster_id=self.cluster_id, resource_type="plugin_metadata",
                         resource_id=pm_id, version=1,
-                        config=json.dumps(raw_plugins, ensure_ascii=False),
+                        config=json.dumps(cpm.get("raw_plugins", {}), ensure_ascii=False),
                         created_by="system",
                     ))
-                    imported_counts["plugin_metadata"] = imported_counts.get("plugin_metadata", 0) + 1
-            await session.flush()
+                    imported_counts["plugin_metadata"] += 1
+                await session.flush()
 
             if selections.plugin_configs:
-                existing_pc_uuids = set(
-                    row[0] for row in (
-                        await session.execute(
-                            select(PluginConfig.edge_uuid).where(PluginConfig.cluster_id == self.cluster_id)
-                        )
-                    ).all()
-                )
                 for cp in converted_plugin_configs:
                     pc_data = cp["plugin_config"]
                     if pc_data["edge_uuid"] in existing_pc_uuids:
                         skipped_counts["plugin_configs"] += 1
                         continue
-                    existing_pc_uuids.add(pc_data["edge_uuid"])
                     new_pc = PluginConfig(**pc_data)
                     session.add(new_pc)
                     await session.flush()
@@ -911,19 +886,11 @@ class EdgeImportService:
                 await session.flush()
 
             if selections.global_rules:
-                existing_gr_uuids = set(
-                    row[0] for row in (
-                        await session.execute(
-                            select(GlobalRule.edge_uuid).where(GlobalRule.cluster_id == self.cluster_id)
-                        )
-                    ).all()
-                )
                 for cg in converted_global_rules:
                     gr_data = cg["global_rule"]
                     if gr_data["edge_uuid"] in existing_gr_uuids:
                         skipped_counts["global_rules"] += 1
                         continue
-                    existing_gr_uuids.add(gr_data["edge_uuid"])
                     new_gr = GlobalRule(**gr_data)
                     session.add(new_gr)
                     await session.flush()
@@ -951,29 +918,16 @@ class EdgeImportService:
                 await session.flush()
 
             if selections.upstreams:
-                existing_upstream_uuids = set(
-                    row[0] for row in (
-                        await session.execute(
-                            select(Upstream.edge_uuid).where(Upstream.cluster_id == self.cluster_id)
-                        )
-                    ).all()
-                )
                 for cu in converted_upstreams:
                     u_data = cu["upstream"]
+
                     if u_data["edge_uuid"] in existing_upstream_uuids:
                         skipped_counts["upstreams"] += 1
                         continue
-                    existing_upstream_uuids.add(u_data["edge_uuid"])
-
-                    if u_data["name"] in existing_upstream_names:
-                        skipped_counts["upstreams"] += 1
-                        continue
-                    existing_upstream_names.add(u_data["name"])
 
                     new_upstream = Upstream(**u_data)
                     session.add(new_upstream)
                     await session.flush()
-
                     new_upstream.current_version = 1
                     edge_raw = next(
                         (e for e in edge_data.get("upstreams", [])
@@ -990,64 +944,34 @@ class EdgeImportService:
                             resource_id=new_upstream.id, version=1,
                             config=config_json, created_by="system",
                         ))
-
                     upstream_uuid_map[u_data["edge_uuid"]] = new_upstream.id
                     imported_counts["upstreams"] += 1
-
                     for t_data in cu["targets"]:
                         t_data["upstream_id"] = new_upstream.id
-                        target = UpstreamTarget(**t_data)
-                        session.add(target)
-
+                        session.add(UpstreamTarget(**t_data))
                 await session.flush()
 
             if selections.routes:
+                # Routes depend on upstream_uuid_map, so they're converted here (after upstreams are in the map)
+                routes_data = edge_data.get("routes", [])
+                if not isinstance(routes_data, list):
+                    routes_data = []
                 converted_routes = [
                     self.convert_route(er, upstream_uuid_map)
-                    for er in edge_data.get("routes", [])
+                    for er in routes_data
                 ]
-
-                existing_route_uuids = set(
-                    row[0] for row in (
-                        await session.execute(
-                            select(Route.edge_uuid).where(Route.cluster_id == self.cluster_id)
-                        )
-                    ).all()
-                )
                 for cr in converted_routes:
                     r_data = cr["route"]
-
-                    # Skip on UUID conflict
                     if r_data["edge_uuid"] in existing_route_uuids:
                         skipped_counts["routes"] += 1
                         continue
-                    existing_route_uuids.add(r_data["edge_uuid"])
-
-                    # Skip on name conflict (no suffix)
-                    if r_data["name"] in existing_route_names:
-                        skipped_counts["routes"] += 1
-                        continue
-                    existing_route_names.add(r_data["name"])
-
-                    # Skip on URI conflict
-                    if r_data.get("uri"):
-                        uri_result = await session.execute(
-                            select(Route.id).where(
-                                Route.cluster_id == self.cluster_id,
-                                Route.uri == r_data["uri"],
-                            )
-                        )
-                        if uri_result.first() is not None:
-                            skipped_counts["routes"] += 1
-                            continue
 
                     new_route = Route(**r_data)
                     session.add(new_route)
                     await session.flush()
-
                     new_route.current_version = 1
                     edge_raw = next(
-                        (e for e in edge_data.get("routes", [])
+                        (e for e in routes_data
                          if (e.get("value", e).get("id") if isinstance(e, dict) else e.get("id")) == r_data["edge_uuid"]),
                         None,
                     )
@@ -1060,14 +984,10 @@ class EdgeImportService:
                                 ensure_ascii=False
                             ), created_by="system",
                         ))
-
                     imported_counts["routes"] += 1
-
                     for p_data in cr["plugins"]:
                         p_data["route_id"] = new_route.id
-                        route_plugin = RoutePlugin(**p_data)
-                        session.add(route_plugin)
-
+                        session.add(RoutePlugin(**p_data))
                     ps = cr.get("plugin_summary", {})
                     known_plugin_count += ps.get("known_count", 0)
                     unknown_plugin_count += ps.get("unknown_count", 0)
