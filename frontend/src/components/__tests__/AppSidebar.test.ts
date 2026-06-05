@@ -47,6 +47,7 @@ describe('AppSidebar.vue', () => {
     expect(wrapper.text()).toContain('核心功能')
     expect(wrapper.text()).toContain('概览')
     expect(wrapper.text()).toContain('集群管理')
+    expect(wrapper.text()).toContain('节点管理')
     expect(wrapper.text()).toContain('插件元数据')
   })
 

@@ -80,6 +80,11 @@ const routes: RouteRecordRaw[] = [
         name: 'PluginMetadataList',
         component: () => import('@/views/PluginMetadataList.vue'),
       },
+      {
+        path: 'nodes',
+        name: 'NodeList',
+        component: () => import('@/views/NodeList.vue'),
+      },
     ]
   }
 ]

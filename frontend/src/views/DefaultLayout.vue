@@ -61,6 +61,7 @@ const themeStore = useThemeStore()
 const routeNameMap: Record<string, string> = {
   Dashboard: '仪表盘',
   Clusters: '集群管理',
+  NodeList: '节点管理',
   Users: '用户管理',
   EdgeClient: '边缘节点',
   EdgeImport: 'Edge 数据导入',

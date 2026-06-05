@@ -205,6 +205,7 @@ async def get_cluster_stats(cluster_id: int, db: AsyncSession = Depends(get_db))
         "plugin_configs": await count(PluginConfig, cluster_id=cluster_id),
         "global_rules": await count(GlobalRule, cluster_id=cluster_id),
         "plugin_metadata": await count(PluginMetadata, cluster_id=cluster_id),
+        "static_resources": await count(StaticResource, cluster_id=cluster_id),
         "config_versions": await count(ConfigVersion, cluster_id=cluster_id),
     }
 

@@ -215,6 +215,7 @@ class NodeUpdate(BaseModel):
 class NodeResponse(NodeBase):
     id: int
     cluster_id: int
+    cluster_name: Optional[str] = None
     status_detail: Optional[dict] = None
     created_at: Optional[str] = None
 

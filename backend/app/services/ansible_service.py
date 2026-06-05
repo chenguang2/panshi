@@ -68,6 +68,8 @@ class AnsibleRunnerService:
         self._private_data_dir = private_data_dir
         self._job_timeout = job_timeout
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
+        # Ensure SSH ControlPath directory exists for ControlMaster sockets
+        os.makedirs("/tmp/panshi-cp", exist_ok=True)
 
     # ── public API ──────────────────────────────────────────────
 
@@ -103,7 +105,7 @@ class AnsibleRunnerService:
         _current_path = os.environ.get("PATH", "")
         _runner_env = {
             "ANSIBLE_HOST_KEY_CHECKING": "False",
-            "ANSIBLE_SSH_ARGS": "-C -o ControlMaster=auto -o ControlPersist=600s",
+            "ANSIBLE_SSH_ARGS": "-C -o ControlMaster=auto -o ControlPersist=600s -o UpdateHostKeys=no",
             "ANSIBLE_SSH_CONTROL_PATH": "/tmp/panshi-cp/%%h-%%p-%%r",
             "ANSIBLE_PIPELINING": "True",
         }
