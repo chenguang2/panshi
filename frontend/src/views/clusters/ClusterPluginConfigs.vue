@@ -75,26 +75,7 @@
     </a-modal>
 
     <!-- View Plugin Config Drawer -->
-    <a-drawer
-      v-model:open="viewPcDrawerVisible"
-      :title="`查看插件组 - ${viewingPc?.name}`"
-      width="600"
-      @close="viewPcDrawerVisible = false"
-    >
-      <div v-if="viewingPc">
-        <a-descriptions :column="1" bordered>
-          <a-descriptions-item label="名称">{{ viewingPc.name }}</a-descriptions-item>
-          <a-descriptions-item label="描述">{{ viewingPc.description || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="状态">
-            <a-tag v-if="viewingPc.current_version" color="green">已发布</a-tag>
-            <a-tag v-else color="orange">未发布</a-tag>
-          </a-descriptions-item>
-          <a-descriptions-item label="版本" v-if="viewingPc.current_version">v{{ viewingPc.current_version }}</a-descriptions-item>
-        </a-descriptions>
-        <a-divider>插件配置</a-divider>
-        <pre class="config-preview">{{ JSON.stringify(viewingPc.plugins, null, 2) }}</pre>
-      </div>
-    </a-drawer>
+    <PluginConfigViewDrawer v-model:visible="viewPcDrawerVisible" :config="viewingPc" />
 
     <!-- Version Management Modal -->
     <VersionManagementModal
@@ -116,6 +97,7 @@ import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
 import PluginSelector from '@/components/PluginSelector.vue'
+import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'

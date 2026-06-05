@@ -50,6 +50,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/RouteList.vue'),
       },
       {
+        path: 'plugin-configs',
+        name: 'PluginConfigList',
+        component: () => import('@/views/PluginConfigList.vue'),
+      },
+      {
         path: 'tools',
         name: 'Tools',
         component: () => import('@/views/Tools.vue')

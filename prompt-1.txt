@@ -1667,12 +1667,6 @@ docs/ui/Live-Artifact-4/edge-import.html  来设计和实现
 
 预览和导入采用现在的界面和逻辑
                 
-
-
-
-
-
-
 3. /brainstorming 请仔细阅读 openspec/changes/enhance-edge-import/ 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
 
@@ -1680,3 +1674,31 @@ docs/ui/Live-Artifact-4/edge-import.html  来设计和实现
 4. 请读取 openspec/changes/enhance-edge-import/tasks.md ，严格按照 Superpowers 的
 TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+======================================================================
+
+1. 使用 /opsx-propose 命令，增加插件组功能
+
+需要按照设计稿
+docs/ui/Live-Artifact-4/plugin-configs.html  来设计和实现
+
+其中：
+下拉选择框的选择集群 改为 全部集群
+
+添加插件组，采用现在的集群管理中的添加插件组的功能，需要额外加上：所属集群, 和上游一样要把窗体抽取出来
+
+在插件组卡片中：各个按钮的功能都调用集群管理中的插件组卡片中对应的功能
+
+参考已经做过的上游管理的实现逻辑，例如，提取通用的窗体，和调用相同的函数等等
+
+
+                
+3. /brainstorming 请仔细阅读 openspec/changes/add-plugin-config-page/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+4. 请读取 openspec/changes/add-plugin-config-page/tasks.md ，严格按照 Superpowers 的
+TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+========================================================================

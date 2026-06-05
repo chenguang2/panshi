@@ -88,6 +88,7 @@ const navSections = computed<NavSection[]>(() => {
         { label: '集群管理', route: '/clusters', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg>' },
         { label: '上游管理', route: '/upstreams', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>' },
         { label: '路由管理', route: '/routes', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg>' },
+        { label: '插件组', route: '/plugin-configs', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg>' },
       ]
     },
     {
@@ -117,6 +118,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
   if (item.route === '/upstreams') return name === 'UpstreamList'
   if (item.route === '/routes') return name === 'RouteList'
+  if (item.route === '/plugin-configs') return name === 'PluginConfigList'
   return false
 }
 
