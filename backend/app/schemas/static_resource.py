@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Any
+from datetime import datetime
 
 
 class StaticResourceCreate(BaseModel):
@@ -27,6 +28,13 @@ class StaticResourceResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @field_validator('created_at', 'updated_at', mode='before')
+    @classmethod
+    def convert_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat() + 'Z'
+        return v
 
 
 class StaticResourceListResponse(BaseModel):

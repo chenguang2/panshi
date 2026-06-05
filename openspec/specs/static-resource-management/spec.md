@@ -45,3 +45,21 @@
 #### Scenario: 查看版本历史
 - **WHEN** 用户查看静态资源的版本管理
 - **THEN** 展示所有历史版本、发布时间和发布结果
+
+### Requirement: 静态资源管理页面
+
+静态资源管理页面 SHALL 独立于集群上下文，提供全局视图。
+
+#### Scenario: 卡片网格展示
+- **WHEN** 存在静态资源
+- **THEN** 每个资源 SHALL 以卡片形式在 3 列网格中展示
+- **THEN** 每张卡片 SHALL 显示：名称、路径、描述、文件信息、操作按钮
+
+#### Scenario: 创建/编辑
+- **WHEN** 管理员点击"添加静态资源"或"编辑"
+- **THEN** StaticResourceFormModal SHALL 打开
+- **THEN** "所属集群" SHALL 出现在表单中
+
+#### Scenario: 操作
+- **WHEN** 管理员点击操作按钮
+- **THEN** SHALL 使用与集群管理相同的函数

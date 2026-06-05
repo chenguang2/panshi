@@ -90,6 +90,7 @@ const navSections = computed<NavSection[]>(() => {
         { label: '路由管理', route: '/routes', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg>' },
         { label: '插件组', route: '/plugin-configs', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg>' },
         { label: '全局规则', route: '/global-rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg>' },
+        { label: '静态资源', route: '/static-resources', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg>' },
       ]
     },
     {
@@ -121,6 +122,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/routes') return name === 'RouteList'
   if (item.route === '/plugin-configs') return name === 'PluginConfigList'
   if (item.route === '/global-rules') return name === 'GlobalRuleList'
+  if (item.route === '/static-resources') return name === 'StaticResourceList'
   return false
 }
 

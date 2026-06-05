@@ -60,6 +60,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/GlobalRuleList.vue'),
       },
       {
+        path: 'static-resources',
+        name: 'StaticResourceList',
+        component: () => import('@/views/StaticResourceList.vue'),
+      },
+      {
         path: 'tools',
         name: 'Tools',
         component: () => import('@/views/Tools.vue')
