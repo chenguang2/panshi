@@ -41,7 +41,7 @@
           </template>
         </template>
         <template #footer>
-          <router-link to="/clusters" class="table-card-link">查看全部路由 &rarr;</router-link>
+          <router-link to="/routes" class="table-card-link">查看全部路由 &rarr;</router-link>
         </template>
       </TableCard>
 

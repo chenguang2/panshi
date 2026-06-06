@@ -172,7 +172,7 @@ select.form-input {
   padding: 0 30px 0 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg);
+  background: var(--surface);
   font-size: 13px;
   color: var(--fg);
   outline: none;
@@ -352,7 +352,9 @@ select.form-input {
   box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 12%) !important;
 }
 .ant-input::placeholder { color: oklch(50% 0.018 240 / 40%) !important; }
+.ant-input-affix-wrapper { background: var(--surface) !important; }
 .ant-input-affix-wrapper .ant-input { background: transparent !important; border: none !important; }
+.ant-input-search .ant-input { background: var(--surface) !important; }
 .ant-input-password-icon { color: var(--muted) !important; }
 .ant-select-selection-placeholder { color: oklch(50% 0.018 240 / 40%) !important; }
 .ant-select-selection-item { color: var(--fg) !important; }
