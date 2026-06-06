@@ -37,6 +37,7 @@ export interface Cluster {
   display_name?: string
   description?: string
   group_name?: string
+  admin_key?: string
   status: number
   created_at?: string
   node_count: number
