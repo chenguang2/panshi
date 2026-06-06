@@ -6,8 +6,15 @@ The `/clusters` route SHALL provide a cluster management list page with a respon
 
 #### Scenario: Page loads cluster list
 - **WHEN** the user navigates to `/clusters`
-- **THEN** the page SHALL fetch cluster list from `GET /api/v1/clusters` (or `/my` for non-admin)
+- **THEN** the page SHALL fetch the cluster list
 - **AND** display clusters in a responsive multi-column card grid
+
+#### Scenario: Permission-based cluster visibility
+- **WHEN** the current user has role "admin"
+- **THEN** the page SHALL call `GET /api/v1/clusters` to get all clusters
+- **WHEN** the current user has a non-admin role
+- **THEN** the page SHALL call `GET /api/v1/clusters/my` to get only assigned clusters
+- **AND** the page SHALL NOT show clusters the user does not have access to
 
 #### Scenario: Card grid responsiveness
 - **WHEN** the viewport width is ≥ 1200px
@@ -55,6 +62,7 @@ The cluster list page SHALL provide search and filtering capabilities.
 #### Scenario: Filter by group name
 - **WHEN** the user selects a group name from the dropdown
 - **THEN** the card grid SHALL filter to show only clusters belonging to that group
+- **AND** the dropdown options SHALL include "未分类" as an option for clusters with empty `group_name`
 - **AND** the dropdown options SHALL be dynamically populated from cluster group names
 
 #### Scenario: Combined search and group filter
@@ -71,10 +79,25 @@ Clusters SHALL be organized into groups with group headers.
 - **AND** each group SHALL display a group header with the group name and cluster count
 - **AND** clusters with empty `group_name` SHALL be in a "未分类" group
 
+#### Scenario: Group headers with expand/collapse
+- **WHEN** a group header is displayed
+- **THEN** clicking the group header SHALL toggle the group's expand/collapse state
+- **AND** all groups SHALL be expanded by default
+
 #### Scenario: Group sorting
 - **WHEN** groups are displayed
 - **THEN** named groups SHALL be sorted alphabetically
 - **AND** "未分类" group SHALL appear last
+
+### Requirement: Cluster detail view
+
+The page SHALL provide a detail modal for viewing cluster information.
+
+#### Scenario: View cluster detail
+- **WHEN** the user clicks "详情" on a cluster card
+- **THEN** a modal SHALL open showing: cluster name, display name, group name, description, status badge, admin_key, creation time
+- **AND** a resource statistics grid with 7 categories (node, upstream, route, plugin config, global rule, plugin metadata, static resource)
+- **AND** a node list with IP:port tags and online/offline status indicators
 
 ### Requirement: Cluster CRUD operations
 
@@ -84,16 +107,26 @@ The page SHALL support creating, editing, testing, and deleting clusters.
 - **WHEN** the user clicks "新建集群" button
 - **THEN** a modal SHALL open with form fields: name, display_name, group_name (select with inline add), description, admin_key, status
 
-#### Scenario: Edit cluster
+#### Scenario: Edit cluster (name is read-only)
 - **WHEN** the user clicks "编辑" on a cluster card
 - **THEN** the same modal SHALL open pre-filled with the cluster's current values
+- **AND** the name field SHALL be disabled (cannot be changed after creation)
+- **AND** the name field SHALL show real-time validation error for format mismatch
 
-#### Scenario: Test connectivity
+#### Scenario: Name validation on create
+- **WHEN** the user types a cluster name in the add modal
+- **THEN** the name SHALL be validated in real-time against pattern `/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`
+- **AND** SHALL show inline error if the format is invalid
+
+#### Scenario: Test connectivity with per-node results
 - **WHEN** the user clicks "测试" on a cluster card
-- **THEN** the system SHALL test the cluster connection
-- **AND** display a success/error result message
+- **THEN** a modal SHALL open showing each node (IP:port) with its connection test result (success/failure)
+- **AND** the system SHALL call `POST /clusters/{id}/test` which tests each node's connectivity
 
-#### Scenario: Delete cluster
+#### Scenario: Delete cluster with confirmation flow
 - **WHEN** the user clicks "删除集群" from the dropdown menu
-- **THEN** a confirmation dialog SHALL be shown
-- **AND** after confirmation the cluster SHALL be deleted
+- **THEN** the system SHALL fetch nodes and resource stats
+- **AND** SHALL show a confirmation dialog with resource counts, DB/Edge delete options, and node selection
+- **AND** SHALL require the user to type the cluster name to confirm
+- **AND** SHALL execute deletion with a progress modal
+- **AND** the delete flow SHALL reuse `showDeleteConfirm` and `executeDeleteWithProgress` from `useClusterUtils`

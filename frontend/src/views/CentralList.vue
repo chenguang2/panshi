@@ -241,44 +241,7 @@
       <a-empty description="暂无集群" />
     </div>
 
-    <a-modal v-model:open="modalVisible" :title="editingCluster ? '编辑集群' : '添加集群'" width="600px" @ok="handleSubmit">
-      <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="名称" name="name" :validate-status="nameError ? 'error' : ''" :help="nameError || '小写字母、数字、中划线组成，中划线不能在首尾'">
-          <a-input v-model:value="form.name" @blur="validateName" />
-        </a-form-item>
-        <a-form-item label="显示名称" name="display_name">
-          <a-input v-model:value="form.display_name" />
-        </a-form-item>
-        <a-form-item label="分组" name="group_name">
-          <a-select v-model:value="form.group_name">
-            <template #dropdownRender="{ menuNode }">
-              <div>
-                <component :is="menuNode" />
-                <a-divider style="margin: 4px 0" />
-                <div style="padding: 4px 8px; display: flex; gap: 4px;">
-                  <a-input v-model:value="newGroupName" placeholder="新建分组名称" size="small" @pressEnter="addNewGroup" />
-                  <a-button size="small" type="primary" @click="addNewGroup">添加</a-button>
-                </div>
-              </div>
-            </template>
-            <a-select-option value="">未分类</a-select-option>
-            <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="form.description" :rows="3" />
-        </a-form-item>
-        <a-form-item label="状态" name="status">
-          <a-select v-model:value="form.status">
-            <a-select-option :value="1">正常</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="Admin Key" name="admin_key">
-          <a-input-password v-model:value="form.admin_key" placeholder="Edge 节点 Admin API 密钥" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <ClusterFormModal :visible="modalVisible" :editing-cluster="editingCluster" :group-options="groupOptions" @close="modalVisible = false; editingCluster = null" @saved="modalVisible = false; editingCluster = null; loadClusters()" />
 
     <a-modal v-model:open="nodeModalVisible" :title="editingNode ? '编辑节点' : '添加节点'" width="500px" @ok="handleNodeSubmit">
       <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
@@ -320,13 +283,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, h } from 'vue'
+import { ref, reactive, computed, watch, onMounted, h, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PluginMetadata from '@/components/PluginMetadata.vue'
+import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
@@ -575,7 +540,6 @@ function onDragEnd(_event: DragEvent) {
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
 const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
-const nameError = ref('')
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
@@ -584,49 +548,14 @@ const versionModalResourceName = ref('')
 const versionModalEdgeUuid = ref('')
 
 const isAdmin = () => authStore.user?.role === 'admin'
-const NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
-
-const validateName = () => {
-  if (!form.name) {
-    nameError.value = '请输入集群名称'
-    return false
-  }
-  if (!NAME_PATTERN.test(form.name)) {
-    nameError.value = '集群名称只能包含小写字母、数字和中划线，中划线不能在首尾'
-    return false
-  }
-  nameError.value = ''
-  return true
-}
-
-const form = reactive({
-  name: '',
-  display_name: '',
-  group_name: '',
-  description: '',
-  status: 1,
-  admin_key: '',
-})
-
-const newGroupName = ref('')
-const pendingNewGroup = ref('')
 
 const groupOptions = computed(() => {
   const groups = new Set<string>()
   for (const c of clusters.value) {
     if (c.group_name) groups.add(c.group_name)
   }
-  if (pendingNewGroup.value) groups.add(pendingNewGroup.value)
   return Array.from(groups).sort()
 })
-
-const addNewGroup = () => {
-  const name = newGroupName.value.trim()
-  if (!name) return
-  pendingNewGroup.value = name
-  form.group_name = name
-  newGroupName.value = ''
-}
 
 // ── Shared state for composables ──
 const availablePlugins = ref<Plugin[]>([])
@@ -797,45 +726,12 @@ loadClustersFn = loadClusters
 
 const showAddModal = () => {
   editingCluster.value = null
-  Object.assign(form, {
-    name: '',
-    display_name: '',
-    group_name: '',
-    description: '',
-    status: 1,
-    admin_key: '',
-  })
-  nameError.value = ''
   modalVisible.value = true
 }
 
 const editCluster = (cluster: Cluster) => {
   editingCluster.value = cluster
-  form.name = cluster.name
-  form.display_name = cluster.display_name || ''
-  form.group_name = cluster.group_name || ''
-  form.description = cluster.description || ''
-  form.status = cluster.status
-  form.admin_key = (cluster as any).admin_key || ''
-  nameError.value = ''
   modalVisible.value = true
-}
-
-const handleSubmit = async () => {
-  if (!validateName()) return
-  try {
-    if (editingCluster.value) {
-      await api.put(`/clusters/${editingCluster.value.id}`, form)
-      message.success('集群已更新')
-    } else {
-      await api.post('/clusters', form)
-      message.success('集群已创建')
-    }
-    modalVisible.value = false
-    loadClusters()
-  } catch (error: any) {
-    message.error(error.response?.data?.detail || '操作失败')
-  }
 }
 
 
@@ -909,8 +805,21 @@ const deleteCluster = async (cluster: Cluster) => {
 // Wire showDeleteConfirm for route composable (must be after showDeleteConfirm definition)
 _showDeleteConfirmRoute = showDeleteConfirm
 
-onMounted(() => {
-  loadClusters()
+const centralRoute = useRoute()
+
+onMounted(async () => {
+  await loadClusters()
+  const editId = centralRoute.query.editClusterId
+  if (editId) {
+    const id = parseInt(editId as string, 10)
+    if (!isNaN(id)) {
+      const found = clusters.value.find(c => c.id === id)
+      if (found) {
+        await nextTick()
+        editCluster(found)
+      }
+    }
+  }
 })
 </script>
 

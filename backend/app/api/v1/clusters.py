@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
@@ -82,6 +83,10 @@ async def list_my_clusters(
         cluster_resp.global_rule_count = gr_result.scalar() or 0
         sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
         cluster_resp.static_resource_count = sr_result.scalar() or 0
+        pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == c.id))
+        cluster_resp.plugin_metadata_count = pm_result.scalar() or 0
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == c.id))
+        cluster_resp.nodes = nodes_result.scalars().all()
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
@@ -123,6 +128,10 @@ async def list_clusters(
         cluster_resp.global_rule_count = gr_result.scalar() or 0
         sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
         cluster_resp.static_resource_count = sr_result.scalar() or 0
+        pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == c.id))
+        cluster_resp.plugin_metadata_count = pm_result.scalar() or 0
+        nodes_result = await db.execute(select(Node).where(Node.cluster_id == c.id))
+        cluster_resp.nodes = nodes_result.scalars().all()
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
@@ -330,14 +339,41 @@ async def delete_cluster(
     return {"message": "Edge 节点数据已清理", "results": results}
 
 
+class TestConnectionRequest(BaseModel):
+    node_ids: List[int] = []
+
+
 @router.post("/{cluster_id}/test")
-async def test_connection(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = result.scalar_one_or_none()
     if not cluster:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
 
-    return {"status": "ok", "message": "连接测试成功"}
+    results: list[dict] = []
+    for node_id in req.node_ids:
+        node_result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
+        node = node_result.scalar_one_or_none()
+        if not node:
+            results.append({"node_id": node_id, "ip": "-", "port": 0, "ok": False, "msg": "节点不存在", "version": ""})
+            continue
+
+        port = node.management_port
+        try:
+            import asyncio
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(node.ip, port), timeout=5.0)
+            writer.close()
+            await writer.wait_closed()
+            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": True, "msg": "管理端口可达", "version": ""})
+        except asyncio.TimeoutError:
+            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": "连接超时", "version": ""})
+        except ConnectionRefusedError:
+            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": "连接被拒绝", "version": ""})
+        except OSError as e:
+            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": str(e)[:50], "version": ""})
+
+    return {"results": results}
 
 
 @router.post("/{cluster_id}/sync")

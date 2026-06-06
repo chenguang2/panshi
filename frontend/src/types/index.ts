@@ -46,6 +46,7 @@ export interface Cluster {
   plugin_config_count: number
   global_rule_count: number
   static_resource_count: number
+  plugin_metadata_count: number
   activeTab?: string
   nodes?: Node[]
   nodesLoading?: boolean

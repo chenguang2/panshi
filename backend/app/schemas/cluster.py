@@ -43,6 +43,16 @@ class ClusterUpdate(BaseModel):
         return v
 
 
+class ClusterNodeSchema(BaseModel):
+    id: int
+    ip: str
+    service_port: int = 80
+    status: int = 1
+
+    class Config:
+        from_attributes = True
+
+
 class ClusterResponse(BaseModel):
     id: int
     name: str
@@ -58,7 +68,9 @@ class ClusterResponse(BaseModel):
     route_count: int = 0
     plugin_config_count: int = 0
     global_rule_count: int = 0
+    plugin_metadata_count: int = 0
     static_resource_count: int = 0
+    nodes: List[ClusterNodeSchema] = []
 
     @field_validator('created_at', mode='before')
     @classmethod

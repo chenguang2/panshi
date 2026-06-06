@@ -54,6 +54,39 @@
 - **方案**: 实现 `cluster-grid` 多列卡片网格，卡片结构：标题头（显示名+分组名+状态）→ 描述 → 统计行（7 项）→ 节点标签 → 操作按钮（详情/编辑/测试/删除）
 - **理由**: 设计稿提供了完整的视觉参考，确保 UI 一致性
 
+### Decision 6: 编辑时 cluster name 不可修改
+
+- **方案**: 编辑弹窗中 name 字段禁用（readonly），仅新建时可填写
+- **理由**: name 是集群标识，修改会导致 API 引用断裂，与集中管理页面行为一致
+- **表单校验**: name 实时校验规则 `/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`，新建时实时反馈错误信息
+
+### Decision 7: 详情按钮打开详情弹窗
+
+- **方案**: 点击"详情"打开 Modal，展示集群基本信息（名称、显示名、分组、描述、状态、Admin Key、创建时间）+ 7 项资源统计网格 + 节点列表（IP:port 标签）
+- **参考**: `docs/ui/Live-Artifact-4/clusters.html` 的 detailModal 实现
+- **数据来源**: 直接使用卡片已有的 cluster 对象，无需额外 API 请求
+
+### Decision 8: 测试连接展示 Modal
+
+- **方案**: 点击"测试"打开 Modal，调用 `POST /clusters/{id}/test`，逐节点显示 IP:port 的连接状态（成功/失败）
+- **后端增强**: 当前 `test_connection` 端点为 stub，需改造为实际遍历节点检测连通性
+
+### Decision 9: 删除流程复用集中管理
+
+- **方案**: 直接复用 `useClusterUtils` 中的 `showDeleteConfirm` / `executeDeleteWithProgress`，以及 CentralList.vue 中的名称确认弹窗逻辑
+- **流程**: 点击删除 → 获取节点列表+资源统计 → showDeleteConfirm（资源概览 + DB/Edge选项）→ 输入名称确认 → executeDeleteWithProgress（进度弹窗）
+- **理由**: 与集中管理保持一致，避免重复实现
+
+### Decision 10: 分组展开/收起
+
+- **方案**: 支持分组展开/收起，分组标题头可点击切换，默认展开
+- **理由**: 集中管理已有此功能，统一交互体验
+
+### Decision 11: 不分页
+
+- **方案**: 一次加载所有集群（page_size=200），不实现分页
+- **理由**: 集群数量通常较少（<100），与集中管理一致
+
 ## Risks / Trade-offs
 
 - **[后端兼容性]** 新增 `plugin_metadata_count` 字段需要确保集中管理页面也能正常显示 → 字段默认值 0，前端 `?? 0` 兜底
