@@ -12,8 +12,8 @@
         <span class="search-icon">🔍</span>
       </div>
       <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;">
-        <option value="">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g || '未分类' }}</option>
+        <option value="__all__">全部分组</option>
+          <option v-for="g in groupOptions" :key="g" :value="g === '' ? '__ung__' : g">{{ g || '未分类' }}</option>
       </select>
       <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
       <button v-if="hasCollapsed" class="btn btn-secondary btn-sm" @click="expandAllGroups">全部展开</button>
@@ -178,7 +178,7 @@ const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
-const groupFilter = ref('')
+const groupFilter = ref('__all__')
 const expandedGroups = ref<Record<string, boolean>>({})
 
 const groupOptions = computed(() => {
@@ -192,7 +192,11 @@ const filteredClusters = computed(() => {
   let list = clusters.value
   const ft = filterText.value?.toLowerCase()
   if (ft) list = list.filter(c => c.name.toLowerCase().includes(ft) || (c.display_name || '').toLowerCase().includes(ft))
-  if (groupFilter.value) list = list.filter(c => (c.group_name || '') === groupFilter.value)
+  if (groupFilter.value === '__ung__') {
+    list = list.filter(c => !c.group_name)
+  } else if (groupFilter.value !== '__all__') {
+    list = list.filter(c => c.group_name === groupFilter.value)
+  }
   return list
 })
 
