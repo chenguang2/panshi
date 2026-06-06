@@ -2,7 +2,7 @@
   <div class="cluster-list">
     <div class="header-section">
       <div class="header-left">
-        <h2>集群管理</h2>
+        <h2>统一集中管理</h2>
         <div class="filter-bar">
           <a-input-search
             v-model:value="filterText"

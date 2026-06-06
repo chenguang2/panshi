@@ -60,7 +60,7 @@ const themeStore = useThemeStore()
 
 const routeNameMap: Record<string, string> = {
   Dashboard: '仪表盘',
-  CentralManagement: '集中管理',
+  CentralManagement: '统一集中管理',
   ClusterList: '集群管理',
   NodeList: '节点管理',
   Users: '用户管理',
