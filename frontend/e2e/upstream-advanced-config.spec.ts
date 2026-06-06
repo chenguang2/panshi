@@ -10,7 +10,7 @@ test.describe('Upstream 高级配置', () => {
   });
 
   async function navigateToUpstreamTab(page: any) {
-    await page.goto('/clusters');
+    await page.goto('/central-management');
     await page.waitForTimeout(2000);
 
     const firstCard = page.locator('.cluster-grid .cluster-card').first();

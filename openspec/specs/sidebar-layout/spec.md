@@ -10,7 +10,11 @@ The system SHALL provide a left-side vertical navigation bar replacing the exist
 
 #### Scenario: Sidebar displays navigation items
 - **WHEN** the user loads any page under the authenticated layout
-- **THEN** the sidebar SHALL display the following navigation items: 仪表盘, 集群管理, 边缘节点, Edge 数据导入, 工具箱, 用户管理 (for admin only)
+- **THEN** the sidebar SHALL display the following sections and navigation items:
+  - **核心功能**: 仪表盘, 节点管理, 上游管理, 路由管理, 插件组, 全局规则, 插件元数据, 静态资源
+  - **综合**: 集中管理
+  - **系统管理** (admin only): 插件开关, 用户管理
+  - **Edge功能** (permission-based): 边缘节点, 数据导入, 工具箱
 - **AND** the current active page SHALL be highlighted in the sidebar
 
 #### Scenario: Sidebar collapse/expand

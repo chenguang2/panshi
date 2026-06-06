@@ -96,6 +96,12 @@ const navSections = computed<NavSection[]>(() => {
       ]
     },
     {
+      title: '综合',
+      items: [
+        { label: '集中管理', route: '/central-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg>' },
+      ]
+    },
+    {
       title: '系统管理',
       visible: authStore.user?.role === 'admin',
       items: [
@@ -114,7 +120,8 @@ const navSections = computed<NavSection[]>(() => {
 function isActive(item: NavItem): boolean {
   const name = route.name as string
   if (item.route === '/') return name === 'Dashboard' || !name
-  if (item.route === '/clusters') return name === 'Clusters'
+  if (item.route === '/central-management') return name === 'CentralManagement'
+  if (item.route === '/clusters') return name === 'ClusterList'
   if (item.route === '/users') return name === 'Users'
   if (item.route === '/edge-client') return name === 'EdgeClient'
   if (item.route === '/edge-import') return name === 'EdgeImport'

@@ -24,8 +24,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/UserList.vue')
       },
       {
+        path: 'central-management',
+        name: 'CentralManagement',
+        component: () => import('@/views/CentralList.vue'),
+      },
+      {
         path: 'clusters',
-        name: 'Clusters',
+        name: 'ClusterList',
         component: () => import('@/views/ClusterList.vue'),
       },
       {

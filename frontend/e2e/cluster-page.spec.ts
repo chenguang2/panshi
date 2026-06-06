@@ -17,7 +17,7 @@ test.describe('Cluster page loads correctly', () => {
     await page.waitForTimeout(2000)
 
     // Navigate to clusters
-    await page.goto('http://localhost:9100/clusters')
+    await page.goto('http://localhost:9100/central-management')
     await page.waitForTimeout(3000)
 
     await expect(page.locator('.vite-error-overlay')).toHaveCount(0, { timeout: 3000 })

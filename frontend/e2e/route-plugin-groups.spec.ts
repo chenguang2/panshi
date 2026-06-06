@@ -7,7 +7,7 @@ test.describe('路由插件组 - 存盘验证', () => {
     await page.fill('#password', 'panshi123');
     await page.click('button[type="submit"]');
     await page.waitForTimeout(2000);
-    await page.goto('/clusters');
+    await page.goto('/central-management');
     await page.waitForTimeout(2000);
     await page.locator('.cluster-grid .cluster-card').first().waitFor({ timeout: 10000 });
   });
