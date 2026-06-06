@@ -4,25 +4,25 @@
 
     <div class="stats-grid">
       <StatCard :value="String(stats.clusters)" label="集群" subtitle="多集群管理" accent="cluster">
-        <template #icon><span class="stat-icon cluster">&#x25C6;</span></template>
+        <template #icon><span class="stat-icon cluster"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="5" y="8" width="8" height="3" rx="1"/><rect x="6" y="13" width="6" height="3" rx="1"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.routes)" label="路由" subtitle="API 路由规则" accent="route">
-        <template #icon><span class="stat-icon route">&#x25C7;</span></template>
+        <template #icon><span class="stat-icon route"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.upstreams)" label="上游" subtitle="后端服务" accent="upstream">
-        <template #icon><span class="stat-icon upstream">&#x25CE;</span></template>
+        <template #icon><span class="stat-icon upstream"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.plugin_configs)" label="插件组" subtitle="插件配置" accent="plugin">
-        <template #icon><span class="stat-icon plugin">&#x25B2;</span></template>
+        <template #icon><span class="stat-icon plugin"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h10v10H6V3z"/><path d="M3 6h3v10H3V6z"/><path d="M6 6l3 3M6 9l3-3M9 6l3 3M9 9l3-3"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.global_rules)" label="全局规则" subtitle="全局插件规则" accent="global">
-        <template #icon><span class="stat-icon global">&#x229E;</span></template>
+        <template #icon><span class="stat-icon global"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.static_resources)" label="静态资源" subtitle="ZIP 资源文件" accent="node">
-        <template #icon><span class="stat-icon resource">&#x25A3;</span></template>
+        <template #icon><span class="stat-icon resource"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h4l4 4v9a1 1 0 01-1 1H6a1 1 0 01-1-1V3z"/><path d="M10 2v4h4"/></svg></span></template>
       </StatCard>
       <StatCard :value="String(stats.users)" label="用户" subtitle="系统用户" accent="user">
-        <template #icon><span class="stat-icon user">&#x25A0;</span></template>
+        <template #icon><span class="stat-icon user"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg></span></template>
       </StatCard>
     </div>
 
@@ -135,8 +135,10 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
+}
+.stat-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .stat-icon.cluster { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
