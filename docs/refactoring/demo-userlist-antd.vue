@@ -144,132 +144,144 @@
     </a-table>
     <!-- ↑↑↑ 改这里 ↑↑↑ -->
 
-    <!-- 新建/编辑用户弹窗（与节点弹窗风格一致） -->
-    <div class="modal-overlay" :style="{ display: modalVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide">
-        <div class="modal-header">
-          <h2>{{ editingUser ? '编辑用户 — ' + editingUser.username : '新建用户' }}</h2>
-          <button class="modal-close" @click="closeModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">用户名 <span class="required">*</span></label>
-              <input v-model="formState.username" type="text" class="form-input" placeholder="newuser" :disabled="!!editingUser">
-            </div>
-            <div class="form-group">
-              <label class="form-label">角色</label>
-              <select v-model="formState.role" class="form-input" @change="onRoleChange">
-                <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
-            </div>
+    <!-- ↓↓↓ 改这里：裸 .modal-overlay → <a-modal> ↓↓↓ -->
+    <a-modal
+      v-model:visible="modalVisible"
+      :title="editingUser ? `编辑用户 — ${editingUser.username}` : '新建用户'"
+      :width="640"
+      :confirm-loading="modalSubmitting"
+      ok-text="保存"
+      @ok="handleSave"
+      @cancel="closeModal"
+      destroy-on-close
+    >
+      <a-form
+        ref="formRef"
+        :model="formState"
+        :rules="formRules"
+        layout="vertical"
+      >
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <a-form-item name="username" label="用户名">
+              <a-input
+                v-model:value="formState.username"
+                placeholder="newuser"
+                :disabled="!!editingUser"
+              />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item name="role" label="角色">
+              <a-select v-model:value="formState.role" @change="onRoleChange">
+                <a-select-option value="user">普通用户</a-select-option>
+                <a-select-option value="admin">管理员</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+
+        <a-form-item v-if="!editingUser" name="password" label="密码">
+          <a-input-password v-model:value="formState.password" placeholder="6-50 位字符" />
+        </a-form-item>
+
+        <a-form-item name="status">
+          <a-checkbox v-model:checked="formState.status">启用</a-checkbox>
+        </a-form-item>
+
+        <!-- 资源权限（非管理员） -->
+        <template v-if="formState.role !== 'admin'">
+          <a-divider />
+          <h3>资源权限</h3>
+          <p class="text-muted text-sm" style="margin-bottom:8px;">分配用户可操作的资源模块</p>
+          <a-checkbox-group v-model:value="selectedPermKeys">
+            <a-row :gutter="[8, 8]">
+              <a-col v-for="perm in allPermissions" :key="perm.key" :span="12">
+                <a-checkbox :value="perm.key">{{ perm.label }}</a-checkbox>
+              </a-col>
+            </a-row>
+          </a-checkbox-group>
+        </template>
+
+        <!-- 集群权限（非管理员） -->
+        <template v-if="formState.role !== 'admin'">
+          <a-divider />
+          <h3>集群权限</h3>
+          <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
+          <div class="selected-clusters">
+            <a-tag
+              v-for="cid in selectedClusterIds"
+              :key="cid"
+              closable
+              @close="toggleCluster(cid)"
+            >{{ getClusterName(cid) }}</a-tag>
+            <span v-if="!selectedClusterIds.length" class="text-muted text-sm">暂未选择集群</span>
+            <a-button type="dashed" size="small" @click="clusterPickerVisible = true">+ 选择集群</a-button>
           </div>
+        </template>
 
-          <div v-if="!editingUser" class="form-group">
-            <label class="form-label">密码 <span class="required">*</span></label>
-            <input v-model="formState.password" type="password" class="form-input" placeholder="6-50 位字符">
-          </div>
-
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input v-model="formState.status" type="checkbox">
-              <span>启用</span>
-            </label>
-          </div>
-
-          <!-- 资源权限（非管理员） -->
-          <template v-if="formState.role !== 'admin'">
-            <div class="permissions-section">
-              <h3>资源权限</h3>
-              <p class="text-muted text-sm" style="margin-bottom:8px;">分配用户可操作的资源模块</p>
-              <div class="perm-grid">
-                <label v-for="perm in allPermissions" :key="perm.key">
-                  <input type="checkbox" :checked="selectedPermKeys.includes(perm.key)" @change="togglePerm(perm.key)">
-                  <span>{{ perm.label }}</span>
-                </label>
-              </div>
-            </div>
-          </template>
-
-          <!-- 集群权限（非管理员） -->
-          <template v-if="formState.role !== 'admin'">
-            <div class="permissions-section">
-              <h3>集群权限</h3>
-              <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
-              <div class="selected-clusters">
-                <span v-for="cid in selectedClusterIds" :key="cid" class="selected-cluster-tag">
-                  {{ getClusterName(cid) }}
-                  <span class="remove" @click="toggleCluster(cid)">&times;</span>
-                </span>
-                <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding:4px 0;">暂未选择集群</span>
-                <span class="select-clusters-btn" @click="clusterPickerVisible = true">+ 选择集群</span>
-              </div>
-            </div>
-          </template>
-
-          <!-- 密码重置（编辑模式） -->
-          <template v-if="editingUser">
-            <div class="password-section">
-              <h3>重置密码</h3>
-              <div class="form-row" style="display:flex;gap:12px;">
-                <div class="form-group" style="flex:0 0 auto;margin-bottom:0;">
-                  <input v-model="resetPwdValue" type="password" class="form-input" placeholder="新密码（留空不修改）" style="width:200px">
-                </div>
-                <div style="display:flex;align-items:flex-end;flex-shrink:0;">
-                  <button class="btn btn-secondary btn-sm" style="height:36px;" @click="handleResetPassword">重置密码</button>
-                </div>
-              </div>
-            </div>
-          </template>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeModal">取消</button>
-          <button class="btn btn-primary" @click="handleSave" :disabled="modalSubmitting">{{ modalSubmitting ? '提交中...' : '保存' }}</button>
-        </div>
-      </div>
-    </div>
+        <!-- 密码重置（编辑模式） -->
+        <template v-if="editingUser">
+          <a-divider />
+          <h3>重置密码</h3>
+          <a-row :gutter="12" align="middle">
+            <a-col flex="200px">
+              <a-input-password v-model:value="resetPwdValue" placeholder="新密码（留空不修改）" />
+            </a-col>
+            <a-col flex="auto">
+              <a-button @click="handleResetPassword" :disabled="!resetPwdValue">重置密码</a-button>
+            </a-col>
+          </a-row>
+        </template>
+      </a-form>
+    </a-modal>
+    <!-- ↑↑↑ 改这里 ↑↑↑ -->
 
     <!-- Cluster Picker Modal -->
-    <div v-if="clusterPickerVisible" class="modal-overlay" @click.self="clusterPickerVisible = false">
-      <div class="modal picker-modal">
-        <div class="modal-header">
-          <h2>选择集群</h2>
-          <button class="modal-close" @click="clusterPickerVisible = false">&times;</button>
+    <a-modal
+      v-model:visible="clusterPickerVisible"
+      title="选择集群"
+      :width="640"
+      @ok="clusterPickerVisible = false"
+      @cancel="clusterPickerVisible = false"
+    >
+      <a-input
+        v-model:value="clusterSearchText"
+        placeholder="搜索集群名称..."
+        allow-clear
+        style="margin-bottom: 16px;"
+      />
+      <div v-for="group in filteredGroupedClusters" :key="group.name" class="picker-group">
+        <div class="picker-group-header">
+          <a-checkbox
+            :checked="isGroupAllSelected(group.clusters)"
+            @change="toggleGroup(group.clusters)"
+          >
+            <span>{{ group.name }}</span>
+            <span class="group-count">{{ group.clusters.length }} 个集群</span>
+          </a-checkbox>
         </div>
-        <div class="modal-body">
-          <div class="picker-search">
-            <input v-model="clusterSearchText" type="text" placeholder="搜索集群名称...">
-          </div>
-          <div v-for="group in filteredGroupedClusters" :key="group.name" class="picker-group">
-            <div class="picker-group-header" @click="toggleGroup(group.clusters)">
-              <input type="checkbox" class="group-checkbox" :checked="isGroupAllSelected(group.clusters)" @click.stop="toggleGroup(group.clusters)">
-              <span>{{ group.name }}</span>
-              <span class="group-count">{{ group.clusters.length }} 个集群</span>
-            </div>
-            <div class="picker-group-body">
-              <label v-for="c in group.clusters" :key="c.id" class="picker-cluster-item">
-                <input type="checkbox" :checked="isClusterSelected(c.id)" @change="toggleCluster(c.id)">
-                <span class="picker-cluster-name">{{ c.display_name || c.name }}</span>
-                <span v-if="c.display_name" class="picker-cluster-tag">{{ c.name }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <div class="picker-actions">
-          <span style="font-size:12px;color:var(--muted);margin-right:auto;">已选 {{ selectedClusterIds.length }} 个集群</span>
-          <button class="btn btn-secondary" @click="clusterPickerVisible = false">取消</button>
-          <button class="btn btn-primary" @click="clusterPickerVisible = false">确认</button>
+        <div class="picker-group-body">
+          <a-checkbox
+            v-for="c in group.clusters"
+            :key="c.id"
+            :checked="isClusterSelected(c.id)"
+            @change="toggleCluster(c.id)"
+          >
+            <span class="picker-cluster-name">{{ c.display_name || c.name }}</span>
+            <span v-if="c.display_name" class="picker-cluster-tag">{{ c.name }}</span>
+          </a-checkbox>
         </div>
       </div>
-    </div>
+      <div class="picker-footer-info">已选 {{ selectedClusterIds.length }} 个集群</div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
+import type { FormInstance, TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -375,6 +387,7 @@ function getUserClusterIds(record: UserWithExt): number[] {
 }
 
 // ── Form ──────────────────────────────────────────────────────────────────
+const formRef = ref<FormInstance>()
 const modalVisible = ref(false)
 const modalSubmitting = ref(false)
 const editingUser = ref<UserWithExt | null>(null)
@@ -392,6 +405,17 @@ const formState = reactive<UserForm>({
   status: true,
 })
 
+const formRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { whitespace: true, message: '用户名不能为空', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少 6 位字符', trigger: 'blur' },
+  ],
+}
+
 const allPermissions = [
   { key: 'plugin_groups', label: '插件组管理' },
   { key: 'global_rules', label: '全局规则管理' },
@@ -400,12 +424,6 @@ const allPermissions = [
 ]
 
 const selectedPermKeys = ref<string[]>([])
-
-function togglePerm(key: string) {
-  const idx = selectedPermKeys.value.indexOf(key)
-  if (idx >= 0) selectedPermKeys.value.splice(idx, 1)
-  else selectedPermKeys.value.push(key)
-}
 
 function onRoleChange() {
   if (formState.role === 'admin') {
@@ -444,6 +462,7 @@ function closeModal() {
 }
 
 async function handleSave() {
+  // <a-form> 自动验证, 但我们还需要自定义 check
   if (!formState.username.trim()) {
     message.error('请输入用户名')
     return
@@ -646,259 +665,7 @@ onMounted(loadUsers)
 .text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
 
-/* ── Modal（与节点弹窗风格一致） ── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: oklch(0% 0 0 / 40%);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-wide { max-width: 700px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: oklch(56% 0.16 210 / 10%);
-}
-.modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.modal-close {
-  width: 28px; height: 28px;
-  border: none; background: transparent;
-  font-size: 20px; cursor: pointer;
-  color: var(--muted); border-radius: var(--radius-sm);
-}
-.modal-close:hover { background: var(--bg); color: var(--fg); }
-
-.modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
-
-.form-group { flex: 1; margin-bottom: 16px; }
-
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.required { color: var(--danger); }
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-  cursor: pointer;
-}
-.checkbox-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
-.permissions-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.permissions-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--fg);
-}
-
-.perm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-  margin-top: 8px;
-}
-.perm-grid label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  color: var(--muted);
-}
-.perm-grid label:hover { color: var(--fg); }
-
-.password-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.password-section h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 8px;
-  color: var(--fg);
-}
-
-/* ── 选中集群标签 ── */
-.selected-clusters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  min-height: 28px;
-  align-items: center;
-}
-.selected-cluster-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent);
-}
-.selected-cluster-tag .remove {
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.5;
-}
-.selected-cluster-tag .remove:hover { opacity: 1; }
-.select-clusters-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  background: transparent;
-  transition: all 0.15s;
-  height: 28px;
-}
-.select-clusters-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/* ── Picker 模式（与节点弹窗一致） ── */
-.picker-modal { max-width: 640px; }
-.picker-search { margin-bottom: 16px; }
-.picker-search input {
-  width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 13px;
-  outline: none;
-  background: var(--bg);
-  color: var(--fg);
-}
-.picker-search input:focus { border-color: var(--accent); }
-.picker-group {
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.picker-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg);
-  user-select: none;
-  border-bottom: 1px solid var(--border);
-}
-.picker-group-header:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.picker-group-header .group-checkbox {
-  width: 16px; height: 16px;
-  accent-color: var(--accent);
-}
-.picker-group-header .group-count {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 400;
-}
-.picker-group-body {
-  padding: 6px 14px 10px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 4px;
-}
-.picker-cluster-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--fg);
-  transition: background 0.1s;
-}
-.picker-cluster-item:hover { background: var(--bg); }
-.picker-cluster-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); }
-.picker-cluster-name { font-weight: 500; }
-.picker-cluster-tag { font-size: 10px; color: var(--muted); margin-left: auto; font-family: var(--font-mono); }
-.picker-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-
-/* a-table 样式覆写 */
+/* a-table 样式覆写（需要和 style.css 全局主题配合） */
 .user-table :deep(.ant-table-thead > tr > th) {
   background: oklch(97% 0.005 250);
   font-size: 11px;
@@ -968,6 +735,65 @@ onMounted(loadUsers)
 /* 空状态 */
 .empty-state { text-align: center; color: var(--muted); padding: 32px; }
 .empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+
+/* 集群选择器 */
+.selected-clusters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  min-height: 28px;
+  align-items: center;
+}
+
+/* Picker 集群分组 */
+.picker-group {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.picker-group-header {
+  padding: 10px 14px;
+  background: var(--bg);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.picker-group-header:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.picker-group-body {
+  padding: 6px 14px 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px;
+}
+.group-count {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.picker-cluster-name { font-weight: 500; }
+.picker-cluster-tag {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 4px;
+  font-family: var(--font-mono);
+}
+.picker-footer-info {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 12px;
+}
+
+/* a-modal 里的标题 */
+:deep(.ant-modal-body h3) {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--fg);
+}
 
 @media (max-width: 768px) {
   .user-filter-bar { flex-direction: column; align-items: stretch; }

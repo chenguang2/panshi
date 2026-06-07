@@ -2,11 +2,16 @@
   <div class="route-list">
     <PageHeader title="路由管理" description="管理 API 路由规则，配置请求匹配、转发目标和插件">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="width:160px;height:32px;font-size:12px;" @change="loadRoutes">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
-        <button class="btn btn-primary" @click="openCreateModal">+ 新建路由</button>
+        <a-select
+          v-model:value="clusterFilter"
+          placeholder="全部集群"
+          allow-clear
+          style="width:160px;"
+          @change="loadRoutes"
+        >
+          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
+        </a-select>
+        <a-button type="primary" @click="openCreateModal">+ 新建路由</a-button>
       </template>
     </PageHeader>
 
@@ -17,74 +22,93 @@
         @click="activeMethod = m.value; loadRoutes()">{{ m.label }}</span>
     </div>
 
-    <!-- Filter bar -->
     <div class="route-filter-bar">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索名称、URI、描述..." class="form-input" @input="onSearch">
-        <span class="search-icon">🔍</span>
-      </div>
-      <select v-model="publishFilter" class="form-input" style="width:130px;height:32px;font-size:12px;" @change="loadRoutes">
-        <option value="">全部状态</option>
-        <option value="published">已发布</option>
-        <option value="unpublished">未发布</option>
-      </select>
+      <a-input
+        v-model:value="searchText"
+        placeholder="搜索名称、URI、描述..."
+        allow-clear
+        style="width:220px;"
+        @change="onSearch"
+      />
+      <a-select
+        v-model:value="publishFilter"
+        placeholder="全部状态"
+        allow-clear
+        style="width:130px;"
+        @change="loadRoutes"
+      >
+        <a-select-option value="published">已发布</a-select-option>
+        <a-select-option value="unpublished">未发布</a-select-option>
+      </a-select>
       <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
     </div>
 
-    <!-- Table -->
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:30px;"><input type="checkbox"></th>
-            <th>名称</th>
-            <th>URI</th>
-            <th>方法</th>
-            <th>集群</th>
-            <th>优先级</th>
-            <th>版本</th>
-            <th>创建时间</th>
-            <th style="width:80px;">操作</th>
-          </tr>
-        </thead>
-        <tbody v-if="routes.length === 0">
-          <tr><td colspan="9"><div class="empty-state" style="padding:32px;"><div class="empty-state-icon">◇</div><p>暂无路由规则</p></div></td></tr>
-        </tbody>
-        <tbody v-else>
-          <tr v-for="record in routes" :key="record.id">
-            <td><input type="checkbox"></td>
-            <td><div class="cell-primary">{{ record.name }}</div><div class="cell-secondary">{{ record.description || '-' }}</div></td>
-            <td><span class="uri-cell">{{ record.uri }}</span></td>
-            <td><span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span></td>
-            <td>{{ record.cluster_name || '-' }}</td>
-            <td><span class="priority-badge">{{ record.priority }}</span></td>
-            <td><span class="text-mono text-sm">v{{ record.current_version || '-' }}</span></td>
-            <td><span class="cell-secondary">{{ formatDate(record.created_at) }}</span></td>
-            <td>
-              <div class="action-menu">
-                <button class="action-btn" @click.stop="toggleMenu(record.id)">⋯</button>
-                <div class="action-dropdown" :class="{ open: openMenuId === record.id }">
-                  <button class="action-dropdown-item" @click="copyRoute(record)">复制路由</button>
-                  <button class="action-dropdown-item" @click="editRoute(record)">编辑</button>
-                  <button class="action-dropdown-item" @click="publishRoute(record)">发布</button>
-                  <button class="action-dropdown-item" @click="openVersionManagement(record)">版本管理</button>
-                  <button class="action-dropdown-item danger" @click="deleteRoute(record)">删除</button>
-                </div>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <a-table
+      :data-source="routes"
+      :columns="columns"
+      :row-key="(record: any) => record.id"
+      :pagination="{
+        current: page,
+        pageSize,
+        total: totalCount,
+        showSizeChanger: true,
+        showTotal: (total: number) => `共 ${total} 条路由`,
+        pageSizeOptions: ['10', '20', '50'],
+      }"
+      :loading="loading"
+      size="middle"
+      class="route-table"
+      @change="handleTableChange"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'name'">
+          <div class="cell-primary">{{ record.name }}</div>
+          <div class="cell-secondary">{{ record.description || '-' }}</div>
+        </template>
 
-    <div class="table-footer">
-      <span class="text-muted text-sm">第 {{ page }} 页，共 {{ totalPages }} 页</span>
-      <div class="pagination">
-        <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">‹</button>
-        <button v-for="p in pageNumbers" :key="p" class="btn btn-sm" :class="{ 'btn-primary': p === page }" @click="goPage(p)">{{ p }}</button>
-        <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">›</button>
-      </div>
-    </div>
+        <template v-if="column.key === 'uri'">
+          <span class="uri-cell">{{ record.uri }}</span>
+        </template>
+
+        <template v-if="column.key === 'methods'">
+          <span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span>
+        </template>
+
+        <template v-if="column.key === 'priority'">
+          <span class="priority-badge">{{ record.priority }}</span>
+        </template>
+
+        <template v-if="column.key === 'version'">
+          <span class="text-mono text-sm">v{{ record.current_version || '-' }}</span>
+        </template>
+
+        <template v-if="column.key === 'created_at'">
+          <span class="cell-secondary">{{ formatDate(record.created_at) }}</span>
+        </template>
+
+        <template v-if="column.key === 'actions'">
+          <a-dropdown :trigger="['click']">
+            <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
+                <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
+                <a-menu-item @click="publishRoute(record)">发布</a-menu-item>
+                <a-menu-item @click="openVersionManagement(record)">版本管理</a-menu-item>
+                <a-menu-item danger @click="deleteRoute(record)">删除</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+        </template>
+      </template>
+
+      <template #empty>
+        <div class="empty-state">
+          <div class="empty-state-icon">◇</div>
+          <p>暂无路由规则</p>
+        </div>
+      </template>
+    </a-table>
 
     <RouteFormModal :visible="formModalVisible" :editing-route="editingRoute" :copying-route="isCopy" :clusters="clusters" @close="closeFormModal" @saved="onSaved" />
     <VersionManagementModal v-model:open="vmVisible" resource-type="route" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadRoutes" @published="loadRoutes" />
@@ -93,8 +117,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteFormModal from '@/components/RouteFormModal.vue'
@@ -102,16 +127,16 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 
+const loading = ref(false)
 const routes = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
-const clusterFilter = ref('')
+const clusterFilter = ref<string | undefined>(undefined)
 const activeMethod = ref('')
-const publishFilter = ref('')
-const openMenuId = ref<number | null>(null)
+const publishFilter = ref<string | undefined>(undefined)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const formModalVisible = ref(false)
@@ -125,6 +150,17 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
+const columns = [
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
+  { title: 'URI', key: 'uri' },
+  { title: '方法', key: 'methods' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '优先级', key: 'priority' },
+  { title: '版本', key: 'version' },
+  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || '') },
+  { title: '操作', key: 'actions', width: 80 },
+]
+
 const methodFilters = [
   { label: '全部', value: '' },
   { label: 'GET', value: 'GET' },
@@ -136,28 +172,24 @@ const methodFilters = [
   { label: 'TRACE', value: 'TRACE' },
 ]
 
-const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
-const pageNumbers = computed(() => {
-  const pages: number[] = []
-  const start = Math.max(1, page.value - 2)
-  const end = Math.min(totalPages.value, page.value + 2)
-  for (let i = start; i <= end; i++) pages.push(i)
-  return pages
-})
-
 function formatDate(d: string) {
   if (!d) return '-'
   try { return new Date(d).toLocaleDateString('zh-CN') } catch { return d }
 }
 
-function toggleMenu(id: number) { openMenuId.value = openMenuId.value === id ? null : id }
 function onSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => { page.value = 1; loadRoutes() }, 300)
 }
-function goPage(p: number) { page.value = p; loadRoutes() }
+
+function handleTableChange(pagination: TablePaginationConfig) {
+  page.value = pagination.current || 1
+  if (pagination.pageSize) pageSize.value = pagination.pageSize
+  loadRoutes()
+}
 
 async function loadRoutes() {
+  loading.value = true
   try {
     const params: any = { page: page.value, page_size: pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
@@ -168,6 +200,7 @@ async function loadRoutes() {
     routes.value = res.data.items || []
     totalCount.value = res.data.total || 0
   } catch { message.error('加载路由列表失败') }
+  finally { loading.value = false }
 }
 
 async function loadClusters() {
@@ -182,7 +215,7 @@ function editRoute(r: any) { editingRoute.value = r; isCopy.value = false; formM
 function closeFormModal() { formModalVisible.value = false; editingRoute.value = null; isCopy.value = false }
 function onSaved() { loadRoutes(); closeFormModal() }
 
-async function copyRoute(r: any) {
+function copyRoute(r: any) {
   editingRoute.value = r; isCopy.value = true; formModalVisible.value = true
 }
 
@@ -197,7 +230,6 @@ async function onPublish(nodeIds: number[]) {
 }
 
 async function deleteRoute(r: any) {
-  // Load cluster nodes for delete options
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
     const res = await api.get(`/clusters/${r.cluster_id}/nodes`)
@@ -226,17 +258,18 @@ function openVersionManagement(r: any) {
   vmId.value = r.id; vmClusterId.value = r.cluster_id; vmName.value = r.name; vmVisible.value = true
 }
 
-function closeMenu(e: MouseEvent) {
-  if (!(e.target as HTMLElement).closest('.action-menu')) openMenuId.value = null
-}
-
-onMounted(() => { loadClusters(); loadRoutes(); document.addEventListener('click', closeMenu) })
-onUnmounted(() => { document.removeEventListener('click', closeMenu) })
+onMounted(() => { loadClusters(); loadRoutes() })
 </script>
 
 <style scoped>
 .route-list { padding: 20px 24px; }
 .route-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.text-muted { color: var(--muted); }
+.text-sm { font-size: 12px; }
+.text-mono { font-family: var(--font-mono); }
+.cell-primary { font-weight: 600; color: var(--fg); }
+.cell-secondary { font-size: 12px; color: var(--muted); }
+
 .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filter-chip {
   padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer;
@@ -245,6 +278,7 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
 }
 .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
 .filter-chip.active { background: oklch(56% 0.16 210 / 10%); border-color: var(--accent); color: var(--accent); }
+
 .method-tag {
   display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 600;
   font-family: var(--font-mono); margin-right: 2px; background: var(--bg); border: 1px solid var(--border);
@@ -256,27 +290,32 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
 .method-tag.PATCH { border-color: oklch(55% 0.12 240 / 30%); color: var(--info); }
 .method-tag.CONNECT { border-color: oklch(55% 0.15 280 / 30%); color: oklch(55% 0.15 280); }
 .method-tag.TRACE { border-color: oklch(55% 0.10 200 / 30%); color: oklch(55% 0.10 200); }
+
 .priority-badge { font-family: var(--font-mono); font-size: 11px; }
 .uri-cell { font-family: var(--font-mono); font-size: 12px; }
-.text-mono { font-family: var(--font-mono); }
-.text-sm { font-size: 12px; }
-.cell-primary { font-weight: 600; color: var(--fg); }
-.cell-secondary { font-size: 12px; color: var(--muted); }
-.table-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: visible; box-shadow: var(--shadow-sm); }
-table { width: 100%; border-collapse: collapse; }
-thead th { background: oklch(97% 0.005 250); padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; user-select: none; }
-tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
-tbody tr:last-child { border-bottom: none; }
-tbody tr:hover { background: oklch(97% 0.005 250 / 60%); }
-tbody td { padding: 12px 16px; font-size: 13px; vertical-align: middle; }
-.action-menu { position: relative; display: inline-block; z-index: 10; }
-.action-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 16px; }
-.action-btn:hover { background: var(--bg); color: var(--fg); }
-.action-dropdown { position: absolute; right: 0; top: 100%; z-index: 1000; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); min-width: 150px; padding: 4px; display: none; }
-.action-dropdown.open { display: block; }
-.action-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); font-size: 13px; color: var(--fg); cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; font-family: var(--font-body); }
-.action-dropdown-item:hover { background: var(--bg); }
-.action-dropdown-item.danger { color: var(--danger); }
-.table-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.pagination { display: flex; gap: 4px; align-items: center; }
+
+.route-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(97% 0.005 250);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+}
+.route-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.action-trigger-btn {
+  border: none !important;
+  background: transparent !important;
+  font-size: 16px !important;
+  color: var(--muted) !important;
+}
+
+.empty-state { text-align: center; color: var(--muted); padding: 32px; }
+.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
 </style>

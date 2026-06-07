@@ -1,5 +1,5 @@
-import { h } from 'vue'
-import { message, Modal, Progress } from 'ant-design-vue'
+import { h, render } from 'vue'
+import { message, Progress } from 'ant-design-vue'
 import api from '@/api'
 
 export const resourceLabels: Record<string, string> = {
@@ -23,103 +23,115 @@ export function showDeleteConfirm(opts: {
   let deleteDb = false
   let deleteEdge = false
   const selectedNodeIds: Set<number> = new Set()
-  let confirmModal: any
+  let okDisabled = true
+
+  const container = document.createElement('div')
+  document.body.appendChild(container)
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
 
   const updateOkDisabled = () => {
-    const atLeastOne = deleteDb || (deleteEdge && selectedNodeIds.size > 0)
-    confirmModal.update({ okButtonProps: { disabled: !atLeastOne } })
+    okDisabled = !(deleteDb || (deleteEdge && selectedNodeIds.size > 0))
   }
 
-  const toggleNodeSection = () => {
-    const wrap = document.querySelector('.ant-modal-confirm')
-    if (!wrap) return
-    const section = wrap.querySelector('.delete-node-section') as HTMLElement
-    if (section) section.style.display = deleteEdge ? 'block' : 'none'
+  const close = () => {
+    render(null, container)
+    container.remove()
   }
 
-  const nodeCheckboxContent = (opts.nodes && opts.nodes.length > 0) ? h('div', {
-    class: 'delete-node-section',
-    style: 'margin-top: 8px; margin-left: 24px; border-left: 2px solid #e8e8e8; padding-left: 12px; display: none;',
-  }, [
-    h('div', { style: 'font-size: 12px; color: #666; margin-bottom: 4px;' }, '选择要删除的 Edge 节点：'),
-    ...opts.nodes.map(n =>
-      h('label', { style: 'display: flex; align-items: center; gap: 6px; margin-bottom: 4px; cursor: pointer; font-size: 13px;' }, [
-        h('input', {
-          type: 'checkbox', checked: selectedNodeIds.has(n.id),
-          onInput: (e: any) => {
-            if (e.target.checked) selectedNodeIds.add(n.id)
-            else selectedNodeIds.delete(n.id)
-            updateOkDisabled()
-          },
-          style: 'width: 14px; height: 14px; cursor: pointer;',
-        }),
-        h('span', {}, `${n.ip}:${n.management_port}`),
-      ])
-    ),
-  ]) : null
+  const renderModal = () => {
+    const statsSection = (opts.showResourceStats && opts.stats) ? h('div', {
+      style: 'background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;margin-bottom:12px;font-size:12px;',
+    }, [
+      h('div', { style: 'font-weight:600;margin-bottom:6px;color:var(--fg);' }, '集群资源清单'),
+      ...Object.entries(opts.stats).map(([k, v]) =>
+        h('div', { style: 'display:flex;justify-content:space-between;padding:2px 0;' }, [
+          h('span', { style: 'color:var(--muted);' }, resourceLabels[k] || k),
+          h('span', { style: 'font-weight:500;color:var(--fg);' }, String(v)),
+        ])
+      ),
+      h('div', { style: 'display:flex;justify-content:space-between;padding:4px 0 0;font-weight:600;border-top:1px solid var(--border);margin-top:4px;color:var(--fg);' }, [
+        h('span', '合计'),
+        h('span', `${totalCount} 条记录`),
+      ]),
+    ]) : null
 
-  const content = h('div', { style: 'font-size: 13px;' }, [
-    h('div', { style: 'color: #ff4d4f; margin-bottom: 12px; font-weight: 500;' }, opts.title),
+    const nodeSection = (opts.nodes && opts.nodes.length > 0) ? h('div', {
+      style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};`,
+    }, [
+      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:4px;' }, '选择要删除的 Edge 节点：'),
+      ...opts.nodes.map(n =>
+        h('label', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
+          h('input', {
+            type: 'checkbox', checked: selectedNodeIds.has(n.id),
+            onInput: (e: any) => {
+              if (e.target.checked) selectedNodeIds.add(n.id)
+              else selectedNodeIds.delete(n.id)
+              updateOkDisabled()
+              renderModal()
+            },
+            style: 'width:14px;height:14px;accent-color:var(--accent);cursor:pointer;',
+          }),
+          h('span', { style: 'font-family:var(--font-mono);' }, `${n.ip}:${n.management_port}`),
+        ])
+      ),
+    ]) : null
 
-    // Resource stats section (only for cluster)
-    ...(opts.showResourceStats && opts.stats ? [
-      h('div', { style: 'background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 12px; margin-bottom: 12px;' }, [
-        h('div', { style: 'font-weight: 600; margin-bottom: 8px; color: #333;' }, '集群资源清单'),
-        ...Object.entries(opts.stats).map(([k, v]) =>
-          h('div', { style: 'display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5;' }, [
-            h('span', { style: 'color: #666;' }, resourceLabels[k] || k),
-            h('span', { style: 'font-weight: 500;' }, String(v)),
-          ])
-        ),
-        h('div', { style: 'display: flex; justify-content: space-between; padding: 6px 0 0; font-weight: 600; border-top: 2px solid #e8e8e8; margin-top: 4px;' }, [
-          h('span', '合计'),
-          h('span', `${totalCount} 条记录`),
+    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+      h('div', { class: 'modal', style: 'max-width:520px;' }, [
+        h('div', { class: 'modal-header' }, [
+          h('h2', '确认删除'),
+          h('button', { class: 'modal-close', onClick: close }, '\u00D7'),
         ]),
-      ])
-    ] : []),
-
-    // Delete scope selection
-    h('div', { style: 'border-top: 1px solid #e8e8e8; padding-top: 12px;' }, [
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteDb,
-          onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled() },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, '数据库'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '删除数据库中的记录'),
+        h('div', { class: 'modal-body' }, [
+          h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
+          statsSection,
+          h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
+            h('label', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
+              h('input', {
+                type: 'checkbox', checked: deleteDb,
+                onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled(); renderModal() },
+                style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+              }),
+              h('span', { style: 'font-weight:500;' }, '数据库'),
+              h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
+            ]),
+            h('label', { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
+              h('input', {
+                type: 'checkbox', checked: deleteEdge,
+                onInput: (e: any) => {
+                  deleteEdge = e.target.checked
+                  if (!deleteEdge) selectedNodeIds.clear()
+                  updateOkDisabled()
+                  renderModal()
+                },
+                style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+              }),
+              h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
+              h('span', { style: 'color:var(--muted);font-size:12px;' }, '从 Edge 节点中删除'),
+            ]),
+            nodeSection,
+          ]),
+        ]),
+        h('div', { class: 'modal-footer' }, [
+          h('button', { class: 'btn btn-secondary', onClick: close }, '取消'),
+          h('button', {
+            class: 'btn btn-danger',
+            disabled: okDisabled,
+            style: okDisabled ? 'opacity:0.5;cursor:not-allowed;' : '',
+            onClick: () => {
+              opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
+              close()
+            },
+          }, '确认删除'),
+        ]),
       ]),
-      h('label', { style: 'display: flex; align-items: center; gap: 8px; cursor: pointer;' }, [
-        h('input', {
-          type: 'checkbox', checked: deleteEdge,
-          onInput: (e: any) => {
-            deleteEdge = e.target.checked
-            if (!deleteEdge) selectedNodeIds.clear()
-            toggleNodeSection()
-            updateOkDisabled()
-          },
-          style: 'width: 16px; height: 16px; cursor: pointer;',
-        }),
-        h('span', { style: 'font-size: 14px;' }, 'Edge 节点'),
-        h('span', { style: 'color: #999; font-size: 12px;' }, '从 Edge 节点中删除'),
-      ]),
-      opts.nodes ? nodeCheckboxContent : null,
-    ]),
-  ])
+    ])
 
-  confirmModal = Modal.confirm({
-    title: '确认删除',
-    content,
-    okText: '确认删除',
-    okType: 'danger' as any,
-    cancelText: '取消',
-    okButtonProps: { disabled: true },
-    onOk: () => {
-      opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
-    },
-  })
+    render(vnode, container)
+  }
+
+  renderModal()
 }
 
 export function buildDeleteProgressContent(
@@ -137,6 +149,58 @@ export function buildDeleteProgressContent(
       style: 'max-height:300px;overflow-y:auto;background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:monospace;font-size:12px;line-height:1.6;',
     }, logs.map(l => h('div', l))),
   ])
+}
+
+/**
+ * 创建一个自定义进度弹窗（替代 Modal.info），与自定义 modal 风格一致
+ */
+function createProgressModal(title: string, progress: { percent: number; status: string }, logs: string[]) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const update = () => {
+    const logLines = logs.map(l =>
+      h('div', { style: 'font-family:var(--font-mono);font-size:12px;line-height:1.6;color:#d4d4d4;' }, l)
+    )
+    const progressColor = progress.status === 'exception' ? 'var(--danger)' : progress.status === 'success' ? 'var(--success)' : 'var(--accent)'
+    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+      h('div', { class: 'modal', style: 'max-width:600px;' }, [
+        h('div', { class: 'modal-header', style: 'background:oklch(56% 0.16 210 / 10%);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);' }, [
+          h('h2', { style: 'margin:0;font-size:15px;font-weight:600;color:var(--fg);' }, title),
+        ]),
+        h('div', { class: 'modal-body', style: 'padding:20px;overflow-y:auto;' }, [
+          h('div', { style: 'margin-bottom:12px;' }, [
+            h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
+              h('div', {
+                style: `flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;`,
+              }, [
+                h('div', {
+                  style: `width:${progress.percent}%;height:100%;border-radius:3px;background:${progressColor};transition:width 0.3s;`,
+                }),
+              ]),
+              h('span', { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' }, `${progress.percent}%`),
+            ]),
+          ]),
+          h('div', {
+            style: 'max-height:300px;overflow-y:auto;background:#1e1e1e;padding:10px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:12px;line-height:1.6;',
+          }, logLines),
+        ]),
+        h('div', { class: 'modal-footer', style: 'display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);' }, [
+          h('button', {
+            class: 'btn btn-primary',
+            disabled: progress.percent < 100,
+            style: progress.percent < 100 ? 'opacity:0.5;cursor:not-allowed;' : '',
+            onClick: () => { render(null, container); container.remove() },
+          }, '确定'),
+        ]),
+      ]),
+    ])
+    render(vnode, container)
+  }
+
+  update()
+
+  return { update, close: () => { render(null, container); container.remove() } }
 }
 
 export interface PublishOptions {
@@ -157,18 +221,10 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
     percent: 0, status: 'active',
   }
 
-  const modal = Modal.info({
-    title: opts.title,
-    width: 600,
-    content: buildDeleteProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
+  const modal = createProgressModal(opts.title, progress, logs)
 
   const updateContent = () => {
-    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+    modal.update()
   }
 
   addLog(`开始发布...`)
@@ -215,7 +271,6 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
       }
     }
     updateContent()
-    modal.update({ okButtonProps: { disabled: false } })
 
     await opts.refreshFn()
   } catch (error: unknown) {
@@ -226,7 +281,6 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
     addLog('')
     addLog(`❌ 发布失败: ${errMsg}`)
     updateContent()
-    modal.update({ okButtonProps: { disabled: false } })
   }
 }
 
@@ -251,18 +305,10 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     percent: 0, status: 'active',
   }
 
-  const modal = Modal.info({
-    title: opts.title,
-    width: 600,
-    content: buildDeleteProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
+  const modal = createProgressModal(opts.title, progress, logs)
 
   const updateContent = () => {
-    modal.update({ content: buildDeleteProgressContent(progress, logs) })
+    modal.update()
   }
 
   addLog(`开始删除...`)
@@ -349,7 +395,6 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
     updateContent()
   }
-  modal.update({ okButtonProps: { disabled: false } })
 }
 
 export function formatPublishDateTime(isoStr: string | null): string {

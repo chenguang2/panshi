@@ -54,32 +54,47 @@
     </div>
 
     <!-- Add/Edit Modal -->
-    <a-modal v-model:open="formVisible" :title="formMode === 'add' ? '添加静态资源' : '编辑静态资源'" width="600px" @ok="handleSubmit" :ok-text="formMode === 'add' ? '创建' : '保存'" :ok-button-props="{ disabled: formMode === 'add' && !formValid }">
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="所属集群" name="cluster_id" :rules="[{ required: true, message: '请选择所属集群' }]">
-          <a-select v-model:value="formData.cluster_id" :disabled="formMode === 'edit'">
-            <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="formMode === 'add'" label="选择路由">
-          <a-select v-model:value="formData.route_id" placeholder="请选择路由" show-search :filter-option="(input: string, option: any) => (option.label || '').toLowerCase().includes(input.toLowerCase())" @change="onRouteChange">
-            <a-select-option v-for="r in availableRoutes" :key="r.id" :value="r.id">{{ r.name }} ({{ r.uri }})</a-select-option>
-          </a-select>
-          <div style="margin-top: 6px; font-size: 12px;">
-            <div style="color: #999;">选择路由的要求：</div>
-            <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">{{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾</div>
-            <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">{{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点</div>
-            <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">{{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件</div>
+    <div class="modal-overlay" id="srFormModal" :style="{ display: formVisible ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ formMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
+          <button class="modal-close" @click="formVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">所属集群 <span class="required">*</span></label>
+            <select v-model="formData.cluster_id" class="form-input" :disabled="formMode === 'edit'">
+              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+            </select>
           </div>
-        </a-form-item>
-        <a-form-item v-else label="关联路由">
-          <span>{{ formData.name }} ({{ formData.url_path }})</span>
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="formData.description" :rows="2" placeholder="可选描述" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+          <div v-if="formMode === 'add'" class="form-group">
+            <label class="form-label">选择路由</label>
+            <select v-model="formData.route_id" class="form-input" @change="onRouteChange">
+              <option value="">请选择路由</option>
+              <option v-for="r in availableRoutes" :key="r.id" :value="r.id">{{ r.name }} ({{ r.uri }})</option>
+            </select>
+            <div class="route-validation">
+              <div class="form-hint">选择路由的要求：</div>
+              <div class="route-validation-item" :class="uriValid ? 'valid' : 'invalid'">{{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾</div>
+              <div class="route-validation-item" :class="publishedValid ? 'valid' : 'invalid'">{{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点</div>
+              <div class="route-validation-item" :class="pluginValid ? 'valid' : 'invalid'">{{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件</div>
+            </div>
+          </div>
+          <div v-else class="form-group">
+            <label class="form-label">关联路由</label>
+            <div class="form-value">{{ formData.name }} ({{ formData.url_path }})</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <textarea v-model="formData.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="formVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleSubmit" :disabled="formMode === 'add' && !formValid">{{ formMode === 'add' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
     
     <PublishConfirmModal v-model:visible="publishVisible" title="发布静态资源" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
     <VersionManagementModal v-model:open="vmVisible" resource-type="static_resource" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadResources" @published="loadResources" />
@@ -88,7 +103,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { EditOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -310,5 +325,110 @@ onMounted(() => { loadClusters(); loadResources() })
 .sr-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .text-sm { font-size: 12px; }
 .text-muted { color: var(--muted); }
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+}
+.modal-close:hover {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.required { color: var(--danger); }
+
+.form-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.form-value {
+  font-size: 13px;
+  color: var(--fg);
+  padding: 6px 0;
+}
+
+.route-validation {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.route-validation-item {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.route-validation-item.valid { color: #52c41a; }
+.route-validation-item.invalid { color: #ff4d4f; }
+
 @media (max-width: 768px) { .sr-grid { grid-template-columns: 1fr; } }
 </style>

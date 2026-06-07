@@ -1,69 +1,77 @@
 <template>
-  <a-modal
-    :open="visible"
-    :title="title"
-    width="600px"
-    :ok-button-props="{ disabled: selectedNodeIds.length === 0 }"
-    ok-text="确认发布"
-    cancel-text="取消"
-    @ok="handleConfirm"
-    @cancel="handleCancel"
-    @update:open="handleOpenChange"
-    class="publish-confirm-modal"
-  >
-    <!-- Loading state -->
-    <div v-if="loading" class="modal-state">
-      <a-spin />
-      <p class="state-text">正在加载节点列表...</p>
-    </div>
-
-    <!-- Error state -->
-    <div v-else-if="error" class="modal-state">
-      <p class="error-text">{{ error }}</p>
-      <a-button type="primary" @click="fetchNodes">重新加载</a-button>
-    </div>
-
-    <!-- Node list -->
-    <template v-else>
-      <div class="selection-bar">
-        <span class="selection-links">
-          <a class="action-link" @click="selectAll">全选</a>
-          <a-divider type="vertical" />
-          <a class="action-link" @click="clearAll">取消全选</a>
-        </span>
-        <span class="selection-count">已选择 {{ selectedNodeIds.length }} / {{ nodes.length }} 个节点</span>
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+    <div class="modal modal-wide" style="max-width:600px;">
+      <div class="modal-header">
+        <h2>{{ title }}</h2>
+        <button class="modal-close" @click="handleCancel">&times;</button>
       </div>
 
-      <div class="node-list">
-        <div
-          v-for="node in nodes"
-          :key="node.id"
-          :class="['node-row', { 'node-row--offline': node.status !== 1 }]"
-        >
-          <a-checkbox
-            :checked="isSelected(node.id)"
-            :disabled="node.status !== 1"
-            @change="toggleNode(node.id)"
-          >
-            <span class="node-address">{{ node.ip }}:{{ node.management_port }}</span>
-            <a-tag
-              :color="node.status === 1 ? 'green' : 'default'"
-              class="node-status-tag"
-            >
-              {{ node.status === 1 ? '在线' : '离线' }}
-            </a-tag>
-          </a-checkbox>
+      <div class="modal-body">
+        <!-- Loading state -->
+        <div v-if="loading" class="modal-state">
+          <div class="spinner"></div>
+          <p class="state-text">正在加载节点列表...</p>
         </div>
+
+        <!-- Error state -->
+        <div v-else-if="error" class="modal-state">
+          <p class="error-text">{{ error }}</p>
+          <button class="btn btn-secondary" @click="fetchNodes">重新加载</button>
+        </div>
+
+        <!-- Node list -->
+        <template v-else>
+          <div class="selection-bar">
+            <span class="selection-links">
+              <a class="action-link" @click="selectAll">全选</a>
+              <span class="divider-vertical">|</span>
+              <a class="action-link" @click="clearAll">取消全选</a>
+            </span>
+            <span class="selection-count">已选择 {{ selectedNodeIds.length }} / {{ nodes.length }} 个节点</span>
+          </div>
+
+          <div class="node-list">
+            <div
+              v-for="node in nodes"
+              :key="node.id"
+              :class="['node-row', { 'node-row--offline': node.status !== 1 }]"
+            >
+              <label class="checkbox-label">
+                <input
+                  type="checkbox"
+                  :checked="isSelected(node.id)"
+                  :disabled="node.status !== 1"
+                  @change="toggleNode(node.id)"
+                >
+                <span class="node-address">{{ node.ip }}:{{ node.management_port }}</span>
+                <span
+                  class="node-status-tag"
+                  :style="{
+                    color: node.status === 1 ? '#52c41a' : '#999',
+                    borderColor: node.status === 1 ? '#52c41a' : '#d9d9d9',
+                  }"
+                >
+                  {{ node.status === 1 ? '在线' : '离线' }}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div
+            v-if="selectedNodeIds.length === 0 && nodes.length > 0"
+            class="hint-text"
+          >
+            请至少选择 1 个节点
+          </div>
+        </template>
       </div>
 
-      <div
-        v-if="selectedNodeIds.length === 0 && nodes.length > 0"
-        class="hint-text"
-      >
-        请至少选择 1 个节点
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="handleCancel">取消</button>
+        <button class="btn btn-primary" :disabled="selectedNodeIds.length === 0" @click="handleConfirm">确认发布</button>
       </div>
-    </template>
-  </a-modal>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -163,7 +171,87 @@ const handleOpenChange = (open: boolean): void => {
 </script>
 
 <style scoped>
-.publish-confirm-modal .modal-state {
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide { max-width: 600px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
+
+.modal-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted); border-radius: var(--radius-sm);
+}
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+
+/* ── Modal Body ── */
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+/* ── Loading/Error state ── */
+.modal-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -172,18 +260,30 @@ const handleOpenChange = (open: boolean): void => {
   gap: 16px;
 }
 
-.modal-state .state-text {
+.state-text {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
 }
 
-.modal-state .error-text {
+.error-text {
   margin: 0 0 8px;
   color: var(--danger);
   font-size: 14px;
 }
 
+/* CSS spinner */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Selection bar ── */
 .selection-bar {
   display: flex;
   align-items: center;
@@ -212,11 +312,19 @@ const handleOpenChange = (open: boolean): void => {
   color: var(--accent);
 }
 
+.divider-vertical {
+  margin: 0 8px;
+  color: var(--border);
+  font-size: 13px;
+  line-height: 1;
+}
+
 .selection-count {
   color: var(--muted);
   font-size: 13px;
 }
 
+/* ── Node list ── */
 .node-list {
   max-height: 360px;
   overflow-y: auto;
@@ -239,6 +347,23 @@ const handleOpenChange = (open: boolean): void => {
   cursor: not-allowed;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+  flex: 1;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.node-row--offline .checkbox-label {
+  cursor: not-allowed;
+}
 .node-row--offline .node-address {
   color: var(--muted);
 }
@@ -250,8 +375,13 @@ const handleOpenChange = (open: boolean): void => {
 }
 
 .node-status-tag {
-  font-size: 12px;
-  line-height: 1;
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  border: 1px solid;
 }
 
 .hint-text {

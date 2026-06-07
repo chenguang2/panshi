@@ -6,41 +6,44 @@
         <button class="modal-close" @click="handleCancel">&times;</button>
       </div>
       <div class="modal-body">
-        <a-form ref="formRef" :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-          <a-form-item label="名称" name="name" :validate-status="nameError ? 'error' : ''" :help="nameError || '小写字母、数字、中划线组成，中划线不能在首尾'">
-            <a-input v-model:value="form.name" :disabled="!!editingCluster" @blur="validateName" />
-          </a-form-item>
-          <a-form-item label="显示名称" name="display_name" :rules="[{ required: true, message: '请输入显示名称' }]">
-            <a-input v-model:value="form.display_name" />
-          </a-form-item>
-          <a-form-item label="分组" name="group_name">
-            <a-select v-model:value="form.group_name">
-              <template #dropdownRender="{ menuNode }">
-                <div>
-                <component :is="menuNode" />
-                <div style="padding: 2px 8px 8px; display: flex; gap: 4px;">
-                    <a-input v-model:value="newGroupName" placeholder="新建分组名称" size="small" @pressEnter="addNewGroup" />
-                    <a-button size="small" type="primary" @click="addNewGroup">添加</a-button>
-                  </div>
-                </div>
-              </template>
-              <a-select-option value="">未分类</a-select-option>
-              <a-select-option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="描述" name="description">
-            <a-textarea v-model:value="form.description" :rows="3" />
-          </a-form-item>
-          <a-form-item label="Admin Key" name="admin_key">
-            <a-input-password v-model:value="form.admin_key" placeholder="Edge 节点 Admin API 密钥" />
-          </a-form-item>
-          <a-form-item label="状态" name="status">
-            <a-select v-model:value="form.status">
-              <a-select-option value="1">正常</a-select-option>
-              <a-select-option value="0">禁用</a-select-option>
-            </a-select>
-          </a-form-item>
-        </a-form>
+        <div class="form-group">
+          <label class="form-label">名称</label>
+          <input type="text" class="form-input" :class="{ 'has-error': formErrors.name }" v-model="form.name" :disabled="!!editingCluster" @blur="validateName" />
+          <span class="form-error" v-if="formErrors.name">{{ formErrors.name }}</span>
+          <span class="form-hint" v-else>小写字母、数字、中划线组成，中划线不能在首尾</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">显示名称</label>
+          <input type="text" class="form-input" :class="{ 'has-error': formErrors.display_name }" v-model="form.display_name" />
+          <span class="form-error" v-if="formErrors.display_name">{{ formErrors.display_name }}</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">分组</label>
+          <select class="form-input" v-model="form.group_name" @change="onGroupChange">
+            <option value="">未分类</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__new__">新建分组...</option>
+          </select>
+          <div v-if="showNewGroupInput" class="inline-group" style="display: flex; gap: 4px; margin-top: 6px;">
+            <input type="text" class="form-input" v-model="newGroupName" placeholder="新建分组名称" @keyup.enter="addNewGroup" style="flex: 1;" />
+            <button class="btn btn-sm btn-primary" @click="addNewGroup">添加</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea class="form-input" v-model="form.description" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admin Key</label>
+          <input type="password" class="form-input" v-model="form.admin_key" placeholder="Edge 节点 Admin API 密钥" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <select class="form-input" v-model="form.status">
+            <option value="1">正常</option>
+            <option value="0">禁用</option>
+          </select>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="handleCancel">取消</button>
@@ -67,9 +70,8 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-const formRef = ref()
 const submitting = ref(false)
-const nameError = ref('')
+const showNewGroupInput = ref(false)
 const newGroupName = ref('')
 const NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
 
@@ -80,6 +82,11 @@ const form = reactive({
   description: '',
   status: '1' as string | number,
   admin_key: '',
+})
+
+const formErrors = reactive({
+  name: '',
+  display_name: '',
 })
 
 watch(() => props.visible, (v) => {
@@ -99,24 +106,18 @@ watch(() => props.visible, (v) => {
     form.status = '1'
     form.admin_key = ''
   }
-  nameError.value = ''
+  formErrors.name = ''
+  formErrors.display_name = ''
+  showNewGroupInput.value = false
 })
 
-function onNameInput() {
-  validateName()
-}
-
-function validateName(): boolean {
-  if (!form.name) {
-    nameError.value = '请输入集群名称'
-    return false
+function onGroupChange() {
+  if (form.group_name === '__new__') {
+    showNewGroupInput.value = true
+    newGroupName.value = ''
+  } else {
+    showNewGroupInput.value = false
   }
-  if (!NAME_PATTERN.test(form.name)) {
-    nameError.value = '集群名称只能包含小写字母、数字和中划线，中划线不能在首尾'
-    return false
-  }
-  nameError.value = ''
-  return true
 }
 
 function addNewGroup() {
@@ -124,6 +125,20 @@ function addNewGroup() {
   if (!name) return
   form.group_name = name
   newGroupName.value = ''
+  showNewGroupInput.value = false
+}
+
+function validateName(): boolean {
+  if (!form.name) {
+    formErrors.name = '请输入集群名称'
+    return false
+  }
+  if (!NAME_PATTERN.test(form.name)) {
+    formErrors.name = '集群名称只能包含小写字母、数字和中划线，中划线不能在首尾'
+    return false
+  }
+  formErrors.name = ''
+  return true
 }
 
 function handleCancel() {
@@ -132,7 +147,10 @@ function handleCancel() {
 
 async function handleSubmit() {
   if (!validateName()) return
-  try { if (formRef.value) await formRef.value.validate() } catch { return }
+  if (!form.display_name) {
+    formErrors.display_name = '请输入显示名称'
+    return
+  }
   submitting.value = true
   try {
     const data = {
@@ -185,18 +203,22 @@ async function handleSubmit() {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 20px; border-top: 1px solid var(--border);
 }
-/* White input style matching NodeList */
-:deep(.ant-input) { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; }
-:deep(.ant-input:hover) { border-color: var(--accent) !important; }
-:deep(.ant-input:focus) { border-color: var(--accent) !important; box-shadow: 0 0 0 3px oklch(56% 0.16 210 / 12%) !important; }
-:deep(.ant-input-affix-wrapper) { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; padding: 0 11px !important; }
-:deep(.ant-input-affix-wrapper .ant-input) { background: transparent !important; border: none !important; box-shadow: none !important; }
-:deep(.ant-input-affix-wrapper:hover) { border-color: var(--accent) !important; }
-:deep(.ant-input-affix-wrapper:focus-within) { border-color: var(--accent) !important; box-shadow: 0 0 0 3px oklch(56% 0.16 210 / 12%) !important; }
-:deep(.ant-select-selector) { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-md) !important; }
-:deep(.ant-select:hover .ant-select-selector) { border-color: var(--accent) !important; }
-:deep(.ant-select-focused .ant-select-selector) { border-color: var(--accent) !important; box-shadow: 0 0 0 3px oklch(56% 0.16 210 / 12%) !important; }
-:deep(textarea.ant-input) { resize: vertical; min-height: 60px; }
-:deep(.ant-select-dropdown) { padding: 0; }
-:deep(.ant-select-item) { min-height: 30px; }
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block; margin-bottom: 4px; font-size: 13px; font-weight: 500;
+  color: var(--fg);
+}
+.form-input {
+  width: 100%; padding: 6px 12px; font-size: 14px; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); outline: none; box-sizing: border-box;
+}
+.form-input:hover { border-color: var(--accent); }
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px oklch(56% 0.16 210 / 12%); }
+.form-input.has-error { border-color: #ff4d4f; }
+.form-input.has-error:focus { box-shadow: 0 0 0 3px oklch(56% 0.28 27 / 12%); }
+textarea.form-input { resize: vertical; min-height: 60px; }
+.form-error { display: block; margin-top: 2px; font-size: 12px; color: #ff4d4f; }
+.form-hint { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+select.form-input { cursor: pointer; }
 </style>

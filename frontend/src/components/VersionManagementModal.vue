@@ -1,86 +1,95 @@
 <template>
-  <a-modal
-    v-model:open="visible"
-    :title="`版本管理 - ${resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : '插件'}: ${resourceName}` + (edgeUuid ? ` (${edgeUuid})` : '')"
-    width="1000px"
-    @ok="handleClose"
-  >
-    <template #footer>
-      <a-button @click="handleClose">关闭</a-button>
-    </template>
-
-    <div class="version-management">
-      <div v-if="loading" class="loading-hint">
-        <a-spin /> 加载中...
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+    <div class="modal modal-wide" style="max-width:1000px;">
+      <div class="modal-header">
+        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
+        <button class="modal-close" @click="handleClose">&times;</button>
       </div>
 
-      <div v-else-if="versions.length === 0" class="empty-hint">
-        暂无发布历史
-      </div>
-
-      <div v-else class="version-content">
-        <div class="version-list-panel">
-          <div class="panel-header">
-            <span>版本列表</span>
-            <a-checkbox v-model:checked="compareMode">对比模式</a-checkbox>
+      <div class="modal-body">
+        <div class="version-management">
+          <div v-if="loading" class="loading-hint">
+            加载中...
           </div>
-          <div class="version-list">
-            <div
-              v-for="v in versions"
-              :key="v.id"
-              :class="['version-item', { 'version-item--current': v.version === currentVersion, 'version-item--selected': selectedVersions.includes(v.version) }]"
-              @click="handleVersionClick(v)"
-            >
-              <div class="version-item-main">
-                <a-radio
-                  v-if="compareMode"
-                  :checked="selectedVersions.includes(v.version)"
-                  @click.stop="toggleVersionSelection(v.version)"
-                />
-                <span class="version-number" @click.stop="selectVersion(v)">v{{ v.version }}</span>
-                <a-tag v-if="v.version === currentVersion" color="green" size="small">当前</a-tag>
+
+          <div v-else-if="versions.length === 0" class="empty-hint">
+            暂无发布历史
+          </div>
+
+          <div v-else class="version-content">
+            <div class="version-list-panel">
+              <div class="panel-header">
+                <span>版本列表</span>
+                <label class="checkbox-label" style="font-size:12px;cursor:pointer;user-select:none;">
+                  <input type="checkbox" :checked="compareMode" @change="compareMode = !compareMode">
+                  <span>对比模式</span>
+                </label>
               </div>
-              <div class="version-item-meta">
-                {{ formatDate(v.created_at) }}
+              <div class="version-list">
+                <div
+                  v-for="v in versions"
+                  :key="v.id"
+                  :class="['version-item', { 'version-item--current': v.version === currentVersion, 'version-item--selected': selectedVersions.includes(v.version) }]"
+                  @click="handleVersionClick(v)"
+                >
+                  <div class="version-item-main">
+                    <input
+                      v-if="compareMode"
+                      type="radio"
+                      class="radio-input"
+                      :checked="selectedVersions.includes(v.version)"
+                      @click.stop="toggleVersionSelection(v.version)"
+                    />
+                    <span class="version-number" @click.stop="selectVersion(v)">v{{ v.version }}</span>
+                    <span v-if="v.version === currentVersion" class="version-current-tag">当前</span>
+                  </div>
+                  <div class="version-item-meta">
+                    {{ formatDate(v.created_at) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="version-detail-panel">
+              <div v-if="compareMode && selectedVersions.length === 2" class="diff-view">
+                <div class="diff-header">
+                  <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
+                </div>
+                <div class="diff-container">
+                  <div class="diff-tree" v-html="diffTreeHtml"></div>
+                </div>
+              </div>
+
+              <div v-else-if="selectedVersionData" class="single-view">
+                <div class="detail-header">
+                  <span class="version-info">
+                    版本 v{{ selectedVersionData.version }}
+                    <span v-if="selectedVersionData.version === currentVersion" class="version-current-tag">当前</span>
+                  </span>
+                  <div class="detail-actions">
+                    <button class="btn btn-sm btn-ghost" @click="copyConfig">复制JSON</button>
+                    <button class="btn btn-sm btn-primary" @click="handleRepublish">切换到此版本</button>
+                    <button class="btn btn-sm btn-danger" @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</button>
+                  </div>
+                </div>
+                <div class="detail-config">
+                  <textarea readonly class="json-textarea">{{ formattedConfig }}</textarea>
+                </div>
+              </div>
+
+              <div v-else class="select-hint">
+                点击左侧版本号查看详情，或选择两个版本进行对比
               </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="version-detail-panel">
-          <div v-if="compareMode && selectedVersions.length === 2" class="diff-view">
-            <div class="diff-header">
-              <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
-            </div>
-            <div class="diff-container">
-              <div class="diff-tree" v-html="diffTreeHtml"></div>
-            </div>
-          </div>
-
-          <div v-else-if="selectedVersionData" class="single-view">
-            <div class="detail-header">
-              <span class="version-info">
-                版本 v{{ selectedVersionData.version }}
-                <a-tag v-if="selectedVersionData.version === currentVersion" color="green" size="small">当前</a-tag>
-              </span>
-              <a-space>
-                <a-button size="small" @click="copyConfig">复制JSON</a-button>
-                <a-button size="small" type="primary" @click="handleRepublish">切换到此版本</a-button>
-                <a-button size="small" danger @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</a-button>
-              </a-space>
-            </div>
-            <div class="detail-config">
-              <textarea readonly class="json-textarea">{{ formattedConfig }}</textarea>
-            </div>
-          </div>
-
-          <div v-else class="select-hint">
-            点击左侧版本号查看详情，或选择两个版本进行对比
-          </div>
-        </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="handleClose">关闭</button>
       </div>
     </div>
-  </a-modal>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -485,9 +494,138 @@ const handleClose = () => {
 </script>
 
 <style scoped>
-.version-management {
-  min-height: 400px;
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide { max-width: 1000px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+  flex-shrink: 0;
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted); border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+
+.modal-body {
+  padding: 0;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.radio-input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.version-current-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  line-height: 18px;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  font-family: var(--font-body);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
+.btn-ghost:hover { background: var(--bg); color: var(--fg); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--border); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, transparent); border-color: var(--danger); }
+.btn-sm { padding: 3px 10px; font-size: 11px; }
 
 .loading-hint,
 .empty-hint {
@@ -502,11 +640,20 @@ const handleClose = () => {
   height: 500px;
 }
 
+.version-content {
+  display: flex;
+  gap: 0;
+  min-height: 400px;
+  max-height: 60vh;
+}
+
 .version-list-panel {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
-  padding-right: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-header {
@@ -514,35 +661,38 @@ const handleClose = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 13px;
   color: var(--fg);
 }
 
 .version-list {
   overflow-y: auto;
-  max-height: 450px;
+  flex: 1;
 }
 
 .version-item {
-  padding: 8px;
+  padding: 8px 10px;
   margin-bottom: 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
   border: 1px solid transparent;
+  transition: all 0.12s;
 }
 
 .version-item:hover {
   background: var(--bg);
+  border-color: var(--border);
 }
 
 .version-item--current {
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
 }
 
 .version-item--selected {
-  background: oklch(56% 0.16 210 / 10%);
-  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: oklch(56% 0.16 210 / 8%);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .version-item-main {
@@ -552,7 +702,8 @@ const handleClose = () => {
 }
 
 .version-number {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 13px;
   color: var(--accent);
   cursor: pointer;
 }
@@ -562,10 +713,10 @@ const handleClose = () => {
 }
 
 .version-item-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
-  margin-top: 4px;
-  margin-left: 20px;
+  margin-top: 3px;
+  margin-left: 22px;
 }
 
 .version-detail-panel {
@@ -573,6 +724,7 @@ const handleClose = () => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding: 16px;
 }
 
 .single-view,
@@ -580,6 +732,7 @@ const handleClose = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .detail-header,
@@ -590,36 +743,31 @@ const handleClose = () => {
   margin-bottom: 12px;
   padding: 8px 12px;
   background: var(--bg);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
 
 .version-info {
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 13px;
   color: var(--fg);
 }
 
 .detail-config {
   flex: 1;
+  min-height: 0;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 12px;
   overflow: auto;
-}
-
-.detail-config pre {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--fg);
 }
 
 .json-textarea {
   width: 100%;
   height: 100%;
-  min-height: 350px;
+  min-height: 200px;
   border: none;
   background: transparent;
   resize: none;
@@ -634,10 +782,11 @@ const handleClose = () => {
 
 .diff-container {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 12px;
 }
 
@@ -657,37 +806,38 @@ const handleClose = () => {
 }
 
 .diff-tree :deep(.diff-added) {
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
 
 .diff-tree :deep(.diff-removed) {
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 10%);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
   text-decoration: line-through;
 }
 
 .diff-tree :deep(.diff-changed-a) {
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 10%);
-  padding: 0 4px;
-  border-radius: 2px;
-}
-
-.diff-tree :deep(.diff-changed-b) {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   padding: 0 4px;
   border-radius: 2px;
 }
 
+.diff-tree :deep(.diff-changed-b) {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
 .select-hint {
   text-align: center;
-  padding: 60px 20px;
+  padding: 48px 20px;
   color: var(--muted);
+  font-size: 13px;
 }
 </style>

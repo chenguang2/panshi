@@ -50,31 +50,41 @@
       </div>
     </div>
 
-    <!-- Create Modal (方案 B) -->
-    <a-modal v-model:open="createVisible" title="添加插件元数据" width="480px" :footer="null" @cancel="createVisible = false">
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="所属集群" required>
-          <a-select v-model:value="createClusterId" placeholder="请选择集群" @change="onCreateClusterChange">
-            <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="插件名称" required>
-          <a-select v-model:value="createPluginName" placeholder="请选择插件" :disabled="!createClusterId">
-            <a-select-option v-for="p in availablePlugins" :key="p.name" :value="p.name">
-              {{ p.name }} — {{ p.description }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding:8px 12px;margin-left:25%;width:66.67%;box-sizing:border-box;background:oklch(56% 0.16 210 / 8%);border-radius:var(--radius-sm);color:var(--accent);font-size:12px;font-weight:500;">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;flex-shrink:0;"><path d="M8 4v4M8 12h0"/><circle cx="8" cy="8" r="7"/></svg>
-        <span>创建后可在列表页编辑配置</span>
+    <!-- Create Modal -->
+    <div class="modal-overlay" :style="{ display: createVisible ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>添加插件元数据</h2>
+          <button class="modal-close" @click="createVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">所属集群 <span class="required">*</span></label>
+            <select v-model="createClusterId" class="form-input" @change="onCreateClusterChange">
+              <option value="" disabled>请选择集群</option>
+              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">插件名称 <span class="required">*</span></label>
+            <select v-model="createPluginName" class="form-input" :disabled="!createClusterId">
+              <option value="" disabled>请选择插件</option>
+              <option v-for="p in availablePlugins" :key="p.name" :value="p.name">
+                {{ p.name }} — {{ p.description }}
+              </option>
+            </select>
+          </div>
+          <div class="create-info-box">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px;flex-shrink:0;"><path d="M8 4v4M8 12h0"/><circle cx="8" cy="8" r="7"/></svg>
+            <span>创建后可在列表页编辑配置</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="createVisible = false">取消</button>
+          <button class="btn btn-primary" :disabled="!canCreate" @click="handleCreateDirect">保存</button>
+        </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-        <button class="btn btn-ghost" @click="createVisible = false">取消</button>
-        <button class="btn btn-primary" :disabled="!canCreate" @click="handleCreateDirect">保存</button>
-      </div>
-    </a-modal>
+    </div>
 
     <!-- View Drawer -->
     <a-drawer v-model:open="viewVisible" :title="`查看插件元数据 - ${viewingItem?.plugin_name}`" width="560" @close="viewVisible = false">
@@ -360,4 +370,97 @@ onMounted(() => {
 .text-sm { font-size: 12px; }
 .text-muted { color: var(--muted); }
 .config-preview { background: var(--bg); padding: 12px; border-radius: var(--radius-sm); overflow-x: auto; font-size: 12px; font-family: var(--font-mono); max-height: 400px; overflow-y: auto; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+}
+.modal-close:hover {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.required { color: var(--danger); }
+
+.create-info-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: oklch(56% 0.16 210 / 8%);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
 </style>

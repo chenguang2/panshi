@@ -1,129 +1,164 @@
 <template>
-  <a-modal v-model:open="modalOpen" :title="copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '新建路由')" width="800px" :confirm-loading="submitting" @ok="handleSubmit">
-    <a-tabs v-model:activeKey="activeTab" :lazy="true">
-      <a-tab-pane key="basic" tab="基础配置">
-        <a-form ref="formRef" :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-          <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
-            <a-input v-model:value="form.name" placeholder="请输入路由名称" />
-          </a-form-item>
-          <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
-            <a-input v-model:value="form.uri" placeholder="如: /api/*" />
-          </a-form-item>
-          <a-form-item label="所属集群" name="cluster_id" :rules="[{ required: true, message: '请选择所属集群' }]">
-            <a-select v-model:value="form.cluster_id" :disabled="!!editingRoute && !copyingRoute">
-              <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-            <a-select v-model:value="form.methods" mode="multiple" placeholder="可选多个方法" style="width: 300px">
-              <a-select-option value="GET">GET</a-select-option>
-              <a-select-option value="POST">POST</a-select-option>
-              <a-select-option value="PUT">PUT</a-select-option>
-              <a-select-option value="DELETE">DELETE</a-select-option>
-              <a-select-option value="PATCH">PATCH</a-select-option>
-              <a-select-option value="HEAD">HEAD</a-select-option>
-              <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-              <a-select-option value="CONNECT">CONNECT</a-select-option>
-              <a-select-option value="TRACE">TRACE</a-select-option>
-            </a-select>
-            <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
-              {{ allMethodsSelected ? '取消全选' : '全选' }}
-            </a>
-          </a-form-item>
-          <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
-            <a-select v-model:value="form.upstream_id" placeholder="请选择上游" allow-clear>
-              <a-select-option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
-            <a-input-number v-model:value="form.priority" :min="0" style="width: 100%" />
-          </a-form-item>
-          <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-            <a-select v-model:value="form.status">
-              <a-select-option :value="1">正常</a-select-option>
-              <a-select-option :value="0">禁用</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="描述" name="description">
-            <a-textarea v-model:value="form.description" :rows="2" />
-          </a-form-item>
-          <a-form-item label="高级匹配">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <label class="toggle"><input type="checkbox" :checked="form.advancedEnabled" @change="form.advancedEnabled = !form.advancedEnabled" /><span class="toggle-slider"></span></label>
-              <span style="color:#999;font-size:12px;">开启后在"高级匹配"页配置请求条件</span>
-            </div>
-          </a-form-item>
-        </a-form>
-      </a-tab-pane>
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+    <div class="modal modal-wide" style="max-width:860px;">
+      <div class="modal-header">
+        <h2>{{ copyingRoute ? '复制路由' : editingRoute ? '编辑路由' : '新建路由' }}</h2>
+        <button class="modal-close" @click="$emit('close')">&times;</button>
+      </div>
 
-      <a-tab-pane key="advanced" tab="高级匹配">
-        <div v-if="form.advancedEnabled">
-          <RouteAdvancedMatch
-            :enabled="form.advancedEnabled"
-            :model-value="{ vars: form.advancedMatch.vars }"
-            @update:model-value="(val: any) => { form.advancedMatch.vars = val.vars || [] }"
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础配置</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">高级匹配</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'plugins' }" @click="activeTab = 'plugins'">插件管理</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'pluginGroups' }" @click="activeTab = 'pluginGroups'">插件组</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- ── 基础配置 ── -->
+        <div v-show="activeTab === 'basic'">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">名称 <span class="required">*</span></label>
+              <input v-model="form.name" type="text" class="form-input" placeholder="请输入路由名称">
+              <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">URI <span class="required">*</span></label>
+              <input v-model="form.uri" type="text" class="form-input" placeholder="如: /api/*">
+              <div v-if="formErrors.uri" class="form-error">{{ formErrors.uri }}</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">所属集群 <span class="required">*</span></label>
+              <select v-model="form.cluster_id" class="form-input" :disabled="!!editingRoute && !copyingRoute">
+                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+              </select>
+              <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
+            </div>
+            <div class="form-group">
+            <label class="form-label">请求方法 <span class="required">*</span></label>
+            <div class="method-chips">
+              <span
+                v-for="m in ALL_METHODS"
+                :key="m"
+                class="method-chip"
+                :class="{ selected: form.methods.includes(m) }"
+                @click="toggleMethod(m)"
+              >{{ m }}</span>
+            </div>
+            <div style="margin-top:4px;">
+              <label class="checkbox-label" style="font-size:12px;">
+                <input type="checkbox" :checked="allMethodsSelected" @change="toggleAllMethods">
+                <span>{{ allMethodsSelected ? '取消全选' : '全选' }}</span>
+              </label>
+            </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">上游 <span class="required">*</span></label>
+              <select v-model="form.upstream_id" class="form-input">
+                <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
+              </select>
+              <div v-if="formErrors.upstream_id" class="form-error">{{ formErrors.upstream_id }}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">优先级 <span class="required">*</span></label>
+              <input v-model.number="form.priority" type="number" class="form-input" min="0" placeholder="0">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">状态</label>
+              <select v-model="form.status" class="form-input">
+                <option :value="1">正常</option>
+                <option :value="0">禁用</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">描述</label>
+              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="form.advancedEnabled">
+              <span>开启高级匹配</span>
+            </label>
+            <div class="form-hint">开启后在"高级匹配"页配置请求条件</div>
+          </div>
+        </div>
+
+        <!-- ── 高级匹配 ── -->
+        <div v-show="activeTab === 'advanced'">
+          <template v-if="form.advancedEnabled">
+            <RouteAdvancedMatch
+              :enabled="form.advancedEnabled"
+              :model-value="{ vars: form.advancedMatch.vars }"
+              @update:model-value="(val: any) => { form.advancedMatch.vars = val.vars || [] }"
+            />
+          </template>
+          <div v-else class="advanced-disabled-hint">
+            <span class="hint-icon">&#x26A0;</span>
+            高级匹配未启用，请在"基础配置"中开启
+          </div>
+        </div>
+
+        <!-- ── 插件管理 ── -->
+        <div v-show="activeTab === 'plugins'">
+          <PluginSelector
+            v-model="form.plugins"
+            :plugins="availablePlugins"
           />
         </div>
-        <div v-else class="advanced-disabled-hint">
-          <WarningOutlined style="color:#faad14;margin-right:8px;" />
-          高级匹配未启用，请在"基础配置"中开启
-        </div>
-      </a-tab-pane>
 
-      <a-tab-pane key="plugins" tab="插件管理">
-        <PluginSelector
-          v-model="form.plugins"
-          :plugins="availablePlugins"
-        />
-      </a-tab-pane>
-
-      <!-- 插件组 -->
-      <a-tab-pane key="pluginGroups" tab="插件组">
-        <div v-if="clusterPluginGroups.length === 0" class="pg-empty">
-          暂无插件组，请在"插件组"Tab 中创建
-        </div>
-        <div v-else>
-          <div class="pg-desc">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
-          <div class="pg-list">
-            <div
-              v-for="pg in clusterPluginGroups"
-              :key="pg.id"
-              class="plugin-config-card"
-              :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
-              @click="togglePluginGroup(pg)"
-            >
-              <div class="pg-item-header">
-                <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)" />
-                <strong class="pg-item-name">{{ pg.name }}</strong>
-                <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
+        <!-- ── 插件组 ── -->
+        <div v-show="activeTab === 'pluginGroups'">
+          <div v-if="clusterPluginGroups.length === 0" class="advanced-disabled-hint">
+            暂无插件组，请在"插件组"Tab 中创建
+          </div>
+          <div v-else>
+            <div class="form-hint" style="margin-bottom:12px;">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
+            <div class="pg-list">
+              <div
+                v-for="pg in clusterPluginGroups"
+                :key="pg.id"
+                class="plugin-config-card"
+                :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
+                @click="togglePluginGroup(pg)"
+              >
+                <div class="pg-item-header">
+                  <input type="checkbox" class="pg-checkbox" :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)">
+                  <strong class="pg-item-name">{{ pg.name }}</strong>
+                  <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
+                </div>
+                <div class="pg-item-plugins">
+                  <span v-for="(pcfg, pname) in pg.plugins" :key="pname" class="pg-item-tag">{{ pname }}</span>
+                </div>
+                <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
               </div>
-              <div class="pg-item-plugins">
-                <a-tag
-                  v-for="(pcfg, pname) in pg.plugins"
-                  :key="pname"
-                  color="var(--accent)"
-                  style="font-size: 11px; cursor: pointer;"
-                >
-                  {{ pname }}
-                </a-tag>
-              </div>
-              <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
             </div>
           </div>
         </div>
-      </a-tab-pane>
-    </a-tabs>
-    <template #footer>
-      <a-button @click="$emit('close')">取消</a-button>
-      <a-button type="primary" :loading="submitting" @click="handleSubmit">保存</a-button>
-    </template>
-  </a-modal>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '提交中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
-import { WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
@@ -139,10 +174,9 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 
-const modalOpen = computed({ get: () => props.visible, set: (v) => { if (!v) emit('close') } })
-const formRef = ref()
 const activeTab = ref('basic')
 const submitting = ref(false)
+const formErrors = reactive<Record<string, string>>({})
 const upstreams = ref<any[]>([])
 const availablePlugins = ref<any[]>([])
 const clusterPluginGroups = ref<any[]>([])
@@ -158,6 +192,12 @@ const form = reactive({
 })
 
 const allMethodsSelected = computed(() => form.methods.length === ALL_METHODS.length)
+
+function toggleMethod(m: string) {
+  const idx = form.methods.indexOf(m)
+  if (idx >= 0) form.methods.splice(idx, 1)
+  else form.methods.push(m)
+}
 
 function toggleAllMethods() {
   form.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]
@@ -203,6 +243,11 @@ watch(() => form.cluster_id, (cid) => {
 
 watch(() => props.visible, async (v) => {
   if (!v) return
+  formErrors.name = ''
+  formErrors.uri = ''
+  formErrors.cluster_id = ''
+  formErrors.upstream_id = ''
+
   await loadPlugins()
   if (props.editingRoute) {
     const r = props.editingRoute
@@ -237,8 +282,21 @@ watch(() => props.visible, async (v) => {
   activeTab.value = 'basic'
 })
 
+function validateForm(): boolean {
+  formErrors.name = ''
+  formErrors.uri = ''
+  formErrors.cluster_id = ''
+  formErrors.upstream_id = ''
+
+  if (!form.name.trim()) { formErrors.name = '请输入路由名称'; return false }
+  if (!form.uri.trim()) { formErrors.uri = '请输入URI'; return false }
+  if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
+  if (!form.upstream_id) { formErrors.upstream_id = '请选择上游'; return false }
+  return true
+}
+
 async function handleSubmit() {
-  try { await (formRef.value as any)?.validate() } catch { return }
+  if (!validateForm()) return
   submitting.value = true
   try {
     const data: Record<string, any> = {
@@ -257,10 +315,7 @@ async function handleSubmit() {
       routeId = props.editingRoute.id
       message.success('路由已更新')
     } else {
-      // copy or create - always POST
-      if (props.copyingRoute) {
-        data.name = form.name // use the prefilled name (user can modify)
-      }
+      if (props.copyingRoute) data.name = form.name
       const res = await api.post(`/clusters/${cid}/routes`, data)
       routeId = res.data.id
       message.success(props.copyingRoute ? '路由已复制' : '路由已创建')
@@ -277,9 +332,168 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-.advanced-disabled-hint { padding: 24px; text-align: center; color: #999; font-size: 13px; }
-.pg-empty { padding: 24px; text-align: center; color: #999; }
-.pg-desc { font-size: 12px; color: #666; margin-bottom: 12px; }
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide { max-width: 860px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
+
+.modal-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted); border-radius: var(--radius-sm);
+}
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Modal Body ── */
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.form-row { display: flex; gap: 16px; margin-bottom: 0; }
+.form-group { flex: 1; margin-bottom: 16px; }
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.required { color: var(--danger); }
+
+.form-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.form-error {
+  font-size: 12px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+.method-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.method-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  user-select: none;
+  transition: all 0.15s;
+  height: 28px;
+}
+.method-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.method-chip.selected {
+  background: oklch(56% 0.16 210 / 10%);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+/* ── Advanced disabled hint ── */
+.advanced-disabled-hint {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.hint-icon { font-size: 18px; margin-right: 8px; }
+
+/* ── Plugin Groups ── */
 .pg-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
 .plugin-config-card {
   border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px;
@@ -288,8 +502,14 @@ async function handleSubmit() {
 .plugin-config-card:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
 .plugin-config-card.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
 .pg-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.pg-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .pg-item-name { font-size: 14px; font-weight: 600; color: var(--fg); }
 .pg-item-version { font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-left: auto; }
 .pg-item-plugins { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.pg-item-tag {
+  display: inline-block; padding: 1px 7px; border-radius: 3px;
+  font-size: 10px; font-family: var(--font-mono);
+  background: oklch(56% 0.16 210 / 8%); color: var(--accent);
+}
 .pg-item-desc { font-size: 12px; color: var(--muted); }
 </style>

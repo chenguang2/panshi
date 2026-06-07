@@ -2,98 +2,114 @@
   <div class="node-list">
     <PageHeader title="节点管理" description="管理 Edge 网关节点，监控运行状态并执行操作">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="width:160px;height:32px;font-size:12px;" @change="onFilterChange">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
-        <button class="btn btn-primary" @click="openAddModal">+ 添加节点</button>
+        <a-select
+          v-model:value="clusterFilter"
+          placeholder="全部集群"
+          allow-clear
+          style="width:160px;"
+          @change="onFilterChange"
+        >
+          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
+        </a-select>
+        <a-button type="primary" @click="openAddModal">+ 添加节点</a-button>
       </template>
     </PageHeader>
 
     <div class="node-filter-bar">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索 IP 或名称..." class="form-input" @input="onSearchInput">
-        <span class="search-icon">🔍</span>
-      </div>
-      <select v-model="statusFilter" class="form-input" style="width:130px;height:32px;font-size:12px;" @change="onFilterChange">
-        <option value="">全部状态</option>
-        <option :value="1">运行中</option>
-        <option :value="0">已停止</option>
-      </select>
+      <a-input
+        v-model:value="searchText"
+        placeholder="搜索 IP 或名称..."
+        allow-clear
+        style="width:200px;"
+        @change="onSearchInput"
+      />
+      <a-select
+        v-model:value="statusFilter"
+        placeholder="全部状态"
+        allow-clear
+        style="width:130px;"
+        @change="onFilterChange"
+      >
+        <a-select-option :value="1">运行中</a-select-option>
+        <a-select-option :value="0">已停止</a-select-option>
+      </a-select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个节点</span>
     </div>
 
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:30px;"><input type="checkbox" @change="toggleAll" :checked="allSelected"></th>
-            <th>IP</th>
-            <th>所属集群</th>
-            <th>服务端口</th>
-            <th>管理端口</th>
-            <th>Edge 路径</th>
-            <th>状态</th>
-            <th>Edge 版本</th>
-            <th style="width:280px;">操作</th>
-          </tr>
-        </thead>
-        <tbody v-if="nodes.length === 0">
-          <tr>
-            <td colspan="9">
-              <div class="empty-state" style="padding:32px;">
-                <div class="empty-state-icon">◎</div>
-                <p>暂无节点</p>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-        <tbody v-else>
-          <tr v-for="record in nodes" :key="record.id">
-            <td><input type="checkbox" :value="record.id" v-model="selectedIds"></td>
-            <td><span class="text-mono">{{ record.ip }}</span></td>
-            <td>{{ record.cluster_name || '-' }}</td>
-            <td><span class="text-mono text-sm">{{ record.service_port }}</span></td>
-            <td><span class="text-mono text-sm">{{ record.management_port }}</span></td>
-            <td><span class="text-sm">{{ record.edge_path }}</span></td>
-            <td>
-              <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
-              <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
-            </td>
-            <td><span class="text-mono text-sm">{{ record.status_detail?.statistic?.edge_version || '-' }}</span></td>
-            <td>
-              <div class="action-menu-group">
-                <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
-                <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
-                <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态查询</button>
-                <button class="btn btn-ghost btn-sm" @click="viewDetail(record)">ⓘ 详情</button>
-                <div class="action-menu">
-                  <button class="action-btn" @click.stop="toggleActionMenu(record.id)">⋯</button>
-                  <div class="action-dropdown" :class="{ open: openMenuId === record.id }">
-                    <button class="action-dropdown-item" @click="handleEdit(record)">编辑</button>
-                    <button class="action-dropdown-item danger" @click="handleDelete(record)">删除</button>
-                    <button class="action-dropdown-item" @click="handleDiff(record)">数据库对比</button>
-                  </div>
-                </div>
-              </div>
-              <div class="operation-log" :class="{ visible: opLogVisible === record.id }" :id="'opLog-' + record.id"></div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <a-table
+      :data-source="nodes"
+      :columns="columns"
+      :row-key="(record: any) => record.id"
+      :pagination="{
+        current: page,
+        pageSize,
+        total: totalCount,
+        showSizeChanger: true,
+        showTotal: (total: number) => `共 ${total} 个节点`,
+        pageSizeOptions: ['10', '20', '50'],
+      }"
+      :loading="loading"
+      size="middle"
+      class="node-table"
+      @change="handleTableChange"
+    >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'ip'">
+          <span class="text-mono">{{ record.ip }}</span>
+        </template>
 
-    <div class="table-footer">
-      <span class="text-muted text-sm">第 {{ page }} 页，共 {{ totalPages }} 页（{{ totalCount }} 条）</span>
-      <div class="pagination">
-        <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">‹</button>
-        <button v-for="p in pageNumbers" :key="p" class="btn btn-sm" :class="{ 'btn-primary': p === page }" @click="goPage(p)">{{ p }}</button>
-        <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">›</button>
-      </div>
-    </div>
+        <template v-if="column.key === 'service_port'">
+          <span class="text-mono text-sm">{{ record.service_port }}</span>
+        </template>
+
+        <template v-if="column.key === 'management_port'">
+          <span class="text-mono text-sm">{{ record.management_port }}</span>
+        </template>
+
+        <template v-if="column.key === 'edge_path'">
+          <span class="text-sm">{{ record.edge_path || '-' }}</span>
+        </template>
+
+        <template v-if="column.key === 'status'">
+          <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+          <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
+        </template>
+
+        <template v-if="column.key === 'edge_version'">
+          <span class="text-mono text-sm">{{ record.status_detail?.statistic?.edge_version || '-' }}</span>
+        </template>
+
+        <template v-if="column.key === 'actions'">
+          <div class="node-actions-wrap">
+            <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
+            <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
+            <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
+            <button class="btn btn-ghost btn-sm" @click="viewDetail(record)">ⓘ 详情</button>
+            <a-dropdown :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
+                  <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
+                  <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </div>
+          <div class="operation-log" :class="{ visible: opLogVisible === record.id }" :id="'opLog-' + record.id"></div>
+        </template>
+      </template>
+
+      <template #empty>
+        <div class="empty-state">
+          <div class="empty-state-icon">◎</div>
+          <p>暂无节点</p>
+        </div>
+      </template>
+    </a-table>
 
     <!-- Add / Edit Node Modal -->
-    <div class="modal-overlay" id="nodeFormModal" :style="{ display: formModalVisible ? 'flex' : 'none' }">
+    <div class="modal-overlay" :style="{ display: formModalVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
           <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
@@ -141,7 +157,7 @@
     </div>
 
     <!-- Detail Modal -->
-    <div class="modal-overlay" id="detailModal" :style="{ display: detailModalVisible ? 'flex' : 'none' }">
+    <div class="modal-overlay" :style="{ display: detailModalVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
           <h2>{{ detailTitle }}</h2>
@@ -199,15 +215,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
+import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
 
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ──
 const loading = ref(false)
 const nodes = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -215,10 +232,8 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
-const clusterFilter = ref<number | string>('')
-const statusFilter = ref<number | string>('')
-const selectedIds = ref<number[]>([])
-const openMenuId = ref<number | null>(null)
+const clusterFilter = ref<number | string | undefined>(undefined)
+const statusFilter = ref<number | string | undefined>(undefined)
 const opLogVisible = ref<number | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
@@ -259,19 +274,18 @@ const diffDrawerVisible = ref(false)
 const diffClusterId = ref(0)
 const diffNodeId = ref(0)
 
-const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize.value)))
-const allSelected = computed(() => nodes.value.length > 0 && selectedIds.value.length === nodes.value.length)
-const pageNumbers = computed(() => {
-  const pages: number[] = []
-  const tp = totalPages.value
-  const cp = page.value
-  const start = Math.max(1, cp - 2)
-  const end = Math.min(tp, cp + 2)
-  for (let i = start; i <= end; i++) pages.push(i)
-  return pages
-})
+const columns = [
+  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: (a: any, b: any) => a.ip?.localeCompare(b.ip) },
+  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
+  { title: '管理端口', key: 'management_port' },
+  { title: 'Edge 路径', key: 'edge_path' },
+  { title: '状态', key: 'status' },
+  { title: 'Edge 版本', key: 'edge_version' },
+  { title: '操作', key: 'actions', width: 320 },
+]
 
-// ── Data Loading ───────────────────────────────────────────────────────────
+// ── Data Loading ──
 
 async function loadNodes() {
   loading.value = true
@@ -281,7 +295,7 @@ async function loadNodes() {
       pageSize: pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
-      status: statusFilter.value !== '' ? Number(statusFilter.value) : undefined,
+      status: statusFilter.value !== '' && statusFilter.value !== undefined ? Number(statusFilter.value) : undefined,
     })
     nodes.value = res.data.items || []
     totalCount.value = res.data.total || 0
@@ -308,7 +322,13 @@ async function loadClusterStats(clusterId: number) {
   }
 }
 
-// ── Filter / Search / Pagination ───────────────────────────────────────────
+// ── Filter / Search / Pagination ──
+
+function handleTableChange(pagination: TablePaginationConfig) {
+  page.value = pagination.current || 1
+  if (pagination.pageSize) pageSize.value = pagination.pageSize
+  loadNodes()
+}
 
 function onFilterChange() {
   page.value = 1
@@ -323,29 +343,7 @@ function onSearchInput() {
   }, 300)
 }
 
-function goPage(p: number) {
-  page.value = p
-  loadNodes()
-}
-
-function toggleAll() {
-  if (allSelected.value) {
-    selectedIds.value = []
-  } else {
-    selectedIds.value = nodes.value.map((n: any) => n.id)
-  }
-}
-
-function toggleActionMenu(id: number) {
-  openMenuId.value = openMenuId.value === id ? null : id
-}
-
-function closeMenu(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.action-menu')) openMenuId.value = null
-}
-
-// ── Form Modal ─────────────────────────────────────────────────────────────
+// ── Form Modal ──
 
 function openAddModal() {
   editingNode.value = null
@@ -367,7 +365,6 @@ function handleEdit(record: any) {
   formData.edge_path = record.edge_path || ''
   formData.statusCheck = record.status === 1
   formModalVisible.value = true
-  openMenuId.value = null
 }
 
 function closeFormModal() {
@@ -416,7 +413,7 @@ async function handleFormSubmit() {
   }
 }
 
-// ── Detail ─────────────────────────────────────────────────────────────────
+// ── Detail ──
 
 function viewDetail(record: any) {
   detailNode.value = record
@@ -427,7 +424,7 @@ function viewDetail(record: any) {
   }
 }
 
-// ── Node Actions ───────────────────────────────────────────────────────────
+// ── Node Actions ──
 
 function startElapsedTimer() {
   execElapsed.value = 0
@@ -476,16 +473,8 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     execProgress.percent = 100
 
     addLog(`返回码 (rc): ${data.rc}`)
-    if (data.stdout) {
-      addLog('')
-      addLog('--- 输出 (stdout) ---')
-      addLog(data.stdout)
-    }
-    if (data.stderr) {
-      addLog('')
-      addLog('--- 错误输出 (stderr) ---')
-      addLog(data.stderr)
-    }
+    if (data.stdout) { addLog(''); addLog('--- 输出 (stdout) ---'); addLog(data.stdout) }
+    if (data.stderr) { addLog(''); addLog('--- 错误输出 (stderr) ---'); addLog(data.stderr) }
     addLog('')
     if (data.rc === 0) {
       execProgress.status = 'success'
@@ -497,12 +486,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
 
     execHighlights.value = []
     execStatistics.value = data.statistic ? { ...data.statistic } : null
-    execResult.value = {
-      stdout: data.stdout || '',
-      stderr: data.stderr || '',
-      command: data.command || '',
-      rc: data.rc,
-    }
+    execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: data.command || '', rc: data.rc }
     loadNodes()
   } catch (error: any) {
     stopElapsedTimer()
@@ -523,7 +507,6 @@ function handleStart(record: any) {
     okText: '确认启动',
     onOk: () => executeAction(record, 'start', '启动'),
   })
-  openMenuId.value = null
 }
 
 function handleStop(record: any) {
@@ -534,18 +517,15 @@ function handleStop(record: any) {
     okType: 'danger' as any,
     onOk: () => executeAction(record, 'stop', '停止'),
   })
-  openMenuId.value = null
 }
 
 function handleStatus(record: any) {
   executeAction(record, 'status', '状态查询')
-  openMenuId.value = null
 }
 
-// ── Delete ─────────────────────────────────────────────────────────────────
+// ── Delete ──
 
 function handleDelete(record: any) {
-  openMenuId.value = null
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`,
@@ -563,24 +543,19 @@ function handleDelete(record: any) {
   })
 }
 
-// ── Diff ───────────────────────────────────────────────────────────────────
+// ── Diff ──
 
 function handleDiff(record: any) {
   diffClusterId.value = record.cluster_id
   diffNodeId.value = record.id
   diffDrawerVisible.value = true
-  openMenuId.value = null
 }
 
-// ── Utils ──────────────────────────────────────────────────────────────────
+// ── Utils ──
 
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
-  try {
-    return new Date(dateStr).toLocaleString('zh-CN')
-  } catch {
-    return dateStr
-  }
+  try { return new Date(dateStr).toLocaleString('zh-CN') } catch { return dateStr }
 }
 
 function nginxRunning(node: any): boolean {
@@ -589,23 +564,16 @@ function nginxRunning(node: any): boolean {
   return node.status === 1
 }
 
-// ── Lifecycle ──────────────────────────────────────────────────────────────
+// ── Lifecycle ──
 
 onMounted(() => {
   loadClusters()
   loadNodes()
-  document.addEventListener('click', closeMenu)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', closeMenu)
 })
 </script>
 
 <style scoped>
-.node-list {
-  padding: 20px 24px;
-}
+.node-list { padding: 20px 24px; }
 
 .node-filter-bar {
   display: flex;
@@ -615,146 +583,38 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-/* ── Table ── */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: visible;
-  box-shadow: var(--shadow-sm);
-}
+.text-mono { font-family: var(--font-mono); }
+.text-sm { font-size: 12px; }
+.text-muted { color: var(--muted); }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-thead th {
+.node-table :deep(.ant-table-thead > tr > th) {
   background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  text-align: left;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  border-bottom: 1px solid var(--border);
   white-space: nowrap;
   user-select: none;
 }
 
-tbody tr {
-  border-bottom: 1px solid var(--border);
-  transition: background 0.1s;
-}
-
-tbody tr:last-child { border-bottom: none; }
-
-tbody tr:hover {
-  background: oklch(97% 0.005 250 / 60%);
-}
-
-tbody td {
+.node-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
-  vertical-align: middle;
 }
 
-.text-mono { font-family: var(--font-mono); }
-.text-sm { font-size: 12px; }
-.text-muted { color: var(--muted); }
-
-/* ── Action Menu ── */
-.action-menu-group {
+.node-actions-wrap {
   display: flex;
   gap: 4px;
-  flex-wrap: wrap;
   align-items: center;
+  flex-wrap: nowrap;
 }
 
-.action-menu {
-  position: relative;
-  display: inline-block;
-  z-index: 10;
-}
-
-.action-btn {
-  width: 28px; height: 28px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-sm); border: none;
-  background: transparent; cursor: pointer;
-  color: var(--muted); font-size: 16px;
-}
-
-.action-btn:hover { background: var(--bg); color: var(--fg); }
-
-.action-dropdown {
-  position: absolute; right: 0; top: 100%; z-index: 1000;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
-  min-width: 130px; padding: 4px; display: none;
-}
-
-.action-dropdown.open { display: block; }
-
-.action-dropdown-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: var(--radius-sm);
-  font-size: 13px; color: var(--fg); cursor: pointer;
-  border: none; background: transparent; width: 100%; text-align: left;
-  font-family: var(--font-body);
-}
-
-.action-dropdown-item:hover { background: var(--bg); }
-.action-dropdown-item.danger { color: var(--danger); }
-
-/* ── Pagination ── */
-.table-footer {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-top: 1px solid var(--border);
-  font-size: 12px; color: var(--muted);
-}
-
-.pagination { display: flex; gap: 4px; align-items: center; }
-
-/* ── Detail Grid ── */
-.node-detail-grid {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 6px 16px;
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-
-.node-detail-grid .nd-label { color: var(--muted); font-weight: 500; }
-.node-detail-grid .nd-value { font-family: var(--font-mono); word-break: break-all; }
-
-.node-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-}
-
-.node-stat-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  text-align: center;
-}
-
-.node-stat-card .ns-value {
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.node-stat-card .ns-label {
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-top: 2px;
+.action-trigger-btn {
+  border: none !important;
+  background: transparent !important;
+  font-size: 16px !important;
+  color: var(--muted) !important;
 }
 
 .empty-state { text-align: center; color: var(--muted); }
@@ -773,113 +633,44 @@ tbody td {
 }
 
 .operation-log.visible { display: block; }
-.operation-log .log-line { font-family: var(--font-mono); padding: 2px 0; white-space: pre-wrap; }
-.operation-log .log-line.success { color: var(--success); }
-.operation-log .log-line.error { color: var(--danger); }
 
-/* ── Modal ── */
+/* ── Modal (保持原样) ── */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: oklch(0% 0 0 / 40%);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: fixed; inset: 0; background: oklch(0% 0 0 / 40%);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
 }
-
 .modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 600px; max-height: 80vh;
+  display: flex; flex-direction: column;
 }
-
-.modal-wide {
-  max-width: 700px;
-}
-
+.modal-wide { max-width: 700px; }
 .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
   background: oklch(56% 0.16 210 / 10%);
 }
-.modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--fg);
-}
+.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
+.modal-close { width: 28px; height: 28px; border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--muted); border-radius: var(--radius-sm); }
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
 
-.modal-close {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  cursor: pointer;
-  color: var(--muted);
-  border-radius: var(--radius-sm);
-}
-.modal-close:hover {
-  background: var(--bg);
-  color: var(--fg);
-}
-
-.modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
-
-.form-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 0;
-}
-
-.form-group {
-  flex: 1;
-  margin-bottom: 16px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
+.form-row { display: flex; gap: 16px; }
+.form-group { flex: 1; margin-bottom: 16px; }
+.form-label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
 .required { color: var(--danger); }
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.form-hint {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-}
+/* Detail */
+.node-detail-grid { display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; font-size: 13px; margin-bottom: 16px; }
+.node-detail-grid .nd-label { color: var(--muted); font-weight: 500; }
+.node-detail-grid .nd-value { font-family: var(--font-mono); word-break: break-all; }
+.node-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.node-stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; text-align: center; }
+.node-stat-card .ns-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
+.node-stat-card .ns-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
 </style>

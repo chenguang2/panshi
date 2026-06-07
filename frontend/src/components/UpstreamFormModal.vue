@@ -1,143 +1,216 @@
 <template>
-  <a-modal
-    v-model:open="modalOpen"
-    :title="editingUpstream ? '编辑上游' : '添加上游'"
-    width="750px"
-    :confirm-loading="submitting"
-    @ok="handleSubmit"
-    @cancel="$emit('close')"
-  >
-    <a-tabs v-model:activeKey="activeTab">
-      <a-tab-pane key="basic" tab="基础配置">
-        <a-form ref="formRef" :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-          <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
-            <a-input v-model:value="form.name" placeholder="请输入上游名称" />
-          </a-form-item>
-          <a-form-item label="所属集群" name="cluster_id" :rules="[{ required: true, message: '请选择所属集群' }]">
-            <a-select v-model:value="form.cluster_id" :disabled="!!editingUpstream">
-              <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
-            <a-select v-model:value="form.load_balance">
-              <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-              <a-select-option value="chash">一致性哈希</a-select-option>
-              <a-select-option value="ewma">延迟最小</a-select-option>
-              <a-select-option value="least_conn">最少连接</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item v-if="form.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
-            <a-select v-model:value="form.hash_on">
-              <a-select-option value="header">HTTP请求头</a-select-option>
-              <a-select-option value="cookie">Cookie</a-select-option>
-              <a-select-option value="vars">内置变量</a-select-option>
-              <a-select-option value="vars_combinations">自定义变量</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item v-if="form.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-            <a-input v-model:value="form.key" placeholder="请输入哈希 Key" />
-          </a-form-item>
-          <a-form-item label="描述" name="description">
-            <a-textarea v-model:value="form.description" :rows="2" />
-          </a-form-item>
-          <a-form-item label="节点列表">
-            <a-table :columns="targetColumns" :data-source="form.targets" :pagination="false" size="small" row-key="key">
-              <template #bodyCell="{ column, record, index }">
-                <template v-if="column.key === 'ip'">
-                  <a-input v-model:value="record.ip" placeholder="IP地址" />
-                  <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
-                </template>
-                <template v-else-if="column.key === 'port'">
-                  <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
-                  <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
-                </template>
-                <template v-else-if="column.key === 'weight'">
-                  <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
-                  <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
-                </template>
-                <template v-else-if="column.key === 'action'">
-                  <a-button size="small" danger @click="removeTarget(index)">删除</a-button>
-                </template>
-              </template>
-            </a-table>
-            <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addTarget">
-              <PlusOutlined /> 添加节点
-            </a-button>
-          </a-form-item>
-          <a-form-item label="高级配置">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <label class="toggle"><input type="checkbox" :checked="form.advancedEnabled" @change="form.advancedEnabled = !form.advancedEnabled" /><span class="toggle-slider"></span></label>
-              <span style="color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
-            </div>
-          </a-form-item>
-        </a-form>
-      </a-tab-pane>
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+    <div class="modal modal-wide" style="max-width:800px;">
+      <div class="modal-header">
+        <h2>{{ editingUpstream ? '编辑上游' : '添加上游' }}</h2>
+        <button class="modal-close" @click="$emit('close')">&times;</button>
+      </div>
 
-      <a-tab-pane key="advanced" tab="高级配置">
-        <div v-if="form.advancedEnabled">
-          <a-form :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="健康检查" name="checks">
-              <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
-            </a-form-item>
-            <a-form-item label="重试次数" name="retries">
-              <a-input-number v-model:value="form.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
-              <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
-            </a-form-item>
-            <a-form-item label="重试超时(秒)" name="retry_timeout">
-              <a-input-number v-model:value="form.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
-              <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
-            </a-form-item>
-            <a-form-item label="超时配置(秒)">
-              <div style="display: flex; gap: 8px;">
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div><a-input-number v-model:value="form.timeout.connect" :min="0" placeholder="connect" style="width: 100%" /></div>
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div><a-input-number v-model:value="form.timeout.send" :min="0" placeholder="send" style="width: 100%" /></div>
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div><a-input-number v-model:value="form.timeout.read" :min="0" placeholder="read" style="width: 100%" /></div>
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础配置</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">高级配置</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- ── 基础配置 ── -->
+        <div v-show="activeTab === 'basic'">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">名称 <span class="required">*</span></label>
+              <input v-model="form.name" type="text" class="form-input" placeholder="请输入上游名称">
+              <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">所属集群 <span class="required">*</span></label>
+              <select v-model="form.cluster_id" class="form-input" :disabled="!!editingUpstream">
+                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+              </select>
+              <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">负载均衡 <span class="required">*</span></label>
+              <select v-model="form.load_balance" class="form-input">
+                <option value="weighted_roundrobin">加权轮询</option>
+                <option value="chash">一致性哈希</option>
+                <option value="ewma">延迟最小</option>
+                <option value="least_conn">最少连接</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">描述</label>
+              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息">
+            </div>
+          </div>
+
+          <template v-if="form.load_balance === 'chash'">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">哈希位置 <span class="required">*</span></label>
+                <select v-model="form.hash_on" class="form-input">
+                  <option value="header">HTTP请求头</option>
+                  <option value="cookie">Cookie</option>
+                  <option value="vars">内置变量</option>
+                  <option value="vars_combinations">自定义变量</option>
+                </select>
               </div>
-            </a-form-item>
-            <a-form-item label="Host策略" name="pass_host">
-              <a-select v-model:value="form.pass_host">
-                <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
-                <a-select-option value="node">node（使用节点Host）</a-select-option>
-                <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="form.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
-              <a-input v-model:value="form.upstream_host" placeholder="指定上游请求的Host" />
-            </a-form-item>
-            <a-form-item label="通信协议" name="scheme">
-              <a-select v-model:value="form.scheme">
-                <a-select-option value="http">http</a-select-option>
-                <a-select-option value="https">https</a-select-option>
-                <a-select-option value="tcp">tcp</a-select-option>
-                <a-select-option value="udp">udp</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item label="连接池">
-              <div style="display: flex; gap: 8px;">
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div><a-input-number v-model:value="form.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" /></div>
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div><a-input-number v-model:value="form.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" /></div>
-                <div style="flex: 1"><div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div><a-input-number v-model:value="form.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" /></div>
+              <div class="form-group">
+                <label class="form-label">Key <span class="required">*</span></label>
+                <input v-model="form.key" type="text" class="form-input" placeholder="请输入哈希 Key">
               </div>
-            </a-form-item>
-          </a-form>
+            </div>
+          </template>
+
+          <!-- 节点列表 -->
+          <div class="form-group">
+            <label class="form-label">节点列表</label>
+            <div class="inline-table-wrap">
+              <table class="inline-table">
+                <thead>
+                  <tr>
+                    <th>IP 地址</th>
+                    <th>端口</th>
+                    <th>权重</th>
+                    <th style="width:60px;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(t, i) in form.targets" :key="t.key">
+                    <td>
+                      <input v-model="t.ip" type="text" class="form-input" placeholder="IP地址" style="height:30px;font-size:12px;">
+                      <div v-if="targetValidation[i]?.ip" class="form-error">{{ targetValidation[i].ip }}</div>
+                    </td>
+                    <td>
+                      <input v-model.number="t.port" type="number" class="form-input" min="1" max="65535" placeholder="端口" style="height:30px;font-size:12px;">
+                      <div v-if="targetValidation[i]?.port" class="form-error">{{ targetValidation[i].port }}</div>
+                    </td>
+                    <td>
+                      <input v-model.number="t.weight" type="number" class="form-input" min="1" max="100" placeholder="权重" style="height:30px;font-size:12px;">
+                      <div v-if="targetValidation[i]?.weight" class="form-error">{{ targetValidation[i].weight }}</div>
+                    </td>
+                    <td>
+                      <button class="btn btn-sm btn-danger" @click="removeTarget(i)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;border:1px dashed var(--border);" @click="addTarget">+ 添加节点</button>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="form.advancedEnabled">
+              <span>开启高级配置</span>
+            </label>
+            <div class="form-hint">开启后在"高级配置"页配置健康检查、超时、重试等</div>
+          </div>
         </div>
-        <div v-else class="advanced-disabled-hint">
-          <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-          高级配置未启用，请在"基础配置"中开启
+
+        <!-- ── 高级配置 ── -->
+        <div v-show="activeTab === 'advanced'">
+          <template v-if="form.advancedEnabled">
+            <div class="form-group">
+              <label class="form-label">健康检查</label>
+              <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">重试次数</label>
+                <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
+                <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">重试超时（秒）</label>
+                <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
+                <div class="form-hint">0 = 不限制重试时间</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">超时配置（秒）</label>
+              <div class="form-row-sm">
+                <div class="form-sub-group">
+                  <div class="form-sub-label">连接</div>
+                  <input v-model.number="form.timeout.connect" type="number" class="form-input" min="0" placeholder="connect" style="height:30px;">
+                </div>
+                <div class="form-sub-group">
+                  <div class="form-sub-label">发送</div>
+                  <input v-model.number="form.timeout.send" type="number" class="form-input" min="0" placeholder="send" style="height:30px;">
+                </div>
+                <div class="form-sub-group">
+                  <div class="form-sub-label">读取</div>
+                  <input v-model.number="form.timeout.read" type="number" class="form-input" min="0" placeholder="read" style="height:30px;">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Host 策略</label>
+                <select v-model="form.pass_host" class="form-input">
+                  <option value="pass">pass（透传客户端 Host）</option>
+                  <option value="node">node（使用节点 Host）</option>
+                  <option value="rewrite">rewrite（自定义 Host）</option>
+                </select>
+              </div>
+              <div class="form-group" v-if="form.pass_host === 'rewrite'">
+                <label class="form-label">上游 Host</label>
+                <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">通信协议</label>
+                <select v-model="form.scheme" class="form-input">
+                  <option value="http">http</option>
+                  <option value="https">https</option>
+                  <option value="tcp">tcp</option>
+                  <option value="udp">udp</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">连接池</label>
+                <div class="form-row-sm">
+                  <div class="form-sub-group">
+                    <div class="form-sub-label">大小</div>
+                    <input v-model.number="form.keepalive_pool.size" type="number" class="form-input" min="1" placeholder="size" style="height:30px;">
+                  </div>
+                  <div class="form-sub-group">
+                    <div class="form-sub-label">空闲超时（秒）</div>
+                    <input v-model.number="form.keepalive_pool.idle_timeout" type="number" class="form-input" min="0" placeholder="idle" style="height:30px;">
+                  </div>
+                  <div class="form-sub-group">
+                    <div class="form-sub-label">最大请求数</div>
+                    <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="requests" style="height:30px;">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-else class="advanced-disabled-hint">
+            <span class="hint-icon">&#x26A0;</span>
+            高级配置未启用，请在"基础配置"中开启
+          </div>
         </div>
-      </a-tab-pane>
-    </a-tabs>
-    <template #footer>
-      <a-button @click="$emit('close')">取消</a-button>
-      <a-button type="primary" :loading="submitting" @click="handleSubmit">保存</a-button>
-    </template>
-  </a-modal>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '提交中...' : '保存' }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 
 const props = defineProps<{
@@ -151,17 +224,12 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-const modalOpen = computed({
-  get: () => props.visible,
-  set: (val) => { if (!val) emit('close') },
-})
-
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
 
-const formRef = ref()
 const activeTab = ref('basic')
 const submitting = ref(false)
+const formErrors = reactive<Record<string, string>>({})
 const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
 let targetKey = 0
 
@@ -188,13 +256,6 @@ const form = reactive({
 })
 
 const checksJson = ref(defaultChecksJson)
-
-const targetColumns = [
-  { title: 'IP地址', key: 'ip', width: 200 },
-  { title: '端口', key: 'port', width: 120 },
-  { title: '权重', key: 'weight', width: 100 },
-  { title: '操作', key: 'action', width: 80 },
-]
 
 // Watch load_balance change - reset hash fields when not chash
 watch(() => form.load_balance, (val) => {
@@ -227,6 +288,11 @@ watch(() => form.advancedEnabled, (val) => {
 // Populate form when visible changes
 watch(() => props.visible, (v) => {
   if (!v) return
+  formErrors.name = ''
+  formErrors.cluster_id = ''
+  targetValidation.value = {}
+  activeTab.value = 'basic'
+
   if (props.editingUpstream) {
     const u = props.editingUpstream
     form.cluster_id = u.cluster_id
@@ -298,8 +364,6 @@ watch(() => props.visible, (v) => {
     form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
     checksJson.value = defaultChecksJson
   }
-  targetValidation.value = {}
-  activeTab.value = 'basic'
 })
 
 function addTarget() {
@@ -310,8 +374,15 @@ function removeTarget(index: number) {
   form.targets.splice(index, 1)
 }
 
-function validateTargets(): boolean {
+function validateForm(): boolean {
+  formErrors.name = ''
+  formErrors.cluster_id = ''
   targetValidation.value = {}
+
+  if (!form.name.trim()) { formErrors.name = '请输入上游名称'; return false }
+  if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
+
+  // Validate targets
   let valid = true
   const seen = new Set<string>()
   form.targets.forEach((t, i) => {
@@ -327,16 +398,12 @@ function validateTargets(): boolean {
     }
     targetValidation.value[`${i}`] = errors
   })
+
   return valid
 }
 
 async function handleSubmit() {
-  try {
-    if ((formRef.value as any)?.validate) {
-      await (formRef.value as any).validate()
-    }
-  } catch { return }
-  if (!validateTargets()) return
+  if (!validateForm()) return
 
   submitting.value = true
   try {
@@ -386,3 +453,173 @@ async function handleSubmit() {
   }
 }
 </script>
+
+<style scoped>
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide { max-width: 800px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.modal-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted); border-radius: var(--radius-sm);
+}
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Modal Body ── */
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.form-row { display: flex; gap: 16px; margin-bottom: 0; }
+.form-row-sm { display: flex; gap: 8px; }
+.form-group { flex: 1; margin-bottom: 16px; }
+.form-sub-group { flex: 1; }
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.form-sub-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.required { color: var(--danger); }
+
+.form-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.form-error {
+  font-size: 12px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+/* ── Inline Table for Targets ── */
+.inline-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.inline-table { width: 100%; border-collapse: collapse; }
+.inline-table thead th {
+  background: oklch(97% 0.005 250);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.inline-table tbody td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.inline-table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Advanced disabled hint ── */
+.advanced-disabled-hint {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.hint-icon { font-size: 18px; margin-right: 8px; }
+</style>

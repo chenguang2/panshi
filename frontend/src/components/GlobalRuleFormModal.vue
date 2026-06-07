@@ -1,30 +1,47 @@
 <template>
-  <a-modal v-model:open="modalOpen" :title="editingConfig ? '编辑全局规则' : '添加全局规则'" width="800px" :confirm-loading="submitting" @ok="handleSubmit">
-    <a-tabs v-model:activeKey="activeTab">
-      <a-tab-pane key="basic" tab="基础配置">
-        <a-form ref="formRef" :model="form" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-          <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入全局规则名称' }]">
-            <a-input v-model:value="form.name" placeholder="请输入全局规则名称" />
-          </a-form-item>
-          <a-form-item label="所属集群" name="cluster_id" :rules="[{ required: true, message: '请选择所属集群' }]">
-            <a-select v-model:value="form.cluster_id" :disabled="!!editingConfig">
-              <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-            </a-select>
-          </a-form-item>
-          <a-form-item label="描述" name="description">
-            <a-textarea v-model:value="form.description" :rows="2" placeholder="可选描述" />
-          </a-form-item>
-        </a-form>
-      </a-tab-pane>
-      <a-tab-pane key="plugins" tab="插件配置">
-        <PluginSelector v-model="form.selectedPlugins" :plugins="availablePlugins" />
-      </a-tab-pane>
-    </a-tabs>
-    <template #footer>
-      <a-button @click="$emit('close')">取消</a-button>
-      <a-button type="primary" :loading="submitting" @click="handleSubmit">{{ editingConfig ? '保存' : '创建' }}</a-button>
-    </template>
-  </a-modal>
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+    <div class="modal modal-wide" style="max-width:800px;">
+      <div class="modal-header">
+        <h2>{{ editingConfig ? '编辑全局规则' : '添加全局规则' }}</h2>
+        <button class="modal-close" @click="$emit('close')">&times;</button>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础配置</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'plugins' }" @click="activeTab = 'plugins'">插件配置</button>
+      </div>
+
+      <div class="modal-body">
+        <div v-show="activeTab === 'basic'">
+          <div class="form-group">
+            <label class="form-label">名称 <span class="required">*</span></label>
+            <input v-model="form.name" type="text" class="form-input" placeholder="请输入全局规则名称">
+            <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">所属集群 <span class="required">*</span></label>
+            <select v-model="form.cluster_id" class="form-input" :disabled="!!editingConfig">
+              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+            </select>
+            <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <textarea v-model="form.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
+          </div>
+        </div>
+
+        <div v-show="activeTab === 'plugins'">
+          <PluginSelector v-model="form.selectedPlugins" :plugins="availablePlugins" />
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '提交中...' : (editingConfig ? '保存' : '创建') }}</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -42,7 +59,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const modalOpen = computed({ get: () => props.visible, set: (v) => { if (!v) emit('close') } })
-const formRef = ref()
+const formErrors = reactive<Record<string, string>>({})
 const activeTab = ref('basic')
 const submitting = ref(false)
 const availablePlugins = ref<any[]>([])
@@ -56,6 +73,8 @@ const form = reactive({
 
 watch(() => props.visible, async (v) => {
   if (!v) return
+  formErrors.name = ''
+  formErrors.cluster_id = ''
   try {
     const res = await api.get('/plugins/builtin')
     availablePlugins.value = res.data.plugins || []
@@ -77,8 +96,16 @@ watch(() => props.visible, async (v) => {
   activeTab.value = 'basic'
 })
 
+function validateForm(): boolean {
+  formErrors.name = ''
+  formErrors.cluster_id = ''
+  if (!form.name.trim()) { formErrors.name = '请输入全局规则名称'; return false }
+  if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
+  return true
+}
+
 async function handleSubmit() {
-  try { if ((formRef.value as any)?.validate) await (formRef.value as any).validate() } catch { return }
+  if (!validateForm()) return
   submitting.value = true
   try {
     const plugins: Record<string, any> = {}
@@ -103,3 +130,102 @@ async function handleSubmit() {
   finally { submitting.value = false }
 }
 </script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide { max-width: 800px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(56% 0.16 210 / 10%);
+}
+.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
+
+.modal-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted); border-radius: var(--radius-sm);
+}
+.modal-close:hover { background: var(--bg); color: var(--fg); }
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.form-group { margin-bottom: 16px; }
+.form-group:last-child { margin-bottom: 0; }
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.required { color: var(--danger); }
+
+.form-error {
+  font-size: 12px;
+  color: var(--danger);
+  margin-top: 2px;
+}
+</style>

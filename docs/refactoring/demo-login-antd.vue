@@ -22,57 +22,68 @@
       </div>
 
       <!-- ↓↓↓ 改这里：裸 <form> + <input> → Ant Design ↓↓↓ -->
-      <form @submit.prevent="handleLogin" class="login-form">
-        <div class="login-field-wrap">
-          <label class="login-field-label" for="username">用户名</label>
+      <a-form
+        ref="formRef"
+        :model="formState"
+        :rules="formRules"
+        @finish="handleLogin"
+        layout="vertical"
+        class="login-form"
+      >
+        <a-form-item
+          name="username"
+          label="用户名"
+          :colon="false"
+        >
           <a-input
             id="username"
             v-model:value="formState.username"
             placeholder="请输入管理员账号"
             autocomplete="username"
             size="large"
-            :status="fieldErrors.username ? 'error' : undefined"
           >
             <template #prefix>
               <span class="ant-input-icon">&#x1F464;</span>
             </template>
           </a-input>
-          <div v-if="fieldErrors.username" class="login-field-error">{{ fieldErrors.username }}</div>
-        </div>
+        </a-form-item>
 
-        <div class="login-field-wrap">
-          <label class="login-field-label" for="password">密码</label>
+        <a-form-item
+          name="password"
+          label="密码"
+          :colon="false"
+        >
           <a-input-password
             id="password"
             v-model:value="formState.password"
             placeholder="请输入密码"
             autocomplete="current-password"
             size="large"
-            :status="fieldErrors.password ? 'error' : undefined"
           >
             <template #prefix>
               <span class="ant-input-icon">&#x1F512;</span>
             </template>
           </a-input-password>
-          <div v-if="fieldErrors.password" class="login-field-error">{{ fieldErrors.password }}</div>
-        </div>
+        </a-form-item>
 
         <div class="login-options">
           <a-checkbox v-model:checked="formState.remember">记住我</a-checkbox>
           <a href="#" class="forgot-link" tabindex="-1">忘记密码?</a>
         </div>
 
-        <a-button
-          type="primary"
-          html-type="submit"
-          :loading="submitting"
-          block
-          size="large"
-          class="login-btn"
-        >
-          登 录
-        </a-button>
-      </form>
+        <a-form-item style="margin-bottom: 0;">
+          <a-button
+            type="primary"
+            html-type="submit"
+            :loading="submitting"
+            block
+            size="large"
+            class="login-btn"
+          >
+            登 录
+          </a-button>
+        </a-form-item>
+      </a-form>
       <!-- ↑↑↑ 改这里 ↑↑↑ -->
 
       <div class="login-token-hint">
@@ -97,10 +108,12 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { message } from 'ant-design-vue'
+import type { FormInstance } from 'ant-design-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-
+const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const errorMsg = ref('')
 
@@ -116,34 +129,19 @@ const formState = reactive<LoginForm>({
   remember: true,
 })
 
-const fieldErrors = reactive({ username: '', password: '' })
-
-function validateForm(): boolean {
-  fieldErrors.username = ''
-  fieldErrors.password = ''
-
-  if (!formState.username.trim() && !formState.password.trim()) {
-    errorMsg.value = '请输入用户名和密码'
-    return false
-  }
-  if (!formState.username.trim()) {
-    fieldErrors.username = '请输入用户名'
-    return false
-  }
-  if (!formState.password.trim()) {
-    fieldErrors.password = '请输入密码'
-    return false
-  }
-  return true
+const formRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { whitespace: true, message: '用户名不能为空', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { whitespace: true, message: '密码不能为空', trigger: 'blur' },
+  ],
 }
 
 async function handleLogin() {
-  fieldErrors.username = ''
-  fieldErrors.password = ''
   errorMsg.value = ''
-
-  if (!validateForm()) return
-
   submitting.value = true
   try {
     await authStore.login(formState.username.trim(), formState.password.trim())
@@ -232,18 +230,22 @@ async function handleLogin() {
 
 .login-error-icon { flex-shrink: 0; font-size: 14px; }
 
-/* ── 表单样式 ── */
+/* ── Ant Design 表单样式覆写（保持当前设计稿） ── */
 
-.login-field-wrap {
+/* 覆写 a-form-item label 样式匹配设计稿 */
+.login-form :deep(.ant-form-item) {
   margin-bottom: 18px;
 }
 
-.login-field-label {
-  display: block;
-  margin-bottom: 6px;
+.login-form :deep(.ant-form-item-label) {
+  padding-bottom: 6px;
+}
+
+.login-form :deep(.ant-form-item-label > label) {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted) !important;
   font-weight: 500;
+  height: auto;
 }
 
 /* a-input / a-input-password 高度和圆角 */
@@ -265,13 +267,6 @@ async function handleLogin() {
 .ant-input-icon {
   font-size: 15px;
   opacity: 0.5;
-}
-
-/* 字段级错误提示 */
-.login-field-error {
-  font-size: 12px;
-  color: var(--danger);
-  margin-top: 4px;
 }
 
 /* 选项行 */
