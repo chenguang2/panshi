@@ -18,9 +18,13 @@
         <input v-model="searchText" type="text" placeholder="搜索名称、URI、描述..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="loadRoutes">
+      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="onClusterChange">
         <option value="">全部集群</option>
         <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <select v-model="upstreamFilter" class="form-input" style="width:160px;" @change="loadRoutes" :disabled="!upstreams.length && !clusterFilter">
+        <option value="">全部上游</option>
+        <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
       </select>
       <select v-model="publishFilter" class="form-input" style="width:130px;" @change="loadRoutes">
         <option value="">全部状态</option>
@@ -126,11 +130,13 @@ import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/
 const loading = ref(false)
 const routes = ref<any[]>([])
 const clusters = ref<any[]>([])
+const upstreams = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
 const clusterFilter = ref('')
+const upstreamFilter = ref('')
 const activeMethod = ref('')
 const publishFilter = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -191,6 +197,7 @@ async function loadRoutes() {
   try {
     const params: any = { page: page.value, page_size: pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
     if (publishFilter.value) params.publish_status = publishFilter.value
     if (searchText.value) params.search = searchText.value
@@ -206,6 +213,21 @@ async function loadClusters() {
     const res = await api.get('/clusters')
     clusters.value = res.data?.items || res.data || []
   } catch { /* ignore */ }
+}
+
+async function loadUpstreams(cid?: number) {
+  if (!cid) { upstreams.value = []; return }
+  try {
+    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: 200 } })
+    upstreams.value = res.data.items || []
+  } catch { upstreams.value = [] }
+}
+
+function onClusterChange() {
+  upstreamFilter.value = ''
+  page.value = 1
+  loadUpstreams(Number(clusterFilter.value) || undefined)
+  loadRoutes()
 }
 
 function openCreateModal() { editingRoute.value = null; isCopy.value = false; formModalVisible.value = true }

@@ -24,6 +24,7 @@ async def list_all_routes(
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     method: Optional[str] = Query(None, description="Filter by HTTP method"),
+    upstream_id: Optional[int] = Query(None, description="Filter by upstream ID"),
     publish_status: Optional[str] = Query(None, description="published or unpublished"),
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("asc"),
@@ -38,6 +39,10 @@ async def list_all_routes(
     # Method filter
     if method:
         query = query.where(Route.methods.ilike(f"%{method}%"))
+
+    # Upstream filter
+    if upstream_id is not None:
+        query = query.where(Route.upstream_id == upstream_id)
 
     # Permission filter
     if current_user.role != "admin":
