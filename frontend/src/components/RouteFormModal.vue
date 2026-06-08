@@ -211,7 +211,10 @@ async function loadUpstreams(cid: number) {
   try {
     const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: 100 } })
     upstreams.value = res.data.items || []
-  } catch { upstreams.value = [] }
+  } catch (e: any) {
+    upstreams.value = []
+    console.error(`加载上游列表失败 (cluster ${cid}):`, e)
+  }
 }
 
 async function loadPlugins() {
