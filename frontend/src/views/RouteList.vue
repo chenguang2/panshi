@@ -65,6 +65,10 @@
           <span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span>
         </template>
 
+        <template v-if="column.key === 'upstream'">
+          <span class="text-mono text-sm">{{ record.upstream_name || '-' }}</span>
+        </template>
+
         <template v-if="column.key === 'priority'">
           <span class="priority-badge">{{ record.priority }}</span>
         </template>
@@ -147,6 +151,7 @@ const columns = [
   { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
   { title: 'URI', key: 'uri', sorter: (a: any, b: any) => (a.uri || '').localeCompare(b.uri || '') },
   { title: '方法', key: 'methods' },
+  { title: '上游', key: 'upstream', sorter: (a: any, b: any) => (a.upstream_name || '').localeCompare(b.upstream_name || '') },
   { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
   { title: '优先级', key: 'priority', sorter: (a: any, b: any) => (a.priority || 0) - (b.priority || 0) },
   { title: '版本', key: 'version', sorter: (a: any, b: any) => ((a.current_version || '')+'').localeCompare((b.current_version || '')+'') },

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion
+from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream
 from app.models.user import User, UserCluster
 from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
@@ -101,6 +101,14 @@ async def list_all_routes(
         )
         cluster_map = {r[0]: r[1] or r[2] for r in c_result.all()}
 
+    upstream_ids = {r.upstream_id for r in routes if r.upstream_id}
+    upstream_map = {}
+    if upstream_ids:
+        u_result = await db.execute(
+            select(Upstream.id, Upstream.name).where(Upstream.id.in_(upstream_ids))
+        )
+        upstream_map = {r[0]: r[1] for r in u_result.all()}
+
     # Batch publish time
     route_ids = [r.id for r in routes]
     pub_map = {}
@@ -136,6 +144,7 @@ async def list_all_routes(
         )
         item_dict = item.model_dump()
         item_dict["cluster_name"] = cluster_map.get(r.cluster_id, "")
+        item_dict["upstream_name"] = upstream_map.get(r.upstream_id) if r.upstream_id else None
         items.append(item_dict)
 
     return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
