@@ -23,80 +23,82 @@
       <span class="text-muted text-sm">共 {{ totalCount }} 个节点</span>
     </div>
 
-    <a-table
-      :data-source="nodes"
-      :columns="columns"
-      :row-key="(record: any) => record.id"
-      :pagination="{
-        current: page,
-        pageSize,
-        total: totalCount,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 个节点`,
-        pageSizeOptions: ['10', '20', '50'],
-      }"
-      :loading="loading"
-      size="middle"
-      class="node-table"
-      @change="handleTableChange"
-    >
-      <template #bodyCell="{ column, record, index }">
-        <template v-if="column.key === 'index'">
-          <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
-        </template>
-        <template v-if="column.key === 'ip'">
-          <span class="text-mono">{{ record.ip }}</span>
+    <div class="table-container">
+      <a-table
+        :data-source="nodes"
+        :columns="columns"
+        :row-key="(record: any) => record.id"
+        :pagination="{
+          current: page,
+          pageSize,
+          total: totalCount,
+          showSizeChanger: true,
+          showTotal: (total: number) => `共 ${total} 个节点`,
+          pageSizeOptions: ['10', '20', '50'],
+        }"
+        :loading="loading"
+        size="middle"
+        class="node-table"
+        @change="handleTableChange"
+      >
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+          </template>
+          <template v-if="column.key === 'ip'">
+            <span class="text-mono">{{ record.ip }}</span>
+          </template>
+
+          <template v-if="column.key === 'service_port'">
+            <span class="text-mono text-sm">{{ record.service_port }}</span>
+          </template>
+
+          <template v-if="column.key === 'management_port'">
+            <span class="text-mono text-sm">{{ record.management_port }}</span>
+          </template>
+
+          <template v-if="column.key === 'edge_path'">
+            <span class="text-sm">{{ record.edge_path || '-' }}</span>
+          </template>
+
+          <template v-if="column.key === 'status'">
+            <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+            <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
+          </template>
+
+          <template v-if="column.key === 'edge_version'">
+            <span class="text-mono text-sm">{{ record.status_detail?.statistic?.edge_version || '-' }}</span>
+          </template>
+
+          <template v-if="column.key === 'actions'">
+            <div class="node-actions-wrap">
+              <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
+              <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
+              <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
+              <button class="btn btn-ghost btn-sm" @click="viewDetail(record)">ⓘ 详情</button>
+              <a-dropdown :trigger="['click']">
+                <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
+                    <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
+                    <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
+            <div class="operation-log" :class="{ visible: opLogVisible === record.id }" :id="'opLog-' + record.id"></div>
+          </template>
         </template>
 
-        <template v-if="column.key === 'service_port'">
-          <span class="text-mono text-sm">{{ record.service_port }}</span>
-        </template>
-
-        <template v-if="column.key === 'management_port'">
-          <span class="text-mono text-sm">{{ record.management_port }}</span>
-        </template>
-
-        <template v-if="column.key === 'edge_path'">
-          <span class="text-sm">{{ record.edge_path || '-' }}</span>
-        </template>
-
-        <template v-if="column.key === 'status'">
-          <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
-          <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
-        </template>
-
-        <template v-if="column.key === 'edge_version'">
-          <span class="text-mono text-sm">{{ record.status_detail?.statistic?.edge_version || '-' }}</span>
-        </template>
-
-        <template v-if="column.key === 'actions'">
-          <div class="node-actions-wrap">
-            <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
-            <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
-            <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
-            <button class="btn btn-ghost btn-sm" @click="viewDetail(record)">ⓘ 详情</button>
-            <a-dropdown :trigger="['click']">
-              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
-                  <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
-                  <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
+        <template #empty>
+          <div class="empty-state">
+            <div class="empty-state-icon">◎</div>
+            <p>暂无节点</p>
           </div>
-          <div class="operation-log" :class="{ visible: opLogVisible === record.id }" :id="'opLog-' + record.id"></div>
         </template>
-      </template>
-
-      <template #empty>
-        <div class="empty-state">
-          <div class="empty-state-icon">◎</div>
-          <p>暂无节点</p>
-        </div>
-      </template>
-    </a-table>
+      </a-table>
+    </div>
 
     <!-- Add / Edit Node Modal -->
     <div class="modal-overlay" :style="{ display: formModalVisible ? 'flex' : 'none' }">
@@ -616,8 +618,23 @@ onMounted(() => {
 .text-sm { font-size: 12px; }
 .text-muted { color: var(--muted); }
 
+/* ── 表格外框 ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container :deep(.ant-table) {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── 表头 ── */
 .node-table :deep(.ant-table-thead > tr > th) {
   background: oklch(97% 0.005 250);
+  padding: 10px 16px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -625,12 +642,22 @@ onMounted(() => {
   color: var(--muted);
   white-space: nowrap;
   user-select: none;
+  border-bottom: 1px solid var(--border) !important;
+}
+.node-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
 }
 
+/* ── 行分割线 ── */
 .node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px;
-  font-size: 13px;
-  white-space: nowrap;
+  padding: 12px 16px !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.node-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
 }
 
 .node-actions-wrap {

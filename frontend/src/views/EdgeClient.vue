@@ -10,62 +10,54 @@
       style="margin-bottom: 16px;"
     />
 
-    <a-card class="node-selector-card">
-      <div class="node-selector">
-        <a-radio-group v-model:value="inputMode" style="margin-right: 16px;">
-          <a-radio value="cluster">按集群选择</a-radio>
-          <a-radio value="manual">手动输入</a-radio>
-        </a-radio-group>
+    <div class="edge-filter-bar">
+      <select v-model="inputMode" class="form-input" style="width: 130px;">
+        <option value="cluster">按集群选择</option>
+        <option value="manual">手动输入</option>
+      </select>
 
-        <template v-if="inputMode === 'cluster'">
-          <a-select
-            v-model:value="selectedClusterId"
-            placeholder="选择集群"
-            style="width: 200px;"
-            @change="onClusterChange"
-          >
-            <a-select-option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
-              {{ cluster.display_name || cluster.name }}
-            </a-select-option>
-          </a-select>
-          <a-select
-            v-model:value="selectedNode"
-            placeholder="选择边缘节点"
-            style="width: 250px; margin-left: 8px;"
-            :disabled="!selectedClusterId"
-            @change="onNodeChange"
-          >
-            <a-select-option v-for="node in clusterNodes" :key="node.ip + ':' + node.management_port" :value="node.ip + ':' + node.management_port">
-              {{ node.ip }}:{{ node.management_port }}
-            </a-select-option>
-          </a-select>
-        </template>
+      <template v-if="inputMode === 'cluster'">
+        <select v-model="selectedClusterId" class="form-input" style="width: 200px;" @change="onClusterChange">
+          <option value="">选择集群</option>
+          <option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
+            {{ cluster.display_name || cluster.name }}
+          </option>
+        </select>
+        <select v-model="selectedNode" class="form-input" style="width: 250px;" :disabled="!selectedClusterId" @change="onNodeChange">
+          <option value="">选择边缘节点</option>
+          <option v-for="node in clusterNodes" :key="node.ip + ':' + node.management_port" :value="node.ip + ':' + node.management_port">
+            {{ node.ip }}:{{ node.management_port }}
+          </option>
+        </select>
+      </template>
 
-        <template v-else>
-          <a-input
-            v-model:value="manualNode"
-            placeholder="192.168.100.235:11999"
-            style="width: 250px;"
-            @blur="onManualInput"
-          />
-        </template>
+      <template v-else>
+        <input v-model="manualNode" class="form-input" placeholder="192.168.100.235:11999" style="width: 250px;" @blur="onManualInput" />
+      </template>
 
-        <a-button type="primary" @click="startQuery" :loading="loading" style="margin-left: 8px;">
-          <SearchOutlined /> 查询
-        </a-button>
-        <a-button @click="cancelQuery" :disabled="!loading" style="margin-left: 4px;">
-          <CloseCircleOutlined /> 取消查询
-        </a-button>
-      </div>
+      <button class="btn btn-primary" @click="startQuery" :disabled="loading">
+        <SearchOutlined /> 查询
+      </button>
+      <button class="btn btn-ghost" @click="cancelQuery" :disabled="!loading">
+        <CloseCircleOutlined /> 取消查询
+      </button>
+      <span v-if="loadedNode" class="text-muted text-sm" style="margin-left: auto;">
+        已连接: {{ loadedNode }}
+      </span>
+    </div>
 
-      <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px;">
+    <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px;">
         <a-tab-pane key="upstreams" tab="上游">
           <div class="table-toolbar">
-            <a-button type="primary" @click="showUpstreamModal('create')">
+            <button class="btn btn-primary" @click="showUpstreamModal('create')">
               <PlusOutlined /> 添加上游
-            </a-button>
-            <a-input-search v-model:value="upstreamSearch" placeholder="搜索上游..." style="width: 240px;" allow-clear />
+            </button>
+            <div class="search-input-wrap">
+              <input v-model="upstreamSearch" class="form-input" placeholder="搜索上游..." style="width: 240px;" />
+              <span class="search-icon">🔍</span>
+            </div>
           </div>
+          <div class="table-container">
           <a-table
             :columns="upstreamColumns"
             :data-source="upstreamSearch ? upstreams.filter(u => (u.value?.name || '').includes(upstreamSearch) || (u.value?.id || '').includes(upstreamSearch)) : upstreams"
@@ -73,7 +65,10 @@
             :pagination="false"
             rowKey="key"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
               <template v-if="column.key === 'id'">
                 <span style="font-size: 12px;">{{ record.value?.id }}</span>
               </template>
@@ -90,23 +85,28 @@
                 <span v-else>-</span>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button size="small" @click="showUpstreamJson(record)">JSON</a-button>
-                  <a-button size="small" @click="showUpstreamModal('edit', record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteUpstream(record)">删除</a-button>
-                </a-space>
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showUpstreamJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" @click="showUpstreamModal('edit', record)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteUpstream(record)">删除</button>
+                </div>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="routes" tab="路由">
           <div class="table-toolbar">
-            <a-button type="primary" @click="showRouteModal('create')">
+            <button class="btn btn-primary" @click="showRouteModal('create')">
               <PlusOutlined /> 添加路由
-            </a-button>
-            <a-input-search v-model:value="routeSearch" placeholder="搜索路由..." style="width: 240px;" allow-clear />
+            </button>
+            <div class="search-input-wrap">
+              <input v-model="routeSearch" class="form-input" placeholder="搜索路由..." style="width: 240px;" />
+              <span class="search-icon">🔍</span>
+            </div>
           </div>
+          <div class="table-container">
           <a-table
             :columns="routeColumns"
             :data-source="routeSearch ? routes.filter(r => (r.value?.name || '').includes(routeSearch) || (r.value?.uri || '').includes(routeSearch)) : routes"
@@ -114,7 +114,10 @@
             :pagination="false"
             rowKey="key"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
               <template v-if="column.key === 'id'">
                 <span style="font-size: 12px;">{{ record.value?.id }}</span>
               </template>
@@ -131,23 +134,28 @@
                 {{ record.value?.upstream_id || '-' }}
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button size="small" @click="showRouteJson(record)">JSON</a-button>
-                  <a-button size="small" @click="showRouteModal('edit', record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteRoute(record)">删除</a-button>
-                </a-space>
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showRouteJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" @click="showRouteModal('edit', record)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteRoute(record)">删除</button>
+                </div>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="globalRules" tab="全局规则">
           <div class="table-toolbar">
-            <a-button type="primary" @click="showGlobalRuleModal('create')">
+            <button class="btn btn-primary" @click="showGlobalRuleModal('create')">
               <PlusOutlined /> 添加规则
-            </a-button>
-            <a-input-search v-model:value="globalRuleSearch" placeholder="搜索规则..." style="width: 240px;" allow-clear />
+            </button>
+            <div class="search-input-wrap">
+              <input v-model="globalRuleSearch" class="form-input" placeholder="搜索规则..." style="width: 240px;" />
+              <span class="search-icon">🔍</span>
+            </div>
           </div>
+          <div class="table-container">
           <a-table
             :columns="globalRuleColumns"
             :data-source="globalRuleSearch ? globalRules.filter(r => (r.value?.desc || '').includes(globalRuleSearch) || (r.value?.id || '').includes(globalRuleSearch)) : globalRules"
@@ -155,7 +163,10 @@
             :pagination="false"
             rowKey="key"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
               <template v-if="column.key === 'id'">
                 <span style="font-size: 12px;">{{ record.value?.id }}</span>
               </template>
@@ -167,23 +178,28 @@
                 <span v-else>-</span>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button size="small" @click="showGlobalRuleJson(record)">JSON</a-button>
-                  <a-button size="small" @click="showGlobalRuleModal('edit', record)">编辑</a-button>
-                  <a-button size="small" danger @click="deleteGlobalRule(record)">删除</a-button>
-                </a-space>
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showGlobalRuleJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" @click="showGlobalRuleModal('edit', record)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteGlobalRule(record)">删除</button>
+                </div>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="pluginConfigs" tab="插件组">
           <div class="table-toolbar">
-            <a-button type="primary" @click="showPluginConfigModal('create')">
+            <button class="btn btn-primary" @click="showPluginConfigModal('create')">
               <PlusOutlined /> 添加插件组
-            </a-button>
-            <a-input-search v-model:value="pluginConfigSearch" placeholder="搜索插件组..." style="width: 240px;" allow-clear />
+            </button>
+            <div class="search-input-wrap">
+              <input v-model="pluginConfigSearch" class="form-input" placeholder="搜索插件组..." style="width: 240px;" />
+              <span class="search-icon">🔍</span>
+            </div>
           </div>
+          <div class="table-container">
           <a-table
             :columns="pluginConfigColumns"
             :data-source="pluginConfigSearch ? pluginConfigs.filter(p => (p.value?.desc || '').includes(pluginConfigSearch) || (p.value?.id || '').includes(pluginConfigSearch)) : pluginConfigs"
@@ -191,7 +207,10 @@
             :pagination="false"
             rowKey="key"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
               <template v-if="column.key === 'id'">
                 <span style="font-size: 12px;">{{ record.value?.id }}</span>
               </template>
@@ -211,26 +230,31 @@
                 <span v-else>-</span>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button size="small" @click="showPluginConfigJson(record)">JSON</a-button>
-                  <a-button size="small" @click="showPluginConfigModal('edit', record)">编辑</a-button>
-                  <a-button size="small" danger @click="deletePluginConfig(record)">删除</a-button>
-                </a-space>
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showPluginConfigJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" @click="showPluginConfigModal('edit', record)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deletePluginConfig(record)">删除</button>
+                </div>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="pluginMetadata" tab="插件元数据">
           <div class="table-toolbar">
-            <a-button type="primary" @click="showPluginMetadataModal('create')">
-              <PlusOutlined />               添加插件元数据
-            </a-button>
-            <a-button @click="reloadPlugins" :loading="reloadingPlugins">
+            <button class="btn btn-primary" @click="showPluginMetadataModal('create')">
+              <PlusOutlined /> 添加插件元数据
+            </button>
+            <button class="btn btn-ghost" @click="reloadPlugins" :disabled="reloadingPlugins">
               <ReloadOutlined /> 重新加载
-            </a-button>
-            <a-input-search v-model:value="pluginMetadataSearch" placeholder="搜索..." style="width: 200px;" allow-clear />
+            </button>
+            <div class="search-input-wrap">
+              <input v-model="pluginMetadataSearch" class="form-input" placeholder="搜索..." style="width: 200px;" />
+              <span class="search-icon">🔍</span>
+            </div>
           </div>
+          <div class="table-container">
           <a-table
             :columns="pluginMetadataColumns"
             :data-source="pluginMetadataSearch ? pluginMetadataList.filter(m => (m.key || '').includes(pluginMetadataSearch)) : pluginMetadataList"
@@ -238,7 +262,10 @@
             :pagination="false"
             rowKey="key"
           >
-            <template #bodyCell="{ column, record }">
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
               <template v-if="column.key === 'name'">
                 <span style="font-size: 12px;">{{ record.key?.split('/').pop() || '-' }}</span>
               </template>
@@ -246,17 +273,19 @@
                 <pre class="json-viewer-inline">{{ JSON.stringify(record.value, null, 2) }}</pre>
               </template>
               <template v-if="column.key === 'actions'">
-                <a-space>
-                  <a-button size="small" @click="showPluginMetadataJson(record)">JSON</a-button>
-                  <a-button size="small" @click="showPluginMetadataModal('edit', record)">编辑</a-button>
-                  <a-button size="small" danger @click="deletePluginMetadata(record)">删除</a-button>
-                </a-space>
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showPluginMetadataJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" @click="showPluginMetadataModal('edit', record)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deletePluginMetadata(record)">删除</button>
+                </div>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
 
         <a-tab-pane key="pluginList" tab="插件列表">
+          <div class="table-container">
           <a-table
             :columns="pluginListColumns"
             :data-source="pluginList"
@@ -266,214 +295,272 @@
           >
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
-                <span style="font-size: 12px;">{{ index + 1 }}</span>
+                <span class="text-muted">{{ index + 1 }}</span>
               </template>
               <template v-if="column.key === 'name'">
                 <span style="font-size: 12px;">{{ record }}</span>
               </template>
             </template>
           </a-table>
+          </div>
         </a-tab-pane>
       </a-tabs>
-    </a-card>
 
-    <a-modal
-      v-model:open="upstreamModalVisible"
-      :title="upstreamModalMode === 'create' ? '创建上游' : '编辑上游'"
-      @ok="handleUpstreamSubmit"
-      width="600px"
-    >
-      <a-form :model="upstreamForm" layout="vertical">
-        <a-form-item label="名称" name="name">
-          <a-input v-model:value="upstreamForm.name" placeholder="上游名称" />
-        </a-form-item>
-        <a-form-item label="类型" name="type">
-          <a-select v-model:value="upstreamForm.type">
-            <a-select-option value="roundrobin">roundrobin</a-select-option>
-            <a-select-option value="chash">chash</a-select-option>
-            <a-select-option value="ewma">ewma</a-select-option>
-            <a-select-option value="least_conn">least_conn</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="upstreamForm.type === 'chash'" label="哈希位置" name="hash_on">
-          <a-select v-model:value="upstreamForm.hash_on">
-            <a-select-option value="header">HTTP请求头</a-select-option>
-            <a-select-option value="cookie">Cookie</a-select-option>
-            <a-select-option value="vars">内置变量</a-select-option>
-            <a-select-option value="vars_combinations">自定义变量</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item v-if="upstreamForm.type === 'chash'" label="Key" name="key">
-          <a-input v-model:value="upstreamForm.key" placeholder="remote_addr" />
-          <div style="font-size:12px;color:var(--muted);margin-top:4px">
-            hash_on=内置变量时: remote_addr / uri / host / server_name / query_string / arg_xxx
+    <!-- 上游 Modal -->
+    <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ upstreamModalMode === 'create' ? '添加上游' : '编辑上游' }}</h2>
+          <button class="modal-close" @click="upstreamModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">名称</label>
+            <input v-model="upstreamForm.name" class="form-input" placeholder="上游名称" />
           </div>
-        </a-form-item>
-        <a-form-item label="节点" name="nodes">
-          <div v-for="(node, index) in upstreamForm.nodes" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <a-input v-model:value="node.host" placeholder="127.0.0.1:1980" style="width: 200px;" />
-            <a-input-number v-model:value="node.weight" placeholder="权重" style="width: 100px;" />
-            <a-button @click="removeNode(index)" danger>删除</a-button>
+          <div class="form-group">
+            <label class="form-label">类型</label>
+            <select v-model="upstreamForm.type" class="form-input">
+              <option value="roundrobin">roundrobin</option>
+              <option value="chash">chash</option>
+              <option value="ewma">ewma</option>
+              <option value="least_conn">least_conn</option>
+            </select>
           </div>
-          <a-button @click="addNode" type="dashed">+ 添加节点</a-button>
-        </a-form-item>
-      </a-form>
-    </a-modal>
-
-    <a-modal
-      v-model:open="routeModalVisible"
-      :title="routeModalMode === 'create' ? '创建路由' : '编辑路由'"
-      @ok="handleRouteSubmit"
-      width="700px"
-    >
-      <a-form :model="routeForm" layout="vertical">
-        <a-form-item label="名称" name="name">
-          <a-input v-model:value="routeForm.name" placeholder="路由名称" />
-        </a-form-item>
-        <a-form-item label="URI" name="uri">
-          <a-input v-model:value="routeForm.uri" placeholder="/api/*" />
-        </a-form-item>
-        <a-form-item label="请求方法" name="methods">
-          <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="选择方法">
-            <a-select-option value="GET">GET</a-select-option>
-            <a-select-option value="POST">POST</a-select-option>
-            <a-select-option value="PUT">PUT</a-select-option>
-            <a-select-option value="DELETE">DELETE</a-select-option>
-            <a-select-option value="PATCH">PATCH</a-select-option>
-            <a-select-option value="HEAD">HEAD</a-select-option>
-              <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-              <a-select-option value="CONNECT">CONNECT</a-select-option>
-              <a-select-option value="TRACE">TRACE</a-select-option>
-            </a-select>
-          <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
-            {{ allMethodsSelected ? '取消全选' : '全选' }}
-          </a>
-        </a-form-item>
-        <a-form-item label="域名" name="hosts">
-          <a-input v-model:value="routeForm.hosts" placeholder="example.com,*.example.com" />
-        </a-form-item>
-        <a-form-item label="优先级" name="priority">
-          <a-input-number v-model:value="routeForm.priority" style="width: 100%;" />
-        </a-form-item>
-        <a-form-item label="上游ID" name="upstream_id">
-          <a-input v-model:value="routeForm.upstream_id" placeholder="上游UUID" />
-        </a-form-item>
-        <a-form-item label="插件配置 (JSON)" name="plugins">
-          <a-textarea v-model:value="routeForm.pluginsJson" :rows="4" placeholder='{"proxy_rewrite": {...}}' />
-        </a-form-item>
-        <a-form-item label="高级匹配">
-          <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
-          <span style="margin-left: 12px; color: var(--muted); font-size: 12px;">开启后配置请求匹配条件</span>
-        </a-form-item>
-        <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
-          <RouteAdvancedMatch
-            :enabled="routeForm.advancedMatchEnabled"
-            :model-value="{ vars: routeForm.advancedMatch.vars }"
-            @update:model-value="(val: any) => { routeForm.advancedMatch.vars = val.vars || []; }"
-          />
-        </div>
-        <div v-else-if="routeForm.advancedMatchEnabled === false && routeForm.advancedMatch.vars.length > 0" style="margin-bottom: 12px;">
-          <WarningOutlined style="color: var(--warning); margin-right: 8px;" />
-          <span style="color: var(--muted); font-size: 12px;">高级匹配已配置，但未启用</span>
-        </div>
-
-        <a-divider style="margin: 8px 0;" />
-        <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
-        <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: var(--muted); font-size: 12px;">
-          暂无插件组
-        </div>
-        <div v-else style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 240px; overflow-y: auto;">
-          <div
-            v-for="pg in pluginConfigs"
-            :key="pg.value?.id || pg.key"
-            class="plugin-config-card"
-            :class="{ selected: isPluginGroupSelected(pg.value?.id || pg.key) }"
-            @click="togglePluginGroup(pg)"
-            style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: var(--bg);"
-          >
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <a-checkbox :checked="isPluginGroupSelected(pg.value?.id || pg.key)" @click.stop="togglePluginGroup(pg)" />
-              <strong style="font-size: 13px; flex: 1; margin-left: 8px;">{{ pg.value?.id || pg.key }}</strong>
-              <span style="font-size: 11px; color: var(--muted);">v{{ pg.value?.current_version || 0 }}</span>
+          <template v-if="upstreamForm.type === 'chash'">
+            <div class="form-group">
+              <label class="form-label">哈希位置</label>
+              <select v-model="upstreamForm.hash_on" class="form-input">
+                <option value="header">HTTP请求头</option>
+                <option value="cookie">Cookie</option>
+                <option value="vars">内置变量</option>
+                <option value="vars_combinations">自定义变量</option>
+              </select>
             </div>
-            <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
-              <a-tag
-                v-for="(_pcfg, pname) in (typeof pg.value?.plugins === 'string' ? JSON.parse(pg.value.plugins) : (pg.value?.plugins || {}))"
-                :key="pname"
-                color="blue"
-                style="font-size: 11px;"
-              >
-                {{ pname }}
-              </a-tag>
+            <div class="form-group">
+              <label class="form-label">Key</label>
+              <input v-model="upstreamForm.key" class="form-input" placeholder="remote_addr" />
+              <div class="form-hint">hash_on=内置变量时: remote_addr / uri / host / server_name / query_string / arg_xxx</div>
             </div>
-            <div v-if="pg.value?.desc" style="font-size: 11px; color: var(--muted); margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
+          </template>
+          <div class="form-group">
+            <label class="form-label">节点</label>
+            <div v-for="(node, index) in upstreamForm.nodes" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <input v-model="node.host" class="form-input" placeholder="127.0.0.1:1980" style="width: 200px;" />
+              <input v-model.number="node.weight" type="number" class="form-input" placeholder="权重" style="width: 100px;" />
+              <button class="btn btn-sm" style="color:var(--danger)" @click="removeNode(index)">删除</button>
+            </div>
+            <button class="btn btn-ghost" @click="addNode">+ 添加节点</button>
           </div>
         </div>
-      </a-form>
-    </a-modal>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="upstreamModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleUpstreamSubmit">{{ upstreamModalMode === 'create' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
 
-    <a-modal
-      v-model:open="jsonModalVisible"
-      title="JSON 数据"
-      :footer="null"
-      width="700px"
-    >
-      <pre class="json-viewer">{{ jsonContent }}</pre>
-    </a-modal>
+    <!-- 路由 Modal -->
+    <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>{{ routeModalMode === 'create' ? '添加路由' : '编辑路由' }}</h2>
+          <button class="modal-close" @click="routeModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">名称</label>
+            <input v-model="routeForm.name" class="form-input" placeholder="路由名称" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">URI</label>
+            <input v-model="routeForm.uri" class="form-input" placeholder="/api/*" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">请求方法</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+              <label v-for="m in ['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS','CONNECT','TRACE']" :key="m" class="checkbox-label" style="font-size:12px;">
+                <input type="checkbox" :value="m" v-model="routeForm.methods" />
+                {{ m }}
+              </label>
+              <a style="margin-left:4px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
+                {{ allMethodsSelected ? '取消全选' : '全选' }}
+              </a>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">域名</label>
+            <input v-model="routeForm.hosts" class="form-input" placeholder="example.com,*.example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">优先级</label>
+            <input v-model.number="routeForm.priority" type="number" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">上游</label>
+            <select v-model="routeForm.upstream_id" class="form-input">
+              <option value="">请选择上游</option>
+              <option v-for="u in upstreams" :key="u.value?.id || u.key" :value="u.value?.id || u.key">
+                {{ u.value?.name || u.value?.id || u.key }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">插件配置 (JSON)</label>
+            <textarea v-model="routeForm.pluginsJson" class="form-input" :rows="4" placeholder='{"proxy_rewrite": {...}}' style="resize:vertical;"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">高级匹配</label>
+            <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
+            <span style="margin-left: 12px; color: var(--muted); font-size: 12px;">开启后配置请求匹配条件</span>
+          </div>
+          <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab" style="margin-bottom:12px;">
+            <RouteAdvancedMatch
+              :enabled="routeForm.advancedMatchEnabled"
+              :model-value="{ vars: routeForm.advancedMatch.vars }"
+              @update:model-value="(val: any) => { routeForm.advancedMatch.vars = val.vars || []; }"
+            />
+          </div>
+          <div v-else-if="routeForm.advancedMatchEnabled === false && routeForm.advancedMatch.vars.length > 0" style="margin-bottom: 12px;">
+            <WarningOutlined style="color: var(--warning); margin-right: 8px;" />
+            <span style="color: var(--muted); font-size: 12px;">高级匹配已配置，但未启用</span>
+          </div>
 
-    <a-modal
-      v-model:open="globalRuleModalVisible"
-      :title="globalRuleModalMode === 'create' ? '创建全局规则' : '编辑全局规则'"
-      @ok="handleGlobalRuleSubmit"
-      width="700px"
-    >
-      <a-form :model="globalRuleForm" layout="vertical">
-        <a-form-item label="规则ID" name="id">
-          <a-input v-model:value="globalRuleForm.id" placeholder="如: 6001" :disabled="globalRuleModalMode === 'edit'" />
-        </a-form-item>
-        <a-form-item label="描述" name="desc">
-          <a-input v-model:value="globalRuleForm.desc" placeholder="规则描述" />
-        </a-form-item>
-        <a-form-item label="插件配置 (JSON)" name="pluginsJson">
-          <a-textarea v-model:value="globalRuleForm.pluginsJson" :rows="6" placeholder='{"plugin_name": {"option": "value"}}' />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+          <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
+          <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">关联插件组</div>
+          <div v-if="pluginConfigs.length === 0" style="padding: 16px 0; text-align: center; color: var(--muted); font-size: 12px;">
+            暂无插件组
+          </div>
+          <div v-else style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 240px; overflow-y: auto;">
+            <div
+              v-for="pg in pluginConfigs"
+              :key="pg.value?.id || pg.key"
+              class="plugin-config-card"
+              :class="{ selected: isPluginGroupSelected(pg.value?.id || pg.key) }"
+              @click="togglePluginGroup(pg)"
+              style="width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.2s; background: var(--bg);"
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <input type="checkbox" :checked="isPluginGroupSelected(pg.value?.id || pg.key)" @click.stop="togglePluginGroup(pg)" style="width:16px;height:16px;accent-color:var(--accent);" />
+                <strong style="font-size: 13px; flex: 1; margin-left: 8px;">{{ pg.value?.id || pg.key }}</strong>
+                <span style="font-size: 11px; color: var(--muted);">v{{ pg.value?.current_version || 0 }}</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 24px;">
+                <a-tag
+                  v-for="(_pcfg, pname) in (typeof pg.value?.plugins === 'string' ? JSON.parse(pg.value.plugins) : (pg.value?.plugins || {}))"
+                  :key="pname"
+                  color="blue"
+                  style="font-size: 11px;"
+                >
+                  {{ pname }}
+                </a-tag>
+              </div>
+              <div v-if="pg.value?.desc" style="font-size: 11px; color: var(--muted); margin-left: 24px; margin-top: 4px;">{{ pg.value?.desc }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="routeModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleRouteSubmit">{{ routeModalMode === 'create' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
 
-    <a-modal
-      v-model:open="pluginConfigModalVisible"
-      :title="pluginConfigModalMode === 'create' ? '创建插件组' : '编辑插件组'"
-      @ok="handlePluginConfigSubmit"
-      width="700px"
-    >
-      <a-form :model="pluginConfigForm" layout="vertical">
-        <a-form-item label="配置ID" name="id">
-          <a-input v-model:value="pluginConfigForm.id" placeholder="如: 5001" :disabled="pluginConfigModalMode === 'edit'" />
-        </a-form-item>
-        <a-form-item label="描述" name="desc">
-          <a-input v-model:value="pluginConfigForm.desc" placeholder="配置描述" />
-        </a-form-item>
-        <a-form-item label="插件配置 (JSON)" name="pluginsJson">
-          <a-textarea v-model:value="pluginConfigForm.pluginsJson" :rows="6" placeholder='{"plugin_name": {"option": "value"}}' />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <!-- JSON 数据 Modal -->
+    <div class="modal-overlay" :style="{ display: jsonModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>JSON 数据</h2>
+          <button class="modal-close" @click="jsonModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <pre class="json-viewer">{{ jsonContent }}</pre>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="jsonModalVisible = false">关闭</button>
+        </div>
+      </div>
+    </div>
 
-    <a-modal
-      v-model:open="pluginMetadataModalVisible"
-      :title="pluginMetadataModalMode === 'create' ? '创建插件数据' : '编辑插件数据'"
-      @ok="handlePluginMetadataSubmit"
-      width="700px"
-    >
-      <a-form :model="pluginMetadataForm" layout="vertical">
-        <a-form-item label="插件名称" name="name">
-          <a-input v-model:value="pluginMetadataForm.name" placeholder="如: log_process" :disabled="pluginMetadataModalMode === 'edit'" />
-        </a-form-item>
-        <a-form-item label="配置数据 (JSON)" name="configJson">
-          <a-textarea v-model:value="pluginMetadataForm.configJson" :rows="8" placeholder='{"option": "value"}' />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <!-- 全局规则 Modal -->
+    <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>{{ globalRuleModalMode === 'create' ? '添加全局规则' : '编辑全局规则' }}</h2>
+          <button class="modal-close" @click="globalRuleModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">规则ID</label>
+            <input v-model="globalRuleForm.id" class="form-input" placeholder="如: 6001" :disabled="globalRuleModalMode === 'edit'" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="globalRuleForm.desc" class="form-input" placeholder="规则描述" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">插件配置 (JSON)</label>
+            <textarea v-model="globalRuleForm.pluginsJson" class="form-input" :rows="6" placeholder='{"plugin_name": {"option": "value"}}' style="resize:vertical;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="globalRuleModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleGlobalRuleSubmit">{{ globalRuleModalMode === 'create' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 插件组 Modal -->
+    <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>{{ pluginConfigModalMode === 'create' ? '添加插件组' : '编辑插件组' }}</h2>
+          <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">配置ID</label>
+            <input v-model="pluginConfigForm.id" class="form-input" placeholder="如: 5001" :disabled="pluginConfigModalMode === 'edit'" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">描述</label>
+            <input v-model="pluginConfigForm.desc" class="form-input" placeholder="配置描述" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">插件配置 (JSON)</label>
+            <textarea v-model="pluginConfigForm.pluginsJson" class="form-input" :rows="6" placeholder='{"plugin_name": {"option": "value"}}' style="resize:vertical;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="pluginConfigModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handlePluginConfigSubmit">{{ pluginConfigModalMode === 'create' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 插件元数据 Modal -->
+    <div class="modal-overlay" :style="{ display: pluginMetadataModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>{{ pluginMetadataModalMode === 'create' ? '添加插件元数据' : '编辑插件元数据' }}</h2>
+          <button class="modal-close" @click="pluginMetadataModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">插件名称</label>
+            <input v-model="pluginMetadataForm.name" class="form-input" placeholder="如: log_process" :disabled="pluginMetadataModalMode === 'edit'" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">配置数据 (JSON)</label>
+            <textarea v-model="pluginMetadataForm.configJson" class="form-input" :rows="8" placeholder='{"option": "value"}' style="resize:vertical;"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="pluginMetadataModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handlePluginMetadataSubmit">{{ pluginMetadataModalMode === 'create' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -493,6 +580,7 @@ const selectedNode = ref<string | null>(null)
 const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
+const loadedNode = ref('')
 const currentSignal = ref<AbortSignal | undefined>(undefined)
 
 // AbortController for cancel query
@@ -504,6 +592,7 @@ function cancelQuery() {
     abortController = null
   }
   loading.value = false
+  loadedNode.value = ''
 }
 
 onUnmounted(() => {
@@ -568,6 +657,7 @@ const jsonModalVisible = ref(false)
 const jsonContent = ref('')
 
 const upstreamColumns = [
+  { title: '#', key: 'index', width: 45 },
   { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
   { title: '名称', key: 'name', width: 150, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
   { title: '类型', key: 'type', width: 100, sorter: (a: any, b: any) => (a.value?.type || '').localeCompare(b.value?.type || '') },
@@ -576,6 +666,7 @@ const upstreamColumns = [
 ]
 
 const routeColumns = [
+  { title: '#', key: 'index', width: 45 },
   { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
   { title: '名称', key: 'name', width: 120, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
   { title: 'URI', key: 'uri', width: 150, sorter: (a: any, b: any) => (a.value?.uri || '').localeCompare(b.value?.uri || '') },
@@ -585,17 +676,19 @@ const routeColumns = [
 ]
 
 const pluginMetadataColumns = [
+  { title: '#', key: 'index', width: 45 },
   { title: '插件名称', key: 'name', width: 200, sorter: (a: any, b: any) => ((a.key?.split('/').pop() || '') + '').localeCompare((b.key?.split('/').pop() || '') + '') },
   { title: '配置', key: 'config' },
   { title: '操作', key: 'actions', width: 200 }
 ]
 
 const pluginListColumns = [
-  { title: '序号', key: 'index', width: 80 },
+  { title: '#', key: 'index', width: 45 },
   { title: '插件名称', key: 'name', width: 300 }
 ]
 
 const globalRuleColumns = [
+  { title: '#', key: 'index', width: 45 },
   { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
   { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
   { title: '插件数', key: 'plugins', width: 100, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
@@ -603,6 +696,7 @@ const globalRuleColumns = [
 ]
 
 const pluginConfigColumns = [
+  { title: '#', key: 'index', width: 45 },
   { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
   { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
   { title: '插件数', key: 'plugins', width: 80, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
@@ -750,6 +844,7 @@ const loadAllData = async () => {
       loadPluginMetadata(ip, port),
       loadPluginList(ip, port)
     ])
+    loadedNode.value = `${ip}:${port}`
   } catch (error: any) {
     console.error('[DEBUG] loadAllData error:', error)
     message.error('加载数据失败: ' + (error.response?.data?.detail || error.message))
@@ -1556,58 +1651,63 @@ watch(selectedNode, async (_newNode) => {
 
 <style scoped>
 .edge-client {
-  position: relative;
-  min-height: calc(100vh - 56px - 40px);
-  margin: -20px -24px;
   padding: 20px 24px;
-  background: var(--bg);
 }
 
-:deep(.ant-table) {
-  background: transparent !important;
-}
-:deep(.ant-table-thead > tr > th) {
-  background: oklch(56% 0.16 210 / 10%) !important;
-  border-bottom: 2px solid var(--accent) !important;
-  color: var(--fg) !important;
-  font-weight: 600;
-}
-:deep(.ant-table-tbody > tr > td) {
-  background: transparent !important;
-  border-bottom: 1px solid var(--border) !important;
-  color: var(--fg);
-}
-:deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--bg) !important;
-}
-
-:deep(.ant-card) {
-  background: var(--surface) !important;
-  border-color: var(--border) !important;
-}
-:deep(.ant-card .ant-card-head) {
-  border-bottom: 1px solid var(--border) !important;
-  color: var(--fg) !important;
-}
-:deep(.ant-card .ant-card-body) {
-  color: var(--muted) !important;
-}
-:deep(.ant-select-selector) {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-}
-:deep(.ant-select-selection-item) {
-  color: var(--fg) !important;
-}
-
-.node-selector {
+/* ── Filter bar (节点选择器) ── */
+.edge-filter-bar {
   display: flex;
   align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
 }
 
+.text-muted { color: var(--muted); }
+.text-sm { font-size: 12px; }
+
+/* ── 表格外框 ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container :deep(.ant-table) {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── 表头 ── */
+:deep(.ant-table-thead > tr > th) {
+  background: oklch(97% 0.005 250) !important;
+  padding: 10px 16px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: var(--muted) !important;
+  white-space: nowrap !important;
+  user-select: none !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+:deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+
+/* ── 行分割线 ── */
+:deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px !important;
+  font-size: 13px !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+:deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
+}
+
+/* ── Table toolbar per tab ── */
 .table-toolbar {
   display: flex;
   align-items: center;
@@ -1615,6 +1715,15 @@ watch(selectedNode, async (_newNode) => {
   margin-bottom: 12px;
 }
 
+/* ── Action button group in table rows ── */
+.node-actions-wrap {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* ── Plugin config cards in route modal ── */
 .plugin-config-card:hover {
   border-color: var(--accent) !important;
 }
@@ -1623,12 +1732,7 @@ watch(selectedNode, async (_newNode) => {
   background: oklch(56% 0.16 210 / 10%) !important;
 }
 
-.node-selector-card {
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 16px;
-}
-
+/* ── JSON viewer ── */
 .json-viewer {
   max-height: 500px;
   overflow: auto;
@@ -1652,6 +1756,7 @@ watch(selectedNode, async (_newNode) => {
   color: var(--muted);
 }
 
+/* ── JSON viewer ── */
 :deep(.json-viewer) {
   max-height: 500px;
   overflow: auto;

@@ -35,7 +35,7 @@
       <span class="text-muted text-sm">共 {{ filteredUsers.length }} 个用户</span>
     </div>
 
-    <!-- ↓↓↓ 改这里：裸 <table> → <a-table> ↓↓↓ -->
+    <div class="table-container">
     <a-table
       :data-source="pagedUsers"
       :columns="columns"
@@ -132,7 +132,7 @@
         </div>
       </template>
     </a-table>
-    <!-- ↑↑↑ 改这里 ↑↑↑ -->
+    </div>
 
     <!-- 新建/编辑用户弹窗（与节点弹窗风格一致） -->
     <div class="modal-overlay" :style="{ display: modalVisible ? 'flex' : 'none' }">
@@ -903,9 +903,23 @@ onMounted(loadUsers)
   border-top: 1px solid var(--border);
 }
 
-/* a-table 样式覆写 */
+/* ── 表格外框 ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container :deep(.ant-table) {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── 表头 ── */
 .user-table :deep(.ant-table-thead > tr > th) {
   background: oklch(97% 0.005 250);
+  padding: 10px 16px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -913,12 +927,22 @@ onMounted(loadUsers)
   color: var(--muted);
   white-space: nowrap;
   user-select: none;
+  border-bottom: 1px solid var(--border) !important;
+}
+.user-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
 }
 
+/* ── 行分割线 ── */
 .user-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
   white-space: nowrap;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.user-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
 }
 
 /* 用户名 */

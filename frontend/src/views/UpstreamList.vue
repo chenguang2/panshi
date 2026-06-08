@@ -25,6 +25,7 @@
       <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
     </div>
 
+    <div class="table-container">
     <a-table
       :data-source="upstreams"
       :columns="columns"
@@ -98,6 +99,7 @@
         </div>
       </template>
     </a-table>
+    </div>
 
     <UpstreamFormModal
       :visible="formModalVisible"
@@ -309,8 +311,23 @@ onMounted(() => {
   background: oklch(56% 0.16 210 / 8%); color: var(--accent);
 }
 
+/* ── 表格外框 ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container :deep(.ant-table) {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── 表头 ── */
 .upstream-table :deep(.ant-table-thead > tr > th) {
   background: oklch(97% 0.005 250);
+  padding: 10px 16px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -318,11 +335,22 @@ onMounted(() => {
   color: var(--muted);
   white-space: nowrap;
   user-select: none;
+  border-bottom: 1px solid var(--border) !important;
 }
+.upstream-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+
+/* ── 行分割线 ── */
 .upstream-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
   white-space: nowrap;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.upstream-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
 }
 
 .action-trigger-btn {
