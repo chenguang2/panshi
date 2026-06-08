@@ -331,7 +331,7 @@ async function handleSubmit() {
       routeId = res.data.id
       message.success(props.copyingRoute ? '路由已复制' : '路由已创建')
     }
-    if (form.plugins.length > 0 && routeId) {
+    if (routeId) {
       await api.put(`/clusters/${cid}/routes/${routeId}/plugins`, {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
