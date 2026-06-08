@@ -63,6 +63,7 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">上游 <span class="required">*</span></label>
+              <span style="display:none">{{ dbgLog('upstreams:', upstreams, 'length:', upstreams?.length) }}</span>
               <select v-model="form.upstream_id" class="form-input">
                 <option value="">请选择上游</option>
                 <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
@@ -177,6 +178,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; saved: [] }>()
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
+const dbgLog = (...args: any[]) => console.log('[RouteFormModal/dbg]', ...args)
 
 const activeTab = ref('basic')
 const submitting = ref(false)
