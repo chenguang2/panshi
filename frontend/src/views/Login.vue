@@ -9,7 +9,7 @@
     <div class="login-card">
       <!-- 品牌区域：保留原生 HTML，不是表单行为，不需要 Ant Design -->
       <div class="login-brand">
-        <img src="/icon.png" class="login-brand-icon" />
+        <img :src="logoIcon" class="login-brand-icon" />
         <span class="login-brand-name">磐石 Gateway</span>
         <span class="login-brand-sub">API 网关管理平台</span>
         <div class="login-divider"></div>
@@ -97,6 +97,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
 const authStore = useAuthStore()

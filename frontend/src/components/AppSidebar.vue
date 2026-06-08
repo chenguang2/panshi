@@ -2,7 +2,7 @@
   <aside class="sidebar" :class="{ collapsed }">
     <!-- Brand Logo -->
     <div class="sidebar-logo">
-      <img src="/icon.png" class="sidebar-logo-icon" />
+      <img :src="logoIcon" class="sidebar-logo-icon" />
       <span v-show="!collapsed" class="sidebar-logo-text">磐石 Admin</span>
       <span v-show="!collapsed" class="sidebar-logo-version">v1.0</span>
     </div>
@@ -44,6 +44,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
 const route = useRoute()
