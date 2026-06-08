@@ -64,6 +64,7 @@
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
             <select v-model="formData.cluster_id" class="form-input" :disabled="formMode === 'edit'">
+              <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
           </div>
@@ -128,7 +129,7 @@ const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 const formVisible = ref(false)
 const formMode = ref<'add' | 'edit'>('add')
-const formData = reactive({ cluster_id: null as number | null, route_id: null as number | null, name: '', url_path: '', description: '' })
+const formData = reactive({ cluster_id: '' as number | string, route_id: null as number | null, name: '', url_path: '', description: '' })
 const editingResource = ref<any | null>(null)
 const availableRoutes = ref<any[]>([])
 
@@ -180,7 +181,7 @@ async function loadClusters() {
 
 async function openAddModal() {
   formMode.value = 'add'
-  formData.cluster_id = null; formData.route_id = null; formData.name = ''; formData.url_path = ''; formData.description = ''
+  formData.cluster_id = ''; formData.route_id = null; formData.name = ''; formData.url_path = ''; formData.description = ''
   editingResource.value = null; availableRoutes.value = []
   formVisible.value = true
 }

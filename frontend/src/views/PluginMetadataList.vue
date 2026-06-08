@@ -61,7 +61,7 @@
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
             <select v-model="createClusterId" class="form-input" @change="onCreateClusterChange">
-              <option value="" disabled>请选择集群</option>
+              <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
           </div>
@@ -140,7 +140,7 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 // ——— Create modal state ———
 const createVisible = ref(false)
-const createClusterId = ref<number | null>(null)
+const createClusterId = ref<number | string>('')
 const createPluginName = ref<string | null>(null)
 const configuredNamesInCluster = ref<Set<string>>(new Set())
 const builtinPlugins = ref<any[]>([])
@@ -221,7 +221,7 @@ async function loadBuiltinPlugins() {
 
 // ——— Create ———
 function openCreateModal() {
-  createClusterId.value = null
+  createClusterId.value = ''
   createPluginName.value = null
   configuredNamesInCluster.value = new Set()
   createVisible.value = true

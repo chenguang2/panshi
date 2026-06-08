@@ -23,6 +23,7 @@
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
             <select v-model="form.cluster_id" class="form-input" :disabled="!!editingConfig">
+              <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
             <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -68,7 +69,7 @@ const availablePlugins = ref<any[]>([])
 
 const form = reactive({
   name: '',
-  cluster_id: null as number | null,
+  cluster_id: '' as number | string,
   description: '',
   selectedPlugins: [] as any[],
 })
@@ -91,7 +92,7 @@ watch(() => props.visible, async (v) => {
     }))
   } else {
     form.name = ''
-    form.cluster_id = null
+    form.cluster_id = ''
     form.description = ''
     form.selectedPlugins = []
   }

@@ -24,6 +24,7 @@
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
               <select v-model="form.cluster_id" class="form-input" :disabled="!!editingUpstream">
+                <option value="">请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -238,7 +239,7 @@ const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
 const form = reactive({
   name: '',
-  cluster_id: null as number | null,
+  cluster_id: '' as number | string,
   load_balance: 'weighted_roundrobin',
   hash_on: 'vars',
   key: '',
@@ -346,7 +347,7 @@ watch(() => props.visible, (v) => {
       return { key: ++targetKey, ip: ip || '', port: port ? parseInt(port) : 80, weight: t.weight }
     })
   } else {
-    form.cluster_id = null
+    form.cluster_id = ''
     form.name = ''
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'

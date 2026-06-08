@@ -109,29 +109,34 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select v-model="formData.cluster_id" class="form-input" :disabled="!!editingNode">
+              <select v-model="formData.cluster_id" class="form-input" :class="{ 'has-error': formErrors.cluster_id }" :disabled="!!editingNode">
+                <option value="">请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
+              <span class="form-error" v-if="formErrors.cluster_id">{{ formErrors.cluster_id }}</span>
             </div>
             <div class="form-group">
               <label class="form-label">IP 地址 <span class="required">*</span></label>
-              <input v-model="formData.ip" type="text" class="form-input" placeholder="10.0.0.1">
+              <input v-model="formData.ip" type="text" class="form-input" :class="{ 'has-error': formErrors.ip }" placeholder="10.0.0.1">
+              <span class="form-error" v-if="formErrors.ip">{{ formErrors.ip }}</span>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">服务端口</label>
-              <input v-model.number="formData.service_port" type="number" class="form-input" min="1" max="65535">
+              <label class="form-label">服务端口 <span class="required">*</span></label>
+              <input v-model.number="formData.service_port" type="number" class="form-input" :class="{ 'has-error': formErrors.service_port }" min="1" max="65535">
+              <span class="form-error" v-if="formErrors.service_port">{{ formErrors.service_port }}</span>
             </div>
             <div class="form-group">
-              <label class="form-label">管理端口</label>
-              <input v-model.number="formData.management_port" type="number" class="form-input" min="1" max="65535">
+              <label class="form-label">管理端口 <span class="required">*</span></label>
+              <input v-model.number="formData.management_port" type="number" class="form-input" :class="{ 'has-error': formErrors.management_port }" min="1" max="65535">
+              <span class="form-error" v-if="formErrors.management_port">{{ formErrors.management_port }}</span>
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Edge 路径</label>
-            <input v-model="formData.edge_path" type="text" class="form-input" placeholder="/usr/local/edge">
-            <div class="form-hint">必须以 / 开头</div>
+            <label class="form-label">Edge 路径 <span class="required">*</span></label>
+            <input v-model="formData.edge_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_path }" placeholder="/usr/local/edge">
+            <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
           </div>
           <div class="form-group">
             <label class="checkbox-label">
@@ -240,6 +245,8 @@ const formData = reactive({
   edge_path: '/usr/local/edge',
   statusCheck: true,
 })
+const formErrors = reactive<Record<string, string>>({})
+const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
 // Detail modal
 const detailModalVisible = ref(false)
@@ -344,6 +351,11 @@ function openAddModal() {
   formData.management_port = 9180
   formData.edge_path = '/usr/local/edge'
   formData.statusCheck = true
+  formErrors.cluster_id = ''
+  formErrors.ip = ''
+  formErrors.service_port = ''
+  formErrors.management_port = ''
+  formErrors.edge_path = ''
   formModalVisible.value = true
 }
 
@@ -355,6 +367,11 @@ function handleEdit(record: any) {
   formData.management_port = record.management_port
   formData.edge_path = record.edge_path || ''
   formData.statusCheck = record.status === 1
+  formErrors.cluster_id = ''
+  formErrors.ip = ''
+  formErrors.service_port = ''
+  formErrors.management_port = ''
+  formErrors.edge_path = ''
   formModalVisible.value = true
 }
 
@@ -364,18 +381,39 @@ function closeFormModal() {
 }
 
 async function handleFormSubmit() {
+  formErrors.cluster_id = ''
+  formErrors.ip = ''
+  formErrors.service_port = ''
+  formErrors.management_port = ''
+  formErrors.edge_path = ''
+  let valid = true
   if (!formData.cluster_id) {
-    message.warning('请选择所属集群')
-    return
+    formErrors.cluster_id = '请选择所属集群'
+    valid = false
   }
   if (!formData.ip) {
-    message.warning('请输入 IP 地址')
-    return
+    formErrors.ip = '请输入 IP 地址'
+    valid = false
+  } else if (!IP_PATTERN.test(formData.ip)) {
+    formErrors.ip = 'IP 地址格式不正确'
+    valid = false
   }
-  if (formData.edge_path && !formData.edge_path.startsWith('/')) {
-    message.warning('Edge 路径必须以 / 开头')
-    return
+  if (!formData.service_port || formData.service_port < 1 || formData.service_port > 65535) {
+    formErrors.service_port = '请输入有效的端口号 (1-65535)'
+    valid = false
   }
+  if (!formData.management_port || formData.management_port < 1 || formData.management_port > 65535) {
+    formErrors.management_port = '请输入有效的端口号 (1-65535)'
+    valid = false
+  }
+  if (!formData.edge_path) {
+    formErrors.edge_path = '请输入 Edge 路径'
+    valid = false
+  } else if (!formData.edge_path.startsWith('/')) {
+    formErrors.edge_path = '路径必须以 / 开头'
+    valid = false
+  }
+  if (!valid) return
 
   formSubmitting.value = true
   try {

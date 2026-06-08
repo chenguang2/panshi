@@ -142,11 +142,12 @@
           <button class="modal-close" @click="closeModal">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">用户名 <span class="required">*</span></label>
-              <input v-model="formState.username" type="text" class="form-input" placeholder="newuser" :disabled="!!editingUser">
-            </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">用户名 <span class="required">*</span></label>
+      <input v-model="formState.username" type="text" class="form-input" :class="{ 'has-error': formErrors.username }" placeholder="newuser" :disabled="!!editingUser">
+      <span class="form-error" v-if="formErrors.username">{{ formErrors.username }}</span>
+    </div>
             <div class="form-group">
               <label class="form-label">角色</label>
               <select v-model="formState.role" class="form-input" @change="onRoleChange">
@@ -158,7 +159,8 @@
 
           <div v-if="!editingUser" class="form-group">
             <label class="form-label">密码 <span class="required">*</span></label>
-            <input v-model="formState.password" type="password" class="form-input" placeholder="6-50 位字符">
+            <input v-model="formState.password" type="password" class="form-input" :class="{ 'has-error': formErrors.password }" placeholder="6-50 位字符">
+            <span class="form-error" v-if="formErrors.password">{{ formErrors.password }}</span>
           </div>
 
           <div class="form-group">
@@ -382,6 +384,7 @@ const formState = reactive<UserForm>({
   role: 'user',
   status: true,
 })
+const formErrors = reactive<Record<string, string>>({})
 
 const allPermissions = [
   { key: 'plugin_groups', label: '插件组管理' },
@@ -413,6 +416,8 @@ function openAddModal() {
   selectedPermKeys.value = []
   selectedClusterIds.value = []
   resetPwdValue.value = ''
+  formErrors.username = ''
+  formErrors.password = ''
   modalVisible.value = true
 }
 
@@ -426,6 +431,8 @@ function editUser(user: UserWithExt) {
   clusterSearchText.value = ''
   selectedPermKeys.value = [...(user.permissions || [])]
   selectedClusterIds.value = [...(user.cluster_ids || [])]
+  formErrors.username = ''
+  formErrors.password = ''
   modalVisible.value = true
 }
 
@@ -435,14 +442,18 @@ function closeModal() {
 }
 
 async function handleSave() {
+  formErrors.username = ''
+  formErrors.password = ''
+  let valid = true
   if (!formState.username.trim()) {
-    message.error('请输入用户名')
-    return
+    formErrors.username = '请输入用户名'
+    valid = false
   }
   if (!editingUser.value && (!formState.password || formState.password.length < 6)) {
-    message.error('密码至少 6 位字符')
-    return
+    formErrors.password = '密码至少 6 位字符'
+    valid = false
   }
+  if (!valid) return
 
   modalSubmitting.value = true
   try {
@@ -473,10 +484,13 @@ async function handleSave() {
     loadUsers()
   } catch (error: any) {
     const detail = error.response?.data?.detail
-    if (Array.isArray(detail) && detail.length > 0) {
-      message.error(detail[0].msg?.replace(/^Value error,\s*/, '') || '操作失败')
-    } else if (typeof detail === 'string') {
-      message.error(detail.replace(/^Value error,\s*/, ''))
+    const errMsg = Array.isArray(detail) ? detail[0]?.msg?.replace(/^Value error,\s*/, '') : typeof detail === 'string' ? detail.replace(/^Value error,\s*/, '') : ''
+    if (errMsg && (errMsg.includes('password') || errMsg.includes('密码'))) {
+      formErrors.password = errMsg
+    } else if (errMsg && (errMsg.includes('username') || errMsg.includes('用户名') || errMsg.includes('already exists') || errMsg.includes('重复'))) {
+      formErrors.username = errMsg
+    } else if (errMsg) {
+      message.error(errMsg)
     } else {
       message.error('操作失败')
     }

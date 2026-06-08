@@ -7,13 +7,13 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">名称</label>
+          <label class="form-label">名称 <span class="required">*</span></label>
           <input type="text" class="form-input" :class="{ 'has-error': formErrors.name }" v-model="form.name" :disabled="!!editingCluster" @blur="validateName" />
           <span class="form-error" v-if="formErrors.name">{{ formErrors.name }}</span>
           <span class="form-hint" v-else>小写字母、数字、中划线组成，中划线不能在首尾</span>
         </div>
         <div class="form-group">
-          <label class="form-label">显示名称</label>
+          <label class="form-label">显示名称 <span class="required">*</span></label>
           <input type="text" class="form-input" :class="{ 'has-error': formErrors.display_name }" v-model="form.display_name" />
           <span class="form-error" v-if="formErrors.display_name">{{ formErrors.display_name }}</span>
         </div>

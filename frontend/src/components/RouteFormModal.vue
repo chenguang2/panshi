@@ -34,6 +34,7 @@
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
               <select v-model="form.cluster_id" class="form-input" :disabled="!!editingRoute && !copyingRoute">
+                <option value="">请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -55,6 +56,7 @@
                 <span>{{ allMethodsSelected ? '取消全选' : '全选' }}</span>
               </label>
             </div>
+            <div v-if="formErrors.methods" class="form-error">{{ formErrors.methods }}</div>
             </div>
           </div>
 
@@ -62,13 +64,15 @@
             <div class="form-group">
               <label class="form-label">上游 <span class="required">*</span></label>
               <select v-model="form.upstream_id" class="form-input">
+                <option value="">请选择上游</option>
                 <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
               </select>
               <div v-if="formErrors.upstream_id" class="form-error">{{ formErrors.upstream_id }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">优先级 <span class="required">*</span></label>
-              <input v-model.number="form.priority" type="number" class="form-input" min="0" placeholder="0">
+              <input v-model.number="form.priority" type="number" class="form-input" :class="{ 'has-error': formErrors.priority }" min="0" placeholder="0">
+              <span class="form-error" v-if="formErrors.priority">{{ formErrors.priority }}</span>
             </div>
           </div>
 
@@ -142,7 +146,7 @@
                   <span v-for="(pcfg, pname) in pg.plugins" :key="pname" class="pg-item-tag">{{ pname }}</span>
                 </div>
                 <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
-              </div>
+            </div>
             </div>
           </div>
         </div>
@@ -184,8 +188,8 @@ const pluginConfigIds = ref<string[]>([])
 
 const form = reactive({
   name: '', uri: '', methods: [] as string[], priority: 0, status: 1,
-  cluster_id: null as number | null,
-  upstream_id: null as number | null,
+  cluster_id: '' as number | string,
+  upstream_id: '' as number | string | null,
   description: '', advancedEnabled: false,
   advancedMatch: { vars: [] as [string, string, string][] },
   plugins: [] as any[],
@@ -247,6 +251,8 @@ watch(() => props.visible, async (v) => {
   formErrors.uri = ''
   formErrors.cluster_id = ''
   formErrors.upstream_id = ''
+  formErrors.methods = ''
+  formErrors.priority = ''
 
   await loadPlugins()
   if (props.editingRoute) {
@@ -275,7 +281,7 @@ watch(() => props.visible, async (v) => {
     if (r.cluster_id) { await loadUpstreams(r.cluster_id); await loadPluginGroups(r.cluster_id) }
   } else {
     form.name = ''; form.uri = ''; form.priority = 0; form.status = 1
-    form.cluster_id = null; form.description = ''; form.upstream_id = null
+    form.cluster_id = ''; form.description = ''; form.upstream_id = ''
     form.methods = []; form.advancedEnabled = false
     form.advancedMatch = { vars: [] }; form.plugins = []
   }
@@ -287,11 +293,16 @@ function validateForm(): boolean {
   formErrors.uri = ''
   formErrors.cluster_id = ''
   formErrors.upstream_id = ''
+  formErrors.methods = ''
+  formErrors.priority = ''
 
   if (!form.name.trim()) { formErrors.name = '请输入路由名称'; return false }
   if (!form.uri.trim()) { formErrors.uri = '请输入URI'; return false }
+  if (!form.uri.startsWith('/')) { formErrors.uri = 'URI 必须以 / 开头'; return false }
   if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
   if (!form.upstream_id) { formErrors.upstream_id = '请选择上游'; return false }
+  if (form.methods.length === 0) { formErrors.methods = '请至少选择一种请求方法'; return false }
+  if (form.priority === undefined || form.priority === null || form.priority === '' || isNaN(Number(form.priority))) { formErrors.priority = '请输入有效的优先级数字'; return false }
   return true
 }
 
