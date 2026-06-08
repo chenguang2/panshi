@@ -2,8 +2,8 @@
   <aside class="sidebar" :class="{ collapsed }">
     <!-- Brand Logo -->
     <div class="sidebar-logo">
-      <div class="sidebar-logo-icon">磐</div>
-      <span v-show="!collapsed" class="sidebar-logo-text">磐石</span>
+      <img src="/icon.png" class="sidebar-logo-icon" />
+      <span v-show="!collapsed" class="sidebar-logo-text">磐石 Admin</span>
       <span v-show="!collapsed" class="sidebar-logo-version">v1.0</span>
     </div>
 
@@ -172,14 +172,8 @@ const handleLogout = async () => {
 .sidebar-logo-icon {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, var(--accent), var(--info));
   border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
+  object-fit: contain;
   flex-shrink: 0;
 }
 

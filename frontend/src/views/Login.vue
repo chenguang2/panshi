@@ -9,7 +9,7 @@
     <div class="login-card">
       <!-- 品牌区域：保留原生 HTML，不是表单行为，不需要 Ant Design -->
       <div class="login-brand">
-        <div class="login-brand-icon">磐</div>
+        <img src="/icon.png" class="login-brand-icon" />
         <span class="login-brand-name">磐石 Gateway</span>
         <span class="login-brand-sub">API 网关管理平台</span>
         <div class="login-divider"></div>
@@ -86,7 +86,7 @@
       </div>
 
       <div class="login-footer">
-        <div class="login-footer-version">磐石 Gateway Admin v1.0</div>
+        <div class="login-footer-version">Panshi Gateway Admin v1.0</div>
         <div class="login-footer-copy">&copy; 2024 Panshi Gateway</div>
       </div>
     </div>
@@ -198,10 +198,8 @@ async function handleLogin() {
 
 .login-brand-icon {
   width: 52px; height: 52px;
-  background: linear-gradient(135deg, var(--accent), var(--info));
   border-radius: var(--radius-md);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 24px; font-weight: 700; color: #fff;
+  object-fit: contain;
   margin-bottom: 14px;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 25%, transparent);
 }
