@@ -945,6 +945,14 @@ onMounted(loadUsers)
   background: oklch(97% 0.005 250 / 60%) !important;
 }
 
+/* ── 分页脚注 ── */
+.user-table :deep(.ant-table-pagination) {
+  background: var(--bg) !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--border) !important;
+}
+
 /* 用户名 */
 .cell-primary { font-weight: 500; color: var(--fg); }
 

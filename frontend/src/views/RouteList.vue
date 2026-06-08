@@ -329,6 +329,14 @@ onMounted(() => { loadClusters(); loadRoutes() })
   background: oklch(97% 0.005 250 / 60%) !important;
 }
 
+/* ── 分页脚注 ── */
+.route-table :deep(.ant-table-pagination) {
+  background: var(--bg) !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--border) !important;
+}
+
 .action-trigger-btn {
   border: none !important;
   background: transparent !important;
