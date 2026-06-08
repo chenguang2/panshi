@@ -2,10 +2,6 @@
   <div class="pml-page">
     <PageHeader title="插件元数据" description="管理集群级的插件元数据配置，定义插件的默认参数和 schema。">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="min-width:200px;" @change="onClusterFilterChange">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加插件元数据</button>
       </template>
     </PageHeader>
@@ -15,7 +11,11 @@
         <input v-model="searchText" type="text" placeholder="搜索插件名称..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个</span>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="onClusterFilterChange">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个插件元数据</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -350,7 +350,7 @@ onMounted(() => {
 
 <style scoped>
 .pml-page { padding: 20px 24px; }
-.pml-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.pml-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
 .pml-empty { text-align: center; padding: 60px 20px; font-size: 14px; color: var(--muted); }
 .pml-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }

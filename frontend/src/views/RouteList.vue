@@ -2,16 +2,7 @@
   <div class="route-list">
     <PageHeader title="路由管理" description="管理 API 路由规则，配置请求匹配、转发目标和插件">
       <template #actions>
-        <a-select
-          v-model:value="clusterFilter"
-          placeholder="全部集群"
-          allow-clear
-          style="width:160px;"
-          @change="loadRoutes"
-        >
-          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-        </a-select>
-        <a-button type="primary" @click="openCreateModal">+ 新建路由</a-button>
+        <button class="btn btn-primary" @click="openCreateModal">+ 新建路由</button>
       </template>
     </PageHeader>
 
@@ -23,23 +14,19 @@
     </div>
 
     <div class="route-filter-bar">
-      <a-input
-        v-model:value="searchText"
-        placeholder="搜索名称、URI、描述..."
-        allow-clear
-        style="width:220px;"
-        @change="onSearch"
-      />
-      <a-select
-        v-model:value="publishFilter"
-        placeholder="全部状态"
-        allow-clear
-        style="width:130px;"
-        @change="loadRoutes"
-      >
-        <a-select-option value="published">已发布</a-select-option>
-        <a-select-option value="unpublished">未发布</a-select-option>
-      </a-select>
+      <div class="search-input-wrap">
+        <input v-model="searchText" type="text" placeholder="搜索名称、URI、描述..." class="form-input" @input="onSearch">
+        <span class="search-icon">🔍</span>
+      </div>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="loadRoutes">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <select v-model="publishFilter" class="form-input" style="width:130px;" @change="loadRoutes">
+        <option value="">全部状态</option>
+        <option value="published">已发布</option>
+        <option value="unpublished">未发布</option>
+      </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
     </div>
 
@@ -60,7 +47,10 @@
       class="route-table"
       @change="handleTableChange"
     >
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        </template>
         <template v-if="column.key === 'name'">
           <div class="cell-primary">{{ record.name }}</div>
           <div class="cell-secondary">{{ record.description || '-' }}</div>
@@ -134,9 +124,9 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
-const clusterFilter = ref<string | undefined>(undefined)
+const clusterFilter = ref('')
 const activeMethod = ref('')
-const publishFilter = ref<string | undefined>(undefined)
+const publishFilter = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const formModalVisible = ref(false)
@@ -151,12 +141,13 @@ const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
 const columns = [
+  { title: '#', key: 'index', width: 45 },
   { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
-  { title: 'URI', key: 'uri' },
+  { title: 'URI', key: 'uri', sorter: (a: any, b: any) => (a.uri || '').localeCompare(b.uri || '') },
   { title: '方法', key: 'methods' },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
-  { title: '优先级', key: 'priority' },
-  { title: '版本', key: 'version' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
+  { title: '优先级', key: 'priority', sorter: (a: any, b: any) => (a.priority || 0) - (b.priority || 0) },
+  { title: '版本', key: 'version', sorter: (a: any, b: any) => ((a.current_version || '')+'').localeCompare((b.current_version || '')+'') },
   { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || '') },
   { title: '操作', key: 'actions', width: 80 },
 ]
@@ -263,7 +254,7 @@ onMounted(() => { loadClusters(); loadRoutes() })
 
 <style scoped>
 .route-list { padding: 20px 24px; }
-.route-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.route-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
 .text-mono { font-family: var(--font-mono); }
@@ -307,6 +298,7 @@ onMounted(() => { loadClusters(); loadRoutes() })
 .route-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .action-trigger-btn {

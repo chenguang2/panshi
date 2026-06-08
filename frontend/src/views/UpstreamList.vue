@@ -2,39 +2,26 @@
   <div class="upstream-list">
     <PageHeader title="上游管理" description="管理后端上游服务，配置负载均衡和目标节点">
       <template #actions>
-        <a-select
-          v-model:value="clusterFilter"
-          placeholder="全部集群"
-          allow-clear
-          style="width:160px;"
-          @change="loadUpstreams"
-        >
-          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-        </a-select>
-        <a-button type="primary" @click="openCreateModal">+ 新建上游</a-button>
+        <button class="btn btn-primary" @click="openCreateModal">+ 新建上游</button>
       </template>
     </PageHeader>
 
     <div class="upstream-filter-bar">
-      <a-input
-        v-model:value="searchText"
-        placeholder="搜索名称或描述..."
-        allow-clear
-        style="width:200px;"
-        @change="onSearch"
-      />
-      <a-select
-        v-model:value="lbFilter"
-        placeholder="全部算法"
-        allow-clear
-        style="width:140px;"
-        @change="loadUpstreams"
-      >
-        <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-        <a-select-option value="chash">一致性哈希</a-select-option>
-        <a-select-option value="ewma">EWMA</a-select-option>
-        <a-select-option value="least_conn">最少连接</a-select-option>
-      </a-select>
+      <div class="search-input-wrap">
+        <input v-model="searchText" type="text" placeholder="搜索名称或描述..." class="form-input" @input="onSearch">
+        <span class="search-icon">🔍</span>
+      </div>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="loadUpstreams">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <select v-model="lbFilter" class="form-input" style="width:140px;" @change="loadUpstreams">
+        <option value="">全部算法</option>
+        <option value="weighted_roundrobin">加权轮询</option>
+        <option value="chash">一致性哈希</option>
+        <option value="ewma">EWMA</option>
+        <option value="least_conn">最少连接</option>
+      </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
     </div>
 
@@ -55,7 +42,10 @@
       class="upstream-table"
       @change="handleTableChange"
     >
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        </template>
         <template v-if="column.key === 'name'">
           <div class="cell-primary">{{ record.name }}</div>
           <div class="cell-secondary">{{ record.description || '-' }}</div>
@@ -156,8 +146,8 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
-const clusterFilter = ref<string | undefined>(undefined)
-const lbFilter = ref<string | undefined>(undefined)
+const clusterFilter = ref('')
+const lbFilter = ref('')
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
 const vmModalVisible = ref(false)
@@ -170,12 +160,13 @@ const publishingRecord = ref<any | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 const columns = [
+  { title: '#', key: 'index', width: 45 },
   { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
-  { title: '负载均衡', key: 'load_balance' },
-  { title: '目标节点', key: 'targets' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
+  { title: '负载均衡', key: 'load_balance', sorter: (a: any, b: any) => (a.load_balance || '').localeCompare(b.load_balance || '') },
+  { title: '目标节点', key: 'targets', sorter: (a: any, b: any) => ((a.targets?.[0]?.target) || '').localeCompare((b.targets?.[0]?.target) || '') },
   { title: '协议', key: 'scheme' },
-  { title: '版本', key: 'version' },
+  { title: '版本', key: 'version', sorter: (a: any, b: any) => ((a.current_version || '')+'').localeCompare((b.current_version || '')+'') },
   { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || '') },
   { title: '操作', key: 'actions', width: 80 },
 ]
@@ -299,7 +290,7 @@ onMounted(() => {
 
 <style scoped>
 .upstream-list { padding: 20px 24px; }
-.upstream-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.upstream-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
 .text-mono { font-family: var(--font-mono); }
@@ -331,6 +322,7 @@ onMounted(() => {
 .upstream-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .action-trigger-btn {

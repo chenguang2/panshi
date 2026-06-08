@@ -2,37 +2,24 @@
   <div class="node-list">
     <PageHeader title="节点管理" description="管理 Edge 网关节点，监控运行状态并执行操作">
       <template #actions>
-        <a-select
-          v-model:value="clusterFilter"
-          placeholder="全部集群"
-          allow-clear
-          style="width:160px;"
-          @change="onFilterChange"
-        >
-          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-        </a-select>
-        <a-button type="primary" @click="openAddModal">+ 添加节点</a-button>
+        <button class="btn btn-primary" @click="openAddModal">+ 添加节点</button>
       </template>
     </PageHeader>
 
     <div class="node-filter-bar">
-      <a-input
-        v-model:value="searchText"
-        placeholder="搜索 IP 或名称..."
-        allow-clear
-        style="width:200px;"
-        @change="onSearchInput"
-      />
-      <a-select
-        v-model:value="statusFilter"
-        placeholder="全部状态"
-        allow-clear
-        style="width:130px;"
-        @change="onFilterChange"
-      >
-        <a-select-option :value="1">运行中</a-select-option>
-        <a-select-option :value="0">已停止</a-select-option>
-      </a-select>
+      <div class="search-input-wrap">
+        <input v-model="searchText" type="text" placeholder="搜索 IP 或名称..." class="form-input" @input="onSearchInput">
+        <span class="search-icon">🔍</span>
+      </div>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="onFilterChange">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <select v-model="statusFilter" class="form-input" style="width:130px;" @change="onFilterChange">
+        <option value="">全部状态</option>
+        <option :value="1">运行中</option>
+        <option :value="0">已停止</option>
+      </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个节点</span>
     </div>
 
@@ -53,7 +40,10 @@
       class="node-table"
       @change="handleTableChange"
     >
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        </template>
         <template v-if="column.key === 'ip'">
           <span class="text-mono">{{ record.ip }}</span>
         </template>
@@ -232,8 +222,8 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const searchText = ref('')
-const clusterFilter = ref<number | string | undefined>(undefined)
-const statusFilter = ref<number | string | undefined>(undefined)
+const clusterFilter = ref<string>('')
+const statusFilter = ref<string | number>('')
 const opLogVisible = ref<number | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
@@ -275,13 +265,14 @@ const diffClusterId = ref(0)
 const diffNodeId = ref(0)
 
 const columns = [
+  { title: '#', key: 'index', width: 45 },
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: (a: any, b: any) => a.ip?.localeCompare(b.ip) },
-  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
   { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
-  { title: '管理端口', key: 'management_port' },
-  { title: 'Edge 路径', key: 'edge_path' },
-  { title: '状态', key: 'status' },
-  { title: 'Edge 版本', key: 'edge_version' },
+  { title: '管理端口', key: 'management_port', sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0) },
+  { title: 'Edge 路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
+  { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
+  { title: 'Edge 版本', key: 'edge_version', sorter: (a: any, b: any) => ((a.status_detail?.statistic?.edge_version) || '').localeCompare((b.status_detail?.statistic?.edge_version) || '') },
   { title: '操作', key: 'actions', width: 320 },
 ]
 
@@ -580,7 +571,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .text-mono { font-family: var(--font-mono); }
@@ -601,6 +592,7 @@ onMounted(() => {
 .node-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .node-actions-wrap {

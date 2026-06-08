@@ -2,10 +2,6 @@
   <div class="pc-page">
     <PageHeader title="插件组" description="管理集群级的插件组配置。插件组是一组可复用的插件配置集合，可被多个路由引用。">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="min-width:200px;" @change="loadConfigs">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加插件组</button>
       </template>
     </PageHeader>
@@ -15,7 +11,11 @@
         <input v-model="searchText" type="text" placeholder="搜索插件组名称..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个</span>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadConfigs">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个插件组</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -191,7 +191,7 @@ onMounted(() => { loadClusters(); loadConfigs() })
 
 <style scoped>
 .pc-page { padding: 20px 24px; }
-.pc-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.pc-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
 .pc-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
 .pc-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
@@ -227,6 +227,5 @@ onMounted(() => { loadClusters(); loadConfigs() })
 }
 @media (max-width: 768px) {
   .pc-grid { grid-template-columns: 1fr; }
-  .pc-header-actions { flex-direction: column; align-items: stretch; }
 }
 </style>

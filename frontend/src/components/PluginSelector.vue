@@ -707,7 +707,8 @@ const emitUpdate = () => {
 }
 
 .selected-empty,
-.selected-hint {
+.selected-hint,
+.empty-hint {
   text-align: center;
   padding: 24px;
   color: var(--muted);

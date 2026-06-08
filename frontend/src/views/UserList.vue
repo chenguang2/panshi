@@ -12,39 +12,26 @@
   <div class="user-list">
     <PageHeader title="用户管理" description="管理系统用户、角色分配和资源权限">
       <template #actions>
-        <a-button v-if="isAdmin" type="primary" @click="openAddModal">+ 新建用户</a-button>
+        <button v-if="isAdmin" class="btn btn-primary" @click="openAddModal">+ 新建用户</button>
       </template>
     </PageHeader>
 
-    <!-- Filter Bar：保留原生但可改为 a-input / a-select -->
+    <!-- Filter Bar -->
     <div class="user-filter-bar">
-      <a-input
-        v-model:value="searchText"
-        placeholder="搜索用户名..."
-        allow-clear
-        style="width: 200px;"
-        @change="onFilterChange"
-      />
-      <a-select
-        v-model:value="roleFilter"
-        style="width: 120px;"
-        placeholder="全部角色"
-        allow-clear
-        @change="onFilterChange"
-      >
-        <a-select-option value="admin">管理员</a-select-option>
-        <a-select-option value="user">普通用户</a-select-option>
-      </a-select>
-      <a-select
-        v-model:value="statusFilter"
-        style="width: 120px;"
-        placeholder="全部状态"
-        allow-clear
-        @change="onFilterChange"
-      >
-        <a-select-option :value="1">启用</a-select-option>
-        <a-select-option :value="0">禁用</a-select-option>
-      </a-select>
+      <div class="search-input-wrap">
+        <input v-model="searchText" type="text" placeholder="搜索用户名..." class="form-input" @input="onFilterChange">
+        <span class="search-icon">🔍</span>
+      </div>
+      <select v-model="roleFilter" class="form-input" style="width:120px;" @change="onFilterChange">
+        <option value="">全部角色</option>
+        <option value="admin">管理员</option>
+        <option value="user">普通用户</option>
+      </select>
+      <select v-model="statusFilter" class="form-input" style="width:120px;" @change="onFilterChange">
+        <option value="">全部状态</option>
+        <option :value="1">启用</option>
+        <option :value="0">禁用</option>
+      </select>
       <span class="text-muted text-sm">共 {{ filteredUsers.length }} 个用户</span>
     </div>
 
@@ -60,7 +47,10 @@
       @change="handleTableChange"
     >
       <!-- 用户名列 -->
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="text-muted">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+        </template>
         <template v-if="column.key === 'username'">
           <span class="cell-primary">{{ record.username }}</span>
         </template>
@@ -289,8 +279,8 @@ interface UserWithExt extends User {
 const allUsers = ref<UserWithExt[]>([])
 const loading = ref(false)
 const searchText = ref('')
-const roleFilter = ref<string | undefined>(undefined)
-const statusFilter = ref<number | undefined>(undefined)
+const roleFilter = ref('')
+const statusFilter = ref<number | string>('')
 
 // Pagination — <a-table> 自己管理 page/pageSize，我们只需维护 total
 const currentPage = ref(1)
@@ -305,7 +295,7 @@ const filteredUsers = computed(() => {
   if (roleFilter.value) {
     list = list.filter(u => u.role === roleFilter.value)
   }
-  if (statusFilter.value !== undefined) {
+  if (statusFilter.value !== '') {
     list = list.filter(u => u.status === statusFilter.value)
   }
   return list
@@ -329,9 +319,10 @@ const paginationProps = computed<TablePaginationConfig>(() => ({
 // 表格列定义
 const columns = computed(() => {
   const cols: any[] = [
+    { title: '#', key: 'index', width: 45 },
     { title: '用户名', dataIndex: 'username', key: 'username', sorter: (a: User, b: User) => a.username.localeCompare(b.username) },
-    { title: '角色', dataIndex: 'role', key: 'role' },
-    { title: '状态', dataIndex: 'status', key: 'status' },
+    { title: '角色', dataIndex: 'role', key: 'role', sorter: (a: User, b: User) => a.role.localeCompare(b.role) },
+    { title: '状态', dataIndex: 'status', key: 'status', sorter: (a: User, b: User) => (a.status || 0) - (b.status || 0) },
     { title: '权限', key: 'permissions' },
     { title: '可访问集群', key: 'clusters' },
     { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: User, b: User) => (a.created_at || '').localeCompare(b.created_at || '') },
@@ -640,7 +631,7 @@ onMounted(loadUsers)
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .text-muted { color: var(--muted); }
@@ -913,6 +904,7 @@ onMounted(loadUsers)
 .user-table :deep(.ant-table-tbody > tr > td) {
   padding: 12px 16px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 /* 用户名 */
@@ -970,6 +962,6 @@ onMounted(loadUsers)
 .empty-state-icon { font-size: 32px; margin-bottom: 8px; }
 
 @media (max-width: 768px) {
-  .user-filter-bar { flex-direction: column; align-items: stretch; }
+  .user-filter-bar { flex-wrap: wrap; }
 }
 </style>

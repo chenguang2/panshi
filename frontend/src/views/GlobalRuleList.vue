@@ -2,10 +2,6 @@
   <div class="gr-page">
     <PageHeader title="全局规则" description="管理集群级的全局规则配置。全局规则是一组可复用的插件配置集合，可被多个路由引用。">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="min-width:200px;" @change="loadRules">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加全局规则</button>
       </template>
     </PageHeader>
@@ -15,7 +11,11 @@
         <input v-model="searchText" type="text" placeholder="搜索全局规则名称..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个</span>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadRules">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个全局规则</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -191,7 +191,7 @@ onMounted(() => { loadClusters(); loadRules() })
 
 <style scoped>
 .gr-page { padding: 20px 24px; }
-.gr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.gr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
 .gr-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
 .gr-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
@@ -227,6 +227,5 @@ onMounted(() => { loadClusters(); loadRules() })
 }
 @media (max-width: 768px) {
   .gr-grid { grid-template-columns: 1fr; }
-  .gr-header-actions { flex-direction: column; align-items: stretch; }
 }
 </style>

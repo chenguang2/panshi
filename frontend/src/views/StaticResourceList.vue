@@ -2,10 +2,6 @@
   <div class="sr-page">
     <PageHeader title="静态资源" description="管理 ZIP 格式的静态资源文件，上传后通过路由分发">
       <template #actions>
-        <select v-model="clusterFilter" class="form-input" style="min-width:200px;" @change="loadResources">
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
         <button class="btn btn-primary" @click="openAddModal">+ 添加静态资源</button>
       </template>
     </PageHeader>
@@ -15,7 +11,11 @@
         <input v-model="searchText" type="text" placeholder="搜索名称..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个</span>
+      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadResources">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个静态资源</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -306,7 +306,7 @@ onMounted(() => { loadClusters(); loadResources() })
 
 <style scoped>
 .sr-page { padding: 20px 24px; }
-.sr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.sr-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
 .sr-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
 .sr-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
