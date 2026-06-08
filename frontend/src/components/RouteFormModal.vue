@@ -66,6 +66,7 @@
               <span style="display:none">{{ dbgLog('upstreams:', upstreams, 'length:', upstreams?.length) }}</span>
               <select v-model="form.upstream_id" class="form-input">
                 <option value="">请选择上游</option>
+                <option value="test">TEST硬编码</option>
                 <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
               </select>
               <div v-if="formErrors.upstream_id" class="form-error">{{ formErrors.upstream_id }}</div>
