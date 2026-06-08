@@ -33,7 +33,7 @@ cat  ~/.config/uv/config.toml
 
 ```
 yum install -y dos2unix git
-dos2unix prepare.sh
+dos2unix gen-linux.sh
 ```
 
 ## 安装 nvm
