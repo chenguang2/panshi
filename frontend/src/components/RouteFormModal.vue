@@ -208,6 +208,7 @@ function toggleAllMethods() {
 }
 
 async function loadUpstreams(cid: number) {
+  console.log('[RouteFormModal] loadUpstreams called with cid:', cid)
   try {
     const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: 100 } })
     upstreams.value = res.data.items || []
@@ -249,6 +250,7 @@ watch(() => form.cluster_id, (cid) => {
 })
 
 watch(() => props.visible, async (v) => {
+  console.log('[RouteFormModal] visible changed:', v, 'editingRoute:', props.editingRoute, 'copyingRoute:', props.copyingRoute)
   if (!v) return
   formErrors.name = ''
   formErrors.uri = ''
