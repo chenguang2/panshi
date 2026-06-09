@@ -364,7 +364,7 @@ async def batch_node_action(
     nodes = result.scalars().all()
 
     if not nodes:
-        raise HTTPException(status_code=404, detail="未找到节点")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="未找到节点")
 
     # build per-node results
     results: list[dict[str, Any]] = []
@@ -399,7 +399,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
     node = result.scalar_one_or_none()
     if not node:
-        raise HTTPException(status_code=404, detail="节点不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
 
     client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 

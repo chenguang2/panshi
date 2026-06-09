@@ -10,6 +10,7 @@ from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, PublishRequest
 from app.services import edge_sync
+from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
@@ -264,8 +265,6 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
 @router.delete("/{route_id}")
 async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-    from app.models.cluster import Node
 
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
@@ -308,7 +307,6 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 
 @router.post("/{route_id}/publish")
 async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
@@ -435,15 +433,13 @@ async def get_route_history(cluster_id: int, route_id: int, db: AsyncSession = D
 
 @router.post("/{route_id}/rollback/{version}")
 async def rollback_route(cluster_id: int, route_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-    from app.services.edge_logger import get_edge_logger
 
     route_result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = route_result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
 
-    await edge_sync.get_or_404(db, ConfigVersion, resource_type="route", resource_id=route_id, version=version, detail="版本不存在")
+    config_version = await edge_sync.get_or_404(db, ConfigVersion, resource_type="route", resource_id=route_id, version=version, detail="版本不存在")
 
     config_data = json.loads(config_version.config)
 
@@ -594,7 +590,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
 
 @router.delete("/{route_id}/history/{history_id}")
 async def delete_route_history(cluster_id: int, route_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="route", resource_id=route_id, detail="历史版本不存在")
+    config_version = await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="route", resource_id=route_id, detail="历史版本不存在")
 
     await db.delete(config_version)
     await db.commit()

@@ -284,7 +284,7 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
 
-    await edge_sync.get_or_404(db, ConfigVersion, resource_type="upstream", resource_id=upstream_id, version=version, detail="版本不存在")
+    config_version = await edge_sync.get_or_404(db, ConfigVersion, resource_type="upstream", resource_id=upstream_id, version=version, detail="版本不存在")
 
     config_data = json.loads(config_version.config)
 
@@ -310,7 +310,7 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}/history/{history_id}")
 async def delete_upstream_history(cluster_id: int, upstream_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="upstream", resource_id=upstream_id, detail="历史版本不存在")
+    config_version = await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="upstream", resource_id=upstream_id, detail="历史版本不存在")
 
     await db.delete(config_version)
     await db.commit()

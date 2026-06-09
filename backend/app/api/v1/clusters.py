@@ -210,7 +210,6 @@ async def delete_cluster(
     body: Optional[DeleteClusterRequest] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     if body is None:
         body = DeleteClusterRequest()
@@ -221,6 +220,7 @@ async def delete_cluster(
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
+    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     results = []
 
@@ -338,8 +338,8 @@ async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...
             continue
 
         port = node.management_port
+        import asyncio
         try:
-            import asyncio
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(node.ip, port), timeout=5.0)
             writer.close()

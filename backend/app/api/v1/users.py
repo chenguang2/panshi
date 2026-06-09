@@ -8,6 +8,7 @@ from app.core.security import decode_access_token
 from app.models.user import User, UserPermission
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
+from app.services import edge_sync
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 

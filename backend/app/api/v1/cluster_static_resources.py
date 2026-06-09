@@ -2,6 +2,8 @@ import json
 import os
 import shutil
 from datetime import datetime
+import io
+import zipfile
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File
@@ -300,8 +302,6 @@ async def upload_static_resource_zip(
     if not content:
         raise HTTPException(status_code=400, detail="文件内容为空")
 
-    import io
-    import zipfile
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="无效的 zip 文件")
 
@@ -407,8 +407,6 @@ async def get_static_resource_history(
     resource_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.cluster import ConfigVersion
-    from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 
     result = await db.execute(
         select(ConfigVersion).where(
@@ -437,7 +435,6 @@ async def delete_static_resource_history(
     version_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.cluster import ConfigVersion
 
     result = await db.execute(
         select(ConfigVersion).where(
@@ -462,7 +459,6 @@ async def rollback_static_resource(
     version: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.cluster import ConfigVersion
 
     sr = await db.execute(
         select(StaticResource).where(StaticResource.id == resource_id, StaticResource.cluster_id == cluster_id)

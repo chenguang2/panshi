@@ -38,7 +38,7 @@ async def list_or_find_nodes(
         )
         node = result.scalar_one_or_none()
         if not node:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
 
         cluster_result = await db.execute(
             select(Cluster.name, Cluster.display_name).where(Cluster.id == node.cluster_id)

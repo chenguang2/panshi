@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services import edge_sync
+from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
@@ -111,7 +112,6 @@ async def update_plugin_metadata(
 # ─── 删除（级联 ConfigVersion） ─────────────────────
 @router.delete("/{plugin_name}")
 async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
@@ -164,7 +164,6 @@ async def publish_plugin_metadata(
     req: Optional[PublishRequest] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
