@@ -3,7 +3,7 @@ import type { Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route } from '@/types'
-import { useAuthStore } from '@/stores/auth'
+import { useColumnConfig } from './useColumnConfig'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
 
 interface UpstreamExtras {
@@ -154,39 +154,16 @@ export function useClusterUpstreams(options: {
     { title: '操作', key: 'actions', width: 280 },
   ]
 
-  const authStore = useAuthStore()
-  const UPSTREAM_CFG_KEY = () => `upstream_cfg_${authStore.user?.id ?? 'guest'}`
-
-  function loadUpstreamConfig() {
-    try {
-      const raw = localStorage.getItem(UPSTREAM_CFG_KEY())
-      if (raw) {
-        const cfg = JSON.parse(raw)
-        if (cfg.columns) upstreamColumnsSelected.value = cfg.columns
-        if (cfg.searchVisible !== undefined) upstreamSearchVisible.value = cfg.searchVisible
-        if (cfg.actions) upstreamActionsSelected.value = cfg.actions
-      }
-    } catch { /* ignore */ }
-  }
-  function saveUpstreamConfig() {
-    try {
-      localStorage.setItem(UPSTREAM_CFG_KEY(), JSON.stringify({
-        columns: upstreamColumnsSelected.value,
-        searchVisible: upstreamSearchVisible.value,
-        actions: upstreamActionsSelected.value,
-      }))
-    } catch { /* ignore */ }
-  }
-
-  const upstreamColumnPopoverVisible = ref(false)
-  const upstreamColumnsSelected = ref([
-    'name',
-    'load_balance',
-    'publish_status',
-    'description',
-    'actions',
-  ])
-  const upstreamSearchVisible = ref(true)
+  const upstreamCfg = useColumnConfig({
+    key: 'upstream',
+    defaultColumns: ['name', 'load_balance', 'publish_status', 'description', 'actions'],
+    defaultSearchVisible: true,
+    defaultActions: ['edit', 'delete', 'publish', 'version'],
+  })
+  const upstreamColumnPopoverVisible = upstreamCfg.popoverVisible
+  const upstreamColumnsSelected = upstreamCfg.columnsSelected
+  const upstreamSearchVisible = upstreamCfg.searchVisible
+  const upstreamActionsSelected = upstreamCfg.actionsSelected
 
   const allUpstreamActionButtons = [
     { key: 'edit', title: '编辑' },
@@ -194,10 +171,6 @@ export function useClusterUpstreams(options: {
     { key: 'publish', title: '发布' },
     { key: 'version', title: '版本管理' },
   ]
-  const upstreamActionsSelected = ref(['edit', 'delete', 'publish', 'version'])
-
-  watch([upstreamColumnsSelected, upstreamSearchVisible, upstreamActionsSelected], saveUpstreamConfig, { deep: true })
-  loadUpstreamConfig()
 
   const visibleUpstreamColumns = computed(() => {
     const selected = new Set(upstreamColumnsSelected.value)
