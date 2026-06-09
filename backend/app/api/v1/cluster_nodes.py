@@ -138,9 +138,7 @@ async def list_nodes(
     search: Optional[str] = None,
     search_field: Optional[str] = None
 ):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     query = select(Node).where(Node.cluster_id == cluster_id)
 
@@ -177,9 +175,7 @@ async def list_nodes(
 
 @router.post("/{cluster_id}/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
 async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     db_node = Node(cluster_id=cluster_id, **node.model_dump(exclude={"cluster_id"}))
     db.add(db_node)

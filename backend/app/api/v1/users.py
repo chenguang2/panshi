@@ -169,10 +169,7 @@ async def get_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
     return UserResponse.model_validate(user)
 
 
@@ -183,10 +180,7 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     if user_update.role is not None:
         user.role = user_update.role
@@ -204,10 +198,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     if user.role == "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能删除管理员用户")
@@ -224,10 +215,7 @@ async def reset_password(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     from app.core.security import hash_password
     user.password_hash = hash_password(request.new_password)
@@ -255,9 +243,7 @@ async def assign_clusters(
     current_user: User = Depends(get_current_admin_user)
 ):
     from app.models.user import UserCluster
-    result = await db.execute(select(User).where(User.id == user_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     await db.execute(UserCluster.__table__.delete().where(UserCluster.user_id == user_id))
 
@@ -288,9 +274,7 @@ async def update_user_permissions(
     current_user: User = Depends(get_current_admin_user)
 ):
     from app.models.user import UserPermission
-    result = await db.execute(select(User).where(User.id == user_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+    await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     await db.execute(UserPermission.__table__.delete().where(UserPermission.user_id == user_id))
 

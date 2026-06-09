@@ -8,6 +8,7 @@ from app.models.cluster import Node, Cluster
 from app.models.user import User, UserCluster
 from app.schemas.cluster import NodeResponse
 from app.api.v1.clusters import get_current_user
+from app.services import edge_sync
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 

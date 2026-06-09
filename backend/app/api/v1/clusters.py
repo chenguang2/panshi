@@ -158,19 +158,13 @@ async def create_cluster(
 
 @router.get("/{cluster_id}", response_model=ClusterResponse)
 async def get_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = result.scalar_one_or_none()
-    if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
     return ClusterResponse.model_validate(cluster)
 
 
 @router.put("/{cluster_id}", response_model=ClusterResponse)
 async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = result.scalar_one_or_none()
-    if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     if cluster_update.name is not None:
         existing = await db.execute(select(Cluster).where(Cluster.name == cluster_update.name, Cluster.id != cluster_id))
@@ -226,10 +220,7 @@ async def delete_cluster(
     if not delete_db and not delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = result.scalar_one_or_none()
-    if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     results = []
 
@@ -336,10 +327,7 @@ class TestConnectionRequest(BaseModel):
 
 @router.post("/{cluster_id}/test")
 async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = result.scalar_one_or_none()
-    if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     results: list[dict] = []
     for node_id in req.node_ids:
@@ -369,9 +357,6 @@ async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...
 
 @router.post("/{cluster_id}/sync")
 async def sync_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = result.scalar_one_or_none()
-    if not cluster:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
+    cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     return {"status": "ok", "message": "同步成功"}

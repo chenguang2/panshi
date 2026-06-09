@@ -126,10 +126,7 @@ async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSe
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
 async def get_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
     targets = targets_result.scalars().all()
@@ -141,10 +138,7 @@ async def get_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Dep
 
 @router.put("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
 async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: UpstreamUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     update_data = upstream_update.model_dump(exclude_unset=True, exclude={"targets"})
     for key, value in update_data.items():
@@ -177,10 +171,7 @@ async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteCluster
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     results = []
 
@@ -204,10 +195,7 @@ async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteCluster
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/publish")
 async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
@@ -273,10 +261,7 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}/history", response_model=ConfigVersionListResponse)
 async def get_upstream_history(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     query = select(ConfigVersion).where(
         ConfigVersion.resource_type == "upstream",
@@ -299,14 +284,7 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
     if not upstream:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
 
-    result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.resource_type == "upstream",
-        ConfigVersion.resource_id == upstream_id,
-        ConfigVersion.version == version
-    ))
-    config_version = result.scalar_one_or_none()
-    if not config_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    await edge_sync.get_or_404(db, ConfigVersion, resource_type="upstream", resource_id=upstream_id, version=version, detail="版本不存在")
 
     config_data = json.loads(config_version.config)
 
@@ -332,14 +310,7 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}/history/{history_id}")
 async def delete_upstream_history(cluster_id: int, upstream_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.id == history_id,
-        ConfigVersion.resource_type == "upstream",
-        ConfigVersion.resource_id == upstream_id
-    ))
-    config_version = result.scalar_one_or_none()
-    if not config_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+    await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="upstream", resource_id=upstream_id, detail="历史版本不存在")
 
     await db.delete(config_version)
     await db.commit()

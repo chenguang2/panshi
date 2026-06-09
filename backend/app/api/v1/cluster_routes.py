@@ -178,10 +178,7 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
 
 @router.get("/{route_id}", response_model=RouteResponse)
 async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
@@ -209,10 +206,7 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
 
 @router.put("/{route_id}", response_model=RouteResponse)
 async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     update_data = route_update.model_dump(exclude_unset=True)
     if 'vars' in update_data:
@@ -276,10 +270,7 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
     if body.node_ids:
@@ -319,10 +310,7 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     plugins_result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
     plugins = plugins_result.scalars().all()
@@ -415,9 +403,7 @@ async def get_route_plugins(cluster_id: int, route_id: int, db: AsyncSession = D
 
 @router.put("/{route_id}/plugins")
 async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUpdateRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
     
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
     
@@ -431,10 +417,7 @@ async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUp
 
 @router.get("/{route_id}/history")
 async def get_route_history(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+    route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     query = select(ConfigVersion).where(
         ConfigVersion.resource_type == "route",
@@ -460,14 +443,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
 
-    result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.resource_type == "route",
-        ConfigVersion.resource_id == route_id,
-        ConfigVersion.version == version
-    ))
-    config_version = result.scalar_one_or_none()
-    if not config_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
+    await edge_sync.get_or_404(db, ConfigVersion, resource_type="route", resource_id=route_id, version=version, detail="版本不存在")
 
     config_data = json.loads(config_version.config)
 
@@ -618,14 +594,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
 
 @router.delete("/{route_id}/history/{history_id}")
 async def delete_route_history(cluster_id: int, route_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.id == history_id,
-        ConfigVersion.resource_type == "route",
-        ConfigVersion.resource_id == route_id
-    ))
-    config_version = result.scalar_one_or_none()
-    if not config_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
+    await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="route", resource_id=route_id, detail="历史版本不存在")
 
     await db.delete(config_version)
     await db.commit()

@@ -57,19 +57,13 @@ async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: As
 
 @router.get("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
 async def get_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
     return PluginConfigResponse.model_validate(config)
 
 
 @router.put("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
 async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConfigUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if key == "plugins" and value is not None:
@@ -85,10 +79,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
 
     results = []
 
@@ -111,10 +102,7 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
 async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
     upstream_plugins = json.loads(config.plugins) if config.plugins else None
 
     config_data = {
@@ -174,10 +162,7 @@ async def get_plugin_config_history(cluster_id: int, config_id: int, db: AsyncSe
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/rollback/{version}")
 async def rollback_plugin_config(cluster_id: int, config_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(PluginConfig).where(PluginConfig.id == config_id, PluginConfig.cluster_id == cluster_id))
-    config = result.scalar_one_or_none()
-    if not config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
     cv_result = await db.execute(select(ConfigVersion).where(
         ConfigVersion.resource_type == "plugin_config",
         ConfigVersion.resource_id == config_id,

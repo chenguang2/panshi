@@ -56,19 +56,13 @@ async def create_global_rule(cluster_id: int, data: GlobalRuleCreate, db: AsyncS
 
 @router.get("/{cluster_id}/global_rules/{rule_id}", response_model=GlobalRuleResponse)
 async def get_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
-    rule = result.scalar_one_or_none()
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
     return GlobalRuleResponse.model_validate(rule)
 
 
 @router.put("/{cluster_id}/global_rules/{rule_id}", response_model=GlobalRuleResponse)
 async def update_global_rule(cluster_id: int, rule_id: int, data: GlobalRuleUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
-    rule = result.scalar_one_or_none()
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if key == "plugins" and value is not None:
@@ -84,10 +78,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
-    rule = result.scalar_one_or_none()
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
 
     results = []
 
@@ -110,10 +101,7 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
 
 @router.post("/{cluster_id}/global_rules/{rule_id}/publish")
 async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
-    rule = result.scalar_one_or_none()
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
     rule_plugins = json.loads(rule.plugins) if rule.plugins else None
 
     config_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
@@ -169,10 +157,7 @@ async def get_global_rule_history(cluster_id: int, rule_id: int, db: AsyncSessio
 
 @router.post("/{cluster_id}/global_rules/{rule_id}/rollback/{version}")
 async def rollback_global_rule(cluster_id: int, rule_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(GlobalRule).where(GlobalRule.id == rule_id, GlobalRule.cluster_id == cluster_id))
-    rule = result.scalar_one_or_none()
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
+    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
     cv_result = await db.execute(select(ConfigVersion).where(
         ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id, ConfigVersion.version == version))
     cv = cv_result.scalar_one_or_none()

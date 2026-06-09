@@ -7,12 +7,40 @@ that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 
 import json
 from typing import Any, Optional, Callable, Awaitable
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, inspect as sa_inspect
 
 from app.models.cluster import Node, ConfigVersion, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata
 from app.models.static_resource import StaticResource
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+
+async def get_or_404(
+    db: AsyncSession,
+    model: type,
+    *,
+    detail: Optional[str] = None,
+    **filters: Any,
+) -> Any:
+    """Query a single row by filters and return it, or raise 404.
+
+    Usage:
+        route = await get_or_404(db, Route, id=route_id, cluster_id=cluster_id)
+        # raises HTTPException(404, "Route不存在") if not found
+
+    The error message defaults to ``{ModelName}不存在`` but can be overridden
+    via the ``detail`` parameter.
+    """
+    query = select(model)
+    for field, value in filters.items():
+        query = query.where(getattr(model, field) == value)
+    result = await db.execute(query)
+    item = result.scalar_one_or_none()
+    if not item:
+        name = detail or f"{model.__name__}不存在"
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=name)
+    return item
 
 
 async def get_active_nodes(

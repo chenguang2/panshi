@@ -73,15 +73,7 @@ async def create_plugin_metadata(
 # ─── 获取 ────────────────────────────────────────────
 @router.get("/{plugin_name}")
 async def get_plugin_metadata(cluster_id: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
     return {
         "id": item.id,
         "cluster_id": item.cluster_id,
@@ -101,15 +93,7 @@ async def update_plugin_metadata(
     metadata: Dict[str, Any],
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     item.config_data = json.dumps(metadata)
     await db.commit()
@@ -132,15 +116,7 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
     if body.node_ids:
@@ -190,15 +166,7 @@ async def publish_plugin_metadata(
 ):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     plugin_config = json.loads(item.config_data) if item.config_data else {}
     config_data = {"plugin_name": item.plugin_name, "config_data": plugin_config}
@@ -247,15 +215,7 @@ async def get_plugin_metadata_versions(
     plugin_name: str,
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     versions_result = await db.execute(
         select(ConfigVersion).where(
@@ -285,15 +245,7 @@ async def rollback_plugin_metadata(
     version: int,
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     cv_result = await db.execute(
         select(ConfigVersion).where(
@@ -321,15 +273,7 @@ async def delete_plugin_metadata_version(
     version_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(
-        select(PluginMetadata).where(
-            PluginMetadata.cluster_id == cluster_id,
-            PluginMetadata.plugin_name == plugin_name
-        )
-    )
-    item = result.scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件配置不存在")
+    item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     cv_result = await db.execute(
         select(ConfigVersion).where(

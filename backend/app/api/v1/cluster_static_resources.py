@@ -17,6 +17,7 @@ from app.schemas.static_resource import (
     StaticResourceResponse,
     StaticResourceListResponse,
 )
+from app.services import edge_sync
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
