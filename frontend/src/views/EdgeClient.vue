@@ -565,12 +565,14 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
-import { message, Modal, Progress } from 'ant-design-vue'
+import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
+import { message, Modal } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
+import { useProgressModal } from '@/composables/useProgressModal'
+import { upstreamColumns, routeColumns, pluginMetadataColumns, pluginListColumns, globalRuleColumns, pluginConfigColumns } from '@/utils/edgeColumns'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
@@ -655,55 +657,6 @@ const toggleAllMethods = () => {
 
 const jsonModalVisible = ref(false)
 const jsonContent = ref('')
-
-const upstreamColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
-  { title: '名称', key: 'name', width: 150, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
-  { title: '类型', key: 'type', width: 100, sorter: (a: any, b: any) => (a.value?.type || '').localeCompare(b.value?.type || '') },
-  { title: '节点数', key: 'nodes', width: 100, sorter: (a: any, b: any) => (getNodeCount(a.value?.nodes) - getNodeCount(b.value?.nodes)) },
-  { title: '操作', key: 'actions', width: 150 }
-]
-
-const routeColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: 'ID', key: 'id', width: 200, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
-  { title: '名称', key: 'name', width: 120, sorter: (a: any, b: any) => (a.value?.name || '').localeCompare(b.value?.name || '') },
-  { title: 'URI', key: 'uri', width: 150, sorter: (a: any, b: any) => (a.value?.uri || '').localeCompare(b.value?.uri || '') },
-  { title: '方法', key: 'methods', width: 180 },
-  { title: '上游', key: 'upstream', width: 150 },
-  { title: '操作', key: 'actions', width: 150 }
-]
-
-const pluginMetadataColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: '插件名称', key: 'name', width: 200, sorter: (a: any, b: any) => ((a.key?.split('/').pop() || '') + '').localeCompare((b.key?.split('/').pop() || '') + '') },
-  { title: '配置', key: 'config' },
-  { title: '操作', key: 'actions', width: 200 }
-]
-
-const pluginListColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: '插件名称', key: 'name', width: 300 }
-]
-
-const globalRuleColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
-  { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
-  { title: '插件数', key: 'plugins', width: 100, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
-  { title: '操作', key: 'actions', width: 200 }
-]
-
-const pluginConfigColumns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: 'ID', key: 'id', width: 120, sorter: (a: any, b: any) => (a.value?.id || '').localeCompare(b.value?.id || '') },
-  { title: '描述', key: 'desc', width: 150, sorter: (a: any, b: any) => (a.value?.desc || '').localeCompare(b.value?.desc || '') },
-  { title: '插件数', key: 'plugins', width: 80, sorter: (a: any, b: any) => ((a.value?.plugins ? Object.keys(a.value.plugins).length : 0) - (b.value?.plugins ? Object.keys(b.value.plugins).length : 0)) },
-  { title: 'Labels', key: 'labels', width: 80 },
-  { title: 'Hosts', key: 'hosts', width: 80 },
-  { title: '操作', key: 'actions', width: 200 }
-]
 
 const globalRuleModalVisible = ref(false)
 const globalRuleModalMode = ref<'create' | 'edit'>('create')
@@ -874,14 +827,6 @@ const startQuery = async () => {
   await loadAllData()
 }
 
-const buildProgressContent = (progress: { percent: number, status: 'active' | 'success' | 'exception' }, logs: string[]) => {
-  return h('div', {}, [
-    h(Progress, { percent: progress.percent, status: progress.status, showInfo: false, style: 'margin-bottom: 12px;' }),
-    h('div', { style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;' },
-      logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))
-    )
-  ])
-}
 
 const getNodeCount = (nodes: any) => {
   if (Array.isArray(nodes)) return nodes.length
@@ -959,20 +904,8 @@ const handleUpstreamSubmit = async () => {
   }
 
   const action = upstreamModalMode.value === 'create' ? '创建' : '更新'
-  const logs: string[] = []
-  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
   const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-  const progressModal = Modal.info({
-    title: `${action}上游: ${payload.name || upstreamForm.name}`,
-    width: 600,
-    content: buildProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
-  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+  const { addLog, updateContent, done } = useProgressModal(`${action}上游: ${payload.name || upstreamForm.name}`, progress)
 
   upstreamModalVisible.value = false
   addLog(`开始${action}上游: ${payload.name || upstreamForm.name}`)
@@ -999,7 +932,7 @@ const handleUpstreamSubmit = async () => {
         progress.percent = 100
         progress.status = 'exception'
         updateContent()
-        progressModal.update({ okButtonProps: { disabled: false } })
+        done()
         return
       }
       res = await api.put(`/edge-client/nodes/${ip}/${port}/upstreams/${upstreamId}`, payload)
@@ -1016,7 +949,7 @@ const handleUpstreamSubmit = async () => {
     addLog('')
     addLog(`✅ ${action}成功`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
     await loadData()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
@@ -1025,7 +958,7 @@ const handleUpstreamSubmit = async () => {
     addLog('')
     addLog(`❌ ${action}失败: ${errMsg}`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
   }
 }
 
@@ -1147,20 +1080,8 @@ const handleRouteSubmit = async () => {
   }
 
   const action = routeModalMode.value === 'create' ? '创建' : '更新'
-  const logs: string[] = []
-  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
   const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-  const progressModal = Modal.info({
-    title: `${action}路由: ${payload.name || routeForm.name}`,
-    width: 600,
-    content: buildProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
-  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+  const { addLog, updateContent, done } = useProgressModal(`${action}路由: ${payload.name || routeForm.name}`, progress)
 
   routeModalVisible.value = false
   addLog(`开始${action}路由: ${payload.name || routeForm.name}`)
@@ -1184,7 +1105,7 @@ const handleRouteSubmit = async () => {
         progress.percent = 100
         progress.status = 'exception'
         updateContent()
-        progressModal.update({ okButtonProps: { disabled: false } })
+        done()
         return
       }
       await api.put(`/edge-client/nodes/${ip}/${port}/routes/${routeId}`, payload)
@@ -1196,7 +1117,7 @@ const handleRouteSubmit = async () => {
     addLog('')
     addLog(`✅ ${action}成功`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
     await loadData()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
@@ -1205,7 +1126,7 @@ const handleRouteSubmit = async () => {
     addLog('')
     addLog(`❌ ${action}失败: ${errMsg}`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
   }
 }
 
@@ -1276,20 +1197,8 @@ const handleGlobalRuleSubmit = async () => {
   }
 
   const action = globalRuleModalMode.value === 'create' ? '创建' : '更新'
-  const logs: string[] = []
-  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
   const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-  const progressModal = Modal.info({
-    title: `${action}全局规则: ${globalRuleForm.id}`,
-    width: 600,
-    content: buildProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
-  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+  const { addLog, updateContent, done } = useProgressModal(`${action}全局规则: ${globalRuleForm.id}`, progress)
 
   globalRuleModalVisible.value = false
   addLog(`开始${action}全局规则: ${globalRuleForm.id}`)
@@ -1316,7 +1225,7 @@ const handleGlobalRuleSubmit = async () => {
     addLog('')
     addLog(`✅ ${action}成功`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
     await loadData()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
@@ -1325,7 +1234,7 @@ const handleGlobalRuleSubmit = async () => {
     addLog('')
     addLog(`❌ ${action}失败: ${errMsg}`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
   }
 }
 
@@ -1372,23 +1281,11 @@ const handlePluginConfigSubmit = async () => {
   }
 
   const action = pluginConfigModalMode.value === 'create' ? '创建' : '更新'
-  const logs: string[] = []
-  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
   const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-  const progressModal = Modal.info({
-    title: `${action}插件组: ${pluginConfigForm.desc || pluginConfigForm.id}`,
-    width: 600,
-    content: buildProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
-  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+  const { addLog, updateContent, done } = useProgressModal(`${action}插件组: ${pluginConfigForm.id}`, progress)
 
   pluginConfigModalVisible.value = false
-  addLog(`开始${action}插件组: ${pluginConfigForm.desc || pluginConfigForm.id}`)
+  addLog(`开始${action}插件组: ${pluginConfigForm.id}`)
   progress.percent = 10
   updateContent()
 
@@ -1412,7 +1309,7 @@ const handlePluginConfigSubmit = async () => {
     addLog('')
     addLog(`✅ ${action}成功`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
     await loadData()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
@@ -1421,7 +1318,7 @@ const handlePluginConfigSubmit = async () => {
     addLog('')
     addLog(`❌ ${action}失败: ${errMsg}`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
   }
 }
 
@@ -1486,20 +1383,8 @@ const handlePluginMetadataSubmit = async () => {
   }
 
   const action = pluginMetadataModalMode.value === 'create' ? '创建' : '更新'
-  const logs: string[] = []
-  const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
   const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-
-  const progressModal = Modal.info({
-    title: `${action}插件元数据: ${pluginMetadataForm.name}`,
-    width: 600,
-    content: buildProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
-  })
-  const updateContent = () => progressModal.update({ content: buildProgressContent(progress, logs) })
+  const { addLog, updateContent, done } = useProgressModal(`${action}插件元数据: ${pluginMetadataForm.name}`, progress)
 
   pluginMetadataModalVisible.value = false
   addLog(`开始${action}插件元数据: ${pluginMetadataForm.name}`)
@@ -1521,7 +1406,7 @@ const handlePluginMetadataSubmit = async () => {
     addLog('')
     addLog(`✅ ${action}成功`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
     await loadData()
   } catch (error: any) {
     const errMsg = error.response?.data?.detail || error.message || '未知错误'
@@ -1530,7 +1415,7 @@ const handlePluginMetadataSubmit = async () => {
     addLog('')
     addLog(`❌ ${action}失败: ${errMsg}`)
     updateContent()
-    progressModal.update({ okButtonProps: { disabled: false } })
+    done()
   }
 }
 
