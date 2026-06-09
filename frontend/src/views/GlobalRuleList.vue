@@ -55,7 +55,7 @@
       </div>
     </div>
 
-    <GlobalRuleFormModal :visible="formVisible" :editing-config="editingConfig" :clusters="clusters" @close="closeForm" @saved="onSaved" />
+    <PluginEntityFormModal :visible="formVisible" :editing-config="editingConfig" :clusters="clusters" resource-type="global_rule" @close="closeForm" @saved="onSaved" />
     
     <GlobalRuleViewDrawer v-model:visible="viewDrawerVisible" :config="viewingGr" />
 
@@ -70,7 +70,7 @@ import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
-import GlobalRuleFormModal from '@/components/GlobalRuleFormModal.vue'
+import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'

@@ -1,167 +1,37 @@
-import { ref, reactive, h, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
-import api from '@/api'
+import type { Ref } from 'vue'
 import type { Cluster, Plugin } from '@/types'
-import type { VersionModalState } from './useClusterPluginConfigs'
-import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from './useClusterUtils'
+import { useClusterPluginEntity, type PluginEntityDeps, type VersionModalState } from './useClusterPluginEntity'
 
-export interface GlobalRuleDeps {
-  clusters: Ref<Cluster[]>
-  versionModal: VersionModalState
-  availablePlugins: Ref<Plugin[]>
-  loadAvailablePlugins: () => Promise<void>
-  openPublishModal: (title: string, clusterId: number) => Promise<number[]>
+export interface GlobalRuleDeps extends PluginEntityDeps {}
+
+const CONFIG = {
+  apiEndpoint: 'global_rules',
+  displayName: '全局规则',
+  clusterProp: 'global_rules',
+  versionType: 'global_rule',
 }
 
 export function useClusterGlobalRules(deps: GlobalRuleDeps) {
-  const { clusters, versionModal, availablePlugins, loadAvailablePlugins, openPublishModal } = deps
-
-  const globalRuleModalVisible = ref(false)
-  const globalRuleActiveTab = ref('basic')
-  const globalRuleFormMode = ref<'add' | 'edit'>('add')
-  const globalRuleEditingClusterId = ref<number | null>(null)
-  const globalRuleEditingId = ref<number | null>(null)
-
-  const globalRuleFormData = reactive({
-    name: '',
-    description: '',
-    selectedPlugins: [] as any[],
-  })
-
-  const viewGrDrawerVisible = ref(false)
-  const viewingGr = ref<any>(null)
-
-  const loadGlobalRules = async (cluster: Cluster) => {
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/global_rules`)
-      cluster.global_rules = res.data.items || []
-    } catch {
-      cluster.global_rules = []
-    }
-  }
-
-  const showAddGlobalRule = async (cluster: Cluster) => {
-    if (availablePlugins.value.length === 0) await loadAvailablePlugins()
-    globalRuleFormMode.value = 'add'
-    globalRuleEditingClusterId.value = cluster.id
-    globalRuleEditingId.value = null
-    globalRuleFormData.name = ''
-    globalRuleFormData.description = ''
-    globalRuleFormData.selectedPlugins = []
-    globalRuleActiveTab.value = 'basic'
-    globalRuleModalVisible.value = true
-  }
-
-  const viewGlobalRule = (gr: any) => {
-    viewingGr.value = gr
-    viewGrDrawerVisible.value = true
-  }
-
-  const editGlobalRule = async (cluster: Cluster, gr: any) => {
-    if (availablePlugins.value.length === 0) await loadAvailablePlugins()
-    globalRuleFormMode.value = 'edit'
-    globalRuleEditingClusterId.value = cluster.id
-    globalRuleEditingId.value = gr.id
-    globalRuleFormData.name = gr.name || ''
-    globalRuleFormData.description = gr.description || ''
-    globalRuleFormData.selectedPlugins = Object.entries(gr.plugins || {}).map(([plugin_name, config]: [string, any]) => ({
-      plugin_name, config: JSON.stringify(config)
-    }))
-    globalRuleActiveTab.value = 'basic'
-    globalRuleModalVisible.value = true
-  }
-
-  const handleGlobalRuleSubmit = async () => {
-    if (!globalRuleEditingClusterId.value) return
-    if (!globalRuleFormData.name) { message.warning('请输入名称'); return }
-    const plugins: Record<string, any> = {}
-    for (const sp of globalRuleFormData.selectedPlugins) {
-      if (sp.config) { try { plugins[sp.plugin_name] = JSON.parse(sp.config) } catch { plugins[sp.plugin_name] = sp.config } }
-      else { plugins[sp.plugin_name] = {} }
-    }
-    try {
-      const payload = { name: globalRuleFormData.name, description: globalRuleFormData.description, plugins }
-      if (globalRuleEditingId.value) {
-        await api.put(`/clusters/${globalRuleEditingClusterId.value}/global_rules/${globalRuleEditingId.value}`, payload)
-        message.success('全局规则已更新')
-      } else {
-        await api.post(`/clusters/${globalRuleEditingClusterId.value}/global_rules`, payload)
-        message.success('全局规则已添加')
-      }
-      globalRuleModalVisible.value = false
-      const c = clusters.value.find(c => c.id === globalRuleEditingClusterId.value)
-      if (c) await loadGlobalRules(c)
-    } catch (error: any) {
-      message.error('操作失败: ' + (error.response?.data?.detail || error.message))
-    }
-  }
-
-  const deleteGlobalRule = async (cluster: Cluster, gr: any) => {
-    showDeleteConfirm({
-      title: `确定要删除全局规则 "${gr.name}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `删除全局规则: ${gr.name}`,
-          apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}`,
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadGlobalRules(cluster),
-        })
-      },
-    })
-  }
-
-  const publishGlobalRule = async (cluster: Cluster, gr: any) => {
-    const nodeIds = await openPublishModal(`发布全局规则: ${gr.name}`, cluster.id)
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布全局规则: ${gr.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/global_rules/${gr.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadGlobalRules(cluster),
-    })
-  }
-
-  const openGlobalRuleVersionManagement = (cluster: Cluster, gr: any) => {
-    versionModal.type.value = 'global_rule'
-    versionModal.resourceId.value = gr.id
-    versionModal.clusterId.value = cluster.id
-    versionModal.resourceName.value = gr.name
-    versionModal.edgeUuid.value = gr.edge_uuid || ''
-    versionModal.visible.value = true
-  }
-
-  const viewGlobalRulePluginConfig = (gr: any, pname: string, pcfg: any) => {
-    Modal.info({
-      title: `${gr.name} - ${pname}`,
-      content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;color:var(--fg);' }, typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)),
-      okText: '关闭', width: 560
-    })
-  }
+  const entity = useClusterPluginEntity(CONFIG, deps)
 
   return {
-    globalRuleModalVisible,
-    globalRuleActiveTab,
-    globalRuleFormMode,
-    globalRuleEditingClusterId,
-    globalRuleEditingId,
-    globalRuleFormData,
-    viewGrDrawerVisible,
-    viewingGr,
+    globalRuleModalVisible: entity.modalVisible,
+    globalRuleActiveTab: entity.activeTab,
+    globalRuleFormMode: entity.formMode,
+    globalRuleEditingClusterId: entity.editingClusterId,
+    globalRuleEditingId: entity.editingId,
+    globalRuleFormData: entity.formData,
+    viewGrDrawerVisible: entity.viewDrawerVisible,
+    viewingGr: entity.viewingItem,
 
-    loadGlobalRules,
-    showAddGlobalRule,
-    viewGlobalRule,
-    editGlobalRule,
-    handleGlobalRuleSubmit,
-    deleteGlobalRule,
-    publishGlobalRule,
-    openGlobalRuleVersionManagement,
-    viewGlobalRulePluginConfig,
+    loadGlobalRules: entity.loadItems,
+    showAddGlobalRule: entity.showAdd,
+    viewGlobalRule: entity.viewItem,
+    editGlobalRule: entity.editItem,
+    handleGlobalRuleSubmit: entity.handleSubmit,
+    deleteGlobalRule: entity.deleteItem,
+    publishGlobalRule: entity.publishItem,
+    openGlobalRuleVersionManagement: entity.openVersionManagement,
+    viewGlobalRulePluginConfig: entity.viewPluginDetail,
   }
 }

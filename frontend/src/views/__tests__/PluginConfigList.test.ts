@@ -15,7 +15,7 @@ vi.mock('vue-router', () => ({
 
 const stubs = {
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
-  PluginConfigFormModal: { template: '<div class="mock-form-modal" />', props: ['visible', 'editingConfig', 'clusters'] },
+  PluginEntityFormModal: { template: '<div class="mock-form-modal" />', props: ['visible', 'editingConfig', 'clusters'] },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
 }
 

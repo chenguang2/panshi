@@ -55,7 +55,7 @@
       </div>
     </div>
 
-    <PluginConfigFormModal :visible="formVisible" :editing-config="editingConfig" :clusters="clusters" @close="closeForm" @saved="onSaved" />
+    <PluginEntityFormModal :visible="formVisible" :editing-config="editingConfig" :clusters="clusters" resource-type="plugin_config" @close="closeForm" @saved="onSaved" />
     
     <PluginConfigViewDrawer v-model:visible="viewDrawerVisible" :config="viewingPc" />
 
@@ -70,7 +70,7 @@ import { ref, onMounted } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
-import PluginConfigFormModal from '@/components/PluginConfigFormModal.vue'
+import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
