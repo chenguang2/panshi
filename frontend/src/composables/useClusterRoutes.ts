@@ -71,6 +71,10 @@ export interface RouteComposableDeps {
 
   loadPluginConfigs: (cluster: Cluster) => Promise<void>
 
+  /** Shared plugin list — if not provided, composable loads its own */
+  availablePlugins?: Ref<Plugin[]>
+  loadAvailablePlugins?: () => Promise<void>
+
   // ── version-management shared refs (owned by the embedding component) ─
   versionModalVisible: Ref<boolean>
   versionModalType: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
@@ -144,7 +148,12 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   // ── plugins ─────────────────────────────────────────────────────────
 
-  const availablePlugins = ref<Plugin[]>([])
+  const _localPlugins = ref<Plugin[]>([])
+  const availablePlugins = deps.availablePlugins ?? _localPlugins
+  const loadAvailablePlugins = deps.loadAvailablePlugins ?? (async () => {
+    const res = await api.get('/plugins/builtin')
+    _localPlugins.value = res.data.plugins || []
+  })
 
   const currentCluster = computed(() =>
     clusters.value.find((c) => c.id === currentClusterId.value),
@@ -308,15 +317,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   // ── load plugins ───────────────────────────────────────────────────
-
-  async function loadAvailablePlugins() {
-    try {
-      const res = await api.get('/plugins/builtin')
-      availablePlugins.value = res.data.plugins || []
-    } catch {
-      console.error('加载插件列表失败')
-    }
-  }
 
   // ── add / edit / copy modal ────────────────────────────────────────
 

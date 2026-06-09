@@ -234,7 +234,7 @@
 <script setup lang="ts">
 import { ref, computed, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
-import type { Cluster } from '@/types'
+import type { Cluster, Plugin } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
@@ -255,6 +255,8 @@ const props = defineProps<{
     nodes?: { id: number; ip: string; management_port: number }[]
   }) => void
   loadPluginConfigs: (cluster: Cluster) => Promise<void>
+  availablePlugins?: Plugin[]
+  loadAvailablePlugins?: () => Promise<void>
 }>()
 
 // ── Internal refs for composable deps ───────────────────────────────
@@ -309,6 +311,8 @@ const {
   openPublishModal: props.openPublishModal,
   showDeleteConfirm: props.showDeleteConfirm,
   loadPluginConfigs: props.loadPluginConfigs,
+  availablePlugins: props.availablePlugins as any,
+  loadAvailablePlugins: props.loadAvailablePlugins as any,
   versionModalVisible,
   versionModalType,
   versionModalResourceId,
