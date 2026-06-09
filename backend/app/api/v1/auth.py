@@ -5,7 +5,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token, decode_access_token
-from app.models.user import User
+from app.models.user import User, UserPermission
 from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -60,7 +60,6 @@ async def get_current_user(
 
 @router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    from app.models.user import UserPermission
     result = await db.execute(select(User).where(User.username == request.username))
     user = result.scalar_one_or_none()
     
@@ -101,7 +100,6 @@ async def get_my_permissions(
     db: AsyncSession = Depends(get_db),
     authorization: Optional[str] = Header(None)
 ):
-    from app.models.user import User, UserPermission
     user = await get_current_user(authorization, db)
     if user.role == 'admin':
         return {"permissions": []}

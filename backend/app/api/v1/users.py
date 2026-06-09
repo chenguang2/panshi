@@ -4,8 +4,8 @@ from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
-from app.models.user import User, UserPermission
+from app.core.security import decode_access_token, hash_password
+from app.models.user import User, UserPermission, UserCluster
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
 from app.services import edge_sync
@@ -127,8 +127,7 @@ async def list_users(
                     item.permissions.append(p.resource_type)
                     break
 
-        from app.models.user import UserCluster
-        cluster_query = select(UserCluster).where(
+            cluster_query = select(UserCluster).where(
             UserCluster.user_id.in_(user_ids)
         )
         cluster_result = await db.execute(cluster_query)
@@ -151,7 +150,6 @@ async def create_user(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在")
 
-    from app.core.security import hash_password
     db_user = User(
         username=user.username,
         password_hash=hash_password(user.password),
@@ -218,7 +216,6 @@ async def reset_password(
 ):
     user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
-    from app.core.security import hash_password
     user.password_hash = hash_password(request.new_password)
     await db.commit()
     return {"message": "密码重置成功"}
@@ -230,7 +227,6 @@ async def get_user_clusters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.user import UserCluster
     result = await db.execute(select(UserCluster).where(UserCluster.user_id == user_id))
     clusters = result.scalars().all()
     return {"cluster_ids": [c.cluster_id for c in clusters]}
@@ -243,7 +239,6 @@ async def assign_clusters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.user import UserCluster
     await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     await db.execute(UserCluster.__table__.delete().where(UserCluster.user_id == user_id))
@@ -261,7 +256,6 @@ async def get_user_permissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.user import UserPermission
     result = await db.execute(select(UserPermission).where(UserPermission.user_id == user_id, UserPermission.enabled == 1))
     perms = [p.resource_type for p in result.scalars().all()]
     return {"user_id": user_id, "permissions": perms}
@@ -274,7 +268,6 @@ async def update_user_permissions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
-    from app.models.user import UserPermission
     await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     await db.execute(UserPermission.__table__.delete().where(UserPermission.user_id == user_id))
