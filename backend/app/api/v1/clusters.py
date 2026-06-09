@@ -13,6 +13,7 @@ from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
     DeleteClusterRequest,
 )
+from app.services import edge_sync
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -67,26 +68,21 @@ async def list_my_clusters(
     clusters = result.scalars().all()
 
     items = []
+    cids = [c.id for c in clusters]
+    (node_counts, healthy_counts, up_counts, rt_counts, pc_counts,
+     gr_counts, sr_counts, pm_counts, nodes_by_cluster) = await edge_sync.batch_load_cluster_stats(db, clusters, cids)
+
     for c in clusters:
         cluster_resp = ClusterResponse.model_validate(c)
-        node_result = await db.execute(select(func.count(), func.sum(Node.status == 1)).select_from(Node).where(Node.cluster_id == c.id))
-        node_row = node_result.one_or_none()
-        cluster_resp.node_count = node_row[0] or 0
-        cluster_resp.healthy_node_count = node_row[1] or 0
-        upstream_result = await db.execute(select(func.count()).select_from(Upstream).where(Upstream.cluster_id == c.id))
-        cluster_resp.upstream_count = upstream_result.scalar() or 0
-        route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
-        cluster_resp.route_count = route_result.scalar() or 0
-        pc_result = await db.execute(select(func.count()).select_from(PluginConfig).where(PluginConfig.cluster_id == c.id))
-        cluster_resp.plugin_config_count = pc_result.scalar() or 0
-        gr_result = await db.execute(select(func.count()).select_from(GlobalRule).where(GlobalRule.cluster_id == c.id))
-        cluster_resp.global_rule_count = gr_result.scalar() or 0
-        sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
-        cluster_resp.static_resource_count = sr_result.scalar() or 0
-        pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == c.id))
-        cluster_resp.plugin_metadata_count = pm_result.scalar() or 0
-        nodes_result = await db.execute(select(Node).where(Node.cluster_id == c.id))
-        cluster_resp.nodes = nodes_result.scalars().all()
+        cluster_resp.node_count = node_counts.get(c.id, 0)
+        cluster_resp.healthy_node_count = healthy_counts.get(c.id, 0)
+        cluster_resp.upstream_count = up_counts.get(c.id, 0)
+        cluster_resp.route_count = rt_counts.get(c.id, 0)
+        cluster_resp.plugin_config_count = pc_counts.get(c.id, 0)
+        cluster_resp.global_rule_count = gr_counts.get(c.id, 0)
+        cluster_resp.static_resource_count = sr_counts.get(c.id, 0)
+        cluster_resp.plugin_metadata_count = pm_counts.get(c.id, 0)
+        cluster_resp.nodes = nodes_by_cluster.get(c.id, [])
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
@@ -112,26 +108,21 @@ async def list_clusters(
     clusters = result.scalars().all()
 
     items = []
+    cids = [c.id for c in clusters]
+    (node_counts, healthy_counts, up_counts, rt_counts, pc_counts,
+     gr_counts, sr_counts, pm_counts, nodes_by_cluster) = await edge_sync.batch_load_cluster_stats(db, clusters, cids)
+
     for c in clusters:
         cluster_resp = ClusterResponse.model_validate(c)
-        node_result = await db.execute(select(func.count(), func.sum(Node.status == 1)).select_from(Node).where(Node.cluster_id == c.id))
-        node_row = node_result.one_or_none()
-        cluster_resp.node_count = node_row[0] or 0
-        cluster_resp.healthy_node_count = node_row[1] or 0
-        upstream_result = await db.execute(select(func.count()).select_from(Upstream).where(Upstream.cluster_id == c.id))
-        cluster_resp.upstream_count = upstream_result.scalar() or 0
-        route_result = await db.execute(select(func.count()).select_from(Route).where(Route.cluster_id == c.id))
-        cluster_resp.route_count = route_result.scalar() or 0
-        pc_result = await db.execute(select(func.count()).select_from(PluginConfig).where(PluginConfig.cluster_id == c.id))
-        cluster_resp.plugin_config_count = pc_result.scalar() or 0
-        gr_result = await db.execute(select(func.count()).select_from(GlobalRule).where(GlobalRule.cluster_id == c.id))
-        cluster_resp.global_rule_count = gr_result.scalar() or 0
-        sr_result = await db.execute(select(func.count()).select_from(StaticResource).where(StaticResource.cluster_id == c.id))
-        cluster_resp.static_resource_count = sr_result.scalar() or 0
-        pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == c.id))
-        cluster_resp.plugin_metadata_count = pm_result.scalar() or 0
-        nodes_result = await db.execute(select(Node).where(Node.cluster_id == c.id))
-        cluster_resp.nodes = nodes_result.scalars().all()
+        cluster_resp.node_count = node_counts.get(c.id, 0)
+        cluster_resp.healthy_node_count = healthy_counts.get(c.id, 0)
+        cluster_resp.upstream_count = up_counts.get(c.id, 0)
+        cluster_resp.route_count = rt_counts.get(c.id, 0)
+        cluster_resp.plugin_config_count = pc_counts.get(c.id, 0)
+        cluster_resp.global_rule_count = gr_counts.get(c.id, 0)
+        cluster_resp.static_resource_count = sr_counts.get(c.id, 0)
+        cluster_resp.plugin_metadata_count = pm_counts.get(c.id, 0)
+        cluster_resp.nodes = nodes_by_cluster.get(c.id, [])
         items.append(cluster_resp)
 
     return ClusterListResponse(total=total, items=items)
