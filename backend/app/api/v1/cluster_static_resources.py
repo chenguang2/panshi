@@ -63,7 +63,7 @@ async def _get_route_with_plugins(db: AsyncSession, cluster_id: int, route_id: i
     )
     route = route_result.scalar_one_or_none()
     if not route:
-        raise HTTPException(status_code=404, detail="路由不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
 
     uri = (route.uri or "").strip()
     if not uri.endswith("/*"):
@@ -139,7 +139,7 @@ async def create_static_resource(
 ):
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     if not cluster_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="集群不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
 
     route = await _get_route_with_plugins(db, cluster_id, body.route_id)
 
@@ -180,7 +180,7 @@ async def get_static_resource(
     )
     resource = result.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
     return resource_to_response(resource)
 
 
@@ -199,7 +199,7 @@ async def update_static_resource(
     )
     resource = result.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     if body.description is not None:
         resource.description = body.description
@@ -227,7 +227,7 @@ async def delete_static_resource(
     )
     resource = result.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     results = []
 
@@ -293,7 +293,7 @@ async def upload_static_resource_zip(
     )
     resource = result.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="仅支持 zip 格式文件")
@@ -353,7 +353,7 @@ async def publish_static_resource(
     )
     resource = result.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     if not resource.storage_path or not os.path.exists(resource.storage_path):
         raise HTTPException(status_code=400, detail="请先上传 zip 文件")
@@ -445,7 +445,7 @@ async def delete_static_resource_history(
     )
     version = result.scalar_one_or_none()
     if not version:
-        raise HTTPException(status_code=404, detail="历史版本不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
 
     await db.delete(version)
     await db.commit()
@@ -465,7 +465,7 @@ async def rollback_static_resource(
     )
     resource = sr.scalar_one_or_none()
     if not resource:
-        raise HTTPException(status_code=404, detail="静态资源不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     cv = await db.execute(
         select(ConfigVersion).where(
@@ -476,7 +476,7 @@ async def rollback_static_resource(
     )
     config_version = cv.scalar_one_or_none()
     if not config_version:
-        raise HTTPException(status_code=404, detail="版本不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
 
     config_data = json.loads(config_version.config)
     resource.storage_path = config_data.get("file_path", resource.storage_path)
