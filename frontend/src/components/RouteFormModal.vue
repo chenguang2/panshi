@@ -305,7 +305,7 @@ function validateForm(): boolean {
   if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
   if (!form.upstream_id) { formErrors.upstream_id = '请选择上游'; return false }
   if (form.methods.length === 0) { formErrors.methods = '请至少选择一种请求方法'; return false }
-  if (form.priority === undefined || form.priority === null || form.priority === '' || isNaN(Number(form.priority))) { formErrors.priority = '请输入优先级'; return false }
+  if (form.priority === undefined || form.priority === null || isNaN(Number(form.priority))) { formErrors.priority = '请输入优先级'; return false }
   return true
 }
 
