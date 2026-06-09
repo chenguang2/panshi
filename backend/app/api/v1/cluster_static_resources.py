@@ -183,6 +183,54 @@ async def get_static_resource(
     return resource_to_response(resource)
 
 
+@router.get("/{resource_id}/zip-contents")
+async def get_static_resource_zip_contents(
+    cluster_id: int,
+    resource_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(StaticResource).where(
+            StaticResource.id == resource_id,
+            StaticResource.cluster_id == cluster_id,
+        )
+    )
+    resource = result.scalar_one_or_none()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
+
+    storage_path = resource.storage_path
+    if not storage_path or not os.path.exists(storage_path):
+        return {
+            "items": [],
+            "total_count": 0,
+            "message": "暂未上传 ZIP 文件" if not storage_path else "ZIP 文件已被删除",
+        }
+
+    try:
+        with zipfile.ZipFile(storage_path, "r") as zf:
+            all_entries = zf.infolist()
+    except (zipfile.BadZipFile, OSError):
+        raise HTTPException(status_code=400, detail="无法读取 ZIP 文件")
+
+    MAX_DISPLAY = 1000
+    total_count = len(all_entries)
+    display_entries = all_entries[:MAX_DISPLAY]
+
+    items = []
+    for entry in display_entries:
+        dt = entry.date_time
+        modified = f"{dt[0]:04d}-{dt[1]:02d}-{dt[2]:02d}T{dt[3]:02d}:{dt[4]:02d}:{dt[5]:02d}"
+        items.append({
+            "name": entry.filename,
+            "file_size": entry.file_size,
+            "compressed_size": entry.compress_size,
+            "modified": modified,
+        })
+
+    return {"items": items, "total_count": total_count}
+
+
 @router.put("/{resource_id}", response_model=StaticResourceResponse)
 async def update_static_resource(
     cluster_id: int,

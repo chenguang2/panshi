@@ -44,6 +44,7 @@
         <div v-if="sr.file_size" class="sr-size">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
         <div class="sr-card-actions">
           <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑"><EditOutlined /></button>
+          <button class="btn btn-ghost btn-sm" @click="viewZipContents(sr)" :disabled="!sr.file_size" :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'">查看</button>
           <button class="btn btn-ghost btn-sm" @click="uploadZip(sr)" :disabled="!sr.id">上传 ZIP</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click="deleteResource(sr)" title="删除">删除</button>
           <span style="flex:1"></span>
@@ -99,6 +100,53 @@
     
     <PublishConfirmModal v-model:visible="publishVisible" title="发布静态资源" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
     <VersionManagementModal v-model:open="vmVisible" resource-type="static_resource" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadResources" @published="loadResources" />
+
+    <!-- ZIP Contents Modal -->
+    <div class="modal-overlay" id="zipContentsModal" :style="{ display: zipContentsModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide" style="max-width:800px;">
+        <div class="modal-header">
+          <h2>ZIP 内容 — {{ zipContentsResource?.name || '' }}</h2>
+          <button class="modal-close" @click="closeZipContents">&times;</button>
+        </div>
+        <div class="modal-body" style="max-height:60vh;overflow:auto;">
+          <div v-if="zipContentsLoading" class="loading-state">加载中...</div>
+          <div v-else-if="zipContentsError" class="sr-empty">
+            <div class="sr-empty-icon" style="color:var(--danger)">⚠</div>
+            <div class="sr-empty-text" style="color:var(--danger)">{{ zipContentsError }}</div>
+          </div>
+          <div v-else-if="zipContentsData.items.length === 0" class="sr-empty">
+            <div class="sr-empty-icon">📦</div>
+            <div class="sr-empty-text">{{ zipContentsMessage || 'ZIP 包内无文件' }}</div>
+          </div>
+          <div v-else>
+            <div style="margin-bottom:8px;font-size:12px;color:var(--muted);">
+              显示前 {{ zipContentsData.items.length }} 个 / 共 {{ zipContentsData.total_count }} 个文件
+            </div>
+            <table class="zip-table">
+              <thead>
+                <tr>
+                  <th style="width:50%;">文件名</th>
+                  <th style="width:15%;text-align:right;">文件大小</th>
+                  <th style="width:15%;text-align:right;">压缩后</th>
+                  <th style="width:20%;text-align:right;">修改时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, idx) in zipContentsData.items" :key="idx">
+                  <td style="font-family:var(--font-mono);font-size:12px;">{{ item.name }}</td>
+                  <td style="text-align:right;font-family:var(--font-mono);font-size:12px;">{{ formatSize(item.file_size) }}</td>
+                  <td style="text-align:right;font-family:var(--font-mono);font-size:12px;">{{ formatSize(item.compressed_size) }}</td>
+                  <td style="text-align:right;font-family:var(--font-mono);font-size:12px;">{{ formatZipModified(item.modified) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeZipContents">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -149,6 +197,50 @@ const pluginValid = computed(() => {
 })
 const formValid = computed(() => formData.route_id && uriValid.value && publishedValid.value && pluginValid.value)
 
+const zipContentsModalVisible = ref(false)
+const zipContentsResource = ref<any | null>(null)
+const zipContentsLoading = ref(false)
+const zipContentsError = ref('')
+const zipContentsData = ref<{ items: any[], total_count: number }>({ items: [], total_count: 0 })
+const zipContentsMessage = ref('')
+
+async function viewZipContents(sr: any) {
+  zipContentsResource.value = sr
+  zipContentsModalVisible.value = true
+  zipContentsLoading.value = true
+  zipContentsError.value = ''
+  zipContentsData.value = { items: [], total_count: 0 }
+  zipContentsMessage.value = ''
+  try {
+    const res = await api.get(`/clusters/${sr.cluster_id}/static-resources/${sr.id}/zip-contents`)
+    zipContentsData.value = res.data
+    zipContentsMessage.value = res.data.message || ''
+  } catch (e: any) {
+    zipContentsError.value = e?.response?.data?.detail || '获取 ZIP 内容失败'
+  } finally {
+    zipContentsLoading.value = false
+  }
+}
+
+function closeZipContents() {
+  zipContentsModalVisible.value = false
+  zipContentsResource.value = null
+}
+
+function formatSize(bytes: number): string {
+  if (bytes === 0) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatZipModified(dt: string): string {
+  if (!dt) return '-'
+  try {
+    // Format: YYYY-MM-DDTHH:mm:ss → YYYY-MM-DD HH:mm
+    return dt.replace('T', ' ')
+  } catch { return dt }
+}
 
 function formatDate(d: string) {
   if (!d) return '-'
@@ -365,6 +457,11 @@ onUnmounted(() => { cancelSearch() })
 }
 .route-validation-item.valid { color: #52c41a; }
 .route-validation-item.invalid { color: #ff4d4f; }
+
+.zip-table { width:100%; border-collapse: collapse; }
+.zip-table th, .zip-table td { padding:6px 10px; border-bottom:1px solid var(--border); }
+.zip-table th { font-size:11px; color:var(--muted); font-weight:500; text-transform:uppercase; position:sticky; top:0; background:var(--surface); }
+.zip-table tbody tr:hover { background:oklch(50% 0 0 / 4%); }
 
 @media (max-width: 768px) { .sr-grid { grid-template-columns: 1fr; } }
 </style>
