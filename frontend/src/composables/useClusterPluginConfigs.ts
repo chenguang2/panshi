@@ -1,6 +1,5 @@
 import type { Ref } from 'vue'
 import type { Cluster, Plugin } from '@/types'
-import type { VersionModalState } from './useClusterPluginEntity'
 import { useClusterPluginEntity, type PluginEntityDeps, type VersionModalState } from './useClusterPluginEntity'
 
 // Re-export for backward compatibility

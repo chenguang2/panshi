@@ -305,7 +305,7 @@ function validateForm(): boolean {
   if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
   if (!form.upstream_id) { formErrors.upstream_id = '请选择上游'; return false }
   if (form.methods.length === 0) { formErrors.methods = '请至少选择一种请求方法'; return false }
-  if (form.priority === undefined || form.priority === null || isNaN(Number(form.priority))) { formErrors.priority = '请输入有效的优先级数字'; return false }
+  if (form.priority === undefined || form.priority === null || form.priority === '' || isNaN(Number(form.priority))) { formErrors.priority = '请输入优先级'; return false }
   return true
 }
 
@@ -348,6 +348,32 @@ async function handleSubmit() {
 <style scoped>
 .form-row { display: flex; gap: 16px; margin-bottom: 0; }
 .form-group { flex: 1; margin-bottom: 16px; }
+
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 
 .form-label {
   display: block;

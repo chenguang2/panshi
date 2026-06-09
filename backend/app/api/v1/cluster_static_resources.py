@@ -20,7 +20,7 @@ from app.schemas.static_resource import (
     StaticResourceListResponse,
 )
 from app.services import edge_sync
-from app.schemas.cluster import DeleteClusterRequest, PublishRequest
+from app.schemas.cluster import DeleteClusterRequest, PublishRequest, ConfigVersionResponse, ConfigVersionListResponse
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])

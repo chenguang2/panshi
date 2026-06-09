@@ -136,6 +136,20 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
+/* Tab Bar */
+.tab-bar {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border);
+  padding: 0 20px; background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px; border: none; background: transparent;
+  font-size: 13px; font-weight: 500; color: var(--muted);
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.15s; font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 .form-group { margin-bottom: 16px; }
 .form-label {
   display: block; margin-bottom: 6px; font-size: 13px;

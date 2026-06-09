@@ -93,9 +93,30 @@ async def list_clusters(
     keyword: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
 ):
     query = select(Cluster)
+
+    # If user is authenticated and not admin, filter by assigned clusters
+    if authorization:
+        try:
+            from app.core.security import decode_access_token
+            if authorization.startswith("Bearer "):
+                token = authorization[7:]
+            else:
+                token = authorization
+            payload = decode_access_token(token)
+            if payload:
+                user_id = int(payload.get("sub"))
+                user_result = await db.execute(select(User).where(User.id == user_id))
+                user = user_result.scalar_one_or_none()
+                if user and user.role != "admin":
+                    assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == user.id)
+                    query = query.where(Cluster.id.in_(assigned_ids))
+        except Exception:
+            pass
+
     if keyword:
         query = query.where(Cluster.name.contains(keyword) | Cluster.display_name.contains(keyword))
 

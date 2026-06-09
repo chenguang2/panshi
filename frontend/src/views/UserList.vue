@@ -255,12 +255,29 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: deleteConfirm.visible ? 'flex' : 'none' }" @click.self="deleteConfirm.visible = false">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>删除用户</h2>
+          <button class="modal-close" @click="deleteConfirm.visible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">确定删除用户 "{{ deleteConfirm.username }}" 吗？</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="deleteConfirm.visible = false">取消</button>
+          <button class="btn btn-danger" @click="executeDeleteUser">删除</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import type { User } from '@/types'
@@ -386,6 +403,13 @@ const formState = reactive<UserForm>({
 })
 const formErrors = reactive<Record<string, string>>({})
 
+// Custom confirm state
+const deleteConfirm = reactive({
+  visible: false,
+  userId: null as number | null,
+  username: '',
+})
+
 const allPermissions = [
   { key: 'plugin_groups', label: '插件组管理' },
   { key: 'global_rules', label: '全局规则管理' },
@@ -472,12 +496,25 @@ async function handleSave() {
       })
       message.success('用户已更新')
     } else {
-      await api.post('/admin/users', {
+      const res = await api.post('/admin/users', {
         username: formState.username,
         password: formState.password,
         role: formState.role,
         status: formState.status ? 1 : 0,
       })
+      const newUserId = res.data?.id
+      if (newUserId && formState.role !== 'admin') {
+        if (selectedPermKeys.value.length > 0) {
+          await api.put(`/admin/users/${newUserId}/permissions`, {
+            permissions: selectedPermKeys.value,
+          })
+        }
+        if (selectedClusterIds.value.length > 0) {
+          await api.put(`/admin/users/${newUserId}/clusters`, {
+            cluster_ids: selectedClusterIds.value,
+          })
+        }
+      }
       message.success('用户已创建')
     }
     closeModal()
@@ -566,22 +603,22 @@ function deleteUser(user: UserWithExt) {
     message.error('不能删除初始管理员')
     return
   }
-  Modal.confirm({
-    title: '删除用户',
-    content: `确定删除用户 "${user.username}" 吗？`,
-    okText: '删除',
-    okType: 'danger',
-    onOk: async () => {
-      try {
-        await api.delete(`/admin/users/${user.id}`)
-        message.success('用户已删除')
-        loadUsers()
-      } catch (error: any) {
-        const detail = error.response?.data?.detail
-        message.error(typeof detail === 'string' ? detail : '删除用户失败')
-      }
-    },
-  })
+  deleteConfirm.userId = user.id
+  deleteConfirm.username = user.username
+  deleteConfirm.visible = true
+}
+
+async function executeDeleteUser() {
+  if (!deleteConfirm.userId) return
+  try {
+    await api.delete(`/admin/users/${deleteConfirm.userId}`)
+    message.success('用户已删除')
+    deleteConfirm.visible = false
+    loadUsers()
+  } catch (error: any) {
+    const detail = error.response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '删除用户失败')
+  }
 }
 
 // ── Reset Password ────────────────────────────────────────────────────────

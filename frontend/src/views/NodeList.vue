@@ -208,6 +208,25 @@
       :statistics="execStatistics"
       @update:visible="execDrawerVisible = $event"
     />
+
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }" @click.self="confirmState.visible = false">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>{{ confirmState.title }}</h2>
+          <button class="modal-close" @click="confirmState.visible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">{{ confirmState.content }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
+          <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
+            {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -267,6 +286,16 @@ const execElapsed = ref<number | null>(null)
 const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
 const execHighlights = ref<string[]>([])
 const execStatistics = ref<Record<string, string> | null>(null)
+
+// Custom confirm modal state
+const confirmState = reactive({
+  visible: false,
+  title: '',
+  content: '',
+  confirmText: '',
+  loading: false,
+  onConfirm: null as (() => Promise<void>) | null,
+})
 
 // Config diff drawer
 const diffDrawerVisible = ref(false)
@@ -554,24 +583,41 @@ function handleStatus(record: any) {
   executeAction(record, 'status', '状态查询')
 }
 
+// ── Custom Confirm ──
+
+function showConfirm(title: string, content: string, confirmText: string, onConfirm: () => Promise<void>) {
+  confirmState.title = title
+  confirmState.content = content
+  confirmState.confirmText = confirmText
+  confirmState.loading = false
+  confirmState.onConfirm = onConfirm
+  confirmState.visible = true
+}
+
+async function executeConfirm() {
+  if (!confirmState.onConfirm) return
+  confirmState.loading = true
+  try {
+    await confirmState.onConfirm()
+    confirmState.visible = false
+  } finally {
+    confirmState.loading = false
+  }
+}
+
 // ── Delete ──
 
 function handleDelete(record: any) {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`,
-    okText: '确认删除',
-    okType: 'danger' as any,
-    onOk: async () => {
-      try {
-        await deleteNode(record.cluster_id, record.id, { delete_db: true, delete_edge: false })
-        message.success('节点已删除')
-        loadNodes()
-      } catch (error: any) {
-        message.error(error.response?.data?.detail || '删除失败')
-      }
-    },
-  })
+  showConfirm(
+    '确认删除',
+    `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`,
+    '确认删除',
+    async () => {
+      await deleteNode(record.cluster_id, record.id, { delete_db: true, delete_edge: false })
+      message.success('节点已删除')
+      loadNodes()
+    }
+  )
 }
 
 // ── Diff ──

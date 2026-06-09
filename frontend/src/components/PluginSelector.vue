@@ -111,13 +111,31 @@
       :upstreams="props.upstreams"
       @save="handleSavePlugin"
     />
+
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }" @click.self="confirmVisible = false">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>确认移除</h2>
+          <button class="modal-close" @click="confirmVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">确定要移除插件「{{ confirmPluginName }}」吗？</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="confirmVisible = false">取消</button>
+          <button class="btn btn-danger" @click="doRemove">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { CaretDownOutlined, CaretRightOutlined, EditOutlined, DeleteOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
-import { Tooltip as ATooltip, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { Tooltip as ATooltip } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 
@@ -208,6 +226,11 @@ const expandCategoryWithSelected = () => {
 }
 watch(selectedPlugins, expandCategoryWithSelected, { deep: true, immediate: true })
 
+// Custom confirm state
+const confirmVisible = ref(false)
+const confirmPluginName = ref('')
+const pendingRemoveIndex = ref(-1)
+
 // 监听 props.modelValue 变化
 watch(() => props.modelValue, (newVal) => {
   if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
@@ -294,15 +317,16 @@ const addPlugin = (plugin: Plugin) => {
 
 // 确认移除插件
 const confirmRemove = (pluginName: string, index: number) => {
-  Modal.confirm({
-    title: '确认移除',
-    content: `确定要移除插件「${pluginName}」吗？`,
-    okText: '确定',
-    cancelText: '取消',
-    onOk: () => {
-      removePlugin(index)
-    }
-  })
+  confirmPluginName.value = pluginName
+  pendingRemoveIndex.value = index
+  confirmVisible.value = true
+}
+
+const doRemove = () => {
+  if (pendingRemoveIndex.value >= 0) {
+    removePlugin(pendingRemoveIndex.value)
+  }
+  confirmVisible.value = false
 }
 
 // 移除插件（带动画）

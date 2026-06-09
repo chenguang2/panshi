@@ -268,7 +268,7 @@ select.form-input {
    Custom Modal Overlay (used by createProgressModal and all custom modals)
    =========================== */
 .modal-overlay {
-  position: fixed;
+  position: fixed !important;
   inset: 0;
   background: oklch(0% 0 0 / 40%);
   z-index: 1000;
@@ -497,4 +497,54 @@ select.form-input {
 .ant-modal-body .plugin-selector .selected-header {
   background: var(--bg) !important;
   border-bottom-color: var(--border) !important;
+}
+
+/* ── Dropdown Menu ── */
+.ant-dropdown-menu {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 4px !important;
+}
+.ant-dropdown-menu-item {
+  color: var(--fg) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 13px !important;
+  padding: 6px 12px !important;
+  transition: background 0.15s !important;
+}
+.ant-dropdown-menu-item:hover {
+  background: var(--bg) !important;
+}
+.ant-dropdown-menu-item-danger {
+  color: var(--danger) !important;
+}
+.ant-dropdown-menu-item-danger:hover {
+  background: oklch(55% 0.18 28 / 8%) !important;
+}
+
+/* ── Confirm Modal (Modal.confirm / Modal.warning) ── */
+.ant-modal-confirm .ant-modal-body {
+  padding: 20px 24px !important;
+}
+.ant-modal-confirm .ant-modal-confirm-title {
+  color: var(--fg) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+.ant-modal-confirm .ant-modal-confirm-content {
+  color: var(--muted) !important;
+  font-size: 13px !important;
+  margin-top: 4px !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn + .ant-btn {
+  margin-inline-start: 0 !important;
 }

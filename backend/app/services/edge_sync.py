@@ -6,7 +6,7 @@ that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 """
 
 import json
-from typing import Any, Optional, Callable, Awaitable
+from typing import Any, Optional, Callable
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, inspect as sa_inspect
@@ -143,7 +143,7 @@ async def publish_to_nodes(
     cluster_id: int,
     active_nodes: list[Node],
     edge_data: dict,
-    publish_fn: Callable[[EdgeClient], Awaitable[Any]],
+        publish_fn: Callable[[EdgeClient], Any],
     log_fn: Optional[Callable[[dict, Any, Optional[Exception], Optional[bytes]], None]] = None,
 ) -> tuple[list[dict], int, int]:
     """Publish resource data to multiple Edge nodes.
@@ -175,7 +175,7 @@ async def publish_to_nodes(
             client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             encrypted = client._encrypt(json.dumps(edge_data).encode())
 
-            response = await publish_fn(client)
+            response = publish_fn(client)
 
             node_result["status"] = "success"
             node_result["response"] = response

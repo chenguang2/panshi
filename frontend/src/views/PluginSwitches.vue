@@ -96,12 +96,43 @@
       <span v-if="hasUnsavedChanges" class="unsaved-hint">有未保存的更改</span>
       <a-button type="primary" @click="saveSwitches" :loading="saving">保存配置</a-button>
     </div>
+
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }" @click.self="confirmVisible = false">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>确认离开</h2>
+          <button class="modal-close" @click="cancelLeave">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">有未保存的更改，确定要离开吗？</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="cancelLeave">取消</button>
+          <button class="btn btn-primary" @click="confirmLeave">离开</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Info Modal (success/warning) -->
+    <div class="modal-overlay" :style="{ display: infoModal.visible ? 'flex' : 'none' }" @click.self="infoModal.visible = false">
+      <div class="modal" style="max-width: 480px;">
+        <div class="modal-header">
+          <h2>{{ infoModal.title }}</h2>
+          <button class="modal-close" @click="infoModal.visible = false">&times;</button>
+        </div>
+        <div class="modal-body" v-html="infoModal.htmlContent"></div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" @click="infoModal.visible = false">知道了</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, h } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { ref, computed, reactive, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -239,34 +270,51 @@ async function saveSwitches() {
           .join('，')
         return `<div style="margin-bottom:8px;"><strong>${w.plugin}</strong>：${refs}</div>`
       }).join('')
-      Modal.warning({
-        title: '插件引用警告',
-        content: h('div', { innerHTML: `<p style="margin-bottom:12px;color:var(--muted);">以下插件已被禁用，但仍有配置引用：</p>${warningHtml}` }),
-        okText: '知道了',
-      })
+      infoModal.title = '插件引用警告'
+      infoModal.htmlContent = `<p style="margin-bottom:12px;color:var(--muted);">以下插件已被禁用，但仍有配置引用：</p>${warningHtml}`
+      infoModal.visible = true
     } else {
-      Modal.success({
-        title: '保存成功',
-        content: '插件配置已保存',
-        okText: '知道了',
-      })
+      infoModal.title = '保存成功'
+      infoModal.htmlContent = '<p>插件配置已保存</p>'
+      infoModal.visible = true
     }
-  } catch {
-    message.error('保存失败')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail || e?.message || '保存失败'
+    message.error(typeof detail === 'string' ? detail : '保存失败')
   } finally {
     saving.value = false
   }
 }
 
+const confirmVisible = ref(false)
+let pendingNext: ((value: boolean) => void) | null = null
+
+// Info modal state
+const infoModal = reactive({
+  visible: false,
+  title: '',
+  htmlContent: '',
+})
+
 onBeforeRouteLeave((_to, _from, next) => {
   if (hasUnsavedChanges.value) {
-    if (!window.confirm('有未保存的更改，确定要离开吗？')) {
-      next(false)
-      return
+    confirmVisible.value = true
+    pendingNext = (confirmed: boolean) => {
+      confirmVisible.value = false
+      next(confirmed)
     }
+  } else {
+    next()
   }
-  next()
 })
+
+function confirmLeave() {
+  pendingNext?.(true)
+}
+
+function cancelLeave() {
+  pendingNext?.(false)
+}
 
 onMounted(loadSwitches)
 </script>

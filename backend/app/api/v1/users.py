@@ -127,7 +127,7 @@ async def list_users(
                     item.permissions.append(p.resource_type)
                     break
 
-            cluster_query = select(UserCluster).where(
+        cluster_query = select(UserCluster).where(
             UserCluster.user_id.in_(user_ids)
         )
         cluster_result = await db.execute(cluster_query)

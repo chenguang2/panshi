@@ -99,6 +99,7 @@
                 </tbody>
               </table>
             </div>
+            <div v-if="formErrors.targets" class="form-error" style="margin-top:8px;">{{ formErrors.targets }}</div>
             <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;border:1px dashed var(--border);" @click="addTarget">+ 添加节点</button>
           </div>
 
@@ -159,13 +160,6 @@
                   <option value="rewrite">rewrite（自定义 Host）</option>
                 </select>
               </div>
-              <div class="form-group" v-if="form.pass_host === 'rewrite'">
-                <label class="form-label">上游 Host</label>
-                <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host">
-              </div>
-            </div>
-
-            <div class="form-row">
               <div class="form-group">
                 <label class="form-label">通信协议</label>
                 <select v-model="form.scheme" class="form-input">
@@ -175,21 +169,27 @@
                   <option value="udp">udp</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">连接池</label>
-                <div class="form-row-sm">
-                  <div class="form-sub-group">
-                    <div class="form-sub-label">大小</div>
-                    <input v-model.number="form.keepalive_pool.size" type="number" class="form-input" min="1" placeholder="size" style="height:30px;">
-                  </div>
-                  <div class="form-sub-group">
-                    <div class="form-sub-label">空闲超时（秒）</div>
-                    <input v-model.number="form.keepalive_pool.idle_timeout" type="number" class="form-input" min="0" placeholder="idle" style="height:30px;">
-                  </div>
-                  <div class="form-sub-group">
-                    <div class="form-sub-label">最大请求数</div>
-                    <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="requests" style="height:30px;">
-                  </div>
+            </div>
+
+            <div v-if="form.pass_host === 'rewrite'" class="form-group">
+              <label class="form-label">上游 Host</label>
+              <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">连接池</label>
+              <div class="form-row-sm">
+                <div class="form-sub-group">
+                  <div class="form-sub-label">大小</div>
+                  <input v-model.number="form.keepalive_pool.size" type="number" class="form-input" min="1" placeholder="size" style="height:30px;">
+                </div>
+                <div class="form-sub-group">
+                  <div class="form-sub-label">空闲超时（秒）</div>
+                  <input v-model.number="form.keepalive_pool.idle_timeout" type="number" class="form-input" min="0" placeholder="idle" style="height:30px;">
+                </div>
+                <div class="form-sub-group">
+                  <div class="form-sub-label">最大请求数</div>
+                  <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="requests" style="height:30px;">
                 </div>
               </div>
             </div>
@@ -291,6 +291,7 @@ watch(() => props.visible, (v) => {
   if (!v) return
   formErrors.name = ''
   formErrors.cluster_id = ''
+  formErrors.targets = ''
   targetValidation.value = {}
   activeTab.value = 'basic'
 
@@ -385,6 +386,11 @@ function validateForm(): boolean {
 
   // Validate targets
   let valid = true
+  formErrors.targets = ''
+  if (form.targets.length === 0) {
+    formErrors.targets = '请至少添加一个节点'
+    valid = false
+  }
   const seen = new Set<string>()
   form.targets.forEach((t, i) => {
     const errors: Record<string, string> = {}
@@ -460,6 +466,32 @@ async function handleSubmit() {
 .form-row-sm { display: flex; gap: 8px; }
 .form-group { flex: 1; margin-bottom: 16px; }
 .form-sub-group { flex: 1; }
+
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--surface);
+}
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  font-family: var(--font-body);
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 
 .form-label {
   display: block;
