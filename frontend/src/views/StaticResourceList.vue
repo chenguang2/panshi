@@ -43,8 +43,8 @@
         <div v-if="sr.description" class="sr-card-desc">{{ sr.description }}</div>
         <div v-if="sr.file_size" class="sr-size">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
         <div class="sr-card-actions">
-          <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑"><EditOutlined /></button>
           <button class="btn btn-ghost btn-sm" @click="viewZipContents(sr)" :disabled="!sr.file_size" :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'">查看</button>
+          <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑">编辑</button>
           <button class="btn btn-ghost btn-sm" @click="uploadZip(sr)" :disabled="!sr.id">上传 ZIP</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click="deleteResource(sr)" title="删除">删除</button>
           <span style="flex:1"></span>
@@ -154,7 +154,7 @@
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message } from 'ant-design-vue'
-import { EditOutlined } from '@ant-design/icons-vue'
+
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
