@@ -60,7 +60,6 @@ session-*.md
 *.png
 *.bak
 *.bak2
-prompt-*.txt
 frontend@*
 vite
 
