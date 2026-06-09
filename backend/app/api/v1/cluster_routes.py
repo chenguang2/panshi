@@ -443,11 +443,20 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
 
     config_data = json.loads(config_version.config)
 
+    # Normalize types: config_version may store data in different formats
+    raw_methods = config_data.get("methods", route.methods)
+    if isinstance(raw_methods, list):
+        raw_methods = ",".join(raw_methods)
+
+    raw_upstream_id = config_data.get("upstream_id", route.upstream_id)
+    if not isinstance(raw_upstream_id, int) or raw_upstream_id is None:
+        raw_upstream_id = None
+
     route.uri = config_data.get("uri", route.uri)
-    route.methods = config_data.get("methods", route.methods)
+    route.methods = raw_methods
     route.priority = config_data.get("priority", route.priority)
     route.status = config_data.get("status", route.status)
-    route.upstream_id = config_data.get("upstream_id", route.upstream_id)
+    route.upstream_id = raw_upstream_id
     route.hosts = config_data.get("hosts", route.hosts)
     route.remote_addrs = config_data.get("remote_addrs", route.remote_addrs)
     route.vars = json.dumps(config_data.get("vars")) if config_data.get("vars") else None
@@ -477,115 +486,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
 
     await db.commit()
 
-    nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
-    active_nodes = nodes_result.scalars().all()
-
-    if not active_nodes:
-        return {"status": "ok", "message": f"路由已切换到版本 v{version}，但集群中没有活跃的 edge 节点", "version": version, "results": []}
-
-    edge_logger = get_edge_logger()
-    upstream_edge_uuid = config_data.get("upstream_edge_uuid")
-    if not upstream_edge_uuid and route.upstream_id:
-        upstream_result = await db.execute(select(Upstream).where(Upstream.id == route.upstream_id))
-        upstream = upstream_result.scalar_one_or_none()
-        if upstream:
-            upstream_edge_uuid = upstream.edge_uuid
-
-    plugins_result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
-    plugins = plugins_result.scalars().all()
-
-    edge_data = EdgeClient.convert_route_to_edge_format(
-        edge_uuid=route.edge_uuid,
-        name=route.name,
-        uri=route.uri,
-        methods=route.methods,
-        hosts=route.hosts,
-        upstream_edge_uuid=upstream_edge_uuid,
-        priority=route.priority or 0,
-        vars_json=route.vars if isinstance(route.vars, str) else None,
-        plugins=plugins,
-        status=route.status,
-        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
-    )
-
-    results = []
-    success_count = 0
-    fail_count = 0
-
-    for node in active_nodes:
-        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-
-        try:
-            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-
-            encrypted = client._encrypt(json.dumps(edge_data).encode())
-
-            response = client.update_route(route.edge_uuid, edge_data)
-
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=encrypted,
-                response_status=201,
-                response_body=response,
-                status="SUCCESS"
-            )
-
-            node_result["status"] = "success"
-            node_result["response"] = response
-            success_count += 1
-
-        except EdgeConnectionError as e:
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=None,
-                response_body=None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
-
-        except EdgeAPIError as e:
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=e.status_code,
-                response_body=e.response_body,
-                status="FAILED",
-                error=e.message
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = e.message
-            fail_count += 1
-
-        results.append(node_result)
-
-    if success_count == len(active_nodes):
-        return {"status": "ok", "message": f"路由已切换到版本 v{version}，已同步到 {success_count} 个节点", "version": version, "results": results}
-    elif success_count > 0:
-        return {"status": "partial", "message": f"路由已切换到版本 v{version}，{success_count}/{len(active_nodes)} 节点同步成功", "version": version, "results": results}
-    else:
-        return {"status": "error", "message": f"路由已切换到版本 v{version}，但节点同步失败", "version": version, "results": results}
+    return {"status": "ok", "message": f"路由已切换到版本 v{version}", "version": version}
 
 
 @router.delete("/{route_id}/history/{history_id}")
