@@ -454,22 +454,6 @@ onMounted(() => { loadClusters() })
   display: flex; flex-direction: column;
 }
 .modal-wide { max-width: 700px; }
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px; border-bottom: 1px solid var(--border);
-  background: oklch(56% 0.16 210 / 10%);
-}
-.modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--fg); }
-.modal-close {
-  width: 28px; height: 28px; border: none; background: transparent;
-  font-size: 20px; cursor: pointer; color: var(--muted); border-radius: var(--radius-sm);
-}
-.modal-close:hover { background: var(--bg); color: var(--fg); }
-.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
-.modal-footer {
-  display: flex; justify-content: flex-end; gap: 8px;
-  padding: 12px 20px; border-top: 1px solid var(--border);
-}
 
 @media (max-width: 1200px) { .cl-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) {

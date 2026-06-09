@@ -653,65 +653,17 @@ onMounted(loadUsers)
 
 /* ── Modal（与节点弹窗风格一致） ── */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: oklch(0% 0 0 / 40%);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: fixed; inset: 0; background: oklch(0% 0 0 / 40%);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
 }
-
 .modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 600px; max-height: 80vh;
+  display: flex; flex-direction: column;
 }
-
 .modal-wide { max-width: 700px; }
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: oklch(56% 0.16 210 / 10%);
-}
-.modal-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.modal-close {
-  width: 28px; height: 28px;
-  border: none; background: transparent;
-  font-size: 20px; cursor: pointer;
-  color: var(--muted); border-radius: var(--radius-sm);
-}
-.modal-close:hover { background: var(--bg); color: var(--fg); }
-
-.modal-body {
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border);
-}
+.picker-modal { max-width: 640px; }
 
 .form-row { display: flex; gap: 16px; margin-bottom: 0; }
 
