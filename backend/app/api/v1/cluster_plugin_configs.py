@@ -119,28 +119,23 @@ async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[P
 
     edge_logger = get_edge_logger()
 
-    def log_publish(node_result, response, error, encrypted):
-        if error:
-            edge_logger.log_plugin_config_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                config_id=config_id, config_name=config.name,
-                method="PUT", path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
-                request_body=edge_data, encrypted_body=None,
-                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
-                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
-                status="FAILED", error=str(error))
-        else:
-            edge_logger.log_plugin_config_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                config_id=config_id, config_name=config.name,
-                method="PUT", path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
-                request_body=edge_data, encrypted_body=encrypted,
-                response_status=201, response_body=response, status="SUCCESS")
-
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_data,
         publish_fn=lambda client: client.create_plugin_config(config.edge_uuid, edge_data),
-        log_fn=log_publish)
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="plugin_config",
+            cluster_id=cluster_id,
+            cluster_name=cluster.name if cluster else str(cluster_id),
+            resource_id=config_id,
+            resource_name=config.name,
+            method="PUT",
+            path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_status=201,
+            response_body=response,
+            error=error,
+        ))
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "插件组", new_version)
 

@@ -231,7 +231,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -247,11 +248,11 @@ const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref<string>('')
 const statusFilter = ref<string | number>('')
 const opLogVisible = ref<number | null>(null)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
 // Form modal
@@ -365,11 +366,7 @@ function onFilterChange() {
 }
 
 function onSearchInput() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    page.value = 1
-    loadNodes()
-  }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadNodes() })
 }
 
 // ── Form Modal ──
@@ -646,6 +643,10 @@ function nginxRunning(node: any): boolean {
 onMounted(() => {
   loadClusters()
   loadNodes()
+})
+
+onUnmounted(() => {
+  cancelSearch()
 })
 </script>
 

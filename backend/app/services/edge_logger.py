@@ -117,6 +117,50 @@ class EdgeLogger:
     def log_plugin_metadata_operation(self, cluster_id, cluster_name, plugin_name, method, path, request_body=None, encrypted_body=None, response_status=None, response_body=None, status="", error=None):
         self.log_operation("plugin_metadata", cluster_id, cluster_name, f"PluginMetadata:{plugin_name}", method, path, request_body, encrypted_body, response_status, response_body, status, error)
 
+    def log_publish_result(
+        self,
+        resource_type: str,
+        cluster_id: int,
+        cluster_name: str,
+        resource_id: int | None,
+        resource_name: str,
+        method: str,
+        path: str,
+        request_body: dict[str, Any] | None = None,
+        encrypted_body: str | None = None,
+        response_status: int | None = None,
+        response_body: dict[str, Any] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        """Shared log callback passed to edge_sync.publish_to_nodes().
+
+        Handles both success and error logging in one place,
+        replacing 5 identical log_publish closures.
+        """
+        type_label = resource_type.replace("_", " ").title().replace(" ", "")
+        resource_label = (
+            f"{type_label}:{resource_name} (ID:{resource_id})"
+            if resource_id is not None
+            else f"{type_label}:{resource_name}"
+        )
+        if error:
+            self.log_operation(
+                resource_type, cluster_id, cluster_name,
+                resource_label,
+                method, path,
+                request_body=request_body, encrypted_body=None,
+                response_status=getattr(error, 'status_code', None),
+                response_body=getattr(error, 'response_body', None),
+                status="FAILED", error=str(error))
+        else:
+            self.log_operation(
+                resource_type, cluster_id, cluster_name,
+                resource_label,
+                method, path,
+                request_body=request_body, encrypted_body=encrypted_body,
+                response_status=response_status, response_body=response_body,
+                status="SUCCESS")
+
 
 _edge_logger: EdgeLogger | None = None
 

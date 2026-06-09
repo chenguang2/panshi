@@ -103,7 +103,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted } from 'vue'
+import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message } from 'ant-design-vue'
 import { EditOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
@@ -116,7 +117,7 @@ const resources = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const page = ref(1)
 const pageSize = ref(20)
@@ -147,7 +148,7 @@ const pluginValid = computed(() => {
   return (route.plugins || []).some((p: any) => p.plugin_name === 'static_resource')
 })
 const formValid = computed(() => formData.route_id && uriValid.value && publishedValid.value && pluginValid.value)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 
 function formatDate(d: string) {
   if (!d) return '-'
@@ -155,8 +156,7 @@ function formatDate(d: string) {
 }
 
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; loadResources() }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadResources() })
 }
 
 async function loadResources() {
@@ -303,6 +303,8 @@ function openVersionManagement(sr: any) {
 }
 
 onMounted(() => { loadClusters(); loadResources() })
+
+onUnmounted(() => { cancelSearch() })
 </script>
 
 <style scoped>

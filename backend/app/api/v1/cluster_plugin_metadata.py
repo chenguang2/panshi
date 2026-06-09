@@ -138,20 +138,11 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     if body.delete_edge:
-        if active_nodes:
-            for node in active_nodes:
-                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
-                try:
-                    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-                    response = client.delete_plugin_metadata(plugin_name)
-                    node_result["status"] = "success"
-                    node_result["response"] = response
-                except (EdgeConnectionError, EdgeAPIError) as e:
-                    node_result["status"] = "failed"
-                    node_result["error"] = str(e)
-                results.append(node_result)
-        else:
-            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
+        edge_results = await edge_sync.delete_on_nodes(
+            cluster_id, active_nodes, plugin_name,
+            lambda client, name: client.delete_plugin_metadata(name)
+        )
+        results.extend(edge_results)
 
     return {"message": "插件配置已删除", "results": results}
 
@@ -181,28 +172,23 @@ async def publish_plugin_metadata(
 
     edge_logger = get_edge_logger()
 
-    def log_publish(node_result, response, error, encrypted):
-        if error:
-            edge_logger.log_plugin_metadata_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                plugin_name=plugin_name,
-                method="PUT", path=f"/edge/admin/plugin_metadata/{plugin_name}",
-                request_body=edge_data, encrypted_body=None,
-                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
-                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
-                status="FAILED", error=str(error))
-        else:
-            edge_logger.log_plugin_metadata_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                plugin_name=plugin_name,
-                method="PUT", path=f"/edge/admin/plugin_metadata/{plugin_name}",
-                request_body=edge_data, encrypted_body=encrypted,
-                response_status=201, response_body=response, status="SUCCESS")
-
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_data,
         publish_fn=lambda client: client.create_plugin_metadata(plugin_name, edge_data),
-        log_fn=log_publish)
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="plugin_metadata",
+            cluster_id=cluster_id,
+            cluster_name=cluster.name if cluster else str(cluster_id),
+            resource_id=None,
+            resource_name=plugin_name,
+            method="PUT",
+            path=f"/edge/admin/plugin_metadata/{plugin_name}",
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_status=201,
+            response_body=response,
+            error=error,
+        ))
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "插件元数据", new_version)
 

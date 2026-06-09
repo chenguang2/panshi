@@ -117,28 +117,23 @@ async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[Publi
 
     edge_logger = get_edge_logger()
 
-    def log_publish(node_result, response, error, encrypted):
-        if error:
-            edge_logger.log_global_rule_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                rule_id=rule_id, rule_name=rule.name,
-                method="PUT", path=f"/edge/admin/global_rules/{rule.edge_uuid}",
-                request_body=edge_data, encrypted_body=None,
-                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
-                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
-                status="FAILED", error=str(error))
-        else:
-            edge_logger.log_global_rule_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                rule_id=rule_id, rule_name=rule.name,
-                method="PUT", path=f"/edge/admin/global_rules/{rule.edge_uuid}",
-                request_body=edge_data, encrypted_body=encrypted,
-                response_status=201, response_body=response, status="SUCCESS")
-
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_data,
         publish_fn=lambda client: client.create_global_rule(rule.edge_uuid, edge_data),
-        log_fn=log_publish)
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="global_rule",
+            cluster_id=cluster_id,
+            cluster_name=cluster.name if cluster else str(cluster_id),
+            resource_id=rule_id,
+            resource_name=rule.name,
+            method="PUT",
+            path=f"/edge/admin/global_rules/{rule.edge_uuid}",
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_status=201,
+            response_body=response,
+            error=error,
+        ))
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "全局规则", new_version)
 

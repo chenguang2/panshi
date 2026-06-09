@@ -66,7 +66,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -80,7 +81,7 @@ const rules = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const page = ref(1)
 const pageSize = ref(20)
@@ -96,7 +97,7 @@ const viewingGr = ref<any | null>(null)
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 
 function formatDate(d: string) {
   if (!d) return '-'
@@ -104,8 +105,7 @@ function formatDate(d: string) {
 }
 
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; loadRules() }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadRules() })
 }
 
 async function loadRules() {
@@ -187,6 +187,8 @@ function openVersionManagement(pc: any) {
 }
 
 onMounted(() => { loadClusters(); loadRules() })
+
+onUnmounted(() => { cancelSearch() })
 </script>
 
 <style scoped>

@@ -130,7 +130,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -147,7 +148,7 @@ const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const lbFilter = ref('')
 const formModalVisible = ref(false)
@@ -159,7 +160,7 @@ const vmResourceName = ref('')
 const publishModalVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 
 const columns = [
   { title: '#', key: 'index', width: 45 },
@@ -193,8 +194,7 @@ function handleAction(action: string, record: any) {
 }
 
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; loadUpstreams() }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadUpstreams() })
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
@@ -287,6 +287,10 @@ function onPublishCancel() {
 onMounted(() => {
   loadClusters()
   loadUpstreams()
+})
+
+onUnmounted(() => {
+  cancelSearch()
 })
 </script>
 

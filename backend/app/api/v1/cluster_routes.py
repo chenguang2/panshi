@@ -287,20 +287,11 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     if body.delete_edge:
-        if active_nodes:
-            for node in active_nodes:
-                node_result = {"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "pending"}
-                try:
-                    client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-                    response = client.delete_route(route.edge_uuid)
-                    node_result["status"] = "success"
-                    node_result["response"] = response
-                except (EdgeConnectionError, EdgeAPIError) as e:
-                    node_result["status"] = "failed"
-                    node_result["error"] = str(e)
-                results.append(node_result)
-        else:
-            results.append({"scope": "edge", "status": "skipped", "message": "集群中没有活跃的 Edge 节点"})
+        edge_results = await edge_sync.delete_on_nodes(
+            cluster_id, active_nodes, route.edge_uuid,
+            lambda client, uuid: client.delete_route(uuid)
+        )
+        results.extend(edge_results)
 
     return {"message": "路由已删除", "results": results}
 
@@ -357,28 +348,23 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
 
     edge_logger = get_edge_logger()
 
-    def log_publish(node_result, response, error, encrypted):
-        if error:
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id, cluster_name=str(cluster_id),
-                route_id=route_id, route_name=route.name,
-                method="PUT", path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data, encrypted_body=None,
-                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
-                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
-                status="FAILED", error=str(error))
-        else:
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id, cluster_name=str(cluster_id),
-                route_id=route_id, route_name=route.name,
-                method="PUT", path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data, encrypted_body=encrypted,
-                response_status=201, response_body=response, status="SUCCESS")
-
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_data,
         publish_fn=lambda client: client.update_route(route.edge_uuid, edge_data),
-        log_fn=log_publish)
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="route",
+            cluster_id=cluster_id,
+            cluster_name=str(cluster_id),
+            resource_id=route_id,
+            resource_name=route.name,
+            method="PUT",
+            path=f"/edge/admin/routes/{route.edge_uuid}",
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_status=201,
+            response_body=response,
+            error=error,
+        ))
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"路由 {route.name} ", new_version)
 

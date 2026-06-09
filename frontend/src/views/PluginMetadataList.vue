@@ -118,7 +118,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -132,11 +133,11 @@ const items = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const page = ref(1)
 const pageSize = ref(20)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 
 // ——— Create modal state ———
 const createVisible = ref(false)
@@ -183,8 +184,7 @@ function formatDate(d: string) {
 }
 
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; loadItems() }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadItems() })
 }
 
 function onClusterFilterChange() {
@@ -345,6 +345,10 @@ onMounted(() => {
   loadClusters()
   loadItems()
   loadBuiltinPlugins()
+})
+
+onUnmounted(() => {
+  cancelSearch()
 })
 </script>
 

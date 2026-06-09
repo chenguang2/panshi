@@ -233,28 +233,23 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
 
     edge_logger = get_edge_logger()
 
-    def log_publish(node_result, response, error, encrypted):
-        if error:
-            edge_logger.log_edge_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id, upstream_name=upstream.name,
-                method="PUT", path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
-                request_body=edge_data, encrypted_body=None,
-                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
-                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
-                status="FAILED", error=str(error))
-        else:
-            edge_logger.log_edge_operation(
-                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id, upstream_name=upstream.name,
-                method="PUT", path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
-                request_body=edge_data, encrypted_body=encrypted,
-                response_status=201, response_body=response, status="SUCCESS")
-
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_data,
         publish_fn=lambda client: client.update_upstream(upstream.edge_uuid, edge_data),
-        log_fn=log_publish)
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="upstream",
+            cluster_id=cluster_id,
+            cluster_name=cluster.name if cluster else str(cluster_id),
+            resource_id=upstream_id,
+            resource_name=upstream.name,
+            method="PUT",
+            path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_status=201,
+            response_body=response,
+            error=error,
+        ))
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"上游 {upstream.name} ", new_version)
 

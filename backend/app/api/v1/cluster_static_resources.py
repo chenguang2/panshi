@@ -1,7 +1,6 @@
 import json
 import os
 import shutil
-from datetime import datetime
 import io
 import zipfile
 from typing import Optional
@@ -254,26 +253,11 @@ async def delete_static_resource(
             node_query = node_query.where(Node.id.in_(body.node_ids))
         nodes_result = await db.execute(node_query)
         nodes = nodes_result.scalars().all()
-        edge_log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "logs", "edge", "static_resources.log")
-        os.makedirs(os.path.dirname(edge_log_path), exist_ok=True)
-        for node in nodes:
-            try:
-                client = EdgeClient(
-                    cluster_id=cluster_id,
-                    node_ip=node.ip,
-                    node_port=node.management_port,
-                )
-                delete_url = f"/edge/panshi/admin_static_resources?edge_uuid={resource.edge_uuid}"
-                with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} {delete_url}\n")
-                client.raw_delete(delete_url)
-                with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} success\n")
-                results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "success", "message": "Edge 节点文件已删除"})
-            except (EdgeConnectionError, EdgeAPIError) as e:
-                with open(edge_log_path, "a", encoding="utf-8") as log_f:
-                    log_f.write(f"[{datetime.now().isoformat()}] DELETE {node.ip}:{node.management_port} failed: {e}\n")
-                results.append({"node": f"{node.ip}:{node.management_port}", "scope": "edge", "status": "failed", "error": str(e)})
+        edge_results = await edge_sync.delete_on_nodes(
+            cluster_id, nodes, resource.edge_uuid,
+            lambda client, uuid: client.raw_delete(f"/edge/panshi/admin_static_resources?edge_uuid={uuid}")
+        )
+        results.extend(edge_results)
 
     return {"message": "静态资源已删除", "results": results}
 

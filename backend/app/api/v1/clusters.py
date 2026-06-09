@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -14,6 +16,9 @@ from app.schemas.cluster import (
     DeleteClusterRequest,
 )
 from app.services import edge_sync
+from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -115,7 +120,7 @@ async def list_clusters(
                     assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == user.id)
                     query = query.where(Cluster.id.in_(assigned_ids))
         except Exception:
-            pass
+            logger.warning("list_clusters: failed to decode token for permission filter", exc_info=True)
 
     if keyword:
         query = query.where(Cluster.name.contains(keyword) | Cluster.display_name.contains(keyword))
@@ -241,7 +246,6 @@ async def delete_cluster(
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
-    from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
     results = []
 
@@ -274,19 +278,19 @@ async def delete_cluster(
                     errs = []
                     for r in routes:
                         try: client.delete_route(r.edge_uuid); node_result["details"]["routes"] += 1
-                        except: errs.append(f"route:{r.edge_uuid}")
+                        except Exception: errs.append(f"route:{r.edge_uuid}")
                     for u in upstreams:
                         try: client.delete_upstream(u.edge_uuid); node_result["details"]["upstreams"] += 1
-                        except: errs.append(f"upstream:{u.edge_uuid}")
+                        except Exception: errs.append(f"upstream:{u.edge_uuid}")
                     for p in plugin_configs:
                         try: client.delete_plugin_config(p.edge_uuid); node_result["details"]["plugin_configs"] += 1
-                        except: errs.append(f"plugin_config:{p.edge_uuid}")
+                        except Exception: errs.append(f"plugin_config:{p.edge_uuid}")
                     for g in global_rules:
                         try: client.delete_global_rule(g.edge_uuid); node_result["details"]["global_rules"] += 1
-                        except: errs.append(f"global_rule:{g.edge_uuid}")
+                        except Exception: errs.append(f"global_rule:{g.edge_uuid}")
                     for pm in plugin_metadatas:
                         try: client.delete_plugin_metadata(pm.plugin_name); node_result["details"]["plugin_metadatas"] += 1
-                        except: errs.append(f"plugin_metadata:{pm.plugin_name}")
+                        except Exception: errs.append(f"plugin_metadata:{pm.plugin_name}")
                     if errs:
                         node_result["status"] = "failed"
                         node_result["error"] = f"部分失败: {', '.join(errs[:5])}"

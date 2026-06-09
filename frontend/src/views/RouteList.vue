@@ -117,7 +117,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -134,12 +135,12 @@ const upstreams = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const searchText = ref('')
+const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const upstreamFilter = ref('')
 const activeMethod = ref('')
 const publishFilter = ref('')
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 
 const formModalVisible = ref(false)
 const editingRoute = ref<any | null>(null)
@@ -182,8 +183,7 @@ function formatDate(d: string) {
 }
 
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { page.value = 1; loadRoutes() }, 300)
+  onDebouncedSearch(() => { page.value = 1; loadRoutes() })
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
@@ -279,6 +279,8 @@ function openVersionManagement(r: any) {
 }
 
 onMounted(() => { loadClusters(); loadRoutes() })
+
+onUnmounted(() => { cancelSearch() })
 </script>
 
 <style scoped>
