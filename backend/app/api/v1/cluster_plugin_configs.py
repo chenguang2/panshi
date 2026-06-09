@@ -16,6 +16,7 @@ from app.schemas.cluster import (
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 from app.services import edge_sync
+from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.api.v1.clusters import get_current_user
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -115,93 +116,44 @@ async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[P
     if not config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="插件组不存在")
     upstream_plugins = json.loads(config.plugins) if config.plugins else None
-    # Version increment and save history
-    version_result = await db.execute(
-        select(func.max(ConfigVersion.version)).where(
-            ConfigVersion.resource_type == "plugin_config",
-            ConfigVersion.resource_id == config_id
-        )
-    )
-    latest_version = version_result.scalar() or 0
-    new_version = latest_version + 1
-    event_data = {
-        "id": config.id,
-        "edge_uuid": config.edge_uuid,
-        "name": config.name,
-        "description": config.description,
-        "plugins": upstream_plugins}
-    config_version = ConfigVersion(
-        cluster_id=cluster_id,
-        resource_type="plugin_config",
-        resource_id=config_id,
-        version=new_version,
-        config=json.dumps(event_data))
-    db.add(config_version)
-    config.current_version = new_version
-    await db.commit()
-    edge_data = {
-        "desc": config.name,
-        "plugins": upstream_plugins or {},
-    }
+
+    config_data = {
+        "id": config.id, "edge_uuid": config.edge_uuid, "name": config.name,
+        "description": config.description, "plugins": upstream_plugins}
+    new_version = await edge_sync.create_config_version(db, "plugin_config", config_id, cluster_id, config_data, config)
+
+    edge_data = {"desc": config.name, "plugins": upstream_plugins or {}}
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
-
-    if req and req.node_ids:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids)
-    else:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db)
-
+    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
     edge_logger = get_edge_logger()
-    results = []
-    success_count = 0
-    fail_count = 0
-    for node in active_nodes:
-        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-        try:
-            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-            encrypted = client._encrypt(json.dumps(event_data).encode())
-            response = client.create_plugin_config(config.edge_uuid, edge_data)
 
+    def log_publish(node_result, response, error, encrypted):
+        if error:
             edge_logger.log_plugin_config_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                config_id=config_id,
-                config_name=config.name,
-                method="PUT",
-                path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=encrypted,
-                response_status=201,
-                response_body=response,
-                status="SUCCESS"
-            )
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                config_id=config_id, config_name=config.name,
+                method="PUT", path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
+                request_body=edge_data, encrypted_body=None,
+                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
+                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
+                status="FAILED", error=str(error))
+        else:
+            edge_logger.log_plugin_config_operation(
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                config_id=config_id, config_name=config.name,
+                method="PUT", path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
+                request_body=edge_data, encrypted_body=encrypted,
+                response_status=201, response_body=response, status="SUCCESS")
 
-            node_result["status"] = "success"
-            node_result["response"] = response
-            success_count += 1
-        except (EdgeConnectionError, EdgeAPIError) as e:
-            edge_logger.log_plugin_config_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                config_id=config_id,
-                config_name=config.name,
-                method="PUT",
-                path=f"/edge/admin/plugin_configs/{config.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=e.status_code if isinstance(e, EdgeAPIError) else None,
-                response_body=e.response_body if isinstance(e, EdgeAPIError) else None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
-        results.append(node_result)
+    results, success_count, fail_count = await edge_sync.publish_to_nodes(
+        cluster_id, active_nodes, edge_data,
+        publish_fn=lambda client: client.create_plugin_config(config.edge_uuid, edge_data),
+        log_fn=log_publish)
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "插件组", new_version)
 

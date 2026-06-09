@@ -212,169 +212,63 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
 
-    version_result = await db.execute(
-        select(func.max(ConfigVersion.version)).where(
-            ConfigVersion.resource_type == "upstream",
-            ConfigVersion.resource_id == upstream_id
-        )
-    )
-    latest_version = version_result.scalar() or 0
-    new_version = latest_version + 1
-
     targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
     targets = targets_result.scalars().all()
+    targets_list = [{"target": t.target, "weight": t.weight} for t in targets]
 
     config_data = {
-        "id": upstream.id,
-        "edge_uuid": upstream.edge_uuid,
-        "name": upstream.name,
-        "load_balance": upstream.load_balance,
-        "hash_on": upstream.hash_on,
-        "key": upstream.key,
-        "targets": [{"target": t.target, "weight": t.weight} for t in targets],
+        "id": upstream.id, "edge_uuid": upstream.edge_uuid, "name": upstream.name,
+        "load_balance": upstream.load_balance, "hash_on": upstream.hash_on, "key": upstream.key,
+        "targets": targets_list,
         "checks": json.loads(upstream.checks) if upstream.checks else None,
-        "retries": upstream.retries,
-        "retry_timeout": upstream.retry_timeout,
+        "retries": upstream.retries, "retry_timeout": upstream.retry_timeout,
         "timeout": json.loads(upstream.timeout) if upstream.timeout else None,
-        "pass_host": upstream.pass_host,
-        "upstream_host": upstream.upstream_host,
+        "pass_host": upstream.pass_host, "upstream_host": upstream.upstream_host,
         "scheme": upstream.scheme,
         "keepalive_pool": json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None,
     }
+    new_version = await edge_sync.create_config_version(db, "upstream", upstream_id, cluster_id, config_data, upstream)
 
-    config_version = ConfigVersion(
-        cluster_id=cluster_id,
-        resource_type="upstream",
-        resource_id=upstream_id,
-        version=new_version,
-        config=json.dumps(config_data)
-    )
-    db.add(config_version)
-    upstream.current_version = new_version
-    await db.commit()
-
-    if req and req.node_ids:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids)
-    else:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db)
-
-    if not active_nodes:
-        return {"status": "error", "message": f"上游 {upstream.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
-
-    edge_logger = get_edge_logger()
     upstream_checks = json.loads(upstream.checks) if upstream.checks else None
     upstream_timeout = json.loads(upstream.timeout) if upstream.timeout else None
     upstream_keepalive = json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None
     edge_data = EdgeClient.convert_upstream_to_edge_format(
-        upstream_id, upstream.name, upstream.load_balance,
-        [{"target": t.target, "weight": t.weight} for t in targets],
-        hash_on=upstream.hash_on,
-        key=upstream.key,
-        checks=upstream_checks,
-        retries=upstream.retries,
-        retry_timeout=upstream.retry_timeout,
-        timeout=upstream_timeout,
-        pass_host=upstream.pass_host,
-        upstream_host=upstream.upstream_host,
-        scheme=upstream.scheme,
-        keepalive_pool=upstream_keepalive
-    )
+        upstream_id, upstream.name, upstream.load_balance, targets_list,
+        hash_on=upstream.hash_on, key=upstream.key,
+        checks=upstream_checks, retries=upstream.retries, retry_timeout=upstream.retry_timeout,
+        timeout=upstream_timeout, pass_host=upstream.pass_host, upstream_host=upstream.upstream_host,
+        scheme=upstream.scheme, keepalive_pool=upstream_keepalive)
 
-    results = []
-    success_count = 0
-    fail_count = 0
+    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
+    if not active_nodes:
+        return {"status": "error", "message": f"上游 {upstream.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
-    for node in active_nodes:
-        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+    edge_logger = get_edge_logger()
 
-        try:
-            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-
-            import base64
-            import json as json_module
-            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
-
-            response = client.update_upstream(upstream.edge_uuid, edge_data)
-
+    def log_publish(node_result, response, error, encrypted):
+        if error:
             edge_logger.log_edge_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id,
-                upstream_name=upstream.name,
-                method="PUT",
-                path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=encrypted,
-                response_status=201,
-                response_body=response,
-                status="SUCCESS"
-            )
-
-            node_result["status"] = "success"
-            node_result["response"] = response
-            success_count += 1
-
-        except EdgeConnectionError as e:
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id, upstream_name=upstream.name,
+                method="PUT", path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
+                request_body=edge_data, encrypted_body=None,
+                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
+                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
+                status="FAILED", error=str(error))
+        else:
             edge_logger.log_edge_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id,
-                upstream_name=upstream.name,
-                method="POST",
-                path="/edge/admin/upstreams",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=None,
-                response_body=None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                upstream_id=upstream_id, upstream_name=upstream.name,
+                method="PUT", path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
+                request_body=edge_data, encrypted_body=encrypted,
+                response_status=201, response_body=response, status="SUCCESS")
 
-        except EdgeAPIError as e:
-            edge_logger.log_edge_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id,
-                upstream_name=upstream.name,
-                method="PUT",
-                path=f"/edge/admin/upstreams/{upstream_id}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=e.status_code,
-                response_body=e.response_body,
-                status="FAILED",
-                error=e.message
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = f"API error {e.status_code}: {e.message}"
-            fail_count += 1
+    results, success_count, fail_count = await edge_sync.publish_to_nodes(
+        cluster_id, active_nodes, edge_data,
+        publish_fn=lambda client: client.update_upstream(upstream.edge_uuid, edge_data),
+        log_fn=log_publish)
 
-        except Exception as e:
-            edge_logger.log_edge_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                upstream_id=upstream_id,
-                upstream_name=upstream.name,
-                method="PUT",
-                path=f"/edge/admin/upstreams/{upstream_id}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=None,
-                response_body=None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
-
-        results.append(node_result)
-
-    resource_name = f"上游 {upstream.name} "
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), resource_name, new_version)
+    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"上游 {upstream.name} ", new_version)
 
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}/history", response_model=ConfigVersionListResponse)

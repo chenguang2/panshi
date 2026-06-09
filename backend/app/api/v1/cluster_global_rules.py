@@ -115,80 +115,42 @@ async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[Publi
     if not rule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="全局规则不存在")
     rule_plugins = json.loads(rule.plugins) if rule.plugins else None
-    version_result = await db.execute(
-        select(func.max(ConfigVersion.version)).where(
-            ConfigVersion.resource_type == "global_rule",
-            ConfigVersion.resource_id == rule_id))
-    latest_version = version_result.scalar() or 0
-    new_version = latest_version + 1
-    event_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
-    config_version = ConfigVersion(
-        cluster_id=cluster_id, resource_type="global_rule", resource_id=rule_id,
-        version=new_version, config=json.dumps(event_data))
-    db.add(config_version)
-    rule.current_version = new_version
-    await db.commit()
+
+    config_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
+    new_version = await edge_sync.create_config_version(db, "global_rule", rule_id, cluster_id, config_data, rule)
+
     edge_data = {"desc": rule.name, "plugins": rule_plugins or {}}
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
-
-    if req and req.node_ids:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids)
-    else:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db)
-
+    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
     if not active_nodes:
         return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
     edge_logger = get_edge_logger()
-    results, success_count, fail_count = [], 0, 0
-    for node in active_nodes:
-        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-        try:
-            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
 
-            import base64
-            import json as json_module
-            encrypted = client._encrypt(json_module.dumps(edge_data).encode())
-            response = client.create_global_rule(rule.edge_uuid, edge_data)
-
+    def log_publish(node_result, response, error, encrypted):
+        if error:
             edge_logger.log_global_rule_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                rule_id=rule_id,
-                rule_name=rule.name,
-                method="PUT",
-                path=f"/edge/admin/global_rules/{rule.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=encrypted,
-                response_status=201,
-                response_body=response,
-                status="SUCCESS"
-            )
-
-            node_result["status"] = "success"
-            node_result["response"] = response
-            success_count += 1
-        except (EdgeConnectionError, EdgeAPIError) as e:
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                rule_id=rule_id, rule_name=rule.name,
+                method="PUT", path=f"/edge/admin/global_rules/{rule.edge_uuid}",
+                request_body=edge_data, encrypted_body=None,
+                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
+                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
+                status="FAILED", error=str(error))
+        else:
             edge_logger.log_global_rule_operation(
-                cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                rule_id=rule_id,
-                rule_name=rule.name,
-                method="PUT",
-                path=f"/edge/admin/global_rules/{rule.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=e.status_code if isinstance(e, EdgeAPIError) else None,
-                response_body=e.response_body if isinstance(e, EdgeAPIError) else None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
-        results.append(node_result)
+                cluster_id=cluster_id, cluster_name=cluster.name if cluster else str(cluster_id),
+                rule_id=rule_id, rule_name=rule.name,
+                method="PUT", path=f"/edge/admin/global_rules/{rule.edge_uuid}",
+                request_body=edge_data, encrypted_body=encrypted,
+                response_status=201, response_body=response, status="SUCCESS")
+
+    results, success_count, fail_count = await edge_sync.publish_to_nodes(
+        cluster_id, active_nodes, edge_data,
+        publish_fn=lambda client: client.create_global_rule(rule.edge_uuid, edge_data),
+        log_fn=log_publish)
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "全局规则", new_version)
 

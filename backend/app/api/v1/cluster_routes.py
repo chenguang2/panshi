@@ -9,6 +9,8 @@ from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstr
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, PublishRequest
+from app.services import edge_sync
+from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
@@ -316,21 +318,11 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 @router.post("/{route_id}/publish")
 async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-    from app.services.edge_logger import get_edge_logger
 
     result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
     route = result.scalar_one_or_none()
     if not route:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
-
-    version_result = await db.execute(
-        select(func.max(ConfigVersion.version)).where(
-            ConfigVersion.resource_type == "route",
-            ConfigVersion.resource_id == route_id
-        )
-    )
-    latest_version = version_result.scalar() or 0
-    new_version = latest_version + 1
 
     plugins_result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
     plugins = plugins_result.scalars().all()
@@ -344,144 +336,65 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
 
     plugins_edge_format = {}
     for p in plugins:
-        plugin_name = p.plugin_name
-        plugin_config = p.config
         try:
-            plugins_edge_format[plugin_name] = json.loads(plugin_config) if isinstance(plugin_config, str) else (plugin_config or {})
+            plugins_edge_format[p.plugin_name] = json.loads(p.config) if isinstance(p.config, str) else (p.config or {})
         except (json.JSONDecodeError, TypeError):
-            plugins_edge_format[plugin_name] = {}
+            plugins_edge_format[p.plugin_name] = {}
 
     config_data = {
-        "id": route.id,
-        "edge_uuid": route.edge_uuid,
-        "name": route.name,
-        "uri": route.uri,
-        "methods": route.methods,
-        "priority": route.priority,
-        "status": route.status,
-        "upstream_id": route.upstream_id,
-        "upstream_edge_uuid": upstream_edge_uuid,
-        "hosts": route.hosts,
+        "id": route.id, "edge_uuid": route.edge_uuid, "name": route.name,
+        "uri": route.uri, "methods": route.methods, "priority": route.priority,
+        "status": route.status, "upstream_id": route.upstream_id,
+        "upstream_edge_uuid": upstream_edge_uuid, "hosts": route.hosts,
         "remote_addrs": route.remote_addrs,
         "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
         "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
         "plugins": plugins_edge_format,
-        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
-    }
-
-    config_version = ConfigVersion(
-        cluster_id=cluster_id,
-        resource_type="route",
-        resource_id=route_id,
-        version=new_version,
-        config=json.dumps(config_data)
-    )
-    db.add(config_version)
-    route.current_version = new_version
-    await db.commit()
+        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None}
+    new_version = await edge_sync.create_config_version(db, "route", route_id, cluster_id, config_data, route)
 
     if req and req.node_ids:
-        nodes_result = await db.execute(select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id))
+        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids)
     else:
-        nodes_result = await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))
-    active_nodes = nodes_result.scalars().all()
+        active_nodes = await edge_sync.get_active_nodes(cluster_id, db)
 
     if not active_nodes:
         return {"status": "ok", "message": f"路由 {route.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
-    edge_logger = get_edge_logger()
     edge_data = EdgeClient.convert_route_to_edge_format(
-        edge_uuid=route.edge_uuid,
-        name=route.name,
-        uri=route.uri,
-        methods=route.methods,
-        hosts=route.hosts,
-        upstream_edge_uuid=upstream_edge_uuid,
-        priority=route.priority or 0,
+        edge_uuid=route.edge_uuid, name=route.name, uri=route.uri,
+        methods=route.methods, hosts=route.hosts,
+        upstream_edge_uuid=upstream_edge_uuid, priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
-        plugins=plugins,
-        status=route.status,
-        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None
-    )
+        plugins=plugins, status=route.status,
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None)
 
-    results = []
-    success_count = 0
-    fail_count = 0
+    edge_logger = get_edge_logger()
 
-    for node in active_nodes:
-        node_result = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
-
-        try:
-            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-
-            encrypted = client._encrypt(json.dumps(edge_data).encode())
-
-            response = client.update_route(route.edge_uuid, edge_data)
-
+    def log_publish(node_result, response, error, encrypted):
+        if error:
             edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=encrypted,
-                response_status=201,
-                response_body=response,
-                status="SUCCESS"
-            )
-
-            node_result["status"] = "success"
-            node_result["response"] = response
-            success_count += 1
-
-        except EdgeConnectionError as e:
+                cluster_id=cluster_id, cluster_name=str(cluster_id),
+                route_id=route_id, route_name=route.name,
+                method="PUT", path=f"/edge/admin/routes/{route.edge_uuid}",
+                request_body=edge_data, encrypted_body=None,
+                response_status=error.status_code if isinstance(error, EdgeAPIError) else None,
+                response_body=error.response_body if isinstance(error, EdgeAPIError) else None,
+                status="FAILED", error=str(error))
+        else:
             edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=None,
-                response_body=None,
-                status="FAILED",
-                error=str(e)
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = str(e)
-            fail_count += 1
+                cluster_id=cluster_id, cluster_name=str(cluster_id),
+                route_id=route_id, route_name=route.name,
+                method="PUT", path=f"/edge/admin/routes/{route.edge_uuid}",
+                request_body=edge_data, encrypted_body=encrypted,
+                response_status=201, response_body=response, status="SUCCESS")
 
-        except EdgeAPIError as e:
-            edge_logger.log_route_operation(
-                cluster_id=cluster_id,
-                cluster_name=str(cluster_id),
-                route_id=route_id,
-                route_name=route.name,
-                method="PUT",
-                path=f"/edge/admin/routes/{route.edge_uuid}",
-                request_body=edge_data,
-                encrypted_body=None,
-                response_status=e.status_code,
-                response_body=e.response_body,
-                status="FAILED",
-                error=e.message
-            )
-            node_result["status"] = "failed"
-            node_result["error"] = e.message
-            fail_count += 1
+    results, success_count, fail_count = await edge_sync.publish_to_nodes(
+        cluster_id, active_nodes, edge_data,
+        publish_fn=lambda client: client.update_route(route.edge_uuid, edge_data),
+        log_fn=log_publish)
 
-        results.append(node_result)
-
-    if success_count == len(active_nodes):
-        return {"status": "ok", "message": f"路由 {route.name} 发布成功，已同步到 {success_count} 个节点", "version": new_version, "results": results}
-    elif success_count > 0:
-        return {"status": "partial", "message": f"路由 {route.name} 发布完成，{success_count}/{len(active_nodes)} 节点同步成功", "version": new_version, "results": results}
-    else:
-        return {"status": "error", "message": f"路由 {route.name} 发布失败：无法连接到任何 edge 服务器", "version": new_version, "results": results}
+    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"路由 {route.name} ", new_version)
 
 
 @router.post("/publish")
