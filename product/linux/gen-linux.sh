@@ -88,9 +88,11 @@ echo "[4.6/5] 安装 Ansible collections..."
 mkdir -p "$TARGET_DIR/backend/ansible/collections"
 cp "$PROJECT_ROOT/backend/ansible/collections/requirements.yml" "$TARGET_DIR/backend/ansible/collections/requirements.yml"
 if [ -f "$TARGET_DIR/backend/ansible/collections/requirements.yml" ]; then
+    echo "  使用阿里云 Ansible Galaxy 镜像..."
     "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
         -r "$TARGET_DIR/backend/ansible/collections/requirements.yml" \
-        -p "$TARGET_DIR/backend/ansible/collections"
+        -p "$TARGET_DIR/backend/ansible/collections" \
+        --server=https://mirrors.aliyun.com/ansible/
     echo "  Ansible collections 安装完成"
 else
     echo "  警告: requirements.yml 不存在，跳过 collection 安装"
