@@ -28,9 +28,11 @@ Each cluster card SHALL display essential information at a glance.
 - **WHEN** a cluster card is rendered
 - **THEN** it SHALL display the cluster display name, internal name hint, and a health status indicator (healthy/offline/warning)
 
-#### Scenario: Card displays node/upstream/route counts
+#### Scenario: Card displays all resource counts as clickable links
 - **WHEN** a cluster card is rendered
-- **THEN** it SHALL display three statistics: node count (healthy/total), upstream count, and route count
+- **THEN** it SHALL display seven statistics: node count (healthy/total), upstream count, route count, plugin config count, global rule count, plugin metadata count, and static resource count
+- **AND** each statistic SHALL be a clickable link to the corresponding resource management page
+- **AND** the node count SHALL display as "healthy/total" format
 
 #### Scenario: Card shows action buttons
 - **WHEN** a cluster card is rendered

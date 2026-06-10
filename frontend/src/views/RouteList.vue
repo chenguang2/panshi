@@ -127,7 +127,9 @@ import RouteFormModal from '@/components/RouteFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const loading = ref(false)
 const routes = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -278,7 +280,12 @@ function openVersionManagement(r: any) {
   vmId.value = r.id; vmClusterId.value = r.cluster_id; vmName.value = r.name; vmVisible.value = true
 }
 
-onMounted(() => { loadClusters(); loadRoutes() })
+onMounted(() => {
+  const clusterId = route.query.cluster_id as string | undefined
+  if (clusterId) clusterFilter.value = clusterId
+  loadClusters()
+  loadRoutes()
+})
 
 onUnmounted(() => { cancelSearch() })
 </script>

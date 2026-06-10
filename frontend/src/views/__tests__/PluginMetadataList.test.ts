@@ -11,7 +11,7 @@ vi.mock('@/api', () => ({
 vi.mock('vue-router', () => ({
   onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ name: 'PluginMetadataList' }),
+  useRoute: () => ({ name: 'PluginMetadataList', query: {} }),
 }))
 
 vi.mock('@/components/PluginEditorDrawer.vue', () => ({

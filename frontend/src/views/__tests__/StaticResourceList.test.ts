@@ -10,7 +10,7 @@ vi.mock('@/api', () => ({
 vi.mock('vue-router', () => ({
   onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ name: 'StaticResourceList' }),
+  useRoute: () => ({ name: 'StaticResourceList', query: {} }),
 }))
 
 const stubs = {

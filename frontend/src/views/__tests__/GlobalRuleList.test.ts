@@ -10,7 +10,7 @@ vi.mock('@/api', () => ({
 vi.mock('vue-router', () => ({
   onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ name: 'GlobalRuleList' }),
+  useRoute: () => ({ name: 'GlobalRuleList', query: {} }),
 }))
 
 const stubs = {

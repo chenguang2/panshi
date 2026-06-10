@@ -141,7 +141,9 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const loading = ref(false)
 const upstreams = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -285,6 +287,8 @@ function onPublishCancel() {
 }
 
 onMounted(() => {
+  const clusterId = route.query.cluster_id as string | undefined
+  if (clusterId) clusterFilter.value = clusterId
   loadClusters()
   loadUpstreams()
 })

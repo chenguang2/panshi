@@ -240,6 +240,9 @@ import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
 
 // ── State ──
 const loading = ref(false)
@@ -641,6 +644,8 @@ function nginxRunning(node: any): boolean {
 // ── Lifecycle ──
 
 onMounted(() => {
+  const clusterId = route.query.cluster_id as string | undefined
+  if (clusterId) clusterFilter.value = clusterId
   loadClusters()
   loadNodes()
 })

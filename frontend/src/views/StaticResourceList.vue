@@ -153,6 +153,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
 import { message } from 'ant-design-vue'
 
 import api from '@/api'
@@ -394,7 +397,7 @@ function openVersionManagement(sr: any) {
   vmId.value = sr.id; vmClusterId.value = sr.cluster_id; vmName.value = sr.name; vmVisible.value = true
 }
 
-onMounted(() => { loadClusters(); loadResources() })
+onMounted(() => { const clusterId = route.query.cluster_id as string | undefined; if (clusterId) clusterFilter.value = clusterId; loadClusters(); loadResources() })
 
 onUnmounted(() => { cancelSearch() })
 </script>

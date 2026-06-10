@@ -94,18 +94,28 @@ const routes: RouteRecordRaw[] = [
   }
 ]
 
+const SAVE_SCROLL_KEY = 'panshi_scroll'
+
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(_to, _from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+    return { top: 0 }
+  }
 })
 
 router.beforeEach((to, _from) => {
+  // 导航前保存当前页面的滚动位置
+  sessionStorage.setItem(SAVE_SCROLL_KEY + '_' + _from.path, JSON.stringify({ x: window.scrollX, y: window.scrollY }))
+
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     return '/login'
   }
 
-  // 权限检查：路由配置了 requiredPermission 时需要对应的权限
   const requiredPermission = to.meta?.permission as string | undefined
   if (requiredPermission) {
     const authStore = useAuthStore()

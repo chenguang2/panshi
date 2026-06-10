@@ -7,10 +7,12 @@ vi.mock('@/api', () => ({
   default: { get: (...args: any[]) => mockApiGet(...args) }
 }))
 
+let mockRouteQuery: Record<string, string> = {}
+
 vi.mock('vue-router', () => ({
   onBeforeRouteLeave: vi.fn(),
   useRouter: () => ({ push: vi.fn() }),
-  useRoute: () => ({ name: 'RouteList', query: {} }),
+  useRoute: () => ({ name: 'RouteList', query: mockRouteQuery }),
 }))
 
 const stubs = {
@@ -28,38 +30,40 @@ const MOCK_ROUTES = {
   ]
 }
 
-describe('RouteList.vue', () => {
+describe('RouteList.vue - cluster_id from query', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRouteQuery = {}
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
-      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 5, display_name: '生产集群' }] } })
       return Promise.reject(new Error('unknown url'))
     })
   })
 
-  it('renders page header', async () => {
+  it('无 cluster_id 时请求不传 cluster_id 参数', async () => {
     const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
+    mount(RouteList, { global: { stubs } })
     await new Promise(r => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-    expect(wrapper.find('.page-header').exists()).toBe(true)
+    await new Promise(r => setTimeout(r, 50))
+
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
+    expect(calls.length).toBeGreaterThanOrEqual(1)
+    const params = calls[0][1]?.params || {}
+    expect(params.cluster_id).toBeUndefined()
   })
 
-  it('loads routes on mount', async () => {
-    const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-    expect(mockApiGet).toHaveBeenCalledWith('/routes', expect.any(Object))
-  })
+  it('有 cluster_id 时请求应传 cluster_id 参数', async () => {
+    mockRouteQuery = { cluster_id: '5' }
 
-  it('renders method filter chips', async () => {
     const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
+    mount(RouteList, { global: { stubs } })
     await new Promise(r => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('GET')
-    expect(wrapper.text()).toContain('POST')
+    await new Promise(r => setTimeout(r, 50))
+
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
+    expect(calls.length).toBeGreaterThanOrEqual(1)
+    const params = calls[0][1]?.params || {}
+    expect(params.cluster_id).toBe('5')
   })
 })

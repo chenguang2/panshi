@@ -46,13 +46,13 @@
               </div>
             </div>
             <div class="cl-card-stats">
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.healthy_node_count }}/{{ c.node_count }}</div><div class="cl-stat-label">节点</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.upstream_count }}</div><div class="cl-stat-label">上游</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.route_count }}</div><div class="cl-stat-label">路由</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.plugin_config_count }}</div><div class="cl-stat-label">插件组</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.global_rule_count }}</div><div class="cl-stat-label">全局规则</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.plugin_metadata_count }}</div><div class="cl-stat-label">插件元数据</div></div>
-              <div class="cl-stat-cell"><div class="cl-stat-value">{{ c.static_resource_count }}</div><div class="cl-stat-label">静态资源</div></div>
+              <router-link :to="{ path: '/nodes', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.healthy_node_count }}/{{ c.node_count }}</div><div class="cl-stat-label">节点</div></router-link>
+              <router-link :to="{ path: '/upstreams', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.upstream_count }}</div><div class="cl-stat-label">上游</div></router-link>
+              <router-link :to="{ path: '/routes', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.route_count }}</div><div class="cl-stat-label">路由</div></router-link>
+              <router-link :to="{ path: '/plugin-configs', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.plugin_config_count }}</div><div class="cl-stat-label">插件组</div></router-link>
+              <router-link :to="{ path: '/global-rules', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.global_rule_count }}</div><div class="cl-stat-label">全局规则</div></router-link>
+              <router-link :to="{ path: '/plugin-metadata', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.plugin_metadata_count }}</div><div class="cl-stat-label">插件元数据</div></router-link>
+              <router-link :to="{ path: '/static-resources', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.static_resource_count }}</div><div class="cl-stat-label">静态资源</div></router-link>
             </div>
             <div v-if="c.nodes && c.nodes.length > 0" class="cl-card-nodes">
               <span v-for="n in c.nodes" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
@@ -232,6 +232,14 @@ async function loadClusters() {
       const key = c.group_name || ''
       if (!(key in expandedGroups.value)) expandedGroups.value[key] = true
     }
+    // 数据加载完成后恢复之前保存的滚动位置
+    const savedScroll = sessionStorage.getItem('panshi_scroll_/clusters')
+    if (savedScroll) {
+      sessionStorage.removeItem('panshi_scroll_/clusters')
+      const { x, y } = JSON.parse(savedScroll)
+      // double rAF: 等待 DOM 更新后再滚动
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(x, y)))
+    }
   } catch (e: any) {
     message.error('加载集群列表失败: ' + (e.response?.data?.detail || e.message))
   } finally { loading.value = false }
@@ -400,7 +408,11 @@ onMounted(() => { loadClusters() })
 
 .cl-card-stats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 8px 16px; }
 .cl-stat-cell { text-align: center; min-width: 0; }
-.cl-stat-value { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--fg); line-height: 1.3; }
+.cl-stat-value { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent); line-height: 1.3; }
+.cl-stat-link { text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 1px; border-radius: var(--radius-md); padding: 4px 2px; transition: background 0.15s; cursor: pointer; }
+.cl-stat-link:hover { background: oklch(100% 0 0 / 6%); }
+.cl-stat-link:hover .cl-stat-value { color: var(--accent); }
+.cl-stat-link:hover .cl-stat-label { color: var(--accent); text-decoration: underline; }
 .cl-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; margin-top: 1px; }
 .cl-card-id { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
 
