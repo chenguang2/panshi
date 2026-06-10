@@ -233,7 +233,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -561,22 +561,21 @@ async function executeAction(record: any, action: string, actionLabel: string) {
 }
 
 function handleStart(record: any) {
-  Modal.confirm({
-    title: '确认启动节点',
-    content: `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
-    okText: '确认启动',
-    onOk: () => executeAction(record, 'start', '启动'),
-  })
+  showConfirm(
+    '确认启动节点',
+    `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
+    '确认启动',
+    async () => { await executeAction(record, 'start', '启动') },
+  )
 }
 
 function handleStop(record: any) {
-  Modal.confirm({
-    title: '确认停止节点',
-    content: `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
-    okText: '确认停止',
-    okType: 'danger' as any,
-    onOk: () => executeAction(record, 'stop', '停止'),
-  })
+  showConfirm(
+    '确认停止节点',
+    `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
+    '确认停止',
+    async () => { await executeAction(record, 'stop', '停止') },
+  )
 }
 
 function handleStatus(record: any) {
@@ -751,7 +750,7 @@ onUnmounted(() => {
 
 .operation-log.visible { display: block; }
 
-/* ── Modal (保持原样) ── */
+/* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; background: oklch(0% 0 0 / 40%);
   z-index: 1000; display: flex; align-items: center; justify-content: center;

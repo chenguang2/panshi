@@ -1792,3 +1792,26 @@ static-resource-view-zip
 TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
 ================================================================
+
+
+使用 /opsx-propose 命令，增加通过集群跳转到对应页面功能
+
+现在在集群管理页面中, 例如 http://localhost:9100/clusters 的卡片中，
+
+统计信息都是文字信息， 需要加上链接
+
+例如，点击 路由的链接，就跳转到路由页面，同时路由页面中,集群默认选择的当前的集群，不是全部集群，这样就不用再下拉选择了
+
+你先复述一下我看看
+
+
+clickable-cluster-stats
+
+/brainstorming 请仔细阅读 openspec/changes/clickable-cluster-stats/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/clickable-cluster-stats/tasks.md ，严格按照 Superpowers 的
+TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
