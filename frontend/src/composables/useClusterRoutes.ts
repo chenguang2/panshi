@@ -147,13 +147,17 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   })
 
   // ── plugins ─────────────────────────────────────────────────────────
-
   const _localPlugins = ref<Plugin[]>([])
-  const availablePlugins = deps.availablePlugins ?? _localPlugins
-  const loadAvailablePlugins = deps.loadAvailablePlugins ?? (async () => {
-    const res = await api.get('/plugins/builtin')
-    _localPlugins.value = res.data.plugins || []
-  })
+  const availablePlugins = _localPlugins
+
+  const loadAvailablePlugins = async () => {
+    try {
+      const res = await api.get('/plugins/builtin')
+      _localPlugins.value = res.data.plugins || []
+    } catch {
+      // ignore
+    }
+  }
 
   const currentCluster = computed(() =>
     clusters.value.find((c) => c.id === currentClusterId.value),

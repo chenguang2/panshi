@@ -55,10 +55,11 @@
               <router-link :to="{ path: '/static-resources', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"><div class="cl-stat-value">{{ c.static_resource_count }}</div><div class="cl-stat-label">静态资源</div></router-link>
             </div>
             <div v-if="c.nodes && c.nodes.length > 0" class="cl-card-nodes">
-              <span v-for="n in c.nodes" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
+              <span v-for="n in (c.nodes.length <= 3 ? c.nodes : c.nodes.slice(0, 3))" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
                 <span class="status-dot" :class="n.status === 1 ? 'online' : 'offline'"></span>
                 {{ n.ip }}:{{ n.service_port }}
               </span>
+              <span v-if="c.nodes.length > 3" class="node-more">...还有 {{ c.nodes.length - 3 }} 个</span>
             </div>
             <div class="cl-card-actions">
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
@@ -425,6 +426,7 @@ onMounted(() => { loadClusters() })
 .cl-node-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); }
 .cl-node-tag.online { border-color: oklch(55% 0.15 145 / 25%); }
 .cl-node-tag.offline { border-color: oklch(55% 0.18 28 / 25%); }
+.node-more { font-size: 11px; color: var(--p-text-tertiary); padding: 2px 4px; }
 
 .test-nodes-select { max-height: 320px; overflow-y: auto; }
 .test-node-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid var(--border); }

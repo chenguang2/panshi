@@ -420,6 +420,29 @@ BUILTIN_PLUGINS = [
         }
     },
     {
+        "name": "functions_pre",
+        "display_name": "自定义预处理(旧版)",
+        "category": "process",
+        "description": "自定义预处理方法(旧版) — 通过 functions 数组和 phase 指定阶段执行 Lua 函数，兼容老客户配置",
+        "enable_metadata": False,
+        "schema": {
+            "functions": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "自定义 Lua 函数列表",
+                "examples": [["return function(conf, ctx) ngx.log(ngx.ERR, 'hello'); end"]],
+                "hints": "在指定阶段执行的 Lua 函数列表"
+            },
+            "phase": {
+                "type": "string",
+                "enum": ["rewrite", "access", "header_filter", "body_filter", "log"],
+                "description": "执行阶段",
+                "examples": ["rewrite"],
+                "hints": "指定 functions 执行的阶段，如 rewrite、access 等"
+            }
+        }
+    },
+    {
         "name": "traceid",
         "display_name": "TraceID 追踪",
         "category": "monitor",

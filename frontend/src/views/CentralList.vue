@@ -82,10 +82,11 @@
                   <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
                 </div>
                 <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
-                  <span v-for="n in cluster.nodes" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
+                  <span v-for="n in (cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3))" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
                     <span class="node-ndot" :class="n.status === 1 ? 'green' : 'red'"></span>
                     {{ n.ip }}:{{ n.service_port }}
                   </span>
+                  <span v-if="cluster.nodes.length > 3" class="node-more">...还有 {{ cluster.nodes.length - 3 }} 个</span>
                 </div>
                 <div class="cactions actions-bottom">
                   <button class="cbtn" @click.stop="viewClusterDetail(cluster)">详情</button>
@@ -139,10 +140,11 @@
                   <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
                 </div>
                 <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
-                  <span v-for="n in cluster.nodes" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
+                  <span v-for="n in (cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3))" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
                     <span class="node-ndot" :class="n.status === 1 ? 'green' : 'red'"></span>
                     {{ n.ip }}:{{ n.service_port }}
                   </span>
+                  <span v-if="cluster.nodes.length > 3" class="node-more">...还有 {{ cluster.nodes.length - 3 }} 个</span>
                 </div>
                 <div class="cactions actions-bottom">
                   <button class="cbtn" @click.stop="viewClusterDetail(cluster)">详情</button>
@@ -257,16 +259,18 @@
     <!-- Cluster Detail Modal -->
     <a-modal v-model:open="detailVisible" title="集群详情" width="600px" :footer="null">
       <div v-if="detailCluster">
-        <table class="detail-table">
-          <tr><td class="dt-label">集群名称</td><td class="dt-value">{{ detailCluster.name }}</td></tr>
-          <tr><td class="dt-label">显示名称</td><td class="dt-value">{{ detailCluster.display_name || '-' }}</td></tr>
-          <tr><td class="dt-label">分组</td><td class="dt-value">{{ detailCluster.group_name || '-' }}</td></tr>
-          <tr><td class="dt-label">描述</td><td class="dt-value">{{ detailCluster.description || '-' }}</td></tr>
-          <tr><td class="dt-label">状态</td>
-            <td class="dt-value"><span :style="{ color: detailCluster.status === 1 ? 'var(--p-color-success)' : 'var(--p-color-danger)' }">{{ detailCluster.status === 1 ? '运行中' : '已禁用' }}</span></td>
-          </tr>
-          <tr><td class="dt-label">创建时间</td><td class="dt-value">{{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}</td></tr>
-        </table>
+          <table class="detail-table">
+            <tbody>
+              <tr><td class="dt-label">集群名称</td><td class="dt-value">{{ detailCluster.name }}</td></tr>
+              <tr><td class="dt-label">显示名称</td><td class="dt-value">{{ detailCluster.display_name || '-' }}</td></tr>
+              <tr><td class="dt-label">分组</td><td class="dt-value">{{ detailCluster.group_name || '-' }}</td></tr>
+              <tr><td class="dt-label">描述</td><td class="dt-value">{{ detailCluster.description || '-' }}</td></tr>
+              <tr><td class="dt-label">状态</td>
+                <td class="dt-value"><span :style="{ color: detailCluster.status === 1 ? 'var(--p-color-success)' : 'var(--p-color-danger)' }">{{ detailCluster.status === 1 ? '运行中' : '已禁用' }}</span></td>
+              </tr>
+              <tr><td class="dt-label">创建时间</td><td class="dt-value">{{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}</td></tr>
+            </tbody>
+          </table>
         <h3 class="detail-section-title">资源统计</h3>
         <div class="detail-stats-grid">
           <div class="detail-stat-card"><div class="detail-stat-label">节点</div><div class="detail-stat-value">{{ detailCluster.healthy_node_count }}/{{ detailCluster.node_count }}</div></div>
@@ -1232,6 +1236,7 @@ onMounted(async () => {
 }
 .node-ndot.green { background: var(--p-color-success); }
 .node-ndot.red { background: var(--p-color-danger); }
+.node-more { font-size: 11px; color: var(--p-text-tertiary); padding: 2px 4px; }
 .actions-bottom {
   display: flex; gap: 4px; padding: 8px 16px;
   border-top: 1px solid var(--p-border-divider);
