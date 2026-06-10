@@ -95,7 +95,7 @@ class RouteListResponse(BaseModel):
 
 class PluginConfig(BaseModel):
     plugin_name: str
-    config: str
+    config: Any
 
 
 class PluginUpdateRequest(BaseModel):

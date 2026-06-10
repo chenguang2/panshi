@@ -392,7 +392,8 @@ async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUp
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
     
     for plugin in request.plugins:
-        db_plugin = RoutePlugin(route_id=route_id, plugin_name=plugin.plugin_name, config=plugin.config)
+        config_value = json.dumps(plugin.config, ensure_ascii=False) if not isinstance(plugin.config, str) else plugin.config
+        db_plugin = RoutePlugin(route_id=route_id, plugin_name=plugin.plugin_name, config=config_value)
         db.add(db_plugin)
     
     await db.commit()
