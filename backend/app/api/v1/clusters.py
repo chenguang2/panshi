@@ -57,7 +57,7 @@ async def get_current_user(
 @router.get("/my", response_model=ClusterListResponse)
 async def list_my_clusters(
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = 200,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -97,7 +97,7 @@ async def list_my_clusters(
 async def list_clusters(
     keyword: Optional[str] = None,
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = 200,
     db: AsyncSession = Depends(get_db),
     authorization: Optional[str] = Header(None),
 ):
