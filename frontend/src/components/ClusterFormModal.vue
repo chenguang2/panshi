@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watchEffect, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
@@ -101,15 +101,14 @@ const formErrors = reactive({
   display_name: '',
 })
 
-watch(() => props.visible, (v) => {
-  if (!v) return
-  if (props.editingCluster) {
-    form.name = props.editingCluster.name
-    form.display_name = props.editingCluster.display_name || ''
-    form.group_name = props.editingCluster.group_name || ''
-    form.description = props.editingCluster.description || ''
-    form.status = String(props.editingCluster.status)
-    form.admin_key = (props.editingCluster as any).admin_key || ''
+function initForm(cluster: Cluster | null) {
+  if (cluster) {
+    form.name = cluster.name
+    form.display_name = cluster.display_name || ''
+    form.group_name = cluster.group_name || ''
+    form.description = cluster.description || ''
+    form.status = String(cluster.status)
+    form.admin_key = (cluster as any).admin_key || ''
   } else {
     form.name = ''
     form.display_name = ''
@@ -122,6 +121,15 @@ watch(() => props.visible, (v) => {
   formErrors.display_name = ''
   showNewGroupInput.value = false
   pendingGroupName.value = ''
+}
+
+// Use watchEffect to reactively init form when visible + editingCluster change.
+// watchEffect runs immediately on mount and then whenever deps change,
+// so even if the component is mounted with visible=true, the form is populated.
+watchEffect(() => {
+  if (props.visible) {
+    initForm(props.editingCluster)
+  }
 })
 
 function onGroupChange() {
