@@ -141,6 +141,22 @@ print('  .pth 已修正为相对路径: ' + rel)
 fi
 echo "  路径修正完成"
 
+# 修正 .venv/bin/ 下所有 Python 脚本的 shebang（pip 写入的是构建机绝对路径）
+# 改为 #!/usr/bin/env python3 以支持部署目录迁移到任意目标机器
+echo ""
+echo "[4.5.1/5] 修正 shebang 为可移植路径..."
+SHEBANG_FIX_COUNT=0
+for f in "$TARGET_DIR/backend/.venv/bin/"*; do
+    if [ -f "$f" ] && [ -x "$f" ]; then
+        first_line=$(head -1 "$f")
+        if echo "$first_line" | grep -q "^#!.*python" && ! echo "$first_line" | grep -q "^#!/usr/bin/env python3"; then
+            sed -i '1s|^#!.*python.*|#!/usr/bin/env python3|' "$f"
+            SHEBANG_FIX_COUNT=$((SHEBANG_FIX_COUNT + 1))
+        fi
+    fi
+done
+echo "  已修正 $SHEBANG_FIX_COUNT 个脚本 shebang"
+
 # ---------- 5. 构建前端 ----------
 echo ""
 echo "[5/5] 构建前端..."
