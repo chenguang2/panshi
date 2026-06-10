@@ -88,12 +88,33 @@ echo "[4.6/5] 安装 Ansible collections..."
 mkdir -p "$TARGET_DIR/backend/ansible/collections"
 cp "$PROJECT_ROOT/backend/ansible/collections/requirements.yml" "$TARGET_DIR/backend/ansible/collections/requirements.yml"
 if [ -f "$TARGET_DIR/backend/ansible/collections/requirements.yml" ]; then
-    echo "  使用阿里云 Ansible Galaxy 镜像..."
-    "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+    COLLECTION_TARBALL="$PROJECT_ROOT/backend/ansible/collections/ansible-utils-6.0.2.tar.gz"
+
+    if [ -f "$COLLECTION_TARBALL" ]; then
+        echo "  使用本地缓存 tarball 安装..."
+        "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+            "$COLLECTION_TARBALL" \
+            -p "$TARGET_DIR/backend/ansible/collections"
+        echo "  Ansible collections (本地) 安装完成"
+    elif "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
         -r "$TARGET_DIR/backend/ansible/collections/requirements.yml" \
-        -p "$TARGET_DIR/backend/ansible/collections" \
-        --server=https://mirrors.aliyun.com/ansible/
-    echo "  Ansible collections 安装完成"
+        -p "$TARGET_DIR/backend/ansible/collections" 2>/dev/null; then
+        echo "  Ansible collections 安装完成"
+    else
+        echo "  galaxy.ansible.com 不可用，尝试直接下载 tarball..."
+        TARBALL_URL="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-utils-6.0.2.tar.gz"
+        if wget -q "$TARBALL_URL" -O "/tmp/ansible-utils-6.0.2.tar.gz"; then
+            "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+                "/tmp/ansible-utils-6.0.2.tar.gz" \
+                -p "$TARGET_DIR/backend/ansible/collections"
+            echo "  Ansible collections (tarball) 安装完成"
+            rm -f "/tmp/ansible-utils-6.0.2.tar.gz"
+        else
+            echo "  警告: 所有源均不可用（galaxy.ansible.com / GitHub / tarball）"
+            echo "  请手动下载 https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-utils-6.0.2.tar.gz"
+            echo "  放到 $COLLECTION_TARBALL 后重新执行本脚本"
+        fi
+    fi
 else
     echo "  警告: requirements.yml 不存在，跳过 collection 安装"
 fi
