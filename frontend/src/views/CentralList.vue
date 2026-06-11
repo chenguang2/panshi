@@ -1255,7 +1255,6 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--p-color-primary) 30%, transparent);
   border-top: 3px solid var(--p-color-primary);
   border-radius: var(--p-radius-lg);
-  overflow: hidden;
   margin-bottom: 12px;
   box-shadow: var(--p-shadow-glass);
 }
