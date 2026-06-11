@@ -72,10 +72,22 @@ async def _run_ansible_stream(
     line_count = 0
 
     def event_handler(event_data: dict) -> None:
+        # Ansible's display line (e.g. "TASK [edge : Build edge server]")
         stdout = event_data.get("stdout", "")
         for line in stdout.splitlines():
             if line.strip():
                 q.put(line)
+        # Task result stdout (actual command output from raw/shell modules)
+        res = event_data.get("event_data", {}).get("res", {})
+        if res:
+            task_stdout = res.get("stdout", "") or ""
+            for line in task_stdout.splitlines():
+                if line.strip():
+                    q.put(line)
+            task_stderr = res.get("stderr", "") or ""
+            for line in task_stderr.splitlines():
+                if line.strip():
+                    q.put(f"[stderr] {line}")
 
     async def _run_with_handler() -> dict[str, Any]:
         try:
