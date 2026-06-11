@@ -108,7 +108,7 @@
           <h2>{{ copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由') }}</h2>
           <button class="modal-close" @click="routeModalVisible = false">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="min-height:420px;">
           <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
             <!-- Basic config tab -->
             <a-tab-pane key="basic" tab="基础配置">
