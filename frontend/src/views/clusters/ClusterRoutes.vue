@@ -108,7 +108,7 @@
           <h2>{{ copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由') }}</h2>
           <button class="modal-close" @click="routeModalVisible = false">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" :style="{ minHeight: bodyMinHeight }">
           <a-tabs v-model:activeKey="routeModalActiveTab">
             <!-- Basic config tab -->
             <a-tab-pane key="basic" tab="基础配置">
@@ -244,7 +244,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, type Ref } from 'vue'
+import { ref, computed, watch, nextTick, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Plugin } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
@@ -331,6 +331,36 @@ const {
   versionModalClusterId,
   versionModalResourceName,
   versionModalEdgeUuid,
+})
+
+// ── Auto-fix tab-switch height jumping ──────────────────────────────
+const bodyMinHeight = ref('')
+watch(routeModalVisible, async (open) => {
+  if (!open) { bodyMinHeight.value = ''; return }
+  await nextTick()
+  await nextTick() // double tick for a-tabs to render
+  const panes = document.querySelectorAll('.ant-tabs-tabpane')
+  let maxH = 0
+  panes.forEach((el) => {
+    const h = (el as HTMLElement).scrollHeight
+    if (h > maxH) maxH = h
+  })
+  // Also measure the hidden panes by temporarily showing them
+  const container = document.querySelector('.ant-tabs-content')
+  if (container) {
+    const origDisplay = (container as HTMLElement).style.display
+    ;(container as HTMLElement).style.display = 'block'
+    panes.forEach((el) => {
+      const pane = el as HTMLElement
+      const orig = pane.style.display
+      pane.style.display = 'block'
+      const h = pane.scrollHeight
+      if (h > maxH) maxH = h
+      pane.style.display = orig
+    })
+    ;(container as HTMLElement).style.display = origDisplay
+  }
+  if (maxH > 0) bodyMinHeight.value = maxH + 4 + 'px'
 })
 
 // ── Upstream options for traffic_split plugin dropdown ────────────
