@@ -1,9 +1,6 @@
 - name: init directory
-  shell: "source /etc/profile; {{ item.1 }}/bin/manager install uap-edge;"
-  with_together:
-    - "{{ ips.split(',') }}"
-    - "{{ prefix.split(',') }}"
+  raw: "source /etc/profile; {{ item.1 }}/bin/manager install uap-edge;"
+  loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
   when: inventory_hostname == item.0
-  register: init_result
   tags:
     - install_edge

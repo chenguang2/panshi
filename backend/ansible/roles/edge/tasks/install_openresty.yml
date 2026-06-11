@@ -1,40 +1,28 @@
 ---
-- name: copy edge file directory
-  copy:
-    src: "{{ srcpath }}"
-    dest: "{{ item.0 }}"
-  with_together:
-    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
-    - "{{ prefix.split(',') }}"
-    - "{{ ips.split(',') }}"
-  when: inventory_hostname == item.2
+- name: Compute safe destpath
+  set_fact:
+    _destpaths: "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
+
+- name: Create remote directories
+  raw: "mkdir -p {{ item.1 }}soft/"
+  loop: "{{ ips.split(',') | zip(_destpaths) | list }}"
+  when: inventory_hostname == item.0
   tags: [install_openresty]
 
-- name: decompressing openresty files
-  shell:
-    cmd: "tar xf {{ item.0 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.0 }}soft/"
-  with_together:
-    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
-    - "{{ prefix.split(',') }}"
-    - "{{ ips.split(',') }}"
-  when: inventory_hostname == item.2
-  tags: [install_openresty]
-
-- name: build edge server
-  shell:
-    chdir: "{{ item.0 }}soft/install-edge/"
-    cmd: "source /etc/profile; ./install-edge.sh {{ item.1 }}"
-  with_together:
-    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
-    - "{{ prefix.split(',') }}"
-    - "{{ ips.split(',') }}"
-  when: inventory_hostname == item.2
-  async: 0
-  register: build_jbos
-  tags: [install_openresty]
-
-- name: wait for all async tasks to complete
-  wait_for:
-    timeout: 1
+- name: Copy tar file via SCP (no Python required on remote)
+  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edgepp-26061110.tar.gz {{ item.0 }}:{{ item.1 }}soft/"
   delegate_to: localhost
+  loop: "{{ ips.split(',') | zip(_destpaths) | list }}"
+  tags: [install_openresty]
+
+- name: Decompress openresty files
+  raw: "tar xf {{ item.1 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.1 }}soft/"
+  loop: "{{ ips.split(',') | zip(_destpaths) | list }}"
+  when: inventory_hostname == item.0
+  tags: [install_openresty]
+
+- name: Build edge server
+  raw: "source /etc/profile; cd {{ item.1 }}soft/install-edge/ && ./install-edge.sh {{ item.2 }}"
+  loop: "{{ ips.split(',') | zip(_destpaths, prefix.split(',')) | list }}"
+  when: inventory_hostname == item.0
   tags: [install_openresty]
