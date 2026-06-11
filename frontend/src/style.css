@@ -273,8 +273,9 @@ select.form-input {
   background: oklch(0% 0 0 / 40%);
   z-index: 1000;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: 5vh;
 }
 
 .modal-overlay .modal {
