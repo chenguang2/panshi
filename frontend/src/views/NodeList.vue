@@ -83,6 +83,9 @@
                     <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
                     <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
                     <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
+                    <a-menu-divider />
+                    <a-menu-item @click="handleInstallOpenresty(record)">安装 OpenResty</a-menu-item>
+                    <a-menu-item @click="handleInstallEdge(record)">安装 Edge</a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -239,6 +242,7 @@ import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
+import { useInstallStream } from '@/composables/useInstallStream'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
 import { useRoute } from 'vue-router'
 
@@ -580,6 +584,64 @@ function handleStop(record: any) {
 
 function handleStatus(record: any) {
   executeAction(record, 'status', '状态查询')
+}
+
+// ── Install OpenResty / Edge (streaming) ──────────────────────────
+const installStream = useInstallStream()
+
+function handleInstallOpenresty(record: any) {
+  execDrawerTitle.value = `安装 OpenResty - ${record.ip}`
+  execDrawerVisible.value = true
+  execLogs.value = []
+  execProgress.percent = 0
+  execProgress.status = 'active'
+  execResult.value = null
+
+  // Derive prefix from edge_path (strip /uap-edge or similar suffix to get base path)
+  const prefix = record.edge_path ? record.edge_path.replace(/\/[^/]+$/, '') : '/data/openresty'
+
+  installStream.start(
+    `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
+    { prefix, srcpath: '/path/to/soft', destpath: prefix.replace(/\/[^/]+$/, '') + '/' },
+    {
+      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+      onProgress: (percent: number) => { execProgress.percent = percent },
+      onComplete: (rc: number, status: string) => {
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+      },
+      onError: (err: string) => {
+        execLogs.value = [...execLogs.value, `❌ ${err}`]
+      },
+    },
+  )
+}
+
+function handleInstallEdge(record: any) {
+  execDrawerTitle.value = `安装 Edge - ${record.ip}`
+  execDrawerVisible.value = true
+  execLogs.value = []
+  execProgress.percent = 0
+  execProgress.status = 'active'
+  execResult.value = null
+
+  installStream.start(
+    `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
+    { prefix: record.edge_path || '/work/uap-edge' },
+    {
+      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+      onProgress: (percent: number) => { execProgress.percent = percent },
+      onComplete: (rc: number, status: string) => {
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+      },
+      onError: (err: string) => {
+        execLogs.value = [...execLogs.value, `❌ ${err}`]
+      },
+    },
+  )
 }
 
 // ── Custom Confirm ──
