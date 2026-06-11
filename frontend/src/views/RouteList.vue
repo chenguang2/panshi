@@ -26,6 +26,10 @@
         <option value="">全部上游</option>
         <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
       </select>
+      <select v-model="pluginFilter" class="form-input plugin-filter" style="width:140px;flex-shrink:0;" @change="loadRoutes">
+        <option value="">全部插件</option>
+        <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
+      </select>
       <select v-model="publishFilter" class="form-input" style="width:130px;" @change="loadRoutes">
         <option value="">全部状态</option>
         <option value="published">已发布</option>
@@ -142,6 +146,8 @@ const clusterFilter = ref('')
 const upstreamFilter = ref('')
 const activeMethod = ref('')
 const publishFilter = ref('')
+const pluginFilter = ref('')
+const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
 
 
 const formModalVisible = ref(false)
@@ -202,6 +208,7 @@ async function loadRoutes() {
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
     if (publishFilter.value) params.publish_status = publishFilter.value
+    if (pluginFilter.value) params.plugin = pluginFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/routes', { params })
     routes.value = res.data.items || []
@@ -280,10 +287,18 @@ function openVersionManagement(r: any) {
   vmId.value = r.id; vmClusterId.value = r.cluster_id; vmName.value = r.name; vmVisible.value = true
 }
 
+async function loadPlugins() {
+  try {
+    const res = await api.get('/plugins/builtin')
+    pluginOptions.value = res.data?.plugins || []
+  } catch { /* ignore */ }
+}
+
 onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
+  loadPlugins()
   loadRoutes()
 })
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
 
 const mockApiGet = vi.fn()
@@ -34,6 +35,7 @@ describe('RouteList.vue', () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [{ name: 'limit-req', display_name: '限流' }, { name: 'key-auth', display_name: '密钥认证' }] } })
       return Promise.reject(new Error('unknown url'))
     })
   })
@@ -61,5 +63,42 @@ describe('RouteList.vue', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('GET')
     expect(wrapper.text()).toContain('POST')
+  })
+
+  it('loads plugin options on mount', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    expect(mockApiGet).toHaveBeenCalledWith('/plugins/builtin')
+  })
+
+  it('renders plugin dropdown in filter bar', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const pluginSelect = wrapper.find('select.plugin-filter')
+    expect(pluginSelect.exists()).toBe(true)
+    expect(pluginSelect.text()).toContain('限流')
+    expect(pluginSelect.text()).toContain('密钥认证')
+  })
+
+  it('passes plugin param when filter is selected', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    // After mount, count how many /routes calls we had
+    const mountRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
+    // Simulate user selecting a plugin via DOM
+    const select = wrapper.find('select.plugin-filter').element as HTMLSelectElement
+    select.value = 'limit-req'
+    select.dispatchEvent(new Event('change'))
+    await new Promise(r => setTimeout(r, 300))
+    await wrapper.vm.$nextTick()
+    // There should be one more /routes call after the change
+    const totalRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
+    expect(totalRouteCalls).toBe(mountRouteCalls + 1)
   })
 })

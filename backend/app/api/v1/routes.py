@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, exists
 
 from app.core.database import get_db
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream
@@ -26,6 +26,7 @@ async def list_all_routes(
     method: Optional[str] = Query(None, description="Filter by HTTP method"),
     upstream_id: Optional[int] = Query(None, description="Filter by upstream ID"),
     publish_status: Optional[str] = Query(None, description="published or unpublished"),
+    plugin: Optional[str] = Query(None, description="Filter by plugin name"),
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("asc"),
     current_user: User = Depends(get_current_user),
@@ -75,6 +76,15 @@ async def list_all_routes(
             ConfigVersion.resource_type == "route"
         ).distinct().subquery()
         query = query.where(Route.id.notin_(subq))
+
+    # Plugin filter (EXISTS subquery — only runs when plugin param is provided)
+    if plugin:
+        query = query.where(
+            exists().where(
+                RoutePlugin.route_id == Route.id,
+                RoutePlugin.plugin_name == plugin
+            )
+        )
 
     # Sort
     if sort_by and sort_by in ALLOWED_SORT_FIELDS:

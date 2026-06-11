@@ -50,3 +50,22 @@ class TestRouteListAPI:
             headers = {"Authorization": f"Bearer {token}"}
             response = await client.get("/api/v1/routes", headers=headers, params={"method": "GET"})
             assert response.status_code == 200
+
+    async def test_list_routes_plugin_filter_reduces_count(self):
+        """plugin filter should reduce total count vs unfiltered list."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            token = await self._login(client)
+            headers = {"Authorization": f"Bearer {token}"}
+            # Get total without filter
+            all_resp = await client.get("/api/v1/routes", headers=headers, params={"page_size": 100})
+            assert all_resp.status_code == 200
+            all_total = all_resp.json()["total"]
+            # Get with plugin filter
+            filtered_resp = await client.get("/api/v1/routes", headers=headers, params={"page_size": 100, "plugin": "proxy_rewrite"})
+            assert filtered_resp.status_code == 200
+            data = filtered_resp.json()
+            assert data["total"] < all_total
+            for item in data["items"]:
+                plugin_names = [p["plugin_name"] for p in item.get("plugins", [])]
+                assert "proxy_rewrite" in plugin_names, f"route {item['name']} missing proxy_rewrite"
