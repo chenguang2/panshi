@@ -1,5 +1,6 @@
 import { ref, reactive, onUnmounted } from 'vue'
-import api from '@/api'
+
+const API_BASE = '/api/v1'
 
 export interface InstallStreamOptions {
   onLine: (line: string) => void
@@ -23,22 +24,31 @@ export function useInstallStream() {
     abortController = new AbortController()
 
     try {
-      const response = await api.post(url, body, {
-        responseType: 'stream',
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${API_BASE}${url}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
         signal: abortController.signal,
-      } as any)
+      })
 
-      const reader = (response as any).getReader?.()
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '')
+        let errMsg = `请求失败 (${response.status})`
+        try { const j = JSON.parse(errText); errMsg = j.detail || errMsg } catch { /* ignore */ }
+        options.onError?.(errMsg)
+        error.value = errMsg
+        installing.value = false
+        return
+      }
+
+      const reader = response.body?.getReader()
       if (!reader) {
-        // Fallback for non-streaming responses (e.g. test environments)
-        const data = response.data
-        if (data) {
-          const line = typeof data === 'string' ? data : JSON.stringify(data)
-          logs.value.push(line)
-          options.onLine(line)
-        }
-        progress.percent = 100
-        options.onComplete?.(data?.rc ?? -1, data?.status ?? 'unknown')
+        options.onError?.('浏览器不支持流式读取')
+        error.value = '浏览器不支持流式读取'
         installing.value = false
         return
       }
@@ -79,7 +89,7 @@ export function useInstallStream() {
       }
     } catch (e: any) {
       if (e.name === 'AbortError') return
-      const msg = e?.response?.data?.detail || e.message || '安装失败'
+      const msg = e.message || '安装失败'
       error.value = msg
       options.onError?.(msg)
     } finally {
