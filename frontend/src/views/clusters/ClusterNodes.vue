@@ -360,7 +360,7 @@ function handleInstallOpenresty() {
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
-    { prefix: '/data/openresty', srcpath: '/path/to/soft', destpath: '/data/' },
+    { prefix: '/data/openresty' },
     {
       onLine: (line: string) => {
         execLogs.value = [...execLogs.value, line]

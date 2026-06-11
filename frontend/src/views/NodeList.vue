@@ -602,7 +602,7 @@ function handleInstallOpenresty(record: any) {
 
   installStream.start(
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
-    { prefix, srcpath: '/path/to/soft', destpath: prefix.replace(/\/[^/]+$/, '') + '/' },
+    { prefix },
     {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
       onProgress: (percent: number) => { execProgress.percent = percent },

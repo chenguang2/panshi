@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, Any
 from enum import Enum
 
@@ -65,8 +66,8 @@ class AnsibleRunRequest(BaseModel):
 
 class InstallOpenrestyRequest(BaseModel):
     prefix: str
-    srcpath: str
-    destpath: str
+    srcpath: str = ""
+    destpath: str = ""
 
 
 class InstallEdgeRequest(BaseModel):
@@ -371,7 +372,10 @@ async def install_openresty_stream(
 ):
     """Install OpenResty on a target node via ansible, streaming real-time logs via SSE."""
     node = await _verify_node(cluster_id, node_id, db)
-    extravars = {"prefix": body.prefix, "srcpath": body.srcpath, "destpath": body.destpath}
+    from app.services.ansible_service import PRIVATE_DATA_DIR
+    srcpath = body.srcpath or f"{PRIVATE_DATA_DIR}/soft"
+    destpath = body.destpath or str(Path(body.prefix).parent) + "/"
+    extravars = {"prefix": body.prefix, "srcpath": srcpath, "destpath": destpath}
     return StreamingResponse(
         _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_openresty", extravars=extravars),
         media_type="text/event-stream",
