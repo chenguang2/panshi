@@ -8,9 +8,15 @@
       <a-button size="small" @click="handleNodeStart" :disabled="!cluster.selectedNode">▶ 启动</a-button>
       <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
       <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
-      <a-divider type="vertical" />
-      <a-button size="small" @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-button>
-      <a-button size="small" @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-button>
+      <a-dropdown :trigger="['click']">
+        <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
+        <template #overlay>
+          <a-menu>
+            <a-menu-item @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-menu-item>
+            <a-menu-item @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-menu-item>
+          </a-menu>
+        </template>
+      </a-dropdown>
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
         <template #content>
           <div style="min-width: 400px;">
