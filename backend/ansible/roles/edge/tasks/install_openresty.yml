@@ -1,15 +1,18 @@
 ---
 - name: Create remote directories
-  shell:
-    cmd: "mkdir -p {{ item.1 }}soft/"
+  file:
+    path: "{{ item.1 }}soft/"
+    state: directory
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   when: inventory_hostname == item.0
   tags: [install_openresty]
 
-- name: Copy tar file via SCP (uses SSH key + inventory user)
-  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edge-26061110.tar.gz {{ hostvars[item.0]['ansible_ssh_user'] }}@{{ item.0 }}:{{ item.1 }}soft/"
-  delegate_to: localhost
+- name: Copy tar file
+  copy:
+    src: "{{ srcpath }}/openresty-edge-26061110.tar.gz"
+    dest: "{{ item.1 }}soft/openresty-edge-26061110.tar.gz"
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
+  when: inventory_hostname == item.0
   tags: [install_openresty]
 
 - name: Decompress openresty files
