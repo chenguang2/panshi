@@ -6,13 +6,13 @@
   tags: [install_openresty]
 
 - name: Copy tar file via SCP (no Python required on remote)
-  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edgepp-26061110.tar.gz {{ item.0 }}:{{ item.1 }}soft/"
+  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edge-26061110.tar.gz {{ item.0 }}:{{ item.1 }}soft/"
   delegate_to: localhost
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   tags: [install_openresty]
 
 - name: Decompress openresty files
-  raw: "tar xf {{ item.1 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.1 }}soft/"
+  raw: "tar xf {{ item.1 }}soft/openresty-edge-26061110.tar.gz -C {{ item.1 }}soft/"
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   when: inventory_hostname == item.0
   tags: [install_openresty]
