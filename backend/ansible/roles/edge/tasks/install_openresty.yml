@@ -1,49 +1,44 @@
 ---
-- name: Install OpenResty Edge Server
-  hosts: all
-  gather_facts: false
-  vars:
-    # 核心优化：在变量定义阶段，统一将 destpath 拆分，并确保每个路径都以 '/' 结尾
-    # 这样后续任务中无论怎么拼接，都不会出现 /optsoft/ 这种路径粘连问题
+- name: Compute safe destpath
+  set_fact:
     safe_destpath: "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
 
-  tasks:
-    - name: copy edge file directory
-      copy:
-        src: "{{ srcpath }}"
-        dest: "{{ item.0 }}"
-      with_together:
-        - "{{ safe_destpath }}"
-        - "{{ prefix.split(',') }}"
-        - "{{ ips.split(',') }}"
-      when: inventory_hostname == item.2
-      tags: [install_openresty]
+- name: copy edge file directory
+  copy:
+    src: "{{ srcpath }}"
+    dest: "{{ item.0 }}"
+  with_together:
+    - "{{ safe_destpath }}"
+    - "{{ prefix.split(',') }}"
+    - "{{ ips.split(',') }}"
+  when: inventory_hostname == item.2
+  tags: [install_openresty]
 
-    - name: decompressing openresty files
-      shell:
-        cmd: "tar xf {{ item.0 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.0 }}soft/"
-      with_together:
-        - "{{ safe_destpath }}"
-        - "{{ prefix.split(',') }}"
-        - "{{ ips.split(',') }}"
-      when: inventory_hostname == item.2
-      tags: [install_openresty]
+- name: decompressing openresty files
+  shell:
+    cmd: "tar xf {{ item.0 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.0 }}soft/"
+  with_together:
+    - "{{ safe_destpath }}"
+    - "{{ prefix.split(',') }}"
+    - "{{ ips.split(',') }}"
+  when: inventory_hostname == item.2
+  tags: [install_openresty]
 
-    - name: build edge server
-      shell:
-        chdir: "{{ item.0 }}soft/install-edge/"
-        cmd: "source /etc/profile; ./install-edge.sh {{ item.1 }}"
-      with_together:
-        - "{{ safe_destpath }}"
-        - "{{ prefix.split(',') }}"
-        - "{{ ips.split(',') }}"
-      when: inventory_hostname == item.2
-      async: 0
-      register: build_jbos
-      tags: [install_openresty]
+- name: build edge server
+  shell:
+    chdir: "{{ item.0 }}soft/install-edge/"
+    cmd: "source /etc/profile; ./install-edge.sh {{ item.1 }}"
+  with_together:
+    - "{{ safe_destpath }}"
+    - "{{ prefix.split(',') }}"
+    - "{{ ips.split(',') }}"
+  when: inventory_hostname == item.2
+  async: 0
+  register: build_jbos
+  tags: [install_openresty]
 
-    - name: wait for all async tasks to complete
-      wait_for:
-        timeout: 1
-      delegate_to: localhost
-      tags: [install_openresty]
+- name: wait for all async tasks to complete
+  wait_for:
+    timeout: 1
+  delegate_to: localhost
+  tags: [install_openresty]
