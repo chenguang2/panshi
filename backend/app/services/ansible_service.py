@@ -54,6 +54,7 @@ async def _run_ansible_stream(
     ip: str,
     tag: str,
     extravars: dict[str, Any] | None = None,
+    job_timeout: int = 600,
 ) -> AsyncGenerator[str, None]:
     """Run ansible playbook and yield SSE-formatted events with real-time stdout lines.
 
@@ -89,14 +90,15 @@ async def _run_ansible_stream(
                 if line.strip():
                     q.put(f"[stderr] {line}")
 
-    async def _run_with_handler() -> dict[str, Any]:
-        try:
-            return await runner_method.run_playbook(
-                ip=ip, tag=tag, extravars=extravars,
-                event_handler=event_handler,
-            )
-        finally:
-            q.put(_SENTINEL)
+        async def _run_with_handler() -> dict[str, Any]:
+            try:
+                return await runner_method.run_playbook(
+                    ip=ip, tag=tag, extravars=extravars,
+                    event_handler=event_handler,
+                    job_timeout=job_timeout,
+                )
+            finally:
+                q.put(_SENTINEL)
 
     # Start run_playbook in background, read from queue concurrently
     task = asyncio.create_task(_run_with_handler())
@@ -151,15 +153,17 @@ class AnsibleRunnerService:
         tag: str,
         extravars: dict[str, Any] | None = None,
         event_handler: Any = None,
+        job_timeout: int | None = None,
     ) -> dict[str, Any]:
         """Execute an ansible playbook tag against a single target host.
 
         Args:
             ip: Target node IP (injected into ``extravars.ips``).
             tag: Ansible tag to execute (e.g. ``nginx_cmd_run``).
-            extravars: Extra variables merged with ``{"ips": ip}``.
-            event_handler: Optional callback for real-time event streaming.
-                           Called for each ansible-runner event.
+        extravars: Extra variables merged with ``{"ips": ip}``.
+        event_handler: Optional callback for real-time event streaming.
+                       Called for each ansible-runner event.
+        job_timeout: Playbook timeout in seconds (default 60, use 600+ for install).
 
         Returns:
             Dict with keys ``rc``, ``status``, ``stdout``, ``stderr``.
@@ -188,13 +192,14 @@ class AnsibleRunnerService:
             _runner_env["PATH"] = f"{_venv_bin}:{_current_path}"
 
         # Build kwargs for ansible_runner.run, optionally adding event_handler
+        effective_timeout = job_timeout if job_timeout is not None else self._job_timeout
         runner_kwargs = dict(
             private_data_dir=self._private_data_dir,
             playbook="edge.yml",
             tags=tag,
             extravars=ev,
             envvars=_runner_env,
-            settings={"job_timeout": self._job_timeout},
+            settings={"job_timeout": effective_timeout},
         )
         if event_handler is not None:
             runner_kwargs["event_handler"] = event_handler
@@ -206,7 +211,7 @@ class AnsibleRunnerService:
                         ansible_runner.run,
                         **runner_kwargs,
                     ),
-                    timeout=self._job_timeout + 10,
+                    timeout=effective_timeout + 10,
                 )
             except asyncio.TimeoutError:
                 raise AnsibleExecutionError(

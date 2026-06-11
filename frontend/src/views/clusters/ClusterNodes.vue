@@ -349,6 +349,9 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
 // ── Install OpenResty / Edge streaming ──────────────────────────────
 const installStream = useInstallStream()
 
+let _installTimer: ReturnType<typeof setInterval> | null = null
+function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer); _installTimer = null } }
+
 function handleInstallOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
@@ -356,7 +359,11 @@ function handleInstallOpenresty() {
   execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
   execLogs.value = []
   execProgress.percent = 0
+  execProgress.status = 'active'
   execResult.value = null
+  execElapsed.value = 0
+  clearInstallTimer()
+  _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
@@ -369,10 +376,12 @@ function handleInstallOpenresty() {
         execProgress.percent = percent
       },
       onComplete: (rc: number, status: string) => {
+        clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
       },
+      onError: () => { clearInstallTimer() },
     },
   )
 }
@@ -384,7 +393,11 @@ function handleInstallEdge() {
   execDrawerTitle.value = `安装 Edge - ${node.ip}`
   execLogs.value = []
   execProgress.percent = 0
+  execProgress.status = 'active'
   execResult.value = null
+  execElapsed.value = 0
+  clearInstallTimer()
+  _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
@@ -397,10 +410,12 @@ function handleInstallEdge() {
         execProgress.percent = percent
       },
       onComplete: (rc: number, status: string) => {
+        clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
       },
+      onError: () => { clearInstallTimer() },
     },
   )
 }
