@@ -5,9 +5,11 @@
   when: inventory_hostname == item.0
   tags: [install_openresty]
 
-- name: Copy tar file via SCP (no Python required on remote)
-  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edge-26061110.tar.gz {{ item.0 }}:{{ item.1 }}soft/"
-  delegate_to: localhost
+- name: Copy tar file via synchronize (uses Ansible SSH, no Python on remote)
+  synchronize:
+    src: "{{ srcpath }}/openresty-edge-26061110.tar.gz"
+    dest: "{{ item.1 }}soft/openresty-edge-26061110.tar.gz"
+  delegate_to: "{{ item.0 }}"
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   tags: [install_openresty]
 
