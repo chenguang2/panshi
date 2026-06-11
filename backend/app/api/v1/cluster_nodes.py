@@ -4,6 +4,7 @@ from typing import Optional, Any
 from enum import Enum
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -23,7 +24,9 @@ from app.services.ansible_service import (
     AnsibleExecutionError,
     ALLOWED_TAGS,
     NGINX_CMD_MAP,
+    _run_ansible_stream,
 )
+from app.services.ansible_service import MAX_LOG_LINES
 from app.api.v1.clusters import get_current_user
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
@@ -58,6 +61,16 @@ class NodeActionRequest(BaseModel):
 class AnsibleRunRequest(BaseModel):
     tag: str
     extravars: dict[str, Any] = {}
+
+
+class InstallOpenrestyRequest(BaseModel):
+    prefix: str
+    srcpath: str
+    destpath: str
+
+
+class InstallEdgeRequest(BaseModel):
+    prefix: str
 
 
 # ── shared helpers ───────────────────────────────────────────
@@ -348,6 +361,36 @@ async def ansible_run(
         "rc": result.get("rc"),
         "stdout": result.get("stdout", ""),
     }
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/install-openresty")
+async def install_openresty_stream(
+    cluster_id: int, node_id: int,
+    body: InstallOpenrestyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Install OpenResty on a target node via ansible, streaming real-time logs via SSE."""
+    node = await _verify_node(cluster_id, node_id, db)
+    extravars = {"prefix": body.prefix, "srcpath": body.srcpath, "destpath": body.destpath}
+    return StreamingResponse(
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_openresty", extravars=extravars),
+        media_type="text/event-stream",
+    )
+
+
+@router.post("/{cluster_id}/nodes/{node_id}/install-edge")
+async def install_edge_stream(
+    cluster_id: int, node_id: int,
+    body: InstallEdgeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Install Edge service on a target node via ansible, streaming real-time logs via SSE."""
+    node = await _verify_node(cluster_id, node_id, db)
+    extravars = {"prefix": body.prefix}
+    return StreamingResponse(
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_edge", extravars=extravars),
+        media_type="text/event-stream",
+    )
 
 
 @router.post("/{cluster_id}/nodes/action")

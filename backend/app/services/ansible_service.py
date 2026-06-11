@@ -5,9 +5,11 @@ import logging
 import os
 import re
 import sys
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,64 @@ NGINX_CMD_MAP = {
 
 # Reverse mapping for display
 NGINX_CMD_LABEL = {v: k for k, v in NGINX_CMD_MAP.items()}
+
+
+_SENTINEL = object()
+MAX_LOG_LINES = 500
+
+
+async def _run_ansible_stream(
+    runner_method,
+    ip: str,
+    tag: str,
+    extravars: dict[str, Any] | None = None,
+) -> AsyncGenerator[str, None]:
+    """Run ansible playbook and yield SSE-formatted events with real-time stdout lines.
+
+    Args:
+        runner_method: An ``AnsibleRunnerService`` instance (or compatible) used to
+                       call ``run_playbook`` with an ``event_handler``.
+        ip: Target node IP.
+        tag: Ansible tag to execute (e.g. ``install_openresty``).
+        extravars: Extra variables for the playbook.
+
+    Yields:
+        SSE event strings: ``data: {"line": "...", "percent": N}\\n\\n``
+        Final event: ``data: {"rc": N, "status": "...", "percent": 100}\\n\\n``
+    """
+    q: queue.Queue = queue.Queue()
+    line_count = 0
+
+    def event_handler(event_data: dict) -> None:
+        stdout = event_data.get("stdout", "")
+        for line in stdout.splitlines():
+            if line.strip():
+                q.put(line)
+
+    async def _run_with_handler() -> dict[str, Any]:
+        try:
+            return await runner_method.run_playbook(
+                ip=ip, tag=tag, extravars=extravars,
+                event_handler=event_handler,
+            )
+        finally:
+            q.put(_SENTINEL)
+
+    # Start run_playbook in background, read from queue concurrently
+    task = asyncio.create_task(_run_with_handler())
+
+    while True:
+        line = await asyncio.to_thread(q.get)
+        if line is _SENTINEL:
+            break
+        line_count += 1
+        pct = min(int(line_count / 200 * 100), 99) if line_count < 200 else min(50 + int((line_count - 200) / 20), 99)
+        yield f"data: {json.dumps({'line': line, 'percent': pct})}\n\n"
+
+    result = await task
+    rc = result.get("rc", -1)
+    status = result.get("status", "failed")
+    yield f"data: {json.dumps({'rc': rc, 'status': status, 'percent': 100})}\n\n"
 
 
 class AnsibleExecutionError(Exception):
@@ -78,6 +138,7 @@ class AnsibleRunnerService:
         ip: str,
         tag: str,
         extravars: dict[str, Any] | None = None,
+        event_handler: Any = None,
     ) -> dict[str, Any]:
         """Execute an ansible playbook tag against a single target host.
 
@@ -85,6 +146,8 @@ class AnsibleRunnerService:
             ip: Target node IP (injected into ``extravars.ips``).
             tag: Ansible tag to execute (e.g. ``nginx_cmd_run``).
             extravars: Extra variables merged with ``{"ips": ip}``.
+            event_handler: Optional callback for real-time event streaming.
+                           Called for each ansible-runner event.
 
         Returns:
             Dict with keys ``rc``, ``status``, ``stdout``, ``stderr``.
@@ -112,17 +175,24 @@ class AnsibleRunnerService:
         if _venv_bin not in _current_path:
             _runner_env["PATH"] = f"{_venv_bin}:{_current_path}"
 
+        # Build kwargs for ansible_runner.run, optionally adding event_handler
+        runner_kwargs = dict(
+            private_data_dir=self._private_data_dir,
+            playbook="edge.yml",
+            tags=tag,
+            extravars=ev,
+            envvars=_runner_env,
+            settings={"job_timeout": self._job_timeout},
+        )
+        if event_handler is not None:
+            runner_kwargs["event_handler"] = event_handler
+
         async with self._semaphore:
             try:
                 result = await asyncio.wait_for(
                     asyncio.to_thread(
                         ansible_runner.run,
-                        private_data_dir=self._private_data_dir,
-                        playbook="edge.yml",
-                        tags=tag,
-                        extravars=ev,
-                        envvars=_runner_env,
-                        settings={"job_timeout": self._job_timeout},
+                        **runner_kwargs,
                     ),
                     timeout=self._job_timeout + 10,
                 )
@@ -194,6 +264,26 @@ class AnsibleRunnerService:
         """Execute edge_statistic tag to collect CPU/memory/disk/version."""
         ev = {"prefix": prefix, "ports": ports}
         return await self.run_playbook(ip, "edge_statistic", ev)
+
+    async def install_openresty(
+        self,
+        ip: str,
+        prefix: str,
+        srcpath: str,
+        destpath: str,
+    ) -> dict[str, Any]:
+        """Execute install_openresty tag to deploy OpenResty on target node."""
+        ev = {"prefix": prefix, "srcpath": srcpath, "destpath": destpath}
+        return await self.run_playbook(ip, "install_openresty", ev)
+
+    async def install_edge(
+        self,
+        ip: str,
+        prefix: str,
+    ) -> dict[str, Any]:
+        """Execute install_edge tag to deploy Edge service on target node."""
+        ev = {"prefix": prefix}
+        return await self.run_playbook(ip, "install_edge", ev)
 
     async def generic_run(
         self,
