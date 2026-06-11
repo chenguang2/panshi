@@ -108,8 +108,8 @@
           <h2>{{ copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由') }}</h2>
           <button class="modal-close" @click="routeModalVisible = false">&times;</button>
         </div>
-        <div class="modal-body" style="min-height:420px;">
-          <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
+        <div class="modal-body">
+          <a-tabs v-model:activeKey="routeModalActiveTab">
             <!-- Basic config tab -->
             <a-tab-pane key="basic" tab="基础配置">
               <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
