@@ -88,7 +88,10 @@
 
             <!-- stdout tab -->
             <div v-show="activeTab === 'stdout'" class="tab-body">
-              <div v-if="result && result.stdout" class="log-box full-width">
+              <div v-if="logs.length > 0" class="log-box full-width">
+                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ logs.join('\n') }}</pre>
+              </div>
+              <div v-else-if="result && result.stdout" class="log-box full-width">
                 <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ result.stdout }}</pre>
               </div>
               <div v-else style="color:var(--muted);">无输出</div>
