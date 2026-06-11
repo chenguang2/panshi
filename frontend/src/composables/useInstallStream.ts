@@ -2,6 +2,8 @@ import { ref, reactive, onUnmounted } from 'vue'
 
 const API_BASE = '/api/v1'
 
+export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'error'
+
 export interface InstallStreamOptions {
   onLine: (line: string) => void
   onProgress?: (percent: number) => void
@@ -10,6 +12,7 @@ export interface InstallStreamOptions {
 }
 
 export function useInstallStream() {
+  const status = ref<StreamStatus>('idle')
   const installing = ref(false)
   const progress = reactive({ percent: 0 })
   const logs = ref<string[]>([])
@@ -17,6 +20,7 @@ export function useInstallStream() {
   let abortController: AbortController | null = null
 
   async function start(url: string, body: Record<string, unknown>, options: InstallStreamOptions) {
+    status.value = 'connecting'
     installing.value = true
     error.value = null
     logs.value = []
@@ -41,6 +45,7 @@ export function useInstallStream() {
         try { const j = JSON.parse(errText); errMsg = j.detail || errMsg } catch { /* ignore */ }
         options.onError?.(errMsg)
         error.value = errMsg
+        status.value = 'error'
         installing.value = false
         return
       }
@@ -49,10 +54,12 @@ export function useInstallStream() {
       if (!reader) {
         options.onError?.('浏览器不支持流式读取')
         error.value = '浏览器不支持流式读取'
+        status.value = 'error'
         installing.value = false
         return
       }
 
+      status.value = 'streaming'
       const decoder = new TextDecoder()
       let buffer = ''
 
@@ -91,9 +98,11 @@ export function useInstallStream() {
       if (e.name === 'AbortError') return
       const msg = e.message || '安装失败'
       error.value = msg
+      status.value = 'error'
       options.onError?.(msg)
     } finally {
       installing.value = false
+      if (status.value === 'streaming') status.value = 'completed'
       abortController = null
     }
   }
@@ -106,5 +115,5 @@ export function useInstallStream() {
 
   onUnmounted(() => cancel())
 
-  return { installing, progress, logs, error, start, cancel }
+  return { status, installing, progress, logs, error, start, cancel }
 }
