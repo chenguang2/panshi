@@ -45,23 +45,35 @@
     </div>
 
     <!-- Global Rule Modal -->
-    <a-modal v-model:open="globalRuleModalVisible" :title="globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则'" width="800px" @ok="handleGlobalRuleSubmit" :ok-text="globalRuleFormMode === 'add' ? '创建' : '保存'">
-      <a-tabs v-model:activeKey="globalRuleActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
-              <a-input v-model:value="globalRuleFormData.name" placeholder="请输入名称" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="globalRuleFormData.description" :rows="2" placeholder="可选描述" />
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-        <a-tab-pane key="plugins" tab="插件配置">
-          <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
+    <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }" @click.self="globalRuleModalVisible = false">
+      <div class="modal" style="max-width:800px;">
+        <div class="modal-header">
+          <h2>{{ globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则' }}</h2>
+          <button class="modal-close" @click="globalRuleModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-tabs v-model:activeKey="globalRuleActiveTab">
+            <a-tab-pane key="basic" tab="基础配置">
+              <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
+                  <a-input v-model:value="globalRuleFormData.name" placeholder="请输入名称" />
+                </a-form-item>
+                <a-form-item label="描述" name="description">
+                  <a-textarea v-model:value="globalRuleFormData.description" :rows="2" placeholder="可选描述" />
+                </a-form-item>
+              </a-form>
+            </a-tab-pane>
+            <a-tab-pane key="plugins" tab="插件配置">
+              <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
+            </a-tab-pane>
+          </a-tabs>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="globalRuleModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleGlobalRuleSubmit">{{ globalRuleFormMode === 'add' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
 
     <!-- View Global Rule Drawer -->
     <a-drawer

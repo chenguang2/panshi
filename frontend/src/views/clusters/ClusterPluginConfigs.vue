@@ -53,26 +53,38 @@
     </div>
 
     <!-- Plugin Config Modal -->
-    <a-modal v-model:open="pluginConfigModalVisible" :title="pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组'" width="800px" @ok="handlePluginConfigSubmit" :ok-text="pluginConfigFormMode === 'add' ? '创建' : '保存'">
-      <a-tabs v-model:activeKey="pluginConfigActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
-              <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
-        <a-tab-pane key="plugins" tab="插件配置">
-          <PluginSelector
-            v-model="pluginConfigFormData.selectedPlugins"
-            :plugins="availablePlugins"
-          />
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
+    <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }" @click.self="pluginConfigModalVisible = false">
+      <div class="modal" style="max-width:800px;">
+        <div class="modal-header">
+          <h2>{{ pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组' }}</h2>
+          <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-tabs v-model:activeKey="pluginConfigActiveTab">
+            <a-tab-pane key="basic" tab="基础配置">
+              <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
+                  <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
+                </a-form-item>
+                <a-form-item label="描述" name="description">
+                  <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
+                </a-form-item>
+              </a-form>
+            </a-tab-pane>
+            <a-tab-pane key="plugins" tab="插件配置">
+              <PluginSelector
+                v-model="pluginConfigFormData.selectedPlugins"
+                :plugins="availablePlugins"
+              />
+            </a-tab-pane>
+          </a-tabs>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="pluginConfigModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handlePluginConfigSubmit">{{ pluginConfigFormMode === 'add' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
 
     <!-- View Plugin Config Drawer -->
     <PluginConfigViewDrawer v-model:visible="viewPcDrawerVisible" :config="viewingPc" />

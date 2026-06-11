@@ -45,48 +45,53 @@
     </div>
 
     <!-- Static Resource Modal -->
-    <a-modal
-      v-model:open="staticResourceModalVisible"
-      :title="staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源'"
-      @ok="handleStaticResourceSubmit"
-      width="600px"
-      :ok-text="staticResourceFormMode === 'add' ? '创建' : '保存'"
-      :ok-button-props="{ disabled: staticResourceFormMode === 'add' && !staticResourceFormValid }"
-    >
-      <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
-          <a-select
-            v-model:value="staticResourceFormData.route_id"
-            placeholder="请选择路由"
-            show-search
-            :filter-option="(input: string, option: { value: string; label: string }) => (option.label || '').toLowerCase().includes(input.toLowerCase())"
-            @change="onStaticResourceRouteChange"
-          >
-            <a-select-option v-for="r in staticResourceEditingCluster?.routes || []" :key="r.id" :value="r.id">
-              {{ r.name }} ({{ r.uri }})
-            </a-select-option>
-          </a-select>
-          <div style="margin-top: 6px; font-size: 12px;">
-            <div style="color: #999;">选择路由的要求：</div>
-            <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
-              {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
-            </div>
-            <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
-              {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
-            </div>
-            <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
-              {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
-            </div>
-          </div>
-        </a-form-item>
-        <a-form-item v-else label="关联路由">
-          <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
-        </a-form-item>
-        <a-form-item label="描述" name="description">
-          <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }" @click.self="staticResourceModalVisible = false">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header">
+          <h2>{{ staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
+          <button class="modal-close" @click="staticResourceModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
+              <a-select
+                v-model:value="staticResourceFormData.route_id"
+                placeholder="请选择路由"
+                show-search
+                :filter-option="(input: string, option: { value: string; label: string }) => (option.label || '').toLowerCase().includes(input.toLowerCase())"
+                @change="onStaticResourceRouteChange"
+              >
+                <a-select-option v-for="r in staticResourceEditingCluster?.routes || []" :key="r.id" :value="r.id">
+                  {{ r.name }} ({{ r.uri }})
+                </a-select-option>
+              </a-select>
+              <div style="margin-top: 6px; font-size: 12px;">
+                <div style="color: #999;">选择路由的要求：</div>
+                <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
+                  {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
+                </div>
+                <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
+                  {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
+                </div>
+                <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
+                  {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
+                </div>
+              </div>
+            </a-form-item>
+            <a-form-item v-else label="关联路由">
+              <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
+            </a-form-item>
+            <a-form-item label="描述" name="description">
+              <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
+            </a-form-item>
+          </a-form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="staticResourceModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleStaticResourceSubmit" :disabled="staticResourceFormMode === 'add' && !staticResourceFormValid">{{ staticResourceFormMode === 'add' ? '创建' : '保存' }}</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Version Management Modal -->
     <VersionManagementModal

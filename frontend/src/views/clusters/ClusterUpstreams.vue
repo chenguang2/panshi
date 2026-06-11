@@ -92,141 +92,153 @@
       </template>
     </a-table>
 
-    <a-modal v-model:open="upstreamModalVisible" :title="editingUpstream ? '编辑上游' : '添加上游'" width="750px" @ok="handleUpstreamSubmit">
-      <a-tabs v-model:activeKey="upstreamModalActiveTab">
-        <a-tab-pane key="basic" tab="基础配置">
-          <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
-              <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
-            </a-form-item>
-            <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
-              <a-select v-model:value="upstreamForm.load_balance">
-                <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-                <a-select-option value="chash">一致性哈希</a-select-option>
-                <a-select-option value="ewma">延迟最小</a-select-option>
-                <a-select-option value="least_conn">最少连接</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
-              <a-select v-model:value="upstreamForm.hash_on">
-                <a-select-option value="header">HTTP请求头</a-select-option>
-                <a-select-option value="cookie">Cookie</a-select-option>
-                <a-select-option value="vars">内置变量</a-select-option>
-                <a-select-option value="vars_combinations">自定义变量</a-select-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
-              <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="upstreamForm.description" :rows="2" />
-            </a-form-item>
-            <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
-              <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
-                <template #bodyCell="{ column, record, index }">
-                  <template v-if="column.key === 'ip'">
-                    <a-input v-model:value="record.ip" placeholder="IP地址" />
-                    <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'port'">
-                    <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
-                    <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'weight'">
-                    <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
-                    <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
-                  </template>
-                  <template v-else-if="column.key === 'action'">
-                    <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
-                  </template>
-                </template>
-              </a-table>
-              <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
-                <PlusOutlined /> 添加节点
-              </a-button>
-            </a-form-item>
-            <a-form-item label="高级配置">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
-                <span style="color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
-              </div>
-            </a-form-item>
-          </a-form>
-        </a-tab-pane>
+    <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }" @click.self="upstreamModalVisible = false">
+      <div class="modal" style="max-width:750px;">
+        <div class="modal-header">
+          <h2>{{ editingUpstream ? '编辑上游' : '添加上游' }}</h2>
+          <button class="modal-close" @click="upstreamModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-tabs v-model:activeKey="upstreamModalActiveTab">
+            <a-tab-pane key="basic" tab="基础配置">
+              <a-form ref="upstreamFormRef" :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
+                  <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
+                </a-form-item>
+                <a-form-item label="负载均衡" name="load_balance" :rules="[{ required: true, message: '请选择负载均衡' }]">
+                  <a-select v-model:value="upstreamForm.load_balance">
+                    <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
+                    <a-select-option value="chash">一致性哈希</a-select-option>
+                    <a-select-option value="ewma">延迟最小</a-select-option>
+                    <a-select-option value="least_conn">最少连接</a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="哈希位置" name="hash_on" :rules="[{ required: true, message: '请选择哈希位置' }]">
+                  <a-select v-model:value="upstreamForm.hash_on">
+                    <a-select-option value="header">HTTP请求头</a-select-option>
+                    <a-select-option value="cookie">Cookie</a-select-option>
+                    <a-select-option value="vars">内置变量</a-select-option>
+                    <a-select-option value="vars_combinations">自定义变量</a-select-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item v-if="upstreamForm.load_balance === 'chash'" label="Key" name="key" :rules="[{ required: true, message: '请输入哈希 Key' }]">
+                  <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
+                </a-form-item>
+                <a-form-item label="描述" name="description">
+                  <a-textarea v-model:value="upstreamForm.description" :rows="2" />
+                </a-form-item>
+                <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
+                  <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
+                    <template #bodyCell="{ column, record, index }">
+                      <template v-if="column.key === 'ip'">
+                        <a-input v-model:value="record.ip" placeholder="IP地址" />
+                        <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
+                      </template>
+                      <template v-else-if="column.key === 'port'">
+                        <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
+                        <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">{{ targetValidation[index].port }}</div>
+                      </template>
+                      <template v-else-if="column.key === 'weight'">
+                        <a-input-number v-model:value="record.weight" :min="1" :max="100" style="width: 100%" placeholder="权重" />
+                        <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">{{ targetValidation[index].weight }}</div>
+                      </template>
+                      <template v-else-if="column.key === 'action'">
+                        <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
+                      </template>
+                    </template>
+                  </a-table>
+                  <a-button type="dashed" size="small" style="width: 100%; margin-top: 8px" @click="addUpstreamTarget">
+                    <PlusOutlined /> 添加节点
+                  </a-button>
+                </a-form-item>
+                <a-form-item label="高级配置">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
+                    <span style="color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
+                  </div>
+                </a-form-item>
+              </a-form>
+            </a-tab-pane>
 
-        <a-tab-pane key="advanced" tab="高级配置">
-          <div v-if="upstreamForm.advancedEnabled">
-            <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-              <a-form-item label="健康检查" name="checks">
-                <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
-              </a-form-item>
-              <a-form-item label="重试次数" name="retries">
-                <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
-                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
-              </a-form-item>
-              <a-form-item label="重试超时(秒)" name="retry_timeout">
-                <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
-                <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
-              </a-form-item>
-              <a-form-item label="超时配置(秒)">
-                <div style="display: flex; gap: 8px;">
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
-                    <a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width: 100%" />
-                  </div>
-                </div>
-              </a-form-item>
-              <a-form-item label="Host策略" name="pass_host">
-                <a-select v-model:value="upstreamForm.pass_host">
-                  <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
-                  <a-select-option value="node">node（使用节点Host）</a-select-option>
-                  <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
-                </a-select>
-              </a-form-item>
-              <a-form-item v-if="upstreamForm.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
-                <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" />
-              </a-form-item>
-              <a-form-item label="通信协议" name="scheme">
-                <a-select v-model:value="upstreamForm.scheme">
-                  <a-select-option value="http">http</a-select-option>
-                  <a-select-option value="https">https</a-select-option>
-                  <a-select-option value="tcp">tcp</a-select-option>
-                  <a-select-option value="udp">udp</a-select-option>
-                </a-select>
-              </a-form-item>
-              <a-form-item label="连接池">
-                <div style="display: flex; gap: 8px;">
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" />
-                  </div>
-                  <div style="flex: 1">
-                    <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
-                    <a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" />
-                  </div>
-                </div>
-              </a-form-item>
-            </a-form>
-          </div>
-          <div v-else class="advanced-disabled-hint">
-            <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-            高级配置未启用，请在"基础配置"中开启
-          </div>
-        </a-tab-pane>
-      </a-tabs>
-    </a-modal>
+            <a-tab-pane key="advanced" tab="高级配置">
+              <div v-if="upstreamForm.advancedEnabled">
+                <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                  <a-form-item label="健康检查" name="checks">
+                    <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
+                  </a-form-item>
+                  <a-form-item label="重试次数" name="retries">
+                    <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
+                    <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
+                  </a-form-item>
+                  <a-form-item label="重试超时(秒)" name="retry_timeout">
+                    <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
+                    <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
+                  </a-form-item>
+                  <a-form-item label="超时配置(秒)">
+                    <div style="display: flex; gap: 8px;">
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
+                        <a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width: 100%" />
+                      </div>
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
+                        <a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width: 100%" />
+                      </div>
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
+                        <a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width: 100%" />
+                      </div>
+                    </div>
+                  </a-form-item>
+                  <a-form-item label="Host策略" name="pass_host">
+                    <a-select v-model:value="upstreamForm.pass_host">
+                      <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
+                      <a-select-option value="node">node（使用节点Host）</a-select-option>
+                      <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                  <a-form-item v-if="upstreamForm.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
+                    <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" />
+                  </a-form-item>
+                  <a-form-item label="通信协议" name="scheme">
+                    <a-select v-model:value="upstreamForm.scheme">
+                      <a-select-option value="http">http</a-select-option>
+                      <a-select-option value="https">https</a-select-option>
+                      <a-select-option value="tcp">tcp</a-select-option>
+                      <a-select-option value="udp">udp</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                  <a-form-item label="连接池">
+                    <div style="display: flex; gap: 8px;">
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
+                        <a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" />
+                      </div>
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
+                        <a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" />
+                      </div>
+                      <div style="flex: 1">
+                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
+                        <a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" />
+                      </div>
+                    </div>
+                  </a-form-item>
+                </a-form>
+              </div>
+              <div v-else class="advanced-disabled-hint">
+                <WarningOutlined style="color: #faad14; margin-right: 8px;" />
+                高级配置未启用，请在"基础配置"中开启
+              </div>
+            </a-tab-pane>
+          </a-tabs>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="upstreamModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleUpstreamSubmit">{{ editingUpstream ? '保存' : '创建' }}</button>
+        </div>
+      </div>
+    </div>
 
     <VersionManagementModal
       v-model:open="versionModalVisible"

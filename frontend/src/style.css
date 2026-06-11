@@ -440,18 +440,12 @@ select.form-input {
 .ant-select-arrow { color: var(--muted) !important; }
 .ant-input-number-handler-wrap { background: var(--bg) !important; border-left: 1px solid var(--border) !important; }
 
-/* Modal — unified with .modal-overlay custom modal style */
-.ant-modal-content { background: var(--bg) !important; border: 1px solid var(--border) !important; border-radius: var(--radius-lg) !important; box-shadow: var(--shadow-lg) !important; }
-.ant-modal-header {
-  background: oklch(56% 0.16 210 / 10%) !important;
-  border-bottom: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
-  padding: 14px 20px !important;
-}
-.ant-modal-title { color: var(--fg) !important; font-size: 15px !important; font-weight: 600 !important; }
-.ant-modal-close { color: var(--muted) !important; top: 14px !important; right: 16px !important; }
+/* Modal */
+.ant-modal-content { background: var(--surface) !important; border: 1px solid var(--border) !important; }
+.ant-modal-header { background: var(--surface) !important; border-bottom: 1px solid var(--border) !important; }
+.ant-modal-title { color: var(--fg) !important; }
+.ant-modal-close { color: var(--muted) !important; top: 14px; right: 16px; }
 .ant-modal-close:hover { background: var(--bg) !important; color: var(--fg) !important; }
-.ant-modal-body { padding: 20px !important; }
 .ant-modal-body .ant-form-item-label > label { color: var(--muted) !important; }
 .ant-modal-body .ant-form-item-explain { color: var(--muted) !important; }
 .ant-modal-body .ant-tabs-tab { color: var(--muted) !important; }
@@ -460,22 +454,9 @@ select.form-input {
 .ant-modal-body .ant-tabs-nav { border-bottom: 1px solid var(--border) !important; }
 .ant-modal-body .ant-switch { background: var(--border) !important; }
 .ant-modal-body .ant-switch-checked { background: var(--accent) !important; }
-.ant-modal-footer {
-  padding: 12px 20px !important;
-  border-top: 1px solid var(--border) !important;
-}
-.ant-modal-footer .ant-btn {
-  border-radius: var(--radius-md) !important;
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--fg) !important;
-  height: auto !important;
-  padding: 6px 14px !important;
-  font-size: 13px !important;
-}
+.ant-modal-footer .ant-btn { border-radius: var(--radius-md); background: var(--surface) !important; border: 1px solid var(--border) !important; color: var(--fg) !important; }
 .ant-modal-footer .ant-btn:hover { background: var(--bg) !important; border-color: var(--accent) !important; color: var(--accent) !important; }
 .ant-modal-footer .ant-btn-primary { background: var(--accent) !important; border: none !important; color: #fff !important; }
-.ant-modal-footer .ant-btn-primary:hover { background: oklch(50% 0.16 210) !important; }
 .ant-modal-mask { background: oklch(0% 0 0 / 40%) !important; }
 
 /* Drawer */

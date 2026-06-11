@@ -113,28 +113,40 @@
       </template>
     </a-table>
 
-    <a-modal v-model:open="nodeModalVisible" :title="editingNode ? '编辑节点' : '添加节点'" width="500px" @ok="handleNodeSubmit">
-      <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
-          <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
-        </a-form-item>
-        <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
-          <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
-          <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
-          <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
-        </a-form-item>
-        <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-          <a-select v-model:value="nodeForm.status">
-            <a-select-option :value="1">正常</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }" @click.self="nodeModalVisible = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
+          <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
+              <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
+            </a-form-item>
+            <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
+              <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
+            </a-form-item>
+            <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
+              <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
+            </a-form-item>
+            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
+            </a-form-item>
+            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+              <a-select v-model:value="nodeForm.status">
+                <a-select-option :value="1">正常</a-select-option>
+                <a-select-option :value="0">禁用</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
+        </div>
+      </div>
+    </div>
 
     <ConfigDiff
       v-model:visible="diffDrawerVisible"
