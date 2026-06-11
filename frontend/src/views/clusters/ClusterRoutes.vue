@@ -102,6 +102,7 @@
     </a-table>
 
     <!-- Route add/edit modal -->
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }" @click.self="routeModalVisible = false">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
@@ -229,6 +230,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- Version management modal -->
     <VersionManagementModal

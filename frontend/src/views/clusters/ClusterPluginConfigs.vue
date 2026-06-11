@@ -53,6 +53,7 @@
     </div>
 
     <!-- Plugin Config Modal -->
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }" @click.self="pluginConfigModalVisible = false">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
@@ -85,6 +86,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- View Plugin Config Drawer -->
     <PluginConfigViewDrawer v-model:visible="viewPcDrawerVisible" :config="viewingPc" />

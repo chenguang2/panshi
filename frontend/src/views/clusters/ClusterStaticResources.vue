@@ -45,6 +45,7 @@
     </div>
 
     <!-- Static Resource Modal -->
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }" @click.self="staticResourceModalVisible = false">
       <div class="modal" style="max-width:600px;">
         <div class="modal-header">
@@ -92,6 +93,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- Version Management Modal -->
     <VersionManagementModal

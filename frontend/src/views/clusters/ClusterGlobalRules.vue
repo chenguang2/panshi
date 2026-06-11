@@ -45,6 +45,7 @@
     </div>
 
     <!-- Global Rule Modal -->
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }" @click.self="globalRuleModalVisible = false">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
@@ -74,6 +75,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- View Global Rule Drawer -->
     <a-drawer

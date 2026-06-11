@@ -92,6 +92,7 @@
       </template>
     </a-table>
 
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }" @click.self="upstreamModalVisible = false">
       <div class="modal" style="max-width:750px;">
         <div class="modal-header">
@@ -239,6 +240,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <VersionManagementModal
       v-model:open="versionModalVisible"

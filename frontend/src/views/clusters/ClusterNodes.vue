@@ -113,6 +113,7 @@
       </template>
     </a-table>
 
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }" @click.self="nodeModalVisible = false">
       <div class="modal">
         <div class="modal-header">
@@ -147,6 +148,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <ConfigDiff
       v-model:visible="diffDrawerVisible"
@@ -166,6 +168,7 @@
     />
 
     <!-- Custom Confirm Modal -->
+    <Teleport to="body">
     <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }" @click.self="confirmState.visible = false">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
@@ -183,6 +186,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 

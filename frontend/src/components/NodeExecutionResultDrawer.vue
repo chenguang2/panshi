@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }" @click.self="onClose">
     <div class="modal modal-wide" style="max-width:860px;">
       <div class="modal-header">
@@ -118,6 +119,7 @@
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
