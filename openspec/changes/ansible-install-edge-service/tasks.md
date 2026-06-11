@@ -11,14 +11,14 @@
 
 ## 3. Frontend — Streaming log display
 
-- [ ] 3.1 Add `useInstallStream()` composable that wraps fetch + ReadableStream, emits `onLine` and `onComplete` callbacks
-- [ ] 3.2 Adapt `NodeExecutionResultDrawer.vue` to support streaming mode (append lines one by one instead of setting all at once)
-- [ ] 3.3 Add install buttons to ClusterNodes.vue toolbar (安装 OpenResty, 安装 Edge)
-- [ ] 3.4 Wire install buttons → fetch + stream → streaming drawer
+- [x] 3.1 Add `useInstallStream()` composable that wraps fetch + ReadableStream, emits `onLine` and `onComplete` callbacks
+- [x] 3.2 Adapt `NodeExecutionResultDrawer.vue` to support streaming mode (append lines one by one instead of setting all at once)
+- [x] 3.3 Add install buttons to ClusterNodes.vue toolbar (安装 OpenResty, 安装 Edge)
+- [x] 3.4 Wire install buttons → fetch + stream → streaming drawer
 
 ## 4. Verify
 
 - [x] 4.1 Unit test: SSE streaming generator produces correctly formatted events (4 backend tests pass)
 - [ ] 4.2 Integration test: install endpoint returns 200 with content-type text/event-stream
 - [ ] 4.3 Frontend test: streaming composable handles messages correctly
-- [ ] 4.4 Build passes with `npx vite build`
+- [x] 4.4 Build passes with `npx vite build`
