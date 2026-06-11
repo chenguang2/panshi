@@ -100,6 +100,9 @@ async def _run_ansible_stream(
             finally:
                 q.put(_SENTINEL)
 
+    # Yield initial event to confirm connection is established
+    yield f"data: {json.dumps({'line': '正在连接远程主机并启动 Ansible...', 'percent': 0})}\n\n"
+
     # Start run_playbook in background, read from queue concurrently
     task = asyncio.create_task(_run_with_handler())
 
