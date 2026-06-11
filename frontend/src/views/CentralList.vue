@@ -1485,63 +1485,6 @@ onMounted(async () => {
   border-color: var(--border) !important;
 }
 
-/* ── Tab content: unify Ant Design modals ── */
-:deep(.dbody) .ant-modal-content {
-  background: var(--bg) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-lg) !important;
-}
-:deep(.dbody) .ant-modal-header {
-  background: oklch(56% 0.16 210 / 10%) !important;
-  border-bottom: 1px solid var(--border) !important;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
-  padding: 14px 20px !important;
-}
-:deep(.dbody) .ant-modal-title {
-  color: var(--fg) !important;
-  font-size: 15px !important;
-  font-weight: 600 !important;
-}
-:deep(.dbody) .ant-modal-close {
-  color: var(--muted) !important;
-  top: 14px !important;
-  right: 16px !important;
-}
-:deep(.dbody) .ant-modal-close:hover {
-  background: var(--bg) !important;
-  color: var(--fg) !important;
-}
-:deep(.dbody) .ant-modal-body {
-  padding: 20px !important;
-}
-:deep(.dbody) .ant-modal-footer {
-  padding: 12px 20px !important;
-  border-top: 1px solid var(--border) !important;
-}
-:deep(.dbody) .ant-modal-footer .ant-btn {
-  border-radius: var(--radius-md) !important;
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--fg) !important;
-}
-:deep(.dbody) .ant-modal-footer .ant-btn:hover {
-  background: var(--bg) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-}
-:deep(.dbody) .ant-modal-footer .ant-btn-primary {
-  background: var(--accent) !important;
-  border: none !important;
-  color: #fff !important;
-}
-:deep(.dbody) .ant-modal-footer .ant-btn-primary:hover {
-  background: oklch(50% 0.16 210) !important;
-}
-:deep(.dbody) .ant-modal-mask {
-  background: oklch(0% 0 0 / 40%) !important;
-}
-
 :deep(.ant-popover-inner) { background: var(--p-bg-page) !important; border: 1px solid var(--p-border-default) !important; }
 :deep(.ant-popover-title) { color: var(--p-text-primary) !important; border-bottom: 1px solid var(--p-border-divider) !important; }
 :deep(.ant-popover-inner-content) { color: var(--p-text-secondary) !important; }
