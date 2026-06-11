@@ -110,8 +110,8 @@
                 <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ result.command }}</pre>
               </div>
               <div v-else class="ner-empty-state">
-                <div class="ner-empty-title">⚠ 无法获取执行命令</div>
-                <div style="font-size:13px;">请求异常，命令未成功投递到服务端。请检查节点网络连接或尝试手动执行。</div>
+                <div class="ner-empty-title">ℹ 安装命令已在服务端执行</div>
+                <div style="font-size:13px;">安装过程通过 Ansible 远程执行，请在「stdout」标签页查看实时日志输出。</div>
               </div>
             </div>
           </div>
