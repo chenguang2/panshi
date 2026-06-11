@@ -1,26 +1,24 @@
 <template>
-  <div class="cluster-list">
-    <div class="header-section">
-      <div class="header-left">
-        <h2>统一集中管理</h2>
-        <div class="filter-bar">
-          <a-input-search
-            v-model:value="filterText"
-            placeholder="搜索集群名称或显示名"
-            style="width: 280px;"
-            allow-clear
-          />
-          <a-radio-group v-model:value="statusFilter" size="small" option-type="button" button-style="solid">
-            <a-radio-button value="all">全部</a-radio-button>
-            <a-radio-button value="healthy">健康</a-radio-button>
-            <a-radio-button value="offline">离线</a-radio-button>
-          </a-radio-group>
-          <span class="filter-count">共 {{ filteredClusters.length }} 个集群</span>
-          <a-button size="small" @click="expandAll" v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] === false)">全部展开</a-button>
-          <a-button size="small" @click="collapseAll" v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] !== false)">全部收起</a-button>
-        </div>
+  <div class="cl-page">
+    <PageHeader title="统一集中管理" description="集中管理所有的网关集群，实现统一监控与运维">
+      <template #actions>
+        <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
+      </template>
+    </PageHeader>
+
+    <div class="cl-header-actions">
+      <div class="search-input-wrap">
+        <input v-model="filterText" type="text" placeholder="搜索集群名称或显示名..." class="form-input">
+        <span class="search-icon">🔍</span>
       </div>
-      <a-button type="primary" @click="showAddModal">添加集群</a-button>
+      <select v-model="statusFilter" class="form-input" style="width:110px;flex-shrink:0;">
+        <option value="all">全部状态</option>
+        <option value="healthy">健康</option>
+        <option value="offline">离线</option>
+      </select>
+      <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
+      <button v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] === false)" class="btn btn-secondary btn-sm" @click="expandAll">全部展开</button>
+      <button v-if="groupedClusters.some(g => expandedGroups[g.name || '__ungrouped__'] !== false)" class="btn btn-secondary btn-sm" @click="collapseAll">全部收起</button>
     </div>
 
     <!-- Mini-bar: compact cluster bar when in maximized mode -->
@@ -60,7 +58,7 @@
           </div>
           <div v-if="expandedGroups[group.name] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
-              <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
+              <div v-for="cluster in group.clusters" :key="cluster.id" class="cl-card">
                 <div class="cl-card-topbar">
                   <span>{{ cluster.group_name || '未分类' }}</span>
                   <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
@@ -68,18 +66,26 @@
                     <span>最大化</span>
                   </div>
                 </div>
-                <div class="expand-row">
-                  <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
-                  <span class="cname">{{ cluster.display_name || cluster.name }}</span>
-                  <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+                <div class="cl-card-header">
+                  <div class="cl-card-info" style="display:flex;align-items:center;gap:8px;">
+                    <span class="status-dot" :class="cluster.status === 1 ? 'online' : 'offline'"></span>
+                    <div>
+                      <div class="cl-card-name">{{ cluster.display_name || cluster.name }}</div>
+                      <div v-if="cluster.display_name" class="cl-card-desc">集群标识: {{ cluster.name }}</div>
+                    </div>
+                  </div>
+                  <div class="cl-card-meta">
+                    <span v-if="cluster.status === 1" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+                    <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+                  </div>
                 </div>
-                <div class="stats-bar">
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'routes')"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
+                <div class="cl-card-stats">
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"><div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="cl-stat-label">节点</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')"><div class="cl-stat-value">{{ cluster.upstream_count }}</div><div class="cl-stat-label">上游</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'routes')"><div class="cl-stat-value">{{ cluster.route_count }}</div><div class="cl-stat-label">路由</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')"><div class="cl-stat-value">{{ cluster.plugin_config_count }}</div><div class="cl-stat-label">插件组</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')"><div class="cl-stat-value">{{ cluster.global_rule_count }}</div><div class="cl-stat-label">全局规则</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="cl-stat-value">{{ cluster.static_resource_count }}</div><div class="cl-stat-label">静态资源</div></div>
                 </div>
                 <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
                   <span v-for="n in (cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3))" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
@@ -88,11 +94,13 @@
                   </span>
                   <span v-if="cluster.nodes.length > 3" class="node-more">...还有 {{ cluster.nodes.length - 3 }} 个</span>
                 </div>
-                <div class="cactions actions-bottom">
-                  <button class="cbtn" @click.stop="viewClusterDetail(cluster)">详情</button>
-                  <button class="cbtn" @click.stop="testCluster(cluster)">测试</button>
-                  <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
-                  <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+                <div class="cl-card-actions">
+                  <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+                  <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                  <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click.stop="deleteCluster(cluster)">删除</button>
+                  <span style="flex:1"></span>
+                  <span class="cl-card-id">#{{ cluster.id }}</span>
                 </div>
               </div>
             </TransitionGroup>
@@ -118,7 +126,7 @@
           </div>
           <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
             <TransitionGroup name="grid" tag="div" class="cluster-grid">
-              <div v-for="cluster in group.clusters" :key="cluster.id" class="cluster-card">
+              <div v-for="cluster in group.clusters" :key="cluster.id" class="cl-card">
                 <div class="cl-card-topbar">
                   <span>{{ cluster.group_name || '未分类' }}</span>
                   <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
@@ -126,18 +134,26 @@
                     <span>最大化</span>
                   </div>
                 </div>
-                <div class="expand-row">
-                  <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
-                  <span class="cname">{{ cluster.display_name || cluster.name }}</span>
-                  <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
+                <div class="cl-card-header">
+                  <div class="cl-card-info" style="display:flex;align-items:center;gap:8px;">
+                    <span class="status-dot" :class="cluster.status === 1 ? 'online' : 'offline'"></span>
+                    <div>
+                      <div class="cl-card-name">{{ cluster.display_name || cluster.name }}</div>
+                      <div v-if="cluster.display_name" class="cl-card-desc">集群标识: {{ cluster.name }}</div>
+                    </div>
+                  </div>
+                  <div class="cl-card-meta">
+                    <span v-if="cluster.status === 1" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+                    <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+                  </div>
                 </div>
-                <div class="stats-bar">
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"><div class="snum">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="slbl">节点</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')"><div class="snum">{{ cluster.upstream_count }}</div><div class="slbl">上游</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'routes')"><div class="snum">{{ cluster.route_count }}</div><div class="slbl">路由</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')"><div class="snum">{{ cluster.plugin_config_count }}</div><div class="slbl">插件组</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')"><div class="snum">{{ cluster.global_rule_count }}</div><div class="slbl">全局规则</div></div>
-                  <div class="scell" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="snum">{{ cluster.static_resource_count }}</div><div class="slbl">静态资源</div></div>
+                <div class="cl-card-stats">
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"><div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div><div class="cl-stat-label">节点</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')"><div class="cl-stat-value">{{ cluster.upstream_count }}</div><div class="cl-stat-label">上游</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'routes')"><div class="cl-stat-value">{{ cluster.route_count }}</div><div class="cl-stat-label">路由</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')"><div class="cl-stat-value">{{ cluster.plugin_config_count }}</div><div class="cl-stat-label">插件组</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')"><div class="cl-stat-value">{{ cluster.global_rule_count }}</div><div class="cl-stat-label">全局规则</div></div>
+                  <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"><div class="cl-stat-value">{{ cluster.static_resource_count }}</div><div class="cl-stat-label">静态资源</div></div>
                 </div>
                 <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
                   <span v-for="n in (cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3))" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
@@ -146,11 +162,13 @@
                   </span>
                   <span v-if="cluster.nodes.length > 3" class="node-more">...还有 {{ cluster.nodes.length - 3 }} 个</span>
                 </div>
-                <div class="cactions actions-bottom">
-                  <button class="cbtn" @click.stop="viewClusterDetail(cluster)">详情</button>
-                  <button class="cbtn" @click.stop="testCluster(cluster)">测试</button>
-                  <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
-                  <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+                <div class="cl-card-actions">
+                  <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+                  <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                  <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click.stop="deleteCluster(cluster)">删除</button>
+                  <span style="flex:1"></span>
+                  <span class="cl-card-id">#{{ cluster.id }}</span>
                 </div>
               </div>
             </TransitionGroup>
@@ -181,11 +199,11 @@
         <div class="expanded-name-row">
           <span class="cname">{{ cluster.display_name || cluster.name }}</span>
           <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
-          <div class="cactions">
-            <button class="cbtn" @click.stop="viewClusterDetail(cluster)">详情</button>
-            <button class="cbtn" @click.stop="testCluster(cluster)">测试</button>
-            <button class="cbtn" @click.stop="editCluster(cluster)">编辑</button>
-            <button class="cbtn danger" @click.stop="deleteCluster(cluster)">删除</button>
+          <div class="cl-card-actions">
+            <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+            <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+            <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click.stop="deleteCluster(cluster)">删除</button>
           </div>
         </div>
         <div class="card-detail">
@@ -219,28 +237,41 @@
 
     <ClusterFormModal :visible="modalVisible" :editing-cluster="editingCluster" :group-options="groupOptions" @close="modalVisible = false; editingCluster = null" @saved="modalVisible = false; editingCluster = null; loadClusters()" />
 
-    <a-modal v-model:open="nodeModalVisible" :title="editingNode ? '编辑节点' : '添加节点'" width="500px" @ok="handleNodeSubmit">
-      <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-        <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
-          <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
-        </a-form-item>
-        <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
-          <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
-          <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
-        </a-form-item>
-        <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
-          <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
-        </a-form-item>
-        <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-          <a-select v-model:value="nodeForm.status">
-            <a-select-option :value="1">正常</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
-          </a-select>
-        </a-form-item>
-      </a-form>
-    </a-modal>
+    <!-- Node Form Modal -->
+    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }" @click.self="nodeModalVisible = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
+          <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+            <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
+              <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
+            </a-form-item>
+            <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
+              <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
+            </a-form-item>
+            <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
+              <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
+            </a-form-item>
+            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
+            </a-form-item>
+            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+              <a-select v-model:value="nodeForm.status">
+                <a-select-option :value="1">正常</a-select-option>
+                <a-select-option :value="0">禁用</a-select-option>
+              </a-select>
+            </a-form-item>
+          </a-form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
+        </div>
+      </div>
+    </div>
 
     <ConfigDiff
       v-model:visible="diffDrawerVisible"
@@ -257,62 +288,84 @@
     />
 
     <!-- Cluster Detail Modal -->
-    <a-modal v-model:open="detailVisible" title="集群详情" width="600px" :footer="null">
-      <div v-if="detailCluster">
-          <table class="detail-table">
-            <tbody>
-              <tr><td class="dt-label">集群名称</td><td class="dt-value">{{ detailCluster.name }}</td></tr>
-              <tr><td class="dt-label">显示名称</td><td class="dt-value">{{ detailCluster.display_name || '-' }}</td></tr>
-              <tr><td class="dt-label">分组</td><td class="dt-value">{{ detailCluster.group_name || '-' }}</td></tr>
-              <tr><td class="dt-label">描述</td><td class="dt-value">{{ detailCluster.description || '-' }}</td></tr>
-              <tr><td class="dt-label">状态</td>
-                <td class="dt-value"><span :style="{ color: detailCluster.status === 1 ? 'var(--p-color-success)' : 'var(--p-color-danger)' }">{{ detailCluster.status === 1 ? '运行中' : '已禁用' }}</span></td>
-              </tr>
-              <tr><td class="dt-label">创建时间</td><td class="dt-value">{{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}</td></tr>
-            </tbody>
-          </table>
-        <h3 class="detail-section-title">资源统计</h3>
-        <div class="detail-stats-grid">
-          <div class="detail-stat-card"><div class="detail-stat-label">节点</div><div class="detail-stat-value">{{ detailCluster.healthy_node_count }}/{{ detailCluster.node_count }}</div></div>
-          <div class="detail-stat-card"><div class="detail-stat-label">上游</div><div class="detail-stat-value">{{ detailCluster.upstream_count }}</div></div>
-          <div class="detail-stat-card"><div class="detail-stat-label">路由</div><div class="detail-stat-value">{{ detailCluster.route_count }}</div></div>
-          <div class="detail-stat-card"><div class="detail-stat-label">插件组</div><div class="detail-stat-value">{{ detailCluster.plugin_config_count }}</div></div>
-          <div class="detail-stat-card"><div class="detail-stat-label">全局规则</div><div class="detail-stat-value">{{ detailCluster.global_rule_count }}</div></div>
-          <div class="detail-stat-card"><div class="detail-stat-label">静态资源</div><div class="detail-stat-value">{{ detailCluster.static_resource_count }}</div></div>
+    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }" @click.self="detailVisible = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>集群详情</h2>
+          <button class="modal-close" @click="detailVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="detailCluster">
+            <table class="detail-table">
+              <tbody>
+                <tr><td class="dt-label">集群名称</td><td class="dt-value">{{ detailCluster.name }}</td></tr>
+                <tr><td class="dt-label">显示名称</td><td class="dt-value">{{ detailCluster.display_name || '-' }}</td></tr>
+                <tr><td class="dt-label">分组</td><td class="dt-value">{{ detailCluster.group_name || '-' }}</td></tr>
+                <tr><td class="dt-label">描述</td><td class="dt-value">{{ detailCluster.description || '-' }}</td></tr>
+                <tr><td class="dt-label">状态</td>
+                  <td class="dt-value">
+                    <span v-if="detailCluster.status === 1" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+                    <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+                  </td>
+                </tr>
+                <tr><td class="dt-label">创建时间</td><td class="dt-value">{{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}</td></tr>
+              </tbody>
+            </table>
+            <h3 class="detail-section-title">资源统计</h3>
+            <div class="detail-stats-grid">
+              <div class="detail-stat-card"><div class="detail-stat-label">节点</div><div class="detail-stat-value">{{ detailCluster.healthy_node_count }}/{{ detailCluster.node_count }}</div></div>
+              <div class="detail-stat-card"><div class="detail-stat-label">上游</div><div class="detail-stat-value">{{ detailCluster.upstream_count }}</div></div>
+              <div class="detail-stat-card"><div class="detail-stat-label">路由</div><div class="detail-stat-value">{{ detailCluster.route_count }}</div></div>
+              <div class="detail-stat-card"><div class="detail-stat-label">插件组</div><div class="detail-stat-value">{{ detailCluster.plugin_config_count }}</div></div>
+              <div class="detail-stat-card"><div class="detail-stat-label">全局规则</div><div class="detail-stat-value">{{ detailCluster.global_rule_count }}</div></div>
+              <div class="detail-stat-card"><div class="detail-stat-label">静态资源</div><div class="detail-stat-value">{{ detailCluster.static_resource_count }}</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="detailVisible = false">关闭</button>
         </div>
       </div>
-    </a-modal>
+    </div>
 
     <!-- Test Connection Modal -->
-    <a-modal v-model:open="testVisible" title="测试连接" width="600px" :footer="null" @cancel="resetTest">
-      <div v-if="!testRunning && testLogs.length === 0">
-        <div style="margin-bottom:12px;font-size:13px;color:var(--p-text-tertiary);">将要对下列节点进行 TCP 端口连接测试：</div>
-        <div v-if="testNodes.length > 0" class="test-nodes-list">
-          <div v-for="n in testNodes" :key="n.id" class="test-node-row">
-            <span class="node-addr">{{ n.ip }}:{{ n.management_port }}</span>
-            <a-tag :color="n.status === 1 ? 'success' : 'default'">{{ n.status === 1 ? '在线' : '离线' }}</a-tag>
+    <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }" @click.self="resetTest">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>测试连接</h2>
+          <button class="modal-close" @click="resetTest">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="!testRunning && testLogs.length === 0">
+            <div style="margin-bottom:12px;font-size:13px;color:var(--muted);">将要对下列节点进行 TCP 端口连接测试：</div>
+            <div v-if="testNodes.length > 0" class="test-nodes-list">
+              <div v-for="n in testNodes" :key="n.id" class="test-node-row">
+                <span class="node-addr">{{ n.ip }}:{{ n.management_port }}</span>
+                <span class="badge" :class="n.status === 1 ? 'badge-success' : 'badge-neutral'">{{ n.status === 1 ? '在线' : '离线' }}</span>
+              </div>
+            </div>
+            <div v-else style="text-align:center;padding:20px 0;color:var(--muted)">该集群没有节点</div>
+          </div>
+          <div v-else>
+            <div class="test-progress">
+              <div v-for="(log, i) in testLogs" :key="i" class="test-log-row" :class="log.status">
+                <span v-if="log.status === 'pending'" class="log-spinner">⏳</span>
+                <span v-else-if="log.status === 'success'" class="log-icon">✓</span>
+                <span v-else-if="log.status === 'error'" class="log-icon log-error">✗</span>
+                <span class="log-msg">{{ log.msg }}</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div v-else style="text-align:center;padding:20px 0;color:var(--p-text-tertiary)">该集群没有节点</div>
-        <div style="text-align:right;margin-top:16px;">
-          <a-button @click="resetTest">取消</a-button>
-          <a-button type="primary" :disabled="testNodes.length === 0" @click="runTest" style="margin-left:8px;">开始测试</a-button>
+        <div class="modal-footer">
+          <template v-if="!testRunning && testLogs.length === 0">
+            <button class="btn btn-secondary" @click="resetTest">取消</button>
+            <button class="btn btn-primary" :disabled="testNodes.length === 0" @click="runTest">开始测试</button>
+          </template>
+          <button v-else class="btn btn-secondary" @click="resetTest">关闭</button>
         </div>
       </div>
-      <div v-else>
-        <div class="test-progress">
-          <div v-for="(log, i) in testLogs" :key="i" class="test-log-row" :class="log.status">
-            <span v-if="log.status === 'pending'" style="color:var(--p-color-info);">⏳</span>
-            <span v-else-if="log.status === 'success'" style="color:var(--p-color-success);">✓</span>
-            <span v-else-if="log.status === 'error'" style="color:var(--p-color-danger);">✗</span>
-            <span class="log-msg">{{ log.msg }}</span>
-          </div>
-        </div>
-        <div style="text-align:right;margin-top:16px;">
-          <a-button @click="resetTest">关闭</a-button>
-        </div>
-      </div>
-    </a-modal>
+    </div>
   </div>
 </template>
 
@@ -320,12 +373,14 @@
 import { ref, reactive, computed, watch, onMounted, h, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
+import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import api from '@/api'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
+import PageHeader from '@/components/PageHeader.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
@@ -948,98 +1003,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.cluster-list {
-  position: relative;
-  min-height: calc(100vh - 56px - 40px);
-  margin: -20px -24px;
+.cl-page {
   padding: 20px 24px;
-  background: var(--p-bg-page);
-  overflow: hidden;
+  min-height: calc(100vh - 56px - 40px);
 }
 
-.header-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.header-section h2 {
-  margin: 0 0 6px 0;
-  color: var(--p-text-primary);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.filter-bar {
+.cl-header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-bottom: 20px;
+  flex-wrap: nowrap;
 }
-
-.filter-count {
-  font-size: 12px;
-  color: var(--p-text-tertiary);
-  white-space: nowrap;
-}
-
-/* ── Ant Design overrides in header ── */
-:deep(.header-section) .ant-input-affix-wrapper {
-  background: var(--p-bg-glass) !important;
-  border: 1px solid var(--p-border-default) !important;
-  border-radius: 6px !important;
-  box-shadow: none !important;
-  height: 32px;
-}
-:deep(.header-section) .ant-input-affix-wrapper .ant-input {
-  background: transparent !important;
-  border: none !important;
-  color: var(--p-text-primary) !important;
-  font-size: 13px;
-}
-:deep(.header-section) .ant-input-affix-wrapper .ant-input::placeholder {
-  color: var(--p-text-disabled) !important;
-}
-:deep(.header-section) .ant-input-search-button {
-  background: transparent !important;
-  border: none !important;
-  color: var(--p-text-tertiary) !important;
-  border-radius: 0 6px 6px 0 !important;
-  height: 32px;
-}
-:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper {
-  background: var(--p-bg-glass) !important;
-  border-color: var(--p-border-default) !important;
-  color: var(--p-text-secondary) !important;
-  font-size: 12px;
-  height: 32px;
-  line-height: 32px;
-}
-:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper-checked {
-  background: var(--p-color-primary) !important;
-  border-color: var(--p-color-primary) !important;
-  color: var(--p-text-inverse) !important;
-}
-:deep(.header-section) .ant-radio-group.ant-radio-group-solid .ant-radio-button-wrapper:not(:first-child)::before {
-  background: var(--p-border-default) !important;
-}
-:deep(.header-section .ant-btn-primary) {
-  height: 32px;
-  font-size: 13px;
-  border-radius: 6px;
-}
+.cl-header-actions .search-input-wrap { width: 200px; flex-shrink: 0; }
+.cl-header-actions :deep(.form-input) { width: 100%; }
 
 .status-dot {
   width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
@@ -1129,117 +1106,138 @@ onMounted(async () => {
   z-index: 1;
 }
 
-.cluster-card {
-  background: var(--p-bg-glass);
-  backdrop-filter: blur(var(--p-glass-blur));
-  -webkit-backdrop-filter: blur(var(--p-glass-blur));
-  border: 1px solid var(--p-glass-border);
-  border-top: 3px solid var(--p-color-primary);
-  border-radius: var(--p-radius-lg);
+/* ── Card style matching ClusterList ── */
+.cl-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  box-shadow: var(--p-shadow-glass);
-  transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s;
 }
-.cluster-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--p-shadow-lg);
-  border-color: var(--p-border-hover);
+.cl-card:hover {
+  box-shadow: var(--shadow-md);
 }
-
-.expand-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  cursor: pointer;
-  user-select: none;
-  background: var(--p-bg-hover);
-  transition: background 0.15s;
-  border-bottom: 1px solid var(--p-border-divider);
-  border-left: 3px solid transparent;
-}
-.expand-row:hover {
-  background: var(--p-color-primary-bg);
-  border-left-color: var(--p-color-primary);
-}
-.expand-row:hover {
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
-}
-
-.cname-wrap {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
-}
-.cname {
-  font-weight: 600; font-size: 14px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--p-text-primary);
-}
-.chint {
-  font-size: 11px; color: var(--p-text-tertiary); font-weight: 400; flex-shrink: 0;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: transparent;
-}
-
-.stats-bar {
-  display: flex;
-  background: var(--p-bg-hover);
-  border-radius: var(--p-radius-md);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.scell + .scell { border-left: 1px solid var(--p-border-divider); }
-.snum { font-size: 15px; font-weight: 700; color: var(--p-text-primary); line-height: 1.2; }
-.slbl { font-size: 10px; color: var(--p-text-tertiary); }
-
-.cactions {
-  display: flex; gap: 3px; flex-shrink: 0; margin-left: auto;
-}
-.cbtn {
-  padding: 3px 10px; font-size: 11px;
-  border: 1px solid var(--p-border-default);
-  border-radius: var(--p-radius-sm);
-  background: var(--p-bg-hover);
-  cursor: pointer;
-  color: var(--p-text-secondary);
-  transition: all 0.2s;
-}
-.cbtn:hover { border-color: var(--p-color-primary); color: var(--p-color-primary); background: var(--p-bg-hover); }
-.cbtn.danger:hover { border-color: var(--p-color-danger); color: var(--p-color-danger); background: color-mix(in srgb, var(--p-color-danger) 10%, transparent); }
 
 .cl-card-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 3px 12px 3px 16px; font-size: 11px; font-weight: 500;
-  color: var(--p-color-primary);
-  background: color-mix(in srgb, var(--p-color-primary) 8%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--p-color-primary) 12%, transparent);
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 8%);
+  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
 }
+
+.cl-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  padding: 12px 20px 0;
+}
+.cl-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.cl-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cl-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+.cl-card-meta {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.cl-card-stats {
+  display: flex;
+  background: oklch(50% 0 0 / 4%);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  margin: 4px 16px;
+}
+.cl-stat-cell {
+  text-align: center; cursor: pointer;
+  padding: 5px 12px;
+  transition: all 0.15s;
+  flex: 1;
+}
+.cl-stat-cell + .cl-stat-cell {
+  border-left: 1px solid var(--border);
+}
+.cl-stat-cell:hover {
+  background: oklch(100% 0 0 / 6%);
+}
+.cl-stat-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.3;
+}
+.cl-stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.cl-card-actions {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  margin-top: auto;
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.cl-card-id {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
 .cl-card-nodes {
-  display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 10px;
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px 8px;
 }
 .cl-node-tag {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 2px 8px; border-radius: 10px; font-size: 11px;
-  background: var(--p-bg-hover);
-  border: 1px solid var(--p-border-default);
-  font-family: monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
 }
-.cl-node-tag.online { border-color: color-mix(in srgb, var(--p-color-success) 25%, transparent); }
-.cl-node-tag.offline { border-color: color-mix(in srgb, var(--p-color-danger) 25%, transparent); }
+.cl-node-tag.online { border-color: oklch(55% 0.15 145 / 25%); }
+.cl-node-tag.offline { border-color: oklch(55% 0.18 28 / 25%); }
 .node-ndot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
-.node-ndot.green { background: var(--p-color-success); }
-.node-ndot.red { background: var(--p-color-danger); }
+.node-ndot.green { background: var(--success); }
+.node-ndot.red { background: var(--danger); }
 .node-more { font-size: 11px; color: var(--p-text-tertiary); padding: 2px 4px; }
-.actions-bottom {
-  display: flex; gap: 4px; padding: 8px 16px;
-  border-top: 1px solid var(--p-border-divider);
+
+/* Expanded area action buttons */
+.cactions {
+  display: flex; gap: 3px; flex-shrink: 0; margin-left: auto;
+}
+.cname {
+  font-weight: 600; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg);
+}
+.chint {
+  font-size: 11px; color: var(--muted); font-weight: 400; flex-shrink: 0;
 }
 
 .expanded-area {
@@ -1596,6 +1594,13 @@ onMounted(async () => {
 .test-log-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; font-size: 13px; border-bottom: 1px solid var(--p-border-divider); }
 .test-log-row:last-child { border-bottom: none; }
 .log-msg { font-family: monospace; font-size: 12px; color: var(--p-text-primary); }
+
+@media (max-width: 1200px) { .cluster-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 768px) {
+  .cluster-grid { grid-template-columns: 1fr; }
+  .cl-header-actions { flex-direction: column; align-items: stretch; }
+  .cl-header-actions .search-input-wrap { width: 100%; }
+}
 </style>
 
 <style>
