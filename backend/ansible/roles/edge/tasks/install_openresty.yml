@@ -5,8 +5,8 @@
   when: inventory_hostname == item.0
   tags: [install_openresty]
 
-- name: Copy tar file via SCP with sshpass
-  raw: "sshpass -p '{{ hostvars[item.0]['ansible_ssh_pass'] }}' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edge-26061110.tar.gz {{ hostvars[item.0]['ansible_ssh_user'] }}@{{ item.0 }}:{{ item.1 }}soft/"
+- name: Copy tar file via SCP (uses SSH key + inventory user)
+  raw: "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {{ srcpath }}/openresty-edge-26061110.tar.gz {{ hostvars[item.0]['ansible_ssh_user'] }}@{{ item.0 }}:{{ item.1 }}soft/"
   delegate_to: localhost
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   tags: [install_openresty]
