@@ -93,7 +93,7 @@
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
-            <a-button size="small" @click="handleNodeAction(cluster, record, btnKey)">
+            <a-button size="small" @click="handleNodeActionWithConfirm(cluster, record, btnKey)">
               {{ getNodeActionButtonTitle(btnKey) }}
             </a-button>
           </template>
@@ -102,7 +102,7 @@
               更多 <DownOutlined />
             </a-button>
             <template #overlay>
-              <a-menu @click="(e: { key: string }) => handleNodeAction(cluster, record, e.key)">
+              <a-menu @click="(e: { key: string }) => handleNodeActionWithConfirm(cluster, record, e.key)">
                 <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
                   {{ btn.title }}
                 </a-menu-item>
@@ -311,6 +311,26 @@ function handleNodeStop() {
     '确认停止',
     () => executeNodeAction(node as any, 'stop', '停止'),
   )
+}
+
+function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: string) {
+  if (btnKey === 'start') {
+    showConfirm(
+      '确认启动节点',
+      `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
+      '确认启动',
+      () => executeNodeAction(record as any, 'start', '启动'),
+    )
+  } else if (btnKey === 'stop') {
+    showConfirm(
+      '确认停止节点',
+      `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
+      '确认停止',
+      () => executeNodeAction(record as any, 'stop', '停止'),
+    )
+  } else {
+    handleNodeAction(cluster, record, btnKey)
+  }
 }
 </script>
 
