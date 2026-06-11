@@ -1,19 +1,30 @@
 <template>
-  <a-drawer :open="visible" :title="`查看插件组 - ${config?.name}`" width="600" @update:open="$emit('update:visible', $event)" @close="$emit('update:visible', false)">
-    <div v-if="config">
-      <a-descriptions :column="1" bordered :label-style="{ width: '140px' }">
-        <a-descriptions-item label="名称">{{ config.name }}</a-descriptions-item>
-        <a-descriptions-item label="描述">{{ config.description || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="状态">
-          <a-tag v-if="config.current_version" color="green">已发布</a-tag>
-          <a-tag v-else color="orange">未发布</a-tag>
-        </a-descriptions-item>
-        <a-descriptions-item label="版本" v-if="config.current_version">v{{ config.current_version }}</a-descriptions-item>
-      </a-descriptions>
-      <a-divider>插件配置</a-divider>
-      <pre class="config-preview">{{ JSON.stringify(config.plugins, null, 2) }}</pre>
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }" @click.self="$emit('update:visible', false)">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h2>查看插件组 - {{ config?.name }}</h2>
+        <button class="modal-close" @click="$emit('update:visible', false)">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div v-if="config">
+          <a-descriptions :column="1" bordered :label-style="{ width: '140px' }">
+            <a-descriptions-item label="名称">{{ config.name }}</a-descriptions-item>
+            <a-descriptions-item label="描述">{{ config.description || '-' }}</a-descriptions-item>
+            <a-descriptions-item label="状态">
+              <a-tag v-if="config.current_version" color="green">已发布</a-tag>
+              <a-tag v-else color="orange">未发布</a-tag>
+            </a-descriptions-item>
+            <a-descriptions-item label="版本" v-if="config.current_version">v{{ config.current_version }}</a-descriptions-item>
+          </a-descriptions>
+          <a-divider>插件配置</a-divider>
+          <pre class="config-preview">{{ JSON.stringify(config.plugins, null, 2) }}</pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" @click="$emit('update:visible', false)">关闭</button>
+      </div>
     </div>
-  </a-drawer>
+  </div>
 </template>
 
 <script setup lang="ts">
