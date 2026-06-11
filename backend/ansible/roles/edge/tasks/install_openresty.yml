@@ -1,14 +1,10 @@
 ---
-- name: Compute safe destpath
-  set_fact:
-    safe_destpath: "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
-
 - name: copy edge file directory
   copy:
     src: "{{ srcpath }}"
     dest: "{{ item.0 }}"
   with_together:
-    - "{{ safe_destpath }}"
+    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
     - "{{ prefix.split(',') }}"
     - "{{ ips.split(',') }}"
   when: inventory_hostname == item.2
@@ -18,7 +14,7 @@
   shell:
     cmd: "tar xf {{ item.0 }}soft/openresty-edgepp-26061110.tar.gz -C {{ item.0 }}soft/"
   with_together:
-    - "{{ safe_destpath }}"
+    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
     - "{{ prefix.split(',') }}"
     - "{{ ips.split(',') }}"
   when: inventory_hostname == item.2
@@ -29,7 +25,7 @@
     chdir: "{{ item.0 }}soft/install-edge/"
     cmd: "source /etc/profile; ./install-edge.sh {{ item.1 }}"
   with_together:
-    - "{{ safe_destpath }}"
+    - "{{ destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list }}"
     - "{{ prefix.split(',') }}"
     - "{{ ips.split(',') }}"
   when: inventory_hostname == item.2
