@@ -5,8 +5,8 @@
       <a-button size="small" @click="editNode(cluster)" :disabled="!cluster.selectedNode">编辑节点</a-button>
       <a-button size="small" danger :disabled="!cluster.selectedNode" @click="deleteNode(cluster)">删除节点</a-button>
       <a-divider type="vertical" />
-      <a-button size="small" @click="startNode(cluster.selectedNode!)" :disabled="!cluster.selectedNode">启动</a-button>
-      <a-button size="small" @click="stopNode(cluster.selectedNode!)" :disabled="!cluster.selectedNode">停止</a-button>
+      <a-button size="small" @click="handleNodeStart" :disabled="!cluster.selectedNode">▶ 启动</a-button>
+      <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
       <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
       <a-divider type="vertical" />
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
@@ -164,11 +164,30 @@
       :statistics="execStatistics"
       :elapsed="execElapsed"
     />
+
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }" @click.self="confirmState.visible = false">
+      <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>{{ confirmState.title }}</h2>
+          <button class="modal-close" @click="confirmState.visible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">{{ confirmState.content }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
+          <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
+            {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import { DownOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
@@ -228,6 +247,7 @@ const {
   startNode,
   stopNode,
   queryNodeStatus,
+  executeNodeAction,
   execDrawerVisible,
   execDrawerTitle,
   execProgress,
@@ -240,6 +260,58 @@ const {
   clusters,
   onRefresh,
 })
+
+// ── Custom Confirm (matches NodeList.vue pattern) ──
+const confirmState = reactive({
+  visible: false,
+  title: '',
+  content: '',
+  confirmText: '',
+  loading: false,
+  onConfirm: null as (() => Promise<void>) | null,
+})
+
+function showConfirm(title: string, content: string, confirmText: string, onConfirm: () => Promise<void>) {
+  confirmState.title = title
+  confirmState.content = content
+  confirmState.confirmText = confirmText
+  confirmState.loading = false
+  confirmState.onConfirm = onConfirm
+  confirmState.visible = true
+}
+
+async function executeConfirm() {
+  if (!confirmState.onConfirm) return
+  confirmState.loading = true
+  try {
+    await confirmState.onConfirm()
+    confirmState.visible = false
+  } finally {
+    confirmState.loading = false
+  }
+}
+
+function handleNodeStart() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  showConfirm(
+    '确认启动节点',
+    `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
+    '确认启动',
+    () => executeNodeAction(node as any, 'start', '启动'),
+  )
+}
+
+function handleNodeStop() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  showConfirm(
+    '确认停止节点',
+    `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
+    '确认停止',
+    () => executeNodeAction(node as any, 'stop', '停止'),
+  )
+}
 </script>
 
 <style scoped>

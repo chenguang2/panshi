@@ -642,6 +642,7 @@ export function useClusterNodes(options: {
     startNode,
     stopNode,
     queryNodeStatus,
+    executeNodeAction,
     // Execution Drawer state
     execDrawerVisible,
     execDrawerTitle,
