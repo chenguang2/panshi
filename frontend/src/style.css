@@ -275,7 +275,7 @@ select.form-input {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 5vh;
+  padding-top: 2vh;
 }
 
 .modal-overlay .modal {
