@@ -414,3 +414,32 @@ cat cmd_run.sh
 #调用命令请使用绝对路径
 free -m
 ```
+
+# 安装 openresty (3.0)
+
+install_openresty
+
+```bash 
+ansible-runner run -p edge.yml -i "runner-test" \
+--tags install_openresty \
+--extra-vars \
+"ips=192.168.100.235 \
+prefix=/data/qcg/openresty-1.21.4 \
+srcpath=/data/qcg/edge-ansible/soft \
+destpath=/data/qcg/" \
+/data/qcg/edge-ansible/
+```
+
+# 安装 edge (3.0)
+
+install_edge
+
+```bash
+
+ansible-runner run -p edge.yml -i "runner-test" \
+--tags install_edge \
+--extra-vars \
+"ips=192.168.120.14 \
+prefix=/work/jboss/openresty-14" \
+/work/jboss/edge-ansible/
+```

@@ -14,3 +14,8 @@
 - import_tasks: plugins_md5.yml
 - import_tasks: unzip.yml
 - import_tasks: nginx_stream.yml
+- import_tasks: check_env.yml
+- import_tasks: install_edge.yml
+- import_tasks: install_openresty.yml
+- import_tasks: upgrade_openresty.yml
+- import_tasks: upgrade_edge.yml
