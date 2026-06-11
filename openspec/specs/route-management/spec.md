@@ -25,8 +25,10 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 - **WHEN** the page loads
 - **THEN** a search input SHALL filter by name/URI/description
 - **THEN** a publish status dropdown SHALL filter (全部/已发布/未发布)
+- **THEN** a plugin dropdown SHALL filter by plugin name (options from `/plugins/builtin`)
 - **THEN** the API SHALL support `method` parameter for method chip filtering
 - **THEN** the API SHALL support `publish_status` parameter (published/unpublished) by checking ConfigVersion records
+- **THEN** the API SHALL support `plugin` parameter to filter by RoutePlugin.plugin_name
 - **THEN** a count SHALL show "共 N 条路由"
 
 #### Scenario: Table display
