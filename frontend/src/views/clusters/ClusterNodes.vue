@@ -9,6 +9,8 @@
       <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
       <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
       <a-divider type="vertical" />
+      <a-button size="small" @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-button>
+      <a-button size="small" @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-button>
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
         <template #content>
           <div style="min-width: 400px;">
@@ -191,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { DownOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
@@ -199,6 +201,7 @@ import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
+import { useInstallStream } from '@/composables/useInstallStream'
 
 /** Check whether nginx is actually running by analyzing parsed stdout. */
 function nginxRunning(node: Node): boolean {
@@ -335,6 +338,65 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
   } else {
     handleNodeAction(cluster, record, btnKey)
   }
+}
+
+// ── Install OpenResty / Edge streaming ──────────────────────────────
+const installStream = useInstallStream()
+
+function handleInstallOpenresty() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  execDrawerVisible.value = true
+  execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
+  execLogs.value = []
+  execProgress.percent = 0
+  execResult.value = null
+
+  installStream.start(
+    `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
+    { prefix: '/data/openresty', srcpath: '/path/to/soft', destpath: '/data/' },
+    {
+      onLine: (line: string) => {
+        execLogs.value = [...execLogs.value, line]
+      },
+      onProgress: (percent: number) => {
+        execProgress.percent = percent
+      },
+      onComplete: (rc: number, status: string) => {
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+      },
+    },
+  )
+}
+
+function handleInstallEdge() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  execDrawerVisible.value = true
+  execDrawerTitle.value = `安装 Edge - ${node.ip}`
+  execLogs.value = []
+  execProgress.percent = 0
+  execResult.value = null
+
+  installStream.start(
+    `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
+    { prefix: '/work/openresty' },
+    {
+      onLine: (line: string) => {
+        execLogs.value = [...execLogs.value, line]
+      },
+      onProgress: (percent: number) => {
+        execProgress.percent = percent
+      },
+      onComplete: (rc: number, status: string) => {
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+      },
+    },
+  )
 }
 </script>
 
