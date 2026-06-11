@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }" @click.self="onClose">
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }" @click.self="onOverlayClick">
     <div class="modal modal-wide" style="max-width:860px;">
       <div class="modal-header">
         <h2>{{ title || '执行结果' }}</h2>
@@ -19,6 +19,11 @@
             <span>{{ progress.percent }}%</span>
             <span v-if="elapsed !== null">已用 {{ elapsed }} 秒</span>
           </div>
+        </div>
+
+        <!-- Error banner -->
+        <div v-if="streamError" style="margin-bottom:12px;padding:10px 14px;background:oklch(55% 0.18 28 / 8%);border:1px solid oklch(55% 0.18 28 / 25%);border-radius:6px;color:var(--danger);font-size:13px;">
+          ❌ {{ streamError }}
         </div>
 
         <!-- Tabs -->
@@ -138,6 +143,8 @@ const props = defineProps<{
   result: { stdout: string; stderr: string; command: string; rc: number } | null
   highlights: string[]
   statistics: Record<string, string> | null
+  installing?: boolean
+  streamError?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -186,6 +193,10 @@ watch(() => props.result, (r) => {
 
 function onClose() {
   emit('update:visible', false)
+}
+function onOverlayClick() {
+  if (props.installing) return // Don't close during installation
+  onClose()
 }
 
 async function copyAll() {

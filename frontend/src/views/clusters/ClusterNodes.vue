@@ -173,6 +173,8 @@
       :highlights="execHighlights"
       :statistics="execStatistics"
       :elapsed="execElapsed"
+      :installing="installInstalling"
+      :stream-error="installError"
     />
 
     <!-- Custom Confirm Modal -->
@@ -348,6 +350,7 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
 
 // ── Install OpenResty / Edge streaming ──────────────────────────────
 const installStream = useInstallStream()
+const { installing: installInstalling, error: installError } = installStream
 
 let _installTimer: ReturnType<typeof setInterval> | null = null
 function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer); _installTimer = null } }
