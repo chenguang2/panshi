@@ -295,12 +295,12 @@ async function copyAll() {
 
 /* ── Tab body ── */
 .tab-body {
-  min-height: 200px;
-  max-height: 55vh;
-  overflow-y: auto;
+  min-height: 100px;
+  max-height: 50vh;
+  overflow-y: scroll;
 }
-.tab-body::-webkit-scrollbar { width: 8px; }
-.tab-body::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 25%); border-radius: 4px; }
+.tab-body::-webkit-scrollbar { width: 6px; }
+.tab-body::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 20%); border-radius: 3px; }
 
 /* ── Log box ── */
 .log-box {
