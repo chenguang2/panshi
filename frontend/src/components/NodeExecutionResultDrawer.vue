@@ -112,7 +112,7 @@
 
             <!-- stdout tab -->
             <div v-show="activeTab === 'stdout'" class="tab-body">
-              <div v-if="logs.length > 0" class="log-box full-width">
+              <div v-if="logs.length > 0" ref="stdoutLogBox" class="log-box full-width" style="overflow-y:auto;max-height:50vh;">
                 <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ logs.join('\n') }}</pre>
               </div>
               <div v-else-if="result && result.stdout" class="log-box full-width">
@@ -146,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 
 const props = defineProps<{
@@ -168,6 +168,7 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref('summary')
+const stdoutLogBox = ref<HTMLElement | null>(null)
 
 function allLines(): string[] {
   const lines = [...props.highlights]
@@ -200,6 +201,15 @@ const statLabels: Record<string, string> = {
   system_memory_usage: '内存使用率 (系统)',
   edge_version: 'Edge 版本',
 }
+
+// Auto-scroll stdout log box to bottom when new lines arrive
+watch(() => props.logs.length, async () => {
+  if (activeTab.value !== 'stdout') return
+  await nextTick()
+  if (stdoutLogBox.value) {
+    stdoutLogBox.value.scrollTop = stdoutLogBox.value.scrollHeight
+  }
+})
 
 watch(() => props.result, (r) => {
   if (r && r.rc !== 0 && r.stderr) {

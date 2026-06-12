@@ -385,7 +385,7 @@ async def _install_openresty_stream(
 
     # Phase 2: SSH direct execution of install-edge.sh (real-time streaming)
     build_dir = f"{destpath}soft/install-edge/"
-    build_cmd = f"source /etc/profile; cd {build_dir} && ./install-edge.sh {prefix}"
+    build_cmd = f"source /etc/profile; cd {build_dir} && ./install-edge.sh {prefix}; wait"
     ssh_user = "jboss"
 
     yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
