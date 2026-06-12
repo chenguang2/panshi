@@ -296,11 +296,7 @@ async function copyAll() {
 /* ── Tab body ── */
 .tab-body {
   min-height: 200px;
-  max-height: 50vh;
-  overflow-y: auto;
 }
-.tab-body::-webkit-scrollbar { width: 6px; }
-.tab-body::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 15%); border-radius: 3px; }
 
 /* ── Log box ── */
 .log-box {
@@ -316,7 +312,7 @@ async function copyAll() {
   overflow-y: auto;
 }
 .log-box.full-width {
-  max-height: calc(50vh - 20px);
+  max-height: calc(60vh - 20px);
 }
 
 /* ── Result badges ── */

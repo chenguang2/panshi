@@ -495,6 +495,7 @@ function startElapsedTimer() {
   if (_elapsedTimer) clearInterval(_elapsedTimer)
   _elapsedTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
+    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
   }, 1000)
 }
 

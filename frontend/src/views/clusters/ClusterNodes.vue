@@ -378,7 +378,10 @@ function handleInstallOpenresty() {
   execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
   execElapsed.value = 0
   clearInstallTimer()
-  _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
+  _installTimer = setInterval(() => {
+    execElapsed.value = (execElapsed.value ?? 0) + 1
+    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+  }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
@@ -414,7 +417,10 @@ function handleInstallEdge() {
   execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
   execElapsed.value = 0
   clearInstallTimer()
-  _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
+  _installTimer = setInterval(() => {
+    execElapsed.value = (execElapsed.value ?? 0) + 1
+    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+  }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
