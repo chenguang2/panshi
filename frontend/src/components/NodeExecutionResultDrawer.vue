@@ -6,7 +6,7 @@
         <h2>{{ title || '执行结果' }}</h2>
         <div class="modal-header-extra">
           <button class="btn btn-ghost btn-sm" @click="copyAll" :disabled="logs.length === 0">复制日志</button>
-          <button class="modal-close" @click="onClose">&times;</button>
+          <button class="modal-close" :disabled="installing" @click="onClose">&times;</button>
         </div>
       </div>
       <div class="modal-body" style="max-height:80vh;overflow-y:auto;">
@@ -138,7 +138,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" @click="onClose">关闭</button>
+        <button v-if="installing" class="btn btn-danger" @click="onCancel">取消安装</button>
+        <button v-else class="btn btn-secondary" @click="onClose">关闭</button>
       </div>
     </div>
   </div>
@@ -165,6 +166,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
+  'cancel': []
 }>()
 
 const activeTab = ref('summary')
@@ -219,6 +221,9 @@ watch(() => props.result, (r) => {
 
 function onClose() {
   emit('update:visible', false)
+}
+function onCancel() {
+  emit('cancel')
 }
 function onOverlayClick() {
   if (props.installing) return // Don't close during installation

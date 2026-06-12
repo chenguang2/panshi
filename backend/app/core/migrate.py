@@ -126,6 +126,7 @@ def _fix_postgresql_table(engine: Engine, table: str, bad_col: str, compound_col
 
 COLUMN_MIGRATIONS = [
     ("ps_node", "status_detail", "TEXT"),
+    ("ps_node", "edge_install_path", "VARCHAR(255)"),
 ]
 
 

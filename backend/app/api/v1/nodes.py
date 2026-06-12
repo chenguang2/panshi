@@ -54,6 +54,7 @@ async def list_or_find_nodes(
             "service_port": node.service_port,
             "management_port": node.management_port,
             "edge_path": node.edge_path,
+            "edge_install_path": node.edge_install_path,
             "status": node.status,
         }
 

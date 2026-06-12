@@ -139,8 +139,11 @@
             <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
               <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
             </a-form-item>
-            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
-              <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
+            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
+            </a-form-item>
+            <a-form-item label="安装路径" name="edge_install_path" :rules="[{ pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_install_path" placeholder="留空则与Edge路径相同" />
             </a-form-item>
             <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
               <a-select v-model:value="nodeForm.status">
@@ -176,11 +179,12 @@
       :installing="installInstalling"
       :stream-error="installError"
       :stream-status="installStatus"
+      @cancel="handleCancelInstall"
     />
 
     <!-- Custom Confirm Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }" @click.self="confirmState.visible = false">
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }" @click.self="confirmState.visible = false">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>{{ confirmState.title }}</h2>
@@ -209,6 +213,7 @@ import BadgeStatus from '@/components/BadgeStatus.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
 
@@ -298,10 +303,9 @@ function showConfirm(title: string, content: string, confirmText: string, onConf
 
 async function executeConfirm() {
   if (!confirmState.onConfirm) return
-  confirmState.loading = true
+  confirmState.visible = false
   try {
     await confirmState.onConfirm()
-    confirmState.visible = false
   } finally {
     confirmState.loading = false
   }
@@ -351,6 +355,8 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
 
 // ── Install OpenResty / Edge streaming ──────────────────────────────
 const installStream = useInstallStream()
+const cancelling = ref(false)
+const execTargetNode = ref<any | null>(null)
 const { installing: installInstalling, error: installError, status: installStatus } = installStream
 
 let _installTimer: ReturnType<typeof setInterval> | null = null
@@ -359,6 +365,10 @@ function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer)
 function buildInstallCommand(node: any, tag: string, extravars: Record<string, string>) {
   const ev = JSON.stringify({ ...extravars, ips: node.ip })
   const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  // install-edge 只走 Ansible, 不执行 SSH; install-openresty 才走 Ansible + SSH 两阶段
+  if (tag === 'install_edge') {
+    return `# Ansible 命令:\n${ansibleCmd}`
+  }
   const prefix = extravars.prefix || node.edge_path || ''
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
   const sshUser = 'jboss'
@@ -369,39 +379,48 @@ function buildInstallCommand(node: any, tag: string, extravars: Record<string, s
 function handleInstallOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
-  const pendingCommand = buildInstallCommand(node, 'install_openresty', { prefix: node.edge_path || '/data/openresty', srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath: (node.edge_path || '/data/openresty').replace(/\/[^/]+$/, '') + '/' })
-  execDrawerVisible.value = true
-  execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
-  execLogs.value = []
-  execProgress.percent = 0
-  execProgress.status = 'active'
-  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-  execElapsed.value = 0
-  clearInstallTimer()
-  _installTimer = setInterval(() => {
-    execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
-  }, 1000)
+  showConfirm(
+    '确认安装 OpenResty',
+    `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 OpenResty\uff08${node.edge_install_path || node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    '\u786e\u8ba4\u5b89\u88c5',
+    async () => {
+      execTargetNode.value = node
+      const prefix = node.edge_install_path || node.edge_path || '/data/openresty'
+      const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
+      const pendingCommand = buildInstallCommand(node, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath })
+      execDrawerVisible.value = true
+      execDrawerTitle.value = `\u5b89\u88c5 OpenResty - ${node.ip}`
+      execLogs.value = []
+      execProgress.percent = 0
+      execProgress.status = 'active'
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      execElapsed.value = 0
+      clearInstallTimer()
+      _installTimer = setInterval(() => {
+        execElapsed.value = (execElapsed.value ?? 0) + 1
+        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+      }, 1000)
 
-  installStream.start(
-    `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
-    { prefix: node.edge_path || '/data/openresty' },
-    {
-      onLine: (line: string) => {
-        execLogs.value = [...execLogs.value, line]
-      },
-      onProgress: (percent: number) => {
-        // Only allow progress to increase (backend line-count may fluctuate)
-        if (percent > execProgress.percent) execProgress.percent = percent
-      },
-      onComplete: (rc: number, status: string) => {
-        clearInstallTimer()
-        execProgress.status = rc === 0 ? 'success' : 'exception'
-        execProgress.percent = 100
-        const prevCmd = execResult.value?.command || ''
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-      },
-      onError: () => { clearInstallTimer() },
+      installStream.start(
+        `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
+        { prefix },
+        {
+          onLine: (line: string) => {
+            execLogs.value = [...execLogs.value, line]
+          },
+          onProgress: (percent: number) => {
+            if (percent > execProgress.percent) execProgress.percent = percent
+          },
+          onComplete: (rc: number, status: string) => {
+            clearInstallTimer()
+            execProgress.status = rc === 0 ? 'success' : 'exception'
+            execProgress.percent = 100
+            const prevCmd = execResult.value?.command || ''
+            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+          },
+          onError: () => { clearInstallTimer() },
+        },
+      )
     },
   )
 }
@@ -409,38 +428,118 @@ function handleInstallOpenresty() {
 function handleInstallEdge() {
   const node = props.cluster.selectedNode
   if (!node) return
-  const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: node.edge_path || '/work/openresty' })
-  execDrawerVisible.value = true
-  execDrawerTitle.value = `安装 Edge - ${node.ip}`
-  execLogs.value = []
-  execProgress.percent = 0
-  execProgress.status = 'active'
-  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-  execElapsed.value = 0
-  clearInstallTimer()
-  _installTimer = setInterval(() => {
-    execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
-  }, 1000)
+  showConfirm(
+    '\u786e\u8ba4\u5b89\u88c5 Edge',
+    `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 Edge\uff08${node.edge_install_path || node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    '\u786e\u8ba4\u5b89\u88c5',
+    async () => {
+      execTargetNode.value = node
+      const installPrefix = node.edge_install_path || node.edge_path || '/work/openresty'
+      const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix })
+      execDrawerVisible.value = true
+      execDrawerTitle.value = `\u5b89\u88c5 Edge - ${node.ip}`
+      execLogs.value = []
+      execProgress.percent = 0
+      execProgress.status = 'active'
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      execElapsed.value = 0
+      clearInstallTimer()
+      _installTimer = setInterval(() => {
+        execElapsed.value = (execElapsed.value ?? 0) + 1
+        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+      }, 1000)
 
-  installStream.start(
-    `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
-    { prefix: node.edge_path || '/work/openresty' },
-    {
-      onLine: (line: string) => {
-        execLogs.value = [...execLogs.value, line]
-      },
-      onProgress: (percent: number) => {
-        if (percent > execProgress.percent) execProgress.percent = percent
-      },
-      onComplete: (rc: number, status: string) => {
-        clearInstallTimer()
-        execProgress.status = rc === 0 ? 'success' : 'exception'
+      installStream.start(
+        `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
+        { prefix: installPrefix },
+        {
+          onLine: (line: string) => {
+            execLogs.value = [...execLogs.value, line]
+          },
+          onProgress: (percent: number) => {
+            if (percent > execProgress.percent) execProgress.percent = percent
+          },
+          onComplete: (rc: number, status: string) => {
+            clearInstallTimer()
+            execProgress.status = rc === 0 ? 'success' : 'exception'
+            execProgress.percent = 100
+            const prevCmd = execResult.value?.command || ''
+            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+          },
+          onError: () => { clearInstallTimer() },
+        },
+      )
+    },
+  )
+}
+
+function handleCancelInstall() {
+  const node = execTargetNode.value
+  if (!node || cancelling.value) return
+
+  showConfirm(
+    '确认取消安装',
+    `即将取消节点 ${node.ip} 的安装操作，终止正在编译的进程。确认？`,
+    '确认取消',
+    async () => {
+      cancelling.value = true
+      try {
+        execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
+        execProgress.percent = 60
+        execProgress.status = 'active'
+
+        const res = await api.post(`/clusters/${node.cluster_id}/nodes/${node.id}/cancel-install`)
+        const data = res.data
+
+        execLogs.value.push('')
+        execLogs.value.push('═══════════════════════════════════════════')
+        execLogs.value.push('取消安装结果:')
+
+        for (const step of data.steps) {
+          const icon = step.status === 'success' ? '✓' : step.status === 'skipped' ? '−' : '✗'
+          execLogs.value.push('')
+          execLogs.value.push(` ${icon} ${step.command}`)
+          if (step.stdout) {
+            for (const line of step.stdout.split('\n')) {
+              execLogs.value.push(`   ${line}`)
+            }
+          }
+          if (step.stderr) {
+            execLogs.value.push(`   stderr: ${step.stderr}`)
+          }
+        }
+
+        const allOk = data.steps.every((s: any) => s.status === 'success' || s.status === 'skipped')
+        execLogs.value.push('')
+        execLogs.value.push('═══════════════════════════════════════════')
+        execLogs.value.push(
+          data.status === 'skipped'
+            ? '⚠️ 没有运行中的安装进程'
+            : allOk
+              ? '✅ 安装已取消'
+              : '⚠️ 取消过程部分异常'
+        )
+
         execProgress.percent = 100
-        const prevCmd = execResult.value?.command || ''
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-      },
-      onError: () => { clearInstallTimer() },
+        execProgress.status = 'success'
+
+        execResult.value = {
+          stdout: execLogs.value.join('\n'),
+          stderr: '',
+          command: data.steps.map((s: any) => `# ${s.command}\n${s.stdout || ''}`).join('\n\n'),
+          rc: 0,
+        }
+      } catch (error: any) {
+        const err = error as { response?: { data?: { detail?: string } }; message?: string }
+        const detail = err.response?.data?.detail || err.message || '取消失败'
+        execLogs.value.push(`❌ ${detail}`)
+        execProgress.percent = 100
+        execProgress.status = 'exception'
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
+      } finally {
+        cancelling.value = false
+        installStream.cancel()
+      }
     },
   )
 }

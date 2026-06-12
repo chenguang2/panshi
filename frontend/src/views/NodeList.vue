@@ -61,6 +61,10 @@
             <span class="text-sm">{{ record.edge_path || '-' }}</span>
           </template>
 
+          <template v-if="column.key === 'edge_install_path'">
+            <span class="text-sm">{{ record.edge_install_path || '（同Edge路径）' }}</span>
+          </template>
+
           <template v-if="column.key === 'status'">
             <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
             <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
@@ -144,6 +148,11 @@
             <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
           </div>
           <div class="form-group">
+            <label class="form-label">安装路径</label>
+            <input v-model="formData.edge_install_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_install_path }" placeholder="留空则与Edge路径相同">
+            <span class="form-error" v-if="formErrors.edge_install_path">{{ formErrors.edge_install_path }}</span>
+          </div>
+          <div class="form-group">
             <label class="checkbox-label">
               <input type="checkbox" v-model="formData.statusCheck"> <span>{{ formData.statusCheck ? '启用' : '停用' }}</span>
             </label>
@@ -170,6 +179,7 @@
             <div class="nd-label">服务端口</div><div class="nd-value">{{ detailNode.service_port }}</div>
             <div class="nd-label">管理端口</div><div class="nd-value">{{ detailNode.management_port }}</div>
             <div class="nd-label">Edge 路径</div><div class="nd-value">{{ detailNode.edge_path }}</div>
+          <div class="nd-label">安装路径</div><div class="nd-value">{{ detailNode.edge_install_path || '（同Edge路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
               <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
@@ -209,11 +219,16 @@
       :result="execResult"
       :highlights="execHighlights"
       :statistics="execStatistics"
+      :installing="installInstalling"
+      :stream-error="installError"
+      :stream-status="installStatus"
       @update:visible="execDrawerVisible = $event"
+      @cancel="handleCancelInstall"
     />
 
     <!-- Custom Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }" @click.self="confirmState.visible = false">
+    <Teleport to="body">
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }" @click.self="confirmState.visible = false">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>{{ confirmState.title }}</h2>
@@ -230,6 +245,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>
 
@@ -272,6 +288,7 @@ const formData = reactive({
   service_port: 80,
   management_port: 9180,
   edge_path: '/usr/local/edge',
+  edge_install_path: '',
   statusCheck: true,
 })
 const formErrors = reactive<Record<string, string>>({})
@@ -294,6 +311,8 @@ const execElapsed = ref<number | null>(null)
 const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
 const execHighlights = ref<string[]>([])
 const execStatistics = ref<Record<string, string> | null>(null)
+const execTargetNode = ref<any | null>(null)
+const cancelling = ref(false)
 
 // Custom confirm modal state
 const confirmState = reactive({
@@ -317,6 +336,7 @@ const columns = [
   { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
   { title: '管理端口', key: 'management_port', sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0) },
   { title: 'Edge 路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
+  { title: '安装路径', key: 'edge_install_path', sorter: (a: any, b: any) => (a.edge_install_path || '').localeCompare(b.edge_install_path || '') },
   { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
   { title: 'Edge 版本', key: 'edge_version', sorter: (a: any, b: any) => ((a.status_detail?.statistic?.edge_version) || '').localeCompare((b.status_detail?.statistic?.edge_version) || '') },
   { title: '操作', key: 'actions', width: 320 },
@@ -385,12 +405,14 @@ function openAddModal() {
   formData.service_port = 80
   formData.management_port = 9180
   formData.edge_path = '/usr/local/edge'
+  formData.edge_install_path = ''
   formData.statusCheck = true
   formErrors.cluster_id = ''
   formErrors.ip = ''
   formErrors.service_port = ''
   formErrors.management_port = ''
   formErrors.edge_path = ''
+  formErrors.edge_install_path = ''
   formModalVisible.value = true
 }
 
@@ -401,6 +423,7 @@ function handleEdit(record: any) {
   formData.service_port = record.service_port
   formData.management_port = record.management_port
   formData.edge_path = record.edge_path || ''
+  formData.edge_install_path = record.edge_install_path || ''
   formData.statusCheck = record.status === 1
   formErrors.cluster_id = ''
   formErrors.ip = ''
@@ -421,6 +444,7 @@ async function handleFormSubmit() {
   formErrors.service_port = ''
   formErrors.management_port = ''
   formErrors.edge_path = ''
+  formErrors.edge_install_path = ''
   let valid = true
   if (!formData.cluster_id) {
     formErrors.cluster_id = '请选择所属集群'
@@ -447,6 +471,18 @@ async function handleFormSubmit() {
   } else if (!formData.edge_path.startsWith('/')) {
     formErrors.edge_path = '路径必须以 / 开头'
     valid = false
+  } else if (formData.edge_path.endsWith('/')) {
+    formErrors.edge_path = '路径末尾不能为 /'
+    valid = false
+  }
+  if (formData.edge_install_path) {
+    if (!formData.edge_install_path.startsWith('/')) {
+      formErrors.edge_install_path = '路径必须以 / 开头'
+      valid = false
+    } else if (formData.edge_install_path.endsWith('/')) {
+      formErrors.edge_install_path = '路径末尾不能为 /'
+      valid = false
+    }
   }
   if (!valid) return
 
@@ -457,6 +493,7 @@ async function handleFormSubmit() {
       service_port: formData.service_port,
       management_port: formData.management_port,
       edge_path: formData.edge_path,
+      edge_install_path: formData.edge_install_path || undefined,
       status: formData.statusCheck ? 1 : 0,
     }
 
@@ -600,76 +637,168 @@ function handleStatus(record: any) {
 
 // ── Install OpenResty / Edge (streaming) ──────────────────────────
 const installStream = useInstallStream()
+const { installing: installInstalling, error: installError, status: installStatus } = installStream
 
 function buildInstallCommand(record: any, tag: string, extravars: Record<string, string>) {
   const ev = JSON.stringify({ ...extravars, ips: record.ip })
+  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  // install-edge 只走 Ansible, 不执行 SSH; install-openresty 才走 Ansible + SSH 两阶段
+  if (tag === 'install_edge') {
+    return `# Ansible 命令:\n${ansibleCmd}`
+  }
   const prefix = extravars.prefix || record.edge_path || ''
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
   const sshCmd = `ssh -o StrictHostKeyChecking=no jboss@${record.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
   return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
 function handleInstallOpenresty(record: any) {
-  execDrawerTitle.value = `安装 OpenResty - ${record.ip}`
-  execDrawerVisible.value = true
-  execLogs.value = []
-  execProgress.percent = 0
-  execProgress.status = 'active'
+  showConfirm(
+    '\u786e\u8ba4\u5b89\u88c5 OpenResty',
+    `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 OpenResty\uff08${record.edge_install_path || record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    '\u786e\u8ba4\u5b89\u88c5',
+    async () => {
+      execTargetNode.value = record
+      execDrawerTitle.value = `\u5b89\u88c5 OpenResty - ${record.ip}`
+      execDrawerVisible.value = true
+      execLogs.value = []
+      execProgress.percent = 0
+      execProgress.status = 'active'
 
-  // Derive prefix from edge_path
-  const prefix = record.edge_path ? record.edge_path.replace(/\/[^/]+$/, '') : '/data/openresty'
-  const pendingCommand = buildInstallCommand(record, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath: prefix.replace(/\/[^/]+$/, '') + '/' })
-  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-  startElapsedTimer()
+      const prefix = record.edge_install_path || record.edge_path || '/data/openresty'
+      const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
+      const pendingCommand = buildInstallCommand(record, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath })
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      startElapsedTimer()
 
-  installStream.start(
-    `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
-    { prefix },
-    {
-      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
-      onComplete: (rc: number, status: string) => {
-        stopElapsedTimer()
-        execProgress.status = rc === 0 ? 'success' : 'exception'
-        execProgress.percent = 100
-        const prevCmd = execResult.value?.command || ''
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-      },
-      onError: (err: string) => {
-        execLogs.value = [...execLogs.value, `❌ ${err}`]
-      },
+      installStream.start(
+        `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
+        { prefix },
+        {
+          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onComplete: (rc: number, status: string) => {
+            stopElapsedTimer()
+            execProgress.status = rc === 0 ? 'success' : 'exception'
+            execProgress.percent = 100
+            const prevCmd = execResult.value?.command || ''
+            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+          },
+          onError: (err: string) => {
+            execLogs.value = [...execLogs.value, `\u274c ${err}`]
+          },
+        },
+      )
     },
   )
 }
 
 function handleInstallEdge(record: any) {
-  execDrawerTitle.value = `安装 Edge - ${record.ip}`
-  execDrawerVisible.value = true
-  execLogs.value = []
-  execProgress.percent = 0
-  execProgress.status = 'active'
-  const prefix = record.edge_path || '/work/uap-edge'
-  const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
-  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-  startElapsedTimer()
+  showConfirm(
+    '\u786e\u8ba4\u5b89\u88c5 Edge',
+    `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 Edge\uff08${record.edge_install_path || record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    '\u786e\u8ba4\u5b89\u88c5',
+    async () => {
+      execTargetNode.value = record
+      execDrawerTitle.value = `\u5b89\u88c5 Edge - ${record.ip}`
+      execDrawerVisible.value = true
+      execLogs.value = []
+      execProgress.percent = 0
+      execProgress.status = 'active'
+      const prefix = record.edge_install_path || record.edge_path || '/work/uap-edge'
+      const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      startElapsedTimer()
 
-  installStream.start(
-    `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
-    { prefix },
-    {
-      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
-      onComplete: (rc: number, status: string) => {
-        stopElapsedTimer()
-        execProgress.status = rc === 0 ? 'success' : 'exception'
+      installStream.start(
+        `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
+        { prefix },
+        {
+          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onComplete: (rc: number, status: string) => {
+            stopElapsedTimer()
+            execProgress.status = rc === 0 ? 'success' : 'exception'
+            execProgress.percent = 100
+            const prevCmd = execResult.value?.command || ''
+            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+          },
+          onError: (err: string) => {
+            execLogs.value = [...execLogs.value, `\u274c ${err}`]
+          },
+        },
+      )
+    },
+  )
+}
+
+function handleCancelInstall() {
+  const record = execTargetNode.value
+  if (!record || cancelling.value) return
+
+  showConfirm(
+    '确认取消安装',
+    `即将取消节点 ${record.ip} 的安装操作，终止正在编译的进程。确认？`,
+    '确认取消',
+    async () => {
+      cancelling.value = true
+      try {
+        execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
+        execProgress.percent = 60
+        execProgress.status = 'active'
+
+        const res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/cancel-install`)
+        const data = res.data
+
+        execLogs.value.push('')
+        execLogs.value.push('═══════════════════════════════════════════')
+        execLogs.value.push('取消安装结果:')
+
+        for (const step of data.steps) {
+          const icon = step.status === 'success' ? '✓' : step.status === 'skipped' ? '−' : '✗'
+          execLogs.value.push('')
+          execLogs.value.push(` ${icon} ${step.command}`)
+          if (step.stdout) {
+            for (const line of step.stdout.split('\n')) {
+              execLogs.value.push(`   ${line}`)
+            }
+          }
+          if (step.stderr) {
+            execLogs.value.push(`   stderr: ${step.stderr}`)
+          }
+        }
+
+        const allOk = data.steps.every((s: any) => s.status === 'success' || s.status === 'skipped')
+        execLogs.value.push('')
+        execLogs.value.push('═══════════════════════════════════════════')
+        execLogs.value.push(
+          data.status === 'skipped'
+            ? '⚠️ 没有运行中的安装进程'
+            : allOk
+              ? '✅ 安装已取消'
+              : '⚠️ 取消过程部分异常'
+        )
+
         execProgress.percent = 100
-        const prevCmd = execResult.value?.command || ''
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-      },
-      onError: (err: string) => {
-        execLogs.value = [...execLogs.value, `❌ ${err}`]
-      },
+        execProgress.status = 'success'
+
+        execResult.value = {
+          stdout: execLogs.value.join('\n'),
+          stderr: '',
+          command: data.steps.map((s: any) => `# ${s.command}\n${s.stdout || ''}`).join('\n\n'),
+          rc: 0,
+        }
+      } catch (error: any) {
+        const err = error as { response?: { data?: { detail?: string } }; message?: string }
+        const detail = err.response?.data?.detail || err.message || '取消失败'
+        execLogs.value.push(`❌ ${detail}`)
+        execProgress.percent = 100
+        execProgress.status = 'exception'
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
+      } finally {
+        cancelling.value = false
+        installStream.cancel()
+      }
     },
   )
 }
@@ -687,10 +816,9 @@ function showConfirm(title: string, content: string, confirmText: string, onConf
 
 async function executeConfirm() {
   if (!confirmState.onConfirm) return
-  confirmState.loading = true
+  confirmState.visible = false
   try {
     await confirmState.onConfirm()
-    confirmState.visible = false
   } finally {
     confirmState.loading = false
   }

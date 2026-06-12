@@ -255,8 +255,11 @@
             <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
               <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
             </a-form-item>
-            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { max: 255, message: '最多255个字符' }]">
-              <a-input v-model:value="nodeForm.edge_path" placeholder="请输入Edge路径，如 /edge/node1" />
+            <a-form-item label="Edge路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
+            </a-form-item>
+            <a-form-item label="安装路径" name="edge_install_path" :rules="[{ pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.edge_install_path" placeholder="留空则与Edge路径相同" />
             </a-form-item>
             <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
               <a-select v-model:value="nodeForm.status">

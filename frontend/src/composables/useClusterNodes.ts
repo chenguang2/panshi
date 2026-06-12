@@ -101,6 +101,7 @@ export function useClusterNodes(options: {
     service_port: 80,
     management_port: 9180,
     edge_path: '',
+    edge_install_path: '',
     status: 1
   })
 
@@ -211,6 +212,7 @@ export function useClusterNodes(options: {
       service_port: 80,
       management_port: 9180,
       edge_path: '',
+      edge_install_path: '',
       status: 1
     })
     nodeModalVisible.value = true
@@ -228,6 +230,7 @@ export function useClusterNodes(options: {
     nodeForm.service_port = target.service_port
     nodeForm.management_port = target.management_port
     nodeForm.edge_path = target.edge_path || ''
+    nodeForm.edge_install_path = target.edge_install_path || ''
     nodeForm.status = target.status
     nodeModalVisible.value = true
   }

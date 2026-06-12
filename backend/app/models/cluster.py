@@ -114,6 +114,7 @@ class Node(Base):
     service_port = Column(Integer, nullable=False, default=80)
     management_port = Column(Integer, nullable=False, default=9180)
     edge_path = Column(String(255), nullable=False)
+    edge_install_path = Column(String(255), nullable=True)
     status = Column(Integer, nullable=False, default=1)
     status_detail = Column(Text, nullable=True)  # JSON: last ansible-runner execution result
     created_at = Column(DateTime, default=datetime.utcnow)
