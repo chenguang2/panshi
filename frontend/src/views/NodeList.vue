@@ -620,6 +620,7 @@ function handleInstallOpenresty(record: any) {
   const prefix = record.edge_path ? record.edge_path.replace(/\/[^/]+$/, '') : '/data/openresty'
   const pendingCommand = buildInstallCommand(record, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath: prefix.replace(/\/[^/]+$/, '') + '/' })
   execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+  startElapsedTimer()
 
   installStream.start(
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
@@ -628,6 +629,7 @@ function handleInstallOpenresty(record: any) {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
       onProgress: (percent: number) => { execProgress.percent = percent },
       onComplete: (rc: number, status: string) => {
+        stopElapsedTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
         const prevCmd = execResult.value?.command || ''
@@ -649,6 +651,7 @@ function handleInstallEdge(record: any) {
   const prefix = record.edge_path || '/work/uap-edge'
   const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
   execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+  startElapsedTimer()
 
   installStream.start(
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
@@ -657,6 +660,7 @@ function handleInstallEdge(record: any) {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
       onProgress: (percent: number) => { execProgress.percent = percent },
       onComplete: (rc: number, status: string) => {
+        stopElapsedTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
         const prevCmd = execResult.value?.command || ''
