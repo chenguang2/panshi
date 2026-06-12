@@ -630,7 +630,8 @@ function handleInstallOpenresty(record: any) {
       onComplete: (rc: number, status: string) => {
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
       onError: (err: string) => {
         execLogs.value = [...execLogs.value, `❌ ${err}`]
@@ -658,7 +659,8 @@ function handleInstallEdge(record: any) {
       onComplete: (rc: number, status: string) => {
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
       onError: (err: string) => {
         execLogs.value = [...execLogs.value, `❌ ${err}`]
