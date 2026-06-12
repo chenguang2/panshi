@@ -363,7 +363,7 @@ function buildInstallCommand(node: any, tag: string, extravars: Record<string, s
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
   const sshUser = 'jboss'
   const sshCmd = `ssh -o StrictHostKeyChecking=no ${sshUser}@${node.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
-  return `${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
+  return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
 function handleInstallOpenresty() {

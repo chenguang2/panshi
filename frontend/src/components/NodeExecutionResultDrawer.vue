@@ -16,6 +16,7 @@
             <div class="progress-bar" :class="'progress-' + progress.status" :style="{ width: progress.percent + '%' }"></div>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px;">
+            <span>{{ progress.percent }}%</span>
             <span>
               <template v-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
               <template v-else-if="streamStatus === 'connecting'">连接中...</template>
@@ -298,6 +299,8 @@ async function copyAll() {
   max-height: 50vh;
   overflow-y: auto;
 }
+.tab-body::-webkit-scrollbar { width: 6px; }
+.tab-body::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 15%); border-radius: 3px; }
 
 /* ── Log box ── */
 .log-box {

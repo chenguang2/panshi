@@ -606,7 +606,7 @@ function buildInstallCommand(record: any, tag: string, extravars: Record<string,
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
   const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
   const sshCmd = `ssh -o StrictHostKeyChecking=no jboss@${record.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
-  return `${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
+  return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
 function handleInstallOpenresty(record: any) {
