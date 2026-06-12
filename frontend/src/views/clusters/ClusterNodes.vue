@@ -356,22 +356,28 @@ const { installing: installInstalling, error: installError, status: installStatu
 let _installTimer: ReturnType<typeof setInterval> | null = null
 function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer); _installTimer = null } }
 
+function buildInstallCommand(node: any, tag: string, extravars: Record<string, string>) {
+  const ev = JSON.stringify({ ...extravars, ips: node.ip })
+  return `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+}
+
 function handleInstallOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
+  const pendingCommand = buildInstallCommand(node, 'install_openresty', { prefix: node.edge_path || '/data/openresty', srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath: (node.edge_path || '/data/openresty').replace(/\/[^/]+$/, '') + '/' })
   execDrawerVisible.value = true
   execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = null
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
-    { prefix: '/data/openresty' },
+    { prefix: node.edge_path || '/data/openresty' },
     {
       onLine: (line: string) => {
         execLogs.value = [...execLogs.value, line]
@@ -383,7 +389,8 @@ function handleInstallOpenresty() {
         clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
       onError: () => { clearInstallTimer() },
     },
@@ -393,19 +400,20 @@ function handleInstallOpenresty() {
 function handleInstallEdge() {
   const node = props.cluster.selectedNode
   if (!node) return
+  const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: node.edge_path || '/work/openresty' })
   execDrawerVisible.value = true
   execDrawerTitle.value = `安装 Edge - ${node.ip}`
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = null
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => { execElapsed.value = (execElapsed.value ?? 0) + 1 }, 1000)
 
   installStream.start(
     `/clusters/${node.cluster_id}/nodes/${node.id}/install-edge`,
-    { prefix: '/work/openresty' },
+    { prefix: node.edge_path || '/work/openresty' },
     {
       onLine: (line: string) => {
         execLogs.value = [...execLogs.value, line]
@@ -417,7 +425,8 @@ function handleInstallEdge() {
         clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
       onError: () => { clearInstallTimer() },
     },

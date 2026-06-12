@@ -41,51 +41,66 @@
           <div class="ner-tab-content">
             <!-- Summary tab -->
             <div v-show="activeTab === 'summary'" class="tab-body">
-              <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
-                <div v-if="result.rc === 0" class="result-badge result-success">✅ 成功</div>
-                <div v-else class="result-badge result-fail">❌ 失败 (rc: {{ result.rc }})</div>
-              </div>
-              <div v-if="result && result.rc !== null && result.rc !== 0 && result.stderr" class="error-text">
-                {{ result.stderr }}
-              </div>
-
-              <!-- Nginx status card -->
-              <div v-if="nginxStatus.known" class="ner-card" :class="nginxStatus.running ? 'card-success' : 'card-fail'">
-                <div class="ner-card-title">
-                  <span :style="{ color: nginxStatus.running ? 'var(--success)' : 'var(--danger)' }">
-                    {{ nginxStatus.running ? '●' : '○' }}
-                  </span>
-                  Nginx 进程: {{ nginxStatus.running ? '运行中' : '未运行' }}
+              <!-- Install operation summary -->
+              <template v-if="title && title.startsWith('安装')">
+                <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
+                  <div v-if="result.rc === 0" class="result-badge result-success">✅ 安装成功</div>
+                  <div v-else class="result-badge result-fail">❌ 安装失败 (rc: {{ result.rc }})</div>
                 </div>
-                <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
-              </div>
-              <div v-else-if="result && result.rc !== null && result.rc !== 0" class="ner-card card-warn">
-                <div class="ner-card-title">
-                  <span style="color:var(--warning);">○</span>
-                  Nginx 进程: 未查询到（操作未成功执行）
+                <div v-else style="margin-bottom:12px;">
+                  <div class="result-badge" style="background:oklch(56% 0.16 210 / 10%);color:var(--accent);">⏳ 安装中...</div>
                 </div>
-              </div>
+                <div style="color:var(--muted);font-size:12px;">请在「stdout」标签页查看实时安装日志。</div>
+              </template>
 
-              <!-- Highlights -->
-              <div v-if="highlights.length > 0" style="margin-bottom:12px;">
-                <div class="section-label">关键信息</div>
-                <div class="log-box">
-                  <div v-for="(line, i) in highlights" :key="i" style="color:var(--success);">{{ line }}</div>
+              <!-- Nginx operation summary (start/stop/status) -->
+              <template v-else>
+                <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
+                  <div v-if="result.rc === 0" class="result-badge result-success">✅ 成功</div>
+                  <div v-else class="result-badge result-fail">❌ 失败 (rc: {{ result.rc }})</div>
                 </div>
-              </div>
+                <div v-if="result && result.rc !== null && result.rc !== 0 && result.stderr" class="error-text">
+                  {{ result.stderr }}
+                </div>
 
-              <!-- Statistics -->
-              <div v-if="statistics && Object.keys(statistics).length > 0" style="margin-bottom:12px;">
-                <div class="section-label">节点统计信息</div>
-                <div class="stat-grid">
-                  <div v-for="(val, key) in statistics" :key="key" class="stat-item">
-                    <span class="stat-label">{{ statLabels[key] || key }}</span>
-                    <span class="stat-value">{{ val }}</span>
+                <!-- Nginx status card -->
+                <div v-if="nginxStatus.known" class="ner-card" :class="nginxStatus.running ? 'card-success' : 'card-fail'">
+                  <div class="ner-card-title">
+                    <span :style="{ color: nginxStatus.running ? 'var(--success)' : 'var(--danger)' }">
+                      {{ nginxStatus.running ? '●' : '○' }}
+                    </span>
+                    Nginx 进程: {{ nginxStatus.running ? '运行中' : '未运行' }}
+                  </div>
+                  <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
+                </div>
+                <div v-else-if="result && result.rc !== null && result.rc !== 0" class="ner-card card-warn">
+                  <div class="ner-card-title">
+                    <span style="color:var(--warning);">○</span>
+                    Nginx 进程: 未查询到（操作未成功执行）
                   </div>
                 </div>
-              </div>
 
-              <div v-if="result" style="color:var(--muted);font-size:12px;">返回码 (rc): {{ result.rc }}</div>
+                <!-- Highlights -->
+                <div v-if="highlights.length > 0" style="margin-bottom:12px;">
+                  <div class="section-label">关键信息</div>
+                  <div class="log-box">
+                    <div v-for="(line, i) in highlights" :key="i" style="color:var(--success);">{{ line }}</div>
+                  </div>
+                </div>
+
+                <!-- Statistics -->
+                <div v-if="statistics && Object.keys(statistics).length > 0" style="margin-bottom:12px;">
+                  <div class="section-label">节点统计信息</div>
+                  <div class="stat-grid">
+                    <div v-for="(val, key) in statistics" :key="key" class="stat-item">
+                      <span class="stat-label">{{ statLabels[key] || key }}</span>
+                      <span class="stat-value">{{ val }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="result" style="color:var(--muted);font-size:12px;">返回码 (rc): {{ result.rc }}</div>
+              </template>
 
               <div v-if="logs.length > 0" style="margin-top:12px;">
                 <div class="section-label">执行日志</div>
