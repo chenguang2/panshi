@@ -296,11 +296,7 @@ async function copyAll() {
 /* ── Tab body ── */
 .tab-body {
   min-height: 100px;
-  max-height: 50vh;
-  overflow-y: scroll;
 }
-.tab-body::-webkit-scrollbar { width: 6px; }
-.tab-body::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 20%); border-radius: 3px; }
 
 /* ── Log box ── */
 .log-box {
@@ -316,7 +312,8 @@ async function copyAll() {
   overflow-y: auto;
 }
 .log-box::-webkit-scrollbar { width: 8px; }
-.log-box::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 35%); border-radius: 4px; }
+.log-box::-webkit-scrollbar-thumb { background: #666; border-radius: 4px; }
+.log-box::-webkit-scrollbar-track { background: #333; }
 .log-box.full-width {
   max-height: calc(60vh - 20px);
 }
