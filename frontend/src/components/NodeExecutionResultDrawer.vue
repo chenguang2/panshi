@@ -41,11 +41,11 @@
           <div class="ner-tab-content">
             <!-- Summary tab -->
             <div v-show="activeTab === 'summary'" class="tab-body">
-              <div v-if="result" style="margin-bottom:12px;">
+              <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
                 <div v-if="result.rc === 0" class="result-badge result-success">✅ 成功</div>
                 <div v-else class="result-badge result-fail">❌ 失败 (rc: {{ result.rc }})</div>
               </div>
-              <div v-if="result && result.rc !== 0 && result.stderr" class="error-text">
+              <div v-if="result && result.rc !== null && result.rc !== 0 && result.stderr" class="error-text">
                 {{ result.stderr }}
               </div>
 
@@ -59,7 +59,7 @@
                 </div>
                 <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
               </div>
-              <div v-else-if="result && result.rc !== 0" class="ner-card card-warn">
+              <div v-else-if="result && result.rc !== null && result.rc !== 0" class="ner-card card-warn">
                 <div class="ner-card-title">
                   <span style="color:var(--warning);">○</span>
                   Nginx 进程: 未查询到（操作未成功执行）
