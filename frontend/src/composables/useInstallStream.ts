@@ -9,6 +9,7 @@ export interface InstallStreamOptions {
   onProgress?: (percent: number) => void
   onComplete?: (rc: number, status: string) => void
   onError?: (error: string) => void
+  onCommand?: (command: string) => void
 }
 
 export function useInstallStream() {
@@ -84,6 +85,9 @@ export function useInstallStream() {
             if (data.percent !== undefined) {
               progress.percent = data.percent
               options.onProgress?.(data.percent)
+            }
+            if (data.command) {
+              options.onCommand?.(data.command)
             }
             if (data.rc !== undefined) {
               options.onComplete?.(data.rc, data.status || 'success')

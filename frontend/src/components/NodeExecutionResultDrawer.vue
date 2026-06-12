@@ -18,9 +18,9 @@
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px;">
             <span>{{ progress.percent }}%</span>
             <span>
-              <template v-if="streamStatus === 'connecting'">连接中...</template>
+              <template v-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
+              <template v-else-if="streamStatus === 'connecting'">连接中...</template>
               <template v-else-if="streamStatus === 'streaming'">接收中...</template>
-              <template v-else-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
             </span>
           </div>
         </div>

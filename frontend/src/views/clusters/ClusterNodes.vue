@@ -385,6 +385,9 @@ function handleInstallOpenresty() {
       onProgress: (percent: number) => {
         execProgress.percent = percent
       },
+      onCommand: (cmd: string) => {
+        execResult.value = { ...(execResult.value || { stdout: '', stderr: '', rc: null as any }), command: cmd }
+      },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -420,6 +423,9 @@ function handleInstallEdge() {
       },
       onProgress: (percent: number) => {
         execProgress.percent = percent
+      },
+      onCommand: (cmd: string) => {
+        execResult.value = { ...(execResult.value || { stdout: '', stderr: '', rc: null as any }), command: cmd }
       },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()
