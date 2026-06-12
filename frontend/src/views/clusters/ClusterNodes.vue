@@ -358,7 +358,12 @@ function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer)
 
 function buildInstallCommand(node: any, tag: string, extravars: Record<string, string>) {
   const ev = JSON.stringify({ ...extravars, ips: node.ip })
-  return `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  const prefix = extravars.prefix || node.edge_path || ''
+  const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
+  const sshUser = 'jboss'
+  const sshCmd = `ssh -o StrictHostKeyChecking=no ${sshUser}@${node.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
+  return `${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
 function handleInstallOpenresty() {
@@ -384,9 +389,6 @@ function handleInstallOpenresty() {
       },
       onProgress: (percent: number) => {
         execProgress.percent = percent
-      },
-      onCommand: (cmd: string) => {
-        execResult.value = { ...(execResult.value || { stdout: '', stderr: '', rc: null as any }), command: cmd }
       },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()
@@ -423,9 +425,6 @@ function handleInstallEdge() {
       },
       onProgress: (percent: number) => {
         execProgress.percent = percent
-      },
-      onCommand: (cmd: string) => {
-        execResult.value = { ...(execResult.value || { stdout: '', stderr: '', rc: null as any }), command: cmd }
       },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()

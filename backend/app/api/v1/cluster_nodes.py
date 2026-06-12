@@ -389,12 +389,6 @@ async def _install_openresty_stream(
     build_dir = f"{destpath}soft/install-edge/"
     build_cmd = f"source /etc/profile; cd {build_dir} && ./install-edge.sh {prefix}; wait"
     ssh_user = "jboss"
-    ssh_cmd = f"ssh -o StrictHostKeyChecking=no {ssh_user}@{node.ip} \"{build_cmd}\""
-    ansible_cmd = f"ansible-playbook -i inventory --tags install_openresty_copy -e '{{\"prefix\":\"{prefix}\",\"srcpath\":\"{srcpath}\",\"destpath\":\"{destpath}\",\"ips\":\"{node.ip}\"}}' edge.yml"
-
-    # Emit combined command for the command tab
-    yield f"data: {json.dumps({'command': f'# Ansible 命令:\n# {ansible_cmd}\n#\n# SSH 编译命令:\n# {ssh_cmd}'})}\n\n"
-
     yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
 
     try:
