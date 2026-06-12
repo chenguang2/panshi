@@ -514,6 +514,11 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   execStatistics.value = null
   execDrawerVisible.value = true
 
+  // Build pending command for display even on failure
+  const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', status: 'edge_statistic' }
+  const nginxCmd = nginxCmdMap[action] || action
+  const pendingCommand = `ansible-playbook -i inventory --tags ${nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'} -e "ips=${record.ip} prefix=${record.edge_path || ''} ports=${record.management_port || ''}"`
+
   const addLog = (text: string) => {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
@@ -535,8 +540,10 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     const data = res?.data || {}
     stopElapsedTimer()
     execProgress.percent = 100
+    const finalCommand = data.command || pendingCommand
 
     addLog(`返回码 (rc): ${data.rc}`)
+    if (finalCommand) { addLog(''); addLog(`--- 执行命令 ---`); addLog(finalCommand) }
     if (data.stdout) { addLog(''); addLog('--- 输出 (stdout) ---'); addLog(data.stdout) }
     if (data.stderr) { addLog(''); addLog('--- 错误输出 (stderr) ---'); addLog(data.stderr) }
     addLog('')
@@ -550,7 +557,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
 
     execHighlights.value = []
     execStatistics.value = data.statistic ? { ...data.statistic } : null
-    execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: data.command || '', rc: data.rc }
+    execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: finalCommand, rc: data.rc }
     loadNodes()
   } catch (error: any) {
     stopElapsedTimer()
@@ -560,7 +567,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     addLog(`❌ 操作失败: ${errMsg}`)
     execHighlights.value = []
     execStatistics.value = null
-    execResult.value = { stdout: '', stderr: errMsg, command: '', rc: -1 }
+    execResult.value = { stdout: '', stderr: errMsg, command: pendingCommand, rc: -1 }
   }
 }
 
