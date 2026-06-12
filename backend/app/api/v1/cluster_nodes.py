@@ -382,7 +382,10 @@ async def _install_openresty_stream(
     async for event in _run_ansible_stream(ansible_svc, ip=node.ip, tag="install_openresty_copy", extravars=extravars):
         if '"rc"' in event and '"line"' not in event:
             continue  # Skip the final {rc:...} event from ansible phase
-        line_count += 1
+        # Strip percent from event - frontend uses time-based progress
+        if '"percent"' in event:
+            import re
+            event = re.sub(r', "percent": \d+', '', event)
         yield event
 
     # Phase 2: SSH direct execution of install-edge.sh (real-time streaming)
@@ -405,9 +408,7 @@ async def _install_openresty_stream(
                 break
             raw = line_bytes.decode("utf-8", errors="replace").rstrip()
             if raw:
-                line_count += 1
-                pct = min(40 + int(line_count / 5), 99)
-                yield f"data: {json.dumps({'line': raw, 'percent': pct})}\n\n"
+                yield f"data: {json.dumps({'line': raw})}\n\n"
 
         rc = await proc.wait()
         status = "success" if rc == 0 else "failed"
