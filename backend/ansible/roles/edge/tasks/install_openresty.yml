@@ -5,7 +5,7 @@
     state: directory
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   when: inventory_hostname == item.0
-  tags: [install_openresty]
+  tags: [install_openresty_copy]
 
 - name: Copy tar file
   copy:
@@ -13,18 +13,11 @@
     dest: "{{ item.1 }}soft/openresty-edge-26061110.tar.gz"
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   when: inventory_hostname == item.0
-  tags: [install_openresty]
+  tags: [install_openresty_copy]
 
 - name: Decompress openresty files
   shell:
     cmd: "tar xf {{ item.1 }}soft/openresty-edge-26061110.tar.gz -C {{ item.1 }}soft/"
   loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list) | list }}"
   when: inventory_hostname == item.0
-  tags: [install_openresty]
-
-- name: Build edge server
-  shell:
-    cmd: "source /etc/profile; cd {{ item.1 }}soft/install-edge/ && ./install-edge.sh {{ item.2 }}"
-  loop: "{{ ips.split(',') | zip(destpath.split(',') | map('regex_replace', '^(.*)[^/]$', '\\1/') | list, prefix.split(',')) | list }}"
-  when: inventory_hostname == item.0
-  tags: [install_openresty]
+  tags: [install_openresty_copy]

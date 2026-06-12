@@ -1,7 +1,8 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, AsyncGenerator
 from enum import Enum
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
@@ -364,20 +365,71 @@ async def ansible_run(
     }
 
 
+async def _install_openresty_stream(
+    ansible_svc: Any,
+    node: Any,
+    prefix: str,
+    srcpath: str,
+    destpath: str,
+) -> AsyncGenerator[str, None]:
+    """Stream install_openresty: phase 1 = Ansible copy/decompress, phase 2 = SSH build."""
+    import json
+    extravars = {"prefix": prefix, "srcpath": srcpath, "destpath": destpath}
+    line_count = 0
+
+    # Phase 1: Ansible copy + decompress
+    yield f"data: {json.dumps({'line': '阶段 1/2: 传输文件并解压...', 'percent': 0})}\n\n"
+    async for event in _run_ansible_stream(ansible_svc, ip=node.ip, tag="install_openresty_copy", extravars=extravars):
+        line_count += 1
+        yield event
+
+    # Phase 2: SSH direct execution of install-edge.sh (real-time streaming)
+    build_dir = f"{destpath}soft/install-edge/"
+    build_cmd = f"source /etc/profile; cd {build_dir} && ./install-edge.sh {prefix}"
+    ssh_user = "jboss"
+
+    yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+            f"{ssh_user}@{node.ip}", build_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        while True:
+            line_bytes = await proc.stdout.readline()
+            if not line_bytes:
+                break
+            raw = line_bytes.decode("utf-8", errors="replace").rstrip()
+            if raw:
+                line_count += 1
+                pct = min(40 + int(line_count / 5), 99)
+                yield f"data: {json.dumps({'line': raw, 'percent': pct})}\n\n"
+
+        rc = await proc.wait()
+        status = "success" if rc == 0 else "failed"
+        yield f"data: {json.dumps({'line': f'✅ install-edge.sh 完成 (rc={rc})' if rc == 0 else f'❌ install-edge.sh 失败 (rc={rc})', 'percent': 100})}\n\n"
+        yield f"data: {json.dumps({'rc': rc, 'status': status, 'percent': 100})}\n\n"
+    except FileNotFoundError:
+        yield f"data: {json.dumps({'line': '❌ SSH 客户端未安装，无法执行远程编译', 'percent': 100})}\n\n"
+        yield f"data: {json.dumps({'rc': -1, 'status': 'failed', 'percent': 100})}\n\n"
+
+
 @router.post("/{cluster_id}/nodes/{node_id}/install-openresty")
 async def install_openresty_stream(
     cluster_id: int, node_id: int,
     body: InstallOpenrestyRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Install OpenResty on a target node via ansible, streaming real-time logs via SSE."""
+    """Install OpenResty on a target node via ansible + SSH, streaming real-time logs."""
     node = await _verify_node(cluster_id, node_id, db)
     from app.services.ansible_service import PRIVATE_DATA_DIR
     srcpath = body.srcpath or f"{PRIVATE_DATA_DIR}/soft"
     destpath = body.destpath or str(Path(body.prefix).parent) + "/"
-    extravars = {"prefix": body.prefix, "srcpath": srcpath, "destpath": destpath}
     return StreamingResponse(
-        _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_openresty", extravars=extravars),
+        _install_openresty_stream(_ansible_service, node, body.prefix, srcpath, destpath),
         media_type="text/event-stream",
     )
 
