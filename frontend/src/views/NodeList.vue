@@ -600,16 +600,26 @@ function handleStatus(record: any) {
 // ── Install OpenResty / Edge (streaming) ──────────────────────────
 const installStream = useInstallStream()
 
+function buildInstallCommand(record: any, tag: string, extravars: Record<string, string>) {
+  const ev = JSON.stringify({ ...extravars, ips: record.ip })
+  const prefix = extravars.prefix || record.edge_path || ''
+  const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
+  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  const sshCmd = `ssh -o StrictHostKeyChecking=no jboss@${record.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
+  return `${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
+}
+
 function handleInstallOpenresty(record: any) {
   execDrawerTitle.value = `安装 OpenResty - ${record.ip}`
   execDrawerVisible.value = true
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = null
 
-  // Derive prefix from edge_path (strip /uap-edge or similar suffix to get base path)
+  // Derive prefix from edge_path
   const prefix = record.edge_path ? record.edge_path.replace(/\/[^/]+$/, '') : '/data/openresty'
+  const pendingCommand = buildInstallCommand(record, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath: prefix.replace(/\/[^/]+$/, '') + '/' })
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
 
   installStream.start(
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
@@ -635,11 +645,13 @@ function handleInstallEdge(record: any) {
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = null
+  const prefix = record.edge_path || '/work/uap-edge'
+  const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
 
   installStream.start(
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
-    { prefix: record.edge_path || '/work/uap-edge' },
+    { prefix },
     {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
       onProgress: (percent: number) => { execProgress.percent = percent },
