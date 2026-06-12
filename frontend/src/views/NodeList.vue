@@ -523,6 +523,8 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
 
+  // Set command immediately so command tab shows it from the start
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: -1 }
   addLog(`开始对节点 ${record.ip} 执行 ${actionLabel} 操作...`)
   execProgress.percent = 10
   startElapsedTimer()
