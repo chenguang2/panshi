@@ -628,7 +628,7 @@ function handleInstallOpenresty(record: any) {
     { prefix },
     {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-      onProgress: (percent: number) => { execProgress.percent = percent },
+      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
       onComplete: (rc: number, status: string) => {
         stopElapsedTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -659,7 +659,7 @@ function handleInstallEdge(record: any) {
     { prefix },
     {
       onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-      onProgress: (percent: number) => { execProgress.percent = percent },
+      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
       onComplete: (rc: number, status: string) => {
         stopElapsedTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'

@@ -311,6 +311,9 @@ async function copyAll() {
   max-height: 400px;
   overflow-y: auto;
 }
+.log-box::-webkit-scrollbar { width: 8px; }
+.log-box::-webkit-scrollbar-thumb { background: oklch(0% 0 0 / 30%); border-radius: 4px; }
+.log-box::-webkit-scrollbar-track { background: oklch(0% 0 0 / 10%); }
 .log-box.full-width {
   max-height: calc(60vh - 20px);
 }

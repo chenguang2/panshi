@@ -391,7 +391,8 @@ function handleInstallOpenresty() {
         execLogs.value = [...execLogs.value, line]
       },
       onProgress: (percent: number) => {
-        execProgress.percent = percent
+        // Only allow progress to increase (backend line-count may fluctuate)
+        if (percent > execProgress.percent) execProgress.percent = percent
       },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()
@@ -430,7 +431,7 @@ function handleInstallEdge() {
         execLogs.value = [...execLogs.value, line]
       },
       onProgress: (percent: number) => {
-        execProgress.percent = percent
+        if (percent > execProgress.percent) execProgress.percent = percent
       },
       onComplete: (rc: number, status: string) => {
         clearInstallTimer()
