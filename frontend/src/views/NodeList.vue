@@ -517,7 +517,9 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   // Build pending command for display even on failure
   const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', status: 'edge_statistic' }
   const nginxCmd = nginxCmdMap[action] || action
-  const pendingCommand = `ansible-playbook -i inventory --tags ${nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'} -e "ips=${record.ip} prefix=${record.edge_path || ''} ports=${record.management_port || ''}"`
+  const tag = nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'
+  const ev = JSON.stringify({ prefix: record.edge_path || '', ports: String(record.management_port), ips: record.ip })
+  const pendingCommand = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
 
   const addLog = (text: string) => {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
