@@ -32,7 +32,6 @@
           <div class="sidebar-user-name">{{ authStore.user?.username }}</div>
           <div class="sidebar-user-role">{{ roleLabel }}</div>
         </div>
-        <a v-show="!collapsed" class="sidebar-logout" @click="handleLogout">退出</a>
       </div>
     </div>
   </aside>
@@ -40,14 +39,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useFeaturesStore } from '@/stores/features'
 import logoIcon from '@/assets/icon.png'
 
-const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
@@ -148,11 +145,6 @@ function isActive(item: NavItem): boolean {
   return false
 }
 
-const handleLogout = async () => {
-  await authStore.logout()
-  message.success('已退出登录')
-  router.push('/login')
-}
 </script>
 
 <style scoped>
@@ -318,17 +310,4 @@ const handleLogout = async () => {
   line-height: 1.3;
 }
 
-.sidebar-logout {
-  font-size: 11px;
-  color: var(--sidebar-fg);
-  opacity: 0.5;
-  cursor: pointer;
-  text-decoration: none;
-  flex-shrink: 0;
-}
-
-.sidebar-logout:hover {
-  opacity: 1;
-  color: var(--danger);
-}
 </style>
