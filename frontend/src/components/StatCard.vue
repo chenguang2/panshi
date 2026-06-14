@@ -1,5 +1,5 @@
 <template>
-  <div class="stat-card" :class="accent ? 'accent-' + accent : ''">
+  <component :is="to ? 'router-link' : 'div'" :to="to" class="stat-card" :class="accent ? 'accent-' + accent : ''">
     <div class="stat-card-inner">
       <div class="stat-card-icon-row">
         <slot name="icon" />
@@ -8,15 +8,18 @@
       <div class="stat-card-label">{{ label }}</div>
       <div v-if="subtitle" class="stat-card-sub">{{ subtitle }}</div>
     </div>
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router'
+
 defineProps<{
   value: string | number
   label: string
   subtitle?: string
   accent?: string
+  to?: RouteLocationRaw
 }>()
 </script>
 

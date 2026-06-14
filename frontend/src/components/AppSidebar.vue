@@ -102,15 +102,15 @@ const navSections = computed<NavSection[]>(() => {
         { label: '上游管理', route: '/upstreams', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg>' },
         { label: '路由管理', route: '/routes', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg>' },
         { label: '插件组', route: '/plugin-configs', permission: 'plugin_groups', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h10v10H6V3z"/><path d="M3 6h3v10H3V6z"/><path d="M6 6l3 3M6 9l3-3M9 6l3 3M9 9l3-3"/></svg>' },
-        { label: '全局规则', route: '/global-rules', permission: 'global_rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>' },
         { label: '插件元数据', route: '/plugin-metadata', permission: 'plugin_metadata', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>' },
+        { label: '全局规则', route: '/global-rules', permission: 'global_rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>' },
         { label: '静态资源', route: '/static-resources', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h4l4 4v9a1 1 0 01-1 1H6a1 1 0 01-1-1V3z"/><path d="M10 2v4h4"/></svg>' },
       ].filter(item => !item.permission || authStore.hasPermission(item.permission))
     },
     {
       title: '综合',
       items: [
-        { label: '集中管理', route: '/central-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>' },
+        { label: '统一管理', route: '/central-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>' },
       ]
     },
     {
@@ -122,7 +122,7 @@ const navSections = computed<NavSection[]>(() => {
       ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
     {
-      title: 'Edge功能',
+      title: '运维管理',
       visible: edgeItems.length > 0,
       items: edgeItems,
     },

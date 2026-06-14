@@ -3,25 +3,31 @@
     <PageHeader title="概览" description="网关运行状态概览" />
 
     <div class="stats-grid">
-      <StatCard :value="String(stats.clusters)" label="集群" subtitle="多集群管理" accent="cluster">
+      <StatCard :value="String(stats.clusters)" label="集群" subtitle="多集群管理" accent="cluster" to="/clusters">
         <template #icon><span class="stat-icon cluster"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="5" y="8" width="8" height="3" rx="1"/><rect x="6" y="13" width="6" height="3" rx="1"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.routes)" label="路由" subtitle="API 路由规则" accent="route">
-        <template #icon><span class="stat-icon route"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg></span></template>
+      <StatCard :value="String(stats.nodes)" label="节点" subtitle="Edge 网关节点" accent="node" to="/nodes">
+        <template #icon><span class="stat-icon node"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.upstreams)" label="上游" subtitle="后端服务" accent="upstream">
+      <StatCard :value="String(stats.upstreams)" label="上游" subtitle="后端服务" accent="upstream" to="/upstreams">
         <template #icon><span class="stat-icon upstream"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.plugin_configs)" label="插件组" subtitle="插件配置" accent="plugin">
+      <StatCard :value="String(stats.routes)" label="路由" subtitle="API 路由规则" accent="route" to="/routes">
+        <template #icon><span class="stat-icon route"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg></span></template>
+      </StatCard>
+      <StatCard :value="String(stats.plugin_configs)" label="插件组" subtitle="插件配置" accent="plugin" to="/plugin-configs">
         <template #icon><span class="stat-icon plugin"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h10v10H6V3z"/><path d="M3 6h3v10H3V6z"/><path d="M6 6l3 3M6 9l3-3M9 6l3 3M9 9l3-3"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.global_rules)" label="全局规则" subtitle="全局插件规则" accent="global">
+      <StatCard :value="String(stats.plugin_metadata)" label="插件元数据" subtitle="插件模板配置" accent="plugin" to="/plugin-metadata">
+        <template #icon><span class="stat-icon meta"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg></span></template>
+      </StatCard>
+      <StatCard :value="String(stats.global_rules)" label="全局规则" subtitle="全局插件规则" accent="global" to="/global-rules">
         <template #icon><span class="stat-icon global"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.static_resources)" label="静态资源" subtitle="ZIP 资源文件" accent="node">
+      <StatCard :value="String(stats.static_resources)" label="静态资源" subtitle="ZIP 资源文件" accent="node" to="/static-resources">
         <template #icon><span class="stat-icon resource"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h4l4 4v9a1 1 0 01-1 1H6a1 1 0 01-1-1V3z"/><path d="M10 2v4h4"/></svg></span></template>
       </StatCard>
-      <StatCard :value="String(stats.users)" label="用户" subtitle="系统用户" accent="user">
+      <StatCard :value="String(stats.users)" label="用户" subtitle="系统用户" accent="user" to="/users">
         <template #icon><span class="stat-icon user"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg></span></template>
       </StatCard>
     </div>
@@ -76,12 +82,14 @@ import BadgeStatus from '@/components/BadgeStatus.vue'
 
 const stats = ref({
   clusters: 0,
+  nodes: 0,
   upstreams: 0,
   routes: 0,
   users: 0,
   plugin_configs: 0,
   global_rules: 0,
-  static_resources: 0
+  static_resources: 0,
+  plugin_metadata: 0
 })
 
 const recentRoutes = ref<any[]>([])

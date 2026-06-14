@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 
 from app.core.database import get_db
-from app.models.cluster import Route, Upstream, Cluster, PluginConfig, GlobalRule
+from app.models.cluster import Route, Upstream, Cluster, PluginConfig, GlobalRule, PluginMetadata, Node
 from app.models.static_resource import StaticResource
 from app.models.user import User
 from pydantic import BaseModel
@@ -29,18 +29,23 @@ class RecentRoutesResponse(BaseModel):
 
 class DashboardStatsResponse(BaseModel):
     clusters: int
+    nodes: int = 0
     upstreams: int
     routes: int
     users: int
     plugin_configs: int = 0
     global_rules: int = 0
     static_resources: int = 0
+    plugin_metadata: int = 0
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     cluster_count_result = await db.execute(select(func.count()).select_from(Cluster))
     cluster_count = cluster_count_result.scalar() or 0
+
+    node_count_result = await db.execute(select(func.count()).select_from(Node))
+    node_count = node_count_result.scalar() or 0
 
     upstream_count_result = await db.execute(select(func.count()).select_from(Upstream))
     upstream_count = upstream_count_result.scalar() or 0
@@ -58,14 +63,19 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     static_resource_count_result = await db.execute(select(func.count()).select_from(StaticResource))
     static_resource_count = static_resource_count_result.scalar() or 0
 
+    plugin_metadata_count_result = await db.execute(select(func.count()).select_from(PluginMetadata))
+    plugin_metadata_count = plugin_metadata_count_result.scalar() or 0
+
     return DashboardStatsResponse(
         clusters=cluster_count,
+        nodes=node_count,
         upstreams=upstream_count,
         routes=route_count,
         users=user_count,
         plugin_configs=plugin_config_count,
         global_rules=global_rule_count,
-        static_resources=static_resource_count
+        static_resources=static_resource_count,
+        plugin_metadata=plugin_metadata_count
     )
 
 

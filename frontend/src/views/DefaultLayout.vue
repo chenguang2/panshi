@@ -15,7 +15,7 @@
             @click="themeStore.toggleSidebar()"
           />
           <div class="header-breadcrumb">
-            <span class="crumb-item">磐石</span>
+            <span class="crumb-item">{{ currentSection }}</span>
             <span class="crumb-sep">/</span>
             <span class="crumb-item crumb-current">{{ currentRouteName }}</span>
           </div>
@@ -58,19 +58,48 @@ const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
-const routeNameMap: Record<string, string> = {
-  Dashboard: '仪表盘',
-  CentralManagement: '统一集中管理',
-  ClusterList: '集群管理',
-  NodeList: '节点管理',
-  Users: '用户管理',
-  EdgeClient: '边缘节点',
-  EdgeImport: 'Edge 数据导入',
-  Tools: '工具箱',
+const sectionMap: Record<string, string> = {
+  Dashboard: '核心功能',
+  ClusterList: '核心功能',
+  NodeList: '核心功能',
+  UpstreamList: '核心功能',
+  RouteList: '核心功能',
+  PluginConfigList: '核心功能',
+  GlobalRuleList: '核心功能',
+  PluginMetadataList: '核心功能',
+  StaticResourceList: '核心功能',
+  CentralManagement: '综合',
+  PluginSwitches: '系统管理',
+  Users: '系统管理',
+  EdgeClient: '运维管理',
+  EdgeImport: '运维管理',
+  Tools: '运维管理',
 }
 
+const pageNameMap: Record<string, string> = {
+  Dashboard: '概览',
+  CentralManagement: '统一管理',
+  ClusterList: '集群管理',
+  NodeList: '节点管理',
+  UpstreamList: '上游管理',
+  RouteList: '路由管理',
+  PluginConfigList: '插件组',
+  GlobalRuleList: '全局规则',
+  PluginMetadataList: '插件元数据',
+  StaticResourceList: '静态资源',
+  Users: '用户管理',
+  EdgeClient: 'Edge直连',
+  EdgeImport: '数据导入',
+  Tools: '工具箱',
+  PluginSwitches: '插件开关',
+}
+
+const currentSection = computed(() => {
+  return sectionMap[route.name as string] || ''
+})
+
 const currentRouteName = computed(() => {
-  return routeNameMap[route.name as string] || (route.name as string) || ''
+  return pageNameMap[route.name as string] || (route.name as string) || ''
 })
 
 const handleLogout = async () => {

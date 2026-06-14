@@ -30,7 +30,7 @@
         <div class="cl-group-header" @click="toggleGroup(group.name)">
           <span class="cl-group-arrow">{{ expandedGroups[group.name] ? '▾' : '▸' }}</span>
           <span class="cl-group-name">{{ group.name || '未分类' }}</span>
-          <span class="cl-group-count">({{ group.clusters.length }})</span>
+          <span class="cl-group-count">(共{{ group.clusters.length }}个)</span>
         </div>
         <div v-show="expandedGroups[group.name]" class="cl-grid">
           <div v-for="c in group.clusters" :key="c.id" class="cl-card">
@@ -67,7 +67,6 @@
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" style="color:var(--danger);" @click="deleteCluster(c)">删除</button>
               <span style="flex:1"></span>
-              <span class="cl-card-id">#{{ c.id }}</span>
             </div>
 
           </div>

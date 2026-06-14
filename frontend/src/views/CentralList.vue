@@ -1,6 +1,6 @@
 <template>
   <div class="cl-page">
-    <PageHeader title="统一集中管理" description="集中管理所有的网关集群，实现统一监控与运维">
+    <PageHeader title="统一管理" description="统一管理所有的网关集群，实现统一监控与运维">
       <template #actions>
         <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
       </template>
@@ -43,7 +43,7 @@
             <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
             <CaretRightOutlined v-else class="group-toggle" />
             <span class="group-name">{{ group.name }}</span>
-            <span class="group-count">({{ group.clusters.length }})</span>
+            <span class="group-count">(共{{ group.clusters.length }}个)</span>
             <div class="cluster-names">
               <span v-for="c in group.clusters" :key="c.id"
                     class="cluster-name-item" :title="c.display_name || c.name"
@@ -111,7 +111,7 @@
             <CaretDownOutlined v-if="expandedGroups['__ungrouped__'] !== false" class="group-toggle" />
             <CaretRightOutlined v-else class="group-toggle" />
             <span class="group-name ungrouped-label">未分组</span>
-            <span class="group-count">({{ group.clusters.length }})</span>
+            <span class="group-count">(共{{ group.clusters.length }}个)</span>
             <div class="cluster-names">
               <span v-for="c in group.clusters" :key="c.id"
                     class="cluster-name-item" :title="c.display_name || c.name"
@@ -211,9 +211,9 @@
             <span class="dt" :class="{ active: cluster.activeTab === 'nodes' }" @click="cluster.activeTab = 'nodes'; handleTabClick(cluster, 'nodes')">集群节点 <span class="db">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span>
             <span class="dt" :class="{ active: cluster.activeTab === 'upstreams' }" @click="cluster.activeTab = 'upstreams'; handleTabClick(cluster, 'upstreams')">上游 <span class="db">{{ cluster.upstream_count }}</span></span>
             <span class="dt" :class="{ active: cluster.activeTab === 'routes' }" @click="cluster.activeTab = 'routes'; handleTabClick(cluster, 'routes')">路由 <span class="db">{{ cluster.route_count }}</span></span>
-            <span v-if="authStore.hasPermission('plugin_metadata')" class="dt" :class="{ active: cluster.activeTab === 'globalPlugins' }" @click="cluster.activeTab = 'globalPlugins'; handleTabClick(cluster, 'globalPlugins')">插件元数据</span>
-            <span v-if="authStore.hasPermission('plugin_groups')" class="dt" :class="{ active: cluster.activeTab === 'pluginConfigs' }" @click="cluster.activeTab = 'pluginConfigs'; handleTabClick(cluster, 'pluginConfigs')">插件组 <span class="db">{{ cluster.plugin_config_count }}</span></span>
-            <span v-if="authStore.hasPermission('global_rules')" class="dt" :class="{ active: cluster.activeTab === 'globalRules' }" @click="cluster.activeTab = 'globalRules'; handleTabClick(cluster, 'globalRules')">全局规则 <span class="db">{{ cluster.global_rule_count }}</span></span>
+          <span v-if="authStore.hasPermission('plugin_groups')" class="dt" :class="{ active: cluster.activeTab === 'pluginConfigs' }" @click="cluster.activeTab = 'pluginConfigs'; handleTabClick(cluster, 'pluginConfigs')">插件组 <span class="db">{{ cluster.plugin_config_count }}</span></span>
+          <span v-if="authStore.hasPermission('plugin_metadata')" class="dt" :class="{ active: cluster.activeTab === 'globalPlugins' }" @click="cluster.activeTab = 'globalPlugins'; handleTabClick(cluster, 'globalPlugins')">插件元数据</span>
+          <span v-if="authStore.hasPermission('global_rules')" class="dt" :class="{ active: cluster.activeTab === 'globalRules' }" @click="cluster.activeTab = 'globalRules'; handleTabClick(cluster, 'globalRules')">全局规则 <span class="db">{{ cluster.global_rule_count }}</span></span>
             <span class="dt" :class="{ active: cluster.activeTab === 'staticResources' }" @click="cluster.activeTab = 'staticResources'; handleTabClick(cluster, 'staticResources')">静态资源 <span class="db">{{ cluster.static_resource_count }}</span></span>
           </div>
           <div class="dbody">

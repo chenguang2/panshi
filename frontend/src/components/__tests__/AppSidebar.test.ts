@@ -59,11 +59,11 @@ describe('AppSidebar.vue', () => {
     expect(wrapper.text()).toContain('系统管理')
   })
 
-  it('renders Edge功能 section', async () => {
+  it('renders 运维管理 section', async () => {
     const wrapper = mount(AppSidebar, {
       global: { plugins: [router] }
     })
     await router.isReady()
-    expect(wrapper.text()).toContain('Edge功能')
+    expect(wrapper.text()).toContain('运维管理')
   })
 })
