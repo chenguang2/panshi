@@ -93,7 +93,7 @@
     </a-table>
 
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }" @click.self="upstreamModalVisible = false">
+    <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:750px;">
         <div class="modal-header">
           <h2>{{ editingUpstream ? '编辑上游' : '添加上游' }}</h2>

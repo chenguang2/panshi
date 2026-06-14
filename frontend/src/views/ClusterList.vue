@@ -76,7 +76,7 @@
     </div>
 
     <!-- Detail Modal -->
-    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }" @click.self="detailVisible = false">
+    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
           <h2>集群详情 — {{ detailCluster?.display_name || '' }}</h2>
@@ -124,7 +124,7 @@
     </div>
 
     <!-- Test Connection Modal -->
-    <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }" @click.self="resetTest">
+    <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
           <h2>测试连接</h2>

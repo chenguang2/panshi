@@ -98,7 +98,7 @@
     </div>
 
     <!-- Custom Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }" @click.self="confirmVisible = false">
+    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>确认离开</h2>
@@ -115,7 +115,7 @@
     </div>
 
     <!-- Custom Info Modal (success/warning) -->
-    <div class="modal-overlay" :style="{ display: infoModal.visible ? 'flex' : 'none' }" @click.self="infoModal.visible = false">
+    <div class="modal-overlay" :style="{ display: infoModal.visible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 480px;">
         <div class="modal-header">
           <h2>{{ infoModal.title }}</h2>

@@ -54,7 +54,7 @@
 
     <!-- Plugin Config Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }" @click.self="pluginConfigModalVisible = false">
+    <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
           <h2>{{ pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组' }}</h2>

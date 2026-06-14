@@ -223,7 +223,7 @@
     </div>
 
     <!-- Cluster Picker Modal -->
-    <div v-if="clusterPickerVisible" class="modal-overlay" @click.self="clusterPickerVisible = false">
+    <div v-if="clusterPickerVisible" class="modal-overlay">
       <div class="modal picker-modal">
         <div class="modal-header">
           <h2>选择集群</h2>
@@ -257,7 +257,7 @@
     </div>
 
     <!-- Delete Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: deleteConfirm.visible ? 'flex' : 'none' }" @click.self="deleteConfirm.visible = false">
+    <div class="modal-overlay" :style="{ display: deleteConfirm.visible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>删除用户</h2>

@@ -238,7 +238,7 @@
     <ClusterFormModal :visible="modalVisible" :editing-cluster="editingCluster" :group-options="groupOptions" @close="modalVisible = false; editingCluster = null" @saved="modalVisible = false; editingCluster = null; loadClusters()" />
 
     <!-- Node Form Modal -->
-    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }" @click.self="nodeModalVisible = false">
+    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
       <div class="modal">
         <div class="modal-header">
           <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
@@ -291,7 +291,7 @@
     />
 
     <!-- Cluster Detail Modal -->
-    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }" @click.self="detailVisible = false">
+    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }">
       <div class="modal">
         <div class="modal-header">
           <h2>集群详情</h2>
@@ -332,7 +332,7 @@
     </div>
 
     <!-- Test Connection Modal -->
-    <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }" @click.self="resetTest">
+    <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }">
       <div class="modal">
         <div class="modal-header">
           <h2>测试连接</h2>

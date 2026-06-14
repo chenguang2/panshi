@@ -46,7 +46,7 @@
 
     <!-- Static Resource Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }" @click.self="staticResourceModalVisible = false">
+    <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:600px;">
         <div class="modal-header">
           <h2>{{ staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>

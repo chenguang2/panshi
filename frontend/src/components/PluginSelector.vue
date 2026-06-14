@@ -113,7 +113,7 @@
     />
 
     <!-- Custom Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }" @click.self="confirmVisible = false">
+    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>确认移除</h2>

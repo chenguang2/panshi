@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }" @click.self="$emit('update:visible', false)">
+  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal" style="max-width:600px;">
       <div class="modal-header">
         <h2>查看全局规则 - {{ config?.name }}</h2>

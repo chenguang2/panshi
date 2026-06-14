@@ -228,7 +228,7 @@
 
     <!-- Custom Confirm Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }" @click.self="confirmState.visible = false">
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
       <div class="modal" style="max-width: 420px;">
         <div class="modal-header">
           <h2>{{ confirmState.title }}</h2>

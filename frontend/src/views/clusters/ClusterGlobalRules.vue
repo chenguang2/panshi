@@ -46,7 +46,7 @@
 
     <!-- Global Rule Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }" @click.self="globalRuleModalVisible = false">
+    <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
           <h2>{{ globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则' }}</h2>

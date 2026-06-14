@@ -103,7 +103,7 @@
 
     <!-- Route add/edit modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }" @click.self="routeModalVisible = false">
+    <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:800px;">
         <div class="modal-header">
           <h2>{{ copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由') }}</h2>
