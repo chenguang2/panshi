@@ -87,9 +87,9 @@
                     <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
                     <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
                     <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
-                    <a-menu-divider />
-                    <a-menu-item @click="handleInstallOpenresty(record)">安装 OpenResty</a-menu-item>
-                    <a-menu-item @click="handleInstallEdge(record)">安装 Edge</a-menu-item>
+                    <a-menu-divider v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" />
+                    <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty(record)">安装 OpenResty</a-menu-item>
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge(record)">安装 Edge</a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -259,10 +259,12 @@ import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+const featuresStore = useFeaturesStore()
 
 // ── State ──
 const loading = ref(false)
@@ -677,7 +679,7 @@ function handleInstallOpenresty(record: any) {
         {
           onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
           onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
-          onComplete: (rc: number, status: string) => {
+          onComplete: (rc: number, _status: string) => {
             stopElapsedTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100
@@ -716,7 +718,7 @@ function handleInstallEdge(record: any) {
         {
           onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
           onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
-          onComplete: (rc: number, status: string) => {
+          onComplete: (rc: number, _status: string) => {
             stopElapsedTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100

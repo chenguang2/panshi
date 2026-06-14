@@ -282,6 +282,7 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 import PageHeader from '@/components/PageHeader.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 
@@ -410,12 +411,23 @@ const deleteConfirm = reactive({
   username: '',
 })
 
-const allPermissions = [
-  { key: 'plugin_groups', label: '插件组管理' },
-  { key: 'global_rules', label: '全局规则管理' },
-  { key: 'plugin_metadata', label: '插件元数据' },
-  { key: 'edge_nodes', label: 'Edge直连' },
-]
+const permissionFeatureMap: Record<string, string> = {
+  edge_nodes: 'edge_client',
+}
+
+const allPermissions = computed(() => {
+  const base: { key: string; label: string }[] = [
+    { key: 'plugin_groups', label: '插件组管理' },
+    { key: 'global_rules', label: '全局规则管理' },
+    { key: 'plugin_metadata', label: '插件元数据' },
+    { key: 'edge_nodes', label: 'Edge直连' },
+  ]
+  const featuresStore = useFeaturesStore()
+  return base.filter((p) => {
+    const feature = permissionFeatureMap[p.key]
+    return !feature || featuresStore.has(feature)
+  })
+})
 
 const selectedPermKeys = ref<string[]>([])
 

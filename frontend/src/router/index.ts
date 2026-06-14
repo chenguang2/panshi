@@ -1,114 +1,79 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import type { Router, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 
-const routes: RouteRecordRaw[] = [
+// ── Feature-gated route map ───────────────────────────────────────────
+// Keyed by feature name from features.yaml.  Only registered when the
+// corresponding feature is enabled.
+export const featureRouteMap: Record<string, RouteRecordRaw> = {
+  edge_client: {
+    path: 'edge-client',
+    name: 'EdgeClient',
+    component: () => import('@/views/EdgeClient.vue'),
+    meta: { permission: 'edge_nodes' },
+  },
+  edge_import: {
+    path: 'edge-import',
+    name: 'EdgeImport',
+    component: () => import('@/views/EdgeImport.vue'),
+  },
+  tools: {
+    path: 'tools',
+    name: 'Tools',
+    component: () => import('@/views/Tools.vue'),
+  },
+  plugin_switches: {
+    path: 'plugin-switches',
+    name: 'PluginSwitches',
+    component: () => import('@/views/PluginSwitches.vue'),
+    meta: { permission: 'plugin_management' },
+  },
+}
+
+// ── Static routes (always registered) ─────────────────────────────────
+
+const coreRoutes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),
-    meta: { public: true }
+    meta: { public: true },
   },
   {
     path: '/',
+    name: 'Layout',
     component: () => import('@/views/DefaultLayout.vue'),
     children: [
-      {
-        path: '',
-        name: 'Dashboard',
-        component: () => import('@/views/Dashboard.vue')
-      },
-      {
-        path: 'users',
-        name: 'Users',
-        component: () => import('@/views/UserList.vue')
-      },
-      {
-        path: 'central-management',
-        name: 'CentralManagement',
-        component: () => import('@/views/CentralList.vue'),
-      },
-      {
-        path: 'clusters',
-        name: 'ClusterList',
-        component: () => import('@/views/ClusterList.vue'),
-      },
-      {
-        path: 'edge-client',
-        name: 'EdgeClient',
-        component: () => import('@/views/EdgeClient.vue'),
-        meta: { permission: 'edge_nodes' }
-      },
-      {
-        path: 'edge-import',
-        name: 'EdgeImport',
-        component: () => import('@/views/EdgeImport.vue'),
-      },
-      {
-        path: 'upstreams',
-        name: 'UpstreamList',
-        component: () => import('@/views/UpstreamList.vue'),
-      },
-      {
-        path: 'routes',
-        name: 'RouteList',
-        component: () => import('@/views/RouteList.vue'),
-      },
-      {
-        path: 'plugin-configs',
-        name: 'PluginConfigList',
-        component: () => import('@/views/PluginConfigList.vue'),
-      },
-      {
-        path: 'global-rules',
-        name: 'GlobalRuleList',
-        component: () => import('@/views/GlobalRuleList.vue'),
-      },
-      {
-        path: 'static-resources',
-        name: 'StaticResourceList',
-        component: () => import('@/views/StaticResourceList.vue'),
-      },
-      {
-        path: 'tools',
-        name: 'Tools',
-        component: () => import('@/views/Tools.vue')
-      },
-      {
-        path: 'plugin-switches',
-        name: 'PluginSwitches',
-        component: () => import('@/views/PluginSwitches.vue'),
-        meta: { permission: 'plugin_management' }
-      },
-      {
-        path: 'plugin-metadata',
-        name: 'PluginMetadataList',
-        component: () => import('@/views/PluginMetadataList.vue'),
-      },
-      {
-        path: 'nodes',
-        name: 'NodeList',
-        component: () => import('@/views/NodeList.vue'),
-      },
-    ]
-  }
+      { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
+      { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue') },
+      { path: 'central-management', name: 'CentralManagement', component: () => import('@/views/CentralList.vue') },
+      { path: 'clusters', name: 'ClusterList', component: () => import('@/views/ClusterList.vue') },
+      { path: 'upstreams', name: 'UpstreamList', component: () => import('@/views/UpstreamList.vue') },
+      { path: 'routes', name: 'RouteList', component: () => import('@/views/RouteList.vue') },
+      { path: 'plugin-configs', name: 'PluginConfigList', component: () => import('@/views/PluginConfigList.vue') },
+      { path: 'global-rules', name: 'GlobalRuleList', component: () => import('@/views/GlobalRuleList.vue') },
+      { path: 'static-resources', name: 'StaticResourceList', component: () => import('@/views/StaticResourceList.vue') },
+      { path: 'plugin-metadata', name: 'PluginMetadataList', component: () => import('@/views/PluginMetadataList.vue') },
+      { path: 'nodes', name: 'NodeList', component: () => import('@/views/NodeList.vue') },
+    ],
+  },
 ]
 
 const SAVE_SCROLL_KEY = 'panshi_scroll'
 
-const router = createRouter({
+const router: Router = createRouter({
   history: createWebHistory(),
-  routes,
+  routes: coreRoutes,
   scrollBehavior(_to, _from, savedPosition) {
     if (savedPosition) {
       return savedPosition
     }
     return { top: 0 }
-  }
+  },
 })
 
 router.beforeEach((to, _from) => {
-  // 导航前保存当前页面的滚动位置
   sessionStorage.setItem(SAVE_SCROLL_KEY + '_' + _from.path, JSON.stringify({ x: window.scrollX, y: window.scrollY }))
 
   const token = localStorage.getItem('token')
@@ -124,5 +89,16 @@ router.beforeEach((to, _from) => {
     }
   }
 })
+
+// ── Dynamic route setup (called after features are loaded) ────────────
+
+export function setupDynamicRoutes(router: Router): void {
+  const featuresStore = useFeaturesStore()
+  for (const [feature, route] of Object.entries(featureRouteMap)) {
+    if (featuresStore.has(feature)) {
+      router.addRoute('Layout', route)
+    }
+  }
+}
 
 export default router

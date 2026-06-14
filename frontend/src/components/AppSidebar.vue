@@ -44,12 +44,14 @@ import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
+import { useFeaturesStore } from '@/stores/features'
 import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+const featuresStore = useFeaturesStore()
 
 const collapsed = computed(() => themeStore.sidebarCollapsed)
 
@@ -66,6 +68,7 @@ interface NavItem {
   route: string
   icon: string
   permission?: string
+  feature?: string
 }
 
 interface NavSection {
@@ -75,11 +78,19 @@ interface NavSection {
 }
 
 const navSections = computed<NavSection[]>(() => {
-  const edgeItems = [
-    { label: 'Edge直连', route: '/edge-client', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg>', permission: 'edge_nodes' },
-    { label: '数据导入', route: '/edge-import', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>' },
-    { label: '工具箱', route: '/tools', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>' },
-  ].filter(item => !item.permission || authStore.hasPermission(item.permission))
+  // Pinia reactivity anchor: accessing .features ensures the computed
+  // re-evaluates when features are loaded or change.
+  const _fs = featuresStore.features
+
+  const edgeItems: NavItem[] = [
+    { label: 'Edge直连', route: '/edge-client', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg>', permission: 'edge_nodes', feature: 'edge_client' },
+    { label: '数据导入', route: '/edge-import', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>', feature: 'edge_import' },
+    { label: '工具箱', route: '/tools', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>', feature: 'tools' },
+  ].filter(item => {
+    const passFeature = !item.feature || featuresStore.has(item.feature)
+    const passPermission = !item.permission || authStore.hasPermission(item.permission)
+    return passFeature && passPermission
+  })
 
   return [
     {
@@ -106,9 +117,9 @@ const navSections = computed<NavSection[]>(() => {
       title: '系统管理',
       visible: authStore.user?.role === 'admin',
       items: [
-        { label: '插件开关', route: '/plugin-switches', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>' },
+        { label: '插件开关', route: '/plugin-switches', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>', feature: 'plugin_switches' },
         { label: '用户管理', route: '/users', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>' },
-      ]
+      ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
     {
       title: 'Edge功能',

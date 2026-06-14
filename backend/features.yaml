@@ -1,0 +1,19 @@
+features:
+  edge_client: false
+  edge_import: true
+  tools: true
+  install_openresty: false
+  install_edge: true
+  plugin_switches: true
+enabled_plugins:
+  - proxy_rewrite
+  - response_rewrite
+  - traffic_split
+  - traffic_limit_count
+  - pre_functions
+  - functions_pre
+  - data_center
+  - log_process
+  - static_resource
+  - traceid
+  - monitor

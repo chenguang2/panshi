@@ -234,7 +234,7 @@ async def batch_load_cluster_stats(
      plugin_config_count, global_rule_count, static_resource_count, nodes)
     """
     if not cluster_ids:
-        return {}, {}, {}, {}, {}, {}, {}, {}
+        return {}, {}, {}, {}, {}, {}, {}, {}, {}
 
     # Nodes: count + health per cluster
     node_q = await db.execute(

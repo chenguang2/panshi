@@ -7,9 +7,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.api.v1 import api_router
+from app.api.v1 import api_router, feature_routers
 from app.core.database import init_db, close_db, AsyncSessionLocal
 from app.core.seed import seed_data
+from app.core.features import load_features, feature_enabled
+
+# Load deployment feature configuration before the app starts.
+# This ensures validation errors surface early (crash on import).
+load_features()
 
 
 @asynccontextmanager
@@ -40,7 +45,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# ── Always-on routes ────────────────────────────────────────────────
 app.include_router(api_router, prefix="/api/v1")
+
+# ── Feature-gated routes ────────────────────────────────────────────
+# Each router is only registered if the corresponding feature is enabled
+# in the deployment's features.yaml configuration.
+for feature_name, router in feature_routers.items():
+    if feature_enabled(feature_name):
+        app.include_router(router, prefix="/api/v1")
 
 
 @app.get("/health")

@@ -8,12 +8,12 @@
       <a-button size="small" @click="handleNodeStart" :disabled="!cluster.selectedNode">▶ 启动</a-button>
       <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
       <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
-      <a-dropdown :trigger="['click']">
+      <a-dropdown v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" :trigger="['click']">
         <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
         <template #overlay>
           <a-menu>
-            <a-menu-item @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-menu-item>
-            <a-menu-item @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-menu-item>
+            <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-menu-item>
+            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>
@@ -216,6 +216,9 @@ import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vu
 import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { useFeaturesStore } from '@/stores/features'
+
+const featuresStore = useFeaturesStore()
 
 /** Check whether nginx is actually running by analyzing parsed stdout. */
 function nginxRunning(node: Node): boolean {
@@ -411,7 +414,7 @@ function handleInstallOpenresty() {
           onProgress: (percent: number) => {
             if (percent > execProgress.percent) execProgress.percent = percent
           },
-          onComplete: (rc: number, status: string) => {
+          onComplete: (rc: number, _status: string) => {
             clearInstallTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100
@@ -459,7 +462,7 @@ function handleInstallEdge() {
           onProgress: (percent: number) => {
             if (percent > execProgress.percent) execProgress.percent = percent
           },
-          onComplete: (rc: number, status: string) => {
+          onComplete: (rc: number, _status: string) => {
             clearInstallTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100

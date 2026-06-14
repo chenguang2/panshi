@@ -144,6 +144,12 @@ sed -i '' 's|SCRIPT_DIR/\.\./\.\.|SCRIPT_DIR|' "$TARGET_DIR/start.sh"
 sed -i '' 's|SCRIPT_DIR/\.\./\.\.|SCRIPT_DIR|' "$TARGET_DIR/stop.sh"
 echo "  启停脚本已拷贝到: $TARGET_DIR/"
 
+# 拷贝 features.yaml（部署特性配置模板）
+# 注意：start.sh 执行 cd $PROJECT_ROOT/backend，CWD 是 backend/
+echo "拷贝 features.yaml..."
+cp "$PROJECT_ROOT/product/features.yaml" "$TARGET_DIR/backend/"
+echo "  features.yaml 已拷贝到: $TARGET_DIR/backend/"
+
 # 创建 data/.gitkeep（空目录占位）
 touch "$TARGET_DIR/backend/data/.gitkeep"
 
