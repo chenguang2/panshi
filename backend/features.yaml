@@ -1,8 +1,8 @@
 features:
-  edge_client: false
+  edge_client: true
   edge_import: true
   tools: true
-  install_openresty: false
+  install_openresty: true
   install_edge: true
   plugin_switches: true
 enabled_plugins:
