@@ -1836,4 +1836,20 @@ runtime-feature-config
 TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
 
-=================================================================
+================================================================
+dns
+ssl
+user variables
+过滤与转发
+代理缓存
+page rules
+upstreams
+cache purge
+error logs
+waf config
+Dos logs
+Dynamic Metrics 
+metrics
+Http Basic Auth Credentials
+IP Lists
+=========================================
