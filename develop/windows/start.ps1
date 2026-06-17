@@ -1,5 +1,8 @@
 ﻿$ErrorActionPreference = "Stop"
 
+$BACKEND_PORT = 12344
+$FRONTEND_PORT = 12345
+
 # Determine project root
 $ScriptDir = $PSScriptRoot
 if (-not $ScriptDir) {
@@ -68,12 +71,12 @@ if (-not (Test-Path $DataDir)) {
 }
 
 # 5. Stop processes on ports
-$conn = Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue
+$conn = Get-NetTCPConnection -LocalPort $BACKEND_PORT -ErrorAction SilentlyContinue
 if ($conn) {
     Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
 }
 
-$conn = Get-NetTCPConnection -LocalPort 9100 -ErrorAction SilentlyContinue
+$conn = Get-NetTCPConnection -LocalPort $FRONTEND_PORT -ErrorAction SilentlyContinue
 if ($conn) {
     Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
 }
@@ -83,7 +86,7 @@ Start-Sleep -Seconds 2
 # 6. Start backend with uv run and explicit Python 3.11
 Write-Host "Starting Backend..."
 $backendDir = Join-Path $ProjectRoot "backend"
-$uvArgs = "run --python `"$python311Path`" uvicorn app.main:app --host 127.0.0.1 --port 9000"
+$uvArgs = "run --python `"$python311Path`" uvicorn app.main:app --host 127.0.0.1 --port $BACKEND_PORT"
 Start-Process -FilePath $uvCmd -ArgumentList $uvArgs -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 5
@@ -91,25 +94,25 @@ Start-Sleep -Seconds 5
 # 7. Start frontend
 Write-Host "Starting Frontend..."
 $frontendDir = Join-Path $ProjectRoot "frontend"
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev" -WorkingDirectory $frontendDir -PassThru -WindowStyle Hidden
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev -- --port $FRONTEND_PORT" -WorkingDirectory $frontendDir -PassThru -WindowStyle Hidden
 
 Start-Sleep -Seconds 5
 
 # 8. Verify
-$backendListening = Get-NetTCPConnection -LocalPort 9000 -State Listen -ErrorAction SilentlyContinue
-$frontendListening = Get-NetTCPConnection -LocalPort 9100 -State Listen -ErrorAction SilentlyContinue
+$backendListening = Get-NetTCPConnection -LocalPort $BACKEND_PORT -State Listen -ErrorAction SilentlyContinue
+$frontendListening = Get-NetTCPConnection -LocalPort $FRONTEND_PORT -State Listen -ErrorAction SilentlyContinue
 
 if ($backendListening -and $frontendListening) {
     Write-Host ""
     Write-Host "Panshi Admin started!"
-    Write-Host "Backend: http://localhost:9000"
-    Write-Host "Frontend: http://localhost:9100"
+    Write-Host "Backend: http://localhost:$BACKEND_PORT"
+    Write-Host "Frontend: http://localhost:$FRONTEND_PORT"
     Write-Host "Login: admin / panshi123"
 } else {
     if (-not $backendListening) {
-        Write-Host "Warning: Backend not listening on port 9000"
+        Write-Host "Warning: Backend not listening on port $BACKEND_PORT"
     }
     if (-not $frontendListening) {
-        Write-Host "Warning: Frontend not listening on port 9100"
+        Write-Host "Warning: Frontend not listening on port $FRONTEND_PORT"
     }
 }

@@ -1,24 +1,19 @@
 ﻿$ErrorActionPreference = "SilentlyContinue"
 
+$BACKEND_PORT = 12344
+$FRONTEND_PORT = 12345
+
 Write-Host "Stopping Panshi Admin..."
 
-# Stop by port 9000
-$conn = Get-NetTCPConnection -LocalPort 9000 -ErrorAction SilentlyContinue
-if ($conn) {
-    $procId = $conn.OwningProcess
-    if ($procId -gt 0) {
-        Stop-Process -Id $procId -Force
-        Write-Host "Stopped port 9000 (PID: $procId)"
-    }
-}
-
-# Stop by port 9100
-$conn = Get-NetTCPConnection -LocalPort 9100 -ErrorAction SilentlyContinue
-if ($conn) {
-    $procId = $conn.OwningProcess
-    if ($procId -gt 0) {
-        Stop-Process -Id $procId -Force
-        Write-Host "Stopped port 9100 (PID: $procId)"
+# 端口兜底停止（带进程名双重确认）
+foreach ($PORT in @($BACKEND_PORT, $FRONTEND_PORT)) {
+    $conn = Get-NetTCPConnection -LocalPort $PORT -ErrorAction SilentlyContinue
+    if ($conn -and $conn.OwningProcess -gt 0) {
+        $proc = Get-CimInstance -Query "SELECT * FROM Win32_Process WHERE ProcessId = $($conn.OwningProcess)" -ErrorAction SilentlyContinue
+        if ($proc -and $proc.CommandLine -match "app\.main:app|npm|vite") {
+            Stop-Process -Id $conn.OwningProcess -Force
+            Write-Host "Stopped port $PORT (PID: $($conn.OwningProcess))"
+        }
     }
 }
 
