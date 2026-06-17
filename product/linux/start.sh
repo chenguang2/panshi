@@ -8,7 +8,7 @@
 set -e
 
 # 默认端口（可在脚本中修改）
-DEFAULT_PORT=9000
+DEFAULT_PORT=12345
 
 # 端口获取优先级: 参数1 > 环境变量 > 默认值
 PORT="${1:-${PANSHI_PORT:-$DEFAULT_PORT}}"
@@ -35,8 +35,13 @@ mkdir -p /tmp/panshi-cp
 cd "$PROJECT_ROOT"
 BACKEND_LOG="$PROJECT_ROOT/backend.log"
 
-# ---------- 停止已有进程 ----------
-lsof -ti:"$PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+# ---------- 停止已有进程（带进程名双重确认）----------
+PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null)
+if [ -n "$PRE_PID" ]; then
+    if tr '\0' ' ' < "/proc/$PRE_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
+        kill -9 "$PRE_PID" 2>/dev/null || true
+    fi
+fi
 sleep 1
 
 # ---------- 写入端口文件 ----------

@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # 默认端口
-DEFAULT_PORT=9000
+DEFAULT_PORT=12345
 
 # 端口获取优先级: 参数1 > 环境变量 > 端口文件 > 默认值
 PORT_FILE="$PROJECT_ROOT/backend/.port"
@@ -19,8 +19,13 @@ if [ -f "$PID_FILE" ]; then
     rm "$PID_FILE"
 fi
 
-# 通过端口强制停止（兜底）
-lsof -ti:"$PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+# 通过端口强制停止（兜底，带进程名双重确认）
+LSOF_PID=$(lsof -ti:"$PORT" 2>/dev/null)
+if [ -n "$LSOF_PID" ]; then
+    if ps -p "$LSOF_PID" -o command= 2>/dev/null | grep -q "app\.main:app"; then
+        kill -9 "$LSOF_PID" 2>/dev/null || true
+    fi
+fi
 
 # 清理端口文件
 rm -f "$PORT_FILE"
