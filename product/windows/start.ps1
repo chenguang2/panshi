@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
 
 # 默认端口（可在脚本中修改）
-$DEFAULT_PORT = 9000
+$DEFAULT_PORT = 12345
 
 # 端口获取优先级: 参数 > 环境变量 > 默认值
 $PORT = if ($args[0]) { $args[0] } elseif ($env:PANSHI_PORT) { $env:PANSHI_PORT } else { $DEFAULT_PORT }
