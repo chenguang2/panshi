@@ -86,13 +86,18 @@ async def _install_openresty_stream(
         build_cmd = (
             f"source /etc/profile; "
             f"cd {build_dir} && "
+            f"trap 'kill -- -\\$\\$ 2>/dev/null; exit' EXIT; "
             f"./install-edge.sh {prefix}; "
             f"wait"
         )
         ssh_user = get_ssh_user(node.ip)
         ssh_cmd_parts = [
             "ssh",
+            "-i", "~/.ssh/id_rsa",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=30",
             "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
             f"{ssh_user}@{node.ip}",
             build_cmd,
         ]
@@ -152,8 +157,10 @@ async def _install_openresty_stream(
 async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss") -> tuple[int, str, str]:
     """Run a command on remote node via SSH, return (rc, stdout, stderr)."""
     proc = await asyncio.create_subprocess_exec(
-        "ssh",
-        "-o", "StrictHostKeyChecking=no",
+        "ssh", "-i", "~/.ssh/id_rsa",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=30",
+        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
         f"{ssh_user}@{ip}", cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
