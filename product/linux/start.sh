@@ -36,7 +36,12 @@ cd "$PROJECT_ROOT"
 BACKEND_LOG="$PROJECT_ROOT/backend.log"
 
 # ---------- 停止已有进程（带进程名双重确认）----------
-PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null)
+# 查找已占用端口的进程（ss 优先，lsof 兜底）
+if command -v ss >/dev/null 2>&1; then
+    PRE_PID=$(ss -tlnp 2>/dev/null | grep ":$PORT " | grep -oP 'pid=\K\d+' | head -1 || true)
+elif command -v lsof >/dev/null 2>&1; then
+    PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
+fi
 if [ -n "$PRE_PID" ]; then
     if tr '\0' ' ' < "/proc/$PRE_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
         kill -9 "$PRE_PID" 2>/dev/null || true
