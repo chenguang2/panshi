@@ -73,6 +73,18 @@ echo "[3/5] 创建虚拟环境..."
 "$TARGET_PYTHON_DIR/bin/python3" -m venv --copies "$TARGET_DIR/backend/.venv"
 echo "  .venv 已创建"
 
+# ---------- 3.5 检测 glibc 版本，降级 greenlet（CentOS 7 等旧系统）----------
+echo ""
+echo "[3.5/5] 检测 glibc 版本..."
+GLIBC_VER=$(ldd --version | head -1 | grep -oP '\d+\.\d+' | head -1 || echo "0")
+MIN_VER="2.28"
+if [ "$(printf '%s\n' "$MIN_VER" "$GLIBC_VER" | sort -V | head -1)" != "$MIN_VER" ]; then
+    echo "  glibc $GLIBC_VER < 2.28，greenlet 降级到 2.x"
+    sed -i 's/"greenlet>=3.0.0"/"greenlet>=2.0.0,<3.0.0"/' "$TARGET_DIR/backend/pyproject.toml"
+else
+    echo "  glibc $GLIBC_VER >= 2.28，无需降级"
+fi
+
 # ---------- 4. 安装后端依赖 ----------
 echo ""
 echo "[4/5] 安装后端依赖..."
