@@ -20,10 +20,14 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 # 通过端口强制停止（兜底，带进程名双重确认）
-LSOF_PID=$(lsof -ti:"$PORT" 2>/dev/null)
-if [ -n "$LSOF_PID" ]; then
-    if tr '\0' ' ' < "/proc/$LSOF_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
-        kill -9 "$LSOF_PID" 2>/dev/null || true
+if command -v ss >/dev/null 2>&1; then
+    FALLBACK_PID=$(ss -tlnp 2>/dev/null | grep ":$PORT " | grep -oP 'pid=\K\d+' | head -1 || true)
+elif command -v lsof >/dev/null 2>&1; then
+    FALLBACK_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
+fi
+if [ -n "$FALLBACK_PID" ]; then
+    if tr '\0' ' ' < "/proc/$FALLBACK_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
+        kill -9 "$FALLBACK_PID" 2>/dev/null || true
     fi
 fi
 
