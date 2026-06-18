@@ -74,7 +74,7 @@ node -v
 npm -v
 ```
 
-## centos 7 
+## centos 7 开发机安装 node 16
 
 ```
 # 卸载当前版本
@@ -89,4 +89,48 @@ nvm alias default 16
 # 验证
 node -v
 npm -v
+```
+
+## centos 7 开发机安装必要软件 node 20
+
+### 1. 下载并安装 node20 glibc-217 兼容版
+
+```bash
+# 1. 下载 Node.js 20 LTS 的 glibc-217 兼容版（以 v20.19.0 为例）
+cd /tmp
+wget https://unofficial-builds.nodejs.org/download/release/v20.19.0/node-v20.19.0-linux-x64-glibc-217.tar.gz
+
+# 2. 解压
+tar -zxvf node-v20.19.0-linux-x64-glibc-217.tar.gz
+
+# 4. 添加到 PATH
+echo 'export PATH=/home/qcg/soft/node-v20.19.0-linux-x64-glibc-217/bin:$PATH' >> ~/.bashrc
+source ~/.bashrc
+
+# 5. 验证版本
+node -v
+# 应该输出 v20.19.0
+npm -v
+```
+
+### 2. 修改依赖包
+
+```
+编辑 backend/pyproject.toml
+
+"greenlet>=3.0.0",
+
+改为：
+
+"greenlet>=2.0.0,<3.0.0",
+
+```
+
+### 3. 生成拷贝包
+
+```
+cd panshi/product/linux/
+bash gen_linux.sh
+
+将生成的 panshi 目录拷贝到目的机
 ```
