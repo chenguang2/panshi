@@ -22,6 +22,7 @@ from app.models.cluster import Node
 from app.services.ansible_service import (
     AnsibleRunnerService,
     _run_ansible_stream,
+    get_ssh_user,
 )
 
 
@@ -88,12 +89,15 @@ async def _install_openresty_stream(
             f"./install-edge.sh {prefix}; "
             f"wait"
         )
-        ssh_user = "jboss"
+        ssh_user = get_ssh_user(node.ip)
         yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
+                "ssh", "-i", "~/.ssh/id_rsa",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=30",
+                "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
                 "-o", "UserKnownHostsFile=/dev/null",
                 f"{ssh_user}@{node.ip}", build_cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -142,11 +146,14 @@ async def _install_openresty_stream(
                     pass
         raise
 
-async def _ssh_run(ip: str, cmd: str) -> tuple[int, str, str]:
+async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss") -> tuple[int, str, str]:
     """Run a command on remote node via SSH, return (rc, stdout, stderr)."""
     proc = await asyncio.create_subprocess_exec(
-        "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-        f"jboss@{ip}", cmd,
+        "ssh", "-i", "~/.ssh/id_rsa",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=30",
+        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+        f"{ssh_user}@{ip}", cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -186,7 +193,7 @@ async def cancel_install(
     """Cancel install-openresty: kill SSH process, verify remote, pkill if still alive."""
     node = await _verify_node(cluster_id, node_id, db)
     steps: list[dict] = []
-    ssh_user = "jboss"
+    ssh_user = get_ssh_user(node.ip)
 
     proc = _install_proc_registry.get(node_id)
 
@@ -228,7 +235,7 @@ async def cancel_install(
 
     _install_proc_registry.pop(node_id, None)
 
-    rc, ps_stdout, ps_stderr = await _ssh_run(node.ip, "ps aux | grep install-edge.sh")
+    rc, ps_stdout, ps_stderr = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user)
     ps_lines = [l for l in ps_stdout.split("\n") if "grep" not in l and l.strip()]
     ps_output = "\n".join(ps_lines)
 
@@ -240,14 +247,14 @@ async def cancel_install(
     })
 
     if any("install-edge.sh" in l for l in ps_lines):
-        rc2, pkill_stdout, pkill_stderr = await _ssh_run(node.ip, "pkill -f install-edge.sh")
+        rc2, pkill_stdout, pkill_stderr = await _ssh_run(node.ip, "pkill -f install-edge.sh", ssh_user=ssh_user)
         steps.append({
             "command": f"ssh {ssh_user}@{node.ip} \"pkill -f install-edge.sh\"",
             "status": "success" if rc2 == 0 else "failed",
             "stdout": pkill_stdout or "（无输出）",
             "stderr": pkill_stderr,
         })
-        _, ps2_stdout, _ = await _ssh_run(node.ip, "ps aux | grep install-edge.sh")
+        _, ps2_stdout, _ = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user)
         ps2_lines = [l for l in ps2_stdout.split("\n") if "grep" not in l and l.strip()]
         steps.append({
             "command": f"ssh {ssh_user}@{node.ip} \"ps aux | grep install-edge.sh\"（验证）",

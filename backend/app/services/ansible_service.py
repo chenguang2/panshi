@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, AsyncGenerator
 import queue
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 # Resolve ansible project root: backend/ansible/ relative to this file
@@ -20,6 +22,48 @@ PRIVATE_DATA_DIR = os.getenv("PANSHI_ANSIBLE_DIR", str(_ANSIBLE_DIR))
 
 DEFAULT_JOB_TIMEOUT = 60
 MAX_CONCURRENT_PLAYBOOKS = 5
+
+_INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
+
+
+def get_ssh_user(ip: str) -> str:
+    """Resolve SSH user for *ip* from ansible inventory, falling back to ``"jboss"``.
+
+    Priority: host-level ``ansible_ssh_user`` → group vars → ``"jboss"``.
+    """
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except (FileNotFoundError, yaml.YAMLError):
+        return "jboss"
+
+    try:
+        hosts = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("hosts", {})
+        )
+        host_entry = hosts.get(ip, {})
+        if isinstance(host_entry, dict):
+            user = host_entry.get("ansible_ssh_user")
+            if user:
+                return user
+
+        group_vars = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("vars", {})
+        )
+        if isinstance(group_vars, dict):
+            user = group_vars.get("ansible_ssh_user")
+            if user:
+                return user
+    except (AttributeError, TypeError):
+        pass
+
+    return "jboss"
 
 # Allowed tags for the generic /ansible-run endpoint
 ALLOWED_TAGS = frozenset({
