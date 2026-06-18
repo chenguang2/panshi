@@ -8,6 +8,7 @@ registered based on deployment feature configuration:
 
 import asyncio
 import json
+import shlex
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -100,7 +101,7 @@ async def _install_openresty_stream(
             f"{ssh_user}@{node.ip}",
             build_cmd,
         ]
-        ssh_cmd_str = " ".join(ssh_cmd_parts)
+        ssh_cmd_str = shlex.join(ssh_cmd_parts)
         yield f"data: {json.dumps({'line': f'$ {ssh_cmd_str}', 'percent': 40})}\n\n"
         yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
 
