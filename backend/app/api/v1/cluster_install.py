@@ -90,16 +90,22 @@ async def _install_openresty_stream(
             f"wait"
         )
         ssh_user = get_ssh_user(node.ip)
+        ssh_cmd_parts = [
+            "ssh",
+            "-i", "~/.ssh/id_rsa",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=30",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            f"{ssh_user}@{node.ip}",
+            build_cmd,
+        ]
+        yield f"data: {json.dumps({'line': f'$ {\" \".join(ssh_cmd_parts)}', 'percent': 40})}\n\n"
         yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ssh", "-i", "~/.ssh/id_rsa",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=30",
-                "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2",
-                "-o", "UserKnownHostsFile=/dev/null",
-                f"{ssh_user}@{node.ip}", build_cmd,
+                *ssh_cmd_parts,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
