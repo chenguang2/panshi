@@ -375,7 +375,16 @@ function buildInstallCommand(node: any, tag: string, extravars: Record<string, s
   const prefix = extravars.prefix || node.edge_path || ''
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
   const sshUser = 'jboss'
-  const sshCmd = `ssh -o StrictHostKeyChecking=no ${sshUser}@${node.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
+  const sshCmd = [
+    'ssh',
+    '-i', '~/.ssh/id_rsa',
+    '-o', 'BatchMode=yes',
+    '-o', 'ConnectTimeout=30',
+    '-o', 'StrictHostKeyChecking=no',
+    '-o', 'UserKnownHostsFile=/dev/null',
+    `${sshUser}@${node.ip}`,
+    `"source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`,
+  ].join(' ')
   return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
