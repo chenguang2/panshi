@@ -74,3 +74,19 @@ node -v
 npm -v
 ```
 
+## centos 7 
+
+```
+# 卸载当前版本
+nvm uninstall v24.16.0
+
+# 安装Node.js 16 LTS
+nvm install 16
+
+# 设置为默认版本
+nvm alias default 16
+
+# 验证
+node -v
+npm -v
+```
