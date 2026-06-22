@@ -24,6 +24,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "install_openresty",
     "install_edge",
     "plugin_switches",
+    "metrics",
 })
 
 # ── Module-level cache (set once at startup) ───────────────────────────

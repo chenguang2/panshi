@@ -5,6 +5,7 @@ features:
   install_openresty: true
   install_edge: true
   plugin_switches: true
+  metrics: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

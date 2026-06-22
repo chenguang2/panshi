@@ -175,6 +175,20 @@ class TestFeaturesModule:
         with pytest.raises(SystemExit):
             load_features(str(cfg))
 
+    # ── metrics feature ──────────────────────────────────
+
+    def test_metrics_feature_recognized(self, tmp_path: Path):
+        """metrics is a known feature, should not cause SystemExit."""
+        from app.core.features import load_features, feature_enabled
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {"metrics": False},
+        }))
+
+        load_features(str(cfg))
+        assert feature_enabled("metrics") is False
+
     # ── features not a dict ──────────────────────────────
 
     def test_features_not_dict_raises_systemexit(self, tmp_path: Path):
