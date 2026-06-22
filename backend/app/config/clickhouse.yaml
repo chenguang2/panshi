@@ -1,0 +1,6 @@
+host: 192.168.100.42
+port: 9000
+database: esapm_metrics
+user: default
+password: ""
+connect_timeout: 5
