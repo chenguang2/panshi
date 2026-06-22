@@ -69,6 +69,8 @@ const sectionMap: Record<string, string> = {
   PluginMetadataList: '核心功能',
   StaticResourceList: '核心功能',
   CentralManagement: '综合',
+  Metrics: '综合',
+  MetricsDashboard: '综合',
   PluginSwitches: '系统管理',
   Users: '系统管理',
   EdgeClient: '运维管理',
@@ -91,6 +93,8 @@ const pageNameMap: Record<string, string> = {
   EdgeClient: 'Edge直连',
   EdgeImport: '数据导入',
   Tools: '工具箱',
+  Metrics: '指标查询',
+  MetricsDashboard: '指标总览',
   PluginSwitches: '插件开关',
 }
 

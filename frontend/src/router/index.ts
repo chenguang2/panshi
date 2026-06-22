@@ -6,7 +6,9 @@ import { useFeaturesStore } from '@/stores/features'
 // ── Feature-gated route map ───────────────────────────────────────────
 // Keyed by feature name from features.yaml.  Only registered when the
 // corresponding feature is enabled.
-export const featureRouteMap: Record<string, RouteRecordRaw> = {
+// Value can be a single route or an array of routes (for features with
+// multiple pages, like metrics).
+export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> = {
   edge_client: {
     path: 'edge-client',
     name: 'EdgeClient',
@@ -29,6 +31,18 @@ export const featureRouteMap: Record<string, RouteRecordRaw> = {
     component: () => import('@/views/PluginSwitches.vue'),
     meta: { permission: 'plugin_management' },
   },
+  metrics: [
+    {
+      path: 'metrics',
+      name: 'Metrics',
+      component: () => import('@/views/Metrics.vue'),
+    },
+    {
+      path: 'metrics/dashboard',
+      name: 'MetricsDashboard',
+      component: () => import('@/views/MetricsDashboard.vue'),
+    },
+  ],
 }
 
 // ── Static routes (always registered) ─────────────────────────────────
@@ -94,9 +108,12 @@ router.beforeEach((to, _from) => {
 
 export function setupDynamicRoutes(router: Router): void {
   const featuresStore = useFeaturesStore()
-  for (const [feature, route] of Object.entries(featureRouteMap)) {
+  for (const [feature, routeOrRoutes] of Object.entries(featureRouteMap)) {
     if (featuresStore.has(feature)) {
-      router.addRoute('Layout', route)
+      const routes = Array.isArray(routeOrRoutes) ? routeOrRoutes : [routeOrRoutes]
+      for (const route of routes) {
+        router.addRoute('Layout', route)
+      }
     }
   }
 }

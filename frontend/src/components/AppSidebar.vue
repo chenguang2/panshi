@@ -7,14 +7,14 @@
       <span v-show="!collapsed" class="sidebar-logo-version">v1.0</span>
     </div>
 
-    <!-- Navigation -->
+        <!-- Navigation -->
     <nav class="sidebar-nav">
       <div v-for="section in navSections" :key="section.title" class="sidebar-section" v-show="section.visible !== false">
         <div v-show="!collapsed" class="sidebar-section-title">{{ section.title }}</div>
         <router-link
           v-for="item in section.items"
           :key="item.route"
-          :to="item.route"
+          :to="item.route!"
           class="nav-item"
           :class="{ active: isActive(item) }"
         >
@@ -108,7 +108,13 @@ const navSections = computed<NavSection[]>(() => {
       title: '综合',
       items: [
         { label: '统一管理', route: '/central-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>' },
-      ]
+        ...(featuresStore.has('metrics')
+          ? [
+              { label: '指标查询', route: '/metrics', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>' } as NavItem,
+              { label: '指标总览', route: '/metrics/dashboard', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>' } as NavItem,
+            ]
+          : []),
+      ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
     {
       title: '系统管理',
@@ -142,6 +148,8 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/global-rules') return name === 'GlobalRuleList'
   if (item.route === '/plugin-metadata') return name === 'PluginMetadataList'
   if (item.route === '/static-resources') return name === 'StaticResourceList'
+  if (item.route === '/metrics') return name === 'Metrics'
+  if (item.route === '/metrics/dashboard') return name === 'MetricsDashboard'
   return false
 }
 
