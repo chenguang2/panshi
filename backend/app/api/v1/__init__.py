@@ -9,6 +9,7 @@ from app.api.v1 import (
     system,
     edge_client, edge_import, plugin_switches,
     cluster_install,
+    metrics,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -43,4 +44,5 @@ feature_routers: dict[str, APIRouter] = {
     "install_openresty": cluster_install.install_openresty_router,
     "install_edge": cluster_install.install_edge_router,
     "plugin_switches": plugin_switches.router,
+    "metrics": metrics.router,
 }
