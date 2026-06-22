@@ -164,6 +164,32 @@
           </div>
         </div>
       </div>
+
+      <!-- YAML 格式化 -->
+      <div v-if="activeTool === 'yaml'" class="tool-panel">
+        <div class="tool-header">YAML 格式化 <span class="tool-hint">格式化工具有序 key 但会丢弃 YAML 注释</span></div>
+        <div class="dual-panel">
+          <div class="panel-left">
+            <div class="panel-label">输入</div>
+            <a-textarea v-model:value="yamlInput" :rows="textareaRows" placeholder="输入 YAML 内容" />
+            <div class="copy-row">
+              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlInput)">复制</a-button>
+              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => yamlInput = v)">粘贴</a-button>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <a-button type="primary" @click="yamlOutput = toolsYaml.format(yamlInput)">格式化 ↓</a-button>
+          </div>
+          <div class="panel-right">
+            <div class="panel-label">结果</div>
+            <a-textarea v-model:value="yamlOutput" :rows="textareaRows" readonly placeholder="格式化结果将显示在此" />
+            <div class="copy-row">
+              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlOutput)">复制</a-button>
+              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => yamlOutput = v)">粘贴</a-button>
+            </div>
+          </div>
+        </div>
+      </div>
     </a-layout-content>
   </a-layout>
 </template>
@@ -177,12 +203,14 @@ import {
   FileTextOutlined,
   LockOutlined,
   BlockOutlined,
+  SnippetsOutlined,
 } from '@ant-design/icons-vue'
 import { luaToConfigString, configStringToLua } from '@/utils/tools/lua'
 import * as toolsUrl from '@/utils/tools/url'
 import * as toolsJson from '@/utils/tools/json'
 import * as toolsSm4 from '@/utils/tools/sm4'
 import * as toolsBase64 from '@/utils/tools/base64'
+import * as toolsYaml from '@/utils/tools/yaml'
 
 interface ToolItem {
   key: string
@@ -196,6 +224,7 @@ const tools: ToolItem[] = [
   { key: 'json', label: 'JSON 格式化', icon: FileTextOutlined },
   { key: 'sm4', label: 'SM4 加解密', icon: LockOutlined },
   { key: 'base64', label: 'Base64 编解码', icon: BlockOutlined },
+  { key: 'yaml', label: 'YAML 格式化', icon: SnippetsOutlined },
 ]
 
 const activeTool = ref('lua')
@@ -240,6 +269,10 @@ const sm4Ciphertext = ref('')
 // Base64
 const base64Input = ref('')
 const base64Output = ref('')
+
+// YAML
+const yamlInput = ref('')
+const yamlOutput = ref('')
 
 async function copyToClipboard(text: string) {
   if (!text) {
@@ -364,6 +397,15 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
   color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tool-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .dual-panel {
