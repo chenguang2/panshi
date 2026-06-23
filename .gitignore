@@ -77,4 +77,7 @@ pdf_extract.txt
 
 # AI tool internal tracking
 .omo/
+
+# Prompt history
+prompt-*.txt
 backend/ansible/collections/ansible_collections/

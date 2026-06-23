@@ -34,6 +34,10 @@ async function bootstrap() {
 
   // Register feature-gated routes now that we know what's available.
   setupDynamicRoutes(router)
+
+  // Re-resolve current URL — fixes right-click → open in new tab
+  // where the route wasn't registered at initial navigation time.
+  await router.replace(router.currentRoute.value.fullPath)
 }
 
 bootstrap()
