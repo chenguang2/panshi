@@ -50,7 +50,7 @@
 
     <!-- ── Infra Collapsible ── -->
     <div class="infra-section">
-      <div class="infra-toggle" @click="infraOpen = !infraOpen">
+      <div class="infra-toggle" @click="toggleInfra">
         <span>{{ infraOpen ? '收起' : '更多指标' }}</span>
         <span class="infra-count" v-if="!infraOpen">({{ INFRA_CHARTS.length }} 项)</span>
         <CaretDownOutlined :class="{ rotated: infraOpen }" />
@@ -74,6 +74,7 @@ import { ref } from 'vue'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
 import { useMetricsDashboardStore, BUSINESS_CHARTS, INFRA_CHARTS } from '@/stores/metricsDashboard'
 import MetricChartCard from '@/components/MetricChartCard.vue'
+import PageHeader from '@/components/PageHeader.vue'
 
 const store = useMetricsDashboardStore()
 const infraOpen = ref(false)
@@ -86,6 +87,13 @@ function onTimeRangeChange(e: any): void {
 
 function onRefreshIntervalChange(value: number): void {
   store.setRefreshInterval(value)
+}
+
+function toggleInfra(): void {
+  infraOpen.value = !infraOpen.value
+  if (infraOpen.value) {
+    store.loadInfraCharts()
+  }
 }
 
 function refreshAll(): void {

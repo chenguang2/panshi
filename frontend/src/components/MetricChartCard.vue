@@ -105,7 +105,7 @@ const chartOption = computed(() => ({
   min-height: 160px;
 }
 
-.chart-body :deep(.v-chart) {
+.chart-body :deep(.echarts) {
   height: 160px;
   width: 100%;
 }

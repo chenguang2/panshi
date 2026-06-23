@@ -2,7 +2,7 @@
 
 ## Purpose
 
-提供开发者工具箱页面，包含 Lua 函数 ↔ 配置字符串互转、URL 编解码、JSON 格式化/压缩、SM4 ECB 加解密、Base64 编解码等日常开发调试工具。
+提供开发者工具箱页面，包含 Lua 函数 ↔ 配置字符串互转、URL 编解码、JSON 格式化/压缩、YAML 格式化、SM4 ECB 加解密、Base64 编解码等日常开发调试工具。
 
 ## Requirements
 
@@ -13,12 +13,55 @@
 - **WHEN** 用户点击顶栏「工具箱」菜单项
 - **THEN** 系统导航至 `/tools` 页面，展示工具箱界面
 
+### Requirement: YAML 格式化工具
+系统 SHALL 在工具箱中提供 YAML 格式化工具，将用户输入的 YAML 文本格式化为缩进规整的输出。
+
+#### Scenario: 格式化合法 YAML
+- **WHEN** 用户在左侧输入合法 YAML 文本（如 `key: value\nlist:\n  - item1\n  - item2`）并点击「格式化 ↓」
+- **THEN** 右侧输出区 SHALL 显示经过 2 空格缩进格式化的 YAML，保持原始键顺序
+
+#### Scenario: 格式化非法 YAML
+- **WHEN** 用户在左侧输入非法 YAML（如语法错误或使用 Tab 缩进）并点击「格式化 ↓」
+- **THEN** 右侧输出区 SHALL 显示中文错误提示，包含具体的解析错误详情，例如 `YAML 解析失败: Tabs are not allowed as indentation at line 2`
+
+#### Scenario: 空输入
+- **WHEN** 用户点击「格式化 ↓」时输入为空
+- **THEN** 右侧输出区 SHALL 显示友好的中文提示「请输入 YAML 内容」
+
+#### Scenario: 仅空白字符输入
+- **WHEN** 用户点击「格式化 ↓」时输入仅为空白字符
+- **THEN** 右侧输出区 SHALL 显示友好的中文提示「请输入 YAML 内容」
+
+#### Scenario: 标量值输入
+- **WHEN** 用户输入仅包含标量值的 YAML 文档（如 `42`、`null`、`hello`）
+- **THEN** 右侧输出区 SHALL 正确显示格式化后的标量值
+
+#### Scenario: 输出只读
+- **WHEN** YAML 格式化面板展示时
+- **THEN** 输出文本框 SHALL 设置 `readonly` 属性，与 JSON 工具行为一致
+
+#### Scenario: 注释丢失提示
+- **WHEN** YAML 格式化面板展示时
+- **THEN** 工具头部或操作区附近 SHALL 显示提示，说明 YAML 注释会在格式化后被丢弃
+
+#### Scenario: 复制粘贴
+- **WHEN** 用户点击输出文本框下方的复制按钮
+- **THEN** 输出内容 SHALL 复制到剪贴板并显示成功提示
+- **WHEN** 用户点击输入文本框下方的粘贴按钮
+- **THEN** 剪贴板文本 SHALL 粘贴到输入文本框
+
 ### Requirement: 工具箱页面布局
-系统 SHALL 使用左侧图标栏 + 右侧工作区的布局结构。左侧图标栏展示 5 个工具的图标按钮（Lua 互转、URL 编解码、JSON 格式化、SM4 加解密、Base64 编解码），点击图标右侧工作区切换为对应工具。每个工具的工作区 SHALL 使用统一左右双栏布局。
+系统 SHALL 使用左侧图标栏 + 右侧工作区的布局结构。左侧图标栏展示 6 个工具的图标按钮（Lua 互转、URL 编解码、JSON 格式化、YAML 格式化、SM4 加解密、Base64 编解码），点击图标右侧工作区切换为对应工具。每个工具的工作区 SHALL 使用统一左右双栏布局。
 
 #### Scenario: 图标导航切换工具
 - **WHEN** 用户在左侧图标栏点击「URL 编解码」图标
 - **THEN** 右侧工作区切换为 URL 编解码工具，左右双栏展示输入和输出
+
+#### Scenario: YAML 格式化图标导航
+- **WHEN** 用户在左侧图标栏点击「YAML 格式化」图标
+- **THEN** 右侧工作区切换为 YAML 格式化工具，左右双栏展示输入和输出
+- **AND** 左侧为输入文本框，右侧为只读输出文本框
+- **AND** 两栏之间显示「格式化 ↓」按钮
 
 #### Scenario: 左右双栏布局一致性
 - **WHEN** 用户切换到任意一个工具
@@ -86,8 +129,6 @@
 #### Scenario: Base64 解码
 - **WHEN** 用户在左侧输入 `SGVsbG8gV29ybGQ=` 并点击解码
 - **THEN** 右侧显示 `Hello World`
-
-## ADDED Requirements
 
 ### Requirement: 工具箱功能受特性配置控制
 
