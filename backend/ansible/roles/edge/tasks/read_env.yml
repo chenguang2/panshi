@@ -1,0 +1,17 @@
+---
+- name: read edge.env
+  shell: cat {{ edge_path }}/edge.env
+  register: env_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  tags:
+    - edge_read_env
+
+- name: out
+  debug:
+    msg: "{{ env_output.stdout_lines }}"
+  when: env_output.stdout is defined
+  tags:
+    - edge_read_env

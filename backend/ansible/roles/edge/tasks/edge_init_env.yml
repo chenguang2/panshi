@@ -1,10 +1,35 @@
 ---
-###################### edge init openresty########################
+###################### copy via inline content (new) ########################
+- name: write edge.env from content
+  ansible.builtin.copy:
+    content: "{{ env_content }}"
+    dest: "{{ destpath.split(',')[item|int] }}/edge.env"
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is defined and env_content | length > 0
+  tags:
+    - edge_init_env
+
+- name: init env from content
+  shell:
+    cd {{ destpath.split(',')[item|int] }};
+    bin/edge init;
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is defined and env_content | length > 0
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  tags:
+    - edge_init_env
+
+###################### edge init openresty (legacy) ########################
 - name: copy env file
   ansible.builtin.copy:
     src: "{{ srcpath }}"
-    dest: "{{ destpath.split(',')[item|int] }}/{{ 'edge.env' if filetype == 'env' else srcpath | basename }}"
+    dest: "{{ destpath.split(',')[item|int] }}/{{ 'edge.env' if (filetype | default('')) == 'env' else srcpath | basename }}"
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is not defined or env_content | length == 0
   tags:
     - edge_init_env
 
@@ -14,15 +39,16 @@
     cd {{ destpath.split(',')[item|int] }};
     bin/edge init;
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
-  when: filetype in ['site', 'env_site']
+  when: (filetype | default('')) in ['site', 'env_site'] and (env_content is not defined or env_content | length == 0)
   tags:
     - edge_init_env
 
-- name: init env
+- name: init env (legacy)
   shell:
     cd {{ destpath.split(',')[item|int] }};
     bin/edge init;
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is not defined or env_content | length == 0
   register: cmd_output
   changed_when: false
   failed_when: false
