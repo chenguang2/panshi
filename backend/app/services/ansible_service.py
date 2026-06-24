@@ -75,6 +75,7 @@ ALLOWED_TAGS = frozenset({
     "script_cmd_run",
     "nginx_stream",
     "edge_plugins_md5",
+    "edge_read_env",
 })
 
 # Mapping from nginx_cmd values to user-facing action names
@@ -293,12 +294,31 @@ class AnsibleRunnerService:
             tag, ip, rc, status,
         )
 
+        # Extract structured shell/slurp module output from ansible-runner events.
+        # The combined stdout includes ansible headers; use events to get clean output.
+        shell_stdout = ""
+        slurp_content = ""
+        event_list = getattr(result, "events", []) or []
+        for event in event_list:
+            ed = event.get("event_data", {}) if isinstance(event, dict) else {}
+            if not ed:
+                continue
+            # shell/command module: stdout appears in runner_on_ok res
+            res = ed.get("res", {}) or {}
+            if res.get("stdout"):
+                shell_stdout = res["stdout"]
+            # slurp module: content is base64-encoded in res.content
+            if res.get("content"):
+                slurp_content = res["content"]
+
         return {
             "rc": rc,
             "status": status,
             "stdout": stdout,
             "stderr": stderr,
             "command": command_str,
+            "shell_stdout": shell_stdout,
+            "slurp_content": slurp_content,
         }
 
     async def nginx_cmd(

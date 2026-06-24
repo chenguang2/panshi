@@ -3,6 +3,7 @@ from app.api.v1 import (
     auth, users, clusters,
     cluster_upstreams, cluster_plugin_configs, cluster_global_rules, cluster_nodes,
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
+    cluster_edge_env,
     plugins, dashboard,
     upstreams, routes, plugin_configs, global_rules, nodes, static_resources,
     plugin_metadata,
@@ -35,6 +36,7 @@ api_router.include_router(global_rules.router)
 api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
 api_router.include_router(plugin_metadata.router)
+api_router.include_router(cluster_edge_env.router)
 
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
