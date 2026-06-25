@@ -1,5 +1,14 @@
 ---
 ###################### copy via inline content (new) ########################
+- name: backup existing edge.env
+  ansible.builtin.shell:
+    cmd: cp "{{ destpath.split(',')[item|int] }}/edge.env" "{{ destpath.split(',')[item|int] }}/edge.env.bak.$(date +%s)"
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is defined and env_content | length > 0
+  ignore_errors: true
+  tags:
+    - edge_init_env
+
 - name: write edge.env from content
   ansible.builtin.copy:
     content: "{{ env_content }}"

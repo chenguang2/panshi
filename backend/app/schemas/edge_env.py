@@ -11,6 +11,7 @@ class EdgeEnvReadResponse(BaseModel):
 
 class EdgeEnvDeployRequest(BaseModel):
     content: str = Field(..., min_length=1)
+    node_ids: Optional[List[int]] = None
 
 
 class NodeResultItem(BaseModel):

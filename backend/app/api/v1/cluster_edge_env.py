@@ -18,7 +18,7 @@ from app.schemas.edge_env import (
     NodeResultItem,
 )
 from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream
-from app.utils.yaml_validator import validate_yaml
+from app.utils.yaml_validator import validate_yaml, validate_edge_env
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +61,29 @@ async def deploy_edge_env(
     request: EdgeEnvDeployRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    is_valid, error_msg = validate_yaml(request.content)
+    # Step 1: YAML syntax + field validation
+    is_valid, error_msg = validate_edge_env(request.content)
     if not is_valid:
-        raise HTTPException(status_code=422, detail=error_msg or "YAML 格式错误")
+        raise HTTPException(status_code=422, detail=error_msg or "配置格式错误")
 
     cluster = await db.get(Cluster, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
 
-    nodes = (await db.execute(select(Node).where(Node.cluster_id == cluster_id, Node.status == 1))).scalars().all()
+    # Step 2: resolve target nodes
+    if request.node_ids:
+        nodes = (await db.execute(
+            select(Node).where(Node.id.in_(request.node_ids), Node.cluster_id == cluster_id)
+        )).scalars().all()
+        if not nodes:
+            raise HTTPException(status_code=400, detail="指定的节点不存在或不属于该集群")
+    else:
+        nodes = (await db.execute(
+            select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+        )).scalars().all()
+
     if not nodes:
-        raise HTTPException(status_code=400, detail="集群没有活跃节点")
+        raise HTTPException(status_code=400, detail="没有可发布的节点")
 
     async def deploy_stream():
         node_results: list[dict] = []
@@ -167,6 +179,56 @@ async def get_edge_env_version(cluster_id: int, version_id: int, db: AsyncSessio
         status=version.status, deployed_by=str(version.deployed_by),
         deployed_at=version.deployed_at,
         node_results=json.loads(version.node_results) if version.node_results else [],
+    )
+
+
+@router.get("/clusters/{cluster_id}/edge-env/read-stream")
+async def read_edge_env_stream(
+    cluster_id: int,
+    node_id: int = Query(..., description="Node ID to read edge.env from"),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE stream: read edge.env from a node, showing real-time ansible output."""
+    cluster = await db.get(Cluster, cluster_id)
+    if not cluster:
+        raise HTTPException(status_code=404, detail="集群不存在")
+
+    node = await db.get(Node, node_id)
+    if not node or node.cluster_id != cluster_id:
+        raise HTTPException(status_code=404, detail="节点不存在或不属于该集群")
+
+    async def event_stream():
+        # Phase 1: stream ansible output in real-time
+        async for event in _run_ansible_stream(
+            runner_method=_ansible_service,
+            ip=node.ip,
+            tag="edge_read_env",
+            extravars={"edge_path": node.edge_path},
+        ):
+            yield event
+
+        # Phase 2: get the actual content (SSH connection is cached so this is fast)
+        try:
+            result = await _ansible_service.generic_run(
+                ip=node.ip, tag="edge_read_env",
+                extravars={"edge_path": node.edge_path},
+            )
+            content = result.get("shell_stdout") or result.get("stdout", "")
+            if result.get("rc") == 0:
+                yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'error', 'message': '读取 edge.env 失败', 'percent': 100})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'percent': 100})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

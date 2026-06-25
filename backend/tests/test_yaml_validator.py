@@ -83,3 +83,82 @@ plugin_attr:
         assert ok is False
         assert error is not None
         assert "line" in error.lower() or "column" in error.lower()
+
+
+# ── validate_edge_env fields ─────────────────────────────────────────
+
+from app.utils.yaml_validator import validate_edge_env
+
+
+class TestValidateEdgeEnv:
+
+    def test_valid_full_config(self):
+        content = """deploy:
+  prefix: edge
+  http:
+    edge:
+      listen:
+        - addr: 0.0.0.0:9980
+    admin:
+      listen:
+        - addr: 0.0.0.0:9990
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is True
+        assert err is None
+
+    def test_missing_deploy(self):
+        content = """http:
+  edge:
+    listen:
+      - addr: 0.0.0.0:9980
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is False
+        assert "deploy" in err.lower()
+
+    def test_missing_deploy_http(self):
+        content = """deploy:
+  prefix: edge
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is False
+        assert "http" in err.lower()
+
+    def test_missing_edge_listen(self):
+        content = """deploy:
+  prefix: edge
+  http:
+    admin:
+      listen:
+        - addr: 0.0.0.0:9990
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is False
+        assert "edge" in err.lower() and "listen" in err.lower()
+
+    def test_missing_admin_listen(self):
+        content = """deploy:
+  prefix: edge
+  http:
+    edge:
+      listen:
+        - addr: 0.0.0.0:9980
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is False
+        assert "admin" in err.lower() and "listen" in err.lower()
+
+    def test_empty_listen_should_fail(self):
+        content = """deploy:
+  prefix: edge
+  http:
+    edge:
+      listen: []
+    admin:
+      listen:
+        - addr: 0.0.0.0:9990
+"""
+        ok, err = validate_edge_env(content)
+        assert ok is False
+        assert "listen" in err.lower()

@@ -2,14 +2,11 @@
   <div class="ee-page">
     <PageHeader title="edge.env 配置" description="远程读取、编辑和部署 Edge 网关的 edge.env 配置文件">
       <template #actions>
-        <button class="btn btn-secondary btn-sm" @click="refreshContent" :disabled="!selectedClusterId || loading">
-          {{ loading ? '读取中...' : '刷新' }}
+        <button class="btn btn-primary" @click="startReadTemplate" :disabled="!selectedClusterId || !selectedNodeId || readStreaming">
+          {{ readStreaming ? '读取中...' : '获取配置模板' }}
         </button>
-        <button class="btn btn-secondary btn-sm" @click="showVersionHistory">
-          <span style="margin-right:4px">&#128196;</span>版本历史
-        </button>
-        <button class="btn btn-primary btn-sm" @click="confirmDeploy" :disabled="!selectedClusterId || !editorContent">
-          部署
+        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId">
+          发布
         </button>
       </template>
     </PageHeader>
@@ -29,50 +26,132 @@
           <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port }}</option>
         </select>
       </div>
-      <div v-if="referenceNode" class="ee-node-info">
-        当前从 <strong>{{ referenceNode.ip }}:{{ referenceNode.management_port }}</strong> 读取
-      </div>
     </div>
 
     <div v-if="!selectedClusterId" class="ee-empty">
       <div class="ee-empty-text">请先选择一个集群</div>
     </div>
-    <div v-else-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="errorMsg" class="ee-error">
-      <div class="ee-error-text">{{ errorMsg }}</div>
-      <button class="btn btn-secondary btn-sm" @click="refreshContent">重试</button>
+    <div v-else-if="noActiveNodes" class="ee-empty">
+      <div class="ee-empty-text">当前集群无活跃节点，无法管理 edge.env</div>
     </div>
     <div v-else class="ee-editor-area">
       <MonacoEditor v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
     </div>
 
-    <!-- Deploy Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: deployConfirmVisible ? 'flex' : 'none' }">
+    <!-- Read Template Progress Modal -->
+    <div class="modal-overlay" :style="{ display: readModalVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
-          <h2>确认部署</h2>
-          <button class="modal-close" @click="deployConfirmVisible = false">&times;</button>
+          <h2>获取配置模板</h2>
+          <button class="modal-close" @click="closeReadModal">&times;</button>
         </div>
         <div class="modal-body">
-          <div v-if="diffHtml" class="ee-diff" v-html="diffHtml"></div>
-          <div v-else class="ee-diff-empty">无变更</div>
+          <div v-if="readLogs.length === 0" class="ee-deploying">
+            <div class="ee-spinner"></div>
+            <div>正在连接远程主机...</div>
+          </div>
+          <div v-if="readLogs.length > 0" class="ee-log-area">
+            <div v-for="(log, i) in readLogs" :key="i" class="ee-log-line">{{ log }}</div>
+          </div>
+          <div v-if="readError" class="ee-node-error" style="margin-top:8px">{{ readError }}</div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="deployConfirmVisible = false">取消</button>
-          <button class="btn btn-primary" @click="executeDeploy" :disabled="deploying">确认部署</button>
+          <button class="btn btn-secondary" @click="closeReadModal">关闭</button>
         </div>
       </div>
     </div>
 
-    <!-- Deploy Progress Modal -->
-    <div class="modal-overlay" :style="{ display: deployProgressVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide">
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
+      <div class="modal">
         <div class="modal-header">
-          <h2>部署进度</h2>
-          <button class="modal-close" @click="closeProgress">&times;</button>
+          <h2>{{ confirmTitle }}</h2>
+          <button class="modal-close" @click="onConfirmCancel">&times;</button>
         </div>
         <div class="modal-body">
-          <div v-if="nodeResults.length === 0 && deploying" class="ee-deploying">
+          <div style="font-size:14px;padding:8px 0">{{ confirmContent }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="onConfirmCancel">取消</button>
+          <button class="btn btn-primary" @click="onConfirmOk">{{ confirmOkText }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div class="modal-overlay" :style="{ display: alertVisible ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ alertTitle }}</h2>
+          <button class="modal-close" @click="alertVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:14px;padding:8px 0">{{ alertContent }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" @click="alertVisible = false">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish Diff Modal -->
+    <div class="modal-overlay" :style="{ display: publishDiffVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>确认变更</h2>
+          <button class="modal-close" @click="publishDiffVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="diffHtml" class="ee-diff" v-html="diffHtml"></div>
+          <div v-else class="ee-diff-empty">与上次获取的内容一致，无变更</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="publishDiffVisible = false">取消</button>
+          <button class="btn btn-primary" @click="onShowNodeSelection">继续选择节点</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish Node Selection Modal -->
+    <div class="modal-overlay" :style="{ display: publishNodeModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>选择发布节点</h2>
+          <button class="modal-close" @click="publishNodeModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="publish-node-list">
+            <div
+              v-for="n in allNodes"
+              :key="n.id"
+              class="publish-node-item"
+              :class="{ disabled: n.status !== 1 }"
+              @click="togglePublishNode(n)"
+            >
+              <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" :disabled="n.status !== 1" />
+              <span class="publish-node-ip">{{ n.ip }}:{{ n.management_port }}</span>
+              <span v-if="n.status !== 1" class="badge badge-neutral">离线</span>
+              <span v-else class="badge badge-success">在线</span>
+            </div>
+          </div>
+          <div v-if="selectedPublishNodeIds.length === 0" style="color:var(--danger);font-size:12px;margin-top:8px">请至少选择一个节点</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="publishNodeModalVisible = false">取消</button>
+          <button class="btn btn-primary" @click="executePublish" :disabled="selectedPublishNodeIds.length === 0 || publishing">确认发布</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publish Progress Modal -->
+    <div class="modal-overlay" :style="{ display: publishProgressVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>发布进度</h2>
+          <button class="modal-close" @click="closePublishProgress">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="nodeResults.length === 0 && publishing" class="ee-deploying">
             <div class="ee-spinner"></div>
             <div>正在连接远程节点...</div>
           </div>
@@ -80,46 +159,20 @@
             <div class="ee-node-card-header">
               <span class="ee-node-card-ip">{{ nodeResult.ip }}</span>
               <span class="badge" :class="nodeResult.status === 'success' ? 'badge-success' : nodeResult.status === 'failed' ? 'badge-danger' : 'badge-neutral'">
-                {{ nodeResult.status === 'success' ? '成功' : nodeResult.status === 'failed' ? '失败' : '部署中...' }}
+                {{ nodeResult.status === 'success' ? '成功' : nodeResult.status === 'failed' ? '失败' : '发布中...' }}
               </span>
             </div>
             <div v-if="nodeResult.error" class="ee-node-error">{{ nodeResult.error }}</div>
           </div>
-          <div v-if="deployLogs.length > 0" class="ee-log-area">
-            <div v-for="(log, i) in deployLogs" :key="i" class="ee-log-line">{{ log }}</div>
+          <div v-if="publishLogs.length > 0" class="ee-log-area">
+            <div v-for="(log, i) in publishLogs" :key="i" class="ee-log-line">{{ log }}</div>
           </div>
-          <div v-if="deployResult" class="ee-deploy-result">
-            整体状态: <strong>{{ deployResult.status === 'all_success' ? '全部成功' : deployResult.status === 'partial' ? '部分成功' : '全部失败' }}</strong>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeProgress">关闭</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Version History Modal -->
-    <div class="modal-overlay" :style="{ display: versionHistoryVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide">
-        <div class="modal-header">
-          <h2>版本历史</h2>
-          <button class="modal-close" @click="versionHistoryVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="versions.length === 0" class="ee-empty-text">暂无部署记录</div>
-          <div v-for="v in versions" :key="v.id" class="ee-version-row" @click="viewVersionDetail(v.id)">
-            <div class="ee-version-meta">
-              <span class="badge" :class="v.status === 'all_success' ? 'badge-success' : v.status === 'partial' ? 'badge-warning' : 'badge-danger'">
-                {{ v.status === 'all_success' ? '全部成功' : v.status === 'partial' ? '部分成功' : '失败' }}
-              </span>
-              <span class="ee-version-time">{{ formatDate(v.deployed_at) }}</span>
-              <span class="ee-version-deployed-by">{{ v.deployed_by }}</span>
-            </div>
-            <div class="ee-version-stats">{{ v.success_count }}/{{ v.node_count }} 节点成功</div>
+          <div v-if="publishResult" class="ee-deploy-result">
+            整体状态: <strong>{{ publishResult.status === 'all_success' ? '全部成功' : publishResult.status === 'partial' ? '部分成功' : '全部失败' }}</strong>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="versionHistoryVisible = false">关闭</button>
+          <button class="btn btn-secondary" @click="closePublishProgress">关闭</button>
         </div>
       </div>
     </div>
@@ -136,33 +189,79 @@ import api from '@/api'
 import * as edgeEnvApi from '@/api/edgeEnv'
 import { useInstallStream } from '@/composables/useInstallStream'
 import type { Cluster } from '@/types'
+import { load as yamlLoad } from 'js-yaml'
 
 const route = useRoute()
 
 const clusters = ref<Cluster[]>([])
 const nodes = ref<any[]>([])
+const allNodes = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const selectedNodeId = ref<number | string>('')
 const editorContent = ref('')
 const savedContent = ref('')
-const loading = ref(false)
 const errorMsg = ref('')
 
-const deployConfirmVisible = ref(false)
-const deployProgressVisible = ref(false)
-const nodeResults = ref<any[]>([])
-const deployResult = ref<any>(null)
+// Confirm modal
+const confirmVisible = ref(false)
+const confirmTitle = ref('')
+const confirmContent = ref('')
+const confirmOkText = ref('确认')
+let confirmResolve: ((val: boolean) => void) | null = null
+
+function showConfirm(opts: { title: string; content: string; okText?: string }): Promise<boolean> {
+  confirmTitle.value = opts.title
+  confirmContent.value = opts.content
+  confirmOkText.value = opts.okText || '确认'
+  confirmVisible.value = true
+  return new Promise((resolve) => { confirmResolve = resolve })
+}
+function onConfirmOk() {
+  confirmVisible.value = false
+  confirmResolve?.(true)
+  confirmResolve = null
+}
+function onConfirmCancel() {
+  confirmVisible.value = false
+  confirmResolve?.(false)
+  confirmResolve = null
+}
+
+// Alert modal
+const alertVisible = ref(false)
+const alertTitle = ref('')
+const alertContent = ref('')
+function showAlert(title: string, content: string) {
+  alertTitle.value = title
+  alertContent.value = content
+  alertVisible.value = true
+}
+
+// Read template
+const readModalVisible = ref(false)
+const readStreaming = ref(false)
+const readLogs = ref<string[]>([])
+const readError = ref('')
+let readAbort: AbortController | null = null
+
+// Publish
+const publishDiffVisible = ref(false)
 const diffHtml = ref('')
-const deployLogs = ref<string[]>([])
-
-const versionHistoryVisible = ref(false)
-const versions = ref<any[]>([])
-
-const referenceNode = computed(() => nodes.value.find(n => n.id === selectedNodeId.value))
+const publishNodeModalVisible = ref(false)
+const publishProgressVisible = ref(false)
+const selectedPublishNodeIds = ref<number[]>([])
+const nodeResults = ref<any[]>([])
+const publishResult = ref<any>(null)
+const publishLogs = ref<string[]>([])
 
 const installStream = useInstallStream()
-const deploying = computed(() => installStream.installing.value)
-onUnmounted(() => installStream.cancel())
+const publishing = computed(() => installStream.installing.value)
+onUnmounted(() => { installStream.cancel(); readAbort?.abort() })
+
+const noActiveNodes = computed(() => {
+  if (!selectedClusterId.value) return false
+  return nodes.value.length === 0
+})
 
 onMounted(async () => {
   await loadClusters()
@@ -186,15 +285,16 @@ async function loadNodes() {
   if (!selectedClusterId.value) return
   try {
     const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, { params: { page: 1, page_size: 100 } })
-    nodes.value = (res.data.items || []).filter((n: any) => n.status === 1)
+    allNodes.value = res.data.items || []
+    nodes.value = allNodes.value.filter((n: any) => n.status === 1)
   } catch {
     nodes.value = []
+    allNodes.value = []
   }
 }
 
 async function onClusterChange() {
   editorContent.value = ''
-  savedContent.value = ''
   errorMsg.value = ''
   selectedNodeId.value = ''
   await loadNodes()
@@ -204,29 +304,87 @@ async function onClusterChange() {
 }
 
 async function onNodeChange() {
-  if (editorContent.value && editorContent.value !== savedContent.value) {
-    if (!confirm('当前编辑内容尚未部署，切换节点将丢弃编辑内容，是否继续？')) {
-      return
-    }
+  if (editorContent.value) {
+    const ok = await showConfirm({
+      title: '确认切换节点',
+      content: '当前编辑内容尚未发布，切换节点将丢弃编辑内容，是否继续？',
+      okText: '确认切换',
+    })
+    if (!ok) return
   }
   editorContent.value = ''
-  savedContent.value = ''
   errorMsg.value = ''
 }
 
-async function refreshContent() {
+// ── Read template ──
+
+async function startReadTemplate() {
   if (!selectedClusterId.value || !selectedNodeId.value) return
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const res = await edgeEnvApi.fetchEdgeEnv(Number(selectedClusterId.value), Number(selectedNodeId.value))
-    editorContent.value = res.data.content
-    savedContent.value = res.data.content
-  } catch (e: any) {
-    errorMsg.value = e.response?.data?.detail || '读取 edge.env 失败'
-  } finally {
-    loading.value = false
+
+  // Confirm discard if editor has content
+  if (editorContent.value) {
+    const ok = await showConfirm({
+      title: '确认获取模板',
+      content: '当前编辑内容将被丢弃，确定要获取模板吗？',
+      okText: '确认获取',
+    })
+    if (!ok) return
   }
+
+  readModalVisible.value = true
+  readStreaming.value = true
+  readLogs.value = []
+  readError.value = ''
+
+  readAbort = edgeEnvApi.readEdgeEnvStream(
+    Number(selectedClusterId.value),
+    Number(selectedNodeId.value),
+    (data: any) => {
+      if (data.line) readLogs.value.push(data.line)
+      if (data.type === 'content') {
+        editorContent.value = data.content
+        savedContent.value = data.content
+        readStreaming.value = false
+        readLogs.value.push('✅ 配置模板获取完成')
+      }
+      if (data.type === 'error') {
+        readError.value = data.message || '读取失败'
+        readStreaming.value = false
+      }
+    },
+    (err) => {
+      readError.value = err
+      readStreaming.value = false
+    },
+  )
+}
+
+function closeReadModal() {
+  readModalVisible.value = false
+  readStreaming.value = false
+  readAbort?.abort()
+  readAbort = null
+}
+
+// ── Publish ──
+
+function validateFields(content: string): string | null {
+  if (!content || !content.trim()) {
+    return '编辑器内容为空，请先获取配置模板或输入内容'
+  }
+  try {
+    const parsed = yamlLoad(content)
+    if (!parsed || typeof parsed !== 'object') return '配置内容格式错误'
+    if (!parsed.deploy) return '缺少必填字段: deploy'
+    if (!parsed.deploy.http) return '缺少必填字段: deploy → http'
+    const edgeListen = parsed.deploy.http.edge?.listen
+    if (!Array.isArray(edgeListen) || edgeListen.length === 0) return '缺少必填字段或为空: deploy → http → edge → listen'
+    const adminListen = parsed.deploy.http.admin?.listen
+    if (!Array.isArray(adminListen) || adminListen.length === 0) return '缺少必填字段或为空: deploy → http → admin → listen'
+  } catch {
+    return 'YAML 格式解析失败'
+  }
+  return null
 }
 
 function computeDiff() {
@@ -234,7 +392,7 @@ function computeDiff() {
     diffHtml.value = ''
     return
   }
-  const oldLines = savedContent.value.split('\n')
+  const oldLines = (savedContent.value || '').split('\n')
   const newLines = editorContent.value.split('\n')
   let html = '<div style="font-family:monospace;font-size:12px;max-height:400px;overflow:auto;">'
   const maxLen = Math.max(oldLines.length, newLines.length)
@@ -264,25 +422,55 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function confirmDeploy() {
+function onPublishClick() {
+  if (!selectedClusterId.value) return
+  if (!allNodes.value.length) { showAlert('提示', '该集群下没有节点'); return }
+
+  // Empty content check
+  if (!editorContent.value || !editorContent.value.trim()) {
+    showAlert('提示', '编辑器内容为空，请先获取配置模板或输入内容')
+    return
+  }
+
+  // Field validation
+  const err = validateFields(editorContent.value)
+  if (err) {
+    showAlert('字段验证', err)
+    return
+  }
+
+  // Show diff comparison
   computeDiff()
-  deployConfirmVisible.value = true
+  selectedPublishNodeIds.value = []
+  publishDiffVisible.value = true
 }
 
-async function executeDeploy() {
-  if (!selectedClusterId.value) return
-  deployConfirmVisible.value = false
-  deployProgressVisible.value = true
+function onShowNodeSelection() {
+  publishDiffVisible.value = false
+  publishNodeModalVisible.value = true
+}
+
+function togglePublishNode(n: any) {
+  if (n.status !== 1) return
+  const idx = selectedPublishNodeIds.value.indexOf(n.id)
+  if (idx === -1) selectedPublishNodeIds.value.push(n.id)
+  else selectedPublishNodeIds.value.splice(idx, 1)
+}
+
+async function executePublish() {
+  if (!selectedClusterId.value || selectedPublishNodeIds.value.length === 0) return
+  publishNodeModalVisible.value = false
+  publishProgressVisible.value = true
   nodeResults.value = []
-  deployLogs.value = []
-  deployResult.value = null
+  publishLogs.value = []
+  publishResult.value = null
 
   const url = `/clusters/${selectedClusterId.value}/edge-env/deploy`
-  const body = { content: editorContent.value }
+  const body = { content: editorContent.value, node_ids: selectedPublishNodeIds.value }
 
   await installStream.start(url, body, {
     onLine(line) {
-      deployLogs.value.push(line)
+      publishLogs.value.push(line)
       try {
         const data = JSON.parse(line)
         if (data.type === 'node_start') {
@@ -291,58 +479,30 @@ async function executeDeploy() {
           const nr = nodeResults.value.find(n => n.ip === data.ip)
           if (nr) nr.status = data.status === 'success' ? 'success' : 'failed'
         } else if (data.type === 'complete') {
+          publishResult.value = data
           savedContent.value = editorContent.value
-          deployResult.value = data
-          message.success('部署完成')
+          message.success('发布完成')
         }
-      } catch { /* line is ansible log text */ }
+      } catch { /* ansible log text */ }
     },
     onProgress() { /* no-op */ },
     onComplete(rc, status) {
-      if (!deployResult.value) {
-        deployResult.value = { status: rc === 0 ? 'all_success' : 'all_failed' }
+      if (!publishResult.value) {
+        publishResult.value = { status: rc === 0 ? 'all_success' : 'all_failed' }
       }
     },
     onError(error) {
       nodeResults.value = [{ ip: '-', status: 'failed', error }]
-      deployResult.value = { status: 'all_failed' }
-      message.error('部署失败: ' + error)
+      publishResult.value = { status: 'all_failed' }
+      message.error('发布失败: ' + error)
     },
   })
 }
 
-function closeProgress() {
-  deployProgressVisible.value = false
+function closePublishProgress() {
+  publishProgressVisible.value = false
   nodeResults.value = []
-  deployResult.value = null
-}
-
-async function showVersionHistory() {
-  if (!selectedClusterId.value) return
-  versionHistoryVisible.value = true
-  try {
-    const res = await edgeEnvApi.listVersions(Number(selectedClusterId.value))
-    versions.value = res.data.items || []
-  } catch {
-    versions.value = []
-  }
-}
-
-async function viewVersionDetail(versionId: number) {
-  try {
-    const res = await edgeEnvApi.getVersionDetail(Number(selectedClusterId.value), versionId)
-    editorContent.value = res.data.content
-    savedContent.value = ''
-    versionHistoryVisible.value = false
-    message.info('已加载历史版本内容到编辑器，请确认后手动部署')
-  } catch {
-    message.error('加载版本详情失败')
-  }
-}
-
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN')
+  publishResult.value = null
 }
 </script>
 
@@ -352,13 +512,10 @@ function formatDate(dateStr: string): string {
 .ee-filter-group { display: flex; align-items: center; gap: 6px; }
 .ee-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .ee-select { width: 200px; }
-.ee-node-info { font-size: 12px; color: var(--muted); }
 .ee-empty { text-align: center; padding: 60px 0; }
 .ee-empty-text { font-size: 14px; color: var(--muted); }
-.ee-error { text-align: center; padding: 40px 0; }
-.ee-error-text { font-size: 14px; color: var(--danger); margin-bottom: 12px; }
 .ee-editor-area { margin-top: 0; }
-.ee-diff { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; }
+.ee-diff { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; max-height: 400px; overflow: auto; }
 .ee-diff-empty { text-align: center; padding: 20px; color: var(--muted); }
 .ee-deploying { text-align: center; padding: 40px 0; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .ee-spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -368,13 +525,12 @@ function formatDate(dateStr: string): string {
 .ee-node-card-ip { font-family: var(--font-mono); font-weight: 600; }
 .ee-node-error { margin-top: 8px; font-size: 12px; color: var(--danger); font-family: var(--font-mono); }
 .ee-deploy-result { margin-top: 12px; padding: 8px; text-align: center; font-size: 14px; }
-.ee-log-area { margin-top: 12px; max-height: 200px; overflow-y: auto; background: #1a1a2e; border-radius: 4px; padding: 8px; font-family: var(--font-mono); font-size: 11px; }
+.ee-log-area { margin-top: 12px; max-height: 300px; overflow-y: auto; background: #1a1a2e; border-radius: 4px; padding: 8px; font-family: var(--font-mono); font-size: 11px; }
 .ee-log-line { color: #a0d2ff; padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
-.ee-version-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
-.ee-version-row:hover { background: var(--bg); }
-.ee-version-meta { display: flex; align-items: center; gap: 8px; }
-.ee-version-time { font-size: 12px; color: var(--muted); }
-.ee-version-deployed-by { font-size: 12px; color: var(--muted); }
-.ee-version-stats { font-size: 12px; color: var(--muted); }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); }
+.publish-node-list { max-height: 400px; overflow-y: auto; }
+.publish-node-item { display: flex; align-items: center; gap: 8px; padding: 8px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.publish-node-item:hover { background: var(--bg); }
+.publish-node-item.disabled { opacity: 0.5; cursor: not-allowed; }
+.publish-node-ip { font-family: var(--font-mono); flex: 1; }
 </style>
