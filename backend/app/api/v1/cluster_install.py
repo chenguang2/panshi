@@ -23,7 +23,11 @@ from app.models.cluster import Node
 from app.services.ansible_service import (
     AnsibleRunnerService,
     _run_ansible_stream,
+    _build_ssh_cmd,
+    _sshpass_available,
+    _run_ssh_with_fallback,
     get_ssh_user,
+    get_ssh_password,
 )
 
 
@@ -91,26 +95,18 @@ async def _install_openresty_stream(
             f"wait"
         )
         ssh_user = get_ssh_user(node.ip)
-        ssh_cmd_parts = [
-            "ssh",
-            "-i", "~/.ssh/id_rsa",
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=30",
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            f"{ssh_user}@{node.ip}",
-            build_cmd,
-        ]
-        ssh_cmd_str = shlex.join(ssh_cmd_parts)
-        yield f"data: {json.dumps({'line': f'$ {ssh_cmd_str}', 'percent': 40})}\n\n"
-        yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
+        ssh_password = get_ssh_password(node.ip)
 
-        try:
+        _ssh_result: list[int] = []
+
+        async def _stream_ssh(cmd_parts: list[str]) -> AsyncGenerator[str, None]:
+            """Run cmd via subprocess and yield stdout as SSE lines, storing rc in _ssh_result."""
             proc = await asyncio.create_subprocess_exec(
-                *ssh_cmd_parts,
+                *cmd_parts,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
+                stderr=asyncio.subprocess.PIPE,
             )
+            nonlocal ssh_proc
             ssh_proc = proc
             _install_proc_registry[node.id] = proc
 
@@ -118,10 +114,10 @@ async def _install_openresty_stream(
                 if request is not None:
                     try:
                         if await request.is_disconnected():
+                            _ssh_result.append(-1)
                             return
                     except RuntimeError:
                         pass
-
                 try:
                     line_bytes = await asyncio.wait_for(proc.stdout.readline(), timeout=2.0)
                 except asyncio.TimeoutError:
@@ -132,10 +128,44 @@ async def _install_openresty_stream(
                 if raw:
                     yield f"data: {json.dumps({'line': raw})}\n\n"
 
-            rc = await proc.wait()
+            stderr_bytes, _ = await proc.communicate()
+            stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip() if stderr_bytes else ""
+            proc_rc = await proc.wait()
             _install_proc_registry.pop(node.id, None)
+            _ssh_result.append(proc_rc)
+            nonlocal ssh_err
+            ssh_err = stderr_text
+
+        try:
+            # Round 1: key-based SSH
+            cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd)
+            yield f"data: {json.dumps({'line': f'$ {shlex.join(cmd_parts)}', 'percent': 40})}\n\n"
+            yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
+            rc = -1
+            ssh_err = ""
+            _ssh_result.clear()
+            async for event in _stream_ssh(cmd_parts):
+                yield event
+            rc = _ssh_result[0] if _ssh_result else -1
+
+            # Round 2: password fallback if needed
+            needs_fallback = (
+                rc != 0
+                and ssh_password
+                and _sshpass_available()
+                and (rc == 255 or "Permission denied" in ssh_err or "Authentication failed" in ssh_err)
+            )
+            if needs_fallback:
+                yield f"data: {json.dumps({'line': '免密登录失败，正在尝试密码认证...', 'percent': 40})}\n\n"
+                cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd, password=ssh_password)
+                yield f"data: {json.dumps({'line': f'$ {shlex.join(cmd_parts)}', 'percent': 40})}\n\n"
+                _ssh_result.clear()
+                async for event in _stream_ssh(cmd_parts):
+                    yield event
+                rc = _ssh_result[0] if _ssh_result else -1
+
             status_label = "success" if rc == 0 else "failed"
-            yield f"data: {json.dumps({'line': f'✅ install-edge.sh 完成 (rc={rc})' if rc == 0 else f'❌ install-edge.sh 失败 (rc={rc})', 'percent': 100})}\n\n"
+            yield f"data: {json.dumps({'line': f'✅ install-edge.sh 完成 (rc=0)' if rc == 0 else f'❌ install-edge.sh 失败 (rc={rc})', 'percent': 100})}\n\n"
             yield f"data: {json.dumps({'rc': rc, 'status': status_label, 'percent': 100})}\n\n"
         except FileNotFoundError:
             yield f"data: {json.dumps({'line': '❌ SSH 客户端未安装，无法执行远程编译', 'percent': 100})}\n\n"
@@ -155,18 +185,9 @@ async def _install_openresty_stream(
         raise
 
 async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss") -> tuple[int, str, str]:
-    """Run a command on remote node via SSH, return (rc, stdout, stderr)."""
-    proc = await asyncio.create_subprocess_exec(
-        "ssh", "-i", "~/.ssh/id_rsa",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=30",
-        "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-        f"{ssh_user}@{ip}", cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    return proc.returncode or 0, stdout.decode("utf-8", errors="replace").strip(), stderr.decode("utf-8", errors="replace").strip()
+    """Run a command on remote node via SSH with password fallback, return (rc, stdout, stderr)."""
+    password = get_ssh_password(ip)
+    return await _run_ssh_with_fallback(ip, ssh_user, cmd, password=password)
 
 
 # ── Router A: install-openresty + cancel-install ─────────────────────

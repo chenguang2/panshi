@@ -1865,58 +1865,22 @@ toolbox-yaml-format
 TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
 
-========================================
 
-讨论： 
+=======================================
 
-1. 请阅读 docs/edgs/使用手册.md , 这个是最新的文档
-2. 现在需要增加 stream 相关的 上游和路由，插件组，全局规则和插件元数据
-3. 新加 stream 的路由，需要编辑 edge.env 文件， 你可以参考 
-192.168.100.42  
-jboss/jboss  
-/work/jboss/1/openresty-1/uap-edge/edge.env 
+使用 /opsx-propose 命令， 修复 
 
-编辑 edge.env  现在需要每次都手工编辑，需要可以远程编辑，否则客户无法操作
-
-
-请给出几个方案，我看看
-
-
-1. Route/Upstream 模型策略：方案 A（独立 Stream 表）vs 方案 C（精简独立）？
-2. PluginConfig/GlobalRule：是否复用现有表，还是希望也分一套 Stream 专用的（如将来 HTTP 插件和 Stream 插件差异很大）？
-3. edge.env 编辑通道：你那边 Edge 节点支持 SSH 吗？如果有现成的 JumpServer 或堡垒机，方案 1 可行性更高。服务器上是否已经部署了 Ansible？
-4. Edge 团队是否可控：方案 2 如果可行（Edge 网关侧加配置 API），长期看是最干净的
-
-继续讨论：
-1. PluginConfig/GlobalRule 他们可以选择的插件和 http 的是不同的，是否完成弄成2套比较好？ 包括 route，stream ， 等整个都是 2套
-2. edge.env 按你的建议就行， edge节点可以ssh ，服务器上使用 ansible runner 
-3. 短期内不会加 edge 网关api
+节点的安装openresty 功能中，第二阶段， ssh 远程执行命令时，目前时免密运行的，实际上在 invertory/host 文件中
+也有 那个 ip 的用户名和密码， 需要加上，如果没有免密，就使用用户名，密码登录
 
 
 
 
-1. 全两套：你是想要完全独立的两组页面入口（侧边栏里有"HTTP 路由"和"Stream 路由"两个不同菜单项），还是在 Cluster 详情页内以 Tab 切换（选到 Stream Tab 看到的是 Stream 路由列表）？
-2. Cluster 粒度：Stream 是整个集群开启的（一个集群要么支持 HTTP+Stream，要么只有 HTTP），还是精细到每个节点都可以独立开关？
-3. edge.env 凭证：SSH 密钥你是想存在 Cluster 上（每个集群独立），还是想用一个全局的运维账号（所有节点同一个 key）？
+openresty-install-ssh-auth
 
-
-继续讨论：
-1. 集群内是两种路由等都有的，就是 http 和 stream 是共存的， 你看看那种方式比较好？ 
-3. edge.env 中的字段，不仅是 stream 相关的， http 的也要有，这个编辑是针对整个文件的， SSH 密钥等不涉及，ansible-runner 已经配好
-
-
-
-1. 现在整体太复杂了，先只弄 edge.env 远程编辑
-
-使用 openspec 来实现  edge.env 远程编辑 的需求
-
-
-edge-env-remote-editing
-
-/brainstorming 请仔细阅读 openspec/changes/edge-env-remote-editing/ 下的需求文档和
+/brainstorming 请仔细阅读 openspec/changes/openresty-install-ssh-auth/ 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
 
-
-请读取 openspec/changes/edge-env-remote-editing/tasks.md ，严格按照 Superpowers 的
+请读取 openspec/changes/openresty-install-ssh-auth/tasks.md ，严格按照 Superpowers 的
 TDD 技能，逐个完成任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。

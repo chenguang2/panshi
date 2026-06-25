@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import threading
 from datetime import datetime, timezone
@@ -24,6 +25,133 @@ DEFAULT_JOB_TIMEOUT = 60
 MAX_CONCURRENT_PLAYBOOKS = 5
 
 _INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
+
+# ── SSH helper functions ──────────────────────────────────────────────
+
+SSH_KEY_PATH = os.path.expanduser("~/.ssh/id_rsa")
+
+
+def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None) -> list[str]:
+    """Build SSH command list, optionally wrapping with sshpass."""
+    base_opts = [
+        "-o", "ConnectTimeout=30",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+    ]
+    if password:
+        return [
+            "sshpass", "-p", password, "ssh",
+            *base_opts,
+            f"{ssh_user}@{ip}", cmd,
+        ]
+    return [
+        "ssh", "-i", SSH_KEY_PATH,
+        "-o", "BatchMode=yes",
+        *base_opts,
+        f"{ssh_user}@{ip}", cmd,
+    ]
+
+
+def _sshpass_available() -> bool:
+    """Check whether ``sshpass`` is installed and in PATH."""
+    return shutil.which("sshpass") is not None
+
+
+async def _run_subprocess(cmd: list[str]) -> tuple[int, str, str]:
+    """Run a subprocess, return (rc, stdout, stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    rc = proc.returncode or 0
+    return rc, stdout.decode("utf-8", errors="replace").strip(), stderr.decode("utf-8", errors="replace").strip()
+
+
+async def _run_ssh_with_fallback(
+    ip: str,
+    ssh_user: str,
+    cmd: str,
+    password: str | None = None,
+    status_callback=None,
+) -> tuple[int, str, str]:
+    """Run SSH command, retrying with password fallback on auth failure.
+
+    Returns (rc, stdout, stderr). On fallback failure, merges both error outputs.
+    """
+    # Round 1: key-based
+    key_cmd = _build_ssh_cmd(ip, ssh_user, cmd)
+    rc, stdout, stderr = await _run_subprocess(key_cmd)
+    if rc == 0:
+        return rc, stdout, stderr
+
+    # Check whether to attempt password fallback
+    is_auth_failure = (
+        rc == 255
+        or "Permission denied" in stderr
+        or "Authentication failed" in stderr
+    )
+    if not is_auth_failure:
+        return rc, stdout, stderr
+    if password and not _sshpass_available():
+        hint = "\n提示: 免密登录失败，且 sshpass 未安装，无法使用密码认证。请安装 sshpass 后重试: sudo apt-get install sshpass"
+        return rc, stdout, stderr + hint
+    if not password:
+        return rc, stdout, stderr
+
+    # Round 2: password-based
+    if status_callback:
+        await status_callback("免密登录失败，正在尝试密码认证...")
+    pass_cmd = _build_ssh_cmd(ip, ssh_user, cmd, password=password)
+    rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd)
+    if rc2 == 0:
+        return rc2, stdout2, stderr2
+
+    # Both failed — merge errors
+    merged_stderr = f"免密登录失败: {stderr}\n--- 密码认证也失败 ---\n{stderr2}"
+    return rc2, stdout2, merged_stderr
+
+
+def get_ssh_password(ip: str) -> str | None:
+    """Resolve SSH password for *ip* from ansible inventory.
+
+    Priority: host-level ``ansible_ssh_pass`` → group vars → ``None``.
+    Returns ``None`` when no password is configured (key-based auth only).
+    """
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except (FileNotFoundError, yaml.YAMLError):
+        return None
+
+    try:
+        hosts = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("hosts", {})
+        )
+        host_entry = hosts.get(ip, {})
+        if isinstance(host_entry, dict):
+            pw = host_entry.get("ansible_ssh_pass")
+            if pw:
+                return str(pw)
+
+        group_vars = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("vars", {})
+        )
+        if isinstance(group_vars, dict):
+            pw = group_vars.get("ansible_ssh_pass")
+            if pw:
+                return str(pw)
+    except (AttributeError, TypeError):
+        pass
+
+    return None
 
 
 def get_ssh_user(ip: str) -> str:
