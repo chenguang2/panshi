@@ -38,11 +38,12 @@ async function bootstrap() {
   // Register feature-gated routes now that we know what's available.
   setupDynamicRoutes(router)
 
-  // Re-resolve current URL — fixes right-click → open in new tab
-  // where the route wasn't registered at initial navigation time.
-  // NOTE: Use window.location.pathname instead of router.currentRoute.value.fullPath
-  // because the initial navigation may not have resolved yet at this point.
-  await router.replace(window.location.pathname)
+  // Re-resolve current URL if route hasn't matched yet — fixes right-click
+  // → open in new tab where the route wasn't registered at initial nav time.
+  // Use window.location.pathname instead of router.currentRoute (which may
+  // still show the initial "/") and use push() instead of replace() to avoid
+  // a route transition that can blank the page during mount.
+  await router.push(window.location.pathname + window.location.search).catch(() => {})
 }
 
 bootstrap()
