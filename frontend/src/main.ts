@@ -47,4 +47,7 @@ async function bootstrap() {
   }
 }
 
-bootstrap()
+if (!(window as any).__PANSHI_BOOTSTRAPPED__) {
+  ;(window as any).__PANSHI_BOOTSTRAPPED__ = true
+  bootstrap()
+}
