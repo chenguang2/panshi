@@ -172,3 +172,37 @@ export interface PluginConfig {
   created_at?: string
   updated_at?: string
 }
+
+export interface StreamProxyTarget {
+  target: string
+  weight: number
+}
+
+export interface StreamProxy {
+  id: number
+  edge_uuid: string
+  cluster_id: number
+  name: string
+  description?: string
+  listen_port: number
+  load_balance: string
+  scheme: string
+  targets?: StreamProxyTarget[]
+  timeout?: Record<string, number>
+  keepalive_pool?: Record<string, number>
+  remote_addr?: string
+  sni?: string
+  status: number
+  current_version?: number
+  published_at?: string
+  created_at?: string
+  updated_at?: string
+  cluster_name?: string
+}
+
+export interface PortItem {
+  port: number
+  status: 'available' | 'in_use' | 'not_in_config'
+  used_by?: string
+  source?: 'db' | 'edge'
+}
