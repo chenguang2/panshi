@@ -31,6 +31,11 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/PluginSwitches.vue'),
     meta: { permission: 'plugin_management' },
   },
+  edge_env: {
+    path: 'edge-env',
+    name: 'EdgeEnv',
+    component: () => import('@/views/EdgeEnv.vue'),
+  },
   metrics: [
     {
       path: 'metrics',
@@ -70,7 +75,6 @@ const coreRoutes: RouteRecordRaw[] = [
       { path: 'static-resources', name: 'StaticResourceList', component: () => import('@/views/StaticResourceList.vue') },
       { path: 'plugin-metadata', name: 'PluginMetadataList', component: () => import('@/views/PluginMetadataList.vue') },
       { path: 'nodes', name: 'NodeList', component: () => import('@/views/NodeList.vue') },
-      { path: 'edge-env', name: 'EdgeEnv', component: () => import('@/views/EdgeEnv.vue') },
     ],
   },
 ]

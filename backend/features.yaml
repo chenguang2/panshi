@@ -6,6 +6,7 @@ features:
   install_edge: true
   plugin_switches: true
   metrics: true
+  edge_env: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

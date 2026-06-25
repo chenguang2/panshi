@@ -57,7 +57,8 @@
                   <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
                 </div>
                 <div class="diff-container">
-                  <div class="diff-tree" v-html="diffTreeHtml"></div>
+                  <div v-if="resourceType === 'edge_env'" class="diff-tree" style="font-family:var(--font-mono,monospace);font-size:12px;white-space:pre-wrap" v-html="textDiffHtml"></div>
+                  <div v-else class="diff-tree" v-html="diffTreeHtml"></div>
                 </div>
               </div>
 
@@ -370,6 +371,43 @@ const diffTreeHtml = computed(() => {
   } catch (e) {
     return '<pre>解析配置失败</pre>'
   }
+})
+
+const textDiffHtml = computed(() => {
+  if (selectedVersions.value.length !== 2) return ''
+  const v1 = Math.min(...selectedVersions.value)
+  const v2 = Math.max(...selectedVersions.value)
+  const versionA = versions.value.find(v => v.version === v1)
+  const versionB = versions.value.find(v => v.version === v2)
+  if (!versionA || !versionB) return ''
+
+  const getContent = (v: any): string => {
+    const raw = v.metadata || v.config || '{}'
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      return parsed.yaml || raw
+    } catch { return typeof raw === 'string' ? raw : JSON.stringify(raw) }
+  }
+
+  const linesA = (getContent(versionA) || '').split('\n')
+  const linesB = (getContent(versionB) || '').split('\n')
+  const maxLen = Math.max(linesA.length, linesB.length)
+  let html = ''
+  for (let i = 0; i < maxLen; i++) {
+    const a = linesA[i] || ''
+    const b = linesB[i] || ''
+    if (a === b) {
+      html += `<div style="color:#999;padding:0 8px">${escapeHtml(a)}</div>`
+    } else if (i >= linesA.length) {
+      html += `<div style="background:#dfd;color:#080;padding:0 8px">+ ${escapeHtml(b)}</div>`
+    } else if (i >= linesB.length) {
+      html += `<div style="background:#fdd;color:#c00;padding:0 8px">- ${escapeHtml(a)}</div>`
+    } else {
+      html += `<div style="background:#fdd;color:#c00;padding:0 8px">- ${escapeHtml(a)}</div>`
+      html += `<div style="background:#dfd;color:#080;padding:0 8px">+ ${escapeHtml(b)}</div>`
+    }
+  }
+  return html
 })
 
 const renderDiffTree = (diff: DiffResult, indent = 0): string => {
