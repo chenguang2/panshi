@@ -8,16 +8,15 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Node, EdgeEnvVersion
+from app.models.cluster import Cluster, Node, ConfigVersion
 from app.schemas.edge_env import (
     EdgeEnvReadResponse,
     EdgeEnvDeployRequest,
-    EdgeEnvDeployResponse,
-    EdgeEnvVersionListItem,
-    EdgeEnvVersionResponse,
     NodeResultItem,
 )
+from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream
+from app.services.edge_sync import create_config_version
 from app.utils.yaml_validator import validate_yaml, validate_edge_env
 
 logger = logging.getLogger(__name__)
@@ -90,10 +89,8 @@ async def deploy_edge_env(
         all_success = True
 
         for i, node in enumerate(nodes):
-            # Emit node start
             yield f"data: {json.dumps({'type': 'node_start', 'ip': node.ip, 'index': i, 'total': len(nodes)})}\n\n"
 
-            # Stream ansible output for this node
             try:
                 async for event in _run_ansible_stream(
                     runner_method=_ansible_service,
@@ -113,16 +110,13 @@ async def deploy_edge_env(
         overall_status = "all_success" if all_success and node_results else \
                          "partial" if any(r.get("status") == "success" for r in node_results) else "all_failed"
 
-        version = EdgeEnvVersion(
-            cluster_id=cluster_id, content=request.content, status=overall_status,
-            node_results=json.dumps(node_results, ensure_ascii=False),
-            deployed_by=0,
+        # Create version record in ConfigVersion
+        config_data = {"yaml": request.content}
+        new_version = await create_config_version(
+            db, "edge_env", cluster_id, cluster_id, config_data, cluster
         )
-        db.add(version)
-        await db.commit()
-        await db.refresh(version)
 
-        yield f"data: {json.dumps({'type': 'complete', 'version_id': version.id, 'status': overall_status, 'node_results': node_results})}\n\n"
+        yield f"data: {json.dumps({'type': 'complete', 'version': new_version, 'status': overall_status, 'node_results': node_results})}\n\n"
 
     return StreamingResponse(
         deploy_stream(),
@@ -135,51 +129,44 @@ async def deploy_edge_env(
     )
 
 
-@router.get("/clusters/{cluster_id}/edge-env/versions")
+@router.get("/clusters/{cluster_id}/edge-env/versions", response_model=ConfigVersionListResponse)
 async def list_edge_env_versions(
     cluster_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    if not await db.get(Cluster, cluster_id):
+    cluster = await db.get(Cluster, cluster_id)
+    if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
 
     versions = (await db.execute(
-        select(EdgeEnvVersion).where(EdgeEnvVersion.cluster_id == cluster_id)
-        .order_by(desc(EdgeEnvVersion.deployed_at))
+        select(ConfigVersion)
+        .where(ConfigVersion.resource_type == "edge_env", ConfigVersion.resource_id == cluster_id)
+        .order_by(desc(ConfigVersion.version))
         .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
 
     total = (await db.execute(
-        select(func.count()).where(EdgeEnvVersion.cluster_id == cluster_id)
+        select(func.count()).where(
+            ConfigVersion.resource_type == "edge_env", ConfigVersion.resource_id == cluster_id
+        )
     )).scalar()
 
-    items = []
-    for v in versions:
-        nr = json.loads(v.node_results) if v.node_results else []
-        items.append(EdgeEnvVersionListItem(
-            id=v.id, status=v.status, deployed_by=str(v.deployed_by),
-            deployed_at=v.deployed_at, node_count=len(nr),
-            success_count=sum(1 for r in nr if r.get("status") == "success"),
-        ))
-
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return ConfigVersionListResponse(
+        total=total or 0,
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=cluster.current_version,
+    )
 
 
-@router.get("/clusters/{cluster_id}/edge-env/versions/{version_id}", response_model=EdgeEnvVersionResponse)
+@router.get("/clusters/{cluster_id}/edge-env/versions/{version_id}", response_model=ConfigVersionResponse)
 async def get_edge_env_version(cluster_id: int, version_id: int, db: AsyncSession = Depends(get_db)):
-    version = await db.get(EdgeEnvVersion, version_id)
-    if not version or version.cluster_id != cluster_id:
+    version = await db.get(ConfigVersion, version_id)
+    if not version or version.resource_type != "edge_env" or version.resource_id != cluster_id:
         raise HTTPException(status_code=404, detail="版本记录不存在")
 
-    return EdgeEnvVersionResponse(
-        id=version.id, cluster_id=version.cluster_id,
-        content=version.content, previous_content=version.previous_content,
-        status=version.status, deployed_by=str(version.deployed_by),
-        deployed_at=version.deployed_at,
-        node_results=json.loads(version.node_results) if version.node_results else [],
-    )
+    return ConfigVersionResponse.model_validate(version)
 
 
 @router.get("/clusters/{cluster_id}/edge-env/read-stream")
@@ -198,7 +185,6 @@ async def read_edge_env_stream(
         raise HTTPException(status_code=404, detail="节点不存在或不属于该集群")
 
     async def event_stream():
-        # Phase 1: stream ansible output in real-time
         async for event in _run_ansible_stream(
             runner_method=_ansible_service,
             ip=node.ip,
@@ -207,7 +193,6 @@ async def read_edge_env_stream(
         ):
             yield event
 
-        # Phase 2: get the actual content (SSH connection is cached so this is fast)
         try:
             result = await _ansible_service.generic_run(
                 ip=node.ip, tag="edge_read_env",

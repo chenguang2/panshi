@@ -16,6 +16,7 @@ class Cluster(Base):
     group_name = Column(String(100), nullable=True)
     status = Column(Integer, nullable=False, default=1)
     creator_id = Column(Integer, nullable=True)
+    current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -183,15 +184,3 @@ class GlobalRule(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class EdgeEnvVersion(Base):
-    __tablename__ = "ps_edge_env_version"
-
-    id = Column(Integer, primary_key=True, index=True)
-    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
-    content = Column(Text, nullable=False)
-    previous_content = Column(Text, nullable=True)
-    content_hash = Column(String(64), nullable=True)
-    node_results = Column(Text, nullable=True)
-    status = Column(String(20), nullable=False, default="all_success")
-    deployed_by = Column(Integer, nullable=False)
-    deployed_at = Column(DateTime, default=datetime.utcnow)

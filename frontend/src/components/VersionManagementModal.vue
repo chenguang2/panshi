@@ -3,7 +3,7 @@
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal modal-wide" style="max-width:1000px;">
       <div class="modal-header">
-        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
+        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
 
@@ -68,9 +68,9 @@
                     <span v-if="selectedVersionData.version === currentVersion" class="version-current-tag">当前</span>
                   </span>
                   <div class="detail-actions">
-                    <button class="btn btn-sm btn-ghost" @click="copyConfig">复制JSON</button>
-                    <button class="btn btn-sm btn-primary" @click="handleRepublish">切换到此版本</button>
-                    <button class="btn btn-sm btn-danger" @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</button>
+                    <button class="btn btn-sm btn-ghost" @click="copyConfig">{{ resourceType === 'edge_env' ? '复制 YAML' : '复制JSON' }}</button>
+                    <button class="btn btn-sm btn-primary" @click="handleRepublish">{{ resourceType === 'edge_env' ? '加载到编辑器' : '切换到此版本' }}</button>
+                    <button v-if="resourceType !== 'edge_env'" class="btn btn-sm btn-danger" @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</button>
                   </div>
                 </div>
                 <div class="detail-config">
@@ -112,7 +112,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -124,6 +124,7 @@ const emit = defineEmits<{
   'edit': [data: { plugin_name: string; config: string }]
   'version-change': [data: { plugin_name: string; version: number; metadata: Record<string, any> }]
   'published': [data: { plugin_name: string }]
+  'republish': [data: { content: string; version: number }]
 }>()
 
 const visible = computed({
@@ -152,6 +153,15 @@ const formattedConfig = computed(() => {
   // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
   const rawData = selectedVersionData.value.metadata || selectedVersionData.value.config
   if (!rawData) return ''
+  // edge_env: config is {"yaml": "<yaml text>"}, show the raw YAML
+  if (props.resourceType === 'edge_env') {
+    try {
+      const parsed = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
+      return parsed.yaml || (typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2))
+    } catch {
+      return typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2)
+    }
+  }
   try {
     if (typeof rawData === 'string') {
       return JSON.stringify(JSON.parse(rawData), null, 2)
@@ -226,6 +236,8 @@ const loadHistory = async () => {
       ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history`
       : props.resourceType === 'static_resource'
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history`
+      : props.resourceType === 'edge_env'
+      ? `/clusters/${props.clusterId}/edge-env/versions`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`
     const res = await api.get(endpoint)
     versions.value = res.data.items || []
@@ -439,6 +451,24 @@ const handleRepublish = async () => {
   }
   if (!props.clusterId || !props.resourceId) return
   const versionToSelect = selectedVersion.value
+
+  // edge_env: load version content into editor instead of auto-publishing
+  if (props.resourceType === 'edge_env') {
+    const detailEndpoint = `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value?.id || selectedVersion.value}`
+    try {
+      const res = await api.get(detailEndpoint)
+      const config = res.data.config || '{}'
+      let yamlContent = ''
+      try { yamlContent = JSON.parse(config).yaml || config } catch { yamlContent = config }
+      emit('republish', { content: yamlContent, version: selectedVersion.value })
+      message.success('已加载版本 v' + selectedVersion.value + ' 到编辑器')
+      handleClose()
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '加载版本失败')
+    }
+    return
+  }
+
   try {
     const endpoint = props.resourceType === 'upstream'
       ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
@@ -480,6 +510,8 @@ const handleDelete = async () => {
       ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'static_resource'
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history/${selectedVersionData.value.id}`
+      : props.resourceType === 'edge_env'
+      ? `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value.id}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
       await api.delete(endpoint)
     }

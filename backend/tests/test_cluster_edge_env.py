@@ -6,8 +6,9 @@ from fastapi import FastAPI
 
 from app.api.v1.cluster_edge_env import router
 from app.core.database import get_db
-from app.models.cluster import Cluster, Node
+from app.models.cluster import Cluster, Node, ConfigVersion
 from app.services.ansible_service import AnsibleRunnerService
+from app.services.edge_sync import create_config_version
 
 
 @pytest.fixture
@@ -105,22 +106,23 @@ class TestEdgeEnvDeploy:
         await test_db.commit()
         app = _make_app(test_db)
         valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
-            async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
-                assert resp.status_code == 200
-                found_complete = False
-                async for line in resp.aiter_lines():
-                    if line.startswith("data: "):
-                        try:
-                            import json
-                            data = json.loads(line[6:])
-                            if data.get("type") == "complete":
-                                assert data["version_id"] > 0
-                                assert data["status"] in ("all_success", "partial", "all_failed")
-                                found_complete = True
-                        except json.JSONDecodeError:
-                            pass
-                assert found_complete, "Should have received a 'complete' event"
+        with patch("app.api.v1.cluster_edge_env.create_config_version", new_callable=AsyncMock, return_value=1):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    assert resp.status_code == 200
+                    found_complete = False
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            try:
+                                import json
+                                data = json.loads(line[6:])
+                                if data.get("type") == "complete":
+                                    assert data.get("version") == 1
+                                    assert data["status"] in ("all_success", "partial", "all_failed")
+                                    found_complete = True
+                            except json.JSONDecodeError:
+                                pass
+                    assert found_complete, "Should have received a 'complete' event"
 
 
 class TestEdgeEnvRead:
@@ -187,6 +189,27 @@ class TestEdgeEnvVersions:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
             resp = await cl.get(f"/api/v1/clusters/{c.id}/edge-env/versions/9999")
             assert resp.status_code == 404
+
+    async def test_version_list_uses_config_version(self, test_db):
+        """Version list should query ConfigVersion with resource_type='edge_env'."""
+        c = Cluster(name="tc", status=1)
+        test_db.add(c)
+        await test_db.commit()
+        await test_db.refresh(c)
+        # Insert a ConfigVersion record directly
+        cv = ConfigVersion(
+            cluster_id=c.id, resource_type="edge_env", resource_id=c.id,
+            version=1, config='{"yaml": "deploy:\\n  prefix: edge\\n"}',
+        )
+        test_db.add(cv)
+        await test_db.commit()
+        app = _make_app(test_db)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
+            resp = await cl.get(f"/api/v1/clusters/{c.id}/edge-env/versions")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["total"] >= 1
+            assert any(v["version"] == 1 for v in body["items"])
 
 
 class TestEdgeEnvReadStream:

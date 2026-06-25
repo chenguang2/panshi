@@ -169,40 +169,29 @@
 
 ### Requirement: 版本管理
 
-系统 SHALL 记录每次发布的版本历史。（暂不实现，保留字段）
+系统 SHALL 使用 `ConfigVersion` 表（`ps_config_version`）记录版本历史，`resource_type='edge_env'`，`resource_id=cluster_id`。不再使用独立的 `EdgeEnvVersion` 表。
 
-#### Scenario: 发布完成后创建版本记录
+版本仅记录配置内容本身，不记录发布结果。
+
+#### Scenario: 发布时创建版本记录
 - **WHEN** 发布完成
-- **THEN** 系统 SHALL 创建 `EdgeEnvVersion` 记录，包含：
-  - 部署的完整 edge.env 内容（content）
-  - 部署前的 edge.env 内容（previous_content，用于 diff）
-  - 部署时间和部署人
-  - 各节点的执行结果（node_results）
-  - 整体状态（status）
+- **THEN** 系统 SHALL 调用 `edge_sync.create_config_version(db, 'edge_env', cluster_id, cluster_id, config_data)` 创建版本记录
+- **AND** 版本记录包含：集群 ID、完整 edge.env 内容（content 字段）、版本号（自动递增）、创建时间
 
 #### Scenario: 查看版本历史列表
-- **WHEN** 用户点击"版本历史"按钮
-- **THEN** 页面 SHALL 以列表展示历史版本（时间、部署人、状态标签）
-- **AND** 默认按部署时间倒序排列
+- **WHEN** 用户点击"版本管理"按钮
+- **THEN** 页面 SHALL 显示版本列表（版本号、创建时间、创建人）
+- **AND** 列表按版本号倒序排列
+- **AND** 支持分页
 
 #### Scenario: 查看版本详情
 - **WHEN** 用户点击某个版本记录
 - **THEN** 页面 SHALL 展示该版本的完整 edge.env 内容（只读模式）
-- **AND** SHALL 展示与上一个版本之间的 diff 对比
 
-#### Scenario: 回滚到历史版本
-- **WHEN** 用户在版本历史中点击"回滚"
+#### Scenario: 加载历史版本到编辑器
+- **WHEN** 用户在版本历史中点击"加载到编辑器"
 - **THEN** 系统 SHALL 将该版本的内容填入编辑器
-- **AND** SHALL NOT 自动部署，用户需要确认后手动点击"部署"
-
-### Requirement: 部署状态持久化
-
-部署结果 SHALL 在页面刷新后仍然可查。
-
-#### Scenario: 页面刷新后保留部署状态
-- **WHEN** 部署进行中用户刷新页面
-- **THEN** 最新的部署记录仍然可以在版本历史中查看
-- **AND** 未完成的部署记录 status 标记为 `interrupted`
+- **AND** SHALL NOT 自动发布，用户需要确认后手动点击"发布"
 
 ### Requirement: 编辑提示与确认
 

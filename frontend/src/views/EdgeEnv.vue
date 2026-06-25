@@ -8,6 +8,9 @@
         <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId">
           发布
         </button>
+        <button class="btn btn-secondary" @click="showVersionManagement" :disabled="!selectedClusterId">
+          版本管理
+        </button>
       </template>
     </PageHeader>
 
@@ -176,6 +179,16 @@
         </div>
       </div>
     </div>
+
+    <!-- Version Management Modal -->
+    <VersionManagementModal
+      v-model:open="versionModalVisible"
+      resource-type="edge_env"
+      :resource-id="Number(selectedClusterId)"
+      :cluster-id="Number(selectedClusterId)"
+      :resource-name="selectedClusterName"
+      @republish="onVersionLoadToEditor"
+    />
   </div>
 </template>
 
@@ -185,6 +198,7 @@ import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
+import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import api from '@/api'
 import * as edgeEnvApi from '@/api/edgeEnv'
 import { useInstallStream } from '@/composables/useInstallStream'
@@ -201,6 +215,10 @@ const selectedNodeId = ref<number | string>('')
 const editorContent = ref('')
 const savedContent = ref('')
 const errorMsg = ref('')
+
+// Version management
+const versionModalVisible = ref(false)
+const selectedClusterName = ref('')
 
 // Confirm modal
 const confirmVisible = ref(false)
@@ -297,6 +315,8 @@ async function onClusterChange() {
   editorContent.value = ''
   errorMsg.value = ''
   selectedNodeId.value = ''
+  const cluster = clusters.value.find(c => c.id === Number(selectedClusterId.value))
+  selectedClusterName.value = cluster?.display_name || cluster?.name || String(selectedClusterId.value)
   await loadNodes()
   if (nodes.value.length > 0) {
     selectedNodeId.value = nodes.value[0].id
@@ -503,6 +523,17 @@ function closePublishProgress() {
   publishProgressVisible.value = false
   nodeResults.value = []
   publishResult.value = null
+}
+
+// ── Version management ──
+
+function showVersionManagement() {
+  versionModalVisible.value = true
+}
+
+function onVersionLoadToEditor(data: { content: string; version: number }) {
+  editorContent.value = data.content
+  savedContent.value = ''
 }
 </script>
 
