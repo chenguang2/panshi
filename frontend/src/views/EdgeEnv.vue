@@ -533,7 +533,6 @@ function showVersionManagement() {
 
 function onVersionLoadToEditor(data: { content: string; version: number }) {
   editorContent.value = data.content
-  savedContent.value = ''
 }
 </script>
 
