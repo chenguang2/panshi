@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -66,19 +65,25 @@ async def health_check():
 # 注意：必须在 API 路由之后挂载，确保 API 优先级高于静态文件
 _frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if _frontend_dist.is_dir():
-    from starlette.staticfiles import StaticFiles
-    from starlette.responses import FileResponse
+    from pathlib import Path as _Path
+    from starlette.staticfiles import StaticFiles as _StaticFiles
+    from starlette.responses import FileResponse as _FileResponse
 
-    class SPAStaticFiles(StaticFiles):
+    class _SPAStaticFiles(_StaticFiles):
         """StaticFiles with SPA fallback — serves index.html for unmatched paths."""
         async def get_response(self, path: str, scope):
             try:
-                return await super().get_response(path, scope)
-            except HTTPException as e:
-                if e.status_code == 404:
-                    index_path = self.directory / "index.html"
-                    if index_path.exists():
-                        return FileResponse(str(index_path))
+                response = await super().get_response(path, scope)
+                if response.status_code == 404:
+                    idx = _Path(str(self.directory)) / "index.html"
+                    if idx.exists():
+                        return _FileResponse(str(idx))
+                return response
+            except Exception as e:
+                if type(e).__name__ == "HTTPException" and getattr(e, 'status_code', None) == 404:
+                    idx = _Path(str(self.directory)) / "index.html"
+                    if idx.exists():
+                        return _FileResponse(str(idx))
                 raise
 
-    app.mount("/", SPAStaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
+    app.mount("/", _SPAStaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
