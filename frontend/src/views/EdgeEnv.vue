@@ -393,7 +393,7 @@ function validateFields(content: string): string | null {
     return '编辑器内容为空，请先获取配置模板或输入内容'
   }
   try {
-    const parsed = yamlLoad(content)
+    const parsed = yamlLoad(content) as Record<string, any> | null
     if (!parsed || typeof parsed !== 'object') return '配置内容格式错误'
     if (!parsed.deploy) return '缺少必填字段: deploy'
     if (!parsed.deploy.http) return '缺少必填字段: deploy → http'
@@ -506,7 +506,7 @@ async function executePublish() {
       } catch { /* ansible log text */ }
     },
     onProgress() { /* no-op */ },
-    onComplete(rc, status) {
+    onComplete(rc, _status) {
       if (!publishResult.value) {
         publishResult.value = { status: rc === 0 ? 'all_success' : 'all_failed' }
       }
