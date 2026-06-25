@@ -185,12 +185,20 @@ async def read_edge_env_stream(
         raise HTTPException(status_code=404, detail="节点不存在或不属于该集群")
 
     async def event_stream():
+        ansible_stdout = ""
         async for event in _run_ansible_stream(
             runner_method=_ansible_service,
             ip=node.ip,
             tag="edge_read_env",
             extravars={"edge_path": node.edge_path},
         ):
+            # Capture the raw ansible output for error analysis
+            try:
+                parsed = json.loads(event[6:].strip())
+                if parsed.get("line"):
+                    ansible_stdout += parsed["line"] + "\n"
+            except (json.JSONDecodeError, KeyError, IndexError):
+                pass
             yield event
 
         try:
@@ -202,7 +210,16 @@ async def read_edge_env_stream(
             if result.get("rc") == 0:
                 yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100})}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'error', 'message': '读取 edge.env 失败', 'percent': 100})}\n\n"
+                # Friendly error message based on Ansible output
+                if "Could not match supplied host pattern" in ansible_stdout or "no hosts matched" in ansible_stdout:
+                    err_msg = f"节点 {node.ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+                elif "UNREACHABLE" in ansible_stdout:
+                    err_msg = f"节点 {node.ip} 无法连接，请检查网络和 SSH 配置"
+                elif "Permission denied" in ansible_stdout:
+                    err_msg = f"节点 {node.ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
+                else:
+                    err_msg = f"读取 edge.env 失败"
+                yield f"data: {json.dumps({'type': 'error', 'message': err_msg, 'percent': 100})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'percent': 100})}\n\n"
 
