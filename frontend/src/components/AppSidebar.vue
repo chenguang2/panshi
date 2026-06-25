@@ -112,7 +112,7 @@ const navSections = computed<NavSection[]>(() => {
         ...(featuresStore.has('metrics')
           ? [
               { label: '指标查询', route: '/metrics', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>' } as NavItem,
-              { label: '指标总览', route: '/metrics/dashboard', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>' } as NavItem,
+              { label: '指标总览', route: '/metrics/dashboard', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="2" width="6" height="6" rx="1"/><rect x="2" y="10" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/></svg>' } as NavItem,
             ]
           : []),
       ].filter(item => !item.feature || featuresStore.has(item.feature))
