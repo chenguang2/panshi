@@ -3,7 +3,7 @@ from app.api.v1 import (
     auth, users, clusters,
     cluster_upstreams, cluster_plugin_configs, cluster_global_rules, cluster_nodes,
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
-    cluster_edge_env,
+    cluster_edge_env, cluster_stream_proxies,
     plugins, dashboard,
     upstreams, routes, plugin_configs, global_rules, nodes, static_resources,
     plugin_metadata,
@@ -46,4 +46,5 @@ feature_routers: dict[str, APIRouter] = {
     "install_edge": cluster_install.install_edge_router,
     "plugin_switches": plugin_switches.router,
     "metrics": metrics.router,
+    "stream_proxy": cluster_stream_proxies.router,
 }
