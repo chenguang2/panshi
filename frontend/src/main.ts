@@ -35,11 +35,10 @@ async function bootstrap() {
   // Register feature-gated routes now that we know what's available.
   setupDynamicRoutes(router)
 
-  // Re-resolve current URL if route hasn't matched yet — fixes right-click
-  // → open in new tab for feature-gated routes like /metrics, /edge-env
-  // that weren't registered at initial navigation time.
-  const resolved = router.resolve(window.location.pathname + window.location.search)
-  if (resolved.name === undefined || resolved.matched.length === 0) {
+  // If the initial navigation failed to resolve (e.g. feature-gated route
+  // wasn't registered yet), router.currentRoute.name is undefined. Force a
+  // re-navigation now that all routes are available.
+  if (!router.currentRoute.value.name) {
     await router.replace(window.location.pathname + window.location.search).catch(() => {})
   }
 }
