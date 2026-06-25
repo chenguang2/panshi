@@ -18,6 +18,9 @@ async function bootstrap() {
   // Mount immediately so /login is available
   app.mount('#app')
 
+  // Mount immediately so /login is available
+  app.mount('#app')
+
   // Load feature configuration with retry — never guess defaults.
   // The /login route is always available regardless.
   const { useFeaturesStore } = await import('@/stores/features')
@@ -37,7 +40,9 @@ async function bootstrap() {
 
   // Re-resolve current URL — fixes right-click → open in new tab
   // where the route wasn't registered at initial navigation time.
-  await router.replace(router.currentRoute.value.fullPath)
+  // NOTE: Use window.location.pathname instead of router.currentRoute.value.fullPath
+  // because the initial navigation may not have resolved yet at this point.
+  await router.replace(window.location.pathname)
 }
 
 bootstrap()
