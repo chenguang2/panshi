@@ -39,11 +39,12 @@ async function bootstrap() {
   setupDynamicRoutes(router)
 
   // Re-resolve current URL if route hasn't matched yet — fixes right-click
-  // → open in new tab where the route wasn't registered at initial nav time.
-  // Use window.location.pathname instead of router.currentRoute (which may
-  // still show the initial "/") and use push() instead of replace() to avoid
-  // a route transition that can blank the page during mount.
-  await router.push(window.location.pathname + window.location.search).catch(() => {})
+  // → open in new tab for feature-gated routes like /metrics, /edge-env
+  // that weren't registered at initial navigation time.
+  const resolved = router.resolve(window.location.pathname + window.location.search)
+  if (resolved.name === undefined || resolved.matched.length === 0) {
+    await router.replace(window.location.pathname + window.location.search).catch(() => {})
+  }
 }
 
 bootstrap()
