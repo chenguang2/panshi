@@ -102,6 +102,7 @@ const navSections = computed<NavSection[]>(() => {
         { label: '插件元数据', route: '/plugin-metadata', permission: 'plugin_metadata', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>' },
         { label: '全局规则', route: '/global-rules', permission: 'global_rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>' },
         { label: '静态资源', route: '/static-resources', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h4l4 4v9a1 1 0 01-1 1H6a1 1 0 01-1-1V3z"/><path d="M10 2v4h4"/></svg>' },
+        { label: '四层代理', route: '/stream-proxies', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg>', feature: 'stream_proxy' },
         { label: 'edge.env 配置', route: '/edge-env', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h10a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M6 6h6M6 9h6M6 12h4"/></svg>', feature: 'edge_env' },
       ].filter(item => !item.permission || authStore.hasPermission(item.permission))
     },
@@ -143,6 +144,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/edge-import') return name === 'EdgeImport'
   if (item.route === '/tools') return name === 'Tools'
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
+  if (item.route === '/stream-proxies') return name === 'StreamProxyList'
   if (item.route === '/edge-env') return name === 'EdgeEnv'
   if (item.route === '/upstreams') return name === 'UpstreamList'
   if (item.route === '/routes') return name === 'RouteList'

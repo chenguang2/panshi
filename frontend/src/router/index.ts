@@ -31,6 +31,11 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/PluginSwitches.vue'),
     meta: { permission: 'plugin_management' },
   },
+  stream_proxy: {
+    path: 'stream-proxies',
+    name: 'StreamProxyList',
+    component: () => import('@/views/StreamProxyList.vue'),
+  },
   edge_env: {
     path: 'edge-env',
     name: 'EdgeEnv',
