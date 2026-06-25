@@ -18,9 +18,6 @@ async function bootstrap() {
   // Mount immediately so /login is available
   app.mount('#app')
 
-  // Mount immediately so /login is available
-  app.mount('#app')
-
   // Load feature configuration with retry — never guess defaults.
   // The /login route is always available regardless.
   const { useFeaturesStore } = await import('@/stores/features')
