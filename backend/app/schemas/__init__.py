@@ -9,6 +9,11 @@ from .route import (
     RouteCreate, RouteUpdate, RouteResponse, RouteListResponse,
     PluginConfig, PluginUpdateRequest,
 )
+from .stream_proxy import (
+    StreamProxyCreate, StreamProxyUpdate, StreamProxyResponse,
+    StreamProxyBase, TargetSchema,
+    DetectPortsRequest, DetectPortsResponse,
+)
 __all__ = [
     "LoginRequest", "LoginResponse", "UserInfo", "ChangePasswordRequest",
     "UserCreate", "UserUpdate", "UserResponse", "UserListResponse", "PasswordResetRequest", "ClusterAssignRequest",
@@ -16,4 +21,7 @@ __all__ = [
     "UpstreamCreate", "UpstreamUpdate", "UpstreamResponse", "UpstreamWithTargets", "UpstreamTargetSchema",
     "RouteCreate", "RouteUpdate", "RouteResponse", "RouteListResponse",
     "PluginConfig", "PluginUpdateRequest",
+    "StreamProxyCreate", "StreamProxyUpdate", "StreamProxyResponse",
+    "StreamProxyBase", "TargetSchema",
+    "DetectPortsRequest", "DetectPortsResponse",
 ]

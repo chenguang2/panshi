@@ -286,6 +286,7 @@ class EdgeClient:
         "global_rule": "/edge/admin/global_rules",
         "plugin_metadata": "/edge/admin/plugin_metadata",
         "plugin": "/edge/admin/plugins",
+        "stream_route": "/stream/edge/admin/routes",
     }
 
     ACTION_METHOD = {

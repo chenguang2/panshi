@@ -7,6 +7,7 @@ features:
   plugin_switches: true
   metrics: true
   edge_env: true
+  stream_proxy: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

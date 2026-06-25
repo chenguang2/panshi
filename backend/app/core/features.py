@@ -26,6 +26,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "plugin_switches",
     "metrics",
     "edge_env",
+    "stream_proxy",
 })
 
 # ── Module-level cache (set once at startup) ───────────────────────────

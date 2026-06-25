@@ -184,3 +184,29 @@ class GlobalRule(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class StreamProxy(Base):
+    """四层代理（L4 TCP/UDP Stream Proxy）配置"""
+    __tablename__ = "ps_stream_proxy"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "listen_port", name="uq_stream_proxy_cluster_port"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    listen_port = Column(Integer, nullable=False)
+    load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
+    scheme = Column(String(10), nullable=False, default="tcp")
+    targets = Column(Text, nullable=True)       # JSON: [{"target":"ip:port", "weight":100}, ...]
+    timeout = Column(Text, nullable=True)        # JSON: {"connect": N, "send": N, "read": N}
+    keepalive_pool = Column(Text, nullable=True) # JSON: {"size": N, "idle_timeout": N, "requests": N}
+    remote_addr = Column(String(100), nullable=True)  # CIDR
+    sni = Column(String(255), nullable=True)          # TLS SNI
+    status = Column(Integer, nullable=False, default=1)
+    current_version = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
