@@ -207,7 +207,8 @@ async def read_edge_env_stream(
                 extravars={"edge_path": node.edge_path},
             )
             content = result.get("shell_stdout") or result.get("stdout", "")
-            if result.get("rc") == 0:
+            # Ansible may return rc=0 but still fail (e.g. "no hosts matched")
+            if result.get("rc") == 0 and "no hosts matched" not in content.lower():
                 yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100})}\n\n"
             else:
                 # Friendly error message based on Ansible output
