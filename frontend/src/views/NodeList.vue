@@ -300,9 +300,15 @@ function onGroupChange() {
 }
 
 const displayedNodes = computed(() => {
-  if (groupFilter.value === '__all__') return nodes.value
-  const gIds = new Set(filteredClusters.value.map(c => c.id))
-  return nodes.value.filter(n => gIds.has(n.cluster_id))
+  let list = nodes.value
+  if (groupFilter.value !== '__all__') {
+    const gIds = new Set(filteredClusters.value.map(c => c.id))
+    list = list.filter(n => gIds.has(n.cluster_id))
+  }
+  if (groupFilter.value !== '__all__' && statusFilter.value !== '' && statusFilter.value !== undefined) {
+    list = list.filter(n => n.status === Number(statusFilter.value))
+  }
+  return list
 })
 const opLogVisible = ref<number | null>(null)
 
@@ -378,12 +384,13 @@ async function loadNodes() {
   loading.value = true
   try {
     const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
     const res = await listNodes({
       page: isGroupMode ? 1 : page.value,
       pageSize: isGroupMode ? 100 : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
-      status: statusFilter.value !== '' && statusFilter.value !== undefined ? Number(statusFilter.value) : undefined,
+      status: isGroupMode ? undefined : (hasStatus ? Number(statusFilter.value) : undefined),
     })
     nodes.value = res.data.items || []
     totalCount.value = isGroupMode ? nodes.value.length : (res.data.total || 0)
