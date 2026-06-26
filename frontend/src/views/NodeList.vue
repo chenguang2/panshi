@@ -266,6 +266,7 @@ import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
+import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -306,11 +307,8 @@ const displayedNodes = computed(() => {
     list = list.filter(n => gIds.has(n.cluster_id))
   }
   if (groupFilter.value !== '__all__' && statusFilter.value !== '' && statusFilter.value !== undefined) {
-    const before = list.length
     list = list.filter(n => n.status === Number(statusFilter.value))
-    console.log('[groupfilter] statusFilter=%s, before=%d, after=%d', statusFilter.value, before, list.length)
   }
-  console.log('[groupfilter] group=%s, total nodes=%d, displayed=%d', groupFilter.value, nodes.value.length, list.length)
   return list
 })
 const opLogVisible = ref<number | null>(null)
@@ -390,7 +388,7 @@ async function loadNodes() {
     const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
     const res = await listNodes({
       page: isGroupMode ? 1 : page.value,
-      pageSize: isGroupMode ? 500 : pageSize.value,
+      pageSize: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
       status: isGroupMode ? undefined : (hasStatus ? Number(statusFilter.value) : undefined),

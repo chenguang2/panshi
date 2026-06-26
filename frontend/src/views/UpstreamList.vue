@@ -137,6 +137,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -237,7 +238,7 @@ async function loadUpstreams() {
   loading.value = true
   try {
     const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
-    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? 100 : pageSize.value }
+    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
