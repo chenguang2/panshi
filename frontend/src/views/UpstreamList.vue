@@ -35,7 +35,7 @@
       :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="groupFilter !== '__all__' ? { pageSize, total: displayedUpstreams.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个上游`, pageSizeOptions: ['10', '20', '50'] } : {
+      :pagination="groupFilter !== '__all__' ? { current: page, pageSize, total: displayedUpstreams.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个上游`, pageSizeOptions: ['10', '20', '50'] } : {
         current: page,
         pageSize,
         total: totalCount,
@@ -229,12 +229,11 @@ function onSearch() {
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
-  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
-    if (pagination.pageSize) pageSize.value = pagination.pageSize
-    return
-  }
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
+  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
+    return
+  }
   loadUpstreams()
 }
 

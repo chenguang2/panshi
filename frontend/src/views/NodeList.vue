@@ -33,7 +33,7 @@
         :data-source="displayedNodes"
         :columns="columns"
         :row-key="(record: any) => record.id"
-        :pagination="groupFilter !== '__all__' ? { pageSize, total: displayedNodes.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个节点`, pageSizeOptions: ['10', '20', '50'] } : {
+        :pagination="groupFilter !== '__all__' ? { current: page, pageSize, total: displayedNodes.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个节点`, pageSizeOptions: ['10', '20', '50'] } : {
           current: page,
           pageSize,
           total: totalCount,
@@ -425,12 +425,11 @@ async function loadClusterStats(clusterId: number) {
 // ── Filter / Search / Pagination ──
 
 function handleTableChange(pagination: TablePaginationConfig) {
-  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
-    if (pagination.pageSize) pageSize.value = pagination.pageSize
-    return
-  }
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
+  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
+    return
+  }
   loadNodes()
 }
 
