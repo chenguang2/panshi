@@ -27,15 +27,15 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="upstreamFilter" class="form-input" style="width:160px;" @change="loadRoutes" :disabled="!upstreams.length && !clusterFilter">
+      <select v-model="upstreamFilter" class="form-input" style="width:160px;" @change="onFilterChange" :disabled="!upstreams.length && !clusterFilter">
         <option value="">全部上游</option>
         <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
       </select>
-      <select v-model="pluginFilter" class="form-input plugin-filter" style="width:140px;flex-shrink:0;" @change="loadRoutes">
+      <select v-model="pluginFilter" class="form-input plugin-filter" style="width:140px;flex-shrink:0;" @change="onFilterChange">
         <option value="">全部插件</option>
         <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
       </select>
-      <select v-model="publishFilter" class="form-input" style="width:130px;" @change="loadRoutes">
+      <select v-model="publishFilter" class="form-input" style="width:130px;" @change="onFilterChange">
         <option value="">全部状态</option>
         <option value="published">已发布</option>
         <option value="unpublished">未发布</option>
@@ -217,6 +217,11 @@ const methodFilters = [
 function formatDate(d: string) {
   if (!d) return '-'
   try { return new Date(d).toLocaleDateString('zh-CN') } catch { return d }
+}
+
+function onFilterChange() {
+  page.value = 1
+  loadRoutes()
 }
 
 function onSearch() {
