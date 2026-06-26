@@ -143,7 +143,7 @@ function onSearch() {
 async function loadConfigs() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const isGroupMode = groupFilter.value !== '__all__'
     const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value

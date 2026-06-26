@@ -386,7 +386,7 @@ async function loadNodes() {
   loading.value = true
   try {
     const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
-    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const isGroupMode = groupFilter.value !== '__all__'
     const loadAll = isGroupMode || hasStatus
     const res = await listNodes({
       page: loadAll ? 1 : page.value,
@@ -427,7 +427,7 @@ async function loadClusterStats(clusterId: number) {
 function handleTableChange(pagination: TablePaginationConfig) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
-  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
+  if (groupFilter.value !== '__all__') {
     return
   }
   loadNodes()
