@@ -25,7 +25,7 @@
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedNodes.length : totalCount }} 个节点</span>
+      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' || statusFilter !== '' ? displayedNodes.length : totalCount }} 个节点</span>
     </div>
 
     <div class="table-container">
@@ -306,8 +306,9 @@ const displayedNodes = computed(() => {
     const gIds = new Set(filteredClusters.value.map(c => c.id))
     list = list.filter(n => gIds.has(n.cluster_id))
   }
-  if (groupFilter.value !== '__all__' && statusFilter.value !== '' && statusFilter.value !== undefined) {
-    list = list.filter(n => n.status === Number(statusFilter.value))
+  if (statusFilter.value !== '' && statusFilter.value !== undefined) {
+    const wantRunning = Number(statusFilter.value) === 1
+    list = list.filter(n => nginxRunning(n) === wantRunning)
   }
   return list
 })
@@ -384,17 +385,18 @@ const columns = [
 async function loadNodes() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
     const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
+    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const loadAll = isGroupMode || hasStatus
     const res = await listNodes({
-      page: isGroupMode ? 1 : page.value,
-      pageSize: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value,
+      page: loadAll ? 1 : page.value,
+      pageSize: loadAll ? GROUP_MODE_PAGE_SIZE : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
-      status: isGroupMode ? undefined : (hasStatus ? Number(statusFilter.value) : undefined),
+      status: undefined,  // 全部通过 nginxRunning() 客户端过滤
     })
     nodes.value = res.data.items || []
-    totalCount.value = isGroupMode ? nodes.value.length : (res.data.total || 0)
+    totalCount.value = loadAll ? nodes.value.length : (res.data.total || 0)
   } catch (error: any) {
     const detail = error.response?.data?.detail
     const msg = typeof detail === 'string' ? detail : (detail?.msg || error.message || '未知错误')
