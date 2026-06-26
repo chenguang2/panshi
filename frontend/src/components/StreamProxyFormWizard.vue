@@ -355,7 +355,8 @@ async function handleDetectPorts() {
     logLines.value.push('解析 stream 配置...')
 
     const excludeId = props.editingProxy?.id
-    const res = await streamProxyApi.detectPorts(Number(form.cluster_id), Number(form.node_id), excludeId)
+    const excludePort = props.editingProxy?.listen_port
+    const res = await streamProxyApi.detectPorts(Number(form.cluster_id), Number(form.node_id), excludeId, excludePort)
     ports.value = res.data.ports || []
     hasSearched.value = true
     logLines.value.push('查询已用端口...')
@@ -547,7 +548,8 @@ watch(() => props.visible, async (v) => {
     try {
       if (nodes.value.length > 0) {
         const excludeId = props.editingProxy?.id
-        const res = await streamProxyApi.detectPorts(p.cluster_id, Number(form.node_id), excludeId)
+        const excludePort = props.editingProxy?.listen_port
+        const res = await streamProxyApi.detectPorts(p.cluster_id, Number(form.node_id), excludeId, excludePort)
         ports.value = res.data.ports || []
         hasSearched.value = true
         // 自动选中当前端口
