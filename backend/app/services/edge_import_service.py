@@ -334,6 +334,17 @@ class EdgeImportService:
     def convert_stream_proxy(self, edge_stream: dict) -> dict:
         edge_nodes = (edge_stream.get("upstream") or {}).get("nodes") or {}
 
+        targets_data: list[dict] = []
+        if isinstance(edge_nodes, dict):
+            for host_port, weight in edge_nodes.items():
+                targets_data.append({
+                    "target": host_port,
+                    "weight": weight if isinstance(weight, int) else 1,
+                })
+
+        timeout_raw = (edge_stream.get("upstream") or {}).get("timeout")
+        keepalive_raw = (edge_stream.get("upstream") or {}).get("keepalive_pool")
+
         proxy_data = {
             "name": edge_stream.get("name") or edge_stream.get("id", ""),
             "edge_uuid": edge_stream.get("id", ""),
@@ -346,32 +357,17 @@ class EdgeImportService:
             "description": edge_stream.get("desc"),
             "remote_addr": edge_stream.get("remote_addr"),
             "sni": edge_stream.get("sni"),
+            "targets": self._ensure_json(targets_data) if targets_data else None,
+            "timeout": self._ensure_json(timeout_raw) if timeout_raw and isinstance(timeout_raw, dict) else None,
+            "keepalive_pool": self._ensure_json(keepalive_raw) if keepalive_raw and isinstance(keepalive_raw, dict) else None,
             "current_version": None,
         }
-
-        timeout_raw = (edge_stream.get("upstream") or {}).get("timeout")
-        timeout_data = None
-        if timeout_raw and isinstance(timeout_raw, dict):
-            timeout_data = timeout_raw
-
-        keepalive_raw = (edge_stream.get("upstream") or {}).get("keepalive_pool")
-        keepalive_data = None
-        if keepalive_raw and isinstance(keepalive_raw, dict):
-            keepalive_data = keepalive_raw
-
-        targets_data: list[dict] = []
-        if isinstance(edge_nodes, dict):
-            for host_port, weight in edge_nodes.items():
-                targets_data.append({
-                    "target": host_port,
-                    "weight": weight if isinstance(weight, int) else 1,
-                })
 
         return {
             "stream_proxy": proxy_data,
             "targets": targets_data,
-            "timeout": timeout_data,
-            "keepalive_pool": keepalive_data,
+            "timeout": timeout_raw if isinstance(timeout_raw, dict) else None,
+            "keepalive_pool": keepalive_raw if isinstance(keepalive_raw, dict) else None,
         }
 
     def convert_route(self, edge_route: dict, upstream_uuid_map: dict) -> dict:
