@@ -236,13 +236,14 @@ function handleTableChange(pagination: TablePaginationConfig) {
 async function loadUpstreams() {
   loading.value = true
   try {
-    const params: any = { page: page.value, page_size: pageSize.value }
+    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? 9999 : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/upstreams', { params })
     upstreams.value = res.data.items || []
-    totalCount.value = res.data.total || 0
+    totalCount.value = isGroupMode ? upstreams.value.length : (res.data.total || 0)
   } catch {
     message.error('加载上游列表失败')
   } finally {

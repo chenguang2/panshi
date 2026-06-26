@@ -377,15 +377,16 @@ const columns = [
 async function loadNodes() {
   loading.value = true
   try {
+    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
     const res = await listNodes({
-      page: page.value,
-      pageSize: pageSize.value,
+      page: isGroupMode ? 1 : page.value,
+      pageSize: isGroupMode ? 9999 : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
       status: statusFilter.value !== '' && statusFilter.value !== undefined ? Number(statusFilter.value) : undefined,
     })
     nodes.value = res.data.items || []
-    totalCount.value = res.data.total || 0
+    totalCount.value = isGroupMode ? nodes.value.length : (res.data.total || 0)
   } catch (error: any) {
     message.error('加载节点列表失败: ' + (error.response?.data?.detail || error.message))
   } finally {

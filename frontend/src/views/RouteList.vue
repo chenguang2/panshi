@@ -231,7 +231,8 @@ function handleTableChange(pagination: TablePaginationConfig) {
 async function loadRoutes() {
   loading.value = true
   try {
-    const params: any = { page: page.value, page_size: pageSize.value }
+    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? 9999 : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
@@ -240,7 +241,7 @@ async function loadRoutes() {
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/routes', { params })
     routes.value = res.data.items || []
-    totalCount.value = res.data.total || 0
+    totalCount.value = isGroupMode ? routes.value.length : (res.data.total || 0)
   } catch { message.error('加载路由列表失败') }
   finally { loading.value = false }
 }
