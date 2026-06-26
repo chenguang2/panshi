@@ -529,6 +529,23 @@ class EdgeClient:
     def delete_plugin_config(self, config_id: str) -> dict[str, Any]:
         return self.api("plugin_config", "delete", config_id)
 
+    # ── Stream Route API methods ──
+
+    def list_stream_routes(self) -> list[dict[str, Any]]:
+        return self.api("stream_route", "list")
+
+    def get_stream_route(self, route_id: str) -> dict[str, Any] | None:
+        return self.api("stream_route", "get", route_id)
+
+    def create_stream_route(self, data: dict[str, Any]) -> dict[str, Any]:
+        return self.api("stream_route", "create", data=data)
+
+    def update_stream_route(self, route_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        return self.api("stream_route", "update", route_id, data)
+
+    def delete_stream_route(self, route_id: str) -> dict[str, Any]:
+        return self.api("stream_route", "delete", route_id)
+
     # ── Plugin Metadata API methods ──
 
     def list_plugin_metadata(self) -> list[dict[str, Any]]:

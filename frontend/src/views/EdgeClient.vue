@@ -304,6 +304,60 @@
           </a-table>
           </div>
         </a-tab-pane>
+        <a-tab-pane key="streamRoutes" tab="四层代理">
+          <div class="table-toolbar">
+            <div class="search-input-wrap">
+              <input v-model="streamRouteSearch" class="form-input" placeholder="搜索四层代理..." style="width: 200px;" />
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
+          <div class="table-container">
+          <a-table
+            :columns="streamRouteColumns"
+            :data-source="streamRouteSearch ? streamRoutes.filter(r => (r.value?.name || '').includes(streamRouteSearch) || (r.value?.id || '').includes(streamRouteSearch)) : streamRoutes"
+            :loading="loading"
+            :pagination="false"
+            rowKey="key"
+          >
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">
+                <span class="text-muted">{{ index + 1 }}</span>
+              </template>
+              <template v-if="column.key === 'id'">
+                <span style="font-size: 12px;">{{ record.value?.id }}</span>
+              </template>
+              <template v-if="column.key === 'name'">
+                {{ record.value?.name || '-' }}
+              </template>
+              <template v-if="column.key === 'server_port'">
+                <span class="text-mono">{{ record.value?.server_port }}</span>
+              </template>
+              <template v-if="column.key === 'scheme'">
+                {{ record.value?.upstream?.scheme || 'tcp' }}
+              </template>
+              <template v-if="column.key === 'server_addr'">
+                {{ record.value?.server_addr || '-' }}
+              </template>
+              <template v-if="column.key === 'remote_addr'">
+                {{ record.value?.remote_addr || '-' }}
+              </template>
+              <template v-if="column.key === 'sni'">
+                {{ record.value?.sni || '-' }}
+              </template>
+              <template v-if="column.key === 'upstream_nodes'">
+                <span v-if="record.value?.upstream?.nodes">{{ Object.keys(record.value.upstream.nodes).length }} 个节点</span>
+                <span v-else>-</span>
+              </template>
+              <template v-if="column.key === 'actions'">
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showStreamRouteJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteStreamRoute(record)">删除</button>
+                </div>
+              </template>
+            </template>
+          </a-table>
+          </div>
+        </a-tab-pane>
       </a-tabs>
 
     <!-- 上游 Modal -->
@@ -572,7 +626,7 @@ import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import { useProgressModal } from '@/composables/useProgressModal'
-import { upstreamColumns, routeColumns, pluginMetadataColumns, pluginListColumns, globalRuleColumns, pluginConfigColumns } from '@/utils/edgeColumns'
+import { upstreamColumns, routeColumns, pluginMetadataColumns, pluginListColumns, globalRuleColumns, pluginConfigColumns, streamRouteColumns } from '@/utils/edgeColumns'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
@@ -607,6 +661,7 @@ const globalRules = ref<any[]>([])
 const pluginConfigs = ref<any[]>([])
 const pluginMetadataList = ref<any[]>([])
 const pluginList = ref<any[]>([])
+const streamRoutes = ref<any[]>([])
 const reloadingPlugins = ref(false)
 
 const upstreamSearch = ref('')
@@ -614,6 +669,7 @@ const routeSearch = ref('')
 const globalRuleSearch = ref('')
 const pluginConfigSearch = ref('')
 const pluginMetadataSearch = ref('')
+const streamRouteSearch = ref('')
 
 const upstreamModalVisible = ref(false)
 const upstreamModalMode = ref<'create' | 'edit'>('create')
@@ -775,6 +831,16 @@ const loadPluginList = async (ip: string, port: string) => {
   }
 }
 
+const loadStreamRoutes = async (ip: string, port: string) => {
+  try {
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/stream-routes`, { signal: currentSignal.value })
+    streamRoutes.value = res.data.stream_routes || []
+  } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    console.error('[DEBUG] loadStreamRoutes error:', error)
+  }
+}
+
 // 预加载所有标签页数据（并行）
 const loadAllData = async () => {
   const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
@@ -795,7 +861,8 @@ const loadAllData = async () => {
       loadGlobalRules(ip, port),
       loadPluginConfigs(ip, port),
       loadPluginMetadata(ip, port),
-      loadPluginList(ip, port)
+      loadPluginList(ip, port),
+      loadStreamRoutes(ip, port)
     ])
     loadedNode.value = `${ip}:${port}`
   } catch (error: any) {
@@ -820,6 +887,7 @@ const loadData = async () => {
     case 'pluginConfigs': await loadPluginConfigs(ip, port); break
     case 'pluginMetadata': await loadPluginMetadata(ip, port); break
     case 'pluginList': await loadPluginList(ip, port); break
+    case 'streamRoutes': await loadStreamRoutes(ip, port); break
   }
 }
 
@@ -1439,6 +1507,33 @@ const deletePluginMetadata = (record: any) => {
     onOk: async () => {
       try {
         await api.delete(`/edge-client/nodes/${ip}/${port}/plugin_metadata/${pluginName}`)
+        message.success('删除成功')
+        await loadData()
+      } catch (error: any) {
+        message.error('删除失败: ' + (error.response?.data?.detail || error.message))
+      }
+    }
+  })
+}
+
+const showStreamRouteJson = (record: any) => {
+  jsonContent.value = JSON.stringify(record.value || record, null, 2)
+  jsonModalVisible.value = true
+}
+
+const deleteStreamRoute = (record: any) => {
+  const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
+  if (!node) return
+  const [ip, port] = node.split(':')
+  const routeId = record.value?.id || record.key
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定删除四层代理 ${routeId}？此操作绕过同步流程。`,
+    okText: '删除',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await api.delete(`/edge-client/nodes/${ip}/${port}/stream-routes/${routeId}`)
         message.success('删除成功')
         await loadData()
       } catch (error: any) {

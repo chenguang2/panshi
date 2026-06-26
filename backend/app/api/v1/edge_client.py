@@ -454,3 +454,66 @@ async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db))
     except EdgeAPIError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
+
+# ── Stream Route endpoints ──
+
+
+@router.get("/nodes/{ip}/{port}/stream-routes")
+async def list_stream_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = await run_edge_sync(client.list_stream_routes)
+        return {"stream_routes": result}
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.get("/nodes/{ip}/{port}/stream-routes/{route_id}")
+async def get_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = await run_edge_sync(lambda: client.get_stream_route(route_id))
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.post("/nodes/{ip}/{port}/stream-routes")
+async def create_stream_route(ip: str, port: int, data: dict, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = client.create_stream_route(data)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.put("/nodes/{ip}/{port}/stream-routes/{route_id}")
+async def update_stream_route(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = client.update_stream_route(route_id, data)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.delete("/nodes/{ip}/{port}/stream-routes/{route_id}")
+async def delete_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = client.delete_stream_route(route_id)
+        return result
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+

@@ -55,3 +55,16 @@ export const pluginConfigColumns: TableColumnType[] = [
   { title: 'Hosts', key: 'hosts', width: 80 },
   { title: '操作', key: 'actions', width: 200 },
 ]
+
+export const streamRouteColumns: TableColumnType[] = [
+  { title: '#', key: 'index', width: 45 },
+  { title: 'ID', key: 'id', width: 200 },
+  { title: '名称', key: 'name', width: 120 },
+  { title: '端口', key: 'server_port', width: 80 },
+  { title: '协议', key: 'scheme', width: 60 },
+  { title: 'Server Addr', key: 'server_addr', width: 120 },
+  { title: 'Remote Addr', key: 'remote_addr', width: 120 },
+  { title: 'SNI', key: 'sni', width: 120 },
+  { title: '上游节点', key: 'upstream_nodes', width: 80 },
+  { title: '操作', key: 'actions', width: 150 },
+]
