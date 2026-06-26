@@ -128,6 +128,7 @@ COLUMN_MIGRATIONS = [
     ("ps_node", "status_detail", "TEXT"),
     ("ps_node", "edge_install_path", "VARCHAR(255)"),
     ("ps_cluster", "current_version", "INTEGER"),
+    ("ps_import_log", "stream_proxy_count", "INTEGER DEFAULT 0"),
 ]
 
 
