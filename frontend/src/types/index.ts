@@ -198,6 +198,7 @@ export interface StreamProxy {
   created_at?: string
   updated_at?: string
   cluster_name?: string
+  ref_node_id?: number
 }
 
 export interface PortItem {
