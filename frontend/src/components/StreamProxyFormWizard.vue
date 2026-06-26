@@ -439,6 +439,7 @@ async function handleSubmit() {
       scheme: form.scheme,
       load_balance: form.load_balance,
       description: form.description.trim(),
+      ref_node_id: form.node_id || undefined,
       targets: form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight })),
       timeout: form.timeout,
     }
@@ -532,7 +533,10 @@ watch(() => props.visible, async (v) => {
     try {
       const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: 100 } })
       nodes.value = res.data.items || res.data || []
-      if (nodes.value.length > 0) {
+      // 恢复保存的参考节点，否则用第一个
+      if (p.ref_node_id) {
+        form.node_id = p.ref_node_id
+      } else if (nodes.value.length > 0) {
         form.node_id = nodes.value[0].id
       }
     } catch {

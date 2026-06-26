@@ -204,6 +204,7 @@ class StreamProxy(Base):
     keepalive_pool = Column(Text, nullable=True) # JSON: {"size": N, "idle_timeout": N, "requests": N}
     remote_addr = Column(String(100), nullable=True)  # CIDR
     sni = Column(String(255), nullable=True)          # TLS SNI
+    ref_node_id = Column(Integer, nullable=True)      # 参考节点 ID（用于端口检测）
     status = Column(Integer, nullable=False, default=1)
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

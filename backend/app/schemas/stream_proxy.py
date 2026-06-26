@@ -22,6 +22,7 @@ class StreamProxyBase(BaseModel):
     keepalive_pool: Optional[Dict[str, Any]] = None
     remote_addr: Optional[str] = None
     sni: Optional[str] = None
+    ref_node_id: Optional[int] = None
     status: int = Field(default=1)
 
 
@@ -35,6 +36,7 @@ class StreamProxyUpdate(BaseModel):
     load_balance: Optional[str] = None
     scheme: Optional[str] = None
     listen_port: Optional[int] = None
+    ref_node_id: Optional[int] = None
     targets: Optional[List[TargetSchema]] = None
     timeout: Optional[Dict[str, Any]] = None
     keepalive_pool: Optional[Dict[str, Any]] = None
