@@ -284,7 +284,7 @@ async def update_stream_proxy(
 
     update_data = data.model_dump(exclude_unset=True)
     if "targets" in update_data and update_data["targets"] is not None:
-        update_data["targets"] = json.dumps([t.model_dump() for t in update_data["targets"]])
+        update_data["targets"] = json.dumps(update_data["targets"])
     elif "targets" in update_data:
         update_data["targets"] = None
     for key in ("timeout", "keepalive_pool"):
