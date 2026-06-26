@@ -5,7 +5,7 @@
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
   register: cmd_output
   changed_when: false
-  failed_when: false
+  failed_when: cmd_output.stdout is search("still could not bind") or cmd_output.stdout is search("Failed to get the new Nginx process PID") or cmd_output.rc != 0
   ignore_errors: false
   no_log: false
   tags:
