@@ -170,16 +170,35 @@ async def detect_stream_proxy_ports(
             except ValueError:
                 continue
 
+    # ── Query DB for occupied ports ──
     db_result = await db.execute(
         select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)
     )
     existing_proxies = db_result.scalars().all()
     occupied_ports = {p.listen_port: p.name for p in existing_proxies}
 
+    # ── Query Edge node for actual stream routes (ports used on node) ──
+    edge_occupied = set()
+    cluster = await db.get(Cluster, cluster_id)
+    if cluster:
+        try:
+            client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
+            routes_result = client.api("stream_route", "list")
+            routes = routes_result if isinstance(routes_result, list) else []
+            for route in routes:
+                node_val = route.get("value", route)
+                sp = node_val.get("server_port")
+                if sp:
+                    edge_occupied.add(int(sp))
+        except Exception:
+            pass  # non-blocking: edge query failure should not block detection
+
     ports = []
     for port in sorted(detected_ports):
         if port in occupied_ports:
             ports.append(PortItem(port=port, status="in_use", used_by=occupied_ports[port], source="db"))
+        elif port in edge_occupied:
+            ports.append(PortItem(port=port, status="in_use", used_by="Edge 节点已有路由", source="edge"))
         else:
             ports.append(PortItem(port=port, status="available"))
 
