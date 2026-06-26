@@ -38,7 +38,7 @@
             <div class="form-group">
               <label class="form-label">参考节点 <span class="required">*</span></label>
               <select v-model="form.node_id" class="form-input" :disabled="!form.cluster_id || !!editingProxy">
-                <option value="">请先选择集群</option>
+                <option value="">请选择节点</option>
                 <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port || n.service_port }}</option>
               </select>
               <span v-if="formErrors.node_id" class="form-error">{{ formErrors.node_id }}</span>
