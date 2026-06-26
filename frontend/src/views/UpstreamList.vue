@@ -16,11 +16,11 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="loadUpstreams">
+      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="onFilterChange">
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="lbFilter" class="form-input" style="width:140px;" @change="loadUpstreams">
+      <select v-model="lbFilter" class="form-input" style="width:140px;" @change="onFilterChange">
         <option value="">全部算法</option>
         <option value="weighted_roundrobin">加权轮询</option>
         <option value="chash">一致性哈希</option>
@@ -222,6 +222,11 @@ function handleAction(action: string, record: any) {
   else if (action === 'publish') { publishingRecord.value = record; publishClusterId.value = record.cluster_id; publishModalVisible.value = true }
   else if (action === 'version') { vmResourceId.value = record.id; vmClusterId.value = record.cluster_id; vmResourceName.value = record.name; vmModalVisible.value = true }
   else if (action === 'delete') deleteUpstream(record)
+}
+
+function onFilterChange() {
+  page.value = 1
+  loadUpstreams()
 }
 
 function onSearch() {
