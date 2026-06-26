@@ -89,6 +89,7 @@ class StreamProxyResponse(StreamProxyBase):
 
 class DetectPortsRequest(BaseModel):
     node_id: int = Field(..., ge=1)
+    exclude_proxy_id: Optional[int] = None
 
 
 class PortItem(BaseModel):
