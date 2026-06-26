@@ -78,7 +78,15 @@ async def _install_openresty_stream(
 
     try:
         yield f"data: {json.dumps({'line': '阶段 1/2: 传输文件并解压...', 'percent': 0})}\n\n"
+        ansible_rc = -1
         async for event in _run_ansible_stream(ansible_svc, ip=node.ip, tag="install_openresty_copy", extravars=extravars):
+            import json as _json
+            try:
+                ev_data = _json.loads(event.removeprefix("data: ").removesuffix("\n\n"))
+                if '"rc"' in event and '"status"' in event:
+                    ansible_rc = ev_data.get("rc", -1)
+            except Exception:
+                pass
             if '"rc"' in event and '"line"' not in event:
                 continue
             if '"percent"' in event:
@@ -86,10 +94,15 @@ async def _install_openresty_stream(
                 event = re.sub(r', "percent": \d+', '', event)
             yield event
 
+        if ansible_rc != 0:
+            yield f"data: {json.dumps({'line': f'❌ Ansible 传输/解压失败 (rc={ansible_rc})', 'percent': 100})}\n\n"
+            yield f"data: {json.dumps({'rc': ansible_rc, 'status': 'failed', 'percent': 100})}\n\n"
+            return
+
         build_dir = f"{destpath}soft/install-edge/"
         build_cmd = (
             f"source /etc/profile; "
-            f"cd {build_dir} && "
+            f"cd {build_dir} || {{ echo '❌ cd {build_dir} 失败'; exit 1; }} && "
             f"trap 'kill -- -\\$\\$ 2>/dev/null; exit' EXIT; "
             f"./install-edge.sh {prefix}; "
             f"wait"
