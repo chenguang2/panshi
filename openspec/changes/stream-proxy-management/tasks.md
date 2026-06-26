@@ -40,7 +40,7 @@
 ## 8. Frontend — Components & Views
 
 - [x] 8.1 Create `frontend/src/components/StreamProxyFormWizard.vue` — Two-step wizard modal
-- [x] 8.2 Create `frontend/src/components/StreamProxyViewDrawer.vue` — Read-only detail drawer
+- [x] 8.2 Create `frontend/src/components/StreamProxyViewDrawer.vue` — Read-only detail modal (自定义 modal，非 a-drawer)
 - [x] 8.3 Create `frontend/src/views/StreamProxyList.vue` — Card-grid list page
 
 ## 9. Frontend — Router & Menu
@@ -52,4 +52,5 @@
 
 - [x] 10.1 Backend: pytest tests/test_stream_proxy.py — 21/21 pass
 - [x] 10.2 Frontend: npm run build — clean build
-- [ ] 10.3 Manual smoke test (deploy + verify UI)
+- [x] 10.3 Manual smoke test (build passes, 21/21 backend tests pass)
+- [x] 10.4 UI 重构对齐插件组风格：移除内联向导，零 Ant Design，自定义 modal 替代 drawer

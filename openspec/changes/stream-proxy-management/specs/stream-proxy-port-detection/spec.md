@@ -5,7 +5,7 @@ The system SHALL read the remote edge.env file from a selected cluster node and 
 
 #### Scenario: Detect ports successfully
 - **WHEN** user selects a cluster and reference node, clicks "检测可用端口"
-- **THEN** the system calls the Ansible-based SSE stream to read the remote edge.env file, parses `deploy.stream.edge.listen` addresses, and extracts the port numbers
+- **THEN** the system reads the remote edge.env file via Ansible, parses `deploy.stream.edge.listen` addresses, extracts the port numbers, queries both DB (`ps_stream_proxy`) and Edge node (via `EdgeClient.api("stream_route", "list")`) for occupied ports, and returns a combined port status list
 
 #### Scenario: Parse multiple listen addresses
 - **WHEN** edge.env has multiple entries under `deploy.stream.edge.listen` (e.g., `- addr: 0.0.0.0:9970`, `- addr: 0.0.0.0:9971`)

@@ -35,7 +35,7 @@ The system SHALL display the full configuration of a stream proxy in a read-only
 
 #### Scenario: View proxy details
 - **WHEN** user clicks "查看" on a stream proxy card
-- **THEN** the system opens a drawer showing all proxy details including name, cluster, port, protocol, targets, load balance, timeout, keepalive, and optional match conditions (remote_addr, sni)
+- **THEN** the system opens a modal showing all proxy details including name, cluster, port, protocol, targets, load balance, timeout, keepalive, and optional match conditions (remote_addr, sni)
 
 ### Requirement: User can edit a stream proxy
 The system SHALL allow editing an existing stream proxy's configuration.
