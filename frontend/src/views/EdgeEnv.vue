@@ -15,20 +15,23 @@
     </PageHeader>
 
     <div class="ee-toolbar">
-      <div class="ee-filter-group">
-        <label class="ee-label">集群</label>
-        <select v-model="selectedClusterId" class="form-input ee-select" @change="onClusterChange">
-          <option value="">请选择集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
+      <div class="search-input-wrap">
+        <input v-model="searchText" type="text" placeholder="搜索集群名称..." class="form-input" @input="onSearch">
+        <span class="search-icon">&#128269;</span>
       </div>
-      <div class="ee-filter-group">
-        <label class="ee-label">参考节点</label>
-        <select v-model="selectedNodeId" class="form-input ee-select" @change="onNodeChange" :disabled="!nodes.length">
-          <option value="">请选择节点</option>
-          <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port }}</option>
-        </select>
-      </div>
+      <select v-model="groupFilter" class="form-input" style="width:140px;" @change="onGroupChange">
+        <option value="__all__">全部分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+        <option value="__ung__">未分组</option>
+      </select>
+      <select v-model="selectedClusterId" class="form-input" style="width:160px;" @change="onClusterChange">
+        <option value="">请选择集群</option>
+        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
+      <select v-model="selectedNodeId" class="form-input" style="width:200px;" @change="onNodeChange" :disabled="!nodes.length">
+        <option value="">请选择节点</option>
+        <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port }}</option>
+      </select>
     </div>
 
     <div v-if="!selectedClusterId" class="ee-empty">
@@ -212,6 +215,24 @@ const nodes = ref<any[]>([])
 const allNodes = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const selectedNodeId = ref<number | string>('')
+const searchText = ref('')
+const groupFilter = ref('__all__')
+
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort()
+})
+
+const filteredClusters = computed(() => {
+  let list = clusters.value
+  if (groupFilter.value === '__ung__') list = list.filter(c => !c.group_name)
+  else if (groupFilter.value !== '__all__') list = list.filter(c => c.group_name === groupFilter.value)
+  if (searchText.value) {
+    const q = searchText.value.toLowerCase()
+    list = list.filter(c => (c.display_name || c.name).toLowerCase().includes(q))
+  }
+  return list
+})
 const editorContent = ref('')
 const savedContent = ref('')
 const errorMsg = ref('')
@@ -280,6 +301,25 @@ const noActiveNodes = computed(() => {
   if (!selectedClusterId.value) return false
   return nodes.value.length === 0
 })
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    if (selectedClusterId.value) {
+      const stillInList = filteredClusters.value.find(c => c.id === Number(selectedClusterId.value))
+      if (!stillInList) {
+        selectedClusterId.value = ''
+        selectedNodeId.value = ''
+      }
+    }
+  }, 200)
+}
+
+function onGroupChange() {
+  selectedClusterId.value = ''
+  selectedNodeId.value = ''
+}
 
 onMounted(async () => {
   await loadClusters()

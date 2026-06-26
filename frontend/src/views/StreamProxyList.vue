@@ -11,9 +11,14 @@
         <input v-model="searchText" type="text" placeholder="搜索四层代理名称..." class="form-input" @input="onSearch">
         <span class="search-icon">&#128269;</span>
       </div>
+      <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;" @change="onGroupChange">
+        <option value="__all__">全部分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+        <option value="__ung__">未分组</option>
+      </select>
       <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadProxies">
         <option value="">全部集群</option>
-        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
       <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
     </div>
@@ -93,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -115,7 +120,24 @@ const totalCount = ref(0)
 const loading = ref(false)
 const searchText = ref('')
 const clusterFilter = ref<string | number>('')
+const groupFilter = ref('__all__')
 const page = ref(1)
+
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort()
+})
+
+const filteredClusters = computed(() => {
+  if (groupFilter.value === '__all__') return clusters.value
+  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
+  return clusters.value.filter(c => c.group_name === groupFilter.value)
+})
+
+function onGroupChange() {
+  clusterFilter.value = ''
+  loadProxies()
+}
 const pageSize = ref(20)
 
 // Wizard

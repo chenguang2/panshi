@@ -11,9 +11,14 @@
         <input v-model="searchText" type="text" placeholder="搜索名称或描述..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
+      <select v-model="groupFilter" class="form-input" style="width:140px;" @change="onGroupChange">
+        <option value="__all__">全部分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+        <option value="__ung__">未分组</option>
+      </select>
       <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="loadUpstreams">
         <option value="">全部集群</option>
-        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
       <select v-model="lbFilter" class="form-input" style="width:140px;" @change="loadUpstreams">
         <option value="">全部算法</option>
@@ -152,7 +157,24 @@ const page = ref(1)
 const pageSize = ref(20)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
+const groupFilter = ref('__all__')
 const lbFilter = ref('')
+
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort()
+})
+
+const filteredClusters = computed(() => {
+  if (groupFilter.value === '__all__') return clusters.value
+  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
+  return clusters.value.filter(c => c.group_name === groupFilter.value)
+})
+
+function onGroupChange() {
+  clusterFilter.value = ''
+  loadUpstreams()
+}
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
 const vmModalVisible = ref(false)

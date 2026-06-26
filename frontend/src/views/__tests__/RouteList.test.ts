@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 
@@ -31,10 +32,11 @@ const MOCK_ROUTES = {
 
 describe('RouteList.vue', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
-      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
       if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [{ name: 'limit-req', display_name: '限流' }, { name: 'key-auth', display_name: '密钥认证' }] } })
       return Promise.reject(new Error('unknown url'))
     })
@@ -100,5 +102,33 @@ describe('RouteList.vue', () => {
     // There should be one more /routes call after the change
     const totalRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
     expect(totalRouteCalls).toBe(mountRouteCalls + 1)
+  })
+
+  // ── Group Filter Tests ──
+
+  it('renders group filter select before cluster filter', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const selects = wrapper.findAll('select')
+    const groupIdx = selects.findIndex(s => s.text().includes('全部分组'))
+    const clusterIdx = selects.findIndex(s => s.text().includes('全部集群'))
+    expect(groupIdx).toBeGreaterThanOrEqual(0)
+    expect(clusterIdx).toBeGreaterThanOrEqual(0)
+    expect(groupIdx).toBeLessThan(clusterIdx)
+  })
+
+  it('populates group filter options from cluster group_names', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const options = groupSelect!.findAll('option')
+    const optionTexts = options.map(o => o.text())
+    expect(optionTexts).toContain('线上')
+    expect(optionTexts).toContain('预发')
   })
 })

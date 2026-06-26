@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -32,8 +33,9 @@ const stubs = {
 }
 
 const MOCK_CLUSTERS = [
-  { id: 1, display_name: '生产集群', name: 'production' },
-  { id: 2, display_name: '预发集群', name: 'staging' },
+  { id: 1, display_name: '生产集群', name: 'production', group_name: '线上' },
+  { id: 2, display_name: '预发集群', name: 'staging', group_name: '预发' },
+  { id: 3, display_name: '开发集群', name: 'dev', group_name: '' },
 ]
 
 const MOCK_NODES = {
@@ -48,6 +50,7 @@ const MOCK_NODES = {
 
 describe('NodeList.vue', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/nodes') {
@@ -107,5 +110,31 @@ describe('NodeList.vue', () => {
     const buttons = wrapper.findAll('button')
     const addBtn = buttons.find(b => b.text().includes('添加节点'))
     expect(addBtn).toBeDefined()
+  })
+
+  // ── Group Filter Tests ──
+
+  it('renders group filter select before cluster filter', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    const selects = wrapper.findAll('select')
+    const groupIdx = selects.findIndex(s => s.text().includes('全部分组'))
+    const clusterIdx = selects.findIndex(s => s.text().includes('全部集群'))
+    expect(groupIdx).toBeGreaterThanOrEqual(0)
+    expect(clusterIdx).toBeGreaterThanOrEqual(0)
+    expect(groupIdx).toBeLessThan(clusterIdx)
+  })
+
+  it('populates group filter options from cluster group_names', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const options = groupSelect!.findAll('option')
+    const optionTexts = options.map(o => o.text())
+    expect(optionTexts).toContain('线上')
+    expect(optionTexts).toContain('预发')
   })
 })
