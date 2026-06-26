@@ -24,6 +24,7 @@ class TestConnectionResponse(BaseModel):
     plugin_config_count: Optional[int] = None
     global_rule_count: Optional[int] = None
     plugin_metadata_count: Optional[int] = None
+    stream_proxy_count: Optional[int] = None
     node: Optional[str] = None
     cluster_name: Optional[str] = None
     response_time_ms: Optional[int] = None
@@ -86,6 +87,19 @@ class PluginMetadataPreview(BaseModel):
     config_data: Any = None
 
 
+class StreamProxyPreview(BaseModel):
+    name: Optional[str] = None
+    listen_port: int
+    load_balance: str = "weighted_roundrobin"
+    scheme: str = "tcp"
+    targets: Optional[List[Dict[str, Any]]] = None
+    timeout: Optional[Dict[str, Any]] = None
+    keepalive_pool: Optional[Dict[str, Any]] = None
+    remote_addr: Optional[str] = None
+    sni: Optional[str] = None
+    edge_uuid: str
+
+
 class ConflictInfo(BaseModel):
     type: str  # name_conflict / route_conflict / uuid_conflict
     resource_type: str  # upstream / route / plugin_config / global_rule
@@ -106,6 +120,7 @@ class ImportPreviewResponse(BaseModel):
     plugin_configs: List[PluginConfigPreview]
     global_rules: List[GlobalRulePreview]
     plugin_metadata: List[PluginMetadataPreview] = []
+    stream_proxies: List[StreamProxyPreview] = []
     conflicts: List[ConflictInfo]
     plugin_summary: PluginSummary
 
@@ -116,6 +131,7 @@ class ImportSelection(BaseModel):
     plugin_configs: bool = True
     global_rules: bool = True
     plugin_metadata: bool = True
+    stream_proxy: bool = True
 
 
 class ImportExecuteRequest(BaseModel):
@@ -131,6 +147,7 @@ class ImportCounts(BaseModel):
     plugin_configs: int = 0
     global_rules: int = 0
     plugin_metadata: int = 0
+    stream_proxies: int = 0
     skipped: int = 0
 
 
@@ -154,6 +171,7 @@ class ImportLogResponse(BaseModel):
     route_count: int
     plugin_config_count: int
     global_rule_count: int
+    stream_proxy_count: int = 0
     known_plugin_count: int
     unknown_plugin_count: int
     unknown_plugin_names: Optional[str] = None

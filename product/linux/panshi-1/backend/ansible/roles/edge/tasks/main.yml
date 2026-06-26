@@ -1,0 +1,21 @@
+
+- import_tasks: build.yml
+- import_tasks: build_edge.yml
+- import_tasks: build_openresty.yml
+- import_tasks: nginx_cmd.yml
+- import_tasks: edge_init_openresty.yml
+- import_tasks: edge_init_env.yml
+- import_tasks: master_copy_to_slaves.yml
+- import_tasks: tail_log.yml
+- import_tasks: statistic.yml
+- import_tasks: slave_copy_to_master.yml
+- import_tasks: cmd_run.yml
+- import_tasks: slave_copy_to_slave.yml
+- import_tasks: plugins_md5.yml
+- import_tasks: unzip.yml
+- import_tasks: nginx_stream.yml
+- import_tasks: check_env.yml
+- import_tasks: install_edge.yml
+- import_tasks: install_openresty.yml
+- import_tasks: upgrade_openresty.yml
+- import_tasks: upgrade_edge.yml

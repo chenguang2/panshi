@@ -1,0 +1,7 @@
+- name: init directory
+  shell:
+    cmd: "source /etc/profile; cd  {{ item.1 }}; {{ item.1 }}/bin/manager install uap-edge;"
+  loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
+  when: inventory_hostname == item.0
+  tags:
+    - install_edge

@@ -1,0 +1,30 @@
+---
+###################### edge init openresty########################
+
+- name: edge init openresty
+  shell:
+    source /etc/profile;
+    cd {{ edgepath.split(',')[item|int] }};
+    bin/edge init {{ openrestypath.split(',')[item|int] }};
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+
+  tags:
+    - edge_init_openresty
+
+###################### gen log ########################
+- name: out
+  debug:
+    msg: "{{ item.stdout_lines }}"
+  loop: "{{ cmd_output.results | default([]) }}"
+  when:
+    - cmd_output is defined
+    - cmd_output.results is defined
+    - cmd_output.results | length > 0
+    - item.stdout_lines is defined
+  tags:
+    - edge_init_openresty

@@ -1,0 +1,46 @@
+- name: copy edge file
+  ansible.builtin.copy:
+    src: "{{ srcpath }}"
+    dest: "{{ destpath.split(',')[item|int] }}/"
+  loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
+  tags:
+    - upgrade_edge
+
+- name: pack add
+  shell:
+    cmd: |
+      src_file="{{ srcpath | basename }}"
+      dest_dir="{{ destpath.split(',')[item|int] }}"
+      mv -f "$dest_dir/$src_file" "$dest_dir/edge.tar.gz"
+      {{ prefix.split(',')[item|int] }}/bin/manager pack-add "$dest_dir/edge.tar.gz"
+  loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
+  tags:
+    - upgrade_edge
+
+- name: pack list
+  shell:
+      cmd: "{{ prefix.split(',')[item|int] }}/bin/manager pack-list"  
+  loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
+  register: pack_list_output  
+  tags:  
+    - upgrade_edge
+
+- name: extract second line
+  set_fact:
+    second_line_content: >-
+      {{(pack_list_output.results[0].stdout_lines | reject('equalto', '') | list)[1] | trim }}
+  when: 
+    - pack_list_output.results is defined
+    - pack_list_output.results | length > 0 
+    - (pack_list_output.results[0].stdout_lines | reject('equalto', '') | list | length) >= 2
+  tags:
+    - upgrade_edge
+
+- name: pack rebase
+  shell:
+      cmd: "{{ prefix.split(',')[item|int] }}/bin/manager pack-rebase {{ second_line_content }}"
+  loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
+  when: second_line_content is defined
+  tags:
+    - upgrade_edge
+

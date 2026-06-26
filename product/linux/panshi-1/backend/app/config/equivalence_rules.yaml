@@ -1,0 +1,153 @@
+# ========================================
+# 字段等效规则配置
+# DB 侧缺失/为 NULL 的字段，如果等效于 Edge 侧某值，则视为一致
+# 规则会持续收集，发现误报时补充
+# ========================================
+
+upstream:
+  # DB 字段名 → Edge 字段名映射
+  field_aliases:
+    load_balance: type
+
+  # 标量字段默认值等效
+  field_defaults:
+    scheme: http
+    pass_host: pass
+    hash_on: vars
+
+  # DB 值 → Edge 值映射（DB 有值时归一化为 Edge 等效值）
+  value_mappings:
+    load_balance:
+      weighted_roundrobin: roundrobin
+
+  # 仅 Edge 侧存在、不应视为差异的字段
+  ignore_edge_fields:
+    - update_time
+    - create_time
+
+  # JSON 字段的子键默认值（待实际对比时观察 Edge 返回值再补充）
+  json_fields:
+    timeout:
+      fill_defaults:
+        connect: 6
+        send: 6
+        read: 6
+      ignore_edge_keys:
+        - create_time
+        - update_time
+    keepalive_pool:
+      ignore_edge_keys:
+        - create_time
+        - update_time
+    checks:
+      fill_defaults:
+        passive:
+          type: http
+        active:
+          type: http
+          https_verify_certificate: true
+          http_path: /
+          concurrency: 10
+          timeout: 1
+          healthy:
+            http_statuses:
+              - 200
+              - 302
+              - 403
+              - 404
+            successes: 2
+            interval: 0
+          unhealthy:
+            timeouts: 3
+            tcp_failures: 2
+            interval: 1
+            http_statuses:
+              - 429
+              - 500
+              - 501
+              - 502
+              - 503
+              - 504
+              - 505
+            http_failures: 5
+      ignore_edge_keys:
+        - create_time
+        - update_time
+
+route:
+  field_defaults:
+    priority: 0
+    status: 1
+
+  # DB 逗号字符串 ↔ Edge JSON 数组
+  list_fields:
+    - methods
+    - hosts
+
+  ignore_edge_fields:
+    - update_time
+    - create_time
+
+plugin_config:
+  json_field: plugins
+  # Edge 自动注入的插件级字段，对比前移除
+  ignore_edge_plugin_fields:
+    - _meta
+  per_plugin_defaults:
+    cors:
+      allow_origins: "*"
+      allow_methods: "*"
+      allow_headers: "*"
+      allow_credential: false
+      max_age: 5
+      expose_headers: "*"
+    limit-req:
+      rate: 1
+      burst: 0
+      rejected_code: 503
+    limit-conn:
+      conn: 1
+      burst: 0
+      default_conn_delay: 0.5
+      rejected_code: 503
+    auth_key:
+      hide_credentials: false
+      header: apikey
+      query: apikey
+    proxy-rewrite: {}
+    monitor:
+      prefer_name: false
+    traceid: {}
+    redirect: {}
+    fault-injection:
+      abort:
+        http_status: 500
+        body: ""
+      delay:
+        duration: 0
+    aws-lambda:
+      function_arn: ""
+      timeout: 3000
+      keepalive: true
+    serverless-pre-function: {}
+    serverless-post-function: {}
+    openid-connect: {}
+    prometheus:
+      prefer_name: false
+      status_code: false
+      latency: false
+    auth_basic:
+      hide_credentials: false
+    log_process:
+      logs: logs/process.log
+    traffic_limit_count:
+      policy: local
+
+global_rule:
+  json_field: plugins
+  ignore_edge_plugin_fields:
+    - _meta
+  per_plugin_defaults:
+    monitor:
+      prefer_name: false
+    traceid: {}

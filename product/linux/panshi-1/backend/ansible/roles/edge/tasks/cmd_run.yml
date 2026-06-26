@@ -1,0 +1,18 @@
+---
+######################运行命令########################
+- name: 运行命令
+  script: "{{ script_path_name }}"
+  register: msg_output
+  changed_when: false
+  failed_when: false
+  no_log: true
+  tags:
+    - script_cmd_run
+
+- name: ######### 信息输出 #########
+
+  debug:
+    msg: "{{ msg_output.stdout_lines }}"
+  when: msg_output.stdout is defined
+  tags:
+    - script_cmd_run

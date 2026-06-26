@@ -16,6 +16,7 @@ class ImportLog(Base):
     route_count = Column(Integer, default=0)
     plugin_config_count = Column(Integer, default=0)
     global_rule_count = Column(Integer, default=0)
+    stream_proxy_count = Column(Integer, default=0)
     known_plugin_count = Column(Integer, default=0)
     unknown_plugin_count = Column(Integer, default=0)
     unknown_plugin_names = Column(Text, nullable=True)  # JSON array

@@ -1,0 +1,12 @@
+- name: upgrade openresty server
+  shell:
+    cmd: "source /etc/profile;{{ item.1 }}/bin/manager upgrade {{ item.2 }}uap-edge"
+    executable: /bin/bash
+  when: inventory_hostname == item.0
+  with_together:
+    - "{{ ips.split(',') }}"
+    - "{{ prefix.split(',') }}"
+    - "{{ destpath.split(',') }}"
+  tags:
+    - upgrade_openresty
+

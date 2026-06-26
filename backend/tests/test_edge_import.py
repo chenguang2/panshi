@@ -81,6 +81,37 @@ SAMPLE_EDGE_GLOBAL_RULES = [
     }
 ]
 
+SAMPLE_STREAM_PROXY_DATA = [
+    {
+        "value": {
+            "name": "qcg-test-stream",
+            "id": "uuid-stream-1",
+            "server_port": 19993,
+            "upstream": {
+                "scheme": "tcp",
+                "type": "roundrobin",
+                "pass_host": "pass",
+                "nodes": {"127.0.0.1:19992": 100},
+                "timeout": {"connect": 60, "send": 60, "read": 60},
+            },
+        },
+        "key": "/edge/routes/uuid-stream-1",
+    },
+    {
+        "value": {
+            "name": "chash-stream",
+            "id": "uuid-stream-2",
+            "server_port": 19994,
+            "upstream": {
+                "scheme": "udp",
+                "type": "chash",
+                "nodes": {"10.0.0.1:8080": 100, "10.0.0.2:8080": 200},
+            },
+        },
+        "key": "/edge/routes/uuid-stream-2",
+    },
+]
+
 SAMPLE_EDGE_PLUGINS_LIST = [
     {"name": "limit-req"}, {"name": "cors"}, {"name": "proxy_rewrite"},
     {"name": "monitor"}, {"name": "custom-auth"}, {"name": "my-ratelimit"},
@@ -240,6 +271,63 @@ class TestEdgeImportConverters:
         service.cluster_id = 1
         result = service.convert_upstream({"id": "no-name-upstream", "type": "roundrobin"})
         assert result["upstream"]["name"] == "no-name-upstream"
+
+    def test_convert_stream_proxy_basic(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = SAMPLE_STREAM_PROXY_DATA[0]["value"]
+        result = service.convert_stream_proxy(edge_item)
+
+        sp = result["stream_proxy"]
+        assert sp["name"] == "qcg-test-stream"
+        assert sp["edge_uuid"] == "uuid-stream-1"
+        assert sp["listen_port"] == 19993
+        assert sp["load_balance"] == "weighted_roundrobin"
+        assert sp["scheme"] == "tcp"
+        assert sp["cluster_id"] == 1
+        assert sp["current_version"] is None
+
+        targets = result["targets"]
+        assert len(targets) == 1
+        assert targets[0]["target"] == "127.0.0.1:19992"
+        assert targets[0]["weight"] == 100
+
+        timeout = result["timeout"]
+        assert timeout["connect"] == 60
+        assert timeout["read"] == 60
+
+    def test_convert_stream_proxy_chash(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = SAMPLE_STREAM_PROXY_DATA[1]["value"]
+        result = service.convert_stream_proxy(edge_item)
+
+        sp = result["stream_proxy"]
+        assert sp["name"] == "chash-stream"
+        assert sp["load_balance"] == "chash"
+        assert sp["scheme"] == "udp"
+        assert sp["listen_port"] == 19994
+
+        targets = result["targets"]
+        assert len(targets) == 2
+
+        # No timeout in data
+        assert result["timeout"] is None
+
+    def test_convert_stream_proxy_name_fallback_to_id(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        result = service.convert_stream_proxy({
+            "id": "no-name-stream", "server_port": 19995,
+            "upstream": {"type": "roundrobin", "nodes": {"10.0.0.1:80": 100}},
+        })
+        assert result["stream_proxy"]["name"] == "no-name-stream"
 
     def test_convert_upstream_name_empty_fallback(self):
         from app.services.edge_import_service import EdgeImportService
@@ -452,6 +540,7 @@ class TestEdgeImportConflictDetection:
                 plugin_configs = True
                 global_rules = True
                 plugin_metadata = True
+                stream_proxy = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -506,6 +595,7 @@ class TestEdgeImportConflictDetection:
                 plugin_configs = False
                 global_rules = False
                 plugin_metadata = False
+                stream_proxy = True
 
             result = await service.execute_import(
                 selections=MockSelectionsPartial(),
@@ -558,6 +648,7 @@ class TestEdgeImportConflictDetection:
                 plugin_configs = False
                 global_rules = False
                 plugin_metadata = False
+                stream_proxy = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -596,6 +687,7 @@ class TestEdgeImportConflictDetection:
                 plugin_configs = True
                 global_rules = True
                 plugin_metadata = True
+                stream_proxy = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -646,6 +738,7 @@ class TestEdgeImportConflictDetection:
                 plugin_configs = False
                 global_rules = False
                 plugin_metadata = False
+                stream_proxy = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -685,6 +778,7 @@ async def test_execute_import_route_plugin_group_mapping(test_db):
             plugin_configs = True
             global_rules = False
             plugin_metadata = False
+            stream_proxy = True
 
         result = await service.execute_import(
             selections=MockSelections(),

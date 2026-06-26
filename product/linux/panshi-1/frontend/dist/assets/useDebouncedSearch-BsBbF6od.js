@@ -1,0 +1,1 @@
+import{Ht as e}from"./index-Cd5GOMcn.js";function t(t=300){let n=e(``),r=null;function i(e){r&&clearTimeout(r),r=setTimeout(()=>{e()},t)}function a(){r&&=(clearTimeout(r),null)}return{searchText:n,onSearch:i,cancelSearch:a}}export{t};

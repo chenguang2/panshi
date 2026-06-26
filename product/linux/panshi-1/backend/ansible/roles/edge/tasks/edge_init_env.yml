@@ -1,0 +1,45 @@
+---
+###################### edge init openresty########################
+- name: copy env file
+  ansible.builtin.copy:
+    src: "{{ srcpath }}"
+    dest: "{{ destpath.split(',')[item|int] }}/{{ 'edge.env' if filetype == 'env' else srcpath | basename }}"
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  tags:
+    - edge_init_env
+
+- name: decompressing env files
+  shell:
+    tar xf {{ destpath.split(',')[item|int] }}/{{ srcpath | basename }} -C {{ destpath.split(',')[item|int] }}/;
+    cd {{ destpath.split(',')[item|int] }};
+    bin/edge init;
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: filetype in ['site', 'env_site']
+  tags:
+    - edge_init_env
+
+- name: init env
+  shell:
+    cd {{ destpath.split(',')[item|int] }};
+    bin/edge init;
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  tags:
+    - edge_init_env
+
+###################### gen log ########################
+- name: out
+  debug:
+    msg: "{{ item.stdout_lines }}"
+  loop: "{{ cmd_output.results | default([]) }}"
+  when:
+    - cmd_output is defined
+    - cmd_output.results is defined
+    - cmd_output.results | length > 0
+    - item.stdout_lines is defined
+  tags:
+    - edge_init_env

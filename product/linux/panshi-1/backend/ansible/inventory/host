@@ -1,0 +1,25 @@
+all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.100.235:
+          ansible_ssh_user: jboss
+          ansible_ssh_pass: 'jboss@12306'
+        192.168.120.14:
+#          ansible_ssh_user: root
+#          ansible_ssh_pass: '1'
+        192.168.100.141:
+#          ansible_ssh_user: root
+#          ansible_ssh_pass: 'yu2022'
+        192.168.100.71:
+#          ansible_ssh_user: root
+#          ansible_ssh_pass: 'jdjk@redhat2022'
+        172.31.46.178:
+#          ansible_ssh_user: nginx
+#          ansible_ssh_pass: 'H3FmSyloCd@12306'
+        172.31.46.179:
+#          ansible_ssh_user: nginx
+#          ansible_ssh_pass: 'H3FmSyloCd@12306'
+      vars:
+        ansible_ssh_user: jboss
+        ansible_ssh_pass: 'xFC7@5nf'

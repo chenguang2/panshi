@@ -1,0 +1,24 @@
+---
+###################### run cmd ########################
+- name: run
+  script: "{{ check_cmd_script_path_name }} {{ check_cmd }}"
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  register: cmd_output
+  changed_when: false
+  failed_when: false
+  ignore_errors: false
+  no_log: false
+  tags:
+    - check_cmd_run
+###################### gen log ########################
+- name: out
+  debug:
+    msg: "{{ item.stdout_lines }}"
+  loop: "{{ cmd_output.results | default([]) }}"
+  when:
+    - cmd_output is defined
+    - cmd_output.results is defined
+    - cmd_output.results | length > 0
+    - item.stdout_lines is defined
+  tags:
+    - check_cmd_run
