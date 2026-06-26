@@ -35,10 +35,10 @@
       :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="groupFilter !== '__all__' ? false : {
-        current: page,
+      :pagination="{
+        current: groupFilter !== '__all__' ? 1 : page,
         pageSize,
-        total: totalCount,
+        total: groupFilter !== '__all__' ? displayedUpstreams.length : totalCount,
         showSizeChanger: true,
         showTotal: (total: number) => `共 ${total} 个上游`,
         pageSizeOptions: ['10', '20', '50'],
