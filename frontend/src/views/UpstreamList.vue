@@ -231,7 +231,7 @@ function onSearch() {
 function handleTableChange(pagination: TablePaginationConfig) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
-  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
+  if (groupFilter.value !== '__all__') {
     return
   }
   loadUpstreams()
@@ -240,7 +240,7 @@ function handleTableChange(pagination: TablePaginationConfig) {
 async function loadUpstreams() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const isGroupMode = groupFilter.value !== '__all__'
     const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
