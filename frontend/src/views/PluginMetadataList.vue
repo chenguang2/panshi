@@ -11,20 +11,25 @@
         <input v-model="searchText" type="text" placeholder="搜索插件名称..." class="form-input" @input="onSearch">
         <span class="search-icon">🔍</span>
       </div>
+      <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;" @change="onGroupChange">
+        <option value="__all__">全部分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+        <option value="__ung__">未分组</option>
+      </select>
       <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="onClusterFilterChange">
         <option value="">全部集群</option>
-        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个插件元数据</span>
+      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedItems.length : totalCount }} 个插件元数据</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="items.length === 0" class="pml-empty">
+    <div v-else-if="displayedItems.length === 0" class="pml-empty">
       <div class="pml-empty-icon">▣</div>
       <div class="pml-empty-text">暂无插件元数据</div>
     </div>
     <div v-else class="pml-grid">
-      <div v-for="item in items" :key="item.id" class="pml-card">
+      <div v-for="item in displayedItems" :key="item.id" class="pml-card">
         <div class="pml-card-topbar">{{ item.cluster_name || '-' }}</div>
         <div class="pml-card-header">
           <div class="pml-card-info">
@@ -119,6 +124,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { useRoute } from 'vue-router'
 
@@ -138,7 +144,30 @@ const totalCount = ref(0)
 const loading = ref(false)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
+const groupFilter = ref('__all__')
 const page = ref(1)
+
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort()
+})
+
+const filteredClusters = computed(() => {
+  if (groupFilter.value === '__all__') return clusters.value
+  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
+  return clusters.value.filter(c => c.group_name === groupFilter.value)
+})
+
+const displayedItems = computed(() => {
+  if (groupFilter.value === '__all__') return items.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return items.value.filter(i => gIds.has(i.cluster_id))
+})
+
+function onGroupChange() {
+  clusterFilter.value = ''
+  loadItems()
+}
 const pageSize = ref(20)
 
 

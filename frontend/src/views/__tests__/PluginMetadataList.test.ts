@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -36,10 +37,11 @@ const MOCK_DATA = {
 
 describe('PluginMetadataList.vue', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/plugin_metadata') return Promise.resolve({ data: MOCK_DATA })
-      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }, { id: 2, display_name: '测试集群' }] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '测试集群', group_name: '测试' }] } })
       if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [{ name: 'jwt-auth', enable_metadata: true, description: 'JWT 认证' }] } })
       return Promise.reject(new Error('unknown url'))
     })
@@ -67,6 +69,34 @@ describe('PluginMetadataList.vue', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.pml-card').length).toBe(2)
     expect(wrapper.text()).toContain('jwt-auth')
+  })
+
+  // ── Group Filter Tests ──
+
+  it('renders group filter select before cluster filter', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const selects = wrapper.findAll('select')
+    const groupIdx = selects.findIndex(s => s.text().includes('全部分组'))
+    const clusterIdx = selects.findIndex(s => s.text().includes('全部集群'))
+    expect(groupIdx).toBeGreaterThanOrEqual(0)
+    expect(clusterIdx).toBeGreaterThanOrEqual(0)
+    expect(groupIdx).toBeLessThan(clusterIdx)
+  })
+
+  it('populates group filter options from cluster group_names', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const options = groupSelect!.findAll('option')
+    const optionTexts = options.map(o => o.text())
+    expect(optionTexts).toContain('线上')
+    expect(optionTexts).toContain('测试')
   })
 
   it('shows empty state when no items', async () => {
