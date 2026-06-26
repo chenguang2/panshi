@@ -1988,3 +1988,34 @@ stream-proxy-management
 请读取 openspec/changes/stream-proxy-management/tasks.md   ，严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+===========================================================================================
+
+讨论， 现在只有集群管理有全部分组的下拉框，可用进行分组选择，其它的例如节点管理，上游管理，插件组等都没有这个功能，是否可以都加上？ 
+
+
+add-group-filter-to-resource-pages
+
+/brainstorming 请仔细阅读 openspec/changes/add-group-filter-to-resource-pages/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/add-group-filter-to-resource-pages/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+==========================================================================================
+1. 四层代理 的右侧上部名称是 StreamProxyList , 改成 四层代理
+2. edge.env配置 也一样
+
+
+
+edge-client-stream-proxy-tab
+
+
+/brainstorming 请仔细阅读 openspec/changes/edge-client-stream-proxy-tab/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/edge-client-stream-proxy-tab/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
