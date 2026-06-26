@@ -354,7 +354,8 @@ async function handleDetectPorts() {
     logLines.value.push(`读取 ${node?.ip || ''} edge.env 配置...`)
     logLines.value.push('解析 stream 配置...')
 
-    const res = await streamProxyApi.detectPorts(Number(form.cluster_id), Number(form.node_id))
+    const excludeId = props.editingProxy?.id
+    const res = await streamProxyApi.detectPorts(Number(form.cluster_id), Number(form.node_id), excludeId)
     ports.value = res.data.ports || []
     hasSearched.value = true
     logLines.value.push('查询已用端口...')

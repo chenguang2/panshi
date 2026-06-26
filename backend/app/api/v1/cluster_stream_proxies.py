@@ -229,9 +229,10 @@ async def detect_stream_proxy_ports(
                 continue
 
     # ── Query DB for occupied ports ──
-    db_result = await db.execute(
-        select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)
-    )
+    db_query = select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)
+    if req.exclude_proxy_id:
+        db_query = db_query.where(StreamProxy.id != req.exclude_proxy_id)
+    db_result = await db.execute(db_query)
     existing_proxies = db_result.scalars().all()
     occupied_ports = {p.listen_port: p.name for p in existing_proxies}
 
