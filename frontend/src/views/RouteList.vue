@@ -48,10 +48,10 @@
       :data-source="displayedRoutes"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="groupFilter !== '__all__' ? false : {
-        current: page,
+      :pagination="{
+        current: groupFilter !== '__all__' ? 1 : page,
         pageSize,
-        total: totalCount,
+        total: groupFilter !== '__all__' ? displayedRoutes.length : totalCount,
         showSizeChanger: true,
         showTotal: (total: number) => `共 ${total} 条路由`,
         pageSizeOptions: ['10', '20', '50'],
