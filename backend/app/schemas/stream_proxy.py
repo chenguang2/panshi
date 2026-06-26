@@ -34,6 +34,7 @@ class StreamProxyUpdate(BaseModel):
     description: Optional[str] = None
     load_balance: Optional[str] = None
     scheme: Optional[str] = None
+    listen_port: Optional[int] = None
     targets: Optional[List[TargetSchema]] = None
     timeout: Optional[Dict[str, Any]] = None
     keepalive_pool: Optional[Dict[str, Any]] = None
