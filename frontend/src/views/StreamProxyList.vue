@@ -111,6 +111,7 @@ import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 
 // ── State ──
 
@@ -212,7 +213,7 @@ async function loadProxies() {
     } else {
       const settled = await Promise.allSettled(
         clusters.value.map(c =>
-          api.get(`/clusters/${c.id}/stream-proxies`, { params: { page_size: 999 } }).then(r => r.data.items || [])
+          api.get(`/clusters/${c.id}/stream-proxies`, { params: { page_size: GROUP_MODE_PAGE_SIZE } }).then(r => r.data.items || [])
         )
       )
       let allItems: any[] = settled.flatMap(r => r.status === 'fulfilled' ? r.value : [])
