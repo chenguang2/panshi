@@ -531,20 +531,14 @@ watch(() => props.visible, async (v) => {
     try {
       const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: 100 } })
       nodes.value = res.data.items || res.data || []
+      if (nodes.value.length > 0) {
+        form.node_id = nodes.value[0].id
+      }
     } catch {
       nodes.value = []
     }
 
-    try {
-      if (nodes.value.length > 0) {
-        const res = await streamProxyApi.detectPorts(p.cluster_id, nodes.value[0].id)
-        ports.value = res.data.ports || []
-        hasSearched.value = true
-      }
-    } catch {
-      // non-blocking
-    }
-
+    // 编辑模式下不检测端口（避免远程 SSH 慢），直接进入步骤 2
     currentStep.value = 2
   } else {
     form.cluster_id = ''
