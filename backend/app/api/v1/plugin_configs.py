@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, PluginConfig, ConfigVersion
 from app.models.user import User, UserCluster
 from app.schemas.cluster import PluginConfigResponse
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/plugin_configs", tags=["plugin_configs"])
 async def list_all_plugin_configs(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),

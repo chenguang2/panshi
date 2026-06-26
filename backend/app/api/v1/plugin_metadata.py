@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 import json
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import PluginMetadata, Cluster
 from app.models.user import User, UserCluster
 from app.api.v1.clusters import get_current_user
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/plugin_metadata", tags=["plugin_metadata"])
 async def list_all_plugin_metadata(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),

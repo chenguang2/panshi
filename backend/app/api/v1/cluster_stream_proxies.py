@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, StreamProxy, ConfigVersion, Node
 from app.schemas.stream_proxy import (
     StreamProxyCreate, StreamProxyUpdate, StreamProxyResponse,
@@ -28,7 +29,7 @@ async def list_stream_proxies(
     cluster_id: int,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     search: Optional[str] = None,
 ):
     query = select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)

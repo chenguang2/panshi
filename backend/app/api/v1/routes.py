@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, exists
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream
 from app.models.user import User, UserCluster
 from app.schemas.route import RouteListResponse, RouteResponse
@@ -20,7 +21,7 @@ ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
 async def list_all_routes(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     method: Optional[str] = Query(None, description="Filter by HTTP method"),

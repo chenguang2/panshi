@@ -8,6 +8,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Node, ConfigVersion
 from app.schemas.edge_env import (
     EdgeEnvReadResponse,
@@ -133,7 +134,7 @@ async def deploy_edge_env(
 async def list_edge_env_versions(
     cluster_id: int,
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
 ):
     cluster = await db.get(Cluster, cluster_id)

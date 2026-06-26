@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Node, ConfigVersion, Route, RoutePlugin
 from app.models.static_resource import StaticResource
 from app.schemas.static_resource import (
@@ -88,7 +89,7 @@ async def list_static_resources(
     cluster_id: int,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     search: Optional[str] = Query(None),

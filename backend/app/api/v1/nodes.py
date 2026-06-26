@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Node, Cluster
 from app.models.user import User, UserCluster
 from app.schemas.cluster import NodeResponse
@@ -19,7 +20,7 @@ ALLOWED_SEARCH_FIELDS = {"ip", "name"}
 async def list_or_find_nodes(
     # Pagination
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     # Filters
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
