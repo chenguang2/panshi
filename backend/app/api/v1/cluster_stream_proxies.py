@@ -21,6 +21,16 @@ from app.services.edge_client import EdgeClient
 router = APIRouter(prefix="/clusters", tags=["stream-proxies"])
 
 ALLOWED_SEARCH_FIELDS = {"name", "description"}
+
+
+async def _proxy_response_with_cluster_name(proxy, cluster_id: int, db):
+    """Return StreamProxyResponse with cluster_name added."""
+    cluster = await db.get(Cluster, cluster_id)
+    cluster_name = cluster.display_name or cluster.name if cluster else ""
+    resp = StreamProxyResponse.model_validate(proxy)
+    item = resp.model_dump()
+    item["cluster_name"] = cluster_name
+    return item
 ALLOWED_SORT_FIELDS = {"name", "listen_port", "load_balance", "created_at"}
 
 
@@ -63,12 +73,17 @@ async def list_stream_proxies(
     )
     pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if proxy_ids else {}
 
+    cluster = await db.get(Cluster, cluster_id)
+    cluster_name = cluster.display_name or cluster.name if cluster else ""
+
     items = []
     for p in proxies:
         resp = StreamProxyResponse.model_validate(p)
         ts = pub_map.get(p.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
-        items.append(resp)
+        item = resp.model_dump()
+        item["cluster_name"] = cluster_name
+        items.append(item)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 
@@ -100,7 +115,7 @@ async def create_stream_proxy(
     db.add(proxy)
     await db.commit()
     await db.refresh(proxy)
-    return StreamProxyResponse.model_validate(proxy)
+    return await _proxy_response_with_cluster_name(proxy, cluster_id, db)
 
 
 @router.post("/{cluster_id}/stream-proxies/detect-ports", response_model=DetectPortsResponse)
@@ -213,7 +228,7 @@ async def get_stream_proxy(
     db: AsyncSession = Depends(get_db),
 ):
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
-    return StreamProxyResponse.model_validate(proxy)
+    return await _proxy_response_with_cluster_name(proxy, cluster_id, db)
 
 
 @router.put("/{cluster_id}/stream-proxies/{proxy_id}", response_model=StreamProxyResponse)
@@ -239,7 +254,7 @@ async def update_stream_proxy(
 
     await db.commit()
     await db.refresh(proxy)
-    return StreamProxyResponse.model_validate(proxy)
+    return await _proxy_response_with_cluster_name(proxy, cluster_id, db)
 
 
 @router.delete("/{cluster_id}/stream-proxies/{proxy_id}")
