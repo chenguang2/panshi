@@ -232,7 +232,7 @@ async function loadRoutes() {
   loading.value = true
   try {
     const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
-    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? 9999 : pageSize.value }
+    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? 100 : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
@@ -242,7 +242,11 @@ async function loadRoutes() {
     const res = await api.get('/routes', { params })
     routes.value = res.data.items || []
     totalCount.value = isGroupMode ? routes.value.length : (res.data.total || 0)
-  } catch { message.error('加载路由列表失败') }
+  } catch (error: any) {
+    const detail = error?.response?.data?.detail
+    const msg = typeof detail === 'string' ? detail : (detail?.msg || error?.message || '未知错误')
+    message.error('加载路由列表失败: ' + msg)
+  }
   finally { loading.value = false }
 }
 
