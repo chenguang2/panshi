@@ -36,6 +36,7 @@ api_router.include_router(global_rules.router)
 api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
 api_router.include_router(plugin_metadata.router)
+api_router.include_router(cluster_stream_proxies.global_router)
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
 feature_routers: dict[str, APIRouter] = {

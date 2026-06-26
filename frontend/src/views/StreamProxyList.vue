@@ -211,12 +211,8 @@ async function loadProxies() {
       proxies.value = res.data.items || []
       totalCount.value = res.data.total || 0
     } else {
-      const settled = await Promise.allSettled(
-        clusters.value.map(c =>
-          api.get(`/clusters/${c.id}/stream-proxies`, { params: { page_size: GROUP_MODE_PAGE_SIZE } }).then(r => r.data.items || [])
-        )
-      )
-      let allItems: any[] = settled.flatMap(r => r.status === 'fulfilled' ? r.value : [])
+      const res = await api.get('/stream-proxies', { params: { page_size: GROUP_MODE_PAGE_SIZE } })
+      let allItems: any[] = res.data.items || []
       if (searchText.value) {
         const q = searchText.value.toLowerCase()
         allItems = allItems.filter((p: StreamProxy) => p.name.toLowerCase().includes(q))

@@ -20,6 +20,10 @@ from app.services.edge_client import EdgeClient
 
 router = APIRouter(prefix="/clusters", tags=["stream-proxies"])
 
+# Global stream proxy list endpoint (not cluster-scoped)
+global_router = APIRouter(prefix="/stream-proxies", tags=["stream-proxies"])
+
+
 ALLOWED_SEARCH_FIELDS = {"name", "description"}
 
 
@@ -85,6 +89,44 @@ async def list_stream_proxies(
         item["cluster_name"] = cluster_name
         items.append(item)
 
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@global_router.get("", response_model=dict)
+async def list_all_stream_proxies(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    search: Optional[str] = None,
+):
+    """List stream proxies across all clusters (global view)."""
+    query = select(StreamProxy).order_by(StreamProxy.created_at.desc())
+    if search:
+        pattern = f"%{search}%"
+        conditions = [
+            getattr(StreamProxy, field).ilike(pattern)
+            for field in ALLOWED_SEARCH_FIELDS
+            if hasattr(StreamProxy, field)
+        ]
+        query = query.where(or_(*conditions))
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    proxies = result.scalars().all()
+
+    # Build cluster_id → cluster_name map
+    clusters_result = await db.execute(select(Cluster.id, Cluster.display_name, Cluster.name))
+    cluster_map = {}
+    for row in clusters_result.all():
+        cluster_map[row.id] = row.display_name or row.name or ""
+
+    items = []
+    for p in proxies:
+        resp = StreamProxyResponse.model_validate(p)
+        item = resp.model_dump()
+        item["cluster_name"] = cluster_map.get(p.cluster_id, "")
+        items.append(item)
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
