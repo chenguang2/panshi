@@ -48,10 +48,10 @@
       :data-source="displayedRoutes"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="{
-        current: groupFilter !== '__all__' ? 1 : page,
+      :pagination="groupFilter !== '__all__' ? { pageSize, total: displayedRoutes.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条路由`, pageSizeOptions: ['10', '20', '50'] } : {
+        current: page,
         pageSize,
-        total: groupFilter !== '__all__' ? displayedRoutes.length : totalCount,
+        total: totalCount,
         showSizeChanger: true,
         showTotal: (total: number) => `共 ${total} 条路由`,
         pageSizeOptions: ['10', '20', '50'],
@@ -224,6 +224,10 @@ function onSearch() {
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
+  if (groupFilter.value !== '__all__' && !clusterFilter.value) {
+    if (pagination.pageSize) pageSize.value = pagination.pageSize
+    return  // 分组模式数据已全量加载，客户端分页
+  }
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
   loadRoutes()
