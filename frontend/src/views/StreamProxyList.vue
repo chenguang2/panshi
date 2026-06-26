@@ -313,10 +313,10 @@ function openVersionManagement(p: StreamProxy) {
 
 // ── Lifecycle ──
 
-onMounted(() => {
+onMounted(async () => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
-  loadClusters()
+  await loadClusters()
   loadProxies()
 })
 
