@@ -23,6 +23,7 @@ from app.models.cluster import (
     PluginMetadata,
     ConfigVersion,
     Node,
+    StreamProxy,
 )
 from app.models.edge_import import ImportLog
 
@@ -154,6 +155,13 @@ class EdgeImportService:
             except Exception:
                 plugin_metadata_count = 0
 
+            try:
+                sp_data = self.client.list_stream_routes()
+                sp_list = self._unwrap_panshi_items(sp_data)
+                stream_proxy_count = len(sp_list)
+            except Exception:
+                stream_proxy_count = 0
+
             version = "unknown"
             try:
                 raw = self.client._request("GET", "/edge/server_info")
@@ -173,6 +181,7 @@ class EdgeImportService:
                 "plugin_config_count": plugin_config_count,
                 "global_rule_count": global_rule_count,
                 "plugin_metadata_count": plugin_metadata_count,
+                "stream_proxy_count": stream_proxy_count,
                 "node": f"{self.ip}:{self.port}",
                 "response_time_ms": elapsed,
             }
@@ -236,12 +245,19 @@ class EdgeImportService:
         raw_pm = self.client._request("GET", "/edge/admin/plugin_metadata")
         plugin_metadata = self._parse_resource_list(raw_pm)
 
+        sp_data = self.client.list_stream_routes()
+        if isinstance(sp_data, list):
+            stream_proxies = self._unwrap_panshi_items(sp_data)
+        else:
+            stream_proxies = []
+
         return {
             "upstreams": upstreams,
             "routes": routes,
             "plugin_configs": plugin_configs,
             "global_rules": global_rules,
             "plugin_metadata": plugin_metadata,
+            "stream_proxies": stream_proxies,
         }
 
     def classify_plugins(self, plugins_dict: dict) -> dict:
@@ -307,6 +323,56 @@ class EdgeImportService:
                 })
 
         return {"upstream": upstream_data, "targets": targets_data}
+
+    _STREAM_PROXY_TYPE_MAP = {
+        "roundrobin": "weighted_roundrobin",
+        "chash": "chash",
+        "least_conn": "least_conn",
+        "ewma": "ewma",
+    }
+
+    def convert_stream_proxy(self, edge_stream: dict) -> dict:
+        edge_nodes = (edge_stream.get("upstream") or {}).get("nodes") or {}
+
+        proxy_data = {
+            "name": edge_stream.get("name") or edge_stream.get("id", ""),
+            "edge_uuid": edge_stream.get("id", ""),
+            "cluster_id": self.cluster_id,
+            "listen_port": edge_stream.get("server_port", 0),
+            "load_balance": self._STREAM_PROXY_TYPE_MAP.get(
+                (edge_stream.get("upstream") or {}).get("type", "roundrobin"), "weighted_roundrobin"
+            ),
+            "scheme": (edge_stream.get("upstream") or {}).get("scheme", "tcp"),
+            "description": edge_stream.get("desc"),
+            "remote_addr": edge_stream.get("remote_addr"),
+            "sni": edge_stream.get("sni"),
+            "current_version": None,
+        }
+
+        timeout_raw = (edge_stream.get("upstream") or {}).get("timeout")
+        timeout_data = None
+        if timeout_raw and isinstance(timeout_raw, dict):
+            timeout_data = timeout_raw
+
+        keepalive_raw = (edge_stream.get("upstream") or {}).get("keepalive_pool")
+        keepalive_data = None
+        if keepalive_raw and isinstance(keepalive_raw, dict):
+            keepalive_data = keepalive_raw
+
+        targets_data: list[dict] = []
+        if isinstance(edge_nodes, dict):
+            for host_port, weight in edge_nodes.items():
+                targets_data.append({
+                    "target": host_port,
+                    "weight": weight if isinstance(weight, int) else 1,
+                })
+
+        return {
+            "stream_proxy": proxy_data,
+            "targets": targets_data,
+            "timeout": timeout_data,
+            "keepalive_pool": keepalive_data,
+        }
 
     def convert_route(self, edge_route: dict, upstream_uuid_map: dict) -> dict:
         methods = edge_route.get("methods", [])
@@ -565,6 +631,29 @@ class EdgeImportService:
                         "resolution": "将跳过该记录",
                     })
 
+        sp_ports = [
+            sp["stream_proxy"]["listen_port"]
+            for sp in preview_data.get("converted_stream_proxies", [])
+        ]
+        if sp_ports:
+            result = await db.execute(
+                select(StreamProxy.listen_port).where(
+                    StreamProxy.cluster_id == self.cluster_id,
+                    StreamProxy.listen_port.in_(sp_ports),
+                )
+            )
+            existing_ports = set(row[0] for row in result.all())
+            for sp in preview_data.get("converted_stream_proxies", []):
+                port = sp["stream_proxy"]["listen_port"]
+                if port in existing_ports:
+                    conflicts.append({
+                        "type": "uuid_conflict",
+                        "resource_type": "stream_proxy",
+                        "resource_name": sp["stream_proxy"]["name"],
+                        "reason": f"四层代理 '{sp['stream_proxy']['name']}' (端口: {port}) 已存在于数据库中",
+                        "resolution": "将跳过该记录",
+                    })
+
         return conflicts
 
     async def preview_import(self) -> dict:
@@ -595,12 +684,18 @@ class EdgeImportService:
             for epm in edge_data.get("plugin_metadata", [])
         ]
 
+        converted_stream_proxies = [
+            self.convert_stream_proxy(esp)
+            for esp in edge_data.get("stream_proxies", [])
+        ]
+
         preview_data = {
             "converted_upstreams": converted_upstreams,
             "converted_routes": converted_routes,
             "converted_plugin_configs": converted_plugin_configs,
             "converted_global_rules": converted_global_rules,
             "converted_plugin_metadata": converted_plugin_metadata,
+            "converted_stream_proxies": converted_stream_proxies,
         }
 
         conflicts = await self.detect_conflicts(preview_data)
@@ -732,12 +827,29 @@ class EdgeImportService:
             for pm in converted_plugin_metadata
         ]
 
+        sp_preview = []
+        for csp in converted_stream_proxies:
+            sp = csp["stream_proxy"]
+            sp_preview.append({
+                "name": sp["name"],
+                "listen_port": sp["listen_port"],
+                "load_balance": sp["load_balance"],
+                "scheme": sp["scheme"],
+                "targets": csp.get("targets"),
+                "timeout": csp.get("timeout"),
+                "keepalive_pool": csp.get("keepalive_pool"),
+                "remote_addr": sp.get("remote_addr"),
+                "sni": sp.get("sni"),
+                "edge_uuid": sp["edge_uuid"],
+            })
+
         return {
             "upstreams": upstreams_preview,
             "routes": routes_preview,
             "plugin_configs": pc_preview,
             "global_rules": gr_preview,
             "plugin_metadata": pm_preview,
+            "stream_proxies": sp_preview,
             "conflicts": conflicts,
             "plugin_summary": plugin_summary,
         }
@@ -768,18 +880,23 @@ class EdgeImportService:
                 for eu in edge_data.get("upstreams", [])
             ]
 
+            converted_stream_proxies = [
+                self.convert_stream_proxy(esp)
+                for esp in edge_data.get("stream_proxies", [])
+            ]
+
             upstream_uuid_map: dict = {}
             plugin_config_uuid_map: dict = {}
 
             imported_counts: dict[str, int] = {
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
-                "plugin_metadata": 0,
+                "plugin_metadata": 0, "stream_proxies": 0,
             }
             skipped_counts: dict[str, int] = {
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
-                "plugin_metadata": 0,
+                "plugin_metadata": 0, "stream_proxies": 0,
             }
 
             known_plugin_count = 0
@@ -824,6 +941,15 @@ class EdgeImportService:
                     )
                 ).all()
             )
+            existing_sp_ports = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(StreamProxy.listen_port).where(
+                            StreamProxy.cluster_id == self.cluster_id
+                        )
+                    )
+                ).all()
+            )
 
             # ── Phase 2: Insert (conflict check only against DB, not within Edge batch) ──
 
@@ -850,6 +976,41 @@ class EdgeImportService:
                         created_by="system",
                     ))
                     imported_counts["plugin_metadata"] += 1
+                await session.flush()
+
+            if selections.stream_proxy:
+                for csp in converted_stream_proxies:
+                    sp_data = csp["stream_proxy"]
+                    port = sp_data["listen_port"]
+                    if port in existing_sp_ports:
+                        skipped_counts["stream_proxies"] += 1
+                        continue
+                    existing_sp_ports.add(port)
+                    sp_data["current_version"] = 1
+                    session.add(StreamProxy(**sp_data))
+                    await session.flush()
+                    sp_id = (await session.execute(
+                        select(StreamProxy.id).where(
+                            StreamProxy.cluster_id == self.cluster_id,
+                            StreamProxy.listen_port == port,
+                        )
+                    )).scalar_one()
+                    sp_config = {
+                        "name": sp_data["name"],
+                        "listen_port": port,
+                        "load_balance": sp_data["load_balance"],
+                        "scheme": sp_data["scheme"],
+                        "targets": csp.get("targets"),
+                        "timeout": csp.get("timeout"),
+                        "keepalive_pool": csp.get("keepalive_pool"),
+                    }
+                    session.add(ConfigVersion(
+                        cluster_id=self.cluster_id, resource_type="stream_proxy",
+                        resource_id=sp_id, version=1,
+                        config=json.dumps(sp_config, ensure_ascii=False),
+                        created_by="system",
+                    ))
+                    imported_counts["stream_proxies"] += 1
                 await session.flush()
 
             if selections.plugin_configs:
@@ -1004,6 +1165,7 @@ class EdgeImportService:
                 route_count=imported_counts["routes"],
                 plugin_config_count=imported_counts["plugin_configs"],
                 global_rule_count=imported_counts["global_rules"],
+                stream_proxy_count=imported_counts["stream_proxies"],
                 known_plugin_count=known_plugin_count,
                 unknown_plugin_count=unknown_plugin_count,
                 unknown_plugin_names=json.dumps(

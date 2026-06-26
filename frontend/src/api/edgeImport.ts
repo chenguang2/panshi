@@ -21,6 +21,7 @@ export interface ImportSelections {
   plugin_configs: boolean
   global_rules: boolean
   plugin_metadata: boolean
+  stream_proxy: boolean
 }
 
 // ---- Response Types ----
@@ -34,6 +35,7 @@ export interface TestConnectionResponse {
   plugin_config_count?: number
   global_rule_count?: number
   plugin_metadata_count?: number
+  stream_proxy_count?: number
   node?: string
   cluster_name?: string
   response_time_ms?: number
@@ -64,6 +66,7 @@ export interface PreviewResponse {
   plugin_configs: Record<string, any>[]
   global_rules: Record<string, any>[]
   plugin_metadata: PluginMetadataPreview[]
+  stream_proxies: Record<string, any>[]
   conflicts: Conflict[]
   plugin_summary: PluginSummary
 }
@@ -74,6 +77,7 @@ export interface ImportedCounts {
   plugin_configs: number
   global_rules: number
   plugin_metadata: number
+  stream_proxies: number
   skipped: number
 }
 

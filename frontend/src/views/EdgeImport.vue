@@ -79,7 +79,8 @@
               插件: {{ connectionResult?.plugin_count }} 个 ·
               插件组: {{ connectionResult?.plugin_config_count }} 个 ·
               全局规则: {{ connectionResult?.global_rule_count }} 个 ·
-              插件元数据: {{ connectionResult?.plugin_metadata_count }} 个
+              插件元数据: {{ connectionResult?.plugin_metadata_count }} 个 ·
+              四层代理: {{ connectionResult?.stream_proxy_count }} 个
             </div>
           </template>
         </a-alert>
@@ -518,6 +519,7 @@ const selections = reactive({
   plugin_configs: true,
   global_rules: true,
   plugin_metadata: true,
+  stream_proxy: true,
 })
 
 const expandedSections = reactive({
@@ -536,6 +538,7 @@ const configTypes = [
   { key: 'plugin_configs', label: '插件组', icon: BlockOutlined },
   { key: 'global_rules', label: '全局规则', icon: PropertySafetyOutlined },
   { key: 'plugin_metadata', label: '插件元数据', icon: AppstoreOutlined },
+  { key: 'stream_proxy', label: '四层代理', icon: CloudUploadOutlined },
 ]
 
 function toggleConfigType(key: string) {
@@ -731,6 +734,7 @@ const handleImport = async () => {
       plugin_configs: selections.plugin_configs,
       global_rules: selections.global_rules,
       plugin_metadata: selections.plugin_metadata,
+      stream_proxy: selections.stream_proxy,
     }, adminKey.value)
     importResult.value = res.data
     resultModalVisible.value = true
