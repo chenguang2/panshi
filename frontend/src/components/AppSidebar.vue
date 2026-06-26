@@ -107,7 +107,7 @@ const navSections = computed<NavSection[]>(() => {
     {
       title: '边缘网络',
       items: [
-        { label: 'edge.env 配置', route: '/edge-env', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2h10a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M6 6h6M6 9h6M6 12h4"/></svg>', feature: 'edge_env' },
+        { label: 'edge.env 配置', route: '/edge-env', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg>', feature: 'edge_env' },
         { label: '四层代理', route: '/stream-proxies', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg>', feature: 'stream_proxy' },
       ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
