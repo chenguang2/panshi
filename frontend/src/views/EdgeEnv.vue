@@ -317,8 +317,17 @@ function onSearch() {
 }
 
 function onGroupChange() {
-  selectedClusterId.value = ''
-  selectedNodeId.value = ''
+  if (groupFilter.value === '__all__') {
+    selectedClusterId.value = ''
+    selectedNodeId.value = ''
+  } else {
+    const available = filteredClusters.value
+    selectedClusterId.value = available.length > 0 ? String(available[0].id) : ''
+    selectedNodeId.value = ''
+  }
+  if (selectedClusterId.value) {
+    onClusterChange()
+  }
 }
 
 onMounted(async () => {

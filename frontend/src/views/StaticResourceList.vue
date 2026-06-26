@@ -190,7 +190,12 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  clusterFilter.value = ''
+  if (groupFilter.value === '__all__') {
+    clusterFilter.value = ''
+  } else {
+    const available = filteredClusters.value
+    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
+  }
   loadResources()
 }
 const pageSize = ref(20)
