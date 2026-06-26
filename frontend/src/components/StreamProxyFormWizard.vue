@@ -310,7 +310,10 @@ const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]
 
 const canGoNext = computed(() => {
   if (manualPortEnabled.value && manualPort.value && manualPort.value >= 1 && manualPort.value <= 65535) return true
-  return selectedPort.value !== null
+  if (selectedPort.value !== null) return true
+  // 编辑模式：未选端口也允许下一步（保持原端口不变）
+  if (props.editingProxy) return true
+  return false
 })
 
 // ── Methods ──
@@ -378,7 +381,12 @@ function goToStep2() {
       return
     }
     form.listen_port = manualPort.value
-  } else if (!selectedPort.value) {
+  } else if (selectedPort.value) {
+    form.listen_port = selectedPort.value
+  } else if (props.editingProxy) {
+    // 编辑模式：未选择新端口则保持原端口不变
+    form.listen_port = props.editingProxy.listen_port
+  } else {
     formErrors.port = '请选择一个可用端口或启用手动输入'
     return
   }
@@ -544,24 +552,8 @@ watch(() => props.visible, async (v) => {
       nodes.value = []
     }
 
-    // 编辑模式下加载端口列表（排除自身，自己的端口可选）
-    try {
-      if (nodes.value.length > 0) {
-        const excludeId = props.editingProxy?.id
-        const excludePort = props.editingProxy?.listen_port
-        const res = await streamProxyApi.detectPorts(p.cluster_id, Number(form.node_id), excludeId, excludePort)
-        ports.value = res.data.ports || []
-        hasSearched.value = true
-        // 自动选中当前端口
-        const currentPort = ports.value.find(p => p.port === form.listen_port)
-        if (currentPort) {
-          selectedPort.value = currentPort.port
-        }
-      }
-    } catch {
-      // non-blocking
-    }
-
+    // 编辑模式不自动检测端口（避免远程 SSH 慢），直接进入步骤 2
+    // 用户可在步骤 1 手动点击「检测可用端口」
     currentStep.value = 2
   } else {
     form.cluster_id = ''
