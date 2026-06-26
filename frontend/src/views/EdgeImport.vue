@@ -385,6 +385,43 @@
               </template>
             </a-table>
           </div>
+        <!-- 四层代理 -->
+        <div class="section-card">
+          <div class="section-header">
+            <a-checkbox v-model:checked="selections.stream_proxy" />
+            <span class="section-title">四层代理（{{ previewData?.stream_proxies?.length || 0 }} 个）</span>
+            <a-button size="small" @click="expandedSections.stream_proxy = !expandedSections.stream_proxy">
+              {{ expandedSections.stream_proxy ? '收起详情' : '预览详情' }}
+            </a-button>
+          </div>
+          <div v-if="expandedSections.stream_proxy" class="section-body">
+            <a-table
+              :columns="streamProxyColumns"
+              :data-source="previewData?.stream_proxies || []"
+              :pagination="false"
+              rowKey="edge_uuid"
+              size="small"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'name'">
+                  {{ record.name || '-' }}
+                </template>
+                <template v-if="column.key === 'listen_port'">
+                  <span class="text-mono">{{ record.listen_port }}</span>
+                </template>
+                <template v-if="column.key === 'load_balance'">
+                  {{ record.load_balance || '-' }}
+                </template>
+                <template v-if="column.key === 'scheme'">
+                  {{ record.scheme || 'tcp' }}
+                </template>
+                <template v-if="column.key === 'targets'">
+                  <span v-if="record.targets && record.targets.length">{{ record.targets.length }} 个目标</span>
+                  <span v-else>-</span>
+                </template>
+              </template>
+            </a-table>
+          </div>
         </div>
       </div>
 
@@ -425,6 +462,7 @@
             <div>插件组：{{ importResult.imported_counts.plugin_configs }} 个</div>
             <div>全局规则：{{ importResult.imported_counts.global_rules }} 个</div>
             <div>插件元数据：{{ importResult.imported_counts.plugin_metadata || 0 }} 个</div>
+            <div>四层代理：{{ importResult.imported_counts.stream_proxies || 0 }} 个</div>
             <div v-if="importResult.imported_counts.skipped > 0">
               跳过：{{ importResult.imported_counts.skipped }} 项
             </div>
@@ -528,6 +566,7 @@ const expandedSections = reactive({
   plugin_configs: false,
   global_rules: false,
   plugin_metadata: false,
+  stream_proxy: false,
 })
 
 const showConflicts = ref(false)
@@ -591,6 +630,14 @@ const globalRuleColumns = [
 const pluginMetadataColumns = [
   { title: '插件名称', dataIndex: 'plugin_name', key: 'plugin_name' },
   { title: '配置插件数', key: 'config_data' },
+]
+
+const streamProxyColumns = [
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '端口', dataIndex: 'listen_port', key: 'listen_port' },
+  { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
+  { title: '协议', dataIndex: 'scheme', key: 'scheme' },
+  { title: '上游目标', key: 'targets' },
 ]
 
 // ---- Data Loading ----
