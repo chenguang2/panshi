@@ -539,7 +539,23 @@ watch(() => props.visible, async (v) => {
       nodes.value = []
     }
 
-    // 编辑模式下不检测端口（避免远程 SSH 慢），直接进入步骤 2
+    // 编辑模式下加载端口列表（排除自身，自己的端口可选）
+    try {
+      if (nodes.value.length > 0) {
+        const excludeId = props.editingProxy?.id
+        const res = await streamProxyApi.detectPorts(p.cluster_id, Number(form.node_id), excludeId)
+        ports.value = res.data.ports || []
+        hasSearched.value = true
+        // 自动选中当前端口
+        const currentPort = ports.value.find(p => p.port === form.listen_port)
+        if (currentPort) {
+          selectedPort.value = currentPort.port
+        }
+      }
+    } catch {
+      // non-blocking
+    }
+
     currentStep.value = 2
   } else {
     form.cluster_id = ''
