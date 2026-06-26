@@ -73,6 +73,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -142,7 +143,8 @@ function onSearch() {
 async function loadConfigs() {
   loading.value = true
   try {
-    const params: any = { page: page.value, page_size: pageSize.value }
+    const isGroupMode = groupFilter.value !== '__all__' && !clusterFilter.value
+    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/plugin_configs', { params })
