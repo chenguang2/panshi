@@ -210,12 +210,12 @@ async function loadProxies() {
       proxies.value = res.data.items || []
       totalCount.value = res.data.total || 0
     } else {
-      const results = await Promise.all(
+      const settled = await Promise.allSettled(
         clusters.value.map(c =>
           api.get(`/clusters/${c.id}/stream-proxies`, { params: { page_size: 999 } }).then(r => r.data.items || [])
         )
       )
-      let allItems = results.flat()
+      let allItems: any[] = settled.flatMap(r => r.status === 'fulfilled' ? r.value : [])
       if (searchText.value) {
         const q = searchText.value.toLowerCase()
         allItems = allItems.filter((p: StreamProxy) => p.name.toLowerCase().includes(q))
@@ -223,8 +223,10 @@ async function loadProxies() {
       proxies.value = allItems
       totalCount.value = allItems.length
     }
-  } catch {
-    message.error('加载四层代理列表失败')
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail
+    const msg = typeof detail === 'string' ? detail : (e?.message || '加载四层代理列表失败')
+    message.error('加载失败: ' + msg)
   } finally {
     loading.value = false
   }
