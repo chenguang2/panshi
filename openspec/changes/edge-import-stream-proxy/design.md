@@ -25,38 +25,48 @@ EdgeImport 流程：
 **理由**：与已有的 upstream/route 转换模式一致。
 
 ```
-Edge API 返回格式：
+Edge API 返回格式（含 value/key 包装，与 HTTP 路由一致）：
 {
-  "server_port": 9970,
-  "sni": "...",
-  "remote_addr": "...",
-  "upstream": {
-    "nodes": {"ip:port": weight},
-    "type": "roundrobin",
-    "timeout": {...},
-    "keepalive_pool": {...}
-  }
+  "value": {
+    "name": "qcg-test-stream",
+    "id": "bd38d68a-88e2-48b1-a2f5-26c2915be77e",
+    "server_port": 19993,
+    "upstream": {
+      "scheme": "tcp",
+      "type": "roundrobin",
+      "pass_host": "pass",
+      "nodes": {"127.0.0.1:19992": 100},
+      "timeout": {"connect": 60, "send": 60, "read": 60}
+    }
+  },
+  "key": "/edge/routes/bd38d68a-88e2-48b1-a2f5-26c2915be77e"
 }
 
 DB 存储格式（ps_stream_proxy）：
 {
-  "listen_port": 9970,
-  "sni": "...",
-  "remote_addr": "...",
+  "edge_uuid": "bd38d68a-...",
+  "cluster_id": 31,
+  "name": "qcg-test-stream",
+  "listen_port": 19993,
   "load_balance": "weighted_roundrobin",
   "scheme": "tcp",
-  "targets": [{"target": "ip:port", "weight": 100}],
-  "timeout": {...},
-  "keepalive_pool": {...}
+  "targets": [{"target": "127.0.0.1:19992", "weight": 100}],
+  "timeout": {"connect": 60, "send": 60, "read": 60}
 }
 ```
 
 转换规则：
-- `server_port` → `listen_port`
-- `upstream.type` → `load_balance`（roundrobin → weighted_roundrobin，其余不变）
-- `upstream.nodes`（dict）→ `targets`（array）
-- `upstream.timeout` → `timeout`（不变）
-- `upstream.keepalive_pool` → `keepalive_pool`（不变）
+- `value.id` → `edge_uuid`
+- `value.server_port` → `listen_port`
+- `value.name` → `name`
+- `value.upstream.type` → `load_balance`（roundrobin → weighted_roundrobin，其余不变）
+- `value.upstream.nodes`（dict）→ `targets`（array）
+- `value.upstream.scheme` → `scheme`
+- `value.upstream.timeout` → `timeout`
+- `value.upstream.keepalive_pool` → `keepalive_pool`
+- `value.sni` → `sni`
+- `value.remote_addr` → `remote_addr`
+- `_unwrap_panshi_items()` 会先提取 `value`，后续转换直接操作 value 内的字段
 
 ### 2. 导入顺序
 **选择**：四层代理在 plugin_metadata 之后、plugin_configs 之前导入
