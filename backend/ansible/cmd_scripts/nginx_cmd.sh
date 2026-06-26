@@ -89,6 +89,13 @@ nginx_stop() {
   else
     echo "The Nginx process with PID $nginx_pid does not exist or is not an Nginx process."
   fi
+
+  # Clean up leftover socket files that block restart
+  local sock_dir="$prefix/logs/"
+  if ls "$sock_dir"edge_*.sock 2>/dev/null; then
+    rm -f "$sock_dir"edge_*.sock
+    echo "Cleaned up stale socket files in $sock_dir"
+  fi
 }
 
 
