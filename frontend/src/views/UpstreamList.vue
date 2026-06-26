@@ -35,7 +35,7 @@
       :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="{
+      :pagination="groupFilter !== '__all__' ? false : {
         current: page,
         pageSize,
         total: totalCount,
