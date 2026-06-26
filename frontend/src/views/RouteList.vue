@@ -40,12 +40,12 @@
         <option value="published">已发布</option>
         <option value="unpublished">未发布</option>
       </select>
-      <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
+      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedRoutes.length : totalCount }} 条路由</span>
     </div>
 
     <div class="table-container">
     <a-table
-      :data-source="routes"
+      :data-source="displayedRoutes"
       :columns="columns"
       :row-key="(record: any) => record.id"
       :pagination="{
@@ -163,14 +163,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   onClusterChange()
 }
+
+const displayedRoutes = computed(() => {
+  if (groupFilter.value === '__all__') return routes.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return routes.value.filter(r => gIds.has(r.cluster_id))
+})
 const activeMethod = ref('')
 const publishFilter = ref('')
 const pluginFilter = ref('')

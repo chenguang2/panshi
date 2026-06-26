@@ -20,16 +20,16 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个插件组</span>
+      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedConfigs.length : totalCount }} 个插件组</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="configs.length === 0" class="pc-empty">
+    <div v-else-if="displayedConfigs.length === 0" class="pc-empty">
       <div class="pc-empty-icon">▣</div>
       <div class="pc-empty-text">暂无插件组</div>
     </div>
     <div v-else class="pc-grid">
-      <div v-for="pc in configs" :key="pc.id" class="pc-card">
+      <div v-for="pc in displayedConfigs" :key="pc.id" class="pc-card">
         <div class="pc-card-topbar">{{ pc.cluster_name || '-' }}</div>
         <div class="pc-card-header">
           <div class="pc-card-info">
@@ -106,14 +106,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   loadConfigs()
 }
+
+const displayedConfigs = computed(() => {
+  if (groupFilter.value === '__all__') return configs.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return configs.value.filter(c => gIds.has(c.cluster_id))
+})
 const pageSize = ref(20)
 
 const formVisible = ref(false)

@@ -25,12 +25,12 @@
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm">共 {{ totalCount }} 个节点</span>
+      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedNodes.length : totalCount }} 个节点</span>
     </div>
 
     <div class="table-container">
       <a-table
-        :data-source="nodes"
+        :data-source="displayedNodes"
         :columns="columns"
         :row-key="(record: any) => record.id"
         :pagination="{
@@ -295,14 +295,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   onFilterChange()
 }
+
+const displayedNodes = computed(() => {
+  if (groupFilter.value === '__all__') return nodes.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return nodes.value.filter(n => gIds.has(n.cluster_id))
+})
 const opLogVisible = ref<number | null>(null)
 
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null

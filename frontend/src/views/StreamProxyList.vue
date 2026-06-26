@@ -20,16 +20,16 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
+      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedProxies.length : totalCount }} 个四层代理</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="proxies.length === 0" class="sp-empty">
+    <div v-else-if="displayedProxies.length === 0" class="sp-empty">
       <div class="sp-empty-icon">&#9635;</div>
       <div class="sp-empty-text">暂无四层代理</div>
     </div>
     <div v-else class="sp-grid">
-      <div v-for="p in proxies" :key="p.id" class="sp-card">
+      <div v-for="p in displayedProxies" :key="p.id" class="sp-card">
         <div class="sp-card-topbar">{{ p.cluster_name || '-' }}</div>
         <div class="sp-card-header">
           <div class="sp-card-info">
@@ -135,14 +135,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   loadProxies()
 }
+
+const displayedProxies = computed(() => {
+  if (groupFilter.value === '__all__') return proxies.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return proxies.value.filter(p => gIds.has(p.cluster_id))
+})
 const pageSize = ref(20)
 
 // Wizard

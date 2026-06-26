@@ -20,16 +20,16 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个全局规则</span>
+      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedRules.length : totalCount }} 个全局规则</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="rules.length === 0" class="gr-empty">
+    <div v-else-if="displayedRules.length === 0" class="gr-empty">
       <div class="gr-empty-icon">▣</div>
       <div class="gr-empty-text">暂无全局规则</div>
     </div>
     <div v-else class="gr-grid">
-      <div v-for="pc in rules" :key="pc.id" class="gr-card">
+      <div v-for="pc in displayedRules" :key="pc.id" class="gr-card">
         <div class="gr-card-topbar">{{ pc.cluster_name || '-' }}</div>
         <div class="gr-card-header">
           <div class="gr-card-info">
@@ -106,14 +106,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   loadRules()
 }
+
+const displayedRules = computed(() => {
+  if (groupFilter.value === '__all__') return rules.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return rules.value.filter(r => gIds.has(r.cluster_id))
+})
 const pageSize = ref(20)
 
 const formVisible = ref(false)

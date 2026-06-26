@@ -27,12 +27,12 @@
         <option value="ewma">EWMA</option>
         <option value="least_conn">最少连接</option>
       </select>
-      <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
+      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedUpstreams.length : totalCount }} 个上游</span>
     </div>
 
     <div class="table-container">
     <a-table
-      :data-source="upstreams"
+      :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
       :pagination="{
@@ -172,14 +172,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   loadUpstreams()
 }
+
+const displayedUpstreams = computed(() => {
+  if (groupFilter.value === '__all__') return upstreams.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return upstreams.value.filter(u => gIds.has(u.cluster_id))
+})
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
 const vmModalVisible = ref(false)

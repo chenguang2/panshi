@@ -20,16 +20,16 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个静态资源</span>
+      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedResources.length : totalCount }} 个静态资源</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="resources.length === 0" class="sr-empty">
+    <div v-else-if="displayedResources.length === 0" class="sr-empty">
       <div class="sr-empty-icon">▣</div>
       <div class="sr-empty-text">暂无静态资源</div>
     </div>
     <div v-else class="sr-grid">
-      <div v-for="sr in resources" :key="sr.id" class="sr-card">
+      <div v-for="sr in displayedResources" :key="sr.id" class="sr-card">
         <div class="sr-card-topbar">{{ sr.cluster_name || '-' }}</div>
         <div class="sr-card-header">
           <div>
@@ -190,14 +190,15 @@ const filteredClusters = computed(() => {
 })
 
 function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    clusterFilter.value = ''
-  } else {
-    const available = filteredClusters.value
-    clusterFilter.value = available.length > 0 ? String(available[0].id) : ''
-  }
+  clusterFilter.value = ''
   loadResources()
 }
+
+const displayedResources = computed(() => {
+  if (groupFilter.value === '__all__') return resources.value
+  const gIds = new Set(filteredClusters.value.map(c => c.id))
+  return resources.value.filter(r => gIds.has(r.cluster_id))
+})
 const pageSize = ref(20)
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
