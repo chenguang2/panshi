@@ -228,7 +228,7 @@ async def detect_stream_proxy_ports(
             except ValueError:
                 continue
 
-    # ── Query DB for occupied ports ──
+    # ── Query DB for occupied ports (exclude self if editing) ──
     db_query = select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)
     if req.exclude_proxy_id:
         db_query = db_query.where(StreamProxy.id != req.exclude_proxy_id)
@@ -251,6 +251,10 @@ async def detect_stream_proxy_ports(
                     edge_occupied.add(int(sp))
         except Exception:
             pass  # non-blocking: edge query failure should not block detection
+
+    if req.exclude_port:
+        occupied_ports.pop(req.exclude_port, None)
+        edge_occupied.discard(req.exclude_port)
 
     ports = []
     for port in sorted(detected_ports):

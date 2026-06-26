@@ -44,6 +44,6 @@ export function deleteStreamProxyHistory(clusterId: number, proxyId: number, his
   return api.delete(`/clusters/${clusterId}/stream-proxies/${proxyId}/history/${historyId}`)
 }
 
-export function detectPorts(clusterId: number, nodeId: number, excludeProxyId?: number) {
-  return api.post<{ ports: PortItem[] }>(`/clusters/${clusterId}/stream-proxies/detect-ports`, { node_id: nodeId, exclude_proxy_id: excludeProxyId })
+export function detectPorts(clusterId: number, nodeId: number, excludeProxyId?: number, excludePort?: number) {
+  return api.post<{ ports: PortItem[] }>(`/clusters/${clusterId}/stream-proxies/detect-ports`, { node_id: nodeId, exclude_proxy_id: excludeProxyId, exclude_port: excludePort })
 }
