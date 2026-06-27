@@ -25,7 +25,7 @@
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm">共 {{ statusFilter.value !== '' && statusFilter.value !== undefined ? displayedNodes.length : totalCount }} 个节点</span>
+      <span class="text-muted text-sm">共 {{ statusFilter !== '' && statusFilter !== undefined ? displayedNodes.length : totalCount }} 个节点</span>
     </div>
 
     <div class="table-container">
