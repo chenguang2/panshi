@@ -22,6 +22,7 @@ async def list_or_find_nodes(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     # Filters
+    group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     status: Optional[int] = Query(None),
@@ -42,15 +43,17 @@ async def list_or_find_nodes(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
 
         cluster_result = await db.execute(
-            select(Cluster.name, Cluster.display_name).where(Cluster.id == node.cluster_id)
+            select(Cluster.name, Cluster.display_name, Cluster.group_name).where(Cluster.id == node.cluster_id)
         )
         cluster = cluster_result.first()
         cluster_name = cluster.display_name if cluster and cluster.display_name else (cluster.name if cluster else "")
+        cluster_group_name = cluster.group_name if cluster and cluster.group_name else ""
 
         return {
             "id": node.id,
             "cluster_id": node.cluster_id,
             "cluster_name": cluster_name,
+            "cluster_group_name": cluster_group_name,
             "ip": node.ip,
             "service_port": node.service_port,
             "management_port": node.management_port,
@@ -65,6 +68,16 @@ async def list_or_find_nodes(
     # Cluster filter
     if cluster_id:
         query = query.where(Node.cluster_id == cluster_id)
+
+    # Group filter
+    if group_name == "__ung__":
+        query = query.join(Cluster, Node.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, Node.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
 
     # Status filter
     if status is not None:
@@ -104,18 +117,22 @@ async def list_or_find_nodes(
 
     # Batch load cluster names
     cluster_ids = {n.cluster_id for n in nodes}
-    cluster_map = {}
+    cluster_name_map = {}
+    cluster_group_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name, Cluster.group_name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {r[0]: r[1] or r[2] for r in c_result.all()}
+        for r in c_result.all():
+            cluster_name_map[r[0]] = r[1] or r[2]
+            cluster_group_map[r[0]] = r[3] or ""
 
     items = []
     for n in nodes:
         item = NodeResponse.model_validate(n)
         item_dict = item.model_dump()
-        item_dict["cluster_name"] = cluster_map.get(n.cluster_id, "")
+        item_dict["cluster_name"] = cluster_name_map.get(n.cluster_id, "")
+        item_dict["cluster_group_name"] = cluster_group_map.get(n.cluster_id, "")
         items.append(item_dict)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}

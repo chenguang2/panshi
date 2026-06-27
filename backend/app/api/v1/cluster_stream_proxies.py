@@ -97,10 +97,21 @@ async def list_all_stream_proxies(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    group_name: str = Query("__all__"),
     search: Optional[str] = None,
 ):
     """List stream proxies across all clusters (global view)."""
     query = select(StreamProxy).order_by(StreamProxy.created_at.desc())
+
+    if group_name == "__ung__":
+        query = query.join(Cluster, StreamProxy.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, StreamProxy.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
+
     if search:
         pattern = f"%{search}%"
         conditions = [
@@ -115,17 +126,20 @@ async def list_all_stream_proxies(
     result = await db.execute(query)
     proxies = result.scalars().all()
 
-    # Build cluster_id → cluster_name map
-    clusters_result = await db.execute(select(Cluster.id, Cluster.display_name, Cluster.name))
-    cluster_map = {}
+    # Build cluster_id → cluster_name/cluster_group_name map
+    clusters_result = await db.execute(select(Cluster.id, Cluster.display_name, Cluster.name, Cluster.group_name))
+    cluster_name_map: dict[int, str] = {}
+    cluster_group_map: dict[int, str] = {}
     for row in clusters_result.all():
-        cluster_map[row.id] = row.display_name or row.name or ""
+        cluster_name_map[row.id] = row.display_name or row.name or ""
+        cluster_group_map[row.id] = row.group_name or ""
 
     items = []
     for p in proxies:
         resp = StreamProxyResponse.model_validate(p)
         item = resp.model_dump()
-        item["cluster_name"] = cluster_map.get(p.cluster_id, "")
+        item["cluster_name"] = cluster_name_map.get(p.cluster_id, "")
+        item["cluster_group_name"] = cluster_group_map.get(p.cluster_id, "")
         items.append(item)
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 

@@ -18,6 +18,7 @@ async def list_all_global_rules(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -26,6 +27,15 @@ async def list_all_global_rules(
 
     if cluster_id is not None:
         query = query.where(GlobalRule.cluster_id == cluster_id)
+
+    if group_name == "__ung__":
+        query = query.join(Cluster, GlobalRule.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, GlobalRule.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
 
     if current_user.role != "admin":
         uc_result = await db.execute(
@@ -51,12 +61,15 @@ async def list_all_global_rules(
     rules = result.scalars().all()
 
     cluster_ids = {r.cluster_id for r in rules}
-    cluster_map = {}
+    cluster_name_map = {}
+    cluster_group_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name, Cluster.group_name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {row[0]: row[1] or row[2] for row in c_result.all()}
+        for row in c_result.all():
+            cluster_name_map[row[0]] = row[1] or row[2]
+            cluster_group_map[row[0]] = row[3] or ""
 
     gr_ids = [r.id for r in rules]
     pub_map = {}
@@ -74,7 +87,8 @@ async def list_all_global_rules(
         ts = pub_map.get(r.id)
         item.published_at = ts.isoformat() + "Z" if ts else None
         d = item.model_dump()
-        d["cluster_name"] = cluster_map.get(r.cluster_id, "")
+        d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
+        d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
         items.append(d)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
