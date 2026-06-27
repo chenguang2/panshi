@@ -20,7 +20,7 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedProxies.length : totalCount }} 个四层代理</span>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -30,7 +30,10 @@
     </div>
     <div v-else class="sp-grid">
       <div v-for="p in displayedProxies" :key="p.id" class="sp-card">
-        <div class="sp-card-topbar">{{ p.cluster_name || '-' }}</div>
+        <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
+          <span>{{ p.cluster_name || '-' }}</span>
+          <span v-if="p.cluster_group_name" class="group-badge">{{ p.cluster_group_name }}</span>
+        </div>
         <div class="sp-card-header">
           <div class="sp-card-info">
             <div class="sp-card-name">{{ p.name }}</div>
@@ -104,6 +107,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 import { message } from 'ant-design-vue'
 import type { StreamProxy } from '@/types'
+import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'
@@ -111,7 +115,8 @@ import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { GROUP_MODE_PAGE_SIZE } from '@/constants'
+import { getGroupColorStyle } from '@/composables/useGroupColors'
+
 
 // ── State ──
 
@@ -122,7 +127,6 @@ const loading = ref(false)
 const searchText = ref('')
 const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
-const page = ref(1)
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map(c => c.group_name || ''))
@@ -140,12 +144,7 @@ function onGroupChange() {
   loadProxies()
 }
 
-const displayedProxies = computed(() => {
-  if (groupFilter.value === '__all__') return proxies.value
-  const gIds = new Set(filteredClusters.value.map(c => c.id))
-  return proxies.value.filter(p => gIds.has(p.cluster_id))
-})
-const pageSize = ref(20)
+const displayedProxies = computed(() => proxies.value)
 
 // Wizard
 const wizardVisible = ref(false)
@@ -194,7 +193,6 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
-    page.value = 1
     loadProxies()
   }, 300)
 }
@@ -204,22 +202,12 @@ function onSearch() {
 async function loadProxies() {
   loading.value = true
   try {
-    if (clusterFilter.value) {
-      const params: Record<string, any> = { page: page.value, page_size: pageSize.value }
-      if (searchText.value) params.search = searchText.value
-      const res = await api.get(`/clusters/${clusterFilter.value}/stream-proxies`, { params })
-      proxies.value = res.data.items || []
-      totalCount.value = res.data.total || 0
-    } else {
-      const res = await api.get('/stream-proxies', { params: { page_size: GROUP_MODE_PAGE_SIZE } })
-      let allItems: any[] = res.data.items || []
-      if (searchText.value) {
-        const q = searchText.value.toLowerCase()
-        allItems = allItems.filter((p: StreamProxy) => p.name.toLowerCase().includes(q))
-      }
-      proxies.value = allItems
-      totalCount.value = allItems.length
-    }
+    const params: Record<string, any> = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
+    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (searchText.value) params.search = searchText.value
+    const res = await api.get('/stream-proxies', { params })
+    proxies.value = res.data.items || []
+    totalCount.value = res.data.total || 0
   } catch (e: any) {
     const detail = e?.response?.data?.detail
     const msg = typeof detail === 'string' ? detail : (e?.message || '加载四层代理列表失败')
@@ -336,7 +324,8 @@ onUnmounted(() => {
 .sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .sp-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
 .sp-card:hover { box-shadow: var(--shadow-md); }
-.sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); }
+.sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
+.group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
 .sp-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
 .sp-card-info { flex: 1; }
 .sp-card-name { font-size: 15px; font-weight: 600; }

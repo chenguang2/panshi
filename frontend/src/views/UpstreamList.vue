@@ -27,7 +27,7 @@
         <option value="ewma">EWMA</option>
         <option value="least_conn">最少连接</option>
       </select>
-      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedUpstreams.length : totalCount }} 个上游</span>
+      <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
     </div>
 
     <div class="table-container">
@@ -35,7 +35,7 @@
       :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="groupFilter !== '__all__' ? { current: page, pageSize, total: displayedUpstreams.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个上游`, pageSizeOptions: ['10', '20', '50'] } : {
+      :pagination="{
         current: page,
         pageSize,
         total: totalCount,
@@ -137,10 +137,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
+import { PAGE_SIZE_TABLE } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import UpstreamFormModal from '@/components/UpstreamFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -155,7 +155,7 @@ const upstreams = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const groupFilter = ref('__all__')
@@ -177,11 +177,7 @@ function onGroupChange() {
   loadUpstreams()
 }
 
-const displayedUpstreams = computed(() => {
-  if (groupFilter.value === '__all__') return upstreams.value
-  const gIds = new Set(filteredClusters.value.map(c => c.id))
-  return upstreams.value.filter(u => gIds.has(u.cluster_id))
-})
+const displayedUpstreams = computed(() => upstreams.value)
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
 const vmModalVisible = ref(false)
@@ -236,23 +232,19 @@ function onSearch() {
 function handleTableChange(pagination: TablePaginationConfig) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
-  if (groupFilter.value !== '__all__') {
-    return
-  }
   loadUpstreams()
 }
 
 async function loadUpstreams() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__'
-    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
+    const params: any = { page: page.value, page_size: pageSize.value, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/upstreams', { params })
     upstreams.value = res.data.items || []
-    totalCount.value = isGroupMode ? upstreams.value.length : (res.data.total || 0)
+    totalCount.value = res.data.total || 0
   } catch (error: any) {
     const detail = error?.response?.data?.detail
     const msg = typeof detail === 'string' ? detail : (detail?.msg || error?.message || '未知错误')

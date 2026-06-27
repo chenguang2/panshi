@@ -251,6 +251,7 @@ import { message } from 'ant-design-vue'
 import type { Cluster, PortItem, StreamProxy } from '@/types'
 import * as streamProxyApi from '@/api/streamProxy'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 const props = defineProps<{
   visible: boolean
@@ -336,7 +337,7 @@ async function onClusterChange() {
   logLines.value = []
   if (!form.cluster_id) return
   try {
-    const res = await api.get(`/clusters/${form.cluster_id}/nodes`, { params: { page_size: 100 } })
+    const res = await api.get(`/clusters/${form.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
     nodes.value = res.data.items || res.data || []
   } catch {
     nodes.value = []
@@ -540,7 +541,7 @@ watch(() => props.visible, async (v) => {
     form.sni = p.sni || ''
 
     try {
-      const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: 100 } })
+      const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
       nodes.value = res.data.items || res.data || []
       // 恢复保存的参考节点，否则用第一个
       if (p.ref_node_id) {
