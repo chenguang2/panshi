@@ -51,6 +51,53 @@ class TestRouteListAPI:
             response = await client.get("/api/v1/routes", headers=headers, params={"method": "GET"})
             assert response.status_code == 200
 
+    async def test_list_routes_group_filter_机电_武清(self):
+        """group_name filter should only return routes from that group."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            token = await self._login(client)
+            headers = {"Authorization": f"Bearer {token}"}
+            response = await client.get(
+                "/api/v1/routes", headers=headers,
+                params={"group_name": "机电-武清", "page_size": 200}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["total"] > 0, "expected routes in group 机电-武清"
+            # Verify ALL returned items have cluster_id matching clusters in that group
+            for item in data["items"]:
+                assert item["cluster_id"] in (28, 29), \
+                    f"route {item['id']} cluster_id={item['cluster_id']} not in group 机电-武清"
+
+    async def test_list_routes_group_filter_ungrouped(self):
+        """group_name=__ung__ should return routes from clusters with no group."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            token = await self._login(client)
+            headers = {"Authorization": f"Bearer {token}"}
+            response = await client.get(
+                "/api/v1/routes", headers=headers,
+                params={"group_name": "__ung__", "page_size": 200}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            for item in data["items"]:
+                assert item["cluster_id"] == 30, \
+                    f"route {item['id']} cluster_id={item['cluster_id']} not in ungrouped cluster"
+
+    async def test_list_routes_group_filter_all(self):
+        """group_name=__all__ should return all routes (no filter)."""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            token = await self._login(client)
+            headers = {"Authorization": f"Bearer {token}"}
+            all_resp = await client.get("/api/v1/routes", headers=headers, params={"page_size": 200})
+            assert all_resp.status_code == 200
+            all_total = all_resp.json()["total"]
+            filtered_resp = await client.get("/api/v1/routes", headers=headers, params={"page_size": 200, "group_name": "__all__"})
+            assert filtered_resp.status_code == 200
+            assert filtered_resp.json()["total"] == all_total
+
     async def test_list_routes_plugin_filter_reduces_count(self):
         """plugin filter should reduce total count vs unfiltered list."""
         transport = ASGITransport(app=app)
