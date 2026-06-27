@@ -2031,3 +2031,32 @@ edge-import-stream-proxy
 请读取 openspec/changes/edge-import-stream-proxy/tasks.md   ，严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+================================================================================
+节点管理，上游管理，路由管理，插件组，插件元数据，四层代理，全局规则，静态资源
+
+这些的列表的显示规则是什么？ 是第一次就取回 500 条后，之后的下拉框选择都是在前端本地展示吗？ 
+如果列表超过 500条呢？ 如何处理？ 
+
+
+fix-list-group-filtering
+
+/brainstorming 请仔细阅读 openspec/changes/fix-list-group-filtering/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/fix-list-group-filtering/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+
+
+sync-node-status-on-action
+
+/brainstorming 请仔细阅读 openspec/changes/sync-node-status-on-action/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/sync-node-status-on-action/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。

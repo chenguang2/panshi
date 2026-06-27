@@ -124,6 +124,40 @@
 - **THEN** 系统执行节点状态查询
 - **AND** 展示状态查询结果 Drawer，包含 Edge 版本、CPU/内存使用率等信息
 
+#### Scenario: 启动节点成功后状态自动同步
+- **WHEN** 用户点击"启动"且命令执行成功
+- **THEN** `node.status` SHALL 被设为 1（正常）
+
+#### Scenario: 停止节点成功后状态自动同步
+- **WHEN** 用户点击"停止"且命令执行成功
+- **THEN** `node.status` SHALL 被设为 0（停用）
+
+#### Scenario: 重启节点成功后状态自动同步
+- **WHEN** 用户点击"重启"且命令执行成功
+- **THEN** `node.status` SHALL 被设为 1（正常）
+
+#### Scenario: 配置检查成功后不更新状态
+- **WHEN** 用户点击"检测"且 `nginx -t` 配置检查成功
+- **THEN** `node.status` SHALL NOT 被修改（配置检查不代表进程状态）
+- **AND** `node.status_detail` 仍被更新
+
+#### Scenario: 状态查询发现 nginx 运行中
+- **WHEN** 用户点击"状态查询"且命令执行成功，解析到 `nginx_running=True`
+- **THEN** `node.status` SHALL 被设为 1（正常）
+
+#### Scenario: 状态查询发现 nginx 未运行
+- **WHEN** 用户点击"状态查询"且命令执行成功，解析到 `nginx_running=False` 且 `nginx_status != "unknown"`
+- **THEN** `node.status` SHALL 被设为 0（停用）
+
+#### Scenario: 状态查询返回不可解析结果
+- **WHEN** 用户点击"状态查询"且命令执行成功，但 `_parse_nginx_status` 返回 `nginx_status="unknown"`
+- **THEN** `node.status` SHALL NOT 被修改（不可解析不代表 nginx 实际状态）
+
+#### Scenario: 任何操作失败不更新状态
+- **WHEN** 用户执行任意节点操作且命令执行失败（SSH 不通、返回码非零等）
+- **THEN** `node.status` SHALL NOT 被修改
+- **AND** `node.status_detail` 仍被更新以记录失败信息
+
 #### Scenario: 编辑节点
 - **WHEN** 用户在更多菜单点击"编辑"
 - **THEN** 弹出编辑节点弹窗，预填当前节点信息
