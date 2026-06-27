@@ -42,15 +42,65 @@ The system SHALL provide a group filter dropdown on all resource list pages (nod
 - **THEN** the group filter dropdown SHALL show only "全部分组" and "未分组"
 - **AND** selecting "全部分组" behaves identically to having no group filter
 
-### Requirement: Group filter is client-side only
-The system SHALL implement group filtering entirely on the frontend, without backend API changes.
+### Requirement: Group filter is server-side via API parameter
+The system SHALL implement group filtering by passing the selected `group_name` as a backend API query parameter. The frontend SHALL include `group_name` in API requests when a specific group is selected. The backend SHALL perform server-side filtering via Cluster JOIN.
 
-#### Scenario: No additional API calls
-- **WHEN** user selects a group filter value
-- **THEN** no new API requests SHALL be made
-- **AND** filtering SHALL use the already-loaded clusters list
+#### Scenario: Group filter triggers API request with group_name
+- **WHEN** user selects a specific group from the group filter
+- **THEN** the list page SHALL send an API request with `group_name=<selected_group>` parameter
+- **AND** the response SHALL return only resources belonging to that group
+- **AND** pagination SHALL behave normally (server-side, not client-side)
 
-#### Scenario: Group filter does not affect data loading
-- **WHEN** the page loads its resource list
-- **THEN** the API request SHALL NOT include any group-related parameters
-- **AND** the group filter acts only on the client-side cluster filter options
+#### Scenario: Selecting "__all__" sends explicit all-groups value
+- **WHEN** user selects "全部分组"
+- **THEN** the API request SHALL include `group_name=__all__`
+- **AND** the backend SHALL return resources from all clusters (no group filtering)
+
+#### Scenario: Selecting "__ung__" sends special value
+- **WHEN** user selects "未分组"
+- **THEN** the API request SHALL include `group_name=__ung__`
+- **AND** the backend SHALL interpret this as filtering for clusters with `group_name IS NULL OR group_name = ""`
+
+#### Scenario: No groups exist
+- **WHEN** no clusters have a `group_name` set
+- **THEN** the group filter dropdown SHALL show only "全部分组" and "未分组"
+- **AND** selecting "全部分组" SHALL omit `group_name` from the API call
+
+### Requirement: Card grid pages display group affiliation on each card
+
+卡片网格布局的页面（插件组、全局规则、插件元数据、静态资源、四层代理）SHALL 在每张卡片的顶栏同时显示集群名称和分组名称，以帮助用户快速识别资源所属的组。
+
+#### Scenario: Card topbar shows cluster name with group badge
+- **WHEN** 卡片网格页面渲染卡片
+- **THEN** 顶栏左侧 SHALL 显示集群名
+- **AND** 右侧 SHALL 显示分组名作为小圆角标签（pill badge）
+- **AND** 顶栏背景色 SHALL 根据分组名分配确定性颜色（8色调色板，通过字符串哈希映射）
+- **AND** 无分组时 SHALL 不显示 badge，顶栏保持默认样式
+
+#### Scenario: 分组颜色一致性
+- **WHEN** 同一分组出现在不同卡片上
+- **THEN** 它们的顶栏颜色 SHALL 相同（基于分组名字符串的确定性哈希映射）
+
+#### Scenario: API 响应包含 cluster_group_name
+- **WHEN** 前端请求任意全局列表 API
+- **THEN** 响应中的每个 item SHALL 包含 `cluster_group_name` 字段（字符串，无分组时为 `""`），供前端顶栏渲染使用
+
+### Requirement: 卡片网格全量加载
+
+卡片网格布局的页面（插件组、全局规则、插件元数据、静态资源、四层代理）SHALL 不进行服务端分页，改为一次加载全部匹配数据。
+
+#### Scenario: 全量加载
+- **WHEN** 用户进入卡片网格页面或切换筛选条件
+- **THEN** API 请求 SHALL 使用 `page_size: 500`（`PAGE_SIZE_CARD_GRID` 常量）以加载所有匹配项
+- **AND** 页面 SHALL 展示全部返回的卡片（不限制每页数量）
+- **AND** 顶部计数 SHALL 显示实际返回总数
+
+### Requirement: 分页大小使用全局常量
+
+项目 SHALL 使用统一的全局常量定义分页大小，集中在 `frontend/src/constants.ts`。
+
+#### Scenario: 三个分页常量
+- **WHEN** 代码中涉及分页大小
+- **THEN** 表格页面默认值 SHALL 使用 `PAGE_SIZE_TABLE = 20`
+- **AND** 卡片网格加载 SHALL 使用 `PAGE_SIZE_CARD_GRID = 500`
+- **AND** 下拉选择框 SHALL 使用 `PAGE_SIZE_DROPDOWN = 500`
