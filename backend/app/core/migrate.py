@@ -173,5 +173,43 @@ def run_migrations(engine: Engine) -> None:
         if _add_column(engine, table, column, col_type):
             migrated_any = True
 
+    # Migrate NULL group_name to empty string
+    _migrate_null_group_name(engine)
+
+    # Ensure index on ps_cluster(group_name) for JOIN performance
+    _ensure_index(engine, "ps_cluster", "idx_cluster_group_name", ["group_name"])
+
     if not migrated_any:
         logger.info("All schema constraints check passed")
+
+
+def _migrate_null_group_name(engine: Engine) -> None:
+    with engine.connect() as conn:
+        try:
+            result = conn.execute(
+                text("UPDATE ps_cluster SET group_name = '' WHERE group_name IS NULL")
+            )
+            if result.rowcount > 0:
+                conn.commit()
+                logger.info("Migrated %d NULL group_name to ''", result.rowcount)
+        except Exception as e:
+            logger.warning("Could not migrate group_name: %s", e)
+
+
+def _ensure_index(engine: Engine, table: str, index_name: str, columns: list[str]) -> None:
+    inspector = inspect(engine)
+    try:
+        existing = {idx["name"] for idx in inspector.get_indexes(table)}
+    except Exception:
+        return
+    if index_name in existing:
+        return
+    cols = ", ".join(f'"{c}"' for c in columns)
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({cols})'))
+            conn.commit()
+            logger.info("Created index %s on %s(%s)", index_name, table, ", ".join(columns))
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Could not create index %s: %s", index_name, e)
