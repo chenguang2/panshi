@@ -22,6 +22,7 @@ async def list_all_routes(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     method: Optional[str] = Query(None, description="Filter by HTTP method"),
@@ -37,6 +38,16 @@ async def list_all_routes(
     # Cluster filter
     if cluster_id is not None:
         query = query.where(Route.cluster_id == cluster_id)
+
+    # Group filter — JOIN Cluster table (no relationship defined, use explicit JOIN)
+    if group_name == "__ung__":
+        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
 
     # Method filter
     if method:
@@ -110,12 +121,15 @@ async def list_all_routes(
 
     # Batch cluster names
     cluster_ids = {r.cluster_id for r in routes}
-    cluster_map = {}
+    cluster_name_map = {}
+    cluster_group_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name, Cluster.group_name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {r[0]: r[1] or r[2] for r in c_result.all()}
+        for r in c_result.all():
+            cluster_name_map[r[0]] = r[1] or r[2]
+            cluster_group_map[r[0]] = r[3] or ""
 
     upstream_ids = {r.upstream_id for r in routes if r.upstream_id}
     upstream_map = {}
@@ -159,7 +173,8 @@ async def list_all_routes(
             plugins=plugin_map.get(r.id, []),
         )
         item_dict = item.model_dump()
-        item_dict["cluster_name"] = cluster_map.get(r.cluster_id, "")
+        item_dict["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
+        item_dict["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
         item_dict["upstream_name"] = upstream_map.get(r.upstream_id) if r.upstream_id else None
         items.append(item_dict)
 

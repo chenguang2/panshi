@@ -19,6 +19,7 @@ async def list_all_static_resources(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -27,6 +28,15 @@ async def list_all_static_resources(
 
     if cluster_id is not None:
         query = query.where(StaticResource.cluster_id == cluster_id)
+
+    if group_name == "__ung__":
+        query = query.join(Cluster, StaticResource.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, StaticResource.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
 
     if current_user.role != "admin":
         uc_result = await db.execute(
@@ -52,18 +62,22 @@ async def list_all_static_resources(
     resources = result.scalars().all()
 
     cluster_ids = {r.cluster_id for r in resources}
-    cluster_map = {}
+    cluster_name_map = {}
+    cluster_group_map = {}
     if cluster_ids:
         c_result = await db.execute(
-            select(Cluster.id, Cluster.display_name, Cluster.name).where(Cluster.id.in_(cluster_ids))
+            select(Cluster.id, Cluster.display_name, Cluster.name, Cluster.group_name).where(Cluster.id.in_(cluster_ids))
         )
-        cluster_map = {row[0]: row[1] or row[2] for row in c_result.all()}
+        for row in c_result.all():
+            cluster_name_map[row[0]] = row[1] or row[2]
+            cluster_group_map[row[0]] = row[3] or ""
 
     items = []
     for r in resources:
         resp = StaticResourceResponse.model_validate(r)
         d = resp.model_dump()
-        d["cluster_name"] = cluster_map.get(r.cluster_id, "")
+        d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
+        d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
         if d.get("file_size"):
             d["file_size_kb"] = round(d["file_size"] / 1024, 1)
         items.append(d)
