@@ -1,2 +1,9 @@
-// 分组模式下加载全量数据的分页大小（需 ≤ 后端 MAX_PAGE_SIZE）
-export const GROUP_MODE_PAGE_SIZE = 500
+// ── 分页常量 ───────────────────────────────────────────
+/** 表格分页默认每页条数 */
+export const PAGE_SIZE_TABLE = 20
+
+/** 卡片网格全量加载（插件组、全局规则、元数据、静态资源、四层代理） */
+export const PAGE_SIZE_CARD_GRID = 500
+
+/** 下拉选择框全量加载（上游选择器、节点选择器等） */
+export const PAGE_SIZE_DROPDOWN = 500

@@ -379,6 +379,7 @@ import { message, Modal } from 'ant-design-vue'
 import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PluginMetadata from '@/components/PluginMetadata.vue'
@@ -867,7 +868,7 @@ async function testCluster(cluster: Cluster) {
   testLogs.value = []
   testRunning.value = false
   try {
-    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: 100 } })
+    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     testNodes.value = (res.data.items || []).map((n: any) => ({
       id: n.id, ip: n.ip, service_port: n.service_port, management_port: n.management_port, status: n.status
     }))
@@ -924,7 +925,7 @@ const deleteCluster = async (cluster: Cluster) => {
   let availableNodes: { id: number; ip: string; management_port: number }[] = []
   console.log('[删除集群] cluster.id:', cluster.id, 'clusterName:', clusterName)
   try {
-    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: 100 } })
+    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     availableNodes = res.data.items || []
     console.log('[删除集群] 获取到节点数:', availableNodes.length, JSON.stringify(availableNodes.map((n: any) => n.ip + ':' + n.management_port)))
   } catch (e) {

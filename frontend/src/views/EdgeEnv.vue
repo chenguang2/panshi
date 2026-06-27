@@ -206,6 +206,7 @@ import api from '@/api'
 import * as edgeEnvApi from '@/api/edgeEnv'
 import { useInstallStream } from '@/composables/useInstallStream'
 import type { Cluster } from '@/types'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
 
 const route = useRoute()
@@ -341,7 +342,7 @@ onMounted(async () => {
 
 async function loadClusters() {
   try {
-    const res = await api.get('/clusters', { params: { page: 1, page_size: 200 } })
+    const res = await api.get('/clusters', { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     clusters.value = res.data.items || []
   } catch (e: any) {
     message.error('加载集群列表失败: ' + (e.response?.data?.detail || e.message))
@@ -351,7 +352,7 @@ async function loadClusters() {
 async function loadNodes() {
   if (!selectedClusterId.value) return
   try {
-    const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, { params: { page: 1, page_size: 100 } })
+    const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     allNodes.value = res.data.items || []
     nodes.value = allNodes.value.filter((n: any) => n.status === 1)
   } catch {

@@ -25,7 +25,7 @@
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' || statusFilter !== '' ? displayedNodes.length : totalCount }} 个节点</span>
+      <span class="text-muted text-sm">共 {{ statusFilter.value !== '' && statusFilter.value !== undefined ? displayedNodes.length : totalCount }} 个节点</span>
     </div>
 
     <div class="table-container">
@@ -33,14 +33,7 @@
         :data-source="displayedNodes"
         :columns="columns"
         :row-key="(record: any) => record.id"
-        :pagination="groupFilter !== '__all__' ? { current: page, pageSize, total: displayedNodes.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个节点`, pageSizeOptions: ['10', '20', '50'] } : {
-          current: page,
-          pageSize,
-          total: totalCount,
-          showSizeChanger: true,
-          showTotal: (total: number) => `共 ${total} 个节点`,
-          pageSizeOptions: ['10', '20', '50'],
-        }"
+        :pagination="{ current: page, pageSize, total: totalCount, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个节点`, pageSizeOptions: ['10', '20', '50'] }"
         :loading="loading"
         size="middle"
         class="node-table"
@@ -260,13 +253,14 @@ import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
+import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
-import { GROUP_MODE_PAGE_SIZE } from '@/constants'
+
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -278,7 +272,7 @@ const nodes = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref<string>('')
 const groupFilter = ref('__all__')
@@ -302,10 +296,6 @@ function onGroupChange() {
 
 const displayedNodes = computed(() => {
   let list = nodes.value
-  if (groupFilter.value !== '__all__') {
-    const gIds = new Set(filteredClusters.value.map(c => c.id))
-    list = list.filter(n => gIds.has(n.cluster_id))
-  }
   if (statusFilter.value !== '' && statusFilter.value !== undefined) {
     const wantRunning = Number(statusFilter.value) === 1
     list = list.filter(n => nginxRunning(n) === wantRunning)
@@ -386,11 +376,11 @@ async function loadNodes() {
   loading.value = true
   try {
     const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
-    const isGroupMode = groupFilter.value !== '__all__'
-    const loadAll = isGroupMode || hasStatus
+    const loadAll = hasStatus  // 仅 statusFilter 触发客户端过滤，group 过滤走服务端
     const res = await listNodes({
+      groupName: groupFilter.value,
       page: loadAll ? 1 : page.value,
-      pageSize: loadAll ? GROUP_MODE_PAGE_SIZE : pageSize.value,
+      pageSize: loadAll ? PAGE_SIZE_DROPDOWN : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
       status: undefined,  // 全部通过 nginxRunning() 客户端过滤
@@ -427,9 +417,6 @@ async function loadClusterStats(clusterId: number) {
 function handleTableChange(pagination: TablePaginationConfig) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
-  if (groupFilter.value !== '__all__') {
-    return
-  }
   loadNodes()
 }
 

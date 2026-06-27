@@ -40,7 +40,7 @@
         <option value="published">已发布</option>
         <option value="unpublished">未发布</option>
       </select>
-      <span class="text-muted text-sm">共 {{ groupFilter !== '__all__' ? displayedRoutes.length : totalCount }} 条路由</span>
+      <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
     </div>
 
     <div class="table-container">
@@ -48,14 +48,7 @@
       :data-source="displayedRoutes"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="groupFilter !== '__all__' ? { current: page, pageSize, total: displayedRoutes.length, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条路由`, pageSizeOptions: ['10', '20', '50'] } : {
-        current: page,
-        pageSize,
-        total: totalCount,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 条路由`,
-        pageSizeOptions: ['10', '20', '50'],
-      }"
+      :pagination="{ current: page, pageSize, total: totalCount, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条路由`, pageSizeOptions: ['10', '20', '50'] }"
       :loading="loading"
       size="middle"
       class="route-table"
@@ -128,10 +121,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
+import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteFormModal from '@/components/RouteFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -146,7 +139,7 @@ const clusters = ref<any[]>([])
 const upstreams = ref<any[]>([])
 const totalCount = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const groupFilter = ref('__all__')
@@ -168,11 +161,7 @@ function onGroupChange() {
   onClusterChange()
 }
 
-const displayedRoutes = computed(() => {
-  if (groupFilter.value === '__all__') return routes.value
-  const gIds = new Set(filteredClusters.value.map(c => c.id))
-  return routes.value.filter(r => gIds.has(r.cluster_id))
-})
+const displayedRoutes = computed(() => routes.value)
 const activeMethod = ref('')
 const publishFilter = ref('')
 const pluginFilter = ref('')
@@ -231,17 +220,13 @@ function onSearch() {
 function handleTableChange(pagination: TablePaginationConfig) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
-  if (groupFilter.value !== '__all__') {
-    return  // 分组模式数据已全量加载，跳过 API
-  }
   loadRoutes()
 }
 
 async function loadRoutes() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__'
-    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
+    const params: any = { page: page.value, page_size: pageSize.value, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
@@ -250,7 +235,7 @@ async function loadRoutes() {
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/routes', { params })
     routes.value = res.data.items || []
-    totalCount.value = isGroupMode ? routes.value.length : (res.data.total || 0)
+    totalCount.value = res.data.total || 0
   } catch (error: any) {
     const detail = error?.response?.data?.detail
     const msg = typeof detail === 'string' ? detail : (detail?.msg || error?.message || '未知错误')
@@ -269,7 +254,7 @@ async function loadClusters() {
 async function loadUpstreams(cid?: number) {
   if (!cid) { upstreams.value = []; return }
   try {
-    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: 200 } })
+    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
     upstreams.value = res.data.items || []
   } catch { upstreams.value = [] }
 }

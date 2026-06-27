@@ -164,6 +164,7 @@
 import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 
@@ -209,7 +210,7 @@ function toggleAllMethods() {
 
 async function loadUpstreams(cid: number) {
   try {
-    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: 100 } })
+    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
     upstreams.value = res.data.items || []
   } catch (e: any) {
     upstreams.value = []
@@ -226,7 +227,7 @@ async function loadPlugins() {
 
 async function loadPluginGroups(cid: number) {
   try {
-    const res = await api.get(`/clusters/${cid}/plugin_configs`, { params: { page_size: 100 } })
+    const res = await api.get(`/clusters/${cid}/plugin_configs`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
     clusterPluginGroups.value = res.data.items || []
   } catch { clusterPluginGroups.value = [] }
 }

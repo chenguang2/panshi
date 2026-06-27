@@ -5,6 +5,7 @@ import api from '@/api'
 import type { Cluster, Upstream, Route } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 interface UpstreamExtras {
   hash_on?: string
@@ -607,7 +608,7 @@ export function useClusterUpstreams(options: {
       try {
         const res = await api.get(
           `/clusters/${cluster.id}/routes`,
-          { params: { page: 1, page_size: 100 } },
+          { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
         )
         cluster.routes = res.data.items
       } catch {

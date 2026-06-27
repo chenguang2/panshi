@@ -172,6 +172,7 @@ import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 const authStore = useAuthStore()
 
@@ -226,7 +227,7 @@ async function loadClusters() {
   loading.value = true
   try {
     const endpoint = authStore.user?.role === 'admin' ? '/clusters' : '/clusters/my'
-    const res = await api.get(endpoint, { params: { page: 1, page_size: 200 } })
+    const res = await api.get(endpoint, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     clusters.value = res.data.items || []
     for (const c of clusters.value) {
       const key = c.group_name || ''
@@ -267,7 +268,7 @@ async function testCluster(c: Cluster) {
   testLogs.value = []
   testRunning.value = false
   try {
-    const res = await api.get(`/clusters/${c.id}/nodes`, { params: { page: 1, page_size: 100 } })
+    const res = await api.get(`/clusters/${c.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     testNodes.value = (res.data.items || []).map((n: any) => ({
       id: n.id, ip: n.ip, service_port: n.service_port, management_port: n.management_port, status: n.status
     }))
@@ -337,7 +338,7 @@ function editCluster(c: Cluster) {
 
 function deleteCluster(c: Cluster) {
   const clusterName = c.display_name || c.name
-  api.get(`/clusters/${c.id}/nodes`, { params: { page: 1, page_size: 100 } }).then(nodesRes => {
+  api.get(`/clusters/${c.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } }).then(nodesRes => {
     const availableNodes = nodesRes.data.items || []
     api.get(`/clusters/${c.id}/stats`).then(statsRes => {
       showDeleteConfirm({

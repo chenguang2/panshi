@@ -20,7 +20,7 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ groupFilter !== '__all__' ? displayedItems.length : totalCount }} 个插件元数据</span>
+      <span class="text-sm text-muted">共 {{ totalCount }} 个插件元数据</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -30,7 +30,10 @@
     </div>
     <div v-else class="pml-grid">
       <div v-for="item in displayedItems" :key="item.id" class="pml-card">
-        <div class="pml-card-topbar">{{ item.cluster_name || '-' }}</div>
+        <div class="pml-card-topbar" :style="getGroupColorStyle(item.cluster_group_name)">
+          <span>{{ item.cluster_name || '-' }}</span>
+          <span v-if="item.cluster_group_name" class="group-badge">{{ item.cluster_group_name }}</span>
+        </div>
         <div class="pml-card-header">
           <div class="pml-card-info">
             <div class="pml-card-name">{{ item.plugin_name }}</div>
@@ -124,18 +127,19 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { GROUP_MODE_PAGE_SIZE } from '@/constants'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 import { message } from 'ant-design-vue'
+import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { getGroupColorStyle } from '@/composables/useGroupColors'
 
 // ——— List view state ———
 const items = ref<any[]>([])
@@ -145,7 +149,6 @@ const loading = ref(false)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref('')
 const groupFilter = ref('__all__')
-const page = ref(1)
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map(c => c.group_name || ''))
@@ -158,17 +161,12 @@ const filteredClusters = computed(() => {
   return clusters.value.filter(c => c.group_name === groupFilter.value)
 })
 
-const displayedItems = computed(() => {
-  if (groupFilter.value === '__all__') return items.value
-  const gIds = new Set(filteredClusters.value.map(c => c.id))
-  return items.value.filter(i => gIds.has(i.cluster_id))
-})
+const displayedItems = computed(() => items.value)
 
 function onGroupChange() {
   clusterFilter.value = ''
   loadItems()
 }
-const pageSize = ref(20)
 
 
 // ——— Create modal state ———
@@ -216,19 +214,17 @@ function formatDate(d: string) {
 }
 
 function onSearch() {
-  onDebouncedSearch(() => { page.value = 1; loadItems() })
+  onDebouncedSearch(() => { loadItems() })
 }
 
 function onClusterFilterChange() {
-  page.value = 1
   loadItems()
 }
 
 async function loadItems() {
   loading.value = true
   try {
-    const isGroupMode = groupFilter.value !== '__all__'
-    const params: any = { page: isGroupMode ? 1 : page.value, page_size: isGroupMode ? GROUP_MODE_PAGE_SIZE : pageSize.value }
+    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/plugin_metadata', { params })
@@ -397,7 +393,8 @@ onUnmounted(() => {
 .pml-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .pml-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
 .pml-card:hover { box-shadow: var(--shadow-md); }
-.pml-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); }
+.pml-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
+.group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
 .pml-card-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 20px 0; }
 .pml-card-info { flex: 1; }
 .pml-card-name { font-size: 15px; font-weight: 600; }

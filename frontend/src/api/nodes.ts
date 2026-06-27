@@ -3,6 +3,7 @@ import api from '@/api'
 export interface NodeListParams {
   page?: number
   pageSize?: number
+  groupName?: string
   search?: string
   clusterId?: number
   status?: number
@@ -44,6 +45,7 @@ export function listNodes(params: NodeListParams = {}) {
     params: {
       page: params.page || 1,
       page_size: params.pageSize || 20,
+      group_name: params.groupName || '__all__',
       ...(params.search ? { search: params.search } : {}),
       ...(params.clusterId ? { cluster_id: params.clusterId } : {}),
       ...(params.status !== undefined ? { status: params.status } : {}),
