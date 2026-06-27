@@ -88,4 +88,59 @@ describe('StreamProxyList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/stream-proxies')
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      expect(call[1].params.group_name).toBeDefined()
+    }
+  })
+
+  it('always uses global /stream-proxies endpoint with cluster_id param (not scoped endpoint)', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    // Simulate selecting a cluster
+    const selects = wrapper.findAll('select')
+    const clusterSelect = selects.find(s => s.text().includes('全部集群'))
+    expect(clusterSelect).toBeDefined()
+    const selectEl = clusterSelect!.element as HTMLSelectElement
+    selectEl.value = '1'
+    selectEl.dispatchEvent(new Event('change'))
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    // All calls should go to /stream-proxies (global) with cluster_id param
+    // NOT to /clusters/{id}/stream-proxies (scoped)
+    const globalCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/stream-proxies')
+    const scopedCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0].includes('/clusters/') && c[0].includes('/stream-proxies'))
+    expect(scopedCalls.length).toBe(0)
+    expect(globalCalls.length).toBeGreaterThan(0)
+    // The last global call should have cluster_id param
+    const lastCall = globalCalls[globalCalls.length - 1]
+    expect(lastCall[1].params.cluster_id).toBeDefined()
+  })
+
+  it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const selects = wrapper.findAll('select')
+    const groupSelect = selects.find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const selectEl = groupSelect!.element as HTMLSelectElement
+    selectEl.value = '线上'
+    selectEl.dispatchEvent(new Event('change'))
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const countSpan = wrapper.findAll('span.text-sm.text-muted').find(s => s.text().includes('共'))
+    expect(countSpan).toBeDefined()
+    expect(countSpan!.text()).toContain('2')
+  })
 })

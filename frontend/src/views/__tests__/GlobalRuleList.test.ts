@@ -84,4 +84,45 @@ describe('GlobalRuleList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
+    const wrapper = mount(GlobalRuleList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/global_rules')
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      expect(call[1].params.group_name).toBeDefined()
+    }
+  })
+
+  it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
+    mockApiGet.mockImplementation((url: string, config?: any) => {
+      if (url === '/global_rules') {
+        const groupName = config?.params?.group_name
+        if (groupName && groupName !== '__all__') {
+          return Promise.resolve({ data: { total: 99, page: 1, page_size: 20, items: [{ id: 1, name: 'filtered-rule', cluster_id: 1, cluster_name: '生产集群', description: '', plugins: {}, current_version: null }] } })
+        }
+        return Promise.resolve({ data: MOCK_DATA })
+      }
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
+      }
+      return Promise.reject(new Error('unknown url'))
+    })
+
+    const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
+    const wrapper = mount(GlobalRuleList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))!
+    await groupSelect.setValue('线上')
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('99')
+    expect(wrapper.findAll('.gr-card').length).toBe(1)
+  })
 })

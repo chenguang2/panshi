@@ -137,4 +137,37 @@ describe('NodeList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/nodes')
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      expect(call[1].params.group_name).toBeDefined()
+    }
+  })
+
+  it('uses normal page_size when group filter is active (no client-side loadAll for group)', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    // Simulate selecting a specific group
+    const selects = wrapper.findAll('select')
+    const groupSelect = selects.find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const selectEl = groupSelect!.element as HTMLSelectElement
+    selectEl.value = '线上'
+    selectEl.dispatchEvent(new Event('change'))
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    // Should NOT use page_size=500 (loadAll) just because a group is selected
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/nodes')
+    const lastCall = calls[calls.length - 1]
+    // The page_size should be the default 20, not 500
+    expect(lastCall[1].params.page_size).not.toBe(500)
+  })
 })

@@ -105,4 +105,50 @@ describe('StaticResourceList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+
+    const staticResourcesCalls = mockApiGet.mock.calls.filter((args: any[]) => args[0] === '/static_resources')
+    expect(staticResourcesCalls.length).toBeGreaterThanOrEqual(1)
+    const params = staticResourcesCalls[0][1]?.params
+    expect(params).toBeDefined()
+    expect(params.group_name).toBe('__all__')
+  })
+
+  it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
+    mockApiGet.mockImplementation((url: string, config?: any) => {
+      if (url === '/static_resources') {
+        const groupName = config?.params?.group_name
+        if (groupName && groupName !== '__all__') {
+          return Promise.resolve({ data: { total: 99, page: 1, page_size: 20, items: [{ id: 1, name: 'filtered-resource', url_path: '/test/*', cluster_id: 1, cluster_name: '生产集群', current_version: 1 }] } })
+        }
+        return Promise.resolve({ data: MOCK_DATA })
+      }
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+
+    // Initially shows count from default mock (total=2)
+    expect(wrapper.text()).toContain('共 2 个静态资源')
+
+    // Change group filter to trigger reload with group_name='线上'
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    await groupSelect!.setValue('线上')
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+
+    // Should show server total (99) not displayedResources.length (1)
+    expect(wrapper.text()).toContain('共 99 个静态资源')
+    expect(wrapper.text()).not.toContain('共 1 个静态资源')
+  })
 })
