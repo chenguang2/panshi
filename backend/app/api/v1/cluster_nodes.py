@@ -97,12 +97,32 @@ async def _run_and_update(
     tag: str,
     extravars: dict[str, Any],
 ) -> dict[str, Any]:
-    """Execute ansible playbook and persist result to node.status_detail."""
+    """Execute ansible playbook and persist result to node.status_detail,
+    and sync node.status on success."""
     try:
         result = await _ansible_service.run_playbook(
             ip=node.ip, tag=tag, extravars=extravars,
         )
         detail = _ansible_service.build_status_detail(tag, result)
+
+        # Sync node.status based on operation result
+        if tag == "nginx_cmd_run":
+            nginx_cmd = extravars.get("nginx_cmd", "")
+            if nginx_cmd in ("nginx_stop",):
+                node.status = 0
+            elif nginx_cmd in ("nginx_start", "nginx_reload"):
+                node.status = 1
+            # nginx_check: config syntax test, does not reflect process status → skip
+        elif tag == "edge_statistic":
+            nginx_info = detail.get("nginx", {})
+            nginx_running = nginx_info.get("nginx_running")
+            nginx_status = nginx_info.get("nginx_status")
+            if nginx_running is True:
+                node.status = 1
+            elif nginx_running is False and nginx_status != "unknown":
+                node.status = 0
+            # nginx_running is None, or nginx_status == "unknown" → skip
+
         await _update_status_detail(db, node, detail)
         return result
     except AnsibleExecutionError as e:
