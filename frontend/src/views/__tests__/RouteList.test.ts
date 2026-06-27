@@ -131,4 +131,16 @@ describe('RouteList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const routeCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
+    expect(routeCalls.length).toBeGreaterThan(0)
+    for (const call of routeCalls) {
+      expect(call[1].params.group_name).toBeDefined()
+    }
+  })
 })

@@ -136,4 +136,16 @@ describe('UpstreamList.vue', () => {
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
+
+  it('always passes group_name in API request', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/upstreams')
+    expect(calls.length).toBeGreaterThan(0)
+    for (const call of calls) {
+      expect(call[1].params.group_name).toBeDefined()
+    }
+  })
 })

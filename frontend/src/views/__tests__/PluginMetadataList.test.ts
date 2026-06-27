@@ -99,6 +99,49 @@ describe('PluginMetadataList.vue', () => {
     expect(optionTexts).toContain('测试')
   })
 
+  it('always passes group_name in API request', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    mount(PluginMetadataList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await (await import('vue')).nextTick()
+    const calls = mockApiGet.mock.calls
+    const pluginMetaCall = calls.find((c: any[]) => c[0] === '/plugin_metadata')
+    expect(pluginMetaCall).toBeDefined()
+    expect(pluginMetaCall![1]).toBeDefined()
+    expect(pluginMetaCall![1].params).toBeDefined()
+    expect(pluginMetaCall![1].params.group_name).toBe('__all__')
+  })
+
+  it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    mockApiGet.mockImplementation((url: string, config?: any) => {
+      if (url === '/plugin_metadata') {
+        const groupName = config?.params?.group_name
+        if (groupName && groupName !== '__all__') {
+          return Promise.resolve({ data: { total: 99, items: [{ id: 1, plugin_name: 'jwt-auth', cluster_id: 1, cluster_name: '生产集群', config_data: {}, current_version: null, updated_at: null }] } })
+        }
+        return Promise.resolve({ data: MOCK_DATA })
+      }
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '测试集群', group_name: '测试' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [{ name: 'jwt-auth', enable_metadata: true, description: 'JWT 认证' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await (await import('vue')).nextTick()
+    // Initially shows totalCount=2 from MOCK_DATA
+    expect(wrapper.text()).toContain('共 2 个插件元数据')
+    // Select a group to trigger filter
+    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    await groupSelect!.setValue('线上')
+    await new Promise(r => setTimeout(r, 100))
+    await (await import('vue')).nextTick()
+    // Must show totalCount=99 from server, NOT displayedItems.length=1
+    expect(wrapper.text()).toContain('共 99 个插件元数据')
+    expect(wrapper.text()).not.toContain('共 1 个插件元数据')
+  })
+
   it('shows empty state when no items', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/plugin_metadata') return Promise.resolve({ data: { total: 0, items: [] } })
