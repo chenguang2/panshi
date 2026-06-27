@@ -13,7 +13,7 @@ class Cluster(Base):
     admin_url = Column(String(500), nullable=True)
     admin_key = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
-    group_name = Column(String(100), nullable=True)
+    group_name = Column(String(100), nullable=True, default="")
     status = Column(Integer, nullable=False, default=1)
     creator_id = Column(Integer, nullable=True)
     current_version = Column(Integer, nullable=True)
