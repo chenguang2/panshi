@@ -18,7 +18,8 @@
 10. [Edge 工具](#10-edge-工具)
 11. [系统管理](#11-系统管理)
 12. [常见操作指南](#12-常见操作指南)
-13. [故障排除](#13-故障排除)
+13. [部署与运维](#13-部署与运维)
+14. [故障排除](#14-故障排除)
 
 ---
 
@@ -561,7 +562,130 @@
 
 ---
 
-## 13. 故障排除
+## 13. 部署与运维
+
+### 13.1 部署准备（开发机执行）
+
+在开发机上运行 `gen-linux.sh` 生成离线部署包：
+
+```bash
+bash product/linux/gen-linux.sh
+```
+
+脚本功能：
+
+| 步骤 | 说明 |
+|---|---|
+| 1. 创建输出目录 | 在 `product/linux/panshi/` 下创建部署包目录结构 |
+| 2. 拷贝后端代码 | 拷贝 `backend/app/`、`backend/ansible/`、`pyproject.toml`，清理 `__pycache__` |
+| 3. 准备 Python | 通过 `uv python install 3.11` 下载 standalone Python 解释器（约 30MB） |
+| 4. 创建虚拟环境 | `--copies` 模式，不依赖符号链接 |
+| 5. 检测 glibc | CentOS 7 等旧系统自动降级 greenlet 到 2.x |
+| 6. 安装后端依赖 | 使用清华 PyPI 镜像安装所有 Python 包 |
+| 7. 安装 Ansible | 安装 ansible-utils collection（本地缓存或 galaxy.ansible.com） |
+| 8. 修正路径 | 将 `.pth` 和 shebang 改为相对路径，**部署包可迁移到任意目录** |
+| 9. 构建前端 | `npm install` + `npm run build`，使用 `vue-tsc` 类型检查 |
+| 10. 拷贝启停脚本 | 拷贝 `start.sh`、`stop.sh`，修正其中的项目根路径 |
+
+**前提条件**：开发机需安装 `uv` 和 `npm`，有公网访问。
+
+**输出**：`product/linux/panshi/` 目录，包含全部运行所需文件。
+
+### 13.2 部署到目标机器
+
+```bash
+# 将部署包拷贝到目标 Linux 机器（无需安装 uv/npm/Python/Node.js）
+scp -r product/linux/panshi/ user@target-machine:/opt/panshi/
+```
+
+目标机器不需要任何开发工具和公网访问。
+
+### 13.3 启动服务
+
+```bash
+cd /opt/panshi/panshi/
+bash start.sh
+```
+
+**默认端口**：12345（可通过参数或环境变量修改）
+
+```bash
+# 指定端口启动
+bash start.sh 8080
+
+# 或通过环境变量
+PANSHI_PORT=8080 bash start.sh
+```
+
+**启动流程**：
+
+| 步骤 | 说明 |
+|---|---|
+| 1. 端口获取 | 优先级：命令行参数 > `PANSHI_PORT` 环境变量 > 默认值 12345 |
+| 2. 停止旧进程 | 查找占用端口的进程，通过进程名 `app.main:app` 双重确认后停止 |
+| 3. 写入端口文件 | 保存端口号到 `backend/.port`（供 stop.sh 和前端 Vite 代理使用）|
+| 4. 启动后端 | `nohup uvicorn app.main:app --host 0.0.0.0 --port <PORT>` |
+| 5. 写入 PID | `backend/.pid` 文件用于后续停止 |
+| 6. 验证 | 3 秒后检查端口是否在监昕 |
+
+启动成功后访问 `http://<目标机器IP>:<端口>` 即可进入登录页面。
+
+**注意**：部署模式下后端同时托管前端静态文件（`frontend/dist/`），无需单独启动前端服务。
+
+### 13.4 停止服务
+
+```bash
+cd /opt/panshi/panshi/
+bash stop.sh
+```
+
+**停止流程**：
+
+| 步骤 | 说明 |
+|---|---|
+| 1. 端口获取 | 优先级：参数 > `PANSHI_PORT` 环境变量 > `backend/.port` 文件 > 默认值 |
+| 2. PID 文件停止 | 读取 `backend/.pid`，发送 SIGTERM |
+| 3. 端口兜底 | 通过 `ss` 或 `lsof` 查找占用端口的进程，以 `app.main:app` 进程名双重确认后 `kill -9` |
+| 4. 清理 | 删除 `backend/.port` 文件 |
+
+### 13.5 部署目录结构
+
+部署后的目录结构：
+
+```
+panshi/
+├── start.sh                  # 启动脚本
+├── stop.sh                   # 停止脚本
+├── backend/
+│   ├── app/                  # 后端 Python 代码
+│   ├── ansible/              # Ansible playbook
+│   ├── .venv/                # Python 虚拟环境（独立，不依赖系统）
+│   ├── python/               # Standalone Python 3.11 解释器
+│   ├── data/                 # SQLite 数据库文件（运行后生成）
+│   ├── features.yaml         # 部署特性配置
+│   └── .port                 # 端口号文件（启动时写入，停止时读取）
+├── frontend/
+│   └── dist/                 # 预构建的前端静态文件
+└── logs/                     # 运行日志（运行后生成）
+```
+
+### 13.6 多部署副本
+
+`product/linux/` 下可维护多份部署配置：
+
+```
+product/linux/
+├── panshi/        # gen-linux.sh 输出的默认部署包
+├── panshi-1/      # 第一台目标机器的部署副本
+├── panshi-2/      # 第二台目标机器的部署副本
+└── panshi-3/      # 第三台目标机器的部署副本
+```
+
+每份副本可包含不同的 `features.yaml` 配置（如启用/禁用不同的功能特性）。
+
+---
+
+## 14. 故障排除
 
 ### 13.1 登录问题
 
