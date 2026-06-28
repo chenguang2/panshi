@@ -148,6 +148,11 @@ const fieldLabel = (groupType: string, field: string): string => {
     plugin_configs: { plugins: '插件配置' },
     global_rules: { plugins: '插件配置' },
     plugin_metadata: { config: '配置数据' },
+    stream_proxies: {
+      listen_port: '监听端口', load_balance: '负载均衡', scheme: '协议',
+      targets: '目标节点', timeout: '超时配置', keepalive_pool: '连接池',
+      remote_addr: 'CIDR 范围', sni: 'TLS SNI',
+    },
   }
   return labels[groupType]?.[field] || field
 }

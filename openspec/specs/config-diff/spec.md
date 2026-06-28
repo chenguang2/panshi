@@ -20,7 +20,7 @@ The system SHALL provide a `GET /clusters/{cluster_id}/nodes/{node_id}/diff` end
 
 #### Scenario: API returns structured diff results
 - **WHEN** a GET request is sent to `/clusters/{cluster_id}/nodes/{node_id}/diff`
-- **THEN** the response SHALL contain grouped comparisons for upstreams, routes, plugin_configs, global_rules, and plugin_metadata
+- **THEN** the response SHALL contain grouped comparisons for upstreams, routes, plugin_configs, global_rules, plugin_metadata, and stream_proxies
 - **THEN** each group SHALL list items with status: `match`, `mismatch`, `only_in_db`, or `only_in_edge`
 - **THEN** mismatched items SHALL include field-level differences
 - **THEN** route comparison SHALL include `vars` (advanced match), `plugin_config_ids`, and per-plugin `plugins`
@@ -28,7 +28,7 @@ The system SHALL provide a `GET /clusters/{cluster_id}/nodes/{node_id}/diff` end
 
 ### Requirement: EdgeClient can list all configs
 
-The system SHALL use existing EdgeClient `list_upstreams`, `list_routes`, `list_plugin_configs`, `list_global_rules`, and `list_plugin_metadata` methods to fetch Edge node configurations.
+The system SHALL use existing EdgeClient `list_upstreams`, `list_routes`, `list_plugin_configs`, `list_global_rules`, `list_plugin_metadata`, and `list_stream_routes` methods to fetch Edge node configurations.
 
 #### Scenario: EdgeClient list methods return parseable data
 - **WHEN** `list_upstreams()` is called

@@ -233,6 +233,228 @@ class TestSummary:
         assert _build_summary([])["total"] == 0
 
 
+# ── 四层代理对比测试 ──
+
+_STREAM_PROXY_EDGE = {
+    "id": "uuid-abc",
+    "name": "mysql-proxy",
+    "server_port": 9970,
+    "remote_addr": "",
+    "sni": "",
+    "upstream": {
+        "type": "roundrobin",
+        "scheme": "tcp",
+        "nodes": {"10.0.0.1:3306": 100, "10.0.0.2:3306": 80},
+    },
+}
+
+_STREAM_PROXY_DB = {
+    "name": "mysql-proxy",
+    "edge_uuid": "uuid-abc",
+    "listen_port": 9970,
+    "load_balance": "weighted_roundrobin",
+    "scheme": "tcp",
+    "targets": json.dumps([{"target": "10.0.0.1:3306", "weight": 100}, {"target": "10.0.0.2:3306", "weight": 80}]),
+    "timeout": None,
+    "keepalive_pool": None,
+    "remote_addr": None,
+    "sni": None,
+}
+
+
+def _compare_stream_targets(db_targets_json, edge_nodes):
+    """模拟 diff 端点的 stream proxy targets 对比逻辑"""
+    from app.services.config_diff import EquivalenceRules
+    EquivalenceRules._instance = None
+    db_dict = {}
+    if db_targets_json:
+        try:
+            targets = json.loads(db_targets_json) if isinstance(db_targets_json, str) else db_targets_json
+            for t in (targets or []):
+                db_dict[t.get("target", "")] = t.get("weight", 1)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    edge_dict = edge_nodes if isinstance(edge_nodes, dict) else {}
+    equal = json.dumps(db_dict, sort_keys=True, default=str) == json.dumps(edge_dict, sort_keys=True, default=str)
+    return {
+        "name": "targets",
+        "db": json.dumps(db_dict, indent=1, ensure_ascii=False) if db_dict else "{}",
+        "edge": json.dumps(edge_dict, indent=1, ensure_ascii=False) if edge_dict else "{}",
+        "status": "equal" if equal else "diff",
+    }
+
+
+def _compare_stream_proxy(db_sp: dict, edge_data: dict | None) -> dict:
+    """模拟 diff 端点的 stream proxy 对比逻辑"""
+    from app.services.config_diff import EquivalenceRules
+    EquivalenceRules._instance = None
+    rules = EquivalenceRules()
+
+    if not edge_data:
+        return {"name": db_sp["name"], "id": db_sp.get("edge_uuid", ""), "status": "only_in_db", "fields": []}
+    fields = []
+    edge_upstream = edge_data.get("upstream", {})
+
+    # listen_port
+    db_v = db_sp.get("listen_port")
+    edge_v = edge_data.get("server_port")
+    equal = str(db_v) == str(edge_v)
+    fields.append({"name": "listen_port", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+    # load_balance → upstream.type
+    db_v = db_sp.get("load_balance", "")
+    edge_v = edge_upstream.get("type", "")
+    db_norm = rules.normalize_value("upstream", db_v, "load_balance") or db_v
+    equal = str(db_norm) == str(edge_v)
+    fields.append({"name": "load_balance", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+    # scheme → upstream.scheme
+    db_v = db_sp.get("scheme", "tcp")
+    edge_v = edge_upstream.get("scheme", "tcp")
+    equal = str(db_v) == str(edge_v)
+    fields.append({"name": "scheme", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+    # targets
+    fields.append(_compare_stream_targets(db_sp.get("targets"), edge_upstream.get("nodes")))
+
+    # timeout / keepalive_pool
+    for jkey in ("timeout", "keepalive_pool"):
+        db_val = db_sp.get(jkey)
+        edge_val = edge_upstream.get(jkey)
+        if db_val or edge_val:
+            result = rules.compare_json_field(db_val, edge_val, rules.get_json_rules("upstream", jkey))
+            fields.append({
+                "name": jkey,
+                "db": result["db"] if result else (json.dumps(db_val, indent=1, ensure_ascii=False) if isinstance(db_val, dict) else str(db_val or "{}")),
+                "edge": result["edge"] if result else (json.dumps(edge_val, indent=1, ensure_ascii=False) if isinstance(edge_val, dict) else str(edge_val or "{}")),
+                "status": "equal" if not result else "diff",
+            })
+
+    # remote_addr / sni
+    for key in ("remote_addr", "sni"):
+        db_v = db_sp.get(key) or ""
+        edge_v = edge_data.get(key, "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+    return {"name": db_sp["name"], "id": db_sp.get("edge_uuid", ""), "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+
+
+class TestCompareStreamProxyTargets:
+
+    def test_targets_match(self):
+        db = '[{"target":"10.0.0.1:3306","weight":100}]'
+        edge = {"10.0.0.1:3306": 100}
+        r = _compare_stream_targets(db, edge)
+        assert r["status"] == "equal"
+
+    def test_targets_mismatch_weight(self):
+        db = '[{"target":"10.0.0.1:3306","weight":100}]'
+        edge = {"10.0.0.1:3306": 80}
+        r = _compare_stream_targets(db, edge)
+        assert r["status"] == "diff"
+
+    def test_targets_db_empty_edge_empty(self):
+        assert _compare_stream_targets(None, {})["status"] == "equal"
+        assert _compare_stream_targets("[]", {})["status"] == "equal"
+        assert _compare_stream_targets(None, None)["status"] == "equal"
+
+    def test_targets_db_empty_edge_has(self):
+        edge = {"10.0.0.1:3306": 100}
+        r = _compare_stream_targets(None, edge)
+        assert r["status"] == "diff"
+
+    def test_targets_missing_host_only(self):
+        db = '[{"target":"10.0.0.1","weight":100}]'
+        edge = {"10.0.0.1": 100}
+        r = _compare_stream_targets(db, edge)
+        assert r["status"] == "equal"
+
+    def test_targets_field_has_db_edge_status(self):
+        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', {"x:1": 100})
+        for key in ("name", "db", "edge", "status"):
+            assert key in r, f"targets result missing {key}"
+
+
+class TestCompareStreamProxy:
+
+    def test_match_when_identical(self):
+        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        assert r["status"] == "match"
+
+    def test_load_balance_normalized(self):
+        """weighted_roundrobin → roundrobin 归一化后应一致"""
+        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        lb = next(f for f in r["fields"] if f["name"] == "load_balance")
+        assert lb["status"] == "equal"
+
+    def test_listen_port_mismatch(self):
+        db = dict(_STREAM_PROXY_DB, listen_port=9999)
+        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        assert r["status"] == "mismatch"
+        lp = next(f for f in r["fields"] if f["name"] == "listen_port")
+        assert lp["status"] == "diff"
+
+    def test_scheme_mismatch(self):
+        db = dict(_STREAM_PROXY_DB, scheme="udp")
+        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        assert r["status"] == "mismatch"
+        sc = next(f for f in r["fields"] if f["name"] == "scheme")
+        assert sc["status"] == "diff"
+
+    def test_targets_mismatch(self):
+        db = dict(_STREAM_PROXY_DB, targets=json.dumps([{"target": "10.0.0.1:3306", "weight": 999}]))
+        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        assert r["status"] == "mismatch", "targets weight diff should cause mismatch"
+        tg = next(f for f in r["fields"] if f["name"] == "targets")
+        assert tg["status"] == "diff"
+
+    def test_remote_addr_diff(self):
+        edge = dict(_STREAM_PROXY_EDGE, remote_addr="10.0.0.0/8")
+        db = dict(_STREAM_PROXY_DB, remote_addr="192.168.0.0/16")
+        r = _compare_stream_proxy(db, edge)
+        assert r["status"] == "mismatch"
+        ra = next(f for f in r["fields"] if f["name"] == "remote_addr")
+        assert ra["status"] == "diff"
+
+    def test_only_in_db(self):
+        db = {"name": "db-only", "edge_uuid": "no-edge"}
+        r = _compare_stream_proxy(db, None)
+        assert r["status"] == "only_in_db"
+
+    def test_timeout_json_diff(self):
+        db = dict(_STREAM_PROXY_DB, timeout='{"connect":5}')
+        edge = dict(_STREAM_PROXY_EDGE)
+        edge["upstream"] = dict(edge["upstream"], timeout={"connect": 60})
+        r = _compare_stream_proxy(db, edge)
+        assert r["status"] == "mismatch"
+        to = next((f for f in r["fields"] if f["name"] == "timeout"), None)
+        assert to is not None, "timeout field should be emitted"
+        assert to["status"] == "diff"
+
+    def test_all_fields_emitted(self):
+        """所有字段都应出现在 fields 列表中"""
+        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        names = {f["name"] for f in r["fields"]}
+        expected = {"listen_port", "load_balance", "scheme", "targets", "remote_addr", "sni"}
+        for name in expected:
+            assert name in names, f"{name} should be present"
+
+    def test_all_fields_have_status(self):
+        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        for f in r["fields"]:
+            assert "status" in f, f"field {f['name']} missing status"
+            assert f["status"] in ("equal", "diff"), f"field {f['name']} invalid status"
+
+    def test_sni_diff(self):
+        db = dict(_STREAM_PROXY_DB, sni="db.example.com")
+        edge = dict(_STREAM_PROXY_EDGE, sni="edge.example.com")
+        r = _compare_stream_proxy(db, edge)
+        assert r["status"] == "mismatch"
+        sni = next(f for f in r["fields"] if f["name"] == "sni")
+        assert sni["status"] == "diff"
+
+
 class TestEquivalenceRules:
 
     def setup_method(self):

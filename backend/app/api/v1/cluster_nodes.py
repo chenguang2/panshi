@@ -436,6 +436,8 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     db_global_rules = await _get_all(GlobalRule, cluster_id=cluster_id)
     db_plugin_metadatas = await _get_all(PluginMetadata, cluster_id=cluster_id)
 
+    db_stream_proxies = await _get_all(StreamProxy, cluster_id=cluster_id)
+
     # 查询路由级插件，按 route_id 分组
     db_route_plugins_all = await _get_all(RoutePlugin)
     db_route_plugins: dict[int, dict[str, Any]] = {}
@@ -461,6 +463,8 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     try:
         # list_upstreams 返回解析后的 [{key, value}, ...]
         edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
+        # stream route 返回扁平结构 [{id, name, server_port, upstream: {...}}, ...]，不走 _edge_val
+        edge_stream_proxies = {sp.get("id", ""): sp for sp in client.list_stream_routes()}
         edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
         edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
         edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
@@ -652,13 +656,80 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         })
         return {"name": db_pm.plugin_name, "id": db_pm.plugin_name, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
+    def _compare_stream_targets(db_targets_json: Any, edge_nodes: Any) -> dict:
+        """对比 stream proxy targets（DB JSON array ↔ Edge upstream.nodes dict）"""
+        db_dict: dict[str, int] = {}
+        if db_targets_json:
+            try:
+                targets = json.loads(db_targets_json) if isinstance(db_targets_json, str) else db_targets_json
+                for t in (targets or []):
+                    db_dict[t.get("target", "")] = t.get("weight", 1)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        edge_dict = edge_nodes if isinstance(edge_nodes, dict) else {}
+        equal = json.dumps(db_dict, sort_keys=True, default=str) == json.dumps(edge_dict, sort_keys=True, default=str)
+        return {"name": "targets", "db": json.dumps(db_dict, indent=1, ensure_ascii=False) if db_dict else "{}", "edge": json.dumps(edge_dict, indent=1, ensure_ascii=False) if edge_dict else "{}", "status": "equal" if equal else "diff"}
+
+    def _compare_stream_proxy(db_sp, edge_data: dict | None):
+        """对比四层代理配置（DB vs Edge），处理 upstream 嵌套结构"""
+        if not edge_data:
+            return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+        edge_upstream = edge_data.get("upstream", {})
+
+        # listen_port → server_port
+        db_v = db_sp.listen_port
+        edge_v = edge_data.get("server_port")
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "listen_port", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # load_balance → upstream.type（需算法归一化）
+        db_v = db_sp.load_balance
+        edge_v = edge_upstream.get("type", "")
+        db_norm = _rules.normalize_value("upstream", db_v, "load_balance") or db_v
+        equal = str(db_norm) == str(edge_v)
+        fields.append({"name": "load_balance", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # scheme → upstream.scheme
+        db_v = db_sp.scheme
+        edge_v = edge_upstream.get("scheme", "tcp")
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "scheme", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # targets → upstream.nodes
+        fields.append(_compare_stream_targets(db_sp.targets, edge_upstream.get("nodes")))
+
+        # timeout / keepalive_pool → upstream.timeout / upstream.keepalive_pool
+        for jkey in ("timeout", "keepalive_pool"):
+            db_val = getattr(db_sp, jkey, None)
+            edge_val = edge_upstream.get(jkey)
+            if db_val or edge_val:
+                result = _rules.compare_json_field(db_val, edge_val, _rules.get_json_rules("upstream", jkey))
+                fields.append({
+                    "name": jkey,
+                    "db": result["db"] if result else (json.dumps(db_val, indent=1, ensure_ascii=False) if isinstance(db_val, dict) else str(db_val or "{}")),
+                    "edge": result["edge"] if result else (json.dumps(edge_val, indent=1, ensure_ascii=False) if isinstance(edge_val, dict) else str(edge_val or "{}")),
+                    "status": "equal" if not result else "diff",
+                })
+
+        # remote_addr / sni（顶层字段）
+        for key in ("remote_addr", "sni"):
+            db_v = getattr(db_sp, key, None) or ""
+            edge_v = edge_data.get(key, "") or ""
+            equal = str(db_v) == str(edge_v)
+            fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+
     def _find_only_in_edge(edge_dict, db_items, id_attr="id"):
         """找出仅在 Edge 上存在、DB 中没有的项"""
         db_ids = {getattr(d, "edge_uuid", getattr(d, "plugin_name", "")) for d in db_items}
         result = []
         for eid, edata in edge_dict.items():
             if eid and eid not in db_ids:
-                result.append({"name": edata.get("name", edata.get("uri", eid)), "id": eid, "status": "only_in_edge", "fields": []})
+                # stream proxy 没有 uri，用 server_port 作为后备显示名
+                name = edata.get("name") or (str(edata.get("server_port", eid)) if "server_port" in edata else edata.get("uri", eid))
+                result.append({"name": name, "id": eid, "status": "only_in_edge", "fields": []})
         return result
 
     # ---------- 4. 构建分组 ----------
@@ -697,6 +768,11 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     pm_items = [_compare_plugin_metadata(p, edge_plugin_metadatas.get(p.plugin_name)) for p in db_plugin_metadatas]
     pm_items += _find_only_in_edge(edge_plugin_metadatas, db_plugin_metadatas, id_attr="name")
     _add_group("插件元数据", "plugin_metadata", pm_items)
+
+    # 四层代理
+    sp_items = [_compare_stream_proxy(sp, edge_stream_proxies.get(sp.edge_uuid)) for sp in db_stream_proxies]
+    sp_items += _find_only_in_edge(edge_stream_proxies, db_stream_proxies)
+    _add_group("四层代理", "stream_proxies", sp_items)
 
     return {
         "node": f"{node.ip}:{node.management_port}",
