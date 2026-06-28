@@ -28,24 +28,28 @@
 
 **选择**：遵循现有对比模式，新增 `_compare_stream_proxy` 函数。
 
-⚠️ **重要：Edge API 对 stream route 的返回格式与上游/路由完全不同**，不能使用通用的 `_edge_val()` 提取。Stream route 的数据结构为：
+⚠️ **注意：Stream route 的 Edge API 也使用 `{key, value}` 格式**（与其他资源相同），需要通过 `_edge_val()` 提取 `value` 字段获取实际数据。实际数据内部结构与上游/路由不同——配置项嵌套在 `upstream` 子对象中：
 
 ```python
-# Edge API 返回示例（扁平结构，配置数据在 upstream 子对象中）：
+# Edge API 返回（外部仍然是 {key, value} 格式）：
 {
-    "id": "uuid-xxx",              # → DB.edge_uuid
-    "name": "mysql-proxy",
-    "server_port": 9970,           # → DB.listen_port
-    "remote_addr": "10.0.0.0/8",  # → DB.remote_addr
-    "sni": "mysql.example.com",   # → DB.sni
-    "desc": "...",                 # 描述（暂不参与对比）
-    "upstream": {
-        "type": "roundrobin",      # → DB.load_balance（需归一化）
-        "scheme": "tcp",           # → DB.scheme
-        "nodes": {"10.0.0.1:3306": 100},  # → DB.targets
-        "timeout": {"connect": 60},
-        "keepalive_pool": {"size": 10}
-    }
+    "modifiedIndex": 0,
+    "value": {                           # ← _edge_val() 提取此层
+        "id": "uuid-xxx",               # → DB.edge_uuid
+        "name": "mysql-proxy",
+        "server_port": 9970,            # → DB.listen_port
+        "remote_addr": "10.0.0.0/8",   # → DB.remote_addr
+        "sni": "mysql.example.com",    # → DB.sni
+        "upstream": {
+            "type": "roundrobin",       # → DB.load_balance（需归一化）
+            "scheme": "tcp",            # → DB.scheme
+            "nodes": {"10.0.0.1:3306": 100},  # → DB.targets
+            "timeout": {"connect": 60},
+            "keepalive_pool": {"size": 10}
+        }
+    },
+    "createdIndex": 0,
+    "key": "/edge/routes/uuid-xxx"
 }
 ```
 
@@ -138,8 +142,8 @@ def _compare_stream_targets(db_targets_json, edge_nodes):
 **Edge 数据构建**：
 
 ```python
-# stream route 不走 _edge_val，直接从 list 构建 dict
-edge_stream_proxies = {sp.get("id", ""): sp for sp in client.list_stream_routes()}
+# stream route 也走 _edge_val 提取 value（{key, value} 格式与其他资源一致）
+edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
 ```
 
 **only_in_edge 显示名**：`edata.get("name", str(edata.get("server_port", eid)))`

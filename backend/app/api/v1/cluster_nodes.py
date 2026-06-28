@@ -463,8 +463,8 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     try:
         # list_upstreams 返回解析后的 [{key, value}, ...]
         edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
-        # stream route 返回扁平结构 [{id, name, server_port, upstream: {...}}, ...]，不走 _edge_val
-        edge_stream_proxies = {sp.get("id", ""): sp for sp in client.list_stream_routes()}
+        # stream route 也是 {key, value} 格式，需走 _edge_val 提取
+        edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
         edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
         edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
         edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
