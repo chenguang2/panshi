@@ -463,8 +463,6 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     try:
         # list_upstreams 返回解析后的 [{key, value}, ...]
         edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
-        # stream route 也是 {key, value} 格式，需走 _edge_val 提取
-        edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
         edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
         edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
         edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
@@ -476,6 +474,12 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
                 edge_plugin_metadatas[pname] = pd
     except (EdgeConnectionError, EdgeAPIError) as e:
         raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
+
+    # 单独拉取 stream routes：不受支持的 Edge 节点不应影响其他资源的对比
+    try:
+        edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
+    except Exception:
+        edge_stream_proxies = {}
 
     # ---------- 3. 对比函数 ----------
     _rules = EquivalenceRules()
