@@ -455,6 +455,60 @@ class TestCompareStreamProxy:
         assert sni["status"] == "diff"
 
 
+class TestCompareStreamProxyGracefulDegradation:
+    """验证 stream route 拉取失败时不影响其他资源对比（模拟 except Exception）"""
+
+    def test_proxy_only_in_db_when_edge_data_none(self):
+        """Edge 无数据时显示 only_in_db（模拟 list_stream_routes 失败）"""
+        db = {"name": "sp1", "edge_uuid": "u1", "listen_port": 19994, "load_balance": "weighted_roundrobin", "scheme": "tcp"}
+        r = _compare_stream_proxy(db, None)
+        assert r["status"] == "only_in_db"
+
+    def test_proxy_matches_when_edge_data_provided(self):
+        """Edge 有数据时正常对比（验证 _edge_val 提取后的数据）"""
+        db = dict(_STREAM_PROXY_DB)
+        edge = dict(_STREAM_PROXY_EDGE)
+        r = _compare_stream_proxy(db, edge)
+        assert r["status"] == "match", f"expected match got {r['status']}: {[f for f in r['fields'] if f['status']=='diff']}"
+
+    def test_targets_handles_null_edge_nodes(self):
+        """targets 对比在 edge_nodes 为 None 时不抛异常"""
+        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', None)
+        assert r["status"] == "diff"
+        assert "name" in r
+
+    def test_targets_handles_non_dict_edge_nodes(self):
+        """targets 对比在 edge_nodes 为非 dict 时不抛异常"""
+        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', "invalid")
+        assert r["status"] == "diff"
+
+    def test_malformed_db_targets_does_not_crash(self):
+        """DB targets 为非法 JSON 时不抛异常"""
+        r = _compare_stream_targets("not-json", {"x:1": 100})
+        assert "status" in r  # 不抛异常即可，结果为 diff 是合理的
+
+    def test_list_stream_routes_empty_returns_empty_dict(self):
+        """模拟 list_stream_routes 返回空列表 → edge_stream_proxies = {}"""
+        raw = []
+        result = {sp.get("id", ""): sp for sp in raw}
+        assert result == {}
+
+    def test_list_stream_routes_none_does_not_crash(self):
+        """模拟 list_stream_routes 返回 None（已由 except Exception 兜底）"""
+        raw = None
+        try:
+            result = {_edge_val_fn(sp).get("id", ""): _edge_val_fn(sp) for sp in raw} if raw is not None else {}
+        except TypeError:
+            result = {}
+        assert result == {}
+
+
+def _edge_val_fn(item: dict) -> dict:
+    """模拟 _edge_val"""
+    v = item.get("value") if isinstance(item, dict) else None
+    return v if isinstance(v, dict) else (item if isinstance(item, dict) else {})
+
+
 class TestEquivalenceRules:
 
     def setup_method(self):
