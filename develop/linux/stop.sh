@@ -19,7 +19,7 @@ fi
 for PORT in "$BACKEND_PORT" "$FRONTEND_PORT"; do
     LSOF_PID=$(lsof -ti:"$PORT" 2>/dev/null)
     if [ -n "$LSOF_PID" ]; then
-        if tr '\0' ' ' < "/proc/$LSOF_PID/cmdline" 2>/dev/null | grep -q "app\.main:app\|npm\|vite"; then
+        if tr '\0' ' ' < "/proc/$LSOF_PID/cmdline" 2>/dev/null | grep -q "app\.main:app\|npm\|vite\|python"; then
             kill -9 "$LSOF_PID" 2>/dev/null || true
         fi
     fi

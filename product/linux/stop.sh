@@ -26,7 +26,7 @@ elif command -v lsof >/dev/null 2>&1; then
     FALLBACK_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 fi
 if [ -n "$FALLBACK_PID" ]; then
-    if tr '\0' ' ' < "/proc/$FALLBACK_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
+    if tr '\0' ' ' < "/proc/$FALLBACK_PID/cmdline" 2>/dev/null |  grep -q "app\.main:app\|npm\|vite\|python"; then
         kill -9 "$FALLBACK_PID" 2>/dev/null || true
     fi
 fi
