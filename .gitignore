@@ -41,6 +41,7 @@ backend/.python-version
 
 # 部署生成包
 product/linux/panshi/
+product/linux/panshi-*/
 product/mac/panshi/
 
 # =============================================
