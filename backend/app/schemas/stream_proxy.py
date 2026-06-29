@@ -16,10 +16,15 @@ class StreamProxyBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     listen_port: int = Field(..., ge=1, le=65535)
     load_balance: str = Field(default="weighted_roundrobin")
+    hash_on: Optional[str] = None
+    key: Optional[str] = None
     scheme: str = Field(default="tcp")
     description: Optional[str] = None
     timeout: Optional[Dict[str, Any]] = None
     keepalive_pool: Optional[Dict[str, Any]] = None
+    checks: Optional[Dict[str, Any]] = None
+    retries: Optional[int] = None
+    retry_timeout: Optional[int] = None
     remote_addr: Optional[str] = None
     sni: Optional[str] = None
     ref_node_id: Optional[int] = None
@@ -34,12 +39,17 @@ class StreamProxyUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     load_balance: Optional[str] = None
+    hash_on: Optional[str] = None
+    key: Optional[str] = None
     scheme: Optional[str] = None
     listen_port: Optional[int] = None
     ref_node_id: Optional[int] = None
     targets: Optional[List[TargetSchema]] = None
     timeout: Optional[Dict[str, Any]] = None
     keepalive_pool: Optional[Dict[str, Any]] = None
+    checks: Optional[Dict[str, Any]] = None
+    retries: Optional[int] = None
+    retry_timeout: Optional[int] = None
     remote_addr: Optional[str] = None
     sni: Optional[str] = None
     status: Optional[int] = None
@@ -81,6 +91,13 @@ class StreamProxyResponse(StreamProxyBase):
     @field_validator("keepalive_pool", mode="before")
     @classmethod
     def convert_keepalive_pool(cls, v):
+        if isinstance(v, str):
+            return _json.loads(v)
+        return v
+
+    @field_validator("checks", mode="before")
+    @classmethod
+    def convert_checks(cls, v):
         if isinstance(v, str):
             return _json.loads(v)
         return v

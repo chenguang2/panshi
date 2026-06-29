@@ -35,7 +35,7 @@ The system SHALL display the full configuration of a stream proxy in a read-only
 
 #### Scenario: View proxy details
 - **WHEN** user clicks "查看" on a stream proxy card
-- **THEN** the system opens a modal showing all proxy details including name, cluster, port, protocol, targets, load balance, timeout, keepalive, and optional match conditions (remote_addr, sni)
+- **THEN** the system opens a modal showing all proxy details including name, cluster, port, protocol, targets, load balance, timeout, keepalive, hash key, health check, retries
 
 ### Requirement: User can edit a stream proxy
 The system SHALL allow editing an existing stream proxy's configuration.
@@ -90,7 +90,9 @@ The system SHALL support multiple load balancing algorithms for stream upstreams
 
 #### Scenario: Select consistent hashing
 - **WHEN** user selects "一致性哈希" as the LB algorithm
-- **THEN** the system uses `chash` LB algorithm; the UI does NOT expose `hash_on`/`key` fields (these are HTTP-specific) — Stream chash hashes on `vars` like `$remote_addr` automatically
+- **THEN** the system uses `chash` LB algorithm
+- **THEN** the UI SHALL display a read-only "Hash Key: remote_addr" field
+- **THEN** the backend SHALL save `hash_on = 'vars'` and `key = 'remote_addr'`
 
 #### Scenario: Configure EWMA or least_conn
 - **WHEN** user selects "EWMA" or "最少连接"
@@ -111,9 +113,13 @@ The system SHALL allow configuring timeout, keepalive pool, protocol, and option
 - **WHEN** user selects "TCP" or "UDP" in the protocol toggle
 - **THEN** the system stores the scheme and publishes with the correct protocol
 
-#### Scenario: Set optional match conditions
-- **WHEN** user sets remote_addr CIDR or SNI match
-- **THEN** the system includes these in the Edge stream route configuration
+#### Scenario: Configure retries
+- **WHEN** user expands advanced config and sets retry count and retry timeout
+- **THEN** the system stores and publishes these retry values to Edge
+
+#### Scenario: Configure health check
+- **WHEN** user expands advanced config and edits the health check JSON
+- **THEN** the JSON SHALL be saved to the `checks` field and published to Edge
 
 ### Requirement: Stream proxy list shows publish status
 The system SHALL display the publish status (published version + timestamp, or unpublished) on each card.

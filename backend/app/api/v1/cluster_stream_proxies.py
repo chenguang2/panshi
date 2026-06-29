@@ -166,6 +166,8 @@ async def create_stream_proxy(
         proxy_data["timeout"] = json.dumps(proxy_data["timeout"])
     if proxy_data.get("keepalive_pool"):
         proxy_data["keepalive_pool"] = json.dumps(proxy_data["keepalive_pool"])
+    if proxy_data.get("checks"):
+        proxy_data["checks"] = json.dumps(proxy_data["checks"])
 
     proxy = StreamProxy(cluster_id=cluster_id, **proxy_data)
     db.add(proxy)
@@ -306,7 +308,7 @@ async def update_stream_proxy(
         update_data["targets"] = json.dumps(update_data["targets"])
     elif "targets" in update_data:
         update_data["targets"] = None
-    for key in ("timeout", "keepalive_pool"):
+    for key in ("timeout", "keepalive_pool", "checks"):
         if key in update_data and update_data[key] is not None:
             update_data[key] = json.dumps(update_data[key])
 
@@ -368,16 +370,26 @@ async def publish_stream_proxy(
     lb_map = {"weighted_roundrobin": "roundrobin"}
     lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
 
-    upstream_data = {
+    upstream_data: dict = {
         "nodes": nodes_dict,
         "type": lb_type,
+        "scheme": proxy.scheme or "tcp",
     }
+    if proxy.hash_on and proxy.key:
+        upstream_data["hash_on"] = proxy.hash_on
+        upstream_data["key"] = proxy.key
     if proxy.timeout:
         upstream_data["timeout"] = json.loads(proxy.timeout)
     if proxy.keepalive_pool:
         upstream_data["keepalive_pool"] = json.loads(proxy.keepalive_pool)
+    if proxy.retries is not None:
+        upstream_data["retries"] = proxy.retries
+    if proxy.retry_timeout is not None:
+        upstream_data["retry_timeout"] = proxy.retry_timeout
+    if proxy.checks:
+        upstream_data["checks"] = json.loads(proxy.checks)
 
-    edge_body = {
+    edge_body: dict = {
         "server_port": proxy.listen_port,
         "upstream": upstream_data,
     }

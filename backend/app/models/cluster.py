@@ -198,12 +198,17 @@ class StreamProxy(Base):
     description = Column(Text, nullable=True)
     listen_port = Column(Integer, nullable=False)
     load_balance = Column(String(20), nullable=False, default="weighted_roundrobin")
+    hash_on = Column(String(20), nullable=True)           # 哈希策略（chash 时使用，固定 vars）
+    key = Column(String(100), nullable=True)              # 哈希 key（chash 时固定 remote_addr）
     scheme = Column(String(10), nullable=False, default="tcp")
     targets = Column(Text, nullable=True)       # JSON: [{"target":"ip:port", "weight":100}, ...]
     timeout = Column(Text, nullable=True)        # JSON: {"connect": N, "send": N, "read": N}
     keepalive_pool = Column(Text, nullable=True) # JSON: {"size": N, "idle_timeout": N, "requests": N}
-    remote_addr = Column(String(100), nullable=True)  # CIDR
-    sni = Column(String(255), nullable=True)          # TLS SNI
+    checks = Column(Text, nullable=True)         # JSON: health check config
+    retries = Column(Integer, nullable=True)     # 重试次数
+    retry_timeout = Column(Integer, nullable=True) # 重试超时（秒）
+    remote_addr = Column(String(100), nullable=True)  # CIDR（保留向后兼容）
+    sni = Column(String(255), nullable=True)          # TLS SNI（保留向后兼容）
     ref_node_id = Column(Integer, nullable=True)      # 参考节点 ID（用于端口检测）
     status = Column(Integer, nullable=False, default=1)
     current_version = Column(Integer, nullable=True)

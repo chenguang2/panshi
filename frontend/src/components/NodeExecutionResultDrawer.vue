@@ -105,7 +105,7 @@
               <div v-if="logs.length > 0" style="margin-top:12px;">
                 <div class="section-label">执行日志</div>
                 <div class="log-box">
-                  <div v-for="(line, i) in logs" :key="i" style="white-space:pre-wrap;">{{ line }}</div>
+                  <div v-for="(line, i) in logs" :key="i" style="white-space:pre-wrap;" v-html="ansiToHtml(line)"></div>
                 </div>
               </div>
             </div>
@@ -113,10 +113,10 @@
             <!-- stdout tab -->
             <div v-show="activeTab === 'stdout'" class="tab-body">
               <div v-if="logs.length > 0" ref="stdoutLogBox" class="log-box full-width" style="overflow-y:auto;max-height:50vh;">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ logs.join('\n') }}</pre>
+                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;" v-html="ansiToHtml(logs.join('\n'))"></pre>
               </div>
               <div v-else-if="result && result.stdout" class="log-box full-width">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ result.stdout }}</pre>
+                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;" v-html="ansiToHtml(result.stdout)"></pre>
               </div>
               <div v-else style="color:var(--muted);">无输出</div>
             </div>
@@ -149,6 +149,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
+import { ansiToHtml, stripAnsi } from '@/utils/ansi'
 
 const props = defineProps<{
   visible: boolean
@@ -231,7 +232,7 @@ function onOverlayClick() {
 }
 
 async function copyAll() {
-  const text = props.logs.join('\n')
+  const text = stripAnsi(props.logs.join('\n'))
   try {
     await navigator.clipboard.writeText(text)
     message.success('已复制到剪贴板')

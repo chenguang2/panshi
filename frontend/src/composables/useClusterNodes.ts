@@ -4,6 +4,7 @@ import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
 import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
+import { stripAnsi } from '@/utils/ansi'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
@@ -294,7 +295,7 @@ export function useClusterNodes(options: {
     const highlights: string[] = []
     const lines = stdout.split('\n')
     for (const line of lines) {
-      const trimmed = line.trim()
+      const trimmed = stripAnsi(line.trim())
       // Nginx process status
       if (/Nginx process/i.test(trimmed) || /Nginx.*(PID|running|stopped|started|exist)/i.test(trimmed)) {
         highlights.push(trimmed)

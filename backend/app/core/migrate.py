@@ -130,6 +130,11 @@ COLUMN_MIGRATIONS = [
     ("ps_cluster", "current_version", "INTEGER"),
     ("ps_import_log", "stream_proxy_count", "INTEGER DEFAULT 0"),
     ("ps_stream_proxy", "ref_node_id", "INTEGER"),
+    ("ps_stream_proxy", "hash_on", "VARCHAR(20)"),
+    ("ps_stream_proxy", "key", "VARCHAR(100)"),
+    ("ps_stream_proxy", "checks", "TEXT"),
+    ("ps_stream_proxy", "retries", "INTEGER"),
+    ("ps_stream_proxy", "retry_timeout", "INTEGER"),
 ]
 
 

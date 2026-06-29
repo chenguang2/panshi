@@ -136,6 +136,17 @@
             </div>
           </div>
 
+          <!-- chash: show hash key info -->
+          <template v-if="form.load_balance === 'chash'">
+            <div class="form-row" style="margin-bottom:16px;">
+              <div class="form-group">
+                <label class="form-label">Hash Key</label>
+                <input :value="'remote_addr'" type="text" class="form-input" disabled style="background:var(--bg);color:var(--accent);font-weight:600;">
+                <div class="form-hint">一致性哈希使用来源 IP（remote_addr）作为哈希键</div>
+              </div>
+            </div>
+          </template>
+
           <div class="form-group">
             <label class="form-label">描述</label>
             <input v-model="form.description" type="text" class="form-input" placeholder="描述信息（可选）">
@@ -175,6 +186,24 @@
 
           <!-- Advanced Config Section -->
           <div v-if="advancedEnabled" class="spwf-advanced">
+            <div class="form-group">
+              <label class="form-label">健康检查（JSON）</label>
+              <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">重试次数</label>
+                <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
+                <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">重试超时（秒）</label>
+                <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
+                <div class="form-hint">0 = 不限制重试时间</div>
+              </div>
+            </div>
+
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">连接超时（秒）</label>
@@ -202,19 +231,6 @@
               <div class="form-group">
                 <label class="form-label">最大请求数</label>
                 <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="1000">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Remote Addr</label>
-                <input v-model="form.remote_addr" type="text" class="form-input" placeholder="可选，如 10.0.0.0/8">
-                <div class="form-hint">可选，来源 IP 限制</div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">SNI</label>
-                <input v-model="form.sni" type="text" class="form-input" placeholder="可选，如 example.com">
-                <div class="form-hint">可选，TLS 服务器名称指示</div>
               </div>
             </div>
           </div>
@@ -288,6 +304,8 @@ const form = reactive({
   description: '',
   scheme: 'tcp',
   load_balance: 'weighted_roundrobin',
+  hash_on: 'vars',
+  key: 'remote_addr',
   targets: [] as { key: number; ip: string; port: number; weight: number }[],
   timeout: { connect: 60, send: 60, read: 60 },
   keepalive_pool: {
@@ -295,17 +313,48 @@ const form = reactive({
     idle_timeout: undefined as number | undefined,
     requests: undefined as number | undefined,
   },
-  remote_addr: '',
-  sni: '',
+  retries: undefined as number | undefined,
+  retry_timeout: 0,
+  checks: null as Record<string, unknown> | null,
 })
 
 const advancedEnabled = ref(false)
 const formErrors = reactive<Record<string, string>>({})
 const targetErrors = ref<string[]>([])
 
+const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
+const checksJson = ref(defaultChecksJson)
+
 let targetKey = 0
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+// ── Watches ──
+
+// When chash is selected, fix hash_on/key to remote_addr
+watch(() => form.load_balance, (val) => {
+  if (val === 'chash') {
+    form.hash_on = 'vars'
+    form.key = 'remote_addr'
+  }
+})
+
+// Sync checksJson textarea → form.checks
+watch(checksJson, (val) => {
+  try { form.checks = JSON.parse(val) as Record<string, unknown> } catch { /* ignore */ }
+})
+
+// Reset advanced fields when toggled off
+watch(advancedEnabled, (val) => {
+  if (!val) {
+    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+    checksJson.value = defaultChecksJson
+    form.retries = undefined
+    form.retry_timeout = 0
+    form.timeout = { connect: 60, send: 60, read: 60 }
+    form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
+  }
+})
 
 // ── Computed ──
 
@@ -452,9 +501,17 @@ async function handleSubmit() {
       ref_node_id: form.node_id || undefined,
       targets: form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight })),
       timeout: form.timeout,
+      checks: form.checks,
+    }
+
+    if (form.load_balance === 'chash') {
+      submitData.hash_on = form.hash_on
+      submitData.key = form.key
     }
 
     if (advancedEnabled.value) {
+      if (form.retries !== undefined) submitData.retries = form.retries
+      if (form.retry_timeout !== undefined) submitData.retry_timeout = form.retry_timeout
       const kp = form.keepalive_pool
       if (kp.size !== undefined || kp.idle_timeout !== undefined || kp.requests !== undefined) {
         const pool: Record<string, number> = {}
@@ -463,8 +520,6 @@ async function handleSubmit() {
         if (kp.requests !== undefined) pool.requests = kp.requests
         submitData.keepalive_pool = pool
       }
-      if (form.remote_addr.trim()) submitData.remote_addr = form.remote_addr.trim()
-      if (form.sni.trim()) submitData.sni = form.sni.trim()
     }
 
     const cid = Number(form.cluster_id)
@@ -515,39 +570,54 @@ watch(() => props.visible, async (v) => {
     form.description = p.description || ''
     form.scheme = p.scheme || 'tcp'
     form.load_balance = p.load_balance || 'weighted_roundrobin'
+    form.hash_on = p.hash_on || 'vars'
+    form.key = p.key || 'remote_addr'
     form.targets = (p.targets || []).map((t: any) => {
       const [ip, port] = t.target.split(':')
       return { key: ++targetKey, ip: ip || '', port: port ? parseInt(port) : 80, weight: t.weight || 100 }
     })
 
-    const hasAdvanced = !!(p.remote_addr || p.sni || (p.keepalive_pool && Object.keys(p.keepalive_pool).length > 0))
-    advancedEnabled.value = hasAdvanced
+    // Detect if proxy has advanced config
+    form.retries = p.retries ?? undefined
+    form.retry_timeout = p.retry_timeout ?? 0
+    if (p.checks) {
+      const c = typeof p.checks === 'string' ? JSON.parse(p.checks) : p.checks
+      form.checks = c
+      checksJson.value = JSON.stringify(c, null, 2)
+    } else {
+      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      checksJson.value = defaultChecksJson
+    }
+    const hasChecks = p.checks && JSON.stringify(form.checks) !== defaultChecksJson
+    const hasRetries = p.retries !== undefined && p.retries !== null
+    const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
+    const hasTimeout = p.timeout && p.timeout !== '{}'
+    const t = hasTimeout ? (typeof p.timeout === 'string' ? JSON.parse(p.timeout) : p.timeout) : null
+    const isDefaultTimeout = t ? t.connect === 60 && t.send === 60 && t.read === 60 : true
+    const hasPool = p.keepalive_pool && JSON.stringify(p.keepalive_pool) !== '{}' && p.keepalive_pool !== '{}'
+    advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout || !isDefaultTimeout || hasPool)
 
-    if (p.timeout) {
-      const t = typeof p.timeout === 'string' ? JSON.parse(p.timeout) : p.timeout
+    if (t) {
       form.timeout = { connect: t.connect ?? 60, send: t.send ?? 60, read: t.read ?? 60 }
     } else {
       form.timeout = { connect: 60, send: 60, read: 60 }
     }
 
-    if (p.keepalive_pool && Object.keys(p.keepalive_pool).length > 0) {
+    if (hasPool) {
       const k = typeof p.keepalive_pool === 'string' ? JSON.parse(p.keepalive_pool) : p.keepalive_pool
       form.keepalive_pool = { size: k.size, idle_timeout: k.idle_timeout, requests: k.requests }
     } else {
       form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
     }
 
-    form.remote_addr = p.remote_addr || ''
-    form.sni = p.sni || ''
-
     try {
       const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
       nodes.value = res.data.items || res.data || []
-      // 恢复保存的参考节点，否则用第一个
+      // 恢复保存的参考节点；无记录时保持空让用户手动选择
       if (p.ref_node_id) {
         form.node_id = p.ref_node_id
-      } else if (nodes.value.length > 0) {
-        form.node_id = nodes.value[0].id
+      } else {
+        form.node_id = ''
       }
     } catch {
       nodes.value = []
@@ -564,11 +634,15 @@ watch(() => props.visible, async (v) => {
     form.description = ''
     form.scheme = 'tcp'
     form.load_balance = 'weighted_roundrobin'
+    form.hash_on = 'vars'
+    form.key = 'remote_addr'
     form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
     form.timeout = { connect: 60, send: 60, read: 60 }
     form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
-    form.remote_addr = ''
-    form.sni = ''
+    form.retries = undefined
+    form.retry_timeout = 0
+    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+    checksJson.value = defaultChecksJson
     advancedEnabled.value = false
     nodes.value = []
     ports.value = []

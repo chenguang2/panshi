@@ -55,7 +55,7 @@
                   <option value="header">HTTP请求头</option>
                   <option value="cookie">Cookie</option>
                   <option value="vars">内置变量</option>
-                  <option value="vars_combinations">自定义变量</option>
+                  <option value="vars_combinations">自定义变量组合</option>
                 </select>
               </div>
               <div class="form-group">
