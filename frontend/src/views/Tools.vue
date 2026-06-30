@@ -173,8 +173,8 @@
             <div class="panel-label">输入</div>
             <a-textarea v-model:value="yamlInput" :rows="textareaRows" placeholder="输入 YAML 内容" />
             <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => yamlInput = v)">粘贴</a-button>
+              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlOutput)">复制</a-button>
+              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => yamlOutput = v)">粘贴</a-button>
             </div>
           </div>
           <div class="panel-actions">
@@ -187,6 +187,40 @@
               <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlOutput)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => yamlOutput = v)">粘贴</a-button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JSON 对比 -->
+      <div v-if="activeTool === 'diff'" class="tool-panel">
+        <div class="tool-header">JSON 数据对比</div>
+        <div class="dual-panel">
+          <div class="panel-left">
+            <div class="panel-label">JSON A</div>
+            <a-textarea v-model:value="diffInputA" :rows="textareaRows" placeholder='输入 JSON A，如 {"name":"test"}' />
+            <div class="copy-row">
+              <a-button size="small" class="copy-btn" @click="copyToClipboard(diffInputA)">复制</a-button>
+              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => diffInputA = v)">粘贴</a-button>
+            </div>
+          </div>
+          <div class="panel-actions">
+            <a-button type="primary" @click="handleDiff" :disabled="!diffInputA || !diffInputB">对比 →</a-button>
+          </div>
+          <div class="panel-right">
+            <div class="panel-label">JSON B</div>
+            <a-textarea v-model:value="diffInputB" :rows="textareaRows" placeholder='输入 JSON B，如 {"name":"test2"}' />
+            <div class="copy-row">
+              <a-button size="small" class="copy-btn" @click="copyToClipboard(diffInputB)">复制</a-button>
+              <a-button size="small" class="copy-btn" @click="pasteFromClipboard(v => diffInputB = v)">粘贴</a-button>
+            </div>
+          </div>
+        </div>
+        <div v-if="diffError" class="diff-error">{{ diffError }}</div>
+        <div v-if="diffResultHtml" class="diff-result-box">
+          <div class="panel-label" style="margin-bottom:8px;">差异结果</div>
+          <div class="diff-tree" v-html="diffResultHtml"></div>
+          <div class="copy-row" style="margin-top:8px;">
+            <a-button size="small" class="copy-btn" @click="copyToClipboard(diffResultText)">复制结果</a-button>
           </div>
         </div>
       </div>
@@ -204,6 +238,7 @@ import {
   LockOutlined,
   BlockOutlined,
   SnippetsOutlined,
+  ColumnWidthOutlined,
 } from '@ant-design/icons-vue'
 import { luaToConfigString, configStringToLua } from '@/utils/tools/lua'
 import * as toolsUrl from '@/utils/tools/url'
@@ -211,6 +246,7 @@ import * as toolsJson from '@/utils/tools/json'
 import * as toolsSm4 from '@/utils/tools/sm4'
 import * as toolsBase64 from '@/utils/tools/base64'
 import * as toolsYaml from '@/utils/tools/yaml'
+import { computeDiff, renderDiffTree, sortValue, escapeHtml } from '@/utils/tools/diff'
 
 interface ToolItem {
   key: string
@@ -225,6 +261,7 @@ const tools: ToolItem[] = [
   { key: 'sm4', label: 'SM4 加解密', icon: LockOutlined },
   { key: 'base64', label: 'Base64 编解码', icon: BlockOutlined },
   { key: 'yaml', label: 'YAML 格式化', icon: SnippetsOutlined },
+  { key: 'diff', label: 'JSON 对比', icon: ColumnWidthOutlined },
 ]
 
 const activeTool = ref('lua')
@@ -273,6 +310,38 @@ const base64Output = ref('')
 // YAML
 const yamlInput = ref('')
 const yamlOutput = ref('')
+
+// JSON Diff
+const diffInputA = ref('')
+const diffInputB = ref('')
+const diffResultHtml = ref('')
+const diffResultText = ref('')
+const diffError = ref('')
+
+function handleDiff() {
+  diffError.value = ''
+  diffResultHtml.value = ''
+  diffResultText.value = ''
+  let objA: unknown, objB: unknown
+  try {
+    objA = JSON.parse(diffInputA.value)
+  } catch {
+    diffError.value = 'JSON A 解析失败：请检查格式'
+    return
+  }
+  try {
+    objB = JSON.parse(diffInputB.value)
+  } catch {
+    diffError.value = 'JSON B 解析失败：请检查格式'
+    return
+  }
+  const sortedA = sortValue(objA)
+  const sortedB = sortValue(objB)
+  const diff = computeDiff(sortedA, sortedB)
+  diffResultHtml.value = renderDiffTree(diff)
+  // Build plain-text copy
+  diffResultText.value = JSON.stringify(sortedA, null, 2) + '\n\n--- 对比 ---\n\n' + JSON.stringify(sortedB, null, 2)
+}
 
 async function copyToClipboard(text: string) {
   if (!text) {
@@ -439,6 +508,62 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   padding-top: 24px;
   flex-shrink: 0;
   align-items: center;
+}
+
+/* ── JSON Diff ── */
+.diff-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: oklch(55% 0.18 28 / 8%);
+  border: 1px solid oklch(55% 0.18 28 / 25%);
+  border-radius: 6px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.diff-result-box {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  background: var(--surface);
+}
+.diff-result-box .diff-tree {
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, monospace);
+}
+.diff-result-box .diff-tree .diff-key {
+  color: var(--fg);
+  font-weight: 500;
+}
+.diff-result-box .diff-tree .diff-same {
+  color: var(--muted);
+}
+.diff-result-box .diff-tree .diff-added {
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 10%);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.diff-result-box .diff-tree .diff-removed {
+  color: var(--danger);
+  background: oklch(55% 0.18 28 / 8%);
+  padding: 0 4px;
+  border-radius: 2px;
+  text-decoration: line-through;
+}
+.diff-result-box .diff-tree .diff-changed-a {
+  color: var(--danger);
+  background: oklch(55% 0.18 28 / 8%);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.diff-result-box .diff-tree .diff-changed-b {
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 10%);
+  padding: 0 4px;
+  border-radius: 2px;
 }
 
 .sm4-key-row {
