@@ -29,7 +29,7 @@
       <div class="pml-empty-text">暂无插件元数据</div>
     </div>
     <div v-else class="pml-grid">
-      <div v-for="item in displayedItems" :key="item.id" class="pml-card">
+      <div v-for="item in displayedItems" :key="item.id" class="pml-card" :style="getCardBorderStyle(item.cluster_group_name)">
         <div class="pml-card-topbar" :style="getGroupColorStyle(item.cluster_group_name)">
           <span>{{ item.cluster_name || '-' }}</span>
           <span v-if="item.cluster_group_name" class="group-badge">{{ item.cluster_group_name }}</span>
@@ -139,7 +139,7 @@ import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { getGroupColorStyle } from '@/composables/useGroupColors'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 // ——— List view state ———
 const items = ref<any[]>([])
@@ -161,7 +161,15 @@ const filteredClusters = computed(() => {
   return clusters.value.filter(c => c.group_name === groupFilter.value)
 })
 
-const displayedItems = computed(() => items.value)
+const displayedItems = computed(() => {
+  return [...items.value].sort((a, b) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
+})
 
 function onGroupChange() {
   clusterFilter.value = ''

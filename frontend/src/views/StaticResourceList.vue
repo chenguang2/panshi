@@ -29,7 +29,7 @@
       <div class="sr-empty-text">暂无静态资源</div>
     </div>
     <div v-else class="sr-grid">
-      <div v-for="sr in displayedResources" :key="sr.id" class="sr-card">
+      <div v-for="sr in displayedResources" :key="sr.id" class="sr-card" :style="getCardBorderStyle(sr.cluster_group_name)">
         <div class="sr-card-topbar" :style="getGroupColorStyle(sr.cluster_group_name)">
           <span>{{ sr.cluster_name || '-' }}</span>
           <span v-if="sr.cluster_group_name" class="group-badge">{{ sr.cluster_group_name }}</span>
@@ -172,7 +172,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { getGroupColorStyle } from '@/composables/useGroupColors'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 const resources = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -198,7 +198,15 @@ function onGroupChange() {
   loadResources()
 }
 
-const displayedResources = computed(() => resources.value)
+const displayedResources = computed(() => {
+  return [...resources.value].sort((a, b) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
+})
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)

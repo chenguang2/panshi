@@ -29,7 +29,7 @@
       <div class="sp-empty-text">暂无四层代理</div>
     </div>
     <div v-else class="sp-grid">
-      <div v-for="p in displayedProxies" :key="p.id" class="sp-card">
+      <div v-for="p in displayedProxies" :key="p.id" class="sp-card" :style="getCardBorderStyle(p.cluster_group_name)">
         <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
           <span>{{ p.cluster_name || '-' }}</span>
           <span v-if="p.cluster_group_name" class="group-badge">{{ p.cluster_group_name }}</span>
@@ -115,7 +115,7 @@ import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { getGroupColorStyle } from '@/composables/useGroupColors'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 
 // ── State ──
@@ -144,7 +144,15 @@ function onGroupChange() {
   loadProxies()
 }
 
-const displayedProxies = computed(() => proxies.value)
+const displayedProxies = computed(() => {
+  return [...proxies.value].sort((a, b) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
+})
 
 // Wizard
 const wizardVisible = ref(false)

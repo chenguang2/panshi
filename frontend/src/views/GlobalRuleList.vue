@@ -29,7 +29,7 @@
       <div class="gr-empty-text">暂无全局规则</div>
     </div>
     <div v-else class="gr-grid">
-      <div v-for="pc in displayedRules" :key="pc.id" class="gr-card">
+      <div v-for="pc in displayedRules" :key="pc.id" class="gr-card" :style="getCardBorderStyle(pc.cluster_group_name)">
         <div class="gr-card-topbar" :style="getGroupColorStyle(pc.cluster_group_name)">
           <span>{{ pc.cluster_name || '-' }}</span>
           <span v-if="pc.cluster_group_name" class="group-badge">{{ pc.cluster_group_name }}</span>
@@ -88,7 +88,7 @@ import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { getGroupColorStyle } from '@/composables/useGroupColors'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 const rules = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -114,7 +114,15 @@ function onGroupChange() {
   loadRules()
 }
 
-const displayedRules = computed(() => rules.value)
+const displayedRules = computed(() => {
+  return [...rules.value].sort((a, b) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
+})
 
 const formVisible = ref(false)
 const editingConfig = ref<any | null>(null)

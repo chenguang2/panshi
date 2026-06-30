@@ -591,10 +591,10 @@ watch(() => props.visible, async (v) => {
     const hasChecks = p.checks && JSON.stringify(form.checks) !== defaultChecksJson
     const hasRetries = p.retries !== undefined && p.retries !== null
     const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
-    const hasTimeout = p.timeout && p.timeout !== '{}'
-    const t = hasTimeout ? (typeof p.timeout === 'string' ? JSON.parse(p.timeout) : p.timeout) : null
+    const hasTimeout = p.timeout && JSON.stringify(p.timeout) !== '{}'
+    const t = hasTimeout ? p.timeout : null
     const isDefaultTimeout = t ? t.connect === 60 && t.send === 60 && t.read === 60 : true
-    const hasPool = p.keepalive_pool && JSON.stringify(p.keepalive_pool) !== '{}' && p.keepalive_pool !== '{}'
+    const hasPool = p.keepalive_pool && JSON.stringify(p.keepalive_pool) !== '{}'
     advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout || !isDefaultTimeout || hasPool)
 
     if (t) {

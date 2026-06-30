@@ -186,10 +186,15 @@ export interface StreamProxy {
   description?: string
   listen_port: number
   load_balance: string
+  hash_on?: string
+  key?: string
   scheme: string
   targets?: StreamProxyTarget[]
   timeout?: Record<string, number>
   keepalive_pool?: Record<string, number>
+  checks?: Record<string, unknown> | string
+  retries?: number
+  retry_timeout?: number
   remote_addr?: string
   sni?: string
   status: number

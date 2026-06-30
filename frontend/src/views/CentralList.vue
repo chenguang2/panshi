@@ -586,10 +586,10 @@ const groupedClusters = computed(() => {
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(c)
   }
-  // 有分组名在前，未分组在后
+  // 未分组在前，有分组名在后（默认色在上，彩色在下）
+  if (map.has('')) groups.push({ name: '', clusters: map.get('')! })
   const named = Array.from(map.entries()).filter(([k]) => k).sort(([a],[b]) => a.localeCompare(b))
   for (const [name, cls] of named) groups.push({ name, clusters: cls })
-  if (map.has('')) groups.push({ name: '', clusters: map.get('')! })
   return groups
 })
 

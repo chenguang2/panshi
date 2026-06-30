@@ -29,7 +29,7 @@
       <div class="pc-empty-text">暂无插件组</div>
     </div>
     <div v-else class="pc-grid">
-      <div v-for="pc in displayedConfigs" :key="pc.id" class="pc-card">
+      <div v-for="pc in displayedConfigs" :key="pc.id" class="pc-card" :style="getCardBorderStyle(pc.cluster_group_name)">
         <div class="pc-card-topbar" :style="getGroupColorStyle(pc.cluster_group_name)">
           <span>{{ pc.cluster_name || '-' }}</span>
           <span v-if="pc.cluster_group_name" class="group-badge">{{ pc.cluster_group_name }}</span>
@@ -88,7 +88,7 @@ import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { getGroupColorStyle } from '@/composables/useGroupColors'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 const configs = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -114,7 +114,15 @@ function onGroupChange() {
   loadConfigs()
 }
 
-const displayedConfigs = computed(() => configs.value)
+const displayedConfigs = computed(() => {
+  return [...configs.value].sort((a, b) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
+})
 
 const formVisible = ref(false)
 const editingConfig = ref<any | null>(null)

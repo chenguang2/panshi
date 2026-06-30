@@ -1,28 +1,27 @@
 /**
- * 分组名称 → 顶栏颜色映射
+ * 分组名称 → 颜色映射
  *
- * 为每个分组分配一个确定性颜色，用于卡片顶栏背景 + 标签徽章。
+ * 方案 2：卡片左侧全高竖条 + chip 标签着色。
+ * 标题栏保持默认底色，左侧 4px 竖条贯穿整卡高度。
  * 无分组时不返回颜色（使用默认样式）。
  */
 
 export interface GroupColorScheme {
-  topbarBg: string
-  topbarFg: string
-  topbarBorder: string
+  leftBorder: string
   badgeBg: string
   badgeFg: string
   badgeBorder: string
 }
 
 const COLOR_PALETTE: GroupColorScheme[] = [
-  { topbarBg: 'oklch(55% 0.15 145 / 12%)',  topbarFg: 'oklch(40% 0.15 145)',  topbarBorder: 'oklch(55% 0.15 145 / 25%)',  badgeBg: 'oklch(55% 0.15 145 / 18%)',  badgeFg: 'oklch(35% 0.15 145)',  badgeBorder: 'oklch(55% 0.15 145 / 30%)'  },
-  { topbarBg: 'oklch(55% 0.15 55 / 12%)',   topbarFg: 'oklch(40% 0.15 55)',   topbarBorder: 'oklch(55% 0.15 55 / 25%)',   badgeBg: 'oklch(55% 0.15 55 / 18%)',   badgeFg: 'oklch(35% 0.15 55)',   badgeBorder: 'oklch(55% 0.15 55 / 30%)'   },
-  { topbarBg: 'oklch(55% 0.12 280 / 12%)',  topbarFg: 'oklch(40% 0.12 280)',  topbarBorder: 'oklch(55% 0.12 280 / 25%)',  badgeBg: 'oklch(55% 0.12 280 / 18%)',  badgeFg: 'oklch(35% 0.12 280)',  badgeBorder: 'oklch(55% 0.12 280 / 30%)'  },
-  { topbarBg: 'oklch(55% 0.10 200 / 12%)',  topbarFg: 'oklch(40% 0.10 200)',  topbarBorder: 'oklch(55% 0.10 200 / 25%)',  badgeBg: 'oklch(55% 0.10 200 / 18%)',  badgeFg: 'oklch(35% 0.10 200)',  badgeBorder: 'oklch(55% 0.10 200 / 30%)'  },
-  { topbarBg: 'oklch(60% 0.15 30 / 12%)',   topbarFg: 'oklch(45% 0.15 30)',   topbarBorder: 'oklch(60% 0.15 30 / 25%)',   badgeBg: 'oklch(60% 0.15 30 / 18%)',   badgeFg: 'oklch(40% 0.15 30)',   badgeBorder: 'oklch(60% 0.15 30 / 30%)'   },
-  { topbarBg: 'oklch(50% 0.12 0 / 12%)',    topbarFg: 'oklch(40% 0.12 0)',    topbarBorder: 'oklch(50% 0.12 0 / 25%)',    badgeBg: 'oklch(50% 0.12 0 / 18%)',    badgeFg: 'oklch(35% 0.12 0)',    badgeBorder: 'oklch(50% 0.12 0 / 30%)'    },
-  { topbarBg: 'oklch(55% 0.10 170 / 12%)',  topbarFg: 'oklch(40% 0.10 170)',  topbarBorder: 'oklch(55% 0.10 170 / 25%)',  badgeBg: 'oklch(55% 0.10 170 / 18%)',  badgeFg: 'oklch(35% 0.10 170)',  badgeBorder: 'oklch(55% 0.10 170 / 30%)'  },
-  { topbarBg: 'oklch(55% 0.12 320 / 12%)',  topbarFg: 'oklch(40% 0.12 320)',  topbarBorder: 'oklch(55% 0.12 320 / 25%)',  badgeBg: 'oklch(55% 0.12 320 / 18%)',  badgeFg: 'oklch(35% 0.12 320)',  badgeBorder: 'oklch(55% 0.12 320 / 30%)'  },
+  { leftBorder: 'oklch(55% 0.18 180)', badgeBg: 'oklch(55% 0.18 180 / 18%)', badgeFg: 'oklch(36% 0.18 180)', badgeBorder: 'oklch(55% 0.18 180 / 30%)' },
+  { leftBorder: 'oklch(55% 0.18 140)', badgeBg: 'oklch(55% 0.18 140 / 18%)', badgeFg: 'oklch(36% 0.18 140)', badgeBorder: 'oklch(55% 0.18 140 / 30%)' },
+  { leftBorder: 'oklch(55% 0.18 90)',  badgeBg: 'oklch(55% 0.18 90 / 18%)',  badgeFg: 'oklch(36% 0.18 90)',  badgeBorder: 'oklch(55% 0.18 90 / 30%)'  },
+  { leftBorder: 'oklch(55% 0.18 50)',  badgeBg: 'oklch(55% 0.18 50 / 18%)',  badgeFg: 'oklch(36% 0.18 50)',  badgeBorder: 'oklch(55% 0.18 50 / 30%)'  },
+  { leftBorder: 'oklch(55% 0.18 20)',  badgeBg: 'oklch(55% 0.18 20 / 18%)',  badgeFg: 'oklch(36% 0.18 20)',  badgeBorder: 'oklch(55% 0.18 20 / 30%)'  },
+  { leftBorder: 'oklch(55% 0.18 320)', badgeBg: 'oklch(55% 0.18 320 / 18%)', badgeFg: 'oklch(36% 0.18 320)', badgeBorder: 'oklch(55% 0.18 320 / 30%)' },
+  { leftBorder: 'oklch(55% 0.18 280)', badgeBg: 'oklch(55% 0.18 280 / 18%)', badgeFg: 'oklch(36% 0.18 280)', badgeBorder: 'oklch(55% 0.18 280 / 30%)' },
+  { leftBorder: 'oklch(55% 0.18 220)', badgeBg: 'oklch(55% 0.18 220 / 18%)', badgeFg: 'oklch(36% 0.18 220)', badgeBorder: 'oklch(55% 0.18 220 / 30%)' },
 ]
 
 function hashString(str: string): number {
@@ -40,13 +39,18 @@ export function getGroupColor(groupName: string | null | undefined): GroupColorS
   return COLOR_PALETTE[idx]
 }
 
+/** 卡片左侧全高竖条样式，用于卡片容器（.xx-card）的 :style */
+export function getCardBorderStyle(groupName: string | null | undefined): Record<string, string> {
+  const c = getGroupColor(groupName)
+  if (!c) return {}
+  return { borderLeft: `4px solid ${c.leftBorder}` }
+}
+
+/** 标题栏 chip/组标签颜色样式，用于顶栏（.xx-card-topbar）的 :style */
 export function getGroupColorStyle(groupName: string | null | undefined): Record<string, string> {
   const c = getGroupColor(groupName)
   if (!c) return {}
   return {
-    backgroundColor: c.topbarBg,
-    color: c.topbarFg,
-    borderBottomColor: c.topbarBorder,
     '--badge-bg': c.badgeBg,
     '--badge-fg': c.badgeFg,
     '--badge-border': c.badgeBorder,
