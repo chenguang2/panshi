@@ -162,8 +162,8 @@ function base64Encode(bytes: Uint8Array): string {
 
 function base64Decode(base64: string): Uint8Array {
   try {
-    // Handle URL-safe base64 padding
-    let padded = base64.trim()
+    // Handle URL-safe base64 (replace - → +, _ → /) and add padding
+    let padded = base64.trim().replace(/-/g, '+').replace(/_/g, '/')
     padded = padded + '='.repeat((4 - (padded.length % 4)) % 4)
     const binary = atob(padded)
     const bytes = new Uint8Array(binary.length)
