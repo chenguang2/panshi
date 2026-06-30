@@ -204,6 +204,7 @@
             </div>
           </div>
           <div class="panel-actions">
+            <a-button @click="formatBoth">格式化 ↘</a-button>
             <a-button type="primary" @click="handleDiff" :disabled="!diffInputA || !diffInputB">对比 →</a-button>
           </div>
           <div class="panel-right">
@@ -217,11 +218,8 @@
         </div>
         <div v-if="diffError" class="diff-error">{{ diffError }}</div>
         <div v-if="diffResultHtml" class="diff-result-box">
-          <div class="panel-label" style="margin-bottom:8px;">差异结果</div>
-          <div class="diff-tree" v-html="diffResultHtml"></div>
-          <div class="copy-row" style="margin-top:8px;">
-            <a-button size="small" class="copy-btn" @click="copyToClipboard(diffResultText)">复制结果</a-button>
-          </div>
+          <div class="panel-label" style="margin:12px 12px 0;color:#aaa;">差异结果（红=删除/旧值，绿=新增/新值）</div>
+          <div class="dl-wrap" v-html="diffResultHtml"></div>
         </div>
       </div>
     </a-layout-content>
@@ -246,7 +244,7 @@ import * as toolsJson from '@/utils/tools/json'
 import * as toolsSm4 from '@/utils/tools/sm4'
 import * as toolsBase64 from '@/utils/tools/base64'
 import * as toolsYaml from '@/utils/tools/yaml'
-import { computeDiff, renderDiffTree, sortValue, escapeHtml } from '@/utils/tools/diff'
+import { renderLineDiff, sortValue, type LineDiffResult } from '@/utils/tools/diff'
 
 interface ToolItem {
   key: string
@@ -318,29 +316,39 @@ const diffResultHtml = ref('')
 const diffResultText = ref('')
 const diffError = ref('')
 
+function formatOne(input: string): string {
+  try {
+    return JSON.stringify(sortValue(JSON.parse(input)), null, 2)
+  } catch {
+    return input
+  }
+}
+
+function formatBoth() {
+  diffError.value = ''
+  diffResultHtml.value = ''
+  diffInputA.value = formatOne(diffInputA.value)
+  diffInputB.value = formatOne(diffInputB.value)
+}
+
 function handleDiff() {
   diffError.value = ''
   diffResultHtml.value = ''
   diffResultText.value = ''
-  let objA: unknown, objB: unknown
-  try {
-    objA = JSON.parse(diffInputA.value)
-  } catch {
-    diffError.value = 'JSON A 解析失败：请检查格式'
-    return
-  }
-  try {
-    objB = JSON.parse(diffInputB.value)
-  } catch {
-    diffError.value = 'JSON B 解析失败：请检查格式'
-    return
-  }
-  const sortedA = sortValue(objA)
-  const sortedB = sortValue(objB)
-  const diff = computeDiff(sortedA, sortedB)
-  diffResultHtml.value = renderDiffTree(diff)
-  // Build plain-text copy
-  diffResultText.value = JSON.stringify(sortedA, null, 2) + '\n\n--- 对比 ---\n\n' + JSON.stringify(sortedB, null, 2)
+  if (!diffInputA.value.trim()) { diffError.value = '请输入 JSON A'; return }
+  if (!diffInputB.value.trim()) { diffError.value = '请输入 JSON B'; return }
+
+  // 先格式化
+  formatBoth()
+  if (!diffInputA.value.trim() || !diffInputB.value.trim()) return
+
+  // 再对比
+  const result: LineDiffResult = renderLineDiff(diffInputA.value, diffInputB.value)
+  const totalDiff = result.added + result.removed + result.changed
+  const summary = totalDiff === 0
+    ? '<div class="dl-summary">✅ 两个 JSON 完全一致，无差异</div>'
+    : `<div class="dl-summary">📊 共 ${totalDiff} 处差异（+${result.added} 新增, -${result.removed} 删除, ~${result.changed} 修改）</div>`
+  diffResultHtml.value = summary + result.html
 }
 
 async function copyToClipboard(text: string) {
@@ -510,62 +518,6 @@ async function pasteFromClipboard(setter: (text: string) => void) {
   align-items: center;
 }
 
-/* ── JSON Diff ── */
-.diff-error {
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: oklch(55% 0.18 28 / 8%);
-  border: 1px solid oklch(55% 0.18 28 / 25%);
-  border-radius: 6px;
-  color: var(--danger);
-  font-size: 13px;
-}
-.diff-result-box {
-  margin-top: 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px;
-  background: var(--surface);
-}
-.diff-result-box .diff-tree {
-  font-size: 13px;
-  line-height: 1.8;
-  white-space: pre-wrap;
-  font-family: var(--font-mono, monospace);
-}
-.diff-result-box .diff-tree .diff-key {
-  color: var(--fg);
-  font-weight: 500;
-}
-.diff-result-box .diff-tree .diff-same {
-  color: var(--muted);
-}
-.diff-result-box .diff-tree .diff-added {
-  color: var(--success);
-  background: oklch(55% 0.15 145 / 10%);
-  padding: 0 4px;
-  border-radius: 2px;
-}
-.diff-result-box .diff-tree .diff-removed {
-  color: var(--danger);
-  background: oklch(55% 0.18 28 / 8%);
-  padding: 0 4px;
-  border-radius: 2px;
-  text-decoration: line-through;
-}
-.diff-result-box .diff-tree .diff-changed-a {
-  color: var(--danger);
-  background: oklch(55% 0.18 28 / 8%);
-  padding: 0 4px;
-  border-radius: 2px;
-}
-.diff-result-box .diff-tree .diff-changed-b {
-  color: var(--success);
-  background: oklch(55% 0.15 145 / 10%);
-  padding: 0 4px;
-  border-radius: 2px;
-}
-
 .sm4-key-row {
   display: flex;
   align-items: center;
@@ -589,5 +541,71 @@ async function pasteFromClipboard(setter: (text: string) => void) {
 }
 :deep(.ant-select-selection-item) {
   color: var(--fg) !important;
+}
+</style>
+
+<!-- 非 scoped：v-html 内容不受 scoped 影响，diff 行需要 -->
+<style>
+.diff-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: oklch(55% 0.18 28 / 8%);
+  border: 1px solid oklch(55% 0.18 28 / 25%);
+  border-radius: 6px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.diff-result-box {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+.diff-result-box .dl-wrap {
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 8px 0;
+}
+.diff-result-box .dl-wrap .dl-line {
+  padding: 0 12px;
+  white-space: pre;
+}
+.diff-result-box .dl-same {
+  color: var(--muted);
+}
+.diff-result-box .dl-same::before {
+  content: '  ';
+}
+.diff-result-box .dl-added {
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 12%);
+}
+.diff-result-box .dl-added::before {
+  content: '+ ';
+  font-weight: 700;
+}
+.diff-result-box .dl-removed {
+  color: var(--danger);
+  background: oklch(55% 0.18 28 / 10%);
+}
+.diff-result-box .dl-removed::before {
+  content: '- ';
+  font-weight: 700;
+}
+.diff-result-box .dl-summary {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 </style>
