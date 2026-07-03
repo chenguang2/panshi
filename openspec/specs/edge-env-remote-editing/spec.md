@@ -128,6 +128,7 @@
    2. 通过 `ansible.builtin.copy` 的 `content` 参数写入新 edge.env
    3. 执行 `cd {node.edge_path} && bin/edge init`
    4. 执行 `cd {node.edge_path} && bin/edge reload`
+   4. 执行 `cd {node.edge_path} && bin/edge reload`
 
 #### Scenario: 发布内容通过 content 参数传递
 - **WHEN** ansible-runner 执行 `edge_init_env` tag

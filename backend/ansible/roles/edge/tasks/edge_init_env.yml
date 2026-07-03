@@ -32,6 +32,19 @@
   tags:
     - edge_init_env
 
+- name: reload edge service
+  shell:
+    cd {{ destpath.split(',')[item|int] }};
+    bin/edge reload;
+  loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
+  when: env_content is defined and env_content | length > 0
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+  no_log: false
+  tags:
+    - edge_init_env
+
 ###################### edge init openresty (legacy) ########################
 - name: copy env file
   ansible.builtin.copy:
