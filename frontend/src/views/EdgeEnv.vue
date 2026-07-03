@@ -28,9 +28,11 @@
         <option value="">请选择集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="selectedNodeId" class="form-input" style="width:200px;" @change="onNodeChange" :disabled="!nodes.length">
+      <select v-model="selectedNodeId" class="form-input" style="width:240px;" @change="onNodeChange" :disabled="!nodes.length">
         <option value="">请选择节点</option>
-        <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port }}</option>
+        <option v-for="n in nodes" :key="n.id" :value="n.id" :class="{ 'ee-node-offline': n.status !== 1 }">
+          {{ n.ip }}:{{ n.management_port }}{{ n.status === 1 ? '' : ' (离线)' }}
+        </option>
       </select>
     </div>
 
@@ -38,7 +40,7 @@
       <div class="ee-empty-text">请先选择一个集群</div>
     </div>
     <div v-else-if="noActiveNodes" class="ee-empty">
-      <div class="ee-empty-text">当前集群无活跃节点，无法管理 edge.env</div>
+      <div class="ee-empty-text">当前集群无节点，无法管理 edge.env</div>
     </div>
     <div v-else class="ee-editor-area">
       <MonacoEditor v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
@@ -131,10 +133,9 @@
               v-for="n in allNodes"
               :key="n.id"
               class="publish-node-item"
-              :class="{ disabled: n.status !== 1 }"
               @click="togglePublishNode(n)"
             >
-              <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" :disabled="n.status !== 1" />
+              <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" />
               <span class="publish-node-ip">{{ n.ip }}:{{ n.management_port }}</span>
               <span v-if="n.status !== 1" class="badge badge-neutral">离线</span>
               <span v-else class="badge badge-success">在线</span>
@@ -354,7 +355,7 @@ async function loadNodes() {
   try {
     const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     allNodes.value = res.data.items || []
-    nodes.value = allNodes.value.filter((n: any) => n.status === 1)
+    nodes.value = allNodes.value
   } catch {
     nodes.value = []
     allNodes.value = []
@@ -521,7 +522,6 @@ function onShowNodeSelection() {
 }
 
 function togglePublishNode(n: any) {
-  if (n.status !== 1) return
   const idx = selectedPublishNodeIds.value.indexOf(n.id)
   if (idx === -1) selectedPublishNodeIds.value.push(n.id)
   else selectedPublishNodeIds.value.splice(idx, 1)
@@ -599,6 +599,7 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 .ee-diff-empty { text-align: center; padding: 20px; color: var(--muted); }
 .ee-deploying { text-align: center; padding: 40px 0; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .ee-spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.ee-node-offline { color: var(--danger); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .ee-node-card { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 8px; }
 .ee-node-card-header { display: flex; align-items: center; justify-content: space-between; }

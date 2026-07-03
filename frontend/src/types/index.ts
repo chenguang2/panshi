@@ -195,6 +195,8 @@ export interface StreamProxy {
   checks?: Record<string, unknown> | string
   retries?: number
   retry_timeout?: number
+  proxy_type?: string
+  dns_config?: Record<string, unknown> | string
   remote_addr?: string
   sni?: string
   status: number

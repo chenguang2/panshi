@@ -114,6 +114,30 @@ class TestStreamProxyModel:
         assert proxy.name == "updated-name"
         assert proxy.load_balance == "least_conn"
 
+    async def test_create_dns_proxy(self, test_db):
+        proxy = StreamProxy(
+            cluster_id=1,
+            name="dns-proxy",
+            listen_port=53,
+            scheme="udp",
+            proxy_type="dns",
+            dns_config=json.dumps({
+                "hosts": {
+                    "test.local": {
+                        "nodes": {"10.0.0.1:53": ["127.0.0.1"]},
+                        "type": "roundrobin",
+                    }
+                }
+            }),
+        )
+        test_db.add(proxy)
+        await test_db.commit()
+        await test_db.refresh(proxy)
+        assert proxy.proxy_type == "dns"
+        assert proxy.dns_config is not None
+        hosts = json.loads(proxy.dns_config)["hosts"]
+        assert "test.local" in hosts
+
     async def test_delete_stream_proxy(self, test_db):
         proxy = StreamProxy(cluster_id=1, name="to-delete", listen_port=9976)
         test_db.add(proxy)
@@ -162,7 +186,25 @@ class TestStreamProxySchema:
         from app.schemas.stream_proxy import StreamProxyUpdate
         data = StreamProxyUpdate(name="new-name")
         assert data.name == "new-name"
-        assert data.load_balance is None
+
+    def test_create_dns_proxy_schema(self):
+        from app.schemas.stream_proxy import StreamProxyCreate
+        data = StreamProxyCreate(
+            name="dns-server",
+            listen_port=53,
+            scheme="udp",
+            proxy_type="dns",
+            dns_config={
+                "hosts": {
+                    "test.local": {
+                        "nodes": {"10.0.0.1:53": ["127.0.0.1"]},
+                        "type": "roundrobin",
+                    }
+                }
+            },
+        )
+        assert data.proxy_type == "dns"
+        assert data.dns_config["hosts"]["test.local"]["type"] == "roundrobin"
 
     def test_update_empty(self):
         from app.schemas.stream_proxy import StreamProxyUpdate

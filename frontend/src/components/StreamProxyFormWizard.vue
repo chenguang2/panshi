@@ -87,6 +87,15 @@
             <span v-if="formErrors.port" class="form-error">{{ formErrors.port }}</span>
           </div>
 
+          <!-- Proxy Type -->
+          <div class="form-group" style="margin-top:12px;">
+            <label class="form-label">代理类型 <span class="required">*</span></label>
+            <div class="spwf-toggle">
+              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'">普通四层代理</button>
+              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'">DNS 服务器</button>
+            </div>
+          </div>
+
           <!-- Manual fallback -->
           <div class="form-group" style="margin-top:12px;">
             <label class="checkbox-label">
@@ -121,8 +130,9 @@
             <div class="form-group">
               <label class="form-label">协议 <span class="required">*</span></label>
               <div class="spwf-toggle">
-                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp' }" @click="form.scheme = 'tcp'">TCP</button>
-                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'udp' }" @click="form.scheme = 'udp'">UDP</button>
+                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp' || form.scheme === 'tcp_udp' && form.proxy_type !== 'dns' }" @click="form.scheme = 'tcp'" :disabled="form.proxy_type === 'dns'">TCP</button>
+                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'udp' || form.proxy_type === 'dns' }" @click="form.scheme = 'udp'" :disabled="form.proxy_type === 'dns'">UDP</button>
+                <button v-if="form.proxy_type !== 'dns'" class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp_udp' }" @click="form.scheme = 'tcp_udp'">TCP+UDP</button>
               </div>
             </div>
             <div class="form-group">
@@ -136,45 +146,91 @@
             </div>
           </div>
 
-          <!-- chash: show hash key info -->
-          <template v-if="form.load_balance === 'chash'">
-            <div class="form-row" style="margin-bottom:16px;">
-              <div class="form-group">
-                <label class="form-label">Hash Key</label>
-                <input :value="'remote_addr'" type="text" class="form-input" disabled style="background:var(--bg);color:var(--accent);font-weight:600;">
-                <div class="form-hint">一致性哈希使用来源 IP（remote_addr）作为哈希键</div>
+          <!-- Normal Mode Content -->
+          <template v-if="form.proxy_type !== 'dns'">
+            <!-- chash: show hash key info -->
+            <template v-if="form.load_balance === 'chash'">
+              <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-group">
+                  <label class="form-label">Hash Key</label>
+                  <input :value="'remote_addr'" type="text" class="form-input" disabled style="background:var(--bg);color:var(--accent);font-weight:600;">
+                  <div class="form-hint">一致性哈希使用来源 IP（remote_addr）作为哈希键</div>
+                </div>
               </div>
+            </template>
+
+            <div class="form-group">
+              <label class="form-label">描述</label>
+              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息（可选）">
+            </div>
+
+            <!-- Targets Table -->
+            <div class="form-group">
+              <label class="form-label">目标节点 <span class="required">*</span></label>
+              <div class="spwf-targets-box">
+                <div class="spwf-target-header">
+                  <span class="spwf-th-cell" style="flex:2;">IP 地址</span>
+                  <span class="spwf-th-cell" style="flex:1;">端口</span>
+                  <span class="spwf-th-cell" style="flex:1;">权重</span>
+                  <span class="spwf-th-cell" style="width:60px;">操作</span>
+                </div>
+                <div v-for="(t, i) in form.targets" :key="t.key" class="spwf-target-row">
+                  <input v-model="t.ip" type="text" class="form-input" placeholder="IP 地址" style="flex:2;">
+                  <input v-model.number="t.port" type="number" class="form-input" placeholder="端口" min="1" max="65535" style="flex:1;">
+                  <input v-model.number="t.weight" type="number" class="form-input" placeholder="权重" min="1" max="100" style="flex:1;">
+                  <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeTarget(i)">删除</button>
+                </div>
+                <div v-if="targetErrors.length > 0" class="spwf-target-errors">
+                  <div v-for="(err, i) in targetErrors" :key="i" class="form-error">{{ err }}</div>
+                </div>
+                <button class="btn btn-ghost btn-sm spwf-add-target" @click="addTarget">+ 添加目标</button>
+              </div>
+              <span v-if="formErrors.targets" class="form-error">{{ formErrors.targets }}</span>
             </div>
           </template>
 
-          <div class="form-group">
-            <label class="form-label">描述</label>
-            <input v-model="form.description" type="text" class="form-input" placeholder="描述信息（可选）">
-          </div>
-
-          <!-- Targets Table -->
-          <div class="form-group">
-            <label class="form-label">目标节点 <span class="required">*</span></label>
-            <div class="spwf-targets-box">
-              <div class="spwf-target-header">
-                <span class="spwf-th-cell" style="flex:2;">IP 地址</span>
-                <span class="spwf-th-cell" style="flex:1;">端口</span>
-                <span class="spwf-th-cell" style="flex:1;">权重</span>
-                <span class="spwf-th-cell" style="width:60px;">操作</span>
-              </div>
-              <div v-for="(t, i) in form.targets" :key="t.key" class="spwf-target-row">
-                <input v-model="t.ip" type="text" class="form-input" placeholder="IP 地址" style="flex:2;">
-                <input v-model.number="t.port" type="number" class="form-input" placeholder="端口" min="1" max="65535" style="flex:1;">
-                <input v-model.number="t.weight" type="number" class="form-input" placeholder="权重" min="1" max="100" style="flex:1;">
-                <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeTarget(i)">删除</button>
-              </div>
-              <div v-if="targetErrors.length > 0" class="spwf-target-errors">
-                <div v-for="(err, i) in targetErrors" :key="i" class="form-error">{{ err }}</div>
-              </div>
-              <button class="btn btn-ghost btn-sm spwf-add-target" @click="addTarget">+ 添加目标</button>
+          <!-- DNS Mode Content -->
+          <template v-if="form.proxy_type === 'dns'">
+            <div class="form-group" style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
+              <div style="font-size:12px;color:var(--muted);">DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</div>
             </div>
-            <span v-if="formErrors.targets" class="form-error">{{ formErrors.targets }}</span>
-          </div>
+
+            <!-- Domain List -->
+            <div class="form-group">
+              <label class="form-label">域名映射 <span class="required">*</span></label>
+              <div v-for="(dom, di) in form.dns_domains" :key="dom.key" class="spwf-dns-domain" style="margin-bottom:12px;">
+                <div class="spwf-target-header">
+                  <span class="spwf-th-cell" style="flex:2;">域名</span>
+                  <span class="spwf-th-cell" style="flex:1;">负载均衡</span>
+                  <span class="spwf-th-cell" style="width:60px;">操作</span>
+                </div>
+                <div class="spwf-target-row">
+                  <input v-model="dom.domain" type="text" class="form-input" placeholder="test.local" style="flex:2;">
+                  <select v-model="dom.lb_type" class="form-input" style="flex:1;">
+                    <option value="roundrobin">轮询</option>
+                    <option value="chash">一致性哈希</option>
+                    <option value="least_conn">最少连接</option>
+                  </select>
+                  <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsDomain(di)">删除</button>
+                </div>
+                <div style="margin:4px 8px 0;">
+                  <div class="spwf-target-header" style="font-size:10px;">
+                    <span style="flex:2;">目标 IP:端口</span>
+                    <span style="flex:1;">客户端 CIDR（可选）</span>
+                    <span style="width:60px;">操作</span>
+                  </div>
+                  <div v-for="(dt, dti) in dom.targets" :key="dt.key" class="spwf-target-row">
+                    <input v-model="dt.ip_port" type="text" class="form-input" placeholder="10.0.0.1:53" style="flex:2;">
+                    <input v-model="dt.cidr" type="text" class="form-input" placeholder="192.168.0.0/16 或留空" style="flex:1;">
+                    <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsTarget(di, dti)">删除</button>
+                  </div>
+                  <button class="btn btn-ghost btn-sm" style="width:100%;border:1px dashed var(--border);font-size:11px;" @click="addDnsTarget(di)">+ 添加目标节点</button>
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm" @click="addDnsDomain">+ 添加域名</button>
+              <span v-if="formErrors.dns" class="form-error">{{ formErrors.dns }}</span>
+            </div>
+          </template>
 
           <!-- Advanced Config Toggle -->
           <div class="form-group">
@@ -184,7 +240,7 @@
             </label>
           </div>
 
-          <!-- Advanced Config Section -->
+          <!-- Advanced Config Section (shared) -->
           <div v-if="advancedEnabled" class="spwf-advanced">
             <div class="form-group">
               <label class="form-label">健康检查（JSON）</label>
@@ -296,17 +352,22 @@ const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
 
 // ── Form ──
+interface DnsTarget { key: number; ip_port: string; cidr: string }
+interface DnsDomain { key: number; domain: string; lb_type: string; targets: DnsTarget[] }
+
 const form = reactive({
   cluster_id: '' as number | string,
   node_id: '' as number | string,
   listen_port: 0,
   name: '',
   description: '',
+  proxy_type: 'normal' as 'normal' | 'dns',
   scheme: 'tcp',
   load_balance: 'weighted_roundrobin',
   hash_on: 'vars',
   key: 'remote_addr',
   targets: [] as { key: number; ip: string; port: number; weight: number }[],
+  dns_domains: [] as DnsDomain[],
   timeout: { connect: 60, send: 60, read: 60 },
   keepalive_pool: {
     size: undefined as number | undefined,
@@ -453,15 +514,50 @@ function removeTarget(index: number) {
   form.targets.splice(index, 1)
 }
 
+// ── DNS Domain Management ──
+
+function addDnsDomain() {
+  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', targets: [] })
+}
+
+function removeDnsDomain(index: number) {
+  form.dns_domains.splice(index, 1)
+}
+
+function addDnsTarget(di: number) {
+  form.dns_domains[di].targets.push({ key: ++targetKey, ip_port: '', cidr: '' })
+}
+
+function removeDnsTarget(di: number, ti: number) {
+  form.dns_domains[di].targets.splice(ti, 1)
+}
+
 // ── Validation ──
 
 function validateForm(): boolean {
   formErrors.name = ''
   formErrors.targets = ''
+  formErrors.dns = ''
   targetErrors.value = []
 
   if (!form.name.trim()) { formErrors.name = '请输入代理名称'; return false }
 
+  if (form.proxy_type === 'dns') {
+    if (form.dns_domains.length === 0) {
+      formErrors.dns = '请至少添加一个域名'
+      return false
+    }
+    for (const dom of form.dns_domains) {
+      if (!dom.domain.trim()) { formErrors.dns = '域名不能为空'; return false }
+      if (dom.targets.length === 0) { formErrors.dns = `域名 ${dom.domain} 至少需要一个目标节点`; return false }
+      for (const dt of dom.targets) {
+        if (!dt.ip_port.trim()) { formErrors.dns = `域名 ${dom.domain} 的目标 IP:端口不能为空`; return false }
+      }
+    }
+    return true
+  }
+
+  // Normal mode validation
   if (form.targets.length === 0) {
     formErrors.targets = '请至少添加一个目标节点'
     return false
@@ -496,17 +592,34 @@ async function handleSubmit() {
       name: form.name.trim(),
       listen_port: form.listen_port,
       scheme: form.scheme,
-      load_balance: form.load_balance,
-      description: form.description.trim(),
+      proxy_type: form.proxy_type,
       ref_node_id: form.node_id || undefined,
-      targets: form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight })),
       timeout: form.timeout,
       checks: form.checks,
     }
 
-    if (form.load_balance === 'chash') {
-      submitData.hash_on = form.hash_on
-      submitData.key = form.key
+    if (form.proxy_type === 'dns') {
+      // Build dns_config from dns_domains
+      const hosts: Record<string, any> = {}
+      for (const dom of form.dns_domains) {
+        if (!dom.domain.trim()) continue
+        const nodes: Record<string, string[]> = {}
+        for (const dt of dom.targets) {
+          if (!dt.ip_port.trim()) continue
+          const cidrList: string[] = dt.cidr.trim() ? [dt.cidr.trim()] : []
+          nodes[dt.ip_port.trim()] = cidrList
+        }
+        hosts[dom.domain.trim()] = { nodes, type: dom.lb_type }
+      }
+      submitData.dns_config = { hosts }
+    } else {
+      submitData.load_balance = form.load_balance
+      submitData.description = form.description.trim()
+      submitData.targets = form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight }))
+      if (form.load_balance === 'chash') {
+        submitData.hash_on = form.hash_on
+        submitData.key = form.key
+      }
     }
 
     if (advancedEnabled.value) {
@@ -559,6 +672,7 @@ watch(() => props.visible, async (v) => {
   formErrors.node_id = ''
   formErrors.port = ''
   formErrors.targets = ''
+  formErrors.dns = ''
   targetErrors.value = []
   selectedPort.value = null
 
@@ -567,15 +681,33 @@ watch(() => props.visible, async (v) => {
     form.cluster_id = p.cluster_id
     form.listen_port = p.listen_port
     form.name = p.name
+    form.proxy_type = (p as any).proxy_type === 'dns' ? 'dns' : 'normal'
     form.description = p.description || ''
     form.scheme = p.scheme || 'tcp'
     form.load_balance = p.load_balance || 'weighted_roundrobin'
     form.hash_on = p.hash_on || 'vars'
     form.key = p.key || 'remote_addr'
-    form.targets = (p.targets || []).map((t: any) => {
-      const [ip, port] = t.target.split(':')
-      return { key: ++targetKey, ip: ip || '', port: port ? parseInt(port) : 80, weight: t.weight || 100 }
-    })
+
+    if (form.proxy_type === 'dns') {
+      // Load DNS config
+      const dc = (p as any).dns_config
+      if (dc && dc.hosts) {
+        form.dns_domains = Object.entries(dc.hosts).map(([domain, cfg]: [string, any]) => {
+          const domainKey = ++targetKey
+          const targets = Object.entries(cfg.nodes || {}).map(([ipPort, cidrs]: [string, any]) => ({
+            key: ++targetKey,
+            ip_port: ipPort,
+            cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
+          }))
+          return { key: domainKey, domain, lb_type: cfg.type || 'roundrobin', targets }
+        })
+      }
+    } else {
+      form.targets = (p.targets || []).map((t: any) => {
+        const [ip, port] = t.target.split(':')
+        return { key: ++targetKey, ip: ip || '', port: port ? parseInt(port) : 80, weight: t.weight || 100 }
+      })
+    }
 
     // Detect if proxy has advanced config
     form.retries = p.retries ?? undefined
@@ -592,13 +724,13 @@ watch(() => props.visible, async (v) => {
     const hasRetries = p.retries !== undefined && p.retries !== null
     const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
     const hasTimeout = p.timeout && JSON.stringify(p.timeout) !== '{}'
-    const t = hasTimeout ? p.timeout : null
-    const isDefaultTimeout = t ? t.connect === 60 && t.send === 60 && t.read === 60 : true
+    const pt = hasTimeout ? p.timeout : null
+    const isDefaultTimeout = pt ? pt.connect === 60 && pt.send === 60 && pt.read === 60 : true
     const hasPool = p.keepalive_pool && JSON.stringify(p.keepalive_pool) !== '{}'
     advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout || !isDefaultTimeout || hasPool)
 
-    if (t) {
-      form.timeout = { connect: t.connect ?? 60, send: t.send ?? 60, read: t.read ?? 60 }
+    if (pt) {
+      form.timeout = { connect: pt.connect ?? 60, send: pt.send ?? 60, read: pt.read ?? 60 }
     } else {
       form.timeout = { connect: 60, send: 60, read: 60 }
     }
@@ -623,20 +755,21 @@ watch(() => props.visible, async (v) => {
       nodes.value = []
     }
 
-    // 编辑模式不自动检测端口（避免远程 SSH 慢），直接进入步骤 2
-    // 用户可在步骤 1 手动点击「检测可用端口」
-    currentStep.value = 2
+    // 编辑模式统一先进 step 1
+    currentStep.value = 1
   } else {
     form.cluster_id = ''
     form.node_id = ''
     form.listen_port = 0
     form.name = ''
     form.description = ''
+    form.proxy_type = 'normal'
     form.scheme = 'tcp'
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'
     form.key = 'remote_addr'
     form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
+    form.dns_domains = []
     form.timeout = { connect: 60, send: 60, read: 60 }
     form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
     form.retries = undefined

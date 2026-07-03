@@ -210,6 +210,8 @@ class StreamProxy(Base):
     remote_addr = Column(String(100), nullable=True)  # CIDR（保留向后兼容）
     sni = Column(String(255), nullable=True)          # TLS SNI（保留向后兼容）
     ref_node_id = Column(Integer, nullable=True)      # 参考节点 ID（用于端口检测）
+    proxy_type = Column(String(10), nullable=False, default="normal")  # normal / dns
+    dns_config = Column(Text, nullable=True)     # JSON: DNS 域名映射配置（proxy_type=dns 时使用）
     status = Column(Integer, nullable=False, default=1)
     current_version = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

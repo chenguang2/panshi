@@ -28,6 +28,8 @@ class StreamProxyBase(BaseModel):
     remote_addr: Optional[str] = None
     sni: Optional[str] = None
     ref_node_id: Optional[int] = None
+    proxy_type: str = Field(default="normal")
+    dns_config: Optional[Dict[str, Any]] = None
     status: int = Field(default=1)
 
 
@@ -52,6 +54,8 @@ class StreamProxyUpdate(BaseModel):
     retry_timeout: Optional[int] = None
     remote_addr: Optional[str] = None
     sni: Optional[str] = None
+    proxy_type: Optional[str] = None
+    dns_config: Optional[Dict[str, Any]] = None
     status: Optional[int] = None
 
 
@@ -98,6 +102,13 @@ class StreamProxyResponse(StreamProxyBase):
     @field_validator("checks", mode="before")
     @classmethod
     def convert_checks(cls, v):
+        if isinstance(v, str):
+            return _json.loads(v)
+        return v
+
+    @field_validator("dns_config", mode="before")
+    @classmethod
+    def convert_dns_config(cls, v):
         if isinstance(v, str):
             return _json.loads(v)
         return v

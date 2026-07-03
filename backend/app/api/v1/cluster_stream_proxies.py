@@ -168,6 +168,8 @@ async def create_stream_proxy(
         proxy_data["keepalive_pool"] = json.dumps(proxy_data["keepalive_pool"])
     if proxy_data.get("checks"):
         proxy_data["checks"] = json.dumps(proxy_data["checks"])
+    if proxy_data.get("dns_config"):
+        proxy_data["dns_config"] = json.dumps(proxy_data["dns_config"])
 
     proxy = StreamProxy(cluster_id=cluster_id, **proxy_data)
     db.add(proxy)
@@ -308,7 +310,7 @@ async def update_stream_proxy(
         update_data["targets"] = json.dumps(update_data["targets"])
     elif "targets" in update_data:
         update_data["targets"] = None
-    for key in ("timeout", "keepalive_pool", "checks"):
+    for key in ("timeout", "keepalive_pool", "checks", "dns_config"):
         if key in update_data and update_data[key] is not None:
             update_data[key] = json.dumps(update_data[key])
 
@@ -364,41 +366,66 @@ async def publish_stream_proxy(
 ):
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
 
-    targets = json.loads(proxy.targets) if proxy.targets else []
-    nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
+    # ── Protocol field logic ──
+    # TCP+UDP → omit protocol; single → pass value
+    _protocol = proxy.scheme.upper() if proxy.scheme else None
 
-    lb_map = {"weighted_roundrobin": "roundrobin"}
-    lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
+    is_dns = proxy.proxy_type == "dns"
 
-    upstream_data: dict = {
-        "nodes": nodes_dict,
-        "type": lb_type,
-        "scheme": proxy.scheme or "tcp",
-    }
-    if proxy.hash_on and proxy.key:
-        upstream_data["hash_on"] = proxy.hash_on
-        upstream_data["key"] = proxy.key
-    if proxy.timeout:
-        upstream_data["timeout"] = json.loads(proxy.timeout)
-    if proxy.keepalive_pool:
-        upstream_data["keepalive_pool"] = json.loads(proxy.keepalive_pool)
-    if proxy.retries is not None:
-        upstream_data["retries"] = proxy.retries
-    if proxy.retry_timeout is not None:
-        upstream_data["retry_timeout"] = proxy.retry_timeout
-    if proxy.checks:
-        upstream_data["checks"] = json.loads(proxy.checks)
+    if is_dns:
+        # DNS 模式：无 upstream，用 plugins.dns_upstream
+        edge_body: dict = {
+            "server_port": proxy.listen_port,
+            "name": proxy.name or "",
+        }
+        if _protocol and _protocol != "TCP_UDP":
+            edge_body["protocol"] = _protocol
 
-    edge_body: dict = {
-        "server_port": proxy.listen_port,
-        "upstream": upstream_data,
-    }
-    if proxy.sni:
-        edge_body["sni"] = proxy.sni
-    if proxy.remote_addr:
-        edge_body["remote_addr"] = proxy.remote_addr
-    if proxy.name:
-        edge_body["name"] = proxy.name
+        dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
+        edge_body["plugins"] = {
+            "dns_upstream": {
+                "hosts": dns_cfg.get("hosts", {}),
+            }
+        }
+    else:
+        # 普通模式：标准 upstream
+        targets = json.loads(proxy.targets) if proxy.targets else []
+        nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
+
+        lb_map = {"weighted_roundrobin": "roundrobin"}
+        lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
+
+        upstream_data: dict = {
+            "nodes": nodes_dict,
+            "type": lb_type,
+            "scheme": proxy.scheme or "tcp",
+        }
+        if proxy.hash_on and proxy.key:
+            upstream_data["hash_on"] = proxy.hash_on
+            upstream_data["key"] = proxy.key
+        if proxy.timeout:
+            upstream_data["timeout"] = json.loads(proxy.timeout)
+        if proxy.keepalive_pool:
+            upstream_data["keepalive_pool"] = json.loads(proxy.keepalive_pool)
+        if proxy.retries is not None:
+            upstream_data["retries"] = proxy.retries
+        if proxy.retry_timeout is not None:
+            upstream_data["retry_timeout"] = proxy.retry_timeout
+        if proxy.checks:
+            upstream_data["checks"] = json.loads(proxy.checks)
+
+        edge_body: dict = {
+            "server_port": proxy.listen_port,
+            "upstream": upstream_data,
+        }
+        if _protocol and _protocol != "TCP_UDP":
+            edge_body["protocol"] = _protocol
+        if proxy.sni:
+            edge_body["sni"] = proxy.sni
+        if proxy.remote_addr:
+            edge_body["remote_addr"] = proxy.remote_addr
+        if proxy.name:
+            edge_body["name"] = proxy.name
 
     config_data = StreamProxyResponse.model_validate(proxy).model_dump()
     new_version = await edge_sync.create_config_version(db, "stream_proxy", proxy_id, cluster_id, config_data, proxy)
