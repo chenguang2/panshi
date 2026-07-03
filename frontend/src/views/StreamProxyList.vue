@@ -297,6 +297,43 @@ async function onPublishConfirm(nodeIds: number[]) {
     apiEndpoint: `/clusters/${p.cluster_id}/stream-proxies/${p.id}/publish`,
     nodeIds,
     refreshFn: loadProxies,
+    handleResult: (data, addLog, progress) => {
+      addLog(`状态: ${data.status || '-'}`)
+      addLog(`消息: ${data.message || '-'}`)
+      if (data.version !== undefined) addLog(`版本: v${data.version}`)
+
+      if (data.results && data.results.length > 0) {
+        addLog('')
+        addLog('══════ 节点同步结果 ══════')
+        for (const r of data.results) {
+          const icon = r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌'
+          addLog(`${icon} 节点: ${r.node || r.scope || '-'}`)
+          addLog(`   状态: ${r.status}`)
+          if (r.message) addLog(`   消息: ${r.message}`)
+          if (r.error) addLog(`   错误: ${r.error}`)
+          if (r.stdout) {
+            for (const line of r.stdout.split('\n')) {
+              if (line.trim()) addLog(`   ${line}`)
+            }
+          }
+          addLog('')
+        }
+      } else {
+        addLog('⚠️ 无节点同步结果')
+      }
+
+      progress.percent = 100
+      if (data.status === 'ok') {
+        progress.status = 'success'
+        addLog('✅ 发布成功')
+      } else if (data.status === 'partial') {
+        progress.status = 'exception'
+        addLog('⚠️ 部分节点发布失败')
+      } else {
+        progress.status = 'exception'
+        addLog('❌ 发布失败')
+      }
+    },
   })
 }
 

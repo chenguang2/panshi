@@ -17,6 +17,7 @@ from app.schemas.stream_proxy import (
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
+from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters", tags=["stream-proxies"])
 
@@ -395,10 +396,12 @@ async def publish_stream_proxy(
         lb_map = {"weighted_roundrobin": "roundrobin"}
         lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
 
+        # upstream.scheme only accepts tcp/udp/http/https, not tcp_udp
+        _upstream_scheme = proxy.scheme if proxy.scheme not in ("tcp_udp",) else "tcp"
         upstream_data: dict = {
             "nodes": nodes_dict,
             "type": lb_type,
-            "scheme": proxy.scheme or "tcp",
+            "scheme": _upstream_scheme or "tcp",
         }
         if proxy.hash_on and proxy.key:
             upstream_data["hash_on"] = proxy.hash_on
@@ -434,9 +437,25 @@ async def publish_stream_proxy(
     if not active_nodes:
         return {"status": "error", "message": f"四层代理 {proxy.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
+    cluster = await db.get(Cluster, cluster_id)
+    edge_logger = get_edge_logger()
+
     results, success_count, fail_count = await edge_sync.publish_to_nodes(
         cluster_id, active_nodes, edge_body,
         publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_body),
+        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="stream_proxy",
+            cluster_id=cluster_id,
+            cluster_name=cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id),
+            resource_id=proxy_id,
+            resource_name=proxy.name,
+            method="PUT",
+            path=f"/stream/edge/admin/routes/{proxy.edge_uuid}",
+            request_body=edge_body,
+            encrypted_body=encrypted,
+            response_body=response if error is None else None,
+            error=str(error) if error else None,
+        ),
     )
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"四层代理 {proxy.name} ", new_version)

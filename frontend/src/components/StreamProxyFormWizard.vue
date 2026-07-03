@@ -130,24 +130,26 @@
             <div class="form-group">
               <label class="form-label">协议 <span class="required">*</span></label>
               <div class="spwf-toggle">
-                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp' || form.scheme === 'tcp_udp' && form.proxy_type !== 'dns' }" @click="form.scheme = 'tcp'" :disabled="form.proxy_type === 'dns'">TCP</button>
+                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp' }" @click="form.scheme = 'tcp'" :disabled="form.proxy_type === 'dns'">TCP</button>
                 <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'udp' || form.proxy_type === 'dns' }" @click="form.scheme = 'udp'" :disabled="form.proxy_type === 'dns'">UDP</button>
                 <button v-if="form.proxy_type !== 'dns'" class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp_udp' }" @click="form.scheme = 'tcp_udp'">TCP+UDP</button>
               </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">负载均衡 <span class="required">*</span></label>
-              <select v-model="form.load_balance" class="form-input">
-                <option value="weighted_roundrobin">加权轮询</option>
-                <option value="chash">一致性哈希</option>
-                <option value="ewma">EWMA</option>
-                <option value="least_conn">最少连接</option>
-              </select>
             </div>
           </div>
 
           <!-- Normal Mode Content -->
           <template v-if="form.proxy_type !== 'dns'">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">负载均衡 <span class="required">*</span></label>
+                <select v-model="form.load_balance" class="form-input">
+                  <option value="weighted_roundrobin">加权轮询</option>
+                  <option value="chash">一致性哈希</option>
+                  <option value="ewma">EWMA</option>
+                  <option value="least_conn">最少连接</option>
+                </select>
+              </div>
+            </div>
             <!-- chash: show hash key info -->
             <template v-if="form.load_balance === 'chash'">
               <div class="form-row" style="margin-bottom:16px;">
@@ -362,7 +364,7 @@ const form = reactive({
   name: '',
   description: '',
   proxy_type: 'normal' as 'normal' | 'dns',
-  scheme: 'tcp',
+  scheme: 'tcp_udp',
   load_balance: 'weighted_roundrobin',
   hash_on: 'vars',
   key: 'remote_addr',
@@ -397,6 +399,15 @@ watch(() => form.load_balance, (val) => {
   if (val === 'chash') {
     form.hash_on = 'vars'
     form.key = 'remote_addr'
+  }
+})
+
+// When proxy_type changes to dns, force scheme to udp
+watch(() => form.proxy_type, (val) => {
+  if (val === 'dns') {
+    form.scheme = 'udp'
+  } else if (val === 'normal') {
+    form.scheme = 'tcp_udp'
   }
 })
 
@@ -683,7 +694,7 @@ watch(() => props.visible, async (v) => {
     form.name = p.name
     form.proxy_type = (p as any).proxy_type === 'dns' ? 'dns' : 'normal'
     form.description = p.description || ''
-    form.scheme = p.scheme || 'tcp'
+    form.scheme = p.scheme || 'tcp_udp'
     form.load_balance = p.load_balance || 'weighted_roundrobin'
     form.hash_on = p.hash_on || 'vars'
     form.key = p.key || 'remote_addr'
@@ -764,7 +775,7 @@ watch(() => props.visible, async (v) => {
     form.name = ''
     form.description = ''
     form.proxy_type = 'normal'
-    form.scheme = 'tcp'
+    form.scheme = 'tcp_udp'
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'
     form.key = 'remote_addr'
