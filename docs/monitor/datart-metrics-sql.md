@@ -85,6 +85,47 @@ WHERE s.metric_name = 'edge_nginx_http_current_connections'
   AND s.timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
 GROUP BY bucket, state
 ORDER BY bucket, state
+
+
+-- 多卡片显示,去掉bucket
+SELECT
+    JSONExtractString(t.labels, 'state') AS state,
+    avg(s.value) AS avg_connections
+FROM esapm_metrics.samples_v2 s
+JOIN esapm_metrics.time_series_v2 t
+  ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name
+WHERE s.metric_name = 'edge_nginx_http_current_connections'
+  AND s.timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
+GROUP BY state
+
+-- 多卡片显示,行变成列
+SELECT
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'active')   AS active,
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'handled')  AS handled,
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'writing')  AS writing,
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'accepted') AS accepted,
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'waiting')  AS waiting,
+    avgIf(s.value, JSONExtractString(t.labels, 'state') = 'reading')  AS reading
+FROM esapm_metrics.samples_v2 s
+JOIN esapm_metrics.time_series_v2 t
+  ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name
+WHERE s.metric_name = 'edge_nginx_http_current_connections'
+  AND s.timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
+
+-- 多卡片显示,行变成列, 转成整形
+SELECT
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'active'))   AS active,
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'handled'))  AS handled,
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'writing'))  AS writing,
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'accepted')) AS accepted,
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'waiting'))  AS waiting,
+    toInt64(avgIf(s.value, JSONExtractString(t.labels, 'state') = 'reading'))  AS reading
+FROM esapm_metrics.samples_v2 s
+JOIN esapm_metrics.time_series_v2 t
+  ON s.fingerprint = t.fingerprint AND s.metric_name = t.metric_name
+WHERE s.metric_name = 'edge_nginx_http_current_connections'
+  AND s.timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
+
 ```
 
 ### 4. CPU 使用率
@@ -200,6 +241,13 @@ WHERE metric_name = 'edge_metric_errors'
   AND timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
 GROUP BY bucket
 ORDER BY bucket
+
+-- error_per_sec
+SELECT
+    greatest((max(value) - min(value)) / 300, 0) AS error_per_sec
+FROM esapm_metrics.samples_v2
+WHERE metric_name = 'edge_metric_errors'
+  AND timestamp_ms > (toUnixTimestamp(now()) - 3600) * 1000
 ```
 
 ---
@@ -228,6 +276,12 @@ SELECT
 FROM esapm_metrics.samples_v2
 WHERE metric_name = 'edge_http_requests_total'
   AND timestamp_ms > toStartOfDay(now()) * 1000
+
+-- 需要加时间戳转化
+SELECT max(value) AS total_requests
+FROM esapm_metrics.samples_v2
+WHERE (metric_name = 'edge_http_requests_total')
+  AND (timestamp_ms > (toUnixTimestamp(toStartOfDay(now())) * 1000))
 ```
 
 ### 13. 各指标最新值（最近 5 分钟）

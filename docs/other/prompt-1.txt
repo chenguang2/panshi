@@ -2060,3 +2060,53 @@ sync-node-status-on-action
 请读取 openspec/changes/sync-node-status-on-action/tasks.md   ，严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+=============================================================
+
+使用 openspec 修改4层代理：
+注意： 四层的 upstream 和 7层 的 upstream 的配置项和 key 名称是一样的，可以参考7层的上游管理的配置
+1. 负载均衡的一致性哈希选项， 选择后,hash key 就写死为 remote_addr, 在界面里也显示出来
+2. 高级配置里要有：重试次数和重试超时
+3. 去掉现在的选项 Remote Addr 可选，来源 IP 限制 和  SNI 可选，TLS 服务器名称指示
+4. 加入健康检查
+
+继续修改：
+1. hash_on 和 key 是 upstream 的属性，要放到 upstream 里
+2.  "pass_host": "pass",  这个 4层用不上, 不用传
+3. "scheme": "tcp",  这个你写死了吗？ 界面里是可以配置的
+
+你输出一下，你4层代理的json的逻辑我看看
+
+=============================================================
+查看本目录下文件
+1. /mnt/d/tmp/uapm.dump.sql 为 pg 数据库文件
+2. /mnt/d/tmp/82_122 目录下为 调用 edge admin接口生成的各个文件
+
+现在需要整理 路由 和 上游 插件组，全局规则， 插件元数据 为 excel 表格给用户确认
+请整理一下，先讨论一下你如何整理和想要整理为什么格式
+
+=============================================================
+
+使用 openspec 增加一个4层的dsn功能
+dsn_upstream 插件
+
+讨论，增加一个4层代理的一个功能， dns 配置
+
+1. 端口选择部分可以不变
+2. 在第二步配置详情里，需要做到：
+   1. 增加是否作为 dns 服务器选项， 如果不是 dns 服务器，就时现在的界面和逻辑
+   2. 选择了 作为 dns 服务器后，
+      1. 参考 docs/edge/user-guide/插件手册.md 中的 dsn_upstream 部分，需要加入  dsn_upstream 插件
+      2. 也有高级配置部分
+
+请给出建议，包括界面，给出几个方案我看看       
+
+stream-proxy-dns-mode
+
+
+/brainstorming 请仔细阅读 openspec/changes/stream-proxy-dns-mode/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/stream-proxy-dns-mode/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
