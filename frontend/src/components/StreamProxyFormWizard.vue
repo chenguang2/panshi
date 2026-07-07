@@ -126,13 +126,11 @@
             </div>
           </div>
 
-          <div class="form-row">
+          <div class="form-row" style="margin-bottom:8px;">
             <div class="form-group">
-              <label class="form-label">协议 <span class="required">*</span></label>
-              <div class="spwf-toggle">
-                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp' }" @click="form.scheme = 'tcp'" :disabled="form.proxy_type === 'dns'">TCP</button>
-                <button class="spwf-toggle-btn" :class="{ active: form.scheme === 'udp' || form.proxy_type === 'dns' }" @click="form.scheme = 'udp'" :disabled="form.proxy_type === 'dns'">UDP</button>
-                <button v-if="form.proxy_type !== 'dns'" class="spwf-toggle-btn" :class="{ active: form.scheme === 'tcp_udp' }" @click="form.scheme = 'tcp_udp'">TCP+UDP</button>
+              <label class="form-label">协议</label>
+              <div>
+                <span class="spwf-protocol-badge">{{ form.proxy_type === 'dns' ? 'UDP' : 'TCP' }}</span>
               </div>
             </div>
           </div>
@@ -242,55 +240,27 @@
             </label>
           </div>
 
-          <!-- Advanced Config Section (shared) -->
+          <!-- Advanced Config Section -->
           <div v-if="advancedEnabled" class="spwf-advanced">
             <div class="form-group">
               <label class="form-label">健康检查（JSON）</label>
               <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">重试次数</label>
-                <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
-                <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+            <template v-if="form.proxy_type !== 'dns'">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">重试次数</label>
+                  <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
+                  <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">重试超时（秒）</label>
+                  <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
+                  <div class="form-hint">0 = 不限制重试时间</div>
+                </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">重试超时（秒）</label>
-                <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
-                <div class="form-hint">0 = 不限制重试时间</div>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">连接超时（秒）</label>
-                <input v-model.number="form.timeout.connect" type="number" class="form-input" min="0" placeholder="60">
-              </div>
-              <div class="form-group">
-                <label class="form-label">发送超时（秒）</label>
-                <input v-model.number="form.timeout.send" type="number" class="form-input" min="0" placeholder="60">
-              </div>
-              <div class="form-group">
-                <label class="form-label">读取超时（秒）</label>
-                <input v-model.number="form.timeout.read" type="number" class="form-input" min="0" placeholder="60">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">连接池大小</label>
-                <input v-model.number="form.keepalive_pool.size" type="number" class="form-input" min="1" placeholder="320">
-              </div>
-              <div class="form-group">
-                <label class="form-label">空闲超时（秒）</label>
-                <input v-model.number="form.keepalive_pool.idle_timeout" type="number" class="form-input" min="0" placeholder="60">
-              </div>
-              <div class="form-group">
-                <label class="form-label">最大请求数</label>
-                <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="1000">
-              </div>
-            </div>
+            </template>
           </div>
         </div>
       </div>
@@ -364,18 +334,12 @@ const form = reactive({
   name: '',
   description: '',
   proxy_type: 'normal' as 'normal' | 'dns',
-  scheme: 'tcp_udp',
+  scheme: 'tcp',
   load_balance: 'weighted_roundrobin',
   hash_on: 'vars',
   key: 'remote_addr',
   targets: [] as { key: number; ip: string; port: number; weight: number }[],
   dns_domains: [] as DnsDomain[],
-  timeout: { connect: 60, send: 60, read: 60 },
-  keepalive_pool: {
-    size: undefined as number | undefined,
-    idle_timeout: undefined as number | undefined,
-    requests: undefined as number | undefined,
-  },
   retries: undefined as number | undefined,
   retry_timeout: 0,
   checks: null as Record<string, unknown> | null,
@@ -386,6 +350,7 @@ const formErrors = reactive<Record<string, string>>({})
 const targetErrors = ref<string[]>([])
 
 const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
+const dnsDefaultChecksJson = JSON.stringify({ active: {} }, null, 2)
 const checksJson = ref(defaultChecksJson)
 
 let targetKey = 0
@@ -402,12 +367,20 @@ watch(() => form.load_balance, (val) => {
   }
 })
 
-// When proxy_type changes to dns, force scheme to udp
+// When proxy_type changes, update scheme and default checks
 watch(() => form.proxy_type, (val) => {
   if (val === 'dns') {
     form.scheme = 'udp'
+    if (advancedEnabled.value) {
+      form.checks = JSON.parse(dnsDefaultChecksJson) as Record<string, unknown>
+      checksJson.value = dnsDefaultChecksJson
+    }
   } else if (val === 'normal') {
-    form.scheme = 'tcp_udp'
+    form.scheme = 'tcp'
+    if (advancedEnabled.value) {
+      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      checksJson.value = defaultChecksJson
+    }
   }
 })
 
@@ -419,12 +392,11 @@ watch(checksJson, (val) => {
 // Reset advanced fields when toggled off
 watch(advancedEnabled, (val) => {
   if (!val) {
-    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    checksJson.value = defaultChecksJson
+    const isDns = form.proxy_type === 'dns'
+    form.checks = JSON.parse(isDns ? dnsDefaultChecksJson : defaultChecksJson) as Record<string, unknown>
+    checksJson.value = isDns ? dnsDefaultChecksJson : defaultChecksJson
     form.retries = undefined
     form.retry_timeout = 0
-    form.timeout = { connect: 60, send: 60, read: 60 }
-    form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
   }
 })
 
@@ -605,7 +577,6 @@ async function handleSubmit() {
       scheme: form.scheme,
       proxy_type: form.proxy_type,
       ref_node_id: form.node_id || undefined,
-      timeout: form.timeout,
       checks: form.checks,
     }
 
@@ -636,14 +607,6 @@ async function handleSubmit() {
     if (advancedEnabled.value) {
       if (form.retries !== undefined) submitData.retries = form.retries
       if (form.retry_timeout !== undefined) submitData.retry_timeout = form.retry_timeout
-      const kp = form.keepalive_pool
-      if (kp.size !== undefined || kp.idle_timeout !== undefined || kp.requests !== undefined) {
-        const pool: Record<string, number> = {}
-        if (kp.size !== undefined) pool.size = kp.size
-        if (kp.idle_timeout !== undefined) pool.idle_timeout = kp.idle_timeout
-        if (kp.requests !== undefined) pool.requests = kp.requests
-        submitData.keepalive_pool = pool
-      }
     }
 
     const cid = Number(form.cluster_id)
@@ -723,35 +686,20 @@ watch(() => props.visible, async (v) => {
     // Detect if proxy has advanced config
     form.retries = p.retries ?? undefined
     form.retry_timeout = p.retry_timeout ?? 0
+    const isDns = form.proxy_type === 'dns'
+    const dfltCheck = isDns ? dnsDefaultChecksJson : defaultChecksJson
     if (p.checks) {
       const c = typeof p.checks === 'string' ? JSON.parse(p.checks) : p.checks
       form.checks = c
       checksJson.value = JSON.stringify(c, null, 2)
     } else {
-      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-      checksJson.value = defaultChecksJson
+      form.checks = JSON.parse(dfltCheck) as Record<string, unknown>
+      checksJson.value = dfltCheck
     }
-    const hasChecks = p.checks && JSON.stringify(form.checks) !== defaultChecksJson
+    const hasChecks = p.checks && JSON.stringify(form.checks) !== dfltCheck
     const hasRetries = p.retries !== undefined && p.retries !== null
     const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
-    const hasTimeout = p.timeout && JSON.stringify(p.timeout) !== '{}'
-    const pt = hasTimeout ? p.timeout : null
-    const isDefaultTimeout = pt ? pt.connect === 60 && pt.send === 60 && pt.read === 60 : true
-    const hasPool = p.keepalive_pool && JSON.stringify(p.keepalive_pool) !== '{}'
-    advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout || !isDefaultTimeout || hasPool)
-
-    if (pt) {
-      form.timeout = { connect: pt.connect ?? 60, send: pt.send ?? 60, read: pt.read ?? 60 }
-    } else {
-      form.timeout = { connect: 60, send: 60, read: 60 }
-    }
-
-    if (hasPool) {
-      const k = typeof p.keepalive_pool === 'string' ? JSON.parse(p.keepalive_pool) : p.keepalive_pool
-      form.keepalive_pool = { size: k.size, idle_timeout: k.idle_timeout, requests: k.requests }
-    } else {
-      form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
-    }
+    advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout)
 
     try {
       const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
@@ -775,14 +723,12 @@ watch(() => props.visible, async (v) => {
     form.name = ''
     form.description = ''
     form.proxy_type = 'normal'
-    form.scheme = 'tcp_udp'
+    form.scheme = 'tcp'
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'
     form.key = 'remote_addr'
     form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
     form.dns_domains = []
-    form.timeout = { connect: 60, send: 60, read: 60 }
-    form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
     form.retries = undefined
     form.retry_timeout = 0
     form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
@@ -990,6 +936,19 @@ watch(() => props.visible, async (v) => {
   padding: 16px;
   background: var(--surface);
   margin-bottom: 16px;
+}
+
+/* ── Protocol Badge ── */
+.spwf-protocol-badge {
+  display: inline-flex;
+  padding: 6px 18px;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  border: 1px solid var(--accent);
 }
 
 /* ── Checkbox ── */

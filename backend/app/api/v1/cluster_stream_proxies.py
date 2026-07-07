@@ -163,10 +163,6 @@ async def create_stream_proxy(
     proxy_data = data.model_dump(exclude={"targets"})
     if data.targets is not None:
         proxy_data["targets"] = json.dumps([t.model_dump() for t in data.targets])
-    if proxy_data.get("timeout"):
-        proxy_data["timeout"] = json.dumps(proxy_data["timeout"])
-    if proxy_data.get("keepalive_pool"):
-        proxy_data["keepalive_pool"] = json.dumps(proxy_data["keepalive_pool"])
     if proxy_data.get("checks"):
         proxy_data["checks"] = json.dumps(proxy_data["checks"])
     if proxy_data.get("dns_config"):
@@ -311,7 +307,7 @@ async def update_stream_proxy(
         update_data["targets"] = json.dumps(update_data["targets"])
     elif "targets" in update_data:
         update_data["targets"] = None
-    for key in ("timeout", "keepalive_pool", "checks", "dns_config"):
+    for key in ("checks", "dns_config"):
         if key in update_data and update_data[key] is not None:
             update_data[key] = json.dumps(update_data[key])
 
@@ -383,9 +379,17 @@ async def publish_stream_proxy(
             edge_body["protocol"] = _protocol
 
         dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
+        hosts = dns_cfg.get("hosts", {})
+        # Apply stream-level checks to each domain if set
+        dns_checks = json.loads(proxy.checks) if proxy.checks else {}
+        if dns_checks and any(k for k in dns_checks if k in ('active', 'passive')):
+            for domain_name in hosts:
+                if 'checks' not in hosts[domain_name]:
+                    hosts[domain_name]['checks'] = dns_checks
         edge_body["plugins"] = {
             "dns_upstream": {
-                "hosts": dns_cfg.get("hosts", {}),
+                "disable": False,
+                "hosts": hosts,
             }
         }
     else:
@@ -406,10 +410,6 @@ async def publish_stream_proxy(
         if proxy.hash_on and proxy.key:
             upstream_data["hash_on"] = proxy.hash_on
             upstream_data["key"] = proxy.key
-        if proxy.timeout:
-            upstream_data["timeout"] = json.loads(proxy.timeout)
-        if proxy.keepalive_pool:
-            upstream_data["keepalive_pool"] = json.loads(proxy.keepalive_pool)
         if proxy.retries is not None:
             upstream_data["retries"] = proxy.retries
         if proxy.retry_timeout is not None:

@@ -1,6 +1,6 @@
 <template>
   <div class="cl-page">
-    <PageHeader title="统一管理" description="统一管理所有的网关集群，实现统一监控与运维">
+    <PageHeader title="统一管理" description="以集群为单位，统一管理该集群下的资源，实现统一监控与运维">
       <template #actions>
         <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
       </template>
