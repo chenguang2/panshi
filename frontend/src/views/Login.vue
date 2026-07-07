@@ -87,7 +87,7 @@
 
       <div class="login-footer">
         <div class="login-footer-version">Panshi Gateway Admin v1.0</div>
-        <div class="login-footer-copy">&copy; 2024 Panshi Gateway</div>
+        <div class="login-footer-copy">&copy; 2011~2026 EmbraceSource</div>
       </div>
     </div>
   </div>

@@ -749,7 +749,19 @@ class TestChecksEquivalence:
     """健康检查 JSON 缺省值等效（数据来自实际 Edge 响应）"""
 
     _EDGE_CHECKS = {
-        "passive": {"type": "http"},
+        "passive": {
+            "type": "http",
+            "healthy": {
+                "http_statuses": [200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308],
+                "successes": 5,
+            },
+            "unhealthy": {
+                "http_failures": 5,
+                "http_statuses": [429, 500, 503],
+                "tcp_failures": 2,
+                "timeouts": 7,
+            },
+        },
         "active": {
             "type": "http",
             "unhealthy": {
@@ -771,6 +783,29 @@ class TestChecksEquivalence:
         },
     }
 
+    _EDGE_CHECKS_ACTIVE_ONLY = {
+        "passive": {
+            "type": "http",
+            "healthy": {
+                "http_statuses": [200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 300, 301, 302, 303, 304, 305, 306, 307, 308],
+                "successes": 0,
+            },
+            "unhealthy": {
+                "http_failures": 0, "http_statuses": [429, 500, 503], "tcp_failures": 0, "timeouts": 0,
+            },
+        },
+        "active": {
+            "type": "http",
+            "unhealthy": {
+                "timeouts": 3, "tcp_failures": 2, "interval": 1,
+                "http_statuses": [429, 500, 501, 502, 503, 504, 505], "http_failures": 5,
+            },
+            "https_verify_certificate": True, "http_path": "/", "concurrency": 10,
+            "healthy": {"http_statuses": [200, 302, 403, 404], "successes": 2, "interval": 5},
+            "timeout": 1,
+        },
+    }
+
     def setup_method(self):
         from app.services.config_diff import EquivalenceRules
         EquivalenceRules._instance = None
@@ -788,7 +823,7 @@ class TestChecksEquivalence:
         """DB 改了 http_path，其余用默认值 → 一致"""
         db = {"active": {"http_path": "/health", "unhealthy": {}}}
         edge = {
-            "passive": {"type": "http"},
+            "passive": self._EDGE_CHECKS["passive"],
             "active": {
                 "type": "http",
                 "http_path": "/health",
@@ -806,6 +841,24 @@ class TestChecksEquivalence:
         """DB checks=NULL，Edge 有完整 → 填充默认值后一致"""
         result = self.rules.compare_json_field(None, self._EDGE_CHECKS, self.jrules)
         assert result is None, f"None should match filled Edge: {result}"
+
+    def test_passive_only_variants(self):
+        """所有被动模式简写都匹配 Edge 完整结构"""
+        for db in ('{"passive": {}}', '{}', '{"passive": {}, "active": {"unhealthy": {}}}'):
+            result = self.rules.compare_json_field(db, self._EDGE_CHECKS, self.jrules)
+            assert result is None, f"passive-only variant mismatch: {db} -> {result}"
+
+    def test_active_only_variants(self):
+        """所有主动模式简写都匹配 Edge 完整结构（主动模式）"""
+        for db in ('{"active": {}}', '{"active": {"healthy": {}}}', '{"active": {"unhealthy": {}}}', '{"active": {"healthy": {}, "unhealthy": {}}}'):
+            result = self.rules.compare_json_field(db, self._EDGE_CHECKS_ACTIVE_ONLY, self.jrules)
+            assert result is None, f"active-only variant mismatch: {db} -> {result}"
+
+    def test_both_variants(self):
+        """所有主被动模式简写都匹配 Edge 完整结构"""
+        for db in ('{"passive": {}, "active": {}}', '{"passive": {}, "active": {"healthy": {}}}', '{"passive": {}, "active": {"healthy": {}, "unhealthy": {}}}'):
+            result = self.rules.compare_json_field(db, self._EDGE_CHECKS, self.jrules)
+            assert result is None, f"both-mode variant mismatch: {db} -> {result}"
 
     def test_real_diff_detected(self):
         """DB 和 Edge 值真正不同时仍报差异"""

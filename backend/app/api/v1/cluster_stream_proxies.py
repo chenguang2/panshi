@@ -135,9 +135,22 @@ async def list_all_stream_proxies(
         cluster_name_map[row.id] = row.display_name or row.name or ""
         cluster_group_map[row.id] = row.group_name or ""
 
+    # Build published_at map from ConfigVersion
+    proxy_ids = [p.id for p in proxies]
+    pub_result = await db.execute(
+        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("latest_ts"))
+        .where(
+            ConfigVersion.resource_type == "stream_proxy",
+            ConfigVersion.resource_id.in_(proxy_ids) if proxy_ids else False,
+        ).group_by(ConfigVersion.resource_id)
+    )
+    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if proxy_ids else {}
+
     items = []
     for p in proxies:
         resp = StreamProxyResponse.model_validate(p)
+        ts = pub_map.get(p.id)
+        resp.published_at = ts.isoformat() + "Z" if ts else None
         item = resp.model_dump()
         item["cluster_name"] = cluster_name_map.get(p.cluster_id, "")
         item["cluster_group_name"] = cluster_group_map.get(p.cluster_id, "")

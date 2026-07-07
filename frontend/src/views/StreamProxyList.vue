@@ -52,7 +52,7 @@
         <div class="sp-card-details">
           <div class="sp-detail-row">
             <span class="sp-detail-label">协议</span>
-            <span class="sp-detail-value">{{ schemeLabel(p.scheme) }}</span>
+            <span class="sp-detail-value">UDP</span>
           </div>
           <span class="sp-detail-sep">&middot;</span>
           <div class="sp-detail-row">
@@ -60,16 +60,36 @@
             <span class="sp-detail-value sp-port">{{ p.listen_port }}</span>
           </div>
         </div>
-        <div class="sp-card-details" style="margin-top:-4px;">
-          <div class="sp-detail-row">
-            <span class="sp-detail-label">负载均衡</span>
-            <span class="sp-detail-value">{{ lbLabel(p.load_balance) }}</span>
+
+        <!-- Normal mode: load balance + targets -->
+        <template v-if="p.proxy_type !== 'dns'">
+          <div class="sp-card-details" style="margin-top:-4px;">
+            <div class="sp-detail-row">
+              <span class="sp-detail-label">负载均衡</span>
+              <span class="sp-detail-value">{{ lbLabel(p.load_balance) }}</span>
+            </div>
           </div>
-        </div>
-        <div class="sp-card-targets">
-          <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag">{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span>
-          <span v-if="!p.targets || p.targets.length === 0" class="sp-no-targets">无目标</span>
-        </div>
+          <div class="sp-card-targets">
+            <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag">{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span>
+            <span v-if="!p.targets || p.targets.length === 0" class="sp-no-targets">无目标</span>
+          </div>
+        </template>
+
+        <!-- DNS mode: show dns_upstream hosts info -->
+        <template v-if="p.proxy_type === 'dns'">
+          <div class="sp-card-dns" v-if="dnsHosts(p)">
+            <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
+              <div class="sp-dns-domain-name">{{ domain }}</div>
+              <div class="sp-dns-domain-lb">类型: {{ dnsLbLabel(host.type) }}</div>
+              <div class="sp-dns-nodes">
+                <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="sp-target-tag">{{ nodeIp }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-else class="sp-card-targets">
+            <span class="sp-no-targets">无 DNS 配置</span>
+          </div>
+        </template>
         <div class="sp-card-actions">
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="viewProxy(p)">查看</button>
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="editProxy(p)">编辑</button>
@@ -191,6 +211,18 @@ function lbLabel(algo: string | undefined): string {
     least_conn: '最少连接',
   }
   return map[algo || ''] || algo || '-'
+}
+
+function dnsLbLabel(algo: string | undefined): string {
+  const map: Record<string, string> = { roundrobin: '轮询', chash: '一致性哈希', least_conn: '最少连接' }
+  return map[algo || ''] || algo || '轮询'
+}
+
+function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; type: string }> | null {
+  try {
+    const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
+    return cfg?.hosts || null
+  } catch { return null }
 }
 
 function formatDate(d: string | null | undefined): string {
@@ -389,6 +421,11 @@ onUnmounted(() => {
 .sp-target-tag { display: inline-flex; align-items: center; gap: 2px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
 .sp-target-wt { color: var(--muted); font-size: 10px; }
 .sp-no-targets { font-size: 11px; color: var(--muted); font-style: italic; }
+.sp-card-dns { padding: 0 20px 8px; }
+.sp-dns-domain { margin-bottom: 8px; padding: 8px; background: var(--bg); border-radius: var(--radius-md); border: 1px solid var(--border); }
+.sp-dns-domain-name { font-size: 12px; font-weight: 600; color: var(--accent); font-family: var(--font-mono); margin-bottom: 2px; }
+.sp-dns-domain-lb { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.sp-dns-nodes { display: flex; flex-wrap: wrap; gap: 4px; }
 .sp-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .sp-action-btn { background: none !important; background-color: transparent !important; }
 .sp-action-btn:hover { background: var(--bg) !important; }

@@ -28,6 +28,15 @@ def _deep_fill(obj: Any, defaults: Any) -> Any:
     return result
 
 
+def _deep_pop(obj: dict, path: str) -> None:
+    """Remove a nested key from dict by dotted path (e.g. 'passive.healthy.successes')."""
+    parts = path.split(".", 1)
+    if len(parts) == 1:
+        obj.pop(parts[0], None)
+    elif len(parts) == 2 and parts[0] in obj and isinstance(obj[parts[0]], dict):
+        _deep_pop(obj[parts[0]], parts[1])
+
+
 class EquivalenceRules:
     """Loads and applies field equivalence rules for DB-Edge config comparison."""
 
@@ -103,10 +112,11 @@ class EquivalenceRules:
         edge_parsed = self._parse_json(edge_val)
 
         for key in field_rules.get("ignore_edge_keys", []):
-            edge_parsed.pop(key, None)
+            _deep_pop(edge_parsed, key)
         defaults = field_rules.get("fill_defaults", {})
         if defaults:
             db_parsed = _deep_fill(db_parsed, defaults)
+            edge_parsed = _deep_fill(edge_parsed, defaults)
 
         if json.dumps(db_parsed, sort_keys=True, default=str) != json.dumps(
             edge_parsed, sort_keys=True, default=str
