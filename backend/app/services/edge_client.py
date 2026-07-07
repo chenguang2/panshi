@@ -442,7 +442,9 @@ class EdgeClient:
 
         if vars_json:
             try:
-                edge_route["vars"] = json.loads(vars_json)
+                parsed = json.loads(vars_json)
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    edge_route["vars"] = parsed
             except json.JSONDecodeError:
                 pass
 
