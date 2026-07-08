@@ -129,9 +129,7 @@
           <div class="form-row" style="margin-bottom:8px;">
             <div class="form-group">
               <label class="form-label">协议</label>
-              <div>
-                <span class="spwf-protocol-badge">{{ form.proxy_type === 'dns' ? 'UDP' : 'TCP' }}</span>
-              </div>
+              <div><span class="spwf-protocol-badge">{{ form.proxy_type === 'dns' ? 'UDP' : 'TCP' }}</span></div>
             </div>
           </div>
 

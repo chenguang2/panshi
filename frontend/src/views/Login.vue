@@ -11,7 +11,7 @@
       <div class="login-brand">
         <img :src="logoIcon" class="login-brand-icon" />
         <span class="login-brand-name">磐石 Gateway</span>
-        <span class="login-brand-sub">API 网关管理平台</span>
+        <span class="login-brand-sub">统一接入平台</span>
         <div class="login-divider"></div>
       </div>
 

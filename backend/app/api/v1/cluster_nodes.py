@@ -675,9 +675,11 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         return {"name": "targets", "db": json.dumps(db_dict, indent=1, ensure_ascii=False) if db_dict else "{}", "edge": json.dumps(edge_dict, indent=1, ensure_ascii=False) if edge_dict else "{}", "status": "equal" if equal else "diff"}
 
     def _compare_stream_proxy(db_sp, edge_data: dict | None):
-        """对比四层代理配置（DB vs Edge），处理 upstream 嵌套结构"""
+        """对比四层代理配置（DB vs Edge）"""
         if not edge_data:
             return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "only_in_db", "fields": []}
+
+        is_dns = getattr(db_sp, "proxy_type", None) == "dns"
         fields = []
         edge_upstream = edge_data.get("upstream", {})
 
@@ -687,41 +689,69 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         equal = str(db_v) == str(edge_v)
         fields.append({"name": "listen_port", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
-        # load_balance → upstream.type（需算法归一化）
+        # name
+        db_v = db_sp.name or ""
+        edge_v = edge_data.get("name", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "name", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        if is_dns:
+            # DNS 模式：比较 dns_config.hosts ↔ plugins.dns_upstream.hosts
+            edge_plugins = edge_data.get("plugins", {}) or {}
+            edge_dns = edge_plugins.get("dns_upstream", {}) or {}
+            edge_hosts = edge_dns.get("hosts", {}) or {}
+
+            try:
+                db_cfg = json.loads(db_sp.dns_config) if isinstance(db_sp.dns_config, str) else (db_sp.dns_config or {})
+            except (json.JSONDecodeError, TypeError):
+                db_cfg = {}
+            db_hosts = db_cfg.get("hosts", {}) if isinstance(db_cfg, dict) else {}
+
+            all_domains = set(list(db_hosts.keys()) + list(edge_hosts.keys()))
+            for domain in sorted(all_domains):
+                db_dom = db_hosts.get(domain) or {}
+                edge_dom = edge_hosts.get(domain) or {}
+
+                # 负载均衡 type
+                db_type = db_dom.get("type", "")
+                edge_type = edge_dom.get("type", "")
+                t_eq = str(db_type) == str(edge_type)
+                fields.append({
+                    "name": f"dns.hosts.{domain}.type",
+                    "db": db_type or "roundrobin",
+                    "edge": edge_type or "roundrobin",
+                    "status": "equal" if t_eq else "diff",
+                })
+
+                # 节点 nodes
+                db_nodes = db_dom.get("nodes", {}) or {}
+                edge_nodes = edge_dom.get("nodes", {}) or {}
+                n_eq = json.dumps(db_nodes, sort_keys=True) == json.dumps(edge_nodes, sort_keys=True)
+                fields.append({
+                    "name": f"dns.hosts.{domain}.nodes",
+                    "db": json.dumps(db_nodes, indent=1, ensure_ascii=False) if db_nodes else "{}",
+                    "edge": json.dumps(edge_nodes, indent=1, ensure_ascii=False) if edge_nodes else "{}",
+                    "status": "equal" if n_eq else "diff",
+                })
+
+            return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+
+        # load_balance → upstream.type
         db_v = db_sp.load_balance
         edge_v = edge_upstream.get("type", "")
         db_norm = _rules.normalize_value("upstream", db_v, "load_balance") or db_v
         equal = str(db_norm) == str(edge_v)
         fields.append({"name": "load_balance", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
-        # scheme → upstream.scheme
+        # scheme（兼容旧数据中的 tcp_udp）
         db_v = db_sp.scheme
         edge_v = edge_upstream.get("scheme", "tcp")
-        equal = str(db_v) == str(edge_v)
+        db_norm = "tcp" if db_v == "tcp_udp" else db_v
+        equal = str(db_norm) == str(edge_v)
         fields.append({"name": "scheme", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
         # targets → upstream.nodes
         fields.append(_compare_stream_targets(db_sp.targets, edge_upstream.get("nodes")))
-
-        # timeout / keepalive_pool → upstream.timeout / upstream.keepalive_pool
-        for jkey in ("timeout", "keepalive_pool"):
-            db_val = getattr(db_sp, jkey, None)
-            edge_val = edge_upstream.get(jkey)
-            if db_val or edge_val:
-                result = _rules.compare_json_field(db_val, edge_val, _rules.get_json_rules("upstream", jkey))
-                fields.append({
-                    "name": jkey,
-                    "db": result["db"] if result else (json.dumps(db_val, indent=1, ensure_ascii=False) if isinstance(db_val, dict) else str(db_val or "{}")),
-                    "edge": result["edge"] if result else (json.dumps(edge_val, indent=1, ensure_ascii=False) if isinstance(edge_val, dict) else str(edge_val or "{}")),
-                    "status": "equal" if not result else "diff",
-                })
-
-        # remote_addr / sni（顶层字段）
-        for key in ("remote_addr", "sni"):
-            db_v = getattr(db_sp, key, None) or ""
-            edge_v = edge_data.get(key, "") or ""
-            equal = str(db_v) == str(edge_v)
-            fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
         return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 

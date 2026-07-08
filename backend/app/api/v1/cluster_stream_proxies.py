@@ -376,19 +376,15 @@ async def publish_stream_proxy(
 ):
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
 
-    # ── Protocol field logic ──
-    # TCP+UDP → omit protocol; single → pass value
     _protocol = proxy.scheme.upper() if proxy.scheme else None
-
     is_dns = proxy.proxy_type == "dns"
 
     if is_dns:
-        # DNS 模式：无 upstream，用 plugins.dns_upstream
         edge_body: dict = {
             "server_port": proxy.listen_port,
             "name": proxy.name or "",
         }
-        if _protocol and _protocol != "TCP_UDP":
+        if _protocol:
             edge_body["protocol"] = _protocol
 
         dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
@@ -413,12 +409,10 @@ async def publish_stream_proxy(
         lb_map = {"weighted_roundrobin": "roundrobin"}
         lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
 
-        # upstream.scheme only accepts tcp/udp/http/https, not tcp_udp
-        _upstream_scheme = proxy.scheme if proxy.scheme not in ("tcp_udp",) else "tcp"
         upstream_data: dict = {
             "nodes": nodes_dict,
             "type": lb_type,
-            "scheme": _upstream_scheme or "tcp",
+            "scheme": proxy.scheme or "tcp",
         }
         if proxy.hash_on and proxy.key:
             upstream_data["hash_on"] = proxy.hash_on
@@ -434,7 +428,7 @@ async def publish_stream_proxy(
             "server_port": proxy.listen_port,
             "upstream": upstream_data,
         }
-        if _protocol and _protocol != "TCP_UDP":
+        if _protocol:
             edge_body["protocol"] = _protocol
         if proxy.sni:
             edge_body["sni"] = proxy.sni
