@@ -145,6 +145,8 @@ async def publish_to_nodes(
     edge_data: dict,
         publish_fn: Callable[[EdgeClient], Any],
     log_fn: Optional[Callable[[dict, Any, Optional[Exception], Optional[bytes]], None]] = None,
+    post_publish_fn: Optional[Callable[[EdgeClient], Any]] = None,
+    post_log_fn: Optional[Callable[[dict, Any, Optional[Exception], Optional[bytes]], None]] = None,
 ) -> tuple[list[dict], int, int]:
     """Publish resource data to multiple Edge nodes.
 
@@ -158,6 +160,10 @@ async def publish_to_nodes(
         publish_fn: Async callable `async def fn(client: EdgeClient) -> response`.
         log_fn: Optional callback `fn(node_result, response, error, encrypted)` for
                 resource-specific logging after each node result.
+        post_publish_fn: Optional callback `fn(client)` called after successful
+                publish on each node, for post-publish actions like reload.
+        post_log_fn: Optional callback `fn(node_result, response, error, encrypted)`
+                for logging the post-publish action result.
 
     Returns:
         Tuple of (results list, success_count, fail_count).
@@ -184,6 +190,12 @@ async def publish_to_nodes(
             if log_fn:
                 log_fn(node_result, response, None, encrypted)
 
+            if post_publish_fn:
+                post_response = post_publish_fn(client)
+                node_result["post_action"] = "ok"
+                if post_log_fn:
+                    post_log_fn(node_result, post_response, None, None)
+
         except (EdgeConnectionError, EdgeAPIError) as e:
             node_result["status"] = "failed"
             node_result["error"] = str(e)
@@ -191,6 +203,10 @@ async def publish_to_nodes(
 
             if log_fn:
                 log_fn(node_result, None, e, None)
+
+            if post_publish_fn and node_result.get("post_action") != "ok":
+                if post_log_fn:
+                    post_log_fn(node_result, None, e, None)
 
         results.append(node_result)
 

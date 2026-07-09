@@ -188,7 +188,23 @@ async def publish_plugin_metadata(
             response_status=201,
             response_body=response,
             error=error,
-        ))
+        ),
+        post_publish_fn=lambda client: client.reload_plugins(),
+        post_log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
+            resource_type="plugin_metadata",
+            cluster_id=cluster_id,
+            cluster_name=cluster.name if cluster else str(cluster_id),
+            resource_id=None,
+            resource_name=plugin_name,
+            method="PUT",
+            path="/edge/admin/plugins/reload",
+            request_body={},
+            encrypted_body=encrypted,
+            response_status=200,
+            response_body=response,
+            error=error,
+        ),
+    )
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "插件元数据", new_version)
 
