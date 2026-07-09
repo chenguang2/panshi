@@ -1,73 +1,6 @@
 # clickhouse-metrics-query
 
-## Purpose
-
-提供基于 ClickHouse 的 Edge 网关指标查询与分析功能，包括指标名称列表、时序数据查询、摘要统计等 API，以及前端指标查询页面。
-
-## Requirements
-
-### Requirement: ClickHouse network accessibility
-
-ClickHouse SHALL listen on TCP port 9000 on 0.0.0.0 (not only 127.0.0.1) to allow remote connections from the 磐石 Admin backend server.
-
-Note: 当前测试开发环境暂不配置访问认证。生产部署前 MUST 添加只读账号或 IP 白名单。
-
-#### Scenario: Remote TCP connection succeeds
-- **WHEN** a TCP connection is made to 192.168.100.42:9000 from the backend server
-- **THEN** the connection SHALL succeed and return the ClickHouse server version
-
-#### Scenario: Query from remote host
-- **WHEN** a SELECT query is executed from the backend server against the `esapm_metrics` database
-- **THEN** the query SHALL complete and return results
-
-### Requirement: Backend ClickHouse connection
-
-The backend SHALL connect to ClickHouse using `clickhouse-driver` (Python) via TCP protocol and the `esapm_metrics` database.
-
-#### Scenario: Successful connection on startup
-- **WHEN** the backend starts up with valid ClickHouse configuration
-- **THEN** the ClickHouse client SHALL be initialized and ready for queries
-- **AND** the connection pool SHALL be reusable across requests
-
-#### Scenario: Connection failure handling
-- **WHEN** ClickHouse is unreachable and a query is attempted
-- **THEN** the API SHALL return HTTP 200 with an empty `data` array and a `warning` field
-
-### Requirement: ClickHouse connection configuration
-
-The ClickHouse connection parameters SHALL be configurable via a YAML configuration file `backend/app/config/clickhouse.yaml`.
-
-| Parameter | Default | Description |
-|---|---|---|
-| `host` | `127.0.0.1` | ClickHouse server hostname |
-| `port` | `9000` | ClickHouse TCP port |
-| `database` | `esapm_metrics` | Database name |
-| `user` | `default` | Username |
-| `password` | `""` | Password |
-| `connect_timeout` | `5` | Connection timeout in seconds |
-
-#### Scenario: Config file present
-- **WHEN** `backend/app/config/clickhouse.yaml` exists with valid configuration
-- **THEN** the backend SHALL use those parameters to connect to ClickHouse
-
-#### Scenario: Config file missing or incomplete
-- **WHEN** `backend/app/config/clickhouse.yaml` does not exist or has missing fields
-- **THEN** the backend SHALL use the default values
-- **AND** metrics API endpoints SHALL return empty data without crashing
-
-### Requirement: Feature switch
-
-The metrics monitoring feature SHALL be controlled by the `metrics` feature switch in `backend/features.yaml` and `backend/app/core/features.py` `KNOWN_FEATURES`.
-
-#### Scenario: Feature enabled
-- **WHEN** `features.yaml` has `metrics: true`
-- **THEN** the menu entry SHALL appear
-- **AND** the API endpoints SHALL be registered
-
-#### Scenario: Feature disabled
-- **WHEN** `features.yaml` has `metrics: false` or missing
-- **THEN** the menu entry SHALL NOT appear
-- **AND** the API endpoints SHALL still be registered but return 404 when accessed directly
+## MODIFIED Requirements
 
 ### Requirement: List all metric names
 
@@ -182,11 +115,14 @@ Infrastructure metrics (`scrape_*`, `up`, `edge_shared_dict_*`) SHALL NOT appear
 - **THEN** the chart SHALL display a message: "当前无数据"
 - **AND** the summary cards SHALL show "--" for unavailable values
 
-### Requirement: Menu integration
+### REMOVED Requirements
 
-The metrics monitoring page SHALL be accessible from the sidebar navigation menu.
+### Requirement: List all metric names (original source table)
 
-#### Scenario: Menu item visible
-- **WHEN** a user logs into 磐石 Admin
-- **THEN** "指标监控" SHALL appear in the sidebar navigation menu
-- **AND** clicking it SHALL navigate to the `/metrics` route
+**Reason**: Data source migrated from `samples_v2` to `otel_metrics_gauge` + `otel_metrics_sum`
+**Migration**: Use new OTel tables `otel_metrics_gauge` and `otel_metrics_sum` instead of `samples_v2`
+
+### Requirement: Query time-series data (original label syntax)
+
+**Reason**: Label filtering migrated from `JSONExtractString(t.labels, 'key')` to `Attributes['key']` Map syntax, removing the need for JOIN with `time_series_v2`
+**Migration**: Use `Attributes['key']` syntax instead of `JSONExtractString(labels, 'key')`. The `time_series_v2` table is no longer used.

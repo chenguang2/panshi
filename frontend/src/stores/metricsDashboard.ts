@@ -21,13 +21,13 @@ export interface ChartDefinition {
 export const BUSINESS_CHARTS: ChartDefinition[] = [
   { key: 'qps', label: 'QPS', metricName: 'edge_http_requests_total', unit: '/s' },
   { key: 'connections', label: '活跃连接数', metricName: 'edge_nginx_http_current_connections', labelFilter: 'state:active' },
-  { key: 'errors', label: '采集错误率', metricName: 'edge_metric_errors', unit: '/s' },
+  { key: 'errors', label: '采集错误率', metricName: 'edge_metric_errors_total', unit: '/s' },
 ]
 
 export const INFRA_CHARTS: ChartDefinition[] = [
   { key: 'shared_capacity', label: '共享字典容量', metricName: 'edge_shared_dict_capacity_bytes' },
   { key: 'shared_free', label: '共享字典剩余', metricName: 'edge_shared_dict_free_space_bytes' },
-  { key: 'scrape_duration', label: '采集耗时', metricName: 'scrape_duration' },
+  { key: 'scrape_duration', label: '采集耗时', metricName: 'scrape_duration_seconds' },
   { key: 'scrape_samples', label: '采集样本数', metricName: 'scrape_samples_scraped' },
   { key: 'scrape_series', label: '新增序列', metricName: 'scrape_series_added' },
   { key: 'up', label: '采集目标状态', metricName: 'up' },

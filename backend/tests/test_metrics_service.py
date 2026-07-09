@@ -33,11 +33,11 @@ class TestMetricsService:
     @patch("app.services.metrics_service.execute_query")
     def test_time_series_gauge(self, mock_exec):
         mock_exec.side_effect = [
-            [("Unspecified",)],  # check_temporality
+            [],  # _is_counter: not found in otel_metrics_sum
             [
                 (1690000000, 50.0, 80.0, 30.0, 6),
                 (1690000300, 55.0, 85.0, 35.0, 6),
-            ],  # data
+            ],  # gauge data (bucket, avg, max, min, count)
         ]
         from app.services.metrics_service import query_time_series
         result = query_time_series("cpu_usage")
@@ -46,9 +46,10 @@ class TestMetricsService:
         assert result[0]["metric_name"] == "cpu_usage"
 
     @patch("app.services.metrics_service.execute_query")
-    def test_time_series_counter(self, mock_exec):
+    def test_time_series_counter_from_gauge(self, mock_exec):
+        """Counter metric in gauge table via _total suffix."""
         mock_exec.side_effect = [
-            [("Cumulative",)],  # check_temporality → counter
+            [],  # _is_counter: not found in otel_metrics_sum
             [
                 (1690000000, 0.5, 6),  # rate, sample_count
             ],
@@ -59,9 +60,23 @@ class TestMetricsService:
         assert result[0]["avg"] == 0.5
 
     @patch("app.services.metrics_service.execute_query")
+    def test_time_series_counter_from_sum(self, mock_exec):
+        """Counter metric in otel_metrics_sum (IsMonotonic + Cumulative)."""
+        mock_exec.side_effect = [
+            [(1,)],  # _is_counter: found in otel_metrics_sum
+            [
+                (1690000000, 0.0, 6),  # rate, sample_count
+            ],
+        ]
+        from app.services.metrics_service import query_time_series
+        result = query_time_series("edge_metric_errors_total")
+        assert len(result) == 1
+        assert result[0]["avg"] == 0.0
+
+    @patch("app.services.metrics_service.execute_query")
     def test_time_series_with_label(self, mock_exec):
         mock_exec.side_effect = [
-            [("Unspecified",)],
+            [],  # _is_counter: not found in otel_metrics_sum
             [(1690000000, 10.0, 20.0, 5.0, 3)],
         ]
         from app.services.metrics_service import query_time_series
@@ -71,18 +86,18 @@ class TestMetricsService:
         )
         assert len(result) == 1
         label_call = mock_exec.call_args_list[1]
-        assert "JSONExtractString" in label_call[0][0]
+        assert "Attributes['state']" in label_call[0][0]
 
     @patch("app.services.metrics_service.execute_query")
     def test_time_series_no_data(self, mock_exec):
-        mock_exec.side_effect = [[("Unspecified",)], []]
+        mock_exec.side_effect = [[], []]
         from app.services.metrics_service import query_time_series
         assert query_time_series("cpu_usage") == []
 
     @patch("app.services.metrics_service.execute_query")
     def test_time_series_negative_rate_clamped(self, mock_exec):
         mock_exec.side_effect = [
-            [("Cumulative",)],
+            [],  # _is_counter: not found in otel_metrics_sum → _total suffix
             [(1690000000, -2.0, 3)],  # negative rate
         ]
         from app.services.metrics_service import query_time_series
@@ -92,7 +107,7 @@ class TestMetricsService:
     @patch("app.services.metrics_service.execute_query")
     def test_time_series_parse_since_and_interval(self, mock_exec):
         mock_exec.side_effect = [
-            [("Unspecified",)],
+            [],  # _is_counter: not found in otel_metrics_sum
             [(1690000000, 50.0, 60.0, 40.0, 12)],
         ]
         from app.services.metrics_service import query_time_series
