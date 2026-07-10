@@ -4,11 +4,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 
+_log_dir = Path(__file__).resolve().parent.parent / "logs"
+_log_dir.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    filename=Path(__file__).resolve().parent.parent / "logs" / "app.log",
+    filename=str(_log_dir / "app.log"),
     filemode="a",
 )
 from fastapi.responses import JSONResponse
