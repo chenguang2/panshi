@@ -123,6 +123,7 @@ class ImportPreviewResponse(BaseModel):
     stream_proxies: List[StreamProxyPreview] = []
     conflicts: List[ConflictInfo]
     plugin_summary: PluginSummary
+    warnings: List[str] = []
 
 
 class ImportSelection(BaseModel):

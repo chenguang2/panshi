@@ -136,6 +136,23 @@
 
     <!-- Step 2: 预览导入 -->
     <div v-if="currentStep === 2">
+      <!-- 获取警告 -->
+      <a-alert
+        v-if="previewData?.warnings && previewData.warnings.length > 0"
+        type="warning"
+        show-icon
+        closable
+        style="margin-bottom: 16px;"
+      >
+        <template #message>
+          <strong>部分数据获取失败</strong>
+        </template>
+        <template #description>
+          <div v-for="(w, i) in previewData.warnings" :key="i">{{ w }}</div>
+          <div style="margin-top:4px;font-size:12px;">失败的数据无法导入，其他数据可正常导入。</div>
+        </template>
+      </a-alert>
+
       <!-- 插件摘要 -->
       <a-alert
         v-if="previewData?.plugin_summary && previewData.plugin_summary.unknown_count > 0"

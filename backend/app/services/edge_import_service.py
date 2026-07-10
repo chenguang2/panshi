@@ -6,8 +6,11 @@ from an PANSHI Edge node into the panshi admin database.
 """
 
 import json
+import logging
 import os
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 
@@ -225,31 +228,59 @@ class EdgeImportService:
         return []
 
     def fetch_edge_data(self) -> dict:
-        raw_upstreams = self.client.list_upstreams()
-        upstreams = self._unwrap_panshi_items(
-            self._parse_resource_list(raw_upstreams)
-        )
+        upstreams: list = []
+        routes: list = []
+        plugin_configs: list = []
+        global_rules: list = []
+        plugin_metadata: list = []
+        stream_proxies: list = []
+        warnings: list[str] = []
 
-        routes = self.client.list_routes()
-        if isinstance(routes, list):
-            routes = self._unwrap_panshi_items(routes)
-        else:
-            routes = []
+        try:
+            raw_upstreams = self.client.list_upstreams()
+            upstreams = self._unwrap_panshi_items(
+                self._parse_resource_list(raw_upstreams)
+            )
+        except Exception as e:
+            logger.warning("fetch_edge_data: upstreams failed — %s", e)
+            warnings.append(f"上游获取失败: {e}")
 
-        raw_pc = self.client._request("GET", "/edge/admin/plugin_configs")
-        plugin_configs = self._parse_resource_list(raw_pc)
+        try:
+            raw_routes = self.client.list_routes()
+            if isinstance(raw_routes, list):
+                routes = self._unwrap_panshi_items(raw_routes)
+        except Exception as e:
+            logger.warning("fetch_edge_data: routes failed — %s", e)
+            warnings.append(f"路由获取失败: {e}")
 
-        raw_gr = self.client._request("GET", "/edge/admin/global_rules")
-        global_rules = self._parse_resource_list(raw_gr)
+        try:
+            raw_pc = self.client.list_plugin_configs()
+            plugin_configs = self._parse_resource_list(raw_pc)
+        except Exception as e:
+            logger.warning("fetch_edge_data: plugin_configs failed — %s", e)
+            warnings.append(f"插件组获取失败: {e}")
 
-        raw_pm = self.client._request("GET", "/edge/admin/plugin_metadata")
-        plugin_metadata = self._parse_resource_list(raw_pm)
+        try:
+            raw_gr = self.client.list_global_rules()
+            global_rules = self._parse_resource_list(raw_gr)
+        except Exception as e:
+            logger.warning("fetch_edge_data: global_rules failed — %s", e)
+            warnings.append(f"全局规则获取失败: {e}")
 
-        sp_data = self.client.list_stream_routes()
-        if isinstance(sp_data, list):
-            stream_proxies = self._unwrap_panshi_items(sp_data)
-        else:
-            stream_proxies = []
+        try:
+            raw_pm = self.client.list_plugin_metadata()
+            plugin_metadata = self._parse_resource_list(raw_pm)
+        except Exception as e:
+            logger.warning("fetch_edge_data: plugin_metadata failed — %s", e)
+            warnings.append(f"插件元数据获取失败: {e}")
+
+        try:
+            raw_sp = self.client.list_stream_routes()
+            if isinstance(raw_sp, list):
+                stream_proxies = self._unwrap_panshi_items(raw_sp)
+        except Exception as e:
+            logger.warning("fetch_edge_data: stream_routes failed — %s", e)
+            warnings.append(f"四层代理获取失败: {e}")
 
         return {
             "upstreams": upstreams,
@@ -258,6 +289,7 @@ class EdgeImportService:
             "global_rules": global_rules,
             "plugin_metadata": plugin_metadata,
             "stream_proxies": stream_proxies,
+            "warnings": warnings,
         }
 
     def classify_plugins(self, plugins_dict: dict) -> dict:
@@ -848,6 +880,7 @@ class EdgeImportService:
             "stream_proxies": sp_preview,
             "conflicts": conflicts,
             "plugin_summary": plugin_summary,
+            "warnings": edge_data.get("warnings", []),
         }
 
     async def execute_import(

@@ -69,6 +69,7 @@ export interface PreviewResponse {
   stream_proxies: Record<string, any>[]
   conflicts: Conflict[]
   plugin_summary: PluginSummary
+  warnings?: string[]
 }
 
 export interface ImportedCounts {

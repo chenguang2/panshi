@@ -1,7 +1,16 @@
+import logging
 import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    filename=Path(__file__).resolve().parent.parent / "logs" / "app.log",
+    filemode="a",
+)
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
