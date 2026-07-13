@@ -395,12 +395,16 @@ async def publish_stream_proxy(
             for domain_name in hosts:
                 if 'checks' not in hosts[domain_name]:
                     hosts[domain_name]['checks'] = dns_checks
-        edge_body["plugins"] = {
+        plugins: dict = {
             "dns_upstream": {
                 "disable": False,
                 "hosts": hosts,
             }
         }
+        log_process = dns_cfg.get("log_process")
+        if log_process:
+            plugins["log_process"] = log_process
+        edge_body["plugins"] = plugins
     else:
         # 普通模式：标准 upstream
         targets = json.loads(proxy.targets) if proxy.targets else []

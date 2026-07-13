@@ -226,28 +226,44 @@
                   </div>
                   <button class="btn btn-ghost btn-sm" style="width:100%;border:1px dashed var(--border);font-size:11px;" @click="addDnsTarget(di)">+ 添加目标节点</button>
                 </div>
+                <div style="margin-top:6px;padding:0 8px;">
+                  <label class="checkbox-label" style="font-size:12px;">
+                    <input type="checkbox" v-model="dom.enableChecks">
+                    <span>健康检查</span>
+                  </label>
+                  <div v-if="dom.enableChecks" style="margin-top:6px;">
+                    <textarea v-model="dom.checksJson" class="form-input" rows="4" style="font-family:var(--font-mono);font-size:12px;resize:vertical;" placeholder='{"type":"http","active":{},"passive":{}}'></textarea>
+                  </div>
+                </div>
               </div>
               <button class="btn btn-ghost btn-sm" @click="addDnsDomain">+ 添加域名</button>
               <span v-if="formErrors.dns" class="form-error">{{ formErrors.dns }}</span>
             </div>
+
+            <!-- DNS Log Toggle -->
+            <div class="form-group" style="margin-bottom:8px;">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="dnsEnableLog">
+                <span>生成日志（DNS 请求日志）</span>
+              </label>
+            </div>
           </template>
 
-          <!-- Advanced Config Toggle -->
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="advancedEnabled">
-              <span>高级配置</span>
-            </label>
-          </div>
-
-          <!-- Advanced Config Section -->
-          <div v-if="advancedEnabled" class="spwf-advanced">
+          <!-- Advanced Config Toggle (普通模式) -->
+          <template v-if="form.proxy_type !== 'dns'">
             <div class="form-group">
-              <label class="form-label">健康检查（JSON）</label>
-              <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="advancedEnabled">
+                <span>高级配置</span>
+              </label>
             </div>
 
-            <template v-if="form.proxy_type !== 'dns'">
+            <div v-if="advancedEnabled" class="spwf-advanced">
+              <div class="form-group">
+                <label class="form-label">健康检查（JSON）</label>
+                <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
+              </div>
+
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">重试次数</label>
@@ -260,8 +276,8 @@
                   <div class="form-hint">0 = 不限制重试时间</div>
                 </div>
               </div>
-            </template>
-          </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -322,10 +338,11 @@ const logLines = ref<string[]>([])
 const submitting = ref(false)
 const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
+const dnsEnableLog = ref(false)
 
 // ── Form ──
 interface DnsTarget { key: number; ip_port: string; cidr: string }
-interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; checks: string; targets: DnsTarget[] }
+interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; enableChecks: boolean; checksJson: string; targets: DnsTarget[] }
 
 const form = reactive({
   cluster_id: '' as number | string,
@@ -495,7 +512,7 @@ function removeTarget(index: number) {
 // ── DNS Domain Management ──
 
 function addDnsDomain() {
-  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', ttl: 10, checks: '', targets: [] })
+  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', ttl: 10, enableChecks: true, checksJson: JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2), targets: [] })
 }
 
 function removeDnsDomain(index: number) {
@@ -590,12 +607,16 @@ async function handleSubmit() {
         if (dom.ttl !== undefined && dom.ttl !== null) {
           domainCfg.ttl_valid = dom.ttl
         }
-        if (dom.checks) {
-          try { domainCfg.checks = JSON.parse(dom.checks) } catch { /* ignore invalid json */ }
+        if (dom.enableChecks && dom.checksJson) {
+          try { domainCfg.checks = JSON.parse(dom.checksJson) } catch { /* ignore invalid json */ }
         }
         hosts[dom.domain.trim()] = domainCfg
       }
-      submitData.dns_config = { hosts }
+      const dnsConfig: Record<string, any> = { hosts }
+      if (dnsEnableLog.value) {
+        dnsConfig.log_process = { logs: ['logs/process.stream.log'] }
+      }
+      submitData.dns_config = dnsConfig
     } else {
       submitData.load_balance = form.load_balance
       submitData.description = form.description.trim()
@@ -679,11 +700,14 @@ watch(() => props.visible, async (v) => {
             key: domainKey, domain,
             lb_type: cfg.type || 'roundrobin',
             ttl: cfg.ttl_valid ?? 10,
-            checks: cfg.checks ? JSON.stringify(cfg.checks) : '',
+            enableChecks: !!cfg.checks,
+            checksJson: cfg.checks ? JSON.stringify(cfg.checks, null, 2) : JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2),
             targets,
           }
         })
       }
+      // Load log_process state from existing config
+      dnsEnableLog.value = !!(dc && dc.log_process)
     } else {
       form.targets = (p.targets || []).map((t: any) => {
         const [ip, port] = t.target.split(':')
@@ -742,6 +766,7 @@ watch(() => props.visible, async (v) => {
     form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
     checksJson.value = defaultChecksJson
     advancedEnabled.value = false
+    dnsEnableLog.value = false
     nodes.value = []
     ports.value = []
   }
