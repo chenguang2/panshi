@@ -80,7 +80,10 @@
           <div class="sp-card-dns" v-if="dnsHosts(p)">
             <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
               <div class="sp-dns-domain-name">{{ domain }}</div>
-              <div class="sp-dns-domain-lb">类型: {{ dnsLbLabel(host.type) }}</div>
+              <div class="sp-dns-domain-lb" style="display:flex;gap:12px;">
+                <span>类型: {{ dnsLbLabel(host.type) }}</span>
+                <span v-if="host.ttl_valid != null">TTL: {{ host.ttl_valid }}s</span>
+              </div>
               <div class="sp-dns-nodes">
                 <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="sp-target-tag">{{ nodeIp }}</span>
               </div>
@@ -218,7 +221,7 @@ function dnsLbLabel(algo: string | undefined): string {
   return map[algo || ''] || algo || '轮询'
 }
 
-function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; type: string }> | null {
+function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> | null {
   try {
     const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
     return cfg?.hosts || null

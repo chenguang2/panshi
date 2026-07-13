@@ -200,6 +200,7 @@
                 <div class="spwf-target-header">
                   <span class="spwf-th-cell" style="flex:2;">域名</span>
                   <span class="spwf-th-cell" style="flex:1;">负载均衡</span>
+                  <span class="spwf-th-cell" style="width:70px;">TTL(秒)</span>
                   <span class="spwf-th-cell" style="width:60px;">操作</span>
                 </div>
                 <div class="spwf-target-row">
@@ -209,6 +210,7 @@
                     <option value="chash">一致性哈希</option>
                     <option value="least_conn">最少连接</option>
                   </select>
+                  <input v-model.number="dom.ttl" type="number" class="form-input" min="0" style="width:70px;" placeholder="10">
                   <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsDomain(di)">删除</button>
                 </div>
                 <div style="margin:4px 8px 0;">
@@ -323,7 +325,7 @@ const manualPort = ref<number | null>(null)
 
 // ── Form ──
 interface DnsTarget { key: number; ip_port: string; cidr: string }
-interface DnsDomain { key: number; domain: string; lb_type: string; targets: DnsTarget[] }
+interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; checks: string; targets: DnsTarget[] }
 
 const form = reactive({
   cluster_id: '' as number | string,
@@ -348,7 +350,7 @@ const formErrors = reactive<Record<string, string>>({})
 const targetErrors = ref<string[]>([])
 
 const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
-const dnsDefaultChecksJson = JSON.stringify({ active: {} }, null, 2)
+const dnsDefaultChecksJson = JSON.stringify({ type: "tcp", active: {}, passive: {} }, null, 2)
 const checksJson = ref(defaultChecksJson)
 
 let targetKey = 0
@@ -369,16 +371,10 @@ watch(() => form.load_balance, (val) => {
 watch(() => form.proxy_type, (val) => {
   if (val === 'dns') {
     form.scheme = 'udp'
-    if (advancedEnabled.value) {
-      form.checks = JSON.parse(dnsDefaultChecksJson) as Record<string, unknown>
-      checksJson.value = dnsDefaultChecksJson
-    }
+    checksJson.value = dnsDefaultChecksJson
   } else if (val === 'normal') {
     form.scheme = 'tcp'
-    if (advancedEnabled.value) {
-      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-      checksJson.value = defaultChecksJson
-    }
+    checksJson.value = defaultChecksJson
   }
 })
 
@@ -387,14 +383,15 @@ watch(checksJson, (val) => {
   try { form.checks = JSON.parse(val) as Record<string, unknown> } catch { /* ignore */ }
 })
 
-// Reset advanced fields when toggled off
 watch(advancedEnabled, (val) => {
+  const isDns = form.proxy_type === 'dns'
   if (!val) {
-    const isDns = form.proxy_type === 'dns'
-    form.checks = JSON.parse(isDns ? dnsDefaultChecksJson : defaultChecksJson) as Record<string, unknown>
+    form.checks = null
     checksJson.value = isDns ? dnsDefaultChecksJson : defaultChecksJson
     form.retries = undefined
     form.retry_timeout = 0
+  } else {
+    form.checks = JSON.parse(checksJson.value) as Record<string, unknown>
   }
 })
 
@@ -498,7 +495,7 @@ function removeTarget(index: number) {
 // ── DNS Domain Management ──
 
 function addDnsDomain() {
-  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', targets: [] })
+  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', ttl: 10, checks: '', targets: [] })
 }
 
 function removeDnsDomain(index: number) {
@@ -589,7 +586,14 @@ async function handleSubmit() {
           const cidrList: string[] = dt.cidr.trim() ? [dt.cidr.trim()] : []
           nodes[dt.ip_port.trim()] = cidrList
         }
-        hosts[dom.domain.trim()] = { nodes, type: dom.lb_type }
+        const domainCfg: Record<string, any> = { nodes, type: dom.lb_type }
+        if (dom.ttl !== undefined && dom.ttl !== null) {
+          domainCfg.ttl_valid = dom.ttl
+        }
+        if (dom.checks) {
+          try { domainCfg.checks = JSON.parse(dom.checks) } catch { /* ignore invalid json */ }
+        }
+        hosts[dom.domain.trim()] = domainCfg
       }
       submitData.dns_config = { hosts }
     } else {
@@ -671,7 +675,13 @@ watch(() => props.visible, async (v) => {
             ip_port: ipPort,
             cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
           }))
-          return { key: domainKey, domain, lb_type: cfg.type || 'roundrobin', targets }
+          return {
+            key: domainKey, domain,
+            lb_type: cfg.type || 'roundrobin',
+            ttl: cfg.ttl_valid ?? 10,
+            checks: cfg.checks ? JSON.stringify(cfg.checks) : '',
+            targets,
+          }
         })
       }
     } else {
