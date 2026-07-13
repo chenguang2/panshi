@@ -133,14 +133,30 @@ The system SHALL display the publish status (published version + timestamp, or u
 - **THEN** the card shows a neutral "未发布" badge
 
 ### Requirement: DNS 模式域名配置
-DNS 模式四层代理 SHALL 支持每个域名独立配置 TTL 和健康检查。
+DNS 模式四层代理 SHALL 支持每个域名独立配置 TTL、健康检查和可选的日志生成。
 
 #### Scenario: TTL 配置
 - **WHEN** 用户创建或编辑 DNS 模式四层代理
 - **THEN** 每个域名行 SHALL 显示 TTL 输入框（默认 10，单位秒）
 - **AND** 发布到 Edge 时 SHALL 将 `ttl_valid` 字段写入 dns_upstream hosts
 
-#### Scenario: DNS 模式健康检查默认值
-- **WHEN** DNS 模式四层代理开启健康检查
-- **THEN** 默认健康检查配置 SHALL 为 `{"type": "tcp", "active": {}, "passive": {}}`
+#### Scenario: DNS 模式健康检查（默认开启）
+- **WHEN** 用户新建 DNS 域名
+- **THEN** 健康检查复选框 SHALL 默认勾选
+- **AND** JSON 编辑器 SHALL 默认填充 `{"type": "http", "active": {}, "passive": {}}`
 - **AND** 发布到 Edge 时 SHALL 将 checks 写入每个域名
+
+#### Scenario: DNS 模式健康检查（关闭）
+- **WHEN** 用户取消勾选健康检查复选框
+- **THEN** 该域名的 checks SHALL 不包含在发布的配置中
+
+#### Scenario: DNS 模式生成日志
+- **WHEN** 用户勾选"生成日志"复选框
+- **THEN** 发布的 `plugins` SHALL 包含 `"log_process": {"logs": ["logs/process.stream.log"]}`
+- **AND** 生成日志复选框 SHALL 默认不勾选
+
+#### Scenario: DNS 模式编辑回读
+- **WHEN** 用户编辑已有的 DNS 四层代理
+- **THEN** 已有域名的健康检查状态 SHALL 根据 `cfg.checks` 是否存在决定
+- **AND** JSON 编辑器 SHALL 回显已有 checks
+- **AND** log_process SHALL 根据 `dns_config.log_process` 是否存在决定复选框状态
