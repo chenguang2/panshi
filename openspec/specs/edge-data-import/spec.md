@@ -113,13 +113,19 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 - **WHEN** Edge 节点返回 global_rules 数据
 - **THEN** 系统 SHALL 将每条全局规则写入 `ps_global_rule` 表（如存在）
 
+#### Scenario: 导入 SSL 证书
+- **WHEN** Edge 节点返回 SSL 证书数据
+- **THEN** 系统 SHALL 将每条 SSL 证书写入 `ps_ssl_certificate` 表
+- **AND** 按 `edge_uuid` 检测冲突，已存在的跳过
+- **AND** 导入时创建 `ConfigVersion(resource_type="ssl", version=1)` 记录
+
 ### Requirement: 导入执行
 
 系统 SHALL 在用户确认后执行数据导入，并反馈导入结果。
 
 #### Scenario: 成功导入
 - **WHEN** 用户确认导入所选数据
-- **THEN** 系统 SHALL 按顺序导入：上游 → 路由 → 插件配置 → 全局规则
+- **THEN** 系统 SHALL 按顺序导入：上游 → 路由 → 插件配置 → 全局规则 → SSL 证书
 - **AND** 系统 SHALL 为 Edge 节点创建或更新 `ps_node` 记录并关联到所选集群
 - **AND** 系统 SHALL 写入 `ps_import_log` 记录本次导入详情
 - **AND** 前端 SHALL 显示导入成功，展示各类别导入数量
