@@ -2165,3 +2165,15 @@ openspec/changes/ssl-certificate-management/
 请读取 openspec/changes/ssl-certificate-management/tasks.md   ，严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+=========================================
+使用 /opsx-propose 命令， 在数据导入和edge直连中，加入对 ssl 证书的支持
+
+add-ssl-to-edge-import-and-client
+
+/brainstorming 请仔细阅读 openspec/changes/add-ssl-to-edge-import-and-client/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/add-ssl-to-edge-import-and-client/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
