@@ -7,23 +7,16 @@
       </div>
 
       <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label">证书名称 <span class="required">*</span></label>
-          <input v-model="form.name" type="text" class="form-input" placeholder="输入证书名称">
-        </div>
         <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">证书名称 <span class="required">*</span></label>
+            <input v-model="form.name" type="text" class="form-input" placeholder="输入证书名称">
+          </div>
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
             <select v-model="form.cluster_id" class="form-input" :disabled="!!editingCert">
               <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">证书类型</label>
-            <select v-model="form.cert_type" class="form-input">
-              <option value="server">server（服务端）</option>
-              <option value="client">client（客户端）</option>
             </select>
           </div>
         </div>
@@ -32,27 +25,35 @@
           <input v-model="form.sni" type="text" class="form-input" placeholder="example.com 或多个用逗号分隔">
         </div>
 
-        <div class="form-group">
-          <label class="form-label">证书文件 (PEM) <span class="required">*</span></label>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'file' }" @click="certInputMode = 'file'">上传文件</button>
-            <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'text' }" @click="certInputMode = 'text'">粘贴文本</button>
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">证书文件 (PEM) <span class="required">*</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'file' }" @click="certInputMode = 'file'">上传文件</button>
+              <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'text' }" @click="certInputMode = 'text'">粘贴文本</button>
+            </div>
+            <input v-if="certInputMode === 'file'" type="file" accept=".crt,.pem,.cert" @change="onCertFileChange" style="width:100%;" />
+            <textarea v-else v-model="form.cert" class="form-input" rows="8" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
           </div>
-          <input v-if="certInputMode === 'file'" type="file" accept=".crt,.pem,.cert" @change="onCertFileChange" style="width:100%;" />
-          <textarea v-else v-model="form.cert" class="form-input" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">私钥文件 (PEM) <span class="required">*</span></label>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'file' }" @click="keyInputMode = 'file'">上传文件</button>
-            <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'text' }" @click="keyInputMode = 'text'">粘贴文本</button>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">私钥文件 (PEM) <span class="required">*</span></label>
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'file' }" @click="keyInputMode = 'file'">上传文件</button>
+              <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'text' }" @click="keyInputMode = 'text'">粘贴文本</button>
+            </div>
+            <input v-if="keyInputMode === 'file'" type="file" accept=".key,.pem" @change="onKeyFileChange" style="width:100%;" />
+            <textarea v-else v-model="form.key" class="form-input" rows="8" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
           </div>
-          <input v-if="keyInputMode === 'file'" type="file" accept=".key,.pem" @change="onKeyFileChange" style="width:100%;" />
-          <textarea v-else v-model="form.key" class="form-input" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
         </div>
 
         <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">证书类型</label>
+            <select v-model="form.cert_type" class="form-input">
+              <option value="server">server（服务端）</option>
+              <option value="client">client（客户端）</option>
+            </select>
+          </div>
           <div class="form-group">
             <label class="form-label">SSL 协议版本</label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -61,13 +62,6 @@
                 <span>{{ p }}</span>
               </label>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">状态</label>
-            <select v-model="form.status" class="form-input">
-              <option :value="1">启用</option>
-              <option :value="0">禁用</option>
-            </select>
           </div>
         </div>
         <div class="form-group">
@@ -106,7 +100,6 @@ const form = reactive({
   name: '',
   cluster_id: undefined as number | undefined,
   cert_type: 'server',
-  status: 1,
   sni: '',
   cert: '',
   key: '',
@@ -129,7 +122,6 @@ watch(() => props.visible, (v) => {
     form.name = c.name
     form.cluster_id = c.cluster_id
     form.cert_type = c.cert_type
-    form.status = c.status ?? 1
     form.sni = c.sni
     form.cert = c.cert
     form.key = c.key || c.private_key || ''
@@ -139,7 +131,6 @@ watch(() => props.visible, (v) => {
     form.name = ''
     form.cluster_id = undefined
     form.cert_type = 'server'
-    form.status = 1
     form.sni = ''
     form.cert = ''
     form.key = ''
@@ -178,7 +169,6 @@ async function handleSubmit() {
       sni: form.sni,
       cert: form.cert,
       private_key: form.key,
-      status: form.status,
       description: form.description || undefined,
     }
     if (form.ssl_protocols.length > 0) {
