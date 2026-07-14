@@ -18,6 +18,21 @@ from app.services.edge_client import EdgeClient
 from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"])
+global_router = APIRouter(prefix="/ssl", tags=["ssl"])
+
+
+@global_router.get("")
+async def list_all_ssl_certificates(
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SslCertificate).order_by(SslCertificate.id)
+    )
+    items = result.scalars().all()
+    return {
+        "total": len(items),
+        "items": [SslCertificateResponse.model_validate(c).model_dump(by_alias=True) for c in items],
+    }
 
 
 @router.get("")

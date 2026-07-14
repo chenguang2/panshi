@@ -1,8 +1,11 @@
 import api from '@/api/index'
 import type { SslCertificate, SslCertificateCreate, SslCertificateUpdate, SslListResponse } from '@/types/ssl'
 
-export function listSslCertificates(clusterId: number) {
-  return api.get<SslListResponse>(`/clusters/${clusterId}/ssl`)
+export function listSslCertificates(clusterId?: number) {
+  if (clusterId) {
+    return api.get<SslListResponse>(`/clusters/${clusterId}/ssl`)
+  }
+  return api.get<SslListResponse>('/ssl')
 }
 
 export function createSslCertificate(clusterId: number, data: SslCertificateCreate) {
