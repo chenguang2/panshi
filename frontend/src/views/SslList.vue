@@ -157,7 +157,13 @@ async function loadCerts() {
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/ssl', { params })
-    certs.value = res.data.items || []
+    const items = res.data.items || []
+    const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))
+    certs.value = items.map((cert: any) => ({
+      ...cert,
+      cluster_name: clusterMap.get(cert.cluster_id)?.display_name || clusterMap.get(cert.cluster_id)?.name || String(cert.cluster_id),
+      cluster_group_name: clusterMap.get(cert.cluster_id)?.group_name || '',
+    }))
     totalCount.value = res.data.total || 0
   } catch { message.error('加载 SSL 证书失败') }
   finally { loading.value = false }
@@ -227,7 +233,7 @@ function openVersionManagement(cert: any) {
   vmId.value = cert.id; vmClusterId.value = cert.cluster_id; vmName.value = cert.name; vmVisible.value = true
 }
 
-onMounted(() => { loadClusters(); loadCerts() })
+onMounted(() => { loadClusters().then(() => loadCerts()) })
 </script>
 
 <style scoped>
