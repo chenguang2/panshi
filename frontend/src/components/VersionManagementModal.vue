@@ -239,6 +239,8 @@ const loadHistory = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history`
       : props.resourceType === 'stream_proxy'
       ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history`
+      : props.resourceType === 'ssl'
+      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history`
       : props.resourceType === 'edge_env'
       ? `/clusters/${props.clusterId}/edge-env/versions`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`

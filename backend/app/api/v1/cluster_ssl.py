@@ -193,3 +193,28 @@ async def publish_ssl_certificate(
     )
 
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"SSL 证书 {cert.name} ", new_version)
+
+
+@router.get("/{cert_id}/history")
+async def get_ssl_certificate_history(
+    cluster_id: int,
+    cert_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
+
+    await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
+
+    versions = (
+        await db.execute(
+            select(ConfigVersion)
+            .where(ConfigVersion.resource_type == "ssl", ConfigVersion.resource_id == cert_id)
+            .order_by(ConfigVersion.version.desc())
+        )
+    ).scalars().all()
+
+    return ConfigVersionListResponse(
+        total=len(versions),
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=(await db.get(SslCertificate, cert_id)).current_version,
+    )
