@@ -218,3 +218,38 @@ function handleClose() {
   emit('close')
 }
 </script>
+
+<style scoped>
+.method-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+.method-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 14px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  user-select: none;
+  transition: all 0.15s;
+  height: 28px;
+}
+.method-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.method-chip.selected {
+  background: oklch(56% 0.16 210 / 10%);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+</style>
