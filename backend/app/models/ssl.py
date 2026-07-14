@@ -16,7 +16,7 @@ class SslCertificate(Base):
     name = Column(String(100), nullable=False)
     sni = Column(String(500), nullable=False)
     cert = Column(Text, nullable=False)
-    private_key = Column(Text, nullable=False)
+    private_key = Column("key", Text, nullable=False)
     cert_type = Column(String(20), nullable=False, default="server")
     ssl_protocols = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
