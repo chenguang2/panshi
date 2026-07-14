@@ -1,5 +1,12 @@
 <template>
-  <a-drawer :open="visible" :title="editingCert ? '编辑 SSL 证书' : '添加 SSL 证书'" width="560px" @close="handleClose">
+  <a-modal
+    :open="visible"
+    :title="editingCert ? '编辑 SSL 证书' : '添加 SSL 证书'"
+    width="680px"
+    :footer="null"
+    :destroy-on-close="true"
+    @cancel="handleClose"
+  >
     <a-form layout="vertical">
       <a-form-item label="证书名称" required>
         <a-input v-model:value="form.name" placeholder="输入证书名称" />
@@ -49,11 +56,11 @@
         <a-textarea v-model:value="form.description" rows="2" />
       </a-form-item>
     </a-form>
-    <template #footer>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
       <a-button @click="handleClose">取消</a-button>
       <a-button type="primary" :loading="submitting" @click="handleSubmit">{{ editingCert ? '保存' : '创建' }}</a-button>
-    </template>
-  </a-drawer>
+    </div>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
