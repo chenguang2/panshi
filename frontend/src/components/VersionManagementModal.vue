@@ -520,6 +520,8 @@ const handleRepublish = async () => {
       ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${selectedVersion.value}`
       : props.resourceType === 'static_resource'
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
+      : props.resourceType === 'ssl'
+      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success('已切换到版本 v' + selectedVersion.value)
@@ -554,6 +556,8 @@ const handleDelete = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'stream_proxy'
       ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
+      : props.resourceType === 'ssl'
+      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'edge_env'
       ? `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value.id}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`

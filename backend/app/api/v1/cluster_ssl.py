@@ -195,6 +195,40 @@ async def publish_ssl_certificate(
     return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"SSL 证书 {cert.name} ", new_version)
 
 
+@router.post("/{cert_id}/rollback/{version}")
+async def rollback_ssl_certificate(
+    cluster_id: int,
+    cert_id: int,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+):
+    cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
+
+    config_version = await edge_sync.get_or_404(
+        db, ConfigVersion,
+        resource_type="ssl", resource_id=cert_id, version=version,
+        detail="版本不存在",
+    )
+
+    config_data = json.loads(config_version.config)
+    if "name" in config_data:
+        cert.name = config_data["name"]
+    if "sni" in config_data:
+        cert.sni = config_data["sni"]
+    if "cert" in config_data:
+        cert.cert = config_data["cert"]
+    if "key" in config_data:
+        cert.private_key = config_data["key"]
+    if "type" in config_data:
+        cert.cert_type = config_data["type"]
+    if "ssl_protocols" in config_data:
+        cert.ssl_protocols = json.dumps(config_data["ssl_protocols"]) if isinstance(config_data["ssl_protocols"], list) else config_data["ssl_protocols"]
+    cert.current_version = version
+    await db.commit()
+
+    return {"status": "ok", "message": f"SSL 证书已切换到版本 v{version}", "version": version}
+
+
 @router.get("/{cert_id}/history")
 async def get_ssl_certificate_history(
     cluster_id: int,
@@ -218,3 +252,20 @@ async def get_ssl_certificate_history(
         items=[ConfigVersionResponse.model_validate(v) for v in versions],
         current_version=(await db.get(SslCertificate, cert_id)).current_version,
     )
+
+
+@router.delete("/{cert_id}/history/{history_id}")
+async def delete_ssl_certificate_history(
+    cluster_id: int,
+    cert_id: int,
+    history_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    config_version = await edge_sync.get_or_404(
+        db, ConfigVersion,
+        id=history_id, resource_type="ssl", resource_id=cert_id,
+        detail="版本不存在",
+    )
+    await db.delete(config_version)
+    await db.commit()
+    return {"status": "ok", "message": "历史版本已删除"}
