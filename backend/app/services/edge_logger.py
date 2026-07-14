@@ -15,6 +15,7 @@ class EdgeLogger:
         "global_rule": {"file": "logs/edge/global_rule.log", "label": "GlobalRule:{name} (ID:{id})"},
         "plugin_metadata": {"file": "logs/edge/plugin_metadata.log", "label": "PluginMetadata:{name}"},
         "stream_proxy": {"file": "logs/edge/stream_proxy.log", "label": "StreamProxy:{name} (ID:{id})"},
+        "ssl": {"file": "logs/edge/ssl.log", "label": "SSL:{name} (ID:{id})"},
     }
 
     def __init__(self):

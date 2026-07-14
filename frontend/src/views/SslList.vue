@@ -178,7 +178,7 @@ async function loadClusters() {
 
 function openCreateDrawer() { editingCert.value = null; formVisible.value = true }
 function openEditDrawer(cert: any) { editingCert.value = cert; formVisible.value = true }
-function closeForm() { formVisible.value = false; editingCert.value = null }
+function closeForm() { formVisible.value = false; editingCert.value = null; loadCerts() }
 
 function viewCert(cert: any) {
   viewingCert.value = cert
