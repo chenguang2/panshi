@@ -29,6 +29,15 @@ Admins SHALL be able to view, search, filter, create, edit, delete, publish, and
 - **THEN** load-balance algorithm SHALL display as a badge
 - **THEN** pagination SHALL be supported
 
+### Requirement: Upstream HTTPS scheme
+
+The upstream scheme field SHALL support `https` in addition to `http` for upstream connections.
+
+#### Scenario: Upstream scheme selection
+- **WHEN** user edits an upstream
+- **THEN** the scheme dropdown SHALL include `https` as an option
+- **AND** selecting `https` SHALL enable additional SSL verification options (`https_verify_certificate`)
+
 #### Scenario: Action menu
 - **WHEN** admin clicks the action button (⋯) on a row
 - **THEN** a dropdown SHALL show: 编辑, 发布, 版本管理, 删除
