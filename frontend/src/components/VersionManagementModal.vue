@@ -3,7 +3,7 @@
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal modal-wide" style="max-width:1000px;">
       <div class="modal-header">
-        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : resourceType === 'stream_proxy' ? '四层代理' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
+        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : resourceType === 'stream_proxy' ? '四层代理' : resourceType === 'ssl' ? 'SSL 证书' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
 
@@ -113,7 +113,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env' | 'stream_proxy'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env' | 'stream_proxy' | 'ssl'
   resourceId: number | null
   clusterId: number | null
   resourceName: string

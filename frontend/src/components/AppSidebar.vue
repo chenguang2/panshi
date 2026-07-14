@@ -102,6 +102,7 @@ const navSections = computed<NavSection[]>(() => {
         { label: '插件元数据', route: '/plugin-metadata', permission: 'plugin_metadata', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>' },
         { label: '全局规则', route: '/global-rules', permission: 'global_rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>' },
         { label: '静态资源', route: '/static-resources', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1v8M6 4l3-3 3 3"/><path d="M3 10v4a1 1 0 001 1h10a1 1 0 001-1v-4"/></svg>' },
+        { label: 'SSL 证书', route: '/ssl', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="12" height="10" rx="1"/><path d="M6 7V5a3 3 0 016 0v2"/><circle cx="9" cy="11" r="1"/><path d="M9 11v2"/></svg>' },
       ].filter(item => !item.permission || authStore.hasPermission(item.permission))
     },
     {

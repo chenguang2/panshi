@@ -1,3 +1,4 @@
+import json
 import os
 import base64
 from datetime import datetime
@@ -79,7 +80,7 @@ class EdgeLogger:
         ]
 
         if request_body:
-            log_entry.append(f"Request Body: {request_body}")
+            log_entry.append(f"Request Body: {json.dumps(request_body, ensure_ascii=False, default=str)}")
         if encrypted_body:
             log_entry.append(f"Encrypted: {encrypted_body}")
         if response_status:
@@ -93,7 +94,7 @@ class EdgeLogger:
                 else:
                     log_entry.append(f"Response Body: (encrypted, decryption failed)")
             else:
-                log_entry.append(f"Response Body: {response_body}")
+                log_entry.append(f"Response Body: {json.dumps(response_body, ensure_ascii=False, default=str)}")
 
         if error:
             log_entry.append(f"Error: {error}")

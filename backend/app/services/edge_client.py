@@ -287,6 +287,7 @@ class EdgeClient:
         "plugin_metadata": "/edge/admin/plugin_metadata",
         "plugin": "/edge/admin/plugins",
         "stream_route": "/stream/edge/admin/routes",
+        "ssl": "/edge/admin/ssl",
     }
 
     ACTION_METHOD = {

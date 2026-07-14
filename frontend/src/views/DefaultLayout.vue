@@ -100,6 +100,7 @@ const pageNameMap: Record<string, string> = {
   Metrics: '指标查询',
   MetricsDashboard: '指标总览',
   PluginSwitches: '插件开关',
+  SslList: 'SSL 证书',
 }
 
 const currentSection = computed(() => {

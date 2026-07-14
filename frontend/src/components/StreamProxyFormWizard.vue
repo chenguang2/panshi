@@ -29,7 +29,7 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select v-model="form.cluster_id" class="form-input" :disabled="!!editingProxy" @change="onClusterChange">
+              <select v-model="form.cluster_id" class="form-input" :class="{ 'input-error': formErrors.cluster_id }" :disabled="!!editingProxy" @change="onClusterChange" @blur="formErrors.cluster_id = form.cluster_id ? '' : '请选择集群'">
                 <option value="">请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
@@ -37,7 +37,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">参考节点 <span class="required">*</span></label>
-              <select v-model="form.node_id" class="form-input" :disabled="!form.cluster_id">
+              <select v-model="form.node_id" class="form-input" :class="{ 'input-error': formErrors.node_id }" :disabled="!form.cluster_id" @blur="formErrors.node_id = form.node_id ? '' : '请选择节点'">
                 <option value="">请选择节点</option>
                 <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port || n.service_port }}</option>
               </select>
@@ -193,6 +193,14 @@
               <div style="font-size:12px;color:var(--muted);">DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</div>
             </div>
 
+            <!-- DNS Upstream Placeholder -->
+            <div class="form-group">
+              <label class="form-label">上游配置 <span style="font-size:11px;color:var(--muted);font-weight:normal;">（DNS 模式固定配置）</span></label>
+              <div style="padding:8px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border);font-family:var(--font-mono);font-size:12px;color:var(--muted);">
+                {"type": "roundrobin", "scheme": "tcp"}
+              </div>
+            </div>
+
             <!-- Domain List -->
             <div class="form-group">
               <label class="form-label">域名映射 <span class="required">*</span></label>
@@ -204,7 +212,10 @@
                   <span class="spwf-th-cell" style="width:60px;">操作</span>
                 </div>
                 <div class="spwf-target-row">
-                  <input v-model="dom.domain" type="text" class="form-input" placeholder="test.local" style="flex:2;">
+                  <div style="flex:2;display:flex;flex-direction:column;">
+                    <input v-model="dom.domain" type="text" class="form-input" placeholder="test.local" :class="{ 'input-error': dnsFieldErrors[`${di}.domain`] }" @blur="validateDnsDomain(di)">
+                    <span v-if="dnsFieldErrors[`${di}.domain`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.domain`] }}</span>
+                  </div>
                   <select v-model="dom.lb_type" class="form-input" style="flex:1;">
                     <option value="roundrobin">轮询</option>
                     <option value="chash">一致性哈希</option>
@@ -215,12 +226,20 @@
                 </div>
                 <div style="margin:4px 8px 0;">
                   <div class="spwf-target-header" style="font-size:10px;">
-                    <span style="flex:2;">目标 IP:端口</span>
+                    <span style="flex:2;">IP 地址</span>
+                    <span style="flex:1;">端口</span>
                     <span style="flex:1;">客户端 CIDR（可选）</span>
                     <span style="width:60px;">操作</span>
                   </div>
                   <div v-for="(dt, dti) in dom.targets" :key="dt.key" class="spwf-target-row">
-                    <input v-model="dt.ip_port" type="text" class="form-input" placeholder="10.0.0.1:53" style="flex:2;">
+                    <div style="flex:2;display:flex;flex-direction:column;">
+                      <input v-model="dt.ip" type="text" class="form-input" placeholder="10.0.0.1" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.ip`] }" @blur="validateDnsTarget(di, dti)">
+                      <span v-if="dnsFieldErrors[`${di}.t${dti}.ip`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.ip`] }}</span>
+                    </div>
+                    <div style="flex:1;display:flex;flex-direction:column;">
+                      <input v-model.number="dt.port" type="number" class="form-input" placeholder="53" min="1" max="65535" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.port`] }" @blur="validateDnsTarget(di, dti)">
+                      <span v-if="dnsFieldErrors[`${di}.t${dti}.port`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.port`] }}</span>
+                    </div>
                     <input v-model="dt.cidr" type="text" class="form-input" placeholder="192.168.0.0/16 或留空" style="flex:1;">
                     <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsTarget(di, dti)">删除</button>
                   </div>
@@ -341,7 +360,7 @@ const manualPort = ref<number | null>(null)
 const dnsEnableLog = ref(false)
 
 // ── Form ──
-interface DnsTarget { key: number; ip_port: string; cidr: string }
+interface DnsTarget { key: number; ip: string; port: number; cidr: string }
 interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; enableChecks: boolean; checksJson: string; targets: DnsTarget[] }
 
 const form = reactive({
@@ -365,6 +384,51 @@ const form = reactive({
 const advancedEnabled = ref(false)
 const formErrors = reactive<Record<string, string>>({})
 const targetErrors = ref<string[]>([])
+
+// Per-field DNS validation errors: key = `${di}.${field}` or `${di}.t${ti}.${field}`
+const dnsFieldErrors = reactive<Record<string, string>>({})
+
+function validateDnsDomain(di: number): boolean {
+  const dom = form.dns_domains[di]
+  if (!dom) return false
+  let valid = true
+  if (!dom.domain.trim()) {
+    dnsFieldErrors[`${di}.domain`] = '域名不能为空'
+    valid = false
+  } else {
+    delete dnsFieldErrors[`${di}.domain`]
+  }
+  return valid
+}
+
+function validateDnsTarget(di: number, ti: number): boolean {
+  const dt = form.dns_domains[di]?.targets[ti]
+  if (!dt) return false
+  let valid = true
+  if (!dt.ip.trim()) {
+    dnsFieldErrors[`${di}.t${ti}.ip`] = 'IP 不能为空'
+    valid = false
+  } else if (!IP_PATTERN.test(dt.ip)) {
+    dnsFieldErrors[`${di}.t${ti}.ip`] = 'IP 格式不合法'
+    valid = false
+  } else {
+    delete dnsFieldErrors[`${di}.t${ti}.ip`]
+  }
+  if (!dt.port || dt.port < 1 || dt.port > 65535) {
+    dnsFieldErrors[`${di}.t${ti}.port`] = '端口范围 1-65535'
+    valid = false
+  } else {
+    delete dnsFieldErrors[`${di}.t${ti}.port`]
+  }
+  return valid
+}
+
+function validateDnsDomainAndTargets(di: number): void {
+  validateDnsDomain(di)
+  for (let ti = 0; ti < (form.dns_domains[di]?.targets.length || 0); ti++) {
+    validateDnsTarget(di, ti)
+  }
+}
 
 const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
 const dnsDefaultChecksJson = JSON.stringify({ type: "tcp", active: {}, passive: {} }, null, 2)
@@ -415,6 +479,10 @@ watch(advancedEnabled, (val) => {
 // ── Computed ──
 
 const canGoNext = computed(() => {
+  // 必填项：集群和节点
+  if (!form.cluster_id) return false
+  if (!form.node_id) return false
+  // 端口：手动输入或自动检测选中皆可
   if (manualPortEnabled.value && manualPort.value && manualPort.value >= 1 && manualPort.value <= 65535) return true
   if (selectedPort.value !== null) return true
   // 编辑模式：未选端口也允许下一步（保持原端口不变）
@@ -480,7 +548,11 @@ async function handleDetectPorts() {
 }
 
 function goToStep2() {
+  formErrors.cluster_id = ''
+  formErrors.node_id = ''
   formErrors.port = ''
+  if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; return }
+  if (!form.node_id) { formErrors.node_id = '请选择节点'; return }
   if (manualPortEnabled.value) {
     if (!manualPort.value || manualPort.value < 1 || manualPort.value > 65535) {
       formErrors.port = '请输入有效的端口号（1-65535）'
@@ -520,7 +592,7 @@ function removeDnsDomain(index: number) {
 }
 
 function addDnsTarget(di: number) {
-  form.dns_domains[di].targets.push({ key: ++targetKey, ip_port: '', cidr: '' })
+  form.dns_domains[di].targets.push({ key: ++targetKey, ip: '', port: 53, cidr: '' })
 }
 
 function removeDnsTarget(di: number, ti: number) {
@@ -546,7 +618,9 @@ function validateForm(): boolean {
       if (!dom.domain.trim()) { formErrors.dns = '域名不能为空'; return false }
       if (dom.targets.length === 0) { formErrors.dns = `域名 ${dom.domain} 至少需要一个目标节点`; return false }
       for (const dt of dom.targets) {
-        if (!dt.ip_port.trim()) { formErrors.dns = `域名 ${dom.domain} 的目标 IP:端口不能为空`; return false }
+        if (!dt.ip.trim()) { formErrors.dns = `域名 ${dom.domain} 的 IP 不能为空`; return false }
+        if (!IP_PATTERN.test(dt.ip)) { formErrors.dns = `域名 ${dom.domain} 的 IP 格式不合法`; return false }
+        if (!dt.port || dt.port < 1 || dt.port > 65535) { formErrors.dns = `域名 ${dom.domain} 的端口不合法`; return false }
       }
     }
     return true
@@ -599,9 +673,9 @@ async function handleSubmit() {
         if (!dom.domain.trim()) continue
         const nodes: Record<string, string[]> = {}
         for (const dt of dom.targets) {
-          if (!dt.ip_port.trim()) continue
+          if (!dt.ip.trim() || !dt.port) continue
           const cidrList: string[] = dt.cidr.trim() ? [dt.cidr.trim()] : []
-          nodes[dt.ip_port.trim()] = cidrList
+          nodes[`${dt.ip}:${dt.port}`] = cidrList
         }
         const domainCfg: Record<string, any> = { nodes, type: dom.lb_type }
         if (dom.ttl !== undefined && dom.ttl !== null) {
@@ -691,11 +765,15 @@ watch(() => props.visible, async (v) => {
       if (dc && dc.hosts) {
         form.dns_domains = Object.entries(dc.hosts).map(([domain, cfg]: [string, any]) => {
           const domainKey = ++targetKey
-          const targets = Object.entries(cfg.nodes || {}).map(([ipPort, cidrs]: [string, any]) => ({
-            key: ++targetKey,
-            ip_port: ipPort,
-            cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
-          }))
+          const targets = Object.entries(cfg.nodes || {}).map(([ipPort, cidrs]: [string, any]) => {
+            const [ip, portStr] = ipPort.split(':')
+            return {
+              key: ++targetKey,
+              ip: ip || '',
+              port: portStr ? parseInt(portStr) : 53,
+              cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
+            }
+          })
           return {
             key: domainKey, domain,
             lb_type: cfg.type || 'roundrobin',
@@ -1002,4 +1080,5 @@ watch(() => props.visible, async (v) => {
 /* ── Form overrides ── */
 .form-row { display: flex; gap: 16px; margin-bottom: 0; }
 .form-row .form-group { flex: 1; }
+.input-error { border-color: var(--danger) !important; }
 </style>
