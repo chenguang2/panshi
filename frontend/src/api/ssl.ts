@@ -9,10 +9,7 @@ export function listSslCertificates(clusterId?: number) {
 }
 
 export function createSslCertificate(clusterId: number, data: SslCertificateCreate) {
-  return api.post<SslCertificate>(`/clusters/${clusterId}/ssl`, {
-    ...data,
-    key: data.private_key || data.key,
-  })
+  return api.post<SslCertificate>(`/clusters/${clusterId}/ssl`, data)
 }
 
 export function getSslCertificate(clusterId: number, certId: number) {
@@ -20,10 +17,7 @@ export function getSslCertificate(clusterId: number, certId: number) {
 }
 
 export function updateSslCertificate(clusterId: number, certId: number, data: SslCertificateUpdate) {
-  return api.put<SslCertificate>(`/clusters/${clusterId}/ssl/${certId}`, {
-    ...data,
-    key: data.private_key || data.key,
-  })
+  return api.put<SslCertificate>(`/clusters/${clusterId}/ssl/${certId}`, data)
 }
 
 export function deleteSslCertificate(clusterId: number, certId: number, data?: { delete_db?: boolean; delete_edge?: boolean; node_ids?: number[] }) {

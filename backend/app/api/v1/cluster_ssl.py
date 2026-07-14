@@ -31,7 +31,7 @@ async def list_all_ssl_certificates(
     items = result.scalars().all()
     return {
         "total": len(items),
-        "items": [SslCertificateResponse.model_validate(c).model_dump(by_alias=True) for c in items],
+        "items": [SslCertificateResponse.model_validate(c).model_dump() for c in items],
     }
 
 
@@ -48,7 +48,7 @@ async def list_ssl_certificates(
     items = result.scalars().all()
     return {
         "total": len(items),
-        "items": [SslCertificateResponse.model_validate(c).model_dump(by_alias=True) for c in items],
+        "items": [SslCertificateResponse.model_validate(c).model_dump() for c in items],
     }
 
 
@@ -58,7 +58,7 @@ async def create_ssl_certificate(
     data: SslCertificateCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    cert_data = data.model_dump(by_alias=True)
+    cert_data = data.model_dump()
     cert_data["edge_uuid"] = str(uuid.uuid4())
     cert_data["cluster_id"] = cluster_id
     cert = SslCertificate(**cert_data)
@@ -86,9 +86,9 @@ async def update_ssl_certificate(
     db: AsyncSession = Depends(get_db),
 ):
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
-    update_data = data.model_dump(exclude_unset=True, by_alias=True)
-    for key, value in update_data.items():
-        setattr(cert, key, value)
+    update_data = data.model_dump(exclude_unset=True)
+    for k, v in update_data.items():
+        setattr(cert, k, v)
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)

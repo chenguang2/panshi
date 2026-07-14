@@ -192,8 +192,8 @@ onMounted(() => {
 
 <style scoped>
 .ssl-page { padding: 20px 24px; }
-.ssl-header-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.search-input-wrap { position: relative; flex: 1; min-width: 200px; }
+.ssl-header-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap; }
+.search-input-wrap { position: relative; flex: 1; min-width: 140px; }
 .search-input-wrap .form-input { width: 100%; padding-left: 32px; }
 .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5; pointer-events: none; }
 .loading-state { text-align: center; padding: 48px; color: var(--muted); }
