@@ -304,6 +304,38 @@
           </a-table>
           </div>
         </a-tab-pane>
+        <a-tab-pane key="ssl" tab="SSL 证书">
+          <div class="table-toolbar">
+            <div class="search-input-wrap">
+              <input v-model="sslSearch" class="form-input" placeholder="搜索 SSL 证书..." style="width: 200px;" />
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
+          <div class="table-container">
+          <a-table
+            :columns="sslColumns"
+            :data-source="sslSearch ? sslList.filter(s => (s.value?.id || '').includes(sslSearch) || (s.value?.snis || []).join(' ').includes(sslSearch)) : sslList"
+            :loading="loading"
+            :pagination="{ pageSize: 20 }"
+            size="small"
+            rowKey="key"
+          >
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">{{ index + 1 }}</template>
+              <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>
+              <template v-if="column.key === 'snis'">{{ (record.value?.snis || []).join(', ') }}</template>
+              <template v-if="column.key === 'type'">{{ record.value?.type || '-' }}</template>
+              <template v-if="column.key === 'status'">{{ record.value?.status === 1 ? '启用' : '禁用' }}</template>
+              <template v-if="column.key === 'actions'">
+                <a-button size="small" type="link" @click="viewSslDetail(record)">查看</a-button>
+                <a-popconfirm title="确定删除此 SSL 证书？" @confirm="deleteSslCert(record)">
+                  <a-button size="small" type="link" danger>删除</a-button>
+                </a-popconfirm>
+              </template>
+            </template>
+          </a-table>
+          </div>
+        </a-tab-pane>
         <a-tab-pane key="streamRoutes" tab="四层代理">
           <div class="table-toolbar">
             <div class="search-input-wrap">
@@ -619,14 +651,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
+import { ref, reactive, onMounted, watch, onUnmounted, computed, h } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import { useProgressModal } from '@/composables/useProgressModal'
-import { upstreamColumns, routeColumns, pluginMetadataColumns, pluginListColumns, globalRuleColumns, pluginConfigColumns, streamRouteColumns } from '@/utils/edgeColumns'
+import { upstreamColumns, routeColumns, pluginMetadataColumns, pluginListColumns, globalRuleColumns, pluginConfigColumns, streamRouteColumns, sslColumns } from '@/utils/edgeColumns'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
@@ -670,6 +702,8 @@ const globalRuleSearch = ref('')
 const pluginConfigSearch = ref('')
 const pluginMetadataSearch = ref('')
 const streamRouteSearch = ref('')
+const sslList = ref<any[]>([])
+const sslSearch = ref('')
 
 const upstreamModalVisible = ref(false)
 const upstreamModalMode = ref<'create' | 'edit'>('create')
@@ -841,6 +875,40 @@ const loadStreamRoutes = async (ip: string, port: string) => {
   }
 }
 
+const loadSslCertificates = async (ip: string, port: string) => {
+  try {
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/ssl`, { signal: currentSignal.value })
+    sslList.value = res.data.ssl_certificates || []
+  } catch (error: any) {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    console.error('[DEBUG] loadSslCertificates error:', error)
+  }
+}
+
+const viewSslDetail = (record: any) => {
+  const value = record.value || {}
+  const id = record.key?.split('/').pop() || value.id
+  Modal.info({
+    title: 'SSL 证书详情',
+    width: 600,
+    content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;max-height:400px;overflow-y:auto;background:#f5f5f5;padding:12px;border-radius:4px;' }, JSON.stringify(value, null, 2)),
+  })
+}
+
+const deleteSslCert = async (record: any) => {
+  const ip = loadedNode.value?.split(':')[0]
+  const port = loadedNode.value?.split(':')[1]
+  if (!ip || !port) return
+  const id = record.key?.split('/').pop() || record.value?.id
+  try {
+    await api.delete(`/edge-client/nodes/${ip}/${port}/ssl/${id}`, { signal: currentSignal.value })
+    message.success('已删除')
+    sslList.value = sslList.value.filter((s: any) => s.key !== record.key)
+  } catch (error: any) {
+    message.error('删除失败: ' + (error.response?.data?.detail || error.message))
+  }
+}
+
 // 预加载所有标签页数据（并行）
 const loadAllData = async () => {
   const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
@@ -862,7 +930,8 @@ const loadAllData = async () => {
       loadPluginConfigs(ip, port),
       loadPluginMetadata(ip, port),
       loadPluginList(ip, port),
-      loadStreamRoutes(ip, port)
+      loadStreamRoutes(ip, port),
+      loadSslCertificates(ip, port)
     ])
     loadedNode.value = `${ip}:${port}`
   } catch (error: any) {

@@ -22,6 +22,7 @@ export interface ImportSelections {
   global_rules: boolean
   plugin_metadata: boolean
   stream_proxy: boolean
+  ssl_certificates: boolean
 }
 
 // ---- Response Types ----

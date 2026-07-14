@@ -127,6 +127,8 @@ def _mock_client_with_requests(base_mock, pc_val, gr_val, pm_val):
             return gr_val
         if path == "/edge/admin/plugin_metadata":
             return pm_val
+        if path == "/edge/admin/ssl":
+            return {}
         return {}
     base_mock._request.side_effect = _request_side_effect
     return base_mock
@@ -371,6 +373,60 @@ class TestEdgeImportConverters:
         result = service.convert_plugin_metadata({"value": {"id": "test-plugin"}})
         assert result["plugin_metadata"]["plugin_name"] == "test-plugin"
 
+    def test_convert_ssl_certificate_basic(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_ssl = {
+            "key": "/edge/admin/ssl/uuid-ssl-1",
+            "value": {
+                "id": "uuid-ssl-1",
+                "cert": "-----BEGIN CERTIFICATE-----\nMIIB2DCCAX4CCQ...\n-----END CERTIFICATE-----",
+                "key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgk...\n-----END PRIVATE KEY-----",
+                "snis": ["edge.local"],
+                "type": "server",
+                "ssl_protocols": ["TLSv1.2", "TLSv1.3"],
+                "status": 1,
+            },
+        }
+        result = service.convert_ssl_certificate(edge_ssl)
+        cert = result["ssl_certificate"]
+        assert cert["edge_uuid"] == "uuid-ssl-1"
+        assert cert["name"] == "uuid-ssl-1"
+        assert cert["sni"] == "edge.local"
+        assert cert["cert_type"] == "server"
+        assert cert["current_version"] is None
+        assert cert["cluster_id"] == 1
+
+    def test_convert_ssl_certificate_missing_key(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        result = service.convert_ssl_certificate({"value": {"id": "my-cert", "cert": "crt", "key": "k"}})
+        cert = result["ssl_certificate"]
+        assert cert["edge_uuid"] == "my-cert"
+        assert cert["cert"] == "crt"
+        assert cert["sni"] == ""
+
+    def test_convert_ssl_certificate_multiple_snis(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_ssl = {
+            "key": "/edge/admin/ssl/cert-1",
+            "value": {
+                "id": "cert-1",
+                "cert": "crt",
+                "key": "k",
+                "snis": ["a.com", "b.com", "c.com"],
+            },
+        }
+        result = service.convert_ssl_certificate(edge_ssl)
+        assert result["ssl_certificate"]["sni"] == "a.com, b.com, c.com"
+
     @patch("app.services.edge_import_service._load_builtin_names")
     def test_convert_route_with_plugins(self, mock_load):
         mock_load.return_value = {"limit-req", "cors", "proxy_rewrite"}
@@ -541,6 +597,7 @@ class TestEdgeImportConflictDetection:
                 global_rules = True
                 plugin_metadata = True
                 stream_proxy = True
+                ssl_certificates = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -649,6 +706,7 @@ class TestEdgeImportConflictDetection:
                 global_rules = False
                 plugin_metadata = False
                 stream_proxy = True
+                ssl_certificates = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -688,6 +746,7 @@ class TestEdgeImportConflictDetection:
                 global_rules = True
                 plugin_metadata = True
                 stream_proxy = True
+                ssl_certificates = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -739,6 +798,7 @@ class TestEdgeImportConflictDetection:
                 global_rules = False
                 plugin_metadata = False
                 stream_proxy = True
+                ssl_certificates = True
 
             result = await service.execute_import(
                 selections=MockSelections(),
@@ -779,6 +839,7 @@ async def test_execute_import_route_plugin_group_mapping(test_db):
             global_rules = False
             plugin_metadata = False
             stream_proxy = True
+            ssl_certificates = True
 
         result = await service.execute_import(
             selections=MockSelections(),

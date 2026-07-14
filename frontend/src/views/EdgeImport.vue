@@ -576,6 +576,7 @@ const selections = reactive({
   global_rules: true,
   plugin_metadata: true,
   stream_proxy: true,
+  ssl_certificates: true,
 })
 
 const expandedSections = reactive({
@@ -596,6 +597,7 @@ const configTypes = [
   { key: 'global_rules', label: '全局规则', icon: PropertySafetyOutlined },
   { key: 'plugin_metadata', label: '插件元数据', icon: AppstoreOutlined },
   { key: 'stream_proxy', label: '四层代理', icon: CloudUploadOutlined },
+  { key: 'ssl_certificates', label: 'SSL 证书', icon: PropertySafetyOutlined },
 ]
 
 function toggleConfigType(key: string) {
@@ -800,6 +802,7 @@ const handleImport = async () => {
       global_rules: selections.global_rules,
       plugin_metadata: selections.plugin_metadata,
       stream_proxy: selections.stream_proxy,
+      ssl_certificates: selections.ssl_certificates,
     }, adminKey.value)
     importResult.value = res.data
     resultModalVisible.value = true

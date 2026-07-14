@@ -431,6 +431,40 @@ async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: Async
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+@router.get("/nodes/{ip}/{port}/ssl")
+async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        result = client.api("ssl", "list")
+        return {"ssl_certificates": result}
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.get("/nodes/{ip}/{port}/ssl/{cert_id}")
+async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        return client.api("ssl", "get", cert_id)
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@router.delete("/nodes/{ip}/{port}/ssl/{cert_id}")
+async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
+    client = EdgeClient(0, node_ip=ip, node_port=port)
+    try:
+        return client.api("ssl", "delete", cert_id)
+    except EdgeConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
+    except EdgeAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
 @router.get("/nodes/{ip}/{port}/plugins/list")
 async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)

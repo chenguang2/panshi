@@ -56,6 +56,15 @@ export const pluginConfigColumns: TableColumnType[] = [
   { title: '操作', key: 'actions', width: 200 },
 ]
 
+export const sslColumns: TableColumnType[] = [
+  { title: '#', key: 'index', width: 45 },
+  { title: '名称', key: 'name', width: 120 },
+  { title: 'SNI', key: 'snis', width: 180 },
+  { title: '类型', key: 'type', width: 80 },
+  { title: '状态', key: 'status', width: 80 },
+  { title: '操作', key: 'actions', width: 150 },
+]
+
 export const streamRouteColumns: TableColumnType[] = [
   { title: '#', key: 'index', width: 45 },
   { title: 'ID', key: 'id', width: 200 },

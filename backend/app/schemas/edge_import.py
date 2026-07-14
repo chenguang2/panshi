@@ -133,6 +133,7 @@ class ImportSelection(BaseModel):
     global_rules: bool = True
     plugin_metadata: bool = True
     stream_proxy: bool = True
+    ssl_certificates: bool = True
 
 
 class ImportExecuteRequest(BaseModel):

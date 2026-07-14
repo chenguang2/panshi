@@ -29,6 +29,7 @@ from app.models.cluster import (
     StreamProxy,
 )
 from app.models.edge_import import ImportLog
+from app.models.ssl import SslCertificate
 
 
 def _load_builtin_names() -> set:
@@ -233,6 +234,7 @@ class EdgeImportService:
         plugin_configs: list = []
         global_rules: list = []
         plugin_metadata: list = []
+        ssl_certificates: list = []
         stream_proxies: list = []
         warnings: list[str] = []
 
@@ -275,6 +277,13 @@ class EdgeImportService:
             warnings.append(f"插件元数据获取失败: {e}")
 
         try:
+            raw_ssl = self.client._request("GET", "/edge/admin/ssl")
+            ssl_certificates = self._parse_resource_list(raw_ssl)
+        except Exception as e:
+            logger.warning("fetch_edge_data: ssl failed — %s", e)
+            warnings.append(f"SSL 证书获取失败: {e}")
+
+        try:
             raw_sp = self.client.list_stream_routes()
             if isinstance(raw_sp, list):
                 stream_proxies = self._unwrap_panshi_items(raw_sp)
@@ -288,6 +297,7 @@ class EdgeImportService:
             "plugin_configs": plugin_configs,
             "global_rules": global_rules,
             "plugin_metadata": plugin_metadata,
+            "ssl_certificates": ssl_certificates,
             "stream_proxies": stream_proxies,
             "warnings": warnings,
         }
@@ -540,6 +550,35 @@ class EdgeImportService:
             "raw_plugins": raw_data,
         }
 
+    def convert_ssl_certificate(self, edge_ssl: dict) -> dict:
+        value = edge_ssl.get("value", edge_ssl) if isinstance(edge_ssl, dict) else edge_ssl
+        raw_data = value if isinstance(value, dict) else {}
+        key = edge_ssl.get("key", "") if isinstance(edge_ssl, dict) else ""
+        ssl_id = key.rsplit("/", 1)[-1] if key else raw_data.get("id", "")
+        snis = raw_data.get("snis", [])
+        sni_str = ", ".join(snis) if isinstance(snis, list) else str(snis) if snis else ""
+
+        ssl_protocols = None
+        sp = raw_data.get("ssl_protocols")
+        if sp:
+            import json as _json
+            ssl_protocols = _json.dumps(sp) if isinstance(sp, list) else str(sp)
+
+        return {
+            "ssl_certificate": {
+                "edge_uuid": ssl_id,
+                "cluster_id": self.cluster_id,
+                "name": ssl_id,
+                "sni": sni_str,
+                "cert": raw_data.get("cert", ""),
+                "private_key": raw_data.get("key", ""),
+                "cert_type": raw_data.get("type", "server"),
+                "ssl_protocols": ssl_protocols,
+                "status": raw_data.get("status", 1),
+                "current_version": None,
+            },
+        }
+
     async def detect_conflicts(self, preview_data: dict) -> list[dict]:
         conflicts: list[dict] = []
         db = self.db_session
@@ -682,6 +721,29 @@ class EdgeImportService:
                         "resolution": "将跳过该记录",
                     })
 
+        ssl_uuids = [
+            sc["ssl_certificate"]["edge_uuid"]
+            for sc in preview_data.get("converted_ssl_certificates", [])
+        ]
+        if ssl_uuids:
+            result = await db.execute(
+                select(SslCertificate.edge_uuid).where(
+                    SslCertificate.cluster_id == self.cluster_id,
+                    SslCertificate.edge_uuid.in_(ssl_uuids),
+                )
+            )
+            existing_ssl_uuids = set(row[0] for row in result.all())
+            for sc in preview_data.get("converted_ssl_certificates", []):
+                euuid = sc["ssl_certificate"]["edge_uuid"]
+                if euuid in existing_ssl_uuids:
+                    conflicts.append({
+                        "type": "uuid_conflict",
+                        "resource_type": "ssl_certificate",
+                        "resource_name": sc["ssl_certificate"]["name"],
+                        "reason": f"SSL 证书 '{sc['ssl_certificate']['name']}' (uuid: {euuid}) 已存在于数据库中",
+                        "resolution": "将跳过该记录",
+                    })
+
         return conflicts
 
     async def preview_import(self) -> dict:
@@ -717,6 +779,11 @@ class EdgeImportService:
             for esp in edge_data.get("stream_proxies", [])
         ]
 
+        converted_ssl_certificates = [
+            self.convert_ssl_certificate(esc)
+            for esc in edge_data.get("ssl_certificates", [])
+        ]
+
         preview_data = {
             "converted_upstreams": converted_upstreams,
             "converted_routes": converted_routes,
@@ -724,6 +791,7 @@ class EdgeImportService:
             "converted_global_rules": converted_global_rules,
             "converted_plugin_metadata": converted_plugin_metadata,
             "converted_stream_proxies": converted_stream_proxies,
+            "converted_ssl_certificates": converted_ssl_certificates,
         }
 
         conflicts = await self.detect_conflicts(preview_data)
@@ -855,6 +923,11 @@ class EdgeImportService:
             for pm in converted_plugin_metadata
         ]
 
+        ssl_preview = [
+            {"name": sc["ssl_certificate"]["name"], "sni": sc["ssl_certificate"]["sni"], "cert_type": sc["ssl_certificate"]["cert_type"], "edge_uuid": sc["ssl_certificate"]["edge_uuid"]}
+            for sc in converted_ssl_certificates
+        ]
+
         sp_preview = []
         for csp in converted_stream_proxies:
             sp = csp["stream_proxy"]
@@ -877,6 +950,7 @@ class EdgeImportService:
             "plugin_configs": pc_preview,
             "global_rules": gr_preview,
             "plugin_metadata": pm_preview,
+            "ssl_certificates": ssl_preview,
             "stream_proxies": sp_preview,
             "conflicts": conflicts,
             "plugin_summary": plugin_summary,
@@ -914,6 +988,11 @@ class EdgeImportService:
                 for esp in edge_data.get("stream_proxies", [])
             ]
 
+            converted_ssl_certificates = [
+                self.convert_ssl_certificate(esc)
+                for esc in edge_data.get("ssl_certificates", [])
+            ]
+
             upstream_uuid_map: dict = {}
             plugin_config_uuid_map: dict = {}
 
@@ -921,11 +1000,13 @@ class EdgeImportService:
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
                 "plugin_metadata": 0, "stream_proxies": 0,
+                "ssl_certificates": 0,
             }
             skipped_counts: dict[str, int] = {
                 "upstreams": 0, "routes": 0,
                 "plugin_configs": 0, "global_rules": 0,
                 "plugin_metadata": 0, "stream_proxies": 0,
+                "ssl_certificates": 0,
             }
 
             known_plugin_count = 0
@@ -975,6 +1056,15 @@ class EdgeImportService:
                     await session.execute(
                         select(StreamProxy.listen_port).where(
                             StreamProxy.cluster_id == self.cluster_id
+                        )
+                    )
+                ).all()
+            )
+            existing_ssl_uuids = set(
+                row[0] for row in (
+                    await session.execute(
+                        select(SslCertificate.edge_uuid).where(
+                            SslCertificate.cluster_id == self.cluster_id
                         )
                     )
                 ).all()
@@ -1040,6 +1130,27 @@ class EdgeImportService:
                         created_by="system",
                     ))
                     imported_counts["stream_proxies"] += 1
+                await session.flush()
+
+            if selections.ssl_certificates:
+                for csc in converted_ssl_certificates:
+                    sc_data = csc["ssl_certificate"]
+                    if sc_data["edge_uuid"] in existing_ssl_uuids:
+                        skipped_counts["ssl_certificates"] += 1
+                        continue
+                    existing_ssl_uuids.add(sc_data["edge_uuid"])
+                    sc_data["current_version"] = 1
+                    sc_data.pop("edge_uuid", None)
+                    ssl_obj = SslCertificate(**sc_data)
+                    session.add(ssl_obj)
+                    await session.flush()
+                    session.add(ConfigVersion(
+                        cluster_id=self.cluster_id, resource_type="ssl",
+                        resource_id=ssl_obj.id, version=1,
+                        config=json.dumps(csc.get("ssl_certificate", {}), ensure_ascii=False),
+                        created_by="system",
+                    ))
+                    imported_counts["ssl_certificates"] += 1
                 await session.flush()
 
             if selections.plugin_configs:
