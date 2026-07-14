@@ -24,6 +24,24 @@
           <label class="form-label">SNI 域名 <span class="required">*</span></label>
           <input v-model="form.sni" type="text" class="form-input" placeholder="example.com 或多个用逗号分隔">
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">证书类型</label>
+            <select v-model="form.cert_type" class="form-input">
+              <option value="server">server（服务端）</option>
+              <option value="client">client（客户端）</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:2;">
+            <label class="form-label">SSL 协议版本</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;">
+              <label v-for="p in ['TLSv1.1','TLSv1.2','TLSv1.3']" :key="p" class="checkbox-label" style="font-size:13px;white-space:nowrap;">
+                <input type="checkbox" :value="p" :checked="form.ssl_protocols.includes(p)" @change="toggleProtocol(p)">
+                <span>{{ p }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
 
         <div class="form-row">
           <div class="form-group" style="flex:1;">
@@ -46,24 +64,6 @@
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">证书类型</label>
-            <select v-model="form.cert_type" class="form-input">
-              <option value="server">server（服务端）</option>
-              <option value="client">client（客户端）</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">SSL 协议版本</label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <label v-for="p in ['TLSv1.1','TLSv1.2','TLSv1.3']" :key="p" class="checkbox-label" style="font-size:13px;">
-                <input type="checkbox" :value="p" :checked="form.ssl_protocols.includes(p)" @change="toggleProtocol(p)">
-                <span>{{ p }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
         <div class="form-group">
           <label class="form-label">描述</label>
           <textarea v-model="form.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
