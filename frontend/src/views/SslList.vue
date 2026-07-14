@@ -24,15 +24,15 @@
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="displayedCerts.length === 0" class="ssl-empty">
+    <div v-else-if="certs.length === 0" class="ssl-empty">
       <div class="ssl-empty-icon">🔒</div>
       <div class="ssl-empty-text">暂无 SSL 证书</div>
     </div>
     <div v-else class="ssl-grid">
-      <div v-for="cert in displayedCerts" :key="cert.id" class="ssl-card">
-        <div class="ssl-card-head">
-          <span>{{ cert.cluster_name || cert.cluster_id }}</span>
-          <span v-if="cert.cluster_group_name" class="group-badge" style="font-size:10px;">{{ cert.cluster_group_name }}</span>
+      <div v-for="cert in displayedCerts" :key="cert.id" class="ssl-card" :style="getCardBorderStyle(cert.cluster_group_name)">
+        <div class="ssl-card-topbar" :style="getGroupColorStyle(cert.cluster_group_name)">
+          <span>{{ cert.cluster_name || '-' }}</span>
+          <span v-if="cert.cluster_group_name" class="group-badge">{{ cert.cluster_group_name }}</span>
         </div>
         <div class="ssl-card-header">
           <div class="ssl-card-info">
@@ -42,6 +42,10 @@
           <div class="ssl-card-meta">
             <span v-if="cert.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
+            <div class="ssl-version-text">
+              <template v-if="cert.current_version && cert.published_at">v{{ cert.current_version }} · {{ formatDate(cert.published_at) }}</template>
+              <template v-else-if="cert.current_version">v{{ cert.current_version }} · 未同步</template>
+            </div>
           </div>
         </div>
         <div class="ssl-card-body">
@@ -50,43 +54,51 @@
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
         <div class="ssl-card-actions">
-          <button class="btn btn-ghost btn-sm" @click="handlePublish(cert)">发布</button>
+          <button class="btn btn-ghost btn-sm ssl-action-btn" @click="viewCert(cert)">查看</button>
+          <button class="btn btn-ghost btn-sm ssl-action-btn" @click="openEditDrawer(cert)">编辑</button>
+          <button class="btn btn-ghost btn-sm ssl-action-btn" style="color:var(--danger);" @click="deleteCert(cert)">删除</button>
           <span style="flex:1"></span>
-          <button class="btn btn-ghost btn-sm" @click="openViewDrawer(cert)">查看</button>
-          <button class="btn btn-ghost btn-sm" @click="openEditDrawer(cert)">编辑</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click="handleDelete(cert)">删除</button>
+          <button class="btn btn-secondary btn-sm" @click="publishCert(cert)">发布</button>
+          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(cert)">版本管理</button>
         </div>
       </div>
     </div>
 
-    <SslFormDrawer
-      :visible="drawerVisible"
-      :clusters="clusters"
-      :editing-cert="editingCert"
-      @close="onDrawerClose"
-    />
+    <SslFormDrawer :visible="formVisible" :clusters="clusters" :editing-cert="editingCert" @close="closeForm" />
+
+    <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" />
+
+    <VersionManagementModal v-model:open="vmVisible" resource-type="ssl" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadCerts" @published="loadCerts" />
+
+    <PublishConfirmModal v-model:visible="publishVisible" title="发布 SSL 证书" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
+import { PAGE_SIZE_CARD_GRID } from '@/constants'
+import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import SslFormDrawer from '@/components/SslFormDrawer.vue'
-import { listSslCertificates, deleteSslCertificate, publishSslCertificate } from '@/api/ssl'
-import type { SslCertificate } from '@/types/ssl'
-import api from '@/api'
+import SslViewDrawer from '@/components/SslViewDrawer.vue'
+import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
-const certs = ref<SslCertificate[]>([])
+const certs = ref<any[]>([])
 const clusters = ref<any[]>([])
+const totalCount = ref(0)
 const loading = ref(false)
 const searchText = ref('')
 const groupFilter = ref('__all__')
-const groupOptions = ref<string[]>([])
-const clusterFilter = ref<number | ''>('')
+const clusterFilter = ref('')
 
-const drawerVisible = ref(false)
-const editingCert = ref<SslCertificate | null>(null)
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort()
+})
 
 const filteredClusters = computed(() => {
   if (groupFilter.value === '__all__') return clusters.value
@@ -94,123 +106,159 @@ const filteredClusters = computed(() => {
   return clusters.value.filter((c: any) => c.group_name === groupFilter.value)
 })
 
-const totalCount = computed(() => displayedCerts.value.length)
-
 const displayedCerts = computed(() => {
-  let list = certs.value
+  let list = [...certs.value]
   if (clusterFilter.value) {
-    list = list.filter(c => c.cluster_id === clusterFilter.value)
+    list = list.filter(c => c.cluster_id === Number(clusterFilter.value))
   }
   if (searchText.value) {
     const q = searchText.value.toLowerCase()
     list = list.filter(c => c.name.toLowerCase().includes(q) || c.sni.toLowerCase().includes(q))
   }
-  return list
+  return list.sort((a: any, b: any) => {
+    const ga = a.cluster_group_name || ''
+    const gb = b.cluster_group_name || ''
+    if (ga && !gb) return 1
+    if (!ga && gb) return -1
+    return ga.localeCompare(gb)
+  })
 })
 
-async function loadClusters() {
-  try {
-    const res = await api.get('/clusters', { params: { page_size: 500 } })
-    const items = res.data?.items || []
-    clusters.value = items
-    const groups = new Set<string>()
-    items.forEach((c: any) => { if (c.group_name) groups.add(c.group_name) })
-    groupOptions.value = Array.from(groups).sort()
-  } catch { clusters.value = [] }
+const formVisible = ref(false)
+const editingCert = ref<any | null>(null)
+const vmVisible = ref(false)
+const vmId = ref<number | null>(null)
+const vmClusterId = ref<number | null>(null)
+const vmName = ref('')
+const viewDrawerVisible = ref(false)
+const viewingCert = ref<any | null>(null)
+const publishVisible = ref(false)
+const publishClusterId = ref(0)
+const publishingCert = ref<any | null>(null)
+
+function formatDate(d: string) {
+  if (!d) return '-'
+  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) } catch { return d }
+}
+
+function onSearch() {
+  // computed filters automatically
+}
+
+function onGroupChange() {
+  clusterFilter.value = ''
+  loadCerts()
 }
 
 async function loadCerts() {
   loading.value = true
   try {
-    const res = await listSslCertificates()
-    const items = Array.isArray(res.data?.items) ? res.data.items : []
-    const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))
-    certs.value = items.map((cert: any) => ({
-      ...cert,
-      cluster_name: clusterMap.get(cert.cluster_id)?.display_name || clusterMap.get(cert.cluster_id)?.name || '',
-      cluster_group_name: clusterMap.get(cert.cluster_id)?.group_name || '',
-    }))
-  } catch { certs.value = [] }
+    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
+    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (searchText.value) params.search = searchText.value
+    const res = await api.get('/ssl', { params })
+    certs.value = res.data.items || []
+    totalCount.value = res.data.total || 0
+  } catch { message.error('加载 SSL 证书失败') }
   finally { loading.value = false }
 }
 
-function onSearch() { /* computed filters automatically */ }
-function onGroupChange() { clusterFilter.value = ''; loadCerts() }
-
-function openCreateDrawer() {
-  editingCert.value = null
-  drawerVisible.value = true
-}
-
-function openEditDrawer(cert: SslCertificate) {
-  editingCert.value = cert
-  drawerVisible.value = true
-}
-
-function openViewDrawer(cert: SslCertificate) {
-  editingCert.value = cert
-  drawerVisible.value = true
-}
-
-function onDrawerClose() {
-  drawerVisible.value = false
-  editingCert.value = null
-  loadCerts()
-}
-
-async function handlePublish(cert: SslCertificate) {
+async function loadClusters() {
   try {
-    await publishSslCertificate(cert.cluster_id, cert.id)
-    message.success('发布成功')
-    await loadCerts()
-  } catch (e: any) {
-    message.error('发布失败: ' + (e.response?.data?.detail || e.message))
-  }
+    const res = await api.get('/clusters')
+    clusters.value = res.data?.items || res.data || []
+  } catch { /* ignore */ }
 }
 
-async function handleDelete(cert: SslCertificate) {
-  const msg = cert.current_version ? `该证书已发布到集群节点，确定要删除吗？` : '确定要删除该证书吗？'
-  Modal.confirm({
-    title: '删除 SSL 证书',
-    content: msg,
-    onOk: async () => {
-      try {
-        await deleteSslCertificate(cert.cluster_id, cert.id, { delete_db: true, delete_edge: true })
-        message.success('已删除')
-        await loadCerts()
-      } catch (e: any) {
-        message.error('删除失败: ' + (e.response?.data?.detail || e.message))
-      }
+function openCreateDrawer() { editingCert.value = null; formVisible.value = true }
+function openEditDrawer(cert: any) { editingCert.value = cert; formVisible.value = true }
+function closeForm() { formVisible.value = false; editingCert.value = null }
+
+function viewCert(cert: any) {
+  viewingCert.value = cert
+  viewDrawerVisible.value = true
+}
+
+async function deleteCert(cert: any) {
+  let nodes: { id: number; ip: string; management_port: number }[] = []
+  try {
+    const res = await api.get(`/clusters/${cert.cluster_id}/nodes`)
+    nodes = res.data?.items || []
+  } catch { /* ignore */ }
+
+  showDeleteConfirm({
+    title: `确定要删除 SSL 证书 "${cert.name}" 吗？`,
+    apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
+    nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      await executeDeleteWithProgress({
+        title: `删除 SSL 证书: ${cert.name}`,
+        apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
+        cluster: { id: cert.cluster_id, nodes } as any,
+        deleteDb,
+        deleteEdge,
+        nodeIds,
+        refreshFn: loadCerts,
+        clearSelectedFn: () => {},
+      })
     },
   })
 }
 
-onMounted(() => {
-  loadClusters().then(() => loadCerts())
-})
+function publishCert(cert: any) {
+  publishingCert.value = cert
+  publishClusterId.value = cert.cluster_id
+  publishVisible.value = true
+}
+
+async function onPublishConfirm(nodeIds: number[]) {
+  publishVisible.value = false
+  const cert = publishingCert.value
+  if (!cert) return
+  await executePublish({
+    title: `发布 SSL 证书: ${cert.name}`,
+    apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}/publish`,
+    nodeIds,
+    refreshFn: loadCerts,
+  })
+}
+
+function openVersionManagement(cert: any) {
+  vmId.value = cert.id; vmClusterId.value = cert.cluster_id; vmName.value = cert.name; vmVisible.value = true
+}
+
+onMounted(() => { loadClusters(); loadCerts() })
 </script>
 
 <style scoped>
 .ssl-page { padding: 20px 24px; }
-.ssl-header-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: nowrap; }
+.ssl-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
 .search-input-wrap { position: relative; flex: 1; min-width: 140px; }
 .search-input-wrap .form-input { width: 100%; padding-left: 32px; }
 .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5; pointer-events: none; }
-.loading-state { text-align: center; padding: 48px; color: var(--muted); }
-.ssl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px; }
-.ssl-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
-.ssl-card-head { padding: 6px 12px; font-size: 11px; color: var(--muted); background: var(--bg); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
-.ssl-card-head .group-badge { background: oklch(55% 0.15 250 / 15%); color: oklch(40% 0.18 250); padding: 1px 6px; border-radius: 8px; }
-.ssl-card-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 16px 8px; gap: 8px; }
-.ssl-card-info { flex: 1; min-width: 0; }
-.ssl-card-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ssl-card-desc { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ssl-card-meta { text-align: right; flex-shrink: 0; }
-.ssl-card-body { padding: 4px 16px 8px; }
+.loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
+.ssl-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
+.ssl-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
+.ssl-empty-text { font-size: 14px; color: var(--muted); }
+.ssl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ssl-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
+.ssl-card:hover { box-shadow: var(--shadow-md); }
+.ssl-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
+.ssl-card-info { flex: 1; }
+.ssl-card-name { font-size: 15px; font-weight: 600; }
+.ssl-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+.ssl-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
+.ssl-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
+.ssl-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
+.ssl-card-body { padding: 4px 20px 8px; }
 .ssl-card-row { display: flex; gap: 8px; font-size: 12px; margin-bottom: 2px; }
 .ssl-card-row label { color: var(--muted); min-width: 40px; }
-.ssl-card-actions { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-top: 1px solid var(--border); margin-top: auto; }
-.ssl-empty { text-align: center; padding: 64px; color: var(--muted); }
-.ssl-empty-icon { font-size: 32px; margin-bottom: 8px; }
-.ssl-empty-text { font-size: 14px; }
+.ssl-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
+.ssl-action-btn { background: none !important; background-color: transparent !important; }
+.ssl-action-btn:hover { background: var(--bg) !important; }
+.text-sm { font-size: 12px; }
+.text-muted { color: var(--muted); }
+@media (max-width: 768px) {
+  .ssl-grid { grid-template-columns: 1fr; }
+}
 </style>

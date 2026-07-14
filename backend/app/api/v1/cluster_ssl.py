@@ -4,7 +4,7 @@ import json
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -24,13 +24,38 @@ global_router = APIRouter(prefix="/ssl", tags=["ssl"])
 @global_router.get("")
 async def list_all_ssl_certificates(
     db: AsyncSession = Depends(get_db),
+    page_size: int = Query(500, ge=1, le=500),
+    group_name: str = Query("__all__"),
+    cluster_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
 ):
-    result = await db.execute(
-        select(SslCertificate).order_by(SslCertificate.id)
-    )
+    query = select(SslCertificate)
+
+    if cluster_id is not None:
+        query = query.where(SslCertificate.cluster_id == cluster_id)
+
+    from app.models.cluster import Cluster
+    if group_name == "__ung__":
+        query = query.join(Cluster, SslCertificate.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, SslCertificate.cluster_id == Cluster.id).where(
+            Cluster.group_name == group_name
+        )
+
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(SslCertificate.name.ilike(pattern))
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    query = query.order_by(SslCertificate.id).limit(page_size)
+    result = await db.execute(query)
     items = result.scalars().all()
     return {
-        "total": len(items),
+        "total": total,
         "items": [SslCertificateResponse.model_validate(c).model_dump() for c in items],
     }
 
