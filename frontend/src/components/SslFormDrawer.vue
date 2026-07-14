@@ -108,7 +108,7 @@ const submitting = ref(false)
 
 const form = reactive({
   name: '',
-  cluster_id: undefined as number | undefined,
+  cluster_id: '' as number | string,
   cert_type: 'server',
   sni: '',
   cert: '',
@@ -157,7 +157,7 @@ watch(() => props.visible, (v) => {
     form.description = c.description || ''
   } else {
     form.name = ''
-    form.cluster_id = undefined
+    form.cluster_id = ''
     form.cert_type = 'server'
     form.sni = ''
     form.cert = ''
