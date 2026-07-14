@@ -10,19 +10,22 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书名称 <span class="required">*</span></label>
-            <input v-model="form.name" type="text" class="form-input" placeholder="输入证书名称">
+            <input v-model="form.name" type="text" class="form-input" :class="{ 'has-error': formErrors.name }" placeholder="输入证书名称">
+            <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
           </div>
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <select v-model="form.cluster_id" class="form-input" :disabled="!!editingCert">
+            <select v-model="form.cluster_id" class="form-input" :class="{ 'has-error': formErrors.cluster_id }" :disabled="!!editingCert">
               <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
+            <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">SNI 域名 <span class="required">*</span></label>
-          <input v-model="form.sni" type="text" class="form-input" placeholder="example.com 或多个用逗号分隔">
+          <input v-model="form.sni" type="text" class="form-input" :class="{ 'has-error': formErrors.sni }" placeholder="example.com 或多个用逗号分隔">
+          <div v-if="formErrors.sni" class="form-error">{{ formErrors.sni }}</div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -34,11 +37,14 @@
           </div>
           <div class="form-group" style="flex:2;">
             <label class="form-label">SSL 协议版本</label>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px;">
-              <label v-for="p in ['TLSv1.1','TLSv1.2','TLSv1.3']" :key="p" class="checkbox-label" style="font-size:13px;white-space:nowrap;">
-                <input type="checkbox" :value="p" :checked="form.ssl_protocols.includes(p)" @change="toggleProtocol(p)">
-                <span>{{ p }}</span>
-              </label>
+            <div class="method-chips">
+              <span
+                v-for="p in SSL_PROTOCOLS"
+                :key="p"
+                class="method-chip"
+                :class="{ selected: form.ssl_protocols.includes(p) }"
+                @click="toggleProtocol(p)"
+              >{{ p }}</span>
             </div>
           </div>
         </div>
@@ -50,8 +56,9 @@
               <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'file' }" @click="certInputMode = 'file'">上传文件</button>
               <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'text' }" @click="certInputMode = 'text'">粘贴文本</button>
             </div>
-            <input v-if="certInputMode === 'file'" type="file" accept=".crt,.pem,.cert" @change="onCertFileChange" style="width:100%;" />
-            <textarea v-else v-model="form.cert" class="form-input" rows="8" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+            <input v-if="certInputMode === 'file'" type="file" accept=".crt,.pem,.cert" @change="onCertFileChange" style="width:100%;" :class="{ 'has-error': formErrors.cert }" />
+            <textarea v-else v-model="form.cert" class="form-input" :class="{ 'has-error': formErrors.cert }" rows="8" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+            <div v-if="formErrors.cert" class="form-error">{{ formErrors.cert }}</div>
           </div>
           <div class="form-group" style="flex:1;">
             <label class="form-label">私钥文件 (PEM) <span class="required">*</span></label>
@@ -59,8 +66,9 @@
               <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'file' }" @click="keyInputMode = 'file'">上传文件</button>
               <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'text' }" @click="keyInputMode = 'text'">粘贴文本</button>
             </div>
-            <input v-if="keyInputMode === 'file'" type="file" accept=".key,.pem" @change="onKeyFileChange" style="width:100%;" />
-            <textarea v-else v-model="form.key" class="form-input" rows="8" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+            <input v-if="keyInputMode === 'file'" type="file" accept=".key,.pem" @change="onKeyFileChange" style="width:100%;" :class="{ 'has-error': formErrors.key }" />
+            <textarea v-else v-model="form.key" class="form-input" :class="{ 'has-error': formErrors.key }" rows="8" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+            <div v-if="formErrors.key" class="form-error">{{ formErrors.key }}</div>
           </div>
         </div>
 
@@ -92,6 +100,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
+const SSL_PROTOCOLS = ['TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+
 const certInputMode = ref<'file' | 'text'>('file')
 const keyInputMode = ref<'file' | 'text'>('file')
 const submitting = ref(false)
@@ -107,6 +117,23 @@ const form = reactive({
   description: '',
 })
 
+const formErrors = reactive<Record<string, string>>({})
+
+function clearErrors() {
+  for (const k of Object.keys(formErrors)) delete formErrors[k]
+}
+
+function validate(): boolean {
+  clearErrors()
+  let valid = true
+  if (!form.name.trim()) { formErrors.name = '请输入证书名称'; valid = false }
+  if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; valid = false }
+  if (!form.sni.trim()) { formErrors.sni = '请输入 SNI 域名'; valid = false }
+  if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
+  if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
+  return valid
+}
+
 function toggleProtocol(p: string) {
   const idx = form.ssl_protocols.indexOf(p)
   if (idx >= 0) form.ssl_protocols.splice(idx, 1)
@@ -115,6 +142,7 @@ function toggleProtocol(p: string) {
 
 watch(() => props.visible, (v) => {
   if (!v) return
+  clearErrors()
   certInputMode.value = 'file'
   keyInputMode.value = 'file'
   if (props.editingCert) {
@@ -156,10 +184,7 @@ function onKeyFileChange(e: Event) {
 }
 
 async function handleSubmit() {
-  if (!form.name || !form.cluster_id || !form.sni || !form.cert || !form.key) {
-    message.warning('请填写必填字段')
-    return
-  }
+  if (!validate()) return
   submitting.value = true
   try {
     const data: any = {
