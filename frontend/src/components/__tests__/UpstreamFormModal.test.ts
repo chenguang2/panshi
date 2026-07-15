@@ -55,7 +55,7 @@ describe('UpstreamFormModal.vue', () => {
       props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
       global: { stubs }
     })
-    expect(wrapper.find('.mock-modal').exists()).toBe(true)
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
     expect(wrapper.text()).toContain('所属集群')
   })
 
@@ -70,24 +70,28 @@ describe('UpstreamFormModal.vue', () => {
     expect(select.attributes('disabled')).toBeDefined()
   })
 
+  async function fillAndSubmit(wrapper: any, editing = false) {
+    const vm = wrapper.vm as any
+    vm.form.cluster_id = 1
+    vm.form.targets = [{ key: 1, ip: '10.0.0.1', port: 8080, weight: 100 }]
+    vm.form.name = 'test-upstream'
+    await wrapper.vm.$nextTick()
+    const saveBtn = wrapper.findAll('button').filter((w: any) => w.text().includes('保存'))
+    if (saveBtn.length > 0) {
+      await saveBtn[0].trigger('click')
+    } else {
+      throw new Error('Save button not found')
+    }
+    await wrapper.vm.$nextTick()
+  }
+
   it('calls POST API on create submit', async () => {
     const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
     const wrapper = mount(UpstreamFormModal, {
       props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
       global: { stubs }
     })
-    const vm = wrapper.vm as any
-    vm.form.cluster_id = 1
-    vm.form.targets = [{ key: 1, ip: '10.0.0.1', port: 8080, weight: 100 }]
-    vm.form.name = 'test-upstream'
-    await wrapper.vm.$nextTick()
-    const saveBtn = wrapper.findAll('.mock-btn').filter(w => w.text().includes('保存'))
-    if (saveBtn.length > 0) {
-      await saveBtn[0].trigger('click')
-    } else {
-      await wrapper.findAll('.mock-btn')[1].trigger('click')
-    }
-    await wrapper.vm.$nextTick()
+    await fillAndSubmit(wrapper)
     expect(mockApiPost).toHaveBeenCalled()
   })
 
@@ -97,18 +101,150 @@ describe('UpstreamFormModal.vue', () => {
       props: { visible: true, editingUpstream: MOCK_UPSTREAM, clusters: MOCK_CLUSTERS },
       global: { stubs }
     })
+    await fillAndSubmit(wrapper)
+    expect(mockApiPut).toHaveBeenCalled()
+  })
+
+  // ── RED TEST 1: Toggle OFF all → advanced fields should be null in API call ──
+  it('submit with all toggles OFF sends null for all advanced config fields', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    await fillAndSubmit(wrapper)
+
+    const callArgs = mockApiPost.mock.calls[0]
+    const body = callArgs[1] as Record<string, unknown>
+
+    expect(body.checks).toBeNull()
+    expect(body.timeout).toBeNull()
+    expect(body.keepalive_pool).toBeNull()
+    expect(body.retries).toBeNull()
+    expect(body.retry_timeout).toBeNull()
+    expect(body.pass_host).toBeNull()
+    expect(body.upstream_host).toBeNull()
+    expect(body.scheme).toBeNull()
+  })
+
+  // ── RED TEST 2: retries radio submits correct values ──
+  it('retries radio auto sends null', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
     const vm = wrapper.vm as any
+    vm.toggleRetries = true
+    vm.retriesRadio = 'auto'
+    await fillAndSubmit(wrapper)
+    const body = mockApiPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.retries).toBeNull()
+  })
+
+  it('retries radio custom sends N', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    vm.toggleRetries = true
+    vm.retriesRadio = 'custom'
+    vm.form.retriesInput = 5
+    await fillAndSubmit(wrapper)
+    const body = mockApiPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.retries).toBe(5)
+  })
+
+  it('retries radio disabled sends 0', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    vm.toggleRetries = true
+    vm.retriesRadio = 'disabled'
+    await fillAndSubmit(wrapper)
+    const body = mockApiPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.retries).toBe(0)
+  })
+
+  // ── RED TEST 3: edit populates toggle states from DB values ──
+  it('edit form toggles ON for non-null DB fields', async () => {
+    const upstreamWithConfig = {
+      ...MOCK_UPSTREAM,
+      checks: { passive: {}, active: { unhealthy: {} } },
+      timeout: { connect: 10, send: 10, read: 10 },
+      retries: 3,
+    }
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: upstreamWithConfig, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    expect(vm.toggleChecks).toBe(true)
+    expect(vm.toggleTimeout).toBe(true)
+    expect(vm.toggleRetries).toBe(true)
+    expect(vm.retriesRadio).toBe('custom')
+    expect(vm.form.retriesInput).toBe(3)
+  })
+
+  it('edit form toggles OFF for null DB fields', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: MOCK_UPSTREAM, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    expect(vm.toggleChecks).toBe(false)
+    expect(vm.toggleTimeout).toBe(false)
+    expect(vm.toggleRetries).toBe(false)
+  })
+
+  // ── Regression: empty timeout fields should block save ──
+  it('timeout validation blocks save when connect is empty', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    vm.toggleTimeout = true
+    // Simulate clearing the connect input as custom @input handler does
+    vm.form.timeout.connect = undefined as any
+    vm.form.timeout.send = undefined as any
+    vm.form.timeout.read = undefined as any
     vm.form.cluster_id = 1
     vm.form.targets = [{ key: 1, ip: '10.0.0.1', port: 8080, weight: 100 }]
     vm.form.name = 'test-upstream'
-    await wrapper.vm.$nextTick()
-    const saveBtn = wrapper.findAll('.mock-btn').filter(w => w.text().includes('保存'))
-    if (saveBtn.length > 0) {
-      await saveBtn[0].trigger('click')
-    } else {
-      await wrapper.findAll('.mock-btn')[1].trigger('click')
-    }
-    await wrapper.vm.$nextTick()
-    expect(mockApiPut).toHaveBeenCalled()
+    await vm.$nextTick()
+    // Click save button
+    const saveBtn = wrapper.findAll('button').filter((w: any) => w.text().includes('保存'))
+    await saveBtn[0].trigger('click')
+    await vm.$nextTick()
+    // API should NOT be called
+    expect(mockApiPost).not.toHaveBeenCalled()
+    // Error message should be set
+    expect(vm.formErrors.timeout).toContain('超时配置')
+  })
+
+  // ── Regression: toggle ON without touching textarea → checks should be valid ──
+  it('toggle health check ON sends checks even without touching textarea', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    // Toggle health check ON without touching textarea
+    vm.toggleChecks = true
+    await fillAndSubmit(wrapper)
+    const body = mockApiPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.checks).not.toBeNull()
+    expect(body.checks).toHaveProperty('passive')
+    expect(body.checks).toHaveProperty('active')
   })
 })

@@ -102,101 +102,144 @@
             <div v-if="formErrors.targets" class="form-error" style="margin-top:8px;">{{ formErrors.targets }}</div>
             <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;border:1px dashed var(--border);" @click="addTarget">+ 添加节点</button>
           </div>
-
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="form.advancedEnabled">
-              <span>开启高级配置</span>
-            </label>
-            <div class="form-hint">开启后在"高级配置"页配置健康检查、超时、重试等</div>
-          </div>
         </div>
 
         <!-- ── 高级配置 ── -->
-        <div v-show="activeTab === 'advanced'">
-          <template v-if="form.advancedEnabled">
-            <div class="form-group">
-              <label class="form-label">健康检查</label>
-              <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
-            </div>
+        <div v-show="activeTab === 'advanced'" class="advanced-sections">
+          <!-- 健康检查 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleChecks">
+              <span>健康检查</span>
+            </label>
+            <textarea v-model="checksJson" class="form-input" rows="6"
+              style="font-family:var(--font-mono);font-size:12px;resize:vertical;"
+              :disabled="!toggleChecks">
+            </textarea>
+            <div v-if="formErrors.checks" class="form-error" style="margin-top:6px;">{{ formErrors.checks }}</div>
+          </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">重试次数</label>
-                <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
-                <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+          <!-- 超时配置 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleTimeout">
+              <span>超时配置（秒）</span>
+            </label>
+            <div class="form-row-sm">
+              <div class="form-sub-group">
+                <div class="form-sub-label">连接</div>
+                <input :value="form.timeout.connect ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.connect = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="connect" style="height:30px;" :disabled="!toggleTimeout">
               </div>
-              <div class="form-group">
-                <label class="form-label">重试超时（秒）</label>
-                <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
-                <div class="form-hint">0 = 不限制重试时间</div>
+              <div class="form-sub-group">
+                <div class="form-sub-label">发送</div>
+                <input :value="form.timeout.send ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.send = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="send" style="height:30px;" :disabled="!toggleTimeout">
               </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">超时配置（秒）</label>
-              <div class="form-row-sm">
-                <div class="form-sub-group">
-                  <div class="form-sub-label">连接</div>
-                  <input v-model.number="form.timeout.connect" type="number" class="form-input" min="0" placeholder="connect" style="height:30px;">
-                </div>
-                <div class="form-sub-group">
-                  <div class="form-sub-label">发送</div>
-                  <input v-model.number="form.timeout.send" type="number" class="form-input" min="0" placeholder="send" style="height:30px;">
-                </div>
-                <div class="form-sub-group">
-                  <div class="form-sub-label">读取</div>
-                  <input v-model.number="form.timeout.read" type="number" class="form-input" min="0" placeholder="read" style="height:30px;">
-                </div>
+              <div class="form-sub-group">
+                <div class="form-sub-label">读取</div>
+                <input :value="form.timeout.read ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.read = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="read" style="height:30px;" :disabled="!toggleTimeout">
               </div>
             </div>
+            <div v-if="formErrors.timeout" class="form-error" style="margin-top:6px;">{{ formErrors.timeout }}</div>
+          </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Host 策略</label>
-                <select v-model="form.pass_host" class="form-input">
+          <!-- 连接池 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="togglePool">
+              <span>连接池</span>
+            </label>
+            <div class="form-row-sm">
+              <div class="form-sub-group">
+                <div class="form-sub-label">大小</div>
+                <input :value="form.keepalive_pool.size ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.size = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="1" placeholder="大小" style="height:30px;" :disabled="!togglePool">
+              </div>
+              <div class="form-sub-group">
+                <div class="form-sub-label">空闲超时（秒）</div>
+                <input :value="form.keepalive_pool.idle_timeout ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.idle_timeout = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="空闲超时" style="height:30px;" :disabled="!togglePool">
+              </div>
+              <div class="form-sub-group">
+                <div class="form-sub-label">最大请求数</div>
+                <input :value="form.keepalive_pool.requests ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.requests = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="1" placeholder="最大请求" style="height:30px;" :disabled="!togglePool">
+              </div>
+            </div>
+            <div v-if="formErrors.keepalive_pool" class="form-error" style="margin-top:6px;">{{ formErrors.keepalive_pool }}</div>
+          </div>
+
+          <!-- 重试次数 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleRetries">
+              <span>重试次数</span>
+            </label>
+            <div :style="{ opacity: toggleRetries ? 1 : 0.45 }">
+              <div class="radio-group">
+                <label class="radio-label">
+                  <input type="radio" value="auto" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <span>自动（使用可用节点数）</span>
+                </label>
+                <label class="radio-label">
+                  <input type="radio" value="custom" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <span>指定重试次数</span>
+                </label>
+                <template v-if="retriesRadio === 'custom'">
+                  <input :value="form.retriesInput ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.retriesInput = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="次数" style="height:30px;width:120px;margin-left:24px;" :disabled="!toggleRetries">
+                </template>
+                <label class="radio-label">
+                  <input type="radio" value="disabled" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <span>禁用重试</span>
+                </label>
+              </div>
+              <div v-if="formErrors.retries" class="form-error" style="margin-top:4px;">{{ formErrors.retries }}</div>
+              <div class="form-hint">自动 = 使用后端可用节点数作为重试次数</div>
+            </div>
+          </div>
+
+          <!-- 重试超时 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleRetryTimeout">
+              <span>重试超时（秒）</span>
+            </label>
+            <input :value="form.retry_timeout ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.retry_timeout = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="秒" style="max-width:200px;" :disabled="!toggleRetryTimeout">
+            <div v-if="formErrors.retry_timeout" class="form-error" style="margin-top:4px;">{{ formErrors.retry_timeout }}</div>
+            <div class="form-hint">0 = 不限制重试时间</div>
+          </div>
+
+          <!-- Host 策略 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleHost">
+              <span>Host 策略</span>
+            </label>
+            <div class="form-row-sm">
+              <div class="form-sub-group" style="max-width:260px;">
+                <div class="form-sub-label">Host 策略</div>
+                <select v-model="form.pass_host" class="form-input" :disabled="!toggleHost">
                   <option value="pass">pass（透传客户端 Host）</option>
                   <option value="node">node（使用节点 Host）</option>
                   <option value="rewrite">rewrite（自定义 Host）</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">通信协议</label>
-                <select v-model="form.scheme" class="form-input">
-                  <option value="http">http</option>
-                  <option value="https">https</option>
-                  <option value="tcp">tcp</option>
-                  <option value="udp">udp</option>
-                </select>
+              <div v-if="form.pass_host === 'rewrite'" class="form-sub-group">
+                <div class="form-sub-label">上游 Host</div>
+                <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host" :disabled="!toggleHost">
               </div>
             </div>
+            <div v-if="formErrors.pass_host" class="form-error" style="margin-top:6px;">{{ formErrors.pass_host }}</div>
+          </div>
 
-            <div v-if="form.pass_host === 'rewrite'" class="form-group">
-              <label class="form-label">上游 Host</label>
-              <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host">
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">连接池</label>
-              <div class="form-row-sm">
-                <div class="form-sub-group">
-                  <div class="form-sub-label">大小</div>
-                  <input v-model.number="form.keepalive_pool.size" type="number" class="form-input" min="1" placeholder="size" style="height:30px;">
-                </div>
-                <div class="form-sub-group">
-                  <div class="form-sub-label">空闲超时（秒）</div>
-                  <input v-model.number="form.keepalive_pool.idle_timeout" type="number" class="form-input" min="0" placeholder="idle" style="height:30px;">
-                </div>
-                <div class="form-sub-group">
-                  <div class="form-sub-label">最大请求数</div>
-                  <input v-model.number="form.keepalive_pool.requests" type="number" class="form-input" min="1" placeholder="requests" style="height:30px;">
-                </div>
-              </div>
-            </div>
-          </template>
-          <div v-else class="advanced-disabled-hint">
-            <span class="hint-icon">&#x26A0;</span>
-            高级配置未启用，请在"基础配置"中开启
+          <!-- 通信协议 -->
+          <div class="advanced-section">
+            <label class="checkbox-label section-toggle">
+              <input type="checkbox" v-model="toggleScheme">
+              <span>通信协议</span>
+            </label>
+            <select v-model="form.scheme" class="form-input" style="max-width:200px;" :disabled="!toggleScheme">
+              <option value="http">http</option>
+              <option value="https">https</option>
+              <option value="tcp">tcp</option>
+              <option value="udp">udp</option>
+            </select>
           </div>
         </div>
       </div>
@@ -210,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 
@@ -234,6 +277,27 @@ const formErrors = reactive<Record<string, string>>({})
 const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
 let targetKey = 0
 
+// ── Individual toggle states ──
+const toggleChecks = ref(false)
+const toggleTimeout = ref(false)
+const togglePool = ref(false)
+const toggleRetries = ref(false)
+const toggleRetryTimeout = ref(false)
+const toggleHost = ref(false)
+const toggleScheme = ref(false)
+
+// ── Retries radio ──
+const retriesRadio = ref<'auto' | 'custom' | 'disabled'>('auto')
+
+// computed submit value for retries
+const retriesSubmitValue = computed<number | null>(() => {
+  switch (retriesRadio.value) {
+    case 'auto': return null
+    case 'custom': return form.retriesInput ?? null
+    case 'disabled': return 0
+  }
+})
+
 const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
 const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
@@ -245,10 +309,9 @@ const form = reactive({
   key: '',
   description: '',
   targets: [] as { key: number; ip: string; port: number; weight: number }[],
-  advancedEnabled: false,
-  retries: undefined as number | undefined,
+  retriesInput: undefined as number | undefined,
   retry_timeout: 0,
-  timeout: { connect: 6, send: 6, read: 6 },
+  timeout: { ...defaultTimeout },
   pass_host: 'pass',
   upstream_host: '',
   scheme: 'http',
@@ -271,29 +334,28 @@ watch(checksJson, (val) => {
   try { form.checks = JSON.parse(val) as Record<string, unknown> } catch { /* ignore */ }
 })
 
-// Watch advancedEnabled - reset advanced fields when disabled
-watch(() => form.advancedEnabled, (val) => {
-  if (!val) {
-    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    checksJson.value = defaultChecksJson
-    form.retries = undefined
-    form.retry_timeout = 0
-    form.timeout = { ...defaultTimeout }
-    form.pass_host = 'pass'
-    form.upstream_host = ''
-    form.scheme = 'http'
-    form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
-  }
-})
-
 // Populate form when visible changes
 watch(() => props.visible, (v) => {
   if (!v) return
+  populateForm()
+}, { immediate: true })
+
+function populateForm() {
   formErrors.name = ''
   formErrors.cluster_id = ''
   formErrors.targets = ''
   targetValidation.value = {}
   activeTab.value = 'basic'
+
+  // Reset all toggles to OFF
+  toggleChecks.value = false
+  toggleTimeout.value = false
+  togglePool.value = false
+  toggleRetries.value = false
+  toggleRetryTimeout.value = false
+  toggleHost.value = false
+  toggleScheme.value = false
+  retriesRadio.value = 'auto'
 
   if (props.editingUpstream) {
     const u = props.editingUpstream
@@ -304,43 +366,52 @@ watch(() => props.visible, (v) => {
     form.key = u.key || ''
     form.description = u.description || ''
 
+    // Individual toggle from DB values
+    toggleChecks.value = u.checks !== null && u.checks !== undefined && u.checks !== '{}'
     if (u.checks) {
       const c = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
       form.checks = c
       checksJson.value = JSON.stringify(c, null, 2)
     } else {
-      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      form.checks = defaultParsed
       checksJson.value = defaultChecksJson
     }
 
-    const isDefaultChecks = u.checks ? JSON.stringify(form.checks) === JSON.stringify({ passive: {}, active: { unhealthy: {} } }) : true
-    const hasTimeout = u.timeout && u.timeout !== '{}'
-    const t = hasTimeout ? (typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout) : null
-    const isDefaultTimeout = t ? t.connect === 6 && t.send === 6 && t.read === 6 : true
+    toggleTimeout.value = u.timeout !== null && u.timeout !== undefined
+    const t = u.timeout ? (typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout) : null
+    form.timeout = t || { connect: 6, send: 6, read: 6 }
 
-    form.advancedEnabled = !!(
-      (u.retries !== undefined && u.retries !== null) ||
-      (u.retry_timeout !== undefined && u.retry_timeout !== 0) ||
-      (u.pass_host && u.pass_host !== 'pass') ||
-      (u.upstream_host && u.upstream_host !== '') ||
-      (u.scheme && u.scheme !== 'http') ||
-      !isDefaultChecks ||
-      !isDefaultTimeout ||
-      (u.keepalive_pool && JSON.stringify(u.keepalive_pool) !== '{}' && u.keepalive_pool !== '{}')
-    )
+    toggleRetries.value = u.retries !== null && u.retries !== undefined
+    if (u.retries !== null && u.retries !== undefined) {
+      if (u.retries === 0) {
+        retriesRadio.value = 'disabled'
+        form.retriesInput = undefined
+      } else {
+        retriesRadio.value = 'custom'
+        form.retriesInput = u.retries
+      }
+    } else {
+      retriesRadio.value = 'auto'
+      form.retriesInput = undefined
+    }
 
-    form.retries = u.retries ?? undefined
+    toggleRetryTimeout.value = u.retry_timeout !== null && u.retry_timeout !== undefined
     form.retry_timeout = u.retry_timeout ?? 0
-    form.timeout = t || { ...defaultTimeout }
+
+    toggleHost.value = u.pass_host !== null && u.pass_host !== undefined
     form.pass_host = u.pass_host || 'pass'
     form.upstream_host = u.upstream_host || ''
+
+    toggleScheme.value = u.scheme !== null && u.scheme !== undefined
     form.scheme = u.scheme || 'http'
 
+    togglePool.value = u.keepalive_pool !== null && u.keepalive_pool !== undefined && u.keepalive_pool !== '{}'
     if (u.keepalive_pool && u.keepalive_pool !== '{}') {
       const k = typeof u.keepalive_pool === 'string' ? JSON.parse(u.keepalive_pool) : u.keepalive_pool
-      form.keepalive_pool = { size: k.size, idle_timeout: k.idle_timeout, requests: k.requests }
+      form.keepalive_pool = { size: k.size ?? 10, idle_timeout: k.idle_timeout ?? 60, requests: k.requests ?? 100 }
     } else {
-      form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
+      form.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
     }
 
     form.targets = (u.targets || []).map((t: any) => {
@@ -355,18 +426,18 @@ watch(() => props.visible, (v) => {
     form.key = ''
     form.description = ''
     form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
-    form.advancedEnabled = false
-    form.retries = undefined
+    form.retriesInput = undefined
     form.retry_timeout = 0
     form.timeout = { ...defaultTimeout }
     form.pass_host = 'pass'
     form.upstream_host = ''
     form.scheme = 'http'
-    form.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
-    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+    form.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
+    const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
+    form.checks = defaultParsed
     checksJson.value = defaultChecksJson
   }
-})
+}
 
 function addTarget() {
   form.targets.push({ key: ++targetKey, ip: '', port: 80, weight: 100 })
@@ -384,7 +455,6 @@ function validateForm(): boolean {
   if (!form.name.trim()) { formErrors.name = '请输入上游名称'; return false }
   if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
 
-  // Validate targets
   let valid = true
   formErrors.targets = ''
   if (form.targets.length === 0) {
@@ -406,6 +476,54 @@ function validateForm(): boolean {
     targetValidation.value[`${i}`] = errors
   })
 
+  // Validate advanced fields when toggled ON
+  formErrors.checks = ''
+  formErrors.timeout = ''
+  formErrors.keepalive_pool = ''
+  formErrors.retries = ''
+  formErrors.retry_timeout = ''
+  formErrors.pass_host = ''
+  if (toggleChecks.value) {
+    try {
+      JSON.parse(checksJson.value)
+    } catch {
+      formErrors.checks = 'JSON 格式不正确，请检查'
+      valid = false
+    }
+  }
+  if (toggleTimeout.value) {
+    const t = form.timeout
+    if (t.connect === undefined || t.connect === null || isNaN(t.connect) ||
+        t.send === undefined || t.send === null || isNaN(t.send) ||
+        t.read === undefined || t.read === null || isNaN(t.read)) {
+      formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'
+      valid = false
+    }
+  }
+  if (togglePool.value) {
+    const k = form.keepalive_pool
+    if (k.size === undefined || k.idle_timeout === undefined || k.requests === undefined) {
+      formErrors.keepalive_pool = '请填写完整的连接池配置（大小、空闲超时、最大请求数）'
+      valid = false
+    }
+  }
+  if (toggleRetryTimeout.value) {
+    if (form.retry_timeout === undefined || form.retry_timeout === null || isNaN(form.retry_timeout)) {
+      formErrors.retry_timeout = '请填写重试超时（0 = 不限制）'
+      valid = false
+    }
+  }
+  if (toggleRetries.value && retriesRadio.value === 'custom') {
+    if (form.retriesInput === undefined || form.retriesInput < 1) {
+      formErrors.retries = '请输入大于 0 的重试次数'
+      valid = false
+    }
+  }
+  if (toggleHost.value && form.pass_host === 'rewrite' && !form.upstream_host) {
+    formErrors.pass_host = '请填写上游 Host'
+    valid = false
+  }
+
   return valid
 }
 
@@ -419,19 +537,17 @@ async function handleSubmit() {
       load_balance: form.load_balance,
       description: form.description,
       targets: form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight })),
-      checks: form.checks,
-      timeout: form.timeout,
     }
     if (form.load_balance === 'chash') {
       submitData.hash_on = form.hash_on
       submitData.key = form.key
     }
-    if (form.advancedEnabled) {
-      if (form.retries !== undefined) submitData.retries = form.retries
-      if (form.retry_timeout !== undefined) submitData.retry_timeout = form.retry_timeout
-      if (form.pass_host) submitData.pass_host = form.pass_host
-      if (form.pass_host === 'rewrite' && form.upstream_host) submitData.upstream_host = form.upstream_host
-      if (form.scheme && form.scheme !== 'http') submitData.scheme = form.scheme
+
+    // Each advanced field controlled by its toggle
+    submitData.checks = toggleChecks.value ? form.checks : null
+    submitData.timeout = toggleTimeout.value ? form.timeout : null
+
+    if (togglePool.value) {
       const k = form.keepalive_pool
       if (k.size !== undefined || k.idle_timeout !== undefined || k.requests !== undefined) {
         const kp: Record<string, number> = {}
@@ -440,7 +556,16 @@ async function handleSubmit() {
         if (k.requests !== undefined) kp.requests = k.requests
         submitData.keepalive_pool = kp
       }
+    } else {
+      submitData.keepalive_pool = null
     }
+
+    submitData.retries = toggleRetries.value ? retriesSubmitValue.value : null
+    submitData.retry_timeout = toggleRetryTimeout.value ? form.retry_timeout : null
+
+    submitData.pass_host = toggleHost.value ? form.pass_host : null
+    submitData.upstream_host = toggleHost.value && form.pass_host === 'rewrite' ? (form.upstream_host || null) : null
+    submitData.scheme = toggleScheme.value ? form.scheme : null
 
     const clusterId = form.cluster_id
     if (props.editingUpstream) {
@@ -466,6 +591,19 @@ async function handleSubmit() {
 .form-row-sm { display: flex; gap: 8px; }
 .form-group { flex: 1; margin-bottom: 16px; }
 .form-sub-group { flex: 1; }
+
+/* ── Advanced sections ── */
+.advanced-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.advanced-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--surface);
+}
 
 /* Tab Bar */
 .tab-bar {
@@ -535,6 +673,29 @@ async function handleSubmit() {
   accent-color: var(--accent);
 }
 
+.section-toggle {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+/* Radio group */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.radio-label input[type="radio"] {
+  accent-color: var(--accent);
+}
+
 /* ── Inline Table for Targets ── */
 .inline-table-wrap {
   border: 1px solid var(--border);
@@ -557,13 +718,4 @@ async function handleSubmit() {
   vertical-align: top;
 }
 .inline-table tbody tr:last-child td { border-bottom: none; }
-
-/* ── Advanced disabled hint ── */
-.advanced-disabled-hint {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.hint-icon { font-size: 18px; margin-right: 8px; }
 </style>
