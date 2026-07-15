@@ -180,6 +180,11 @@ plugin_config:
     traffic_limit_count:
       policy: local
 
+plugin_metadata:
+  # Edge 服务端自动注入的字段，对比前忽略
+  ignore_edge_fields:
+    - id
+
 global_rule:
   json_field: plugins
   ignore_edge_plugin_fields:

@@ -566,6 +566,11 @@ class EdgeClient:
     def update_plugin_metadata(self, plugin_name: str, data: dict[str, Any]) -> dict[str, Any]:
         return self.api("plugin_metadata", "patch", plugin_name, data)
 
+    # ── SSL Certificate API methods ──
+
+    def list_ssl(self) -> list[dict[str, Any]]:
+        return self.api("ssl", "list")
+
     def raw_delete(self, path: str) -> dict[str, Any]:
         """Send a DELETE request without SM4 encryption."""
         import httpx

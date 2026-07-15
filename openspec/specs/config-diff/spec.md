@@ -12,6 +12,15 @@
 - **THEN** 对比结果 SHALL 为 `match`（当两者都为空时）或 `diff`（当内容不一致时）
 - **AND** 不 SHALL 返回 `only_in_db`
 
+### Requirement: 插件元数据对比忽略 Edge 自动注入字段
+
+系统 SHALL 在对比插件元数据配置时忽略 Edge 服务端自动注入的 `id` 字段，忽略规则通过 `equivalence_rules.yaml` 的 `plugin_metadata.ignore_edge_fields` 配置。
+
+#### Scenario: 忽略 id 字段
+- **WHEN** Edge 节点返回的插件元数据配置中包含 `"id": "plugin_name"` 字段
+- **THEN** 系统 SHALL 根据 `equivalence_rules.yaml` 中 `plugin_metadata.ignore_edge_fields` 配置移除该字段
+- **AND** 该字段差异 SHALL NOT 标记为配置差异
+
 ## ADDED Requirements
 
 ### Requirement: Backend provides config diff API
@@ -20,7 +29,7 @@ The system SHALL provide a `GET /clusters/{cluster_id}/nodes/{node_id}/diff` end
 
 #### Scenario: API returns structured diff results
 - **WHEN** a GET request is sent to `/clusters/{cluster_id}/nodes/{node_id}/diff`
-- **THEN** the response SHALL contain grouped comparisons for upstreams, routes, plugin_configs, global_rules, plugin_metadata, and stream_proxies
+- **THEN** the response SHALL contain grouped comparisons for upstreams, routes, plugin_configs, global_rules, plugin_metadata, stream_proxies, and ssl_certificates
 - **THEN** each group SHALL list items with status: `match`, `mismatch`, `only_in_db`, or `only_in_edge`
 - **THEN** mismatched items SHALL include field-level differences
 - **THEN** route comparison SHALL include `vars` (advanced match), `plugin_config_ids`, and per-plugin `plugins`
@@ -53,9 +62,29 @@ The system SHALL provide a `GET /clusters/{cluster_id}/nodes/{node_id}/diff` end
 - **THEN** 对比结果 SHALL 将其标记为 `only_in_edge`
 - **AND** 使用 stream route 的 name 或 listen_port 作为显示名称
 
+### Requirement: SSL 证书对比结果纳入配置对比API
+
+系统 SHALL 在节点配置对比中包含 SSL 证书的 DB 与 Edge 差异分析。
+
+#### Scenario: SSL 证书对比
+- **WHEN** 用户查看节点配置对比结果
+- **THEN** 结果中 SHALL 包含「SSL 证书」分组
+- **AND** 系统 SHALL 逐字段对比：name、sni（归一化后）、cert_type、cert、private_key、status
+- **AND** DB 和 Edge 数据均以 edge_uuid 匹配
+
+#### Scenario: SNI 格式兼容
+- **WHEN** Edge 返回的 SSL 数据中 `sni` 为字符串或 `snis` 为数组
+- **THEN** 系统 SHALL 归一化为逗号分隔字符串（去除逗号周围空格）后与 DB 对比
+- **AND** 归一化过程 SHALL NOT 修改原始数据
+
+#### Scenario: Edge SSL 拉取失败
+- **WHEN** 从 Edge 节点拉取 SSL 数据失败（接口不可用、超时等）
+- **THEN** 系统 SHALL 仅标记 DB 中存在的 SSL 证书为 `only_in_db`
+- **AND** 其他资源的对比 SHALL NOT 受影响
+
 ### Requirement: EdgeClient can list all configs
 
-The system SHALL use existing EdgeClient `list_upstreams`, `list_routes`, `list_plugin_configs`, `list_global_rules`, `list_plugin_metadata`, and `list_stream_routes` methods to fetch Edge node configurations.
+The system SHALL use existing EdgeClient `list_upstreams`, `list_routes`, `list_plugin_configs`, `list_global_rules`, `list_plugin_metadata`, `list_stream_routes`, and `list_ssl` methods to fetch Edge node configurations.
 
 #### Scenario: EdgeClient list methods return parseable data
 - **WHEN** `list_upstreams()` is called

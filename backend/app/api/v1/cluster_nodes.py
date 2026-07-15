@@ -10,6 +10,7 @@ from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata, StreamProxy
+from app.models.ssl import SslCertificate
 from app.models.user import User
 from app.schemas.cluster import (
     NodeCreate, NodeUpdate, NodeResponse,
@@ -437,6 +438,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     db_plugin_metadatas = await _get_all(PluginMetadata, cluster_id=cluster_id)
 
     db_stream_proxies = await _get_all(StreamProxy, cluster_id=cluster_id)
+    db_ssl_certificates = await _get_all(SslCertificate, cluster_id=cluster_id)
 
     # 查询路由级插件，按 route_id 分组
     db_route_plugins_all = await _get_all(RoutePlugin)
@@ -480,6 +482,17 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
     except Exception:
         edge_stream_proxies = {}
+
+    # 单独拉取 SSL 证书
+    try:
+        edge_ssl_certificates = {}
+        for c in client.list_ssl():
+            cd = _edge_val(c)
+            cid = cd.get("id", "")
+            if cid:
+                edge_ssl_certificates[cid] = cd
+    except Exception:
+        edge_ssl_certificates = {}
 
     # ---------- 3. 对比函数 ----------
     _rules = EquivalenceRules()
@@ -651,6 +664,9 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
                 edge_config = json.loads(edge_config)
             except json.JSONDecodeError:
                 pass
+        # 通过规则文件忽略 Edge 侧自动注入的字段（如 id）
+        for fld in _rules._res_type("plugin_metadata").get("ignore_edge_fields", []):
+            edge_config.pop(fld, None)
         equal = json.dumps(db_config, sort_keys=True) == json.dumps(edge_config, sort_keys=True)
         fields.append({
             "name": "config",
@@ -755,6 +771,63 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
 
         return {"name": db_sp.name, "id": db_sp.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
+    def _normalize_sni_csv(raw: str) -> str:
+        """归一化 SNI 逗号分隔字符串，统一去除逗号周围空格。"""
+        return ",".join(part.strip() for part in raw.split(",") if part.strip())
+
+    def _normalize_edge_sni(edge_data: dict) -> str:
+        """归一化 Edge SSL 的 sni/snis 字段为归一化后的逗号分隔字符串。"""
+        if "snis" in edge_data:
+            snis = edge_data["snis"]
+            raw = ", ".join(snis) if isinstance(snis, list) else str(snis)
+        else:
+            raw = edge_data.get("sni", "")
+        return _normalize_sni_csv(raw)
+
+    def _compare_ssl_certificate(db_cert, edge_data: dict | None):
+        """对比 SSL 证书配置（DB vs Edge）"""
+        if not edge_data:
+            return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "only_in_db", "fields": []}
+        fields = []
+
+        # name
+        db_v = db_cert.name or ""
+        edge_v = edge_data.get("name", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "name", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # sni (DB 逗号分隔字符串 ↔ Edge sni/snis，归一化后对比)
+        db_v = _normalize_sni_csv(db_cert.sni or "")
+        edge_v = _normalize_edge_sni(edge_data)
+        equal = db_v == edge_v
+        fields.append({"name": "sni", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # cert_type → type
+        db_v = db_cert.cert_type or ""
+        edge_v = edge_data.get("type", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "cert_type", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # cert
+        db_v = db_cert.cert or ""
+        edge_v = edge_data.get("cert", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "cert", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # private_key → key
+        db_v = db_cert.private_key or ""
+        edge_v = edge_data.get("key", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "private_key", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # status
+        db_v = db_cert.status
+        edge_v = edge_data.get("status", 1)
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "status", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+
     def _find_only_in_edge(edge_dict, db_items, id_attr="id"):
         """找出仅在 Edge 上存在、DB 中没有的项"""
         db_ids = {getattr(d, "edge_uuid", getattr(d, "plugin_name", "")) for d in db_items}
@@ -807,6 +880,11 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
     sp_items = [_compare_stream_proxy(sp, edge_stream_proxies.get(sp.edge_uuid)) for sp in db_stream_proxies]
     sp_items += _find_only_in_edge(edge_stream_proxies, db_stream_proxies)
     _add_group("四层代理", "stream_proxies", sp_items)
+
+    # SSL 证书
+    ssl_items = [_compare_ssl_certificate(c, edge_ssl_certificates.get(c.edge_uuid)) for c in db_ssl_certificates]
+    ssl_items += _find_only_in_edge(edge_ssl_certificates, db_ssl_certificates)
+    _add_group("SSL 证书", "ssl_certificates", ssl_items)
 
     return {
         "node": f"{node.ip}:{node.management_port}",

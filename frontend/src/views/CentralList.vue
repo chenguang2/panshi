@@ -375,9 +375,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, h, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
-import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress, showNameConfirm } from '@/composables/useClusterUtils'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import type { Cluster, Upstream, Plugin } from '@/types'
@@ -946,30 +946,10 @@ const deleteCluster = async (cluster: Cluster) => {
     stats,
     nodes: availableNodes,
     onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
-      // 第二步：输入集群名称确认
-      let nameConfirmed = false
-      const nameModal = Modal.confirm({
+      showNameConfirm({
         title: '请输入集群名称确认删除',
-        width: 400,
-        content: h('div', { style: 'font-size: 13px;' }, [
-          h('div', { style: 'margin-bottom: 8px; color: #666;' }, `请输入集群名称 "${clusterName}" 以确认删除：`),
-          h('input', {
-            type: 'text',
-            placeholder: '请输入集群名称',
-            onInput: (e: any) => {
-              nameConfirmed = (e.target.value || '').trim() === (clusterName || '').trim()
-              if (nameModal) {
-                nameModal.update({ okButtonProps: { disabled: !nameConfirmed } })
-              }
-            },
-            style: 'width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; outline: none; box-sizing: border-box; font-size: 14px;',
-          }),
-        ]),
-        okText: '确认删除',
-        okButtonProps: { disabled: true } as any,
-        cancelText: '取消',
-        onOk: async () => {
-          if (!nameConfirmed) return false
+        expectedName: clusterName,
+        onConfirm: async () => {
           await executeDeleteWithProgress({
             title: `删除集群: ${clusterName}`,
             apiEndpoint: `/clusters/${cluster.id}`,

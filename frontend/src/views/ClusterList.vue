@@ -164,13 +164,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { ref, computed, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, executeDeleteWithProgress, showNameConfirm } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
@@ -345,23 +345,10 @@ function deleteCluster(c: Cluster) {
         title: `确定要删除集群 "${clusterName}" 吗？`, apiEndpoint: `/clusters/${c.id}`,
         showResourceStats: true, stats: statsRes.data, nodes: availableNodes,
         onOk: async (deleteDb, deleteEdge, nodeIds) => {
-          let nameConfirmed = false
-          const nameModal = Modal.confirm({
-            title: '请输入集群名称确认删除', width: 400,
-            content: h('div', { style: 'font-size:13px' }, [
-              h('div', { style: 'margin-bottom:8px;color:#666' }, `请输入集群名称 "${clusterName}" 以确认删除：`),
-              h('input', {
-                type: 'text', placeholder: '请输入集群名称',
-                onInput: (e: any) => {
-                  nameConfirmed = (e.target.value || '').trim() === (clusterName || '').trim()
-                  if (nameModal) nameModal.update({ okButtonProps: { disabled: !nameConfirmed } })
-                },
-                style: 'width:100%;padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;outline:none;box-sizing:border-box;font-size:14px',
-              }),
-            ]),
-            okText: '确认删除', okButtonProps: { disabled: true } as any, cancelText: '取消',
-            onOk: async () => {
-              if (!nameConfirmed) return false
+          showNameConfirm({
+            title: '请输入集群名称确认删除',
+            expectedName: clusterName,
+            onConfirm: async () => {
               await executeDeleteWithProgress({
                 title: `删除集群: ${clusterName}`, apiEndpoint: `/clusters/${c.id}`,
                 cluster: c, deleteDb, deleteEdge, nodeIds, refreshFn: () => loadClusters(),

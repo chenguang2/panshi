@@ -446,3 +446,49 @@ export function formatDate(dateStr: string | null | undefined): string {
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+
+export function showNameConfirm(opts: {
+  title: string
+  expectedName: string
+  confirmText?: string
+  onConfirm: () => void | Promise<void>
+}) {
+  let confirmed = false
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const closeModal = () => { render(null, container); container.remove() }
+  const renderModal = () => {
+    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+      h('div', { class: 'modal', style: 'max-width:440px;' }, [
+        h('div', { class: 'modal-header' }, [
+          h('h2', opts.title),
+          h('button', { class: 'modal-close', onClick: closeModal }, '\u00D7'),
+        ]),
+        h('div', { class: 'modal-body' }, [
+          h('div', { style: 'font-size:13px;color:var(--muted);margin-bottom:12px;' }, `请输入集群名称 "${opts.expectedName}" 以确认删除：`),
+          h('input', {
+            type: 'text', placeholder: '请输入集群名称',
+            class: 'form-input',
+            onInput: (e: any) => {
+              confirmed = (e.target.value || '').trim() === (opts.expectedName || '').trim()
+              renderModal()
+            },
+          }),
+        ]),
+        h('div', { class: 'modal-footer' }, [
+          h('button', { class: 'btn btn-secondary', onClick: closeModal }, '取消'),
+          h('button', {
+            class: 'btn btn-danger', disabled: !confirmed,
+            onClick: async () => {
+              if (!confirmed) return
+              closeModal()
+              await opts.onConfirm()
+            },
+          }, opts.confirmText || '确认删除'),
+        ]),
+      ]),
+    ])
+    render(vnode, container)
+  }
+  renderModal()
+}

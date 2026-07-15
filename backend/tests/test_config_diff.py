@@ -503,6 +503,141 @@ class TestCompareStreamProxyGracefulDegradation:
         assert result == {}
 
 
+def _compare_plugin_metadata_standalone(db_config: dict, edge_config: dict | None, rules) -> dict:
+    """模拟 diff 端点的 plugin_metadata 对比逻辑（含 ignore_edge_fields 规则）"""
+    if edge_config is None:
+        return {"name": db_config.get("plugin_name", ""), "id": db_config.get("plugin_name", ""), "status": "only_in_db", "fields": []}
+    edge = dict(edge_config)
+    for fld in rules._res_type("plugin_metadata").get("ignore_edge_fields", []):
+        edge.pop(fld, None)
+    equal = json.dumps(db_config, sort_keys=True) == json.dumps(edge, sort_keys=True)
+    fields = [{"name": "config", "db": json.dumps(db_config, indent=1), "edge": json.dumps(edge, indent=1), "status": "equal" if equal else "diff"}]
+    return {"name": db_config.get("plugin_name", ""), "id": db_config.get("plugin_name", ""), "status": "match" if equal else "mismatch", "fields": fields}
+
+
+def _normalize_sni_csv(raw: str) -> str:
+    """归一化 SNI 逗号分隔字符串，统一去除逗号周围空格。"""
+    return ",".join(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _normalize_edge_sni(edge_data: dict) -> str:
+    """模拟 diff 端点的 _normalize_edge_sni（含归一化）"""
+    if "snis" in edge_data:
+        snis = edge_data["snis"]
+        raw = ", ".join(snis) if isinstance(snis, list) else str(snis)
+    else:
+        raw = edge_data.get("sni", "")
+    return _normalize_sni_csv(raw)
+
+
+def _compare_ssl_certificate(db: dict, edge_data: dict | None) -> dict:
+    """模拟 diff 端点的 SSL 证书对比逻辑"""
+    if not edge_data:
+        return {"name": db.get("name", ""), "id": db.get("edge_uuid", ""), "status": "only_in_db", "fields": []}
+    fields = []
+
+    for key, ekey in [("name", "name"), ("sni", None), ("cert_type", "type"), ("cert", "cert"), ("private_key", "key"), ("status", "status")]:
+        db_v = _normalize_sni_csv(db.get(key, "")) if ekey is None else db.get(key, "")
+        edge_v = _normalize_edge_sni(edge_data) if ekey is None else edge_data.get(ekey, "")
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+    return {"name": db.get("name", ""), "id": db.get("edge_uuid", ""), "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+
+
+class TestNormalizeEdgeSni:
+
+    def test_snis_array(self):
+        assert _normalize_edge_sni({"snis": ["a.com", "b.com"]}) == "a.com,b.com"
+
+    def test_sni_string(self):
+        assert _normalize_edge_sni({"sni": "example.com"}) == "example.com"
+
+    def test_sni_prefers_snis(self):
+        assert _normalize_edge_sni({"sni": "old.com", "snis": ["a.com", "b.com"]}) == "a.com,b.com"
+
+    def test_no_sni(self):
+        assert _normalize_edge_sni({}) == ""
+
+    def test_normalize_sni_csv_removes_spaces(self):
+        assert _normalize_sni_csv("qcg.com, abc.com") == "qcg.com,abc.com"
+        assert _normalize_sni_csv("qcg.com,abc.com") == "qcg.com,abc.com"
+        assert _normalize_sni_csv("  a.com ,  b.com  ") == "a.com,b.com"
+
+
+class TestCompareSslCertificate:
+
+    def test_match_when_identical(self):
+        db = {"name": "my-cert", "edge_uuid": "u1", "sni": "example.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        edge = {"name": "my-cert", "sni": "example.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "match"
+
+    def test_match_sni_ui_format_no_spaces(self):
+        """DB storage from UI uses join(',') without spaces."""
+        db = {"name": "my-cert", "edge_uuid": "u1", "sni": "qcg.com,abc.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        edge = {"name": "my-cert", "snis": ["qcg.com", "abc.com"], "type": "server", "cert": "crt", "key": "k", "status": 1}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "match", f"expected match got {r['status']}: sni normalize should handle space diff"
+
+    def test_match_sni_array(self):
+        db = {"name": "multi", "edge_uuid": "u2", "sni": "a.com,b.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        edge = {"name": "multi", "snis": ["a.com", "b.com"], "type": "server", "cert": "crt", "key": "k", "status": 1}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "match"
+
+    def test_mismatch_when_field_differs(self):
+        db = {"name": "my-cert", "edge_uuid": "u3", "sni": "example.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        edge = {"name": "my-cert", "sni": "other.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "mismatch"
+
+    def test_only_in_db_when_no_edge_data(self):
+        db = {"name": "orphan", "edge_uuid": "u4", "sni": "", "cert_type": "server", "cert": "", "private_key": "", "status": 1}
+        r = _compare_ssl_certificate(db, None)
+        assert r["status"] == "only_in_db"
+
+    def test_all_fields_emitted(self):
+        db = {"name": "full", "edge_uuid": "u5", "sni": "x.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        edge = {"name": "full", "sni": "x.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
+        r = _compare_ssl_certificate(db, edge)
+        names = {f["name"] for f in r["fields"]}
+        for key in ("name", "sni", "cert_type", "cert", "private_key", "status"):
+            assert key in names, f"{key} should be present"
+
+
+class TestComparePluginMetadata:
+
+    def setup_method(self):
+        from app.services.config_diff import EquivalenceRules
+        EquivalenceRules._instance = None
+        EquivalenceRules._rules = {}
+        self.rules = EquivalenceRules()
+
+    def test_match_when_identical(self):
+        db = {"logs": "logs/process.log"}
+        edge = {"id": "log_process", "logs": "logs/process.log"}
+        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        assert r["status"] == "match", f"expected match got {r['status']}: id should be ignored"
+
+    def test_match_when_no_id_in_edge(self):
+        db = {"prefer_name": False}
+        edge = {"prefer_name": False}
+        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        assert r["status"] == "match"
+
+    def test_mismatch_when_config_differs(self):
+        db = {"rate": 10}
+        edge = {"id": "limit-req", "rate": 20}
+        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        assert r["status"] == "mismatch"
+
+    def test_only_in_db_when_no_edge_data(self):
+        db = {"logs": "logs/process.log"}
+        r = _compare_plugin_metadata_standalone(db, None, self.rules)
+        assert r["status"] == "only_in_db"
+
+
 def _edge_val_fn(item: dict) -> dict:
     """模拟 _edge_val"""
     v = item.get("value") if isinstance(item, dict) else None
@@ -537,6 +672,10 @@ class TestEquivalenceRules:
     def test_ignore_edge_fields(self):
         assert self.rules.should_ignore_edge_field("upstream", "update_time") is True
         assert self.rules.should_ignore_edge_field("upstream", "name") is False
+
+    def test_plugin_metadata_ignore_id(self):
+        assert self.rules.should_ignore_edge_field("plugin_metadata", "id") is True
+        assert self.rules.should_ignore_edge_field("plugin_metadata", "name") is False
 
     def test_deep_fill_json_missing_keys(self):
         db_val = '{"connect": 5}'
