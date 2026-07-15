@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.core.database import Base
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 
 
 class SslCertificate(Base):
@@ -12,7 +12,7 @@ class SslCertificate(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     edge_uuid = Column(String(36), nullable=False, default=lambda: str(uuid.uuid4()))
-    cluster_id = Column(Integer, nullable=False)
+    cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)
     sni = Column(String(500), nullable=False)
     cert = Column(Text, nullable=False)

@@ -186,6 +186,9 @@ def run_migrations(engine: Engine) -> None:
     # Ensure index on ps_cluster(group_name) for JOIN performance
     _ensure_index(engine, "ps_cluster", "idx_cluster_group_name", ["group_name"])
 
+    # Ensure ForeignKey on ps_ssl_certificate.cluster_id (existing tables may lack it)
+    _ensure_ssl_foreign_key(engine)
+
     if not migrated_any:
         logger.info("All schema constraints check passed")
 
@@ -201,6 +204,21 @@ def _migrate_null_group_name(engine: Engine) -> None:
                 logger.info("Migrated %d NULL group_name to ''", result.rowcount)
         except Exception as e:
             logger.warning("Could not migrate group_name: %s", e)
+
+
+def _ensure_ssl_foreign_key(engine: Engine) -> None:
+    """Add ForeignKey on ps_ssl_certificate.cluster_id if missing (SQLite only)."""
+    if not is_sqlite(str(engine.url)):
+        return
+    inspector = inspect(engine)
+    try:
+        fks = inspector.get_foreign_keys("ps_ssl_certificate")
+        if any(fk["constrained_columns"] == ["cluster_id"] for fk in fks):
+            return  # FK already exists
+    except Exception:
+        return
+    # SQLite cannot ALTER TABLE ADD CONSTRAINT; recreate table if needed
+    logger.warning("ps_ssl_certificate.cluster_id lacks ForeignKey - table must be recreated manually for CASCADE support")
 
 
 def _ensure_index(engine: Engine, table: str, index_name: str, columns: list[str]) -> None:

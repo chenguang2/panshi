@@ -8,8 +8,9 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata, StreamProxy
 from app.models.static_resource import StaticResource
+from app.models.ssl import SslCertificate
 from app.models.user import User, UserCluster
 from app.schemas.cluster import (
     ClusterCreate, ClusterUpdate, ClusterResponse, ClusterListResponse,
@@ -227,6 +228,8 @@ async def get_cluster_stats(cluster_id: int, db: AsyncSession = Depends(get_db))
         "plugin_metadata": await count(PluginMetadata, cluster_id=cluster_id),
         "static_resources": await count(StaticResource, cluster_id=cluster_id),
         "config_versions": await count(ConfigVersion, cluster_id=cluster_id),
+        "stream_proxies": await count(StreamProxy, cluster_id=cluster_id),
+        "ssl_certificates": await count(SslCertificate, cluster_id=cluster_id),
     }
 
 
@@ -255,6 +258,8 @@ async def delete_cluster(
         plugin_configs = (await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id))).scalars().all()
         global_rules = (await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id))).scalars().all()
         plugin_metadatas = (await db.execute(select(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id))).scalars().all()
+        stream_proxies = (await db.execute(select(StreamProxy).where(StreamProxy.cluster_id == cluster_id))).scalars().all()
+        ssl_certificates = (await db.execute(select(SslCertificate).where(SslCertificate.cluster_id == cluster_id))).scalars().all()
 
         node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
         if body.node_ids:
@@ -271,6 +276,7 @@ async def delete_cluster(
                     "details": {
                         "routes": 0, "upstreams": 0, "plugin_configs": 0,
                         "global_rules": 0, "plugin_metadatas": 0,
+                        "stream_proxies": 0, "ssl_certificates": 0,
                     },
                 }
                 try:
@@ -291,6 +297,12 @@ async def delete_cluster(
                     for pm in plugin_metadatas:
                         try: client.delete_plugin_metadata(pm.plugin_name); node_result["details"]["plugin_metadatas"] += 1
                         except Exception: errs.append(f"plugin_metadata:{pm.plugin_name}")
+                    for sp in stream_proxies:
+                        try: client.delete_stream_route(sp.edge_uuid); node_result["details"]["stream_proxies"] += 1
+                        except Exception: errs.append(f"stream_proxy:{sp.edge_uuid}")
+                    for sc in ssl_certificates:
+                        try: client.delete_ssl(sc.edge_uuid); node_result["details"]["ssl_certificates"] += 1
+                        except Exception: errs.append(f"ssl:{sc.edge_uuid}")
                     if errs:
                         node_result["status"] = "failed"
                         node_result["error"] = f"部分失败: {', '.join(errs[:5])}"
@@ -302,7 +314,7 @@ async def delete_cluster(
                 results.append(node_result)
 
     if delete_db:
-        db_details = {"routes": 0, "upstreams": 0, "plugin_configs": 0, "global_rules": 0, "plugin_metadatas": 0, "nodes": 0, "config_versions": 0}
+        db_details = {"routes": 0, "upstreams": 0, "plugin_configs": 0, "global_rules": 0, "plugin_metadatas": 0, "stream_proxies": 0, "ssl_certificates": 0, "nodes": 0, "config_versions": 0}
 
         cv_result = await db.execute(select(func.count()).select_from(ConfigVersion).where(ConfigVersion.cluster_id == cluster_id))
         db_details["config_versions"] = cv_result.scalar() or 0
@@ -332,6 +344,14 @@ async def delete_cluster(
         pm_result = await db.execute(select(func.count()).select_from(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id))
         db_details["plugin_metadatas"] = pm_result.scalar() or 0
         await db.execute(PluginMetadata.__table__.delete().where(PluginMetadata.cluster_id == cluster_id))
+
+        sp_result = await db.execute(select(func.count()).select_from(StreamProxy).where(StreamProxy.cluster_id == cluster_id))
+        db_details["stream_proxies"] = sp_result.scalar() or 0
+        await db.execute(StreamProxy.__table__.delete().where(StreamProxy.cluster_id == cluster_id))
+
+        sc_result = await db.execute(select(func.count()).select_from(SslCertificate).where(SslCertificate.cluster_id == cluster_id))
+        db_details["ssl_certificates"] = sc_result.scalar() or 0
+        await db.execute(SslCertificate.__table__.delete().where(SslCertificate.cluster_id == cluster_id))
 
         node_result = await db.execute(select(func.count()).select_from(Node).where(Node.cluster_id == cluster_id))
         db_details["nodes"] = node_result.scalar() or 0

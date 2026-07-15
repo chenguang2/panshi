@@ -56,6 +56,28 @@ The following publish operations SHALL use the unified node-select confirm dialo
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/plugin-metadata/{plugin_name}/publish` with selected `node_ids`
 
+### Requirement: 集群资源统计包含四层代理和 SSL
+
+系统 SHALL 在集群统计信息中包含四层代理和 SSL 证书的数量。
+
+#### Scenario: 统计包含四层代理和 SSL
+- **WHEN** 调用 `GET /clusters/{cluster_id}/stats`
+- **THEN** 返回的 JSON SHALL 包含 `stream_proxies` 和 `ssl_certificates` 字段
+- **AND** 值 SHALL 为对应集群下该类型资源的数量
+
+### Requirement: 删除集群清理关联资源
+
+系统 SHALL 在删除集群时清理四层代理和 SSL 证书。
+
+#### Scenario: Edge 侧删除
+- **WHEN** 用户选择「从 Edge 节点删除」后确认删除集群
+- **THEN** 系统 SHALL 遍历并删除集群下的四层代理和 SSL 证书
+- **AND** 删除失败 SHALL NOT 阻塞其他资源的删除
+
+#### Scenario: DB 侧删除
+- **WHEN** 用户选择「从数据库删除」后确认删除集群
+- **THEN** 系统 SHALL 删除该集群下所有四层代理和 SSL 证书的数据库记录
+
 ### Requirement: GlobalPluginSelector SHALL be renamed to PluginMetadata
 
 The component file, CSS class, import, and template tag SHALL be updated to reflect the new name.
@@ -69,3 +91,13 @@ The component file, CSS class, import, and template tag SHALL be updated to refl
 - **WHEN** inspecting `ClusterList.vue`
 - **THEN** `import GlobalPluginSelector from '@/components/GlobalPluginSelector.vue'` SHALL be updated to `import PluginMetadata from '@/components/PluginMetadata.vue'`
 - **THEN** `<GlobalPluginSelector :cluster-id="cluster.id" />` SHALL be updated to `<PluginMetadata :cluster-id="cluster.id" />`
+
+### Requirement: 前端删除资源标签
+
+前端 SHALL 在删除确认弹窗的资源列表和删除结果日志中显示四层代理和 SSL 证书的中文标签。
+
+#### Scenario: 显示标签
+- **WHEN** 用户点击删除集群弹窗展示资源清单
+- **THEN** 列表中 SHALL 显示「四层代理」和「SSL 证书」及其数量
+- **WHEN** 删除完成展示结果日志
+- **THEN** 日志中 SHALL 显示四层代理和 SSL 证书的删除计数

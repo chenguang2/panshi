@@ -25,9 +25,10 @@
             <option value="__new__">新建分组...</option>
           </select>
           <div v-if="showNewGroupInput" class="inline-group" style="display: flex; gap: 4px; margin-top: 6px;">
-            <input type="text" class="form-input" v-model="newGroupName" placeholder="新建分组名称" @keyup.enter="addNewGroup" style="flex: 1;" />
+            <input ref="newGroupInputRef" type="text" class="form-input" :class="{ 'has-error': newGroupError }" v-model="newGroupName" placeholder="新建分组名称" @keyup.enter="addNewGroup" style="flex: 1;" />
             <button class="btn btn-sm btn-primary" @click="addNewGroup">添加</button>
           </div>
+          <span v-if="newGroupError" class="form-error" style="margin-top:4px;">{{ newGroupError }}</span>
         </div>
         <div class="form-group">
           <label class="form-label">描述</label>
@@ -54,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watchEffect, computed } from 'vue'
+import { ref, reactive, watchEffect, computed, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
@@ -73,6 +74,8 @@ const emit = defineEmits<{
 const submitting = ref(false)
 const showNewGroupInput = ref(false)
 const newGroupName = ref('')
+const newGroupError = ref('')
+const newGroupInputRef = ref<HTMLInputElement | null>(null)
 /** Holds a newly created group name that isn't in groupOptions yet */
 const pendingGroupName = ref('')
 /** Combined options: prop groupOptions + any newly created group */
@@ -120,6 +123,7 @@ function initForm(cluster: Cluster | null) {
   formErrors.name = ''
   formErrors.display_name = ''
   showNewGroupInput.value = false
+  newGroupError.value = ''
   pendingGroupName.value = ''
 }
 
@@ -136,18 +140,26 @@ function onGroupChange() {
   if (form.group_name === '__new__') {
     showNewGroupInput.value = true
     newGroupName.value = ''
+    newGroupError.value = ''
     pendingGroupName.value = ''
+    nextTick(() => newGroupInputRef.value?.focus())
   } else {
     showNewGroupInput.value = false
+    newGroupError.value = ''
     pendingGroupName.value = ''
   }
 }
 
 function addNewGroup() {
   const name = newGroupName.value.trim()
-  if (!name) return
+  if (!name) {
+    newGroupError.value = '请输入分组名称'
+    newGroupInputRef.value?.focus()
+    return
+  }
+  newGroupError.value = ''
   pendingGroupName.value = name
-  form.group_name = name  // now safe: allGroupOptions includes this value
+  form.group_name = name
   newGroupName.value = ''
   showNewGroupInput.value = false
 }

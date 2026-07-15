@@ -571,6 +571,9 @@ class EdgeClient:
     def list_ssl(self) -> list[dict[str, Any]]:
         return self.api("ssl", "list")
 
+    def delete_ssl(self, cert_id: str) -> dict[str, Any]:
+        return self.api("ssl", "delete", cert_id)
+
     def raw_delete(self, path: str) -> dict[str, Any]:
         """Send a DELETE request without SM4 encryption."""
         import httpx

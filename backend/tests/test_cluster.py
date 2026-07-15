@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select, func
-from app.models.cluster import Cluster, Node, Upstream, UpstreamTarget, Route, RoutePlugin, PluginConfig, GlobalRule, PluginMetadata, ConfigVersion
+from app.models.cluster import Cluster, Node, Upstream, UpstreamTarget, Route, RoutePlugin, PluginConfig, GlobalRule, PluginMetadata, ConfigVersion, StreamProxy
+from app.models.ssl import SslCertificate
 from app.models.user import User
 from app.core.security import hash_password
 from app.schemas.cluster import ClusterCreate, ClusterResponse, ClusterUpdate
@@ -241,6 +242,10 @@ class TestClusterStats:
         test_db.add_all([PluginMetadata(cluster_id=cid, plugin_name=f"pm-{i}") for i in range(2)])
         # 版本历史
         test_db.add_all([ConfigVersion(cluster_id=cid, resource_type="route", resource_id=1, version=i, config="{}") for i in range(5)])
+        # 四层代理
+        test_db.add_all([StreamProxy(cluster_id=cid, name=f"sp-{i}", listen_port=10000 + i) for i in range(2)])
+        # SSL 证书
+        test_db.add_all([SslCertificate(cluster_id=cid, name=f"cert-{i}", sni=f"test{i}.com", cert="crt", private_key="k") for i in range(3)])
 
         await test_db.commit()
         return cid, cluster
@@ -254,6 +259,8 @@ class TestClusterStats:
         assert await count_db(test_db, PluginConfig, cid) == 2
         assert await count_db(test_db, GlobalRule, cid) == 1
         assert await count_db(test_db, PluginMetadata, cid) == 2
+        assert await count_db(test_db, StreamProxy, cid) == 2
+        assert await count_db(test_db, SslCertificate, cid) == 3
         assert await count_db(test_db, ConfigVersion, cid) == 5
 
     async def test_stats_no_child_resources(self, test_db):

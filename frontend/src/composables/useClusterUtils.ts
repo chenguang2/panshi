@@ -9,6 +9,8 @@ export const resourceLabels: Record<string, string> = {
   plugin_configs: '插件组',
   global_rules: '全局规则',
   plugin_metadata: '插件元数据',
+  stream_proxies: '四层代理',
+  ssl_certificates: 'SSL 证书',
   config_versions: '配置版本历史',
 }
 
@@ -333,7 +335,7 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
       addLog('正在从数据库删除...')
       let dbDetail = ''
       if (dbResult.details) {
-        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', nodes: '节点', config_versions: '版本历史' }
+        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', stream_proxies: '四层代理', ssl_certificates: 'SSL证书', nodes: '节点', config_versions: '版本历史' }
         const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details[k] ?? 0}`)
         dbDetail = ` (${parts.join(' ')})`
       }
