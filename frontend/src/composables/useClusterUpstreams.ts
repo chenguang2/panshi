@@ -39,8 +39,7 @@ interface UpstreamFormData {
   hash_on: string
   key: string
   checks: Record<string, unknown> | null
-  advancedEnabled: boolean
-  retries: number | undefined
+  retriesInput: number | undefined
   retry_timeout: number
   timeout: { connect: number | undefined; send: number | undefined; read: number | undefined }
   pass_host: string
@@ -98,6 +97,27 @@ export function useClusterUpstreams(options: {
   const upstreamFormRef = ref()
 
   const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
+const formErrors = reactive<Record<string, string>>({})
+
+  // ── Individual toggle states ──
+  const toggleChecks = ref(false)
+  const toggleTimeout = ref(false)
+  const togglePool = ref(false)
+  const toggleRetries = ref(false)
+  const toggleRetryTimeout = ref(false)
+  const toggleHost = ref(false)
+  const toggleScheme = ref(false)
+
+  // ── Retries radio ──
+  const retriesRadio = ref<'auto' | 'custom' | 'disabled'>('auto')
+
+  const retriesSubmitValue = computed<number | null>(() => {
+    switch (retriesRadio.value) {
+      case 'auto': return null
+      case 'custom': return upstreamForm.retriesInput ?? null
+      case 'disabled': return 0
+    }
+  })
 
   const upstreamForm = reactive<UpstreamFormData>({
     name: '',
@@ -107,8 +127,7 @@ export function useClusterUpstreams(options: {
     hash_on: 'vars',
     key: '',
     checks: null,
-    advancedEnabled: false,
-    retries: undefined,
+    retriesInput: undefined,
     retry_timeout: 0,
     timeout: { connect: undefined, send: undefined, read: undefined },
     pass_host: 'pass',
@@ -196,23 +215,6 @@ export function useClusterUpstreams(options: {
       // Invalid JSON, don't update
     }
   })
-
-  watch(
-    () => upstreamForm.advancedEnabled,
-    (newVal) => {
-      if (!newVal) {
-        upstreamForm.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-        checksJson.value = defaultChecksJson
-        upstreamForm.retries = undefined
-        upstreamForm.retry_timeout = 0
-        upstreamForm.timeout = { ...defaultTimeout }
-        upstreamForm.pass_host = 'pass'
-        upstreamForm.upstream_host = ''
-        upstreamForm.scheme = 'http'
-        upstreamForm.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
-      }
-    },
-  )
 
   // ── Core: load upstreams ──
   const loadUpstreams = async (cluster: Cluster) => {
@@ -363,6 +365,70 @@ export function useClusterUpstreams(options: {
     return valid
   }
 
+  function readDomValue(placeholder: string): string | null {
+    if (typeof document === 'undefined') return null
+    const el = document.querySelector(`.ant-input-number-input[placeholder="${placeholder}"]`) as HTMLInputElement
+    return el?.value ?? null
+  }
+
+  const validateAdvancedFields = (): boolean => {
+    formErrors.checks = ''
+    formErrors.timeout = ''
+    formErrors.keepalive_pool = ''
+    formErrors.retries = ''
+    formErrors.retry_timeout = ''
+    formErrors.pass_host = ''
+    let valid = true
+    if (toggleChecks.value) {
+      try { JSON.parse(checksJson.value) }
+      catch { formErrors.checks = 'JSON 格式不正确，请检查'; valid = false }
+    }
+    if (toggleTimeout.value) {
+      const cv = readDomValue('connect')
+      const sv = readDomValue('send')
+      const rv = readDomValue('read')
+      if (!cv || !sv || !rv) {
+        formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'; valid = false
+      } else {
+        upstreamForm.timeout.connect = parseFloat(cv)
+        upstreamForm.timeout.send = parseFloat(sv)
+        upstreamForm.timeout.read = parseFloat(rv)
+      }
+    }
+    if (togglePool.value) {
+      const size = readDomValue('size')
+      const idle = readDomValue('idle_timeout')
+      const req = readDomValue('requests')
+      if (!size || !idle || !req) {
+        formErrors.keepalive_pool = '请填写完整的连接池配置'; valid = false
+      } else {
+        upstreamForm.keepalive_pool.size = parseFloat(size)
+        upstreamForm.keepalive_pool.idle_timeout = parseFloat(idle)
+        upstreamForm.keepalive_pool.requests = parseFloat(req)
+      }
+    }
+    if (toggleRetryTimeout.value) {
+      const rtv = readDomValue('秒')
+      if (!rtv) {
+        formErrors.retry_timeout = '请填写重试超时（0 = 不限制）'; valid = false
+      } else {
+        upstreamForm.retry_timeout = parseInt(rtv)
+      }
+    }
+    if (toggleRetries.value && retriesRadio.value === 'custom') {
+      const rv = readDomValue('次数')
+      if (!rv || parseInt(rv) < 1) {
+        formErrors.retries = '请输入大于 0 的重试次数'; valid = false
+      } else {
+        upstreamForm.retriesInput = parseInt(rv)
+      }
+    }
+    if (toggleHost.value && upstreamForm.pass_host === 'rewrite' && !upstreamForm.upstream_host) {
+      formErrors.pass_host = '请填写上游 Host'; valid = false
+    }
+    return valid
+  }
+
   // ── Modal: show add upstream ──
   const showAddUpstreamModal = async (cluster: Cluster) => {
     await loadUpstreams(cluster)
@@ -374,17 +440,26 @@ export function useClusterUpstreams(options: {
     upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
     upstreamForm.hash_on = 'vars'
     upstreamForm.key = ''
+    toggleChecks.value = false
+    toggleTimeout.value = false
+    togglePool.value = false
+    toggleRetries.value = false
+    toggleRetryTimeout.value = false
+    toggleHost.value = false
+    toggleScheme.value = false
+    retriesRadio.value = 'auto'
+    const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
+    upstreamForm.checks = defaultParsed
     checksJson.value = defaultChecksJson
-    upstreamForm.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    upstreamForm.advancedEnabled = false
-    upstreamForm.retries = undefined
+    upstreamForm.retriesInput = undefined
     upstreamForm.retry_timeout = 0
     upstreamForm.timeout = { ...defaultTimeout }
     upstreamForm.pass_host = 'pass'
     upstreamForm.upstream_host = ''
     upstreamForm.scheme = 'http'
-    upstreamForm.keepalive_pool = { size: undefined, idle_timeout: undefined, requests: undefined }
+    upstreamForm.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
     targetValidation.value = {}
+    Object.keys(formErrors).forEach(k => formErrors[k] = '')
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
   }
@@ -409,71 +484,70 @@ export function useClusterUpstreams(options: {
     upstreamForm.hash_on = u.hash_on || 'vars'
     upstreamForm.key = u.key || ''
 
+    // Reset all toggles to OFF first
+    toggleChecks.value = false
+    toggleTimeout.value = false
+    togglePool.value = false
+    toggleRetries.value = false
+    toggleRetryTimeout.value = false
+    toggleHost.value = false
+    toggleScheme.value = false
+    retriesRadio.value = 'auto'
+
+    // Individual toggle from DB values
+    toggleChecks.value = u.checks !== null && u.checks !== undefined && u.checks !== '{}'
     if (u.checks) {
       const checksObj = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
       upstreamForm.checks = checksObj as Record<string, unknown>
       checksJson.value = JSON.stringify(checksObj, null, 2)
     } else {
-      upstreamForm.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      upstreamForm.checks = defaultParsed
       checksJson.value = defaultChecksJson
     }
-    const isDefaultChecks = (() => {
-      if (!u.checks) return true
-      const c = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
-      return (
-        JSON.stringify(c) ===
-        JSON.stringify({ passive: {}, active: { unhealthy: {} } })
-      )
-    })()
-    const isDefaultTimeout = (() => {
-      if (!u.timeout) return true
-      const t = typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout
-      return t.connect === 6 && t.send === 6 && t.read === 6
-    })()
-    upstreamForm.advancedEnabled = !!(
-      (u.retries !== undefined && u.retries !== null) ||
-      (u.retry_timeout !== undefined &&
-        u.retry_timeout !== null &&
-        u.retry_timeout !== 0) ||
-      (u.pass_host && u.pass_host !== 'pass') ||
-      (u.upstream_host && u.upstream_host !== '') ||
-      (u.scheme && u.scheme !== 'http') ||
-      !isDefaultChecks ||
-      !isDefaultTimeout ||
-      (u.keepalive_pool && u.keepalive_pool !== '{}')
-    )
-    upstreamForm.retries = u.retries ?? undefined
-    upstreamForm.retry_timeout = u.retry_timeout ?? 0
-    if (u.timeout) {
-      const t = typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout
-      upstreamForm.timeout = {
-        connect: t.connect ?? defaultTimeout.connect,
-        send: t.send ?? defaultTimeout.send,
-        read: t.read ?? defaultTimeout.read,
+
+    toggleTimeout.value = u.timeout !== null && u.timeout !== undefined
+    const t = u.timeout ? (typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout) : null
+    upstreamForm.timeout = t
+      ? { connect: t.connect ?? defaultTimeout.connect, send: t.send ?? defaultTimeout.send, read: t.read ?? defaultTimeout.read }
+      : { ...defaultTimeout }
+
+    toggleRetries.value = u.retries !== null && u.retries !== undefined
+    if (u.retries !== null && u.retries !== undefined) {
+      if (u.retries === 0) {
+        retriesRadio.value = 'disabled'
+        upstreamForm.retriesInput = undefined
+      } else {
+        retriesRadio.value = 'custom'
+        upstreamForm.retriesInput = u.retries
       }
     } else {
-      upstreamForm.timeout = { ...defaultTimeout }
+      retriesRadio.value = 'auto'
+      upstreamForm.retriesInput = undefined
     }
+
+    toggleRetryTimeout.value = u.retry_timeout !== null && u.retry_timeout !== undefined
+    upstreamForm.retry_timeout = u.retry_timeout ?? 0
+
+    toggleHost.value = u.pass_host !== null && u.pass_host !== undefined
     upstreamForm.pass_host = u.pass_host || 'pass'
     upstreamForm.upstream_host = u.upstream_host || ''
+
+    toggleScheme.value = u.scheme !== null && u.scheme !== undefined
     upstreamForm.scheme = u.scheme || 'http'
-    if (u.keepalive_pool) {
-      const k =
-        typeof u.keepalive_pool === 'string'
-          ? JSON.parse(u.keepalive_pool)
-          : u.keepalive_pool
+
+    togglePool.value = u.keepalive_pool !== null && u.keepalive_pool !== undefined && u.keepalive_pool !== '{}'
+    if (u.keepalive_pool && u.keepalive_pool !== '{}') {
+      const k = typeof u.keepalive_pool === 'string' ? JSON.parse(u.keepalive_pool) : u.keepalive_pool
       upstreamForm.keepalive_pool = {
-        size: (k as KeepalivePoolData).size,
-        idle_timeout: (k as KeepalivePoolData).idle_timeout,
-        requests: (k as KeepalivePoolData).requests,
+        size: (k as KeepalivePoolData).size ?? 10,
+        idle_timeout: (k as KeepalivePoolData).idle_timeout ?? 60,
+        requests: (k as KeepalivePoolData).requests ?? 100,
       }
     } else {
-      upstreamForm.keepalive_pool = {
-        size: undefined,
-        idle_timeout: undefined,
-        requests: undefined,
-      }
+      upstreamForm.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
     }
+
     if (upstream.targets && upstream.targets.length > 0) {
       upstreamForm.targets = upstream.targets.map((t) => {
         const [ip, port] = t.target.split(':')
@@ -490,6 +564,7 @@ export function useClusterUpstreams(options: {
       ]
     }
     targetValidation.value = {}
+    Object.keys(formErrors).forEach(k => formErrors[k] = '')
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
   }
@@ -507,6 +582,11 @@ export function useClusterUpstreams(options: {
       return
     }
 
+    // Validate advanced fields
+    if (!validateAdvancedFields()) {
+      return
+    }
+
     try {
       const submitData: Record<string, unknown> = {
         name: upstreamForm.name,
@@ -516,47 +596,35 @@ export function useClusterUpstreams(options: {
           target: `${t.ip}:${t.port}`,
           weight: t.weight,
         })),
-        checks: upstreamForm.checks,
-        timeout: upstreamForm.timeout,
       }
       if (upstreamForm.load_balance === 'chash') {
         ;(submitData as Record<string, unknown>).hash_on = upstreamForm.hash_on
         ;(submitData as Record<string, unknown>).key = upstreamForm.key
       }
-      if (upstreamForm.advancedEnabled) {
-        if (upstreamForm.retries !== undefined) {
-          ;(submitData as Record<string, unknown>).retries = upstreamForm.retries
-        }
-        if (upstreamForm.retry_timeout !== undefined) {
-          ;(submitData as Record<string, unknown>).retry_timeout =
-            upstreamForm.retry_timeout
-        }
-        if (upstreamForm.pass_host) {
-          ;(submitData as Record<string, unknown>).pass_host = upstreamForm.pass_host
-        }
-        if (
-          upstreamForm.pass_host === 'rewrite' &&
-          upstreamForm.upstream_host
-        ) {
-          ;(submitData as Record<string, unknown>).upstream_host =
-            upstreamForm.upstream_host
-        }
-        if (upstreamForm.scheme && upstreamForm.scheme !== 'http') {
-          ;(submitData as Record<string, unknown>).scheme = upstreamForm.scheme
-        }
+
+      // Each advanced field controlled by its toggle
+      submitData.checks = toggleChecks.value ? upstreamForm.checks : null
+      submitData.timeout = toggleTimeout.value ? upstreamForm.timeout : null
+
+      if (togglePool.value) {
         const k = upstreamForm.keepalive_pool
-        if (
-          k.size !== undefined ||
-          k.idle_timeout !== undefined ||
-          k.requests !== undefined
-        ) {
+        if (k.size !== undefined || k.idle_timeout !== undefined || k.requests !== undefined) {
           const kp: Record<string, number> = {}
           if (k.size !== undefined) kp.size = k.size
           if (k.idle_timeout !== undefined) kp.idle_timeout = k.idle_timeout
           if (k.requests !== undefined) kp.requests = k.requests
-          ;(submitData as Record<string, unknown>).keepalive_pool = kp
+          submitData.keepalive_pool = kp
         }
+      } else {
+        submitData.keepalive_pool = null
       }
+
+      submitData.retries = toggleRetries.value ? retriesSubmitValue.value : null
+      submitData.retry_timeout = toggleRetryTimeout.value ? upstreamForm.retry_timeout : null
+
+      submitData.pass_host = toggleHost.value ? upstreamForm.pass_host : null
+      submitData.upstream_host = toggleHost.value && upstreamForm.pass_host === 'rewrite' ? (upstreamForm.upstream_host || null) : null
+      submitData.scheme = toggleScheme.value ? upstreamForm.scheme : null
       if (editingUpstream.value) {
         await api.put(
           `/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`,
@@ -711,9 +779,20 @@ export function useClusterUpstreams(options: {
     upstreamForm,
     upstreamFormRef,
     targetValidation,
+    formErrors,
     checksJson,
     defaultChecksJson,
     defaultTimeout,
+
+    // Toggle states (used by ClusterUpstreams.vue template)
+    toggleChecks,
+    toggleTimeout,
+    togglePool,
+    toggleRetries,
+    toggleRetryTimeout,
+    toggleHost,
+    toggleScheme,
+    retriesRadio,
 
     // Column / display state
     allUpstreamColumns,

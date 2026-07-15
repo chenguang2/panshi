@@ -152,84 +152,115 @@
                     <PlusOutlined /> 添加节点
                   </a-button>
                 </a-form-item>
-                <a-form-item label="高级配置">
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <label class="toggle"><input type="checkbox" :checked="upstreamForm.advancedEnabled" @change="upstreamForm.advancedEnabled = !upstreamForm.advancedEnabled" /><span class="toggle-slider"></span></label>
-                    <span style="color: #999; font-size: 12px;">开启后在"高级配置"页配置健康检查、超时、重试等</span>
-                  </div>
-                </a-form-item>
               </a-form>
             </a-tab-pane>
 
             <a-tab-pane key="advanced" tab="高级配置">
-              <div v-if="upstreamForm.advancedEnabled">
-                <a-form :model="upstreamForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                  <a-form-item label="健康检查" name="checks">
-                    <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" />
-                  </a-form-item>
-                  <a-form-item label="重试次数" name="retries">
-                    <a-input-number v-model:value="upstreamForm.retries" :min="0" placeholder="默认等于可用节点数" style="width: 100%" />
-                    <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不启用重试，留空 = 自动使用节点数</div>
-                  </a-form-item>
-                  <a-form-item label="重试超时(秒)" name="retry_timeout">
-                    <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width: 100%" />
-                    <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
-                  </a-form-item>
-                  <a-form-item label="超时配置(秒)">
-                    <div style="display: flex; gap: 8px;">
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
-                        <a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width: 100%" />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
-                        <a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width: 100%" />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
-                        <a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width: 100%" />
-                      </div>
+              <div class="advanced-sections">
+                <!-- 健康检查 -->
+                <div class="advanced-section">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleChecks">
+                    <span>健康检查</span>
+                  </label>
+                  <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" :disabled="!toggleChecks" />
+                  <div v-if="formErrors.checks" style="color:var(--danger);font-size:12px;margin-top:6px;">{{ formErrors.checks }}</div>
+                </div>
+
+                <!-- 超时配置 -->
+                <div class="advanced-section" @input.capture="onSectionInput">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleTimeout">
+                    <span>超时配置（秒）</span>
+                  </label>
+                  <div style="display: flex; gap: 8px;">
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">连接</div><a-input-number v-model:value="upstreamForm.timeout.connect" :min="0" placeholder="connect" style="width:100%" :disabled="!toggleTimeout" /></div>
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">发送</div><a-input-number v-model:value="upstreamForm.timeout.send" :min="0" placeholder="send" style="width:100%" :disabled="!toggleTimeout" /></div>
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">读取</div><a-input-number v-model:value="upstreamForm.timeout.read" :min="0" placeholder="read" style="width:100%" :disabled="!toggleTimeout" /></div>
+                  </div>
+                  <div v-if="formErrors.timeout" style="color:var(--danger);font-size:12px;margin-top:6px;">{{ formErrors.timeout }}</div>
+                </div>
+
+                <!-- 连接池 -->
+                <div class="advanced-section" @input.capture="onSectionInput">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="togglePool">
+                    <span>连接池</span>
+                  </label>
+                  <div style="display: flex; gap: 8px;">
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">大小</div><a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width:100%" :disabled="!togglePool" /></div>
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">空闲超时(秒)</div><a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width:100%" :disabled="!togglePool" /></div>
+                    <div style="flex:1"><div style="margin-bottom:2px;color:#666;font-size:12px">最大请求数</div><a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width:100%" :disabled="!togglePool" /></div>
+                  </div>
+                  <div v-if="formErrors.keepalive_pool" style="color:var(--danger);font-size:12px;margin-top:6px;">{{ formErrors.keepalive_pool }}</div>
+                </div>
+
+                <!-- 重试次数 -->
+                <div class="advanced-section">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleRetries">
+                    <span>重试次数</span>
+                  </label>
+                  <div :style="{ opacity: toggleRetries ? 1 : 0.45 }">
+                    <div class="radio-group">
+                      <label class="radio-label"><input type="radio" value="auto" v-model="retriesRadio" :disabled="!toggleRetries"><span>自动（使用可用节点数）</span></label>
+                      <label class="radio-label"><input type="radio" value="custom" v-model="retriesRadio" :disabled="!toggleRetries"><span>指定重试次数</span></label>
+                      <template v-if="retriesRadio === 'custom'">
+                        <a-input-number v-model:value="upstreamForm.retriesInput" :min="0" placeholder="次数" style="width:120px;margin-left:24px" :disabled="!toggleRetries" />
+                      </template>
+                      <label class="radio-label"><input type="radio" value="disabled" v-model="retriesRadio" :disabled="!toggleRetries"><span>禁用重试</span></label>
                     </div>
-                  </a-form-item>
-                  <a-form-item label="Host策略" name="pass_host">
-                    <a-select v-model:value="upstreamForm.pass_host">
-                      <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
-                      <a-select-option value="node">node（使用节点Host）</a-select-option>
-                      <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item v-if="upstreamForm.pass_host === 'rewrite'" label="上游Host" name="upstream_host">
-                    <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" />
-                  </a-form-item>
-                  <a-form-item label="通信协议" name="scheme">
-                    <a-select v-model:value="upstreamForm.scheme">
-                      <a-select-option value="http">http</a-select-option>
-                      <a-select-option value="https">https</a-select-option>
-                      <a-select-option value="tcp">tcp</a-select-option>
-                      <a-select-option value="udp">udp</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item label="连接池">
-                    <div style="display: flex; gap: 8px;">
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
-                        <a-input-number v-model:value="upstreamForm.keepalive_pool.size" :min="1" placeholder="size" style="width: 100%" />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
-                        <a-input-number v-model:value="upstreamForm.keepalive_pool.idle_timeout" :min="0" placeholder="idle_timeout" style="width: 100%" />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
-                        <a-input-number v-model:value="upstreamForm.keepalive_pool.requests" :min="1" placeholder="requests" style="width: 100%" />
-                      </div>
+                    <div v-if="formErrors.retries" style="color:var(--danger);font-size:12px;margin-top:4px;">{{ formErrors.retries }}</div>
+                  </div>
+                </div>
+
+                <!-- 重试超时 -->
+                <div class="advanced-section" @input.capture="onSectionInput">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleRetryTimeout">
+                    <span>重试超时（秒）</span>
+                  </label>
+                  <a-input-number v-model:value="upstreamForm.retry_timeout" :min="0" placeholder="秒" style="width:200px" :disabled="!toggleRetryTimeout" />
+                  <div v-if="formErrors.retry_timeout" style="color:var(--danger);font-size:12px;margin-top:4px;">{{ formErrors.retry_timeout }}</div>
+                  <div style="color:#999;font-size:11px;margin-top:2px">0 = 不限制重试时间</div>
+                </div>
+
+                <!-- Host 策略 -->
+                <div class="advanced-section">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleHost">
+                    <span>Host 策略</span>
+                  </label>
+                  <div style="display:flex;gap:8px">
+                    <div style="flex:1;max-width:260px">
+                      <div style="margin-bottom:2px;color:#666;font-size:12px">Host 策略</div>
+                      <a-select v-model:value="upstreamForm.pass_host" :disabled="!toggleHost">
+                        <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
+                        <a-select-option value="node">node（使用节点Host）</a-select-option>
+                        <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
+                      </a-select>
                     </div>
-                  </a-form-item>
-                </a-form>
-              </div>
-              <div v-else class="advanced-disabled-hint">
-                <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-                高级配置未启用，请在"基础配置"中开启
+                    <div v-if="upstreamForm.pass_host === 'rewrite'" style="flex:1">
+                      <div style="margin-bottom:2px;color:#666;font-size:12px">上游 Host</div>
+                      <a-input v-model:value="upstreamForm.upstream_host" placeholder="指定上游请求的Host" :disabled="!toggleHost" />
+                    </div>
+                  </div>
+                  <div v-if="formErrors.pass_host" style="color:var(--danger);font-size:12px;margin-top:6px;">{{ formErrors.pass_host }}</div>
+                </div>
+
+                <!-- 通信协议 -->
+                <div class="advanced-section">
+                  <label class="checkbox-label section-toggle">
+                    <input type="checkbox" v-model="toggleScheme">
+                    <span>通信协议</span>
+                  </label>
+                  <a-select v-model:value="upstreamForm.scheme" style="width:200px" :disabled="!toggleScheme">
+                    <a-select-option value="http">http</a-select-option>
+                    <a-select-option value="https">https</a-select-option>
+                    <a-select-option value="tcp">tcp</a-select-option>
+                    <a-select-option value="udp">udp</a-select-option>
+                  </a-select>
+                </div>
               </div>
             </a-tab-pane>
           </a-tabs>
@@ -282,6 +313,7 @@ const {
   upstreamForm,
   upstreamFormRef,
   targetValidation,
+  formErrors,
   checksJson,
   allUpstreamColumns,
   upstreamColumnPopoverVisible,
@@ -303,6 +335,14 @@ const {
   removeUpstreamTarget,
   getUpstreamActionButtonTitle,
   handleUpstreamAction,
+  toggleChecks,
+  toggleTimeout,
+  togglePool,
+  toggleRetries,
+  toggleRetryTimeout,
+  toggleHost,
+  toggleScheme,
+  retriesRadio,
 } = useClusterUpstreams({
   clusters: computed(() => props.clusters),
   versionModalVisible,
@@ -313,6 +353,22 @@ const {
   versionModalEdgeUuid,
   openPublishModal: props.openPublishModal,
 })
+
+// Catch native input events from antdv InputNumber to force model update on clear
+const onSectionInput = (e: Event) => {
+  const el = e.target as HTMLInputElement
+  if (el.tagName !== 'INPUT' || el.value !== '') return
+  switch (el.placeholder) {
+    case 'connect': upstreamForm.timeout.connect = undefined; break
+    case 'send': upstreamForm.timeout.send = undefined; break
+    case 'read': upstreamForm.timeout.read = undefined; break
+    case 'size': upstreamForm.keepalive_pool.size = undefined; break
+    case 'idle_timeout': upstreamForm.keepalive_pool.idle_timeout = undefined; break
+    case 'requests': upstreamForm.keepalive_pool.requests = undefined; break
+    case '秒': upstreamForm.retry_timeout = undefined; break
+    case '次数': upstreamForm.retriesInput = undefined; break
+  }
+}
 
 const targetColumns = [
   { title: 'IP地址', key: 'ip', width: 200 },
@@ -350,5 +406,50 @@ const versionModalOnPublished = async () => {
 
 .node-table {
   margin-top: 8px;
+}
+
+/* ── Advanced sections ── */
+.advanced-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.advanced-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--surface);
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.section-toggle {
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.radio-label input[type="radio"] {
+  accent-color: var(--accent);
 }
 </style>
