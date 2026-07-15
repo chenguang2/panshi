@@ -165,7 +165,7 @@ async function loadCerts() {
       cluster_group_name: clusterMap.get(cert.cluster_id)?.group_name || '',
     }))
     totalCount.value = res.data.total || 0
-  } catch { message.error('加载 SSL 证书失败') }
+  } catch { certs.value = []; totalCount.value = 0; message.error('加载 SSL 证书失败') }
   finally { loading.value = false }
 }
 
@@ -239,7 +239,7 @@ onMounted(() => { loadClusters().then(() => loadCerts()) })
 <style scoped>
 .ssl-page { padding: 20px 24px; }
 .ssl-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
-.search-input-wrap { position: relative; flex: 1; min-width: 140px; }
+.search-input-wrap { position: relative; width: 200px; flex-shrink: 0; }
 .search-input-wrap .form-input { width: 100%; padding-left: 32px; }
 .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; opacity: 0.5; pointer-events: none; }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }

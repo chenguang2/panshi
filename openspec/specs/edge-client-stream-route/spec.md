@@ -5,7 +5,7 @@
 
 #### Scenario: Tab 页展示
 - **WHEN** 用户在 Edge 直连页面选择节点后点击「查询」
-- **THEN** 「四层代理」Tab SHALL 显示在 Tab 栏最后位置
+- **THEN** 「四层代理」Tab SHALL 显示在「插件列表」Tab 之后、「SSL 证书」Tab 之前
 - **AND** 列表列定义 SHALL 包含：序号、ID、名称、server_port、协议、server_addr、remote_addr、SNI、上游节点数、操作
 
 #### Scenario: 数据加载

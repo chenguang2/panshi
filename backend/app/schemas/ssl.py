@@ -6,12 +6,12 @@ from datetime import datetime
 
 
 class SslCertificateBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+    name: str = ""
     cluster_id: int = Field(..., ge=1)
     cert_type: str = Field(default="server")
-    sni: str = Field(..., min_length=1)
-    cert: str = Field(..., min_length=1)
-    private_key: str = Field(..., min_length=1, alias="key")
+    sni: str = ""
+    cert: str = ""
+    private_key: str = Field(default="", alias="key")
     ssl_protocols: Optional[str] = None
     description: Optional[str] = None
 
@@ -20,7 +20,10 @@ class SslCertificateBase(BaseModel):
 
 
 class SslCertificateCreate(SslCertificateBase):
-    pass
+    name: str = Field(..., min_length=1, max_length=100)
+    sni: str = Field(..., min_length=1)
+    cert: str = Field(..., min_length=1)
+    private_key: str = Field(..., min_length=1, alias="key")
 
 
 class SslCertificateUpdate(BaseModel):

@@ -166,6 +166,13 @@ class EdgeImportService:
             except Exception:
                 stream_proxy_count = 0
 
+            try:
+                ssl_data = self.client._request("GET", "/edge/admin/ssl")
+                ssl_list = self._parse_resource_list(ssl_data)
+                ssl_certificate_count = len(ssl_list)
+            except Exception:
+                ssl_certificate_count = 0
+
             version = "unknown"
             try:
                 raw = self.client._request("GET", "/edge/server_info")
@@ -186,6 +193,7 @@ class EdgeImportService:
                 "global_rule_count": global_rule_count,
                 "plugin_metadata_count": plugin_metadata_count,
                 "stream_proxy_count": stream_proxy_count,
+                "ssl_certificate_count": ssl_certificate_count,
                 "node": f"{self.ip}:{self.port}",
                 "response_time_ms": elapsed,
             }
@@ -332,9 +340,35 @@ class EdgeImportService:
             return value
         return json.dumps(value, ensure_ascii=False)
 
-    def convert_upstream(self, edge_upstream: dict) -> dict:
-        edge_nodes = edge_upstream.get("nodes") or {}
+    @staticmethod
+    def _parse_nodes(nodes: Any) -> list[dict]:
+        """Parse Edge node list into internal target format.
 
+        Edge API returns nodes in two formats (documented in upstreams.log):
+          1. Dict:  {"host:port": weight, ...}
+          2. Array: [{"host": "...", "port": N, "weight": N}, ...]
+
+        Returns list of {"target": "host:port", "weight": N}.
+        """
+        targets: list[dict] = []
+        if isinstance(nodes, dict):
+            for host_port, weight in nodes.items():
+                targets.append({
+                    "target": host_port,
+                    "weight": weight if isinstance(weight, int) else 1,
+                })
+        elif isinstance(nodes, list):
+            for item in nodes:
+                if isinstance(item, dict):
+                    host = item.get("host", "")
+                    port = item.get("port")
+                    target = f"{host}:{port}" if port else host
+                    weight = item.get("weight", 1)
+                    if host:
+                        targets.append({"target": target, "weight": weight})
+        return targets
+
+    def convert_upstream(self, edge_upstream: dict) -> dict:
         upstream_data = {
             "name": edge_upstream.get("name") or edge_upstream.get("id", ""),
             "edge_uuid": edge_upstream.get("id", ""),
@@ -356,13 +390,7 @@ class EdgeImportService:
             "current_version": None,
         }
 
-        targets_data: list[dict] = []
-        if isinstance(edge_nodes, dict):
-            for host_port, weight in edge_nodes.items():
-                targets_data.append({
-                    "target": host_port,
-                    "weight": weight if isinstance(weight, int) else 1,
-                })
+        targets_data = self._parse_nodes(edge_upstream.get("nodes"))
 
         return {"upstream": upstream_data, "targets": targets_data}
 
@@ -374,42 +402,69 @@ class EdgeImportService:
     }
 
     def convert_stream_proxy(self, edge_stream: dict) -> dict:
-        edge_nodes = (edge_stream.get("upstream") or {}).get("nodes") or {}
+        upstream = edge_stream.get("upstream") or {}
+        edge_plugins = edge_stream.get("plugins") or {}
+        dns_upstream = edge_plugins.get("dns_upstream") or {}
 
-        targets_data: list[dict] = []
-        if isinstance(edge_nodes, dict):
-            for host_port, weight in edge_nodes.items():
-                targets_data.append({
-                    "target": host_port,
-                    "weight": weight if isinstance(weight, int) else 1,
-                })
+        is_dns = bool(dns_upstream)
 
-        timeout_raw = (edge_stream.get("upstream") or {}).get("timeout")
-        keepalive_raw = (edge_stream.get("upstream") or {}).get("keepalive_pool")
+        if is_dns:
+            # DNS 类型：数据存储在 plugins.dns_upstream 中
+            # 同时 edge_plugins.log_process 作为独立插件，需合并到 dns_config
+            dns_cfg: dict = dict(dns_upstream)
+            log_proc = edge_plugins.get("log_process")
+            if log_proc:
+                dns_cfg["log_process"] = log_proc
+            targets_data: list[dict] = []
+            proxy_data = {
+                "name": edge_stream.get("name") or edge_stream.get("id", ""),
+                "edge_uuid": edge_stream.get("id", ""),
+                "cluster_id": self.cluster_id,
+                "listen_port": edge_stream.get("server_port", 0),
+                "load_balance": "weighted_roundrobin",
+                "scheme": "udp",
+                "description": edge_stream.get("desc"),
+                "remote_addr": edge_stream.get("remote_addr"),
+                "sni": edge_stream.get("sni"),
+                "targets": None,
+                "timeout": None,
+                "keepalive_pool": None,
+                "proxy_type": "dns",
+                "dns_config": self._ensure_json(dns_cfg),
+                "current_version": None,
+            }
+        else:
+            # 普通类型：数据存储在 upstream 中
+            targets_data = self._parse_nodes(upstream.get("nodes"))
 
-        proxy_data = {
-            "name": edge_stream.get("name") or edge_stream.get("id", ""),
-            "edge_uuid": edge_stream.get("id", ""),
-            "cluster_id": self.cluster_id,
-            "listen_port": edge_stream.get("server_port", 0),
-            "load_balance": self._STREAM_PROXY_TYPE_MAP.get(
-                (edge_stream.get("upstream") or {}).get("type", "roundrobin"), "weighted_roundrobin"
-            ),
-            "scheme": (edge_stream.get("upstream") or {}).get("scheme", "tcp"),
-            "description": edge_stream.get("desc"),
-            "remote_addr": edge_stream.get("remote_addr"),
-            "sni": edge_stream.get("sni"),
-            "targets": self._ensure_json(targets_data) if targets_data else None,
-            "timeout": self._ensure_json(timeout_raw) if timeout_raw and isinstance(timeout_raw, dict) else None,
-            "keepalive_pool": self._ensure_json(keepalive_raw) if keepalive_raw and isinstance(keepalive_raw, dict) else None,
-            "current_version": None,
-        }
+            timeout_raw = upstream.get("timeout")
+            keepalive_raw = upstream.get("keepalive_pool")
+
+            proxy_data = {
+                "name": edge_stream.get("name") or edge_stream.get("id", ""),
+                "edge_uuid": edge_stream.get("id", ""),
+                "cluster_id": self.cluster_id,
+                "listen_port": edge_stream.get("server_port", 0),
+                "load_balance": self._STREAM_PROXY_TYPE_MAP.get(
+                    upstream.get("type", "roundrobin"), "weighted_roundrobin"
+                ),
+                "scheme": upstream.get("scheme", "tcp"),
+                "description": edge_stream.get("desc"),
+                "remote_addr": edge_stream.get("remote_addr"),
+                "sni": edge_stream.get("sni"),
+                "targets": self._ensure_json(targets_data) if targets_data else None,
+                "timeout": self._ensure_json(timeout_raw) if timeout_raw and isinstance(timeout_raw, dict) else None,
+                "keepalive_pool": self._ensure_json(keepalive_raw) if keepalive_raw and isinstance(keepalive_raw, dict) else None,
+                "retries": upstream.get("retries"),
+                "retry_timeout": upstream.get("retry_timeout"),
+                "proxy_type": "normal",
+                "dns_config": None,
+                "current_version": None,
+            }
 
         return {
             "stream_proxy": proxy_data,
             "targets": targets_data,
-            "timeout": timeout_raw if isinstance(timeout_raw, dict) else None,
-            "keepalive_pool": keepalive_raw if isinstance(keepalive_raw, dict) else None,
         }
 
     def convert_route(self, edge_route: dict, upstream_uuid_map: dict) -> dict:
@@ -555,7 +610,7 @@ class EdgeImportService:
         raw_data = value if isinstance(value, dict) else {}
         key = edge_ssl.get("key", "") if isinstance(edge_ssl, dict) else ""
         ssl_id = key.rsplit("/", 1)[-1] if key else raw_data.get("id", "")
-        snis = raw_data.get("snis", [])
+        snis = raw_data.get("snis", raw_data.get("sni", ""))
         sni_str = ", ".join(snis) if isinstance(snis, list) else str(snis) if snis else ""
 
         ssl_protocols = None
@@ -937,8 +992,8 @@ class EdgeImportService:
                 "load_balance": sp["load_balance"],
                 "scheme": sp["scheme"],
                 "targets": csp.get("targets"),
-                "timeout": csp.get("timeout"),
-                "keepalive_pool": csp.get("keepalive_pool"),
+                "timeout": sp.get("timeout"),
+                "keepalive_pool": sp.get("keepalive_pool"),
                 "remote_addr": sp.get("remote_addr"),
                 "sni": sp.get("sni"),
                 "edge_uuid": sp["edge_uuid"],
@@ -1120,8 +1175,8 @@ class EdgeImportService:
                         "load_balance": sp_data["load_balance"],
                         "scheme": sp_data["scheme"],
                         "targets": csp.get("targets"),
-                        "timeout": csp.get("timeout"),
-                        "keepalive_pool": csp.get("keepalive_pool"),
+                        "timeout": sp_data.get("timeout"),
+                        "keepalive_pool": sp_data.get("keepalive_pool"),
                     }
                     session.add(ConfigVersion(
                         cluster_id=self.cluster_id, resource_type="stream_proxy",

@@ -37,6 +37,7 @@ export interface TestConnectionResponse {
   global_rule_count?: number
   plugin_metadata_count?: number
   stream_proxy_count?: number
+  ssl_certificate_count?: number
   node?: string
   cluster_name?: string
   response_time_ms?: number
@@ -61,12 +62,20 @@ export interface PluginMetadataPreview {
   config_data: Record<string, any>
 }
 
+export interface SslCertificatePreview {
+  name: string
+  sni?: string
+  cert_type?: string
+  edge_uuid: string
+}
+
 export interface PreviewResponse {
   upstreams: Record<string, any>[]
   routes: Record<string, any>[]
   plugin_configs: Record<string, any>[]
   global_rules: Record<string, any>[]
   plugin_metadata: PluginMetadataPreview[]
+  ssl_certificates: SslCertificatePreview[]
   stream_proxies: Record<string, any>[]
   conflicts: Conflict[]
   plugin_summary: PluginSummary
@@ -80,6 +89,7 @@ export interface ImportedCounts {
   global_rules: number
   plugin_metadata: number
   stream_proxies: number
+  ssl_certificates: number
   skipped: number
 }
 

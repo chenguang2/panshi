@@ -24,7 +24,23 @@
         </div>
         <div class="form-group">
           <label class="form-label">SNI 域名 <span class="required">*</span></label>
-          <input v-model="form.sni" type="text" class="form-input" :class="{ 'has-error': formErrors.sni }" placeholder="example.com 或多个用逗号分隔">
+          <div class="sni-tag-input" :class="{ 'has-error': formErrors.sni }" @click="sniInputRef?.focus()">
+            <span v-for="(tag, i) in sniTags" :key="i" class="sni-tag">
+              <span class="sni-tag-text">{{ tag }}</span>
+              <span class="sni-tag-remove" @click.stop="removeSniTag(i)">&times;</span>
+            </span>
+            <input
+              ref="sniInputRef"
+              v-model="sniInputValue"
+              type="text"
+              class="sni-input-inline"
+              placeholder="输入域名后按 Enter 添加"
+              @keydown.enter.prevent="addSniTag"
+              @keydown.space.prevent="addSniTag"
+              @keydown.backspace="onSniBackspace"
+            >
+          </div>
+          <div class="form-hint">每个域名独立添加，支持通配符如 *.example.com</div>
           <div v-if="formErrors.sni" class="form-error">{{ formErrors.sni }}</div>
         </div>
         <div class="form-row">
@@ -106,6 +122,31 @@ const certInputMode = ref<'file' | 'text'>('file')
 const keyInputMode = ref<'file' | 'text'>('file')
 const submitting = ref(false)
 
+const sniTags = ref<string[]>([])
+const sniInputValue = ref('')
+const sniInputRef = ref<HTMLInputElement | null>(null)
+
+function addSniTag() {
+  const val = sniInputValue.value.trim()
+  if (!val) return
+  if (sniTags.value.includes(val)) {
+    sniInputValue.value = ''
+    return
+  }
+  sniTags.value.push(val)
+  sniInputValue.value = ''
+}
+
+function removeSniTag(index: number) {
+  sniTags.value.splice(index, 1)
+}
+
+function onSniBackspace() {
+  if (sniInputValue.value === '' && sniTags.value.length > 0) {
+    sniTags.value.pop()
+  }
+}
+
 const form = reactive({
   name: '',
   cluster_id: '' as number | string,
@@ -128,7 +169,7 @@ function validate(): boolean {
   let valid = true
   if (!form.name.trim()) { formErrors.name = '请输入证书名称'; valid = false }
   if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; valid = false }
-  if (!form.sni.trim()) { formErrors.sni = '请输入 SNI 域名'; valid = false }
+  if (sniTags.value.length === 0) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
   if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
   if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
   return valid
@@ -150,7 +191,7 @@ watch(() => props.visible, (v) => {
     form.name = c.name
     form.cluster_id = c.cluster_id
     form.cert_type = c.cert_type
-    form.sni = c.sni
+    sniTags.value = c.sni ? c.sni.split(',').map((s: string) => s.trim()).filter(Boolean) : []
     form.cert = c.cert
     form.key = c.key || c.private_key || ''
     form.ssl_protocols = c.ssl_protocols ? (() => { try { return JSON.parse(c.ssl_protocols) } catch { return ['TLSv1.2', 'TLSv1.3'] } })() : ['TLSv1.2', 'TLSv1.3']
@@ -159,7 +200,7 @@ watch(() => props.visible, (v) => {
     form.name = ''
     form.cluster_id = ''
     form.cert_type = 'server'
-    form.sni = ''
+    sniTags.value = []
     form.cert = ''
     form.key = ''
     form.ssl_protocols = ['TLSv1.2', 'TLSv1.3']
@@ -191,7 +232,7 @@ async function handleSubmit() {
       name: form.name,
       cluster_id: form.cluster_id,
       cert_type: form.cert_type,
-      sni: form.sni,
+      sni: sniTags.value.join(','),
       cert: form.cert,
       private_key: form.key,
       description: form.description || undefined,
@@ -251,5 +292,72 @@ function handleClose() {
   background: oklch(56% 0.16 210 / 10%);
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ── SNI Tag Input ── */
+.sni-tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: text;
+  min-height: 40px;
+  transition: border-color 0.15s;
+}
+.sni-tag-input:focus-within {
+  border-color: var(--accent);
+}
+.sni-tag-input.has-error {
+  border-color: var(--danger);
+}
+.sni-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  background: oklch(56% 0.16 210 / 10%);
+  border: 1px solid oklch(56% 0.16 210 / 20%);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.sni-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.1s;
+}
+.sni-tag-remove:hover {
+  background: var(--danger);
+  color: #fff;
+}
+.sni-input-inline {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--fg);
+  padding: 2px 0;
+  font-family: var(--font-mono);
+}
+.sni-input-inline::placeholder {
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--font-body);
 }
 </style>

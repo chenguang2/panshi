@@ -154,11 +154,18 @@ async def publish_ssl_certificate(
 ):
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
 
-    config_data = {
-        "name": cert.name, "sni": cert.sni,
+    # DB stores SNI as comma-separated string (e.g., "qcg.com,abc.com").
+    # Edge API expects a single domain in "sni" or an array in "snis".
+    sni_list = [s.strip() for s in cert.sni.split(",") if s.strip()] if cert.sni else []
+    config_data: dict = {
+        "name": cert.name,
         "cert": cert.cert, "key": cert.private_key,
         "type": cert.cert_type,
     }
+    if len(sni_list) == 1:
+        config_data["sni"] = sni_list[0]
+    elif len(sni_list) > 1:
+        config_data["snis"] = sni_list
     if cert.ssl_protocols:
         try:
             config_data["ssl_protocols"] = json.loads(cert.ssl_protocols)

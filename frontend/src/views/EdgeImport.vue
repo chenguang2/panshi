@@ -80,7 +80,8 @@
               插件组: {{ connectionResult?.plugin_config_count }} 个 ·
               全局规则: {{ connectionResult?.global_rule_count }} 个 ·
               插件元数据: {{ connectionResult?.plugin_metadata_count }} 个 ·
-              四层代理: {{ connectionResult?.stream_proxy_count }} 个
+              四层代理: {{ connectionResult?.stream_proxy_count }} 个 ·
+               SSL 证书: {{ connectionResult?.ssl_certificate_count }} 个
             </div>
           </template>
         </a-alert>
@@ -441,6 +442,38 @@
             </a-table>
           </div>
         </div>
+
+        <!-- SSL 证书 -->
+        <div class="section-card">
+          <div class="section-header">
+            <a-checkbox v-model:checked="selections.ssl_certificates" />
+            <span class="section-title">SSL 证书（{{ previewData?.ssl_certificates?.length || 0 }} 个）</span>
+            <a-button size="small" @click="expandedSections.ssl_certificates = !expandedSections.ssl_certificates">
+              {{ expandedSections.ssl_certificates ? '收起详情' : '预览详情' }}
+            </a-button>
+          </div>
+          <div v-if="expandedSections.ssl_certificates" class="section-body">
+            <a-table
+              :columns="sslCertificateColumns"
+              :data-source="previewData?.ssl_certificates || []"
+              :pagination="false"
+              rowKey="edge_uuid"
+              size="small"
+            >
+              <template #bodyCell="{ column, record }">
+                <template v-if="column.key === 'name'">
+                  {{ record.name || '-' }}
+                </template>
+                <template v-if="column.key === 'sni'">
+                  {{ record.sni || '-' }}
+                </template>
+                <template v-if="column.key === 'cert_type'">
+                  {{ record.cert_type || '-' }}
+                </template>
+              </template>
+            </a-table>
+          </div>
+        </div>
       </div>
 
       <!-- Loading overlay for preview -->
@@ -481,6 +514,7 @@
             <div>全局规则：{{ importResult.imported_counts.global_rules }} 个</div>
             <div>插件元数据：{{ importResult.imported_counts.plugin_metadata || 0 }} 个</div>
             <div>四层代理：{{ importResult.imported_counts.stream_proxies || 0 }} 个</div>
+            <div>SSL 证书：{{ importResult.imported_counts.ssl_certificates || 0 }} 个</div>
             <div v-if="importResult.imported_counts.skipped > 0">
               跳过：{{ importResult.imported_counts.skipped }} 项
             </div>
@@ -586,6 +620,7 @@ const expandedSections = reactive({
   global_rules: false,
   plugin_metadata: false,
   stream_proxy: false,
+  ssl_certificates: false,
 })
 
 const showConflicts = ref(false)
@@ -658,6 +693,12 @@ const streamProxyColumns = [
   { title: '负载均衡', dataIndex: 'load_balance', key: 'load_balance' },
   { title: '协议', dataIndex: 'scheme', key: 'scheme' },
   { title: '上游目标', key: 'targets' },
+]
+
+const sslCertificateColumns = [
+  { title: '名称', key: 'name' },
+  { title: 'SNI', key: 'sni' },
+  { title: '类型', key: 'cert_type' },
 ]
 
 // ---- Data Loading ----
@@ -780,6 +821,8 @@ const handleCancel = () => {
   selections.plugin_configs = true
   selections.global_rules = true
   selections.plugin_metadata = true
+  selections.stream_proxy = true
+  selections.ssl_certificates = true
 }
 
 // ---- Import ----

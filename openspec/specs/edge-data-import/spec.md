@@ -9,7 +9,7 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 #### Scenario: 连接成功
 - **WHEN** 用户输入 Edge 节点 IP、端口和 API Key 并点击"测试连接"
 - **THEN** 系统 SHALL 调用 Edge 节点 Admin API（`GET /PANSHI/admin/routes`）验证连通性
-- **AND** 系统 SHALL 返回节点版本号、已安装插件数量、路由数量和上游数量
+- **AND** 系统 SHALL 返回节点版本号、已安装插件数量、路由数量、上游数量和 SSL 证书数量
 - **AND** 前端 SHALL 显示连接成功状态和节点概要信息
 
 #### Scenario: 连接失败
@@ -25,7 +25,7 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 
 #### Scenario: 展示预览数据
 - **WHEN** 用户通过连接测试后进入预览阶段
-- **THEN** 系统 SHALL 从 Edge 节点拉取 routes、upstreams、plugin_configs、global_rules、plugin_metadata、stream_proxies 数据
+- **THEN** 系统 SHALL 从 Edge 节点拉取 routes、upstreams、plugin_configs、global_rules、plugin_metadata、stream_proxies、ssl_certificates 数据
 - **AND** 系统 SHALL 将 PANSHI 格式转换为磐石数据库格式
 - **AND** 系统 SHALL 按数据类型分组展示预览结果
 - **AND** 前端 SHALL 可展开查看每种类型的详细条目列表
@@ -133,7 +133,7 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 #### Scenario: 导入结果展示
 - **WHEN** 导入完成
 - **THEN** 前端 SHALL 显示汇总结果：
-  - 成功导入：上游 N 个、路由 N 条、插件配置 N 个、全局规则 N 个
+  - 成功导入：上游 N 个、路由 N 条、插件配置 N 个、全局规则 N 个、四层代理 N 个、SSL 证书 N 个
   - 已跳过：N 条（含原因）
   - 查看导入日志的链接
 

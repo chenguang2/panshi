@@ -25,6 +25,7 @@ class TestConnectionResponse(BaseModel):
     global_rule_count: Optional[int] = None
     plugin_metadata_count: Optional[int] = None
     stream_proxy_count: Optional[int] = None
+    ssl_certificate_count: Optional[int] = None
     node: Optional[str] = None
     cluster_name: Optional[str] = None
     response_time_ms: Optional[int] = None
@@ -100,6 +101,13 @@ class StreamProxyPreview(BaseModel):
     edge_uuid: str
 
 
+class SslCertificatePreview(BaseModel):
+    name: str
+    sni: Optional[str] = None
+    cert_type: Optional[str] = None
+    edge_uuid: str
+
+
 class ConflictInfo(BaseModel):
     type: str  # name_conflict / route_conflict / uuid_conflict
     resource_type: str  # upstream / route / plugin_config / global_rule
@@ -120,6 +128,7 @@ class ImportPreviewResponse(BaseModel):
     plugin_configs: List[PluginConfigPreview]
     global_rules: List[GlobalRulePreview]
     plugin_metadata: List[PluginMetadataPreview] = []
+    ssl_certificates: List[SslCertificatePreview] = []
     stream_proxies: List[StreamProxyPreview] = []
     conflicts: List[ConflictInfo]
     plugin_summary: PluginSummary
@@ -150,6 +159,7 @@ class ImportCounts(BaseModel):
     global_rules: int = 0
     plugin_metadata: int = 0
     stream_proxies: int = 0
+    ssl_certificates: int = 0
     skipped: int = 0
 
 

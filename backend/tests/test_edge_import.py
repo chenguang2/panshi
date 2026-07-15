@@ -274,6 +274,75 @@ class TestEdgeImportConverters:
         result = service.convert_upstream({"id": "no-name-upstream", "type": "roundrobin"})
         assert result["upstream"]["name"] == "no-name-upstream"
 
+    def test_convert_upstream_nodes_array_format(self):
+        """Upstream nodes in array format (host+port+weight) must be parsed correctly."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "u-array-1",
+            "name": "array-upstream",
+            "type": "roundrobin",
+            "nodes": [
+                {"host": "10.0.0.1", "port": 8080, "weight": 100},
+                {"host": "10.0.0.2", "port": 8081, "weight": 80},
+            ],
+        }
+        result = service.convert_upstream(edge_item)
+        targets = result["targets"]
+        assert len(targets) == 2
+        assert targets[0]["target"] == "10.0.0.1:8080"
+        assert targets[0]["weight"] == 100
+        assert targets[1]["target"] == "10.0.0.2:8081"
+        assert targets[1]["weight"] == 80
+
+    def test_convert_upstream_nodes_empty_array(self):
+        """Empty list of nodes should produce no targets."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        result = service.convert_upstream({"id": "u-empty", "type": "roundrobin", "nodes": []})
+        assert result["targets"] == []
+
+    def test_parse_nodes_dict(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        result = EdgeImportService._parse_nodes({"192.168.1.1:80": 100, "192.168.1.2:80": 50})
+        assert len(result) == 2
+        assert {"target": "192.168.1.1:80", "weight": 100} in result
+        assert {"target": "192.168.1.2:80", "weight": 50} in result
+
+    def test_parse_nodes_array(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        result = EdgeImportService._parse_nodes([
+            {"host": "10.0.0.1", "port": 8080, "weight": 100},
+            {"host": "10.0.0.2", "port": 8081, "weight": 50},
+        ])
+        assert len(result) == 2
+        assert {"target": "10.0.0.1:8080", "weight": 100} in result
+        assert {"target": "10.0.0.2:8081", "weight": 50} in result
+
+    def test_parse_nodes_array_no_port(self):
+        """Array nodes without port should use host only as target."""
+        from app.services.edge_import_service import EdgeImportService
+
+        result = EdgeImportService._parse_nodes([
+            {"host": "10.0.0.1", "weight": 100},
+        ])
+        assert len(result) == 1
+        assert result[0]["target"] == "10.0.0.1"
+        assert result[0]["weight"] == 100
+
+    def test_parse_nodes_empty(self):
+        from app.services.edge_import_service import EdgeImportService
+
+        assert EdgeImportService._parse_nodes(None) == []
+        assert EdgeImportService._parse_nodes({}) == []
+        assert EdgeImportService._parse_nodes([]) == []
+
     def test_convert_stream_proxy_basic(self):
         from app.services.edge_import_service import EdgeImportService
 
@@ -296,7 +365,9 @@ class TestEdgeImportConverters:
         assert targets[0]["target"] == "127.0.0.1:19992"
         assert targets[0]["weight"] == 100
 
-        timeout = result["timeout"]
+        assert sp.get("timeout") is not None
+        import json
+        timeout = json.loads(sp["timeout"])
         assert timeout["connect"] == 60
         assert timeout["read"] == 60
 
@@ -318,7 +389,7 @@ class TestEdgeImportConverters:
         assert len(targets) == 2
 
         # No timeout in data
-        assert result["timeout"] is None
+        assert result["stream_proxy"].get("timeout") is None
 
     def test_convert_stream_proxy_name_fallback_to_id(self):
         from app.services.edge_import_service import EdgeImportService
@@ -330,6 +401,185 @@ class TestEdgeImportConverters:
             "upstream": {"type": "roundrobin", "nodes": {"10.0.0.1:80": 100}},
         })
         assert result["stream_proxy"]["name"] == "no-name-stream"
+
+    def test_convert_stream_proxy_retries(self):
+        """Normal stream proxy should capture retries and retry_timeout."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-retry-1",
+            "name": "retry-stream",
+            "server_port": 19997,
+            "upstream": {
+                "type": "roundrobin",
+                "scheme": "tcp",
+                "nodes": {"10.0.0.1:80": 100},
+                "retries": 3,
+                "retry_timeout": 30,
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp["name"] == "retry-stream"
+        assert sp["retries"] == 3
+        assert sp["retry_timeout"] == 30
+
+    def test_convert_stream_proxy_retries_missing(self):
+        """Normal stream proxy without retries should leave them as None."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-no-retry",
+            "name": "no-retry-stream",
+            "server_port": 19998,
+            "upstream": {
+                "type": "roundrobin",
+                "scheme": "tcp",
+                "nodes": {"10.0.0.1:80": 100},
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp.get("retries") is None
+        assert sp.get("retry_timeout") is None
+
+    def test_convert_stream_proxy_nodes_array_format(self):
+        """Stream proxy nodes in array format must be parsed correctly."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-array-1",
+            "name": "array-stream",
+            "server_port": 19996,
+            "upstream": {
+                "type": "roundrobin",
+                "scheme": "tls",
+                "nodes": [
+                    {"host": "10.0.0.1", "port": 443, "weight": 100},
+                    {"host": "10.0.0.2", "port": 443, "weight": 80},
+                ],
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp["name"] == "array-stream"
+        assert sp["scheme"] == "tls"
+        targets = result["targets"]
+        assert len(targets) == 2
+        assert targets[0]["target"] == "10.0.0.1:443"
+        assert targets[0]["weight"] == 100
+        assert targets[1]["target"] == "10.0.0.2:443"
+        assert targets[1]["weight"] == 80
+
+    def test_convert_stream_proxy_dns_type(self):
+        """DNS type stream proxy: data from plugins.dns_upstream, proxy_type=dns."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-1",
+            "name": "dns-stream",
+            "server_port": 16621,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "example.com": {
+                            "type": "roundrobin",
+                            "nodes": {"10.0.0.1:443": 100},
+                        },
+                    },
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp["name"] == "dns-stream"
+        assert sp["proxy_type"] == "dns"
+        assert sp["scheme"] == "udp"  # DNS 协议应为 UDP，非 TCP
+        assert sp["targets"] is None
+        assert sp["dns_config"] is not None
+        import json
+        dns_cfg = json.loads(sp["dns_config"])
+        assert "hosts" in dns_cfg
+        assert dns_cfg["hosts"]["example.com"]["type"] == "roundrobin"
+        # 无 log_process 时不应出现在 dns_config 中
+        assert "log_process" not in dns_cfg
+        targets = result["targets"]
+        assert targets == []
+
+    def test_convert_stream_proxy_dns_type_with_log(self):
+        """DNS type with log_process plugin: log_process captured into dns_config."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-log",
+            "name": "dns-stream-log",
+            "server_port": 16623,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "test.local": {
+                            "type": "roundrobin",
+                            "nodes": {"10.0.0.1:53": 100},
+                        },
+                    },
+                },
+                "log_process": {
+                    "logs": ["logs/process.stream.log"],
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp["proxy_type"] == "dns"
+        assert sp["scheme"] == "udp"
+        dns_cfg = json.loads(sp["dns_config"])
+        assert "hosts" in dns_cfg
+        assert "log_process" in dns_cfg
+        assert dns_cfg["log_process"]["logs"] == ["logs/process.stream.log"]
+
+    def test_convert_stream_proxy_dns_type_no_targets(self):
+        """DNS type should not extract targets from upstream."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        # DNS stream with both plugins.dns_upstream and upstream.nodes
+        # The upstream.nodes should be IGNORED for DNS type
+        edge_item = {
+            "id": "sp-dns-2",
+            "name": "dns-stream-2",
+            "server_port": 16622,
+            "upstream": {
+                "type": "roundrobin",
+                "nodes": {"10.0.0.1:80": 100},
+            },
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "test.com": {
+                            "type": "chash",
+                            "nodes": {"10.0.0.2:443": 50},
+                        },
+                    },
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        assert sp["proxy_type"] == "dns"
+        assert sp["scheme"] == "udp"
+        assert sp["targets"] is None  # DNS ignores upstream.nodes
+        assert sp["dns_config"] is not None
 
     def test_convert_upstream_name_empty_fallback(self):
         from app.services.edge_import_service import EdgeImportService
@@ -426,6 +676,24 @@ class TestEdgeImportConverters:
         }
         result = service.convert_ssl_certificate(edge_ssl)
         assert result["ssl_certificate"]["sni"] == "a.com, b.com, c.com"
+
+    def test_convert_ssl_certificate_sni_singular(self):
+        """Edge may return sni as singular string (publish format)."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_ssl = {
+            "key": "/edge/admin/ssl/cert-2",
+            "value": {
+                "id": "cert-2",
+                "cert": "crt",
+                "key": "k",
+                "sni": "example.com",
+            },
+        }
+        result = service.convert_ssl_certificate(edge_ssl)
+        assert result["ssl_certificate"]["sni"] == "example.com"
 
     @patch("app.services.edge_import_service._load_builtin_names")
     def test_convert_route_with_plugins(self, mock_load):

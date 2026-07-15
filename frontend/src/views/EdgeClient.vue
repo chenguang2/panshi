@@ -304,38 +304,6 @@
           </a-table>
           </div>
         </a-tab-pane>
-        <a-tab-pane key="ssl" tab="SSL 证书">
-          <div class="table-toolbar">
-            <div class="search-input-wrap">
-              <input v-model="sslSearch" class="form-input" placeholder="搜索 SSL 证书..." style="width: 200px;" />
-              <span class="search-icon">🔍</span>
-            </div>
-          </div>
-          <div class="table-container">
-          <a-table
-            :columns="sslColumns"
-            :data-source="sslSearch ? sslList.filter(s => (s.value?.id || '').includes(sslSearch) || (s.value?.snis || []).join(' ').includes(sslSearch)) : sslList"
-            :loading="loading"
-            :pagination="{ pageSize: 20 }"
-            size="small"
-            rowKey="key"
-          >
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">{{ index + 1 }}</template>
-              <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>
-              <template v-if="column.key === 'snis'">{{ (record.value?.snis || []).join(', ') }}</template>
-              <template v-if="column.key === 'type'">{{ record.value?.type || '-' }}</template>
-              <template v-if="column.key === 'status'">{{ record.value?.status === 1 ? '启用' : '禁用' }}</template>
-              <template v-if="column.key === 'actions'">
-                <a-button size="small" type="link" @click="viewSslDetail(record)">查看</a-button>
-                <a-popconfirm title="确定删除此 SSL 证书？" @confirm="deleteSslCert(record)">
-                  <a-button size="small" type="link" danger>删除</a-button>
-                </a-popconfirm>
-              </template>
-            </template>
-          </a-table>
-          </div>
-        </a-tab-pane>
         <a-tab-pane key="streamRoutes" tab="四层代理">
           <div class="table-toolbar">
             <div class="search-input-wrap">
@@ -384,6 +352,38 @@
                 <div class="node-actions-wrap">
                   <button class="btn btn-ghost btn-sm" @click="showStreamRouteJson(record)">JSON</button>
                   <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteStreamRoute(record)">删除</button>
+                </div>
+              </template>
+            </template>
+          </a-table>
+          </div>
+        </a-tab-pane>
+        <a-tab-pane key="ssl" tab="SSL 证书">
+          <div class="table-toolbar">
+            <div class="search-input-wrap">
+              <input v-model="sslSearch" class="form-input" placeholder="搜索 SSL 证书..." style="width: 200px;" />
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
+          <div class="table-container">
+          <a-table
+            :columns="sslColumns"
+            :data-source="sslSearch ? sslList.filter(s => (s.value?.id || '').includes(sslSearch) || (s.value?.snis || []).join(' ').includes(sslSearch)) : sslList"
+            :loading="loading"
+            :pagination="{ pageSize: 20 }"
+            size="small"
+            rowKey="key"
+          >
+            <template #bodyCell="{ column, record, index }">
+              <template v-if="column.key === 'index'">{{ index + 1 }}</template>
+              <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>
+              <template v-if="column.key === 'snis'">{{ (record.value?.snis || []).join(', ') }}</template>
+              <template v-if="column.key === 'type'">{{ record.value?.type || '-' }}</template>
+              <template v-if="column.key === 'status'">{{ record.value?.status === 1 ? '启用' : '禁用' }}</template>
+              <template v-if="column.key === 'actions'">
+                <div class="node-actions-wrap">
+                  <button class="btn btn-ghost btn-sm" @click="showSslJson(record)">JSON</button>
+                  <button class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteSslCert(record)">删除</button>
                 </div>
               </template>
             </template>
@@ -651,7 +651,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, onUnmounted, computed, h } from 'vue'
+import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import { ReloadOutlined, PlusOutlined, CloseCircleOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
@@ -885,28 +885,31 @@ const loadSslCertificates = async (ip: string, port: string) => {
   }
 }
 
-const viewSslDetail = (record: any) => {
-  const value = record.value || {}
-  const id = record.key?.split('/').pop() || value.id
-  Modal.info({
-    title: 'SSL 证书详情',
-    width: 600,
-    content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;max-height:400px;overflow-y:auto;background:#f5f5f5;padding:12px;border-radius:4px;' }, JSON.stringify(value, null, 2)),
-  })
+const showSslJson = (record: any) => {
+  jsonContent.value = JSON.stringify(record.value || record, null, 2)
+  jsonModalVisible.value = true
 }
 
-const deleteSslCert = async (record: any) => {
-  const ip = loadedNode.value?.split(':')[0]
-  const port = loadedNode.value?.split(':')[1]
-  if (!ip || !port) return
+const deleteSslCert = (record: any) => {
+  const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
+  if (!node) return
+  const [ip, port] = node.split(':')
   const id = record.key?.split('/').pop() || record.value?.id
-  try {
-    await api.delete(`/edge-client/nodes/${ip}/${port}/ssl/${id}`, { signal: currentSignal.value })
-    message.success('已删除')
-    sslList.value = sslList.value.filter((s: any) => s.key !== record.key)
-  } catch (error: any) {
-    message.error('删除失败: ' + (error.response?.data?.detail || error.message))
-  }
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定删除 SSL 证书 ${id}？此操作绕过同步流程。`,
+    okText: '删除',
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        await api.delete(`/edge-client/nodes/${ip}/${port}/ssl/${id}`)
+        message.success('已删除')
+        sslList.value = sslList.value.filter((s: any) => s.key !== record.key)
+      } catch (error: any) {
+        message.error('删除失败: ' + (error.response?.data?.detail || error.message))
+      }
+    }
+  })
 }
 
 // 预加载所有标签页数据（并行）
