@@ -2177,3 +2177,36 @@ add-ssl-to-edge-import-and-client
 请读取 openspec/changes/add-ssl-to-edge-import-and-client/tasks.md   ，严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+=========================================
+
+使用 /opsx-propose 命令， 增强节点管理的 数据库对比功能
+
+1. 对于 插件元数据的对比
+   现在 服务器侧 会 自动加上 id: 插件名称 ， 例如 "id": "log_process"
+   这个在对比时会显示差异，这个对比时可以忽略这个差异
+2. 加上 4层代理 和 ssl 证书的对比
+
+
+enhance-config-diff
+
+/brainstorming 请仔细阅读 openspec/changes/enhance-config-diff/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/enhance-config-diff/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+==============================
+
+fix-cluster-delete-stream-proxy-ssl
+
+/brainstorming 请仔细阅读 openspec/changes/fix-cluster-delete-stream-proxy-ssl/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/fix-cluster-delete-stream-proxy-ssl/tasks.md   ，严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+==============================
+

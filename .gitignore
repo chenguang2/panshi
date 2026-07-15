@@ -80,4 +80,5 @@ pdf_extract.txt
 .omo/
 
 
+backend/ansible/soft/
 backend/ansible/collections/ansible_collections/
