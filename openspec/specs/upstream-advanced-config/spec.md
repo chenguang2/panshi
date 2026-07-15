@@ -1,63 +1,145 @@
 ## Purpose
 
-上游创建/编辑弹窗的高级配置功能，将健康检查、重试、超时、host策略、协议、连接池等配置项从隐藏默认值变为 Tab 中可编辑的配置项。
+上游创建/编辑弹窗的高级配置功能，将健康检查、超时、重试、host策略、协议、连接池等配置项从单一总开关改为每项独立开关控制。
+
 ## Requirements
-### Requirement: 上游表单高级配置 Tab
-上游创建/编辑弹窗 SHALL 包含"基础配置"和"高级配置"两个 Tab，使用 `a-tabs` 组件。高级配置默认关闭，需通过开关启用。
 
-#### Scenario: 打开添加上游弹窗
-- **WHEN** 用户点击"添加上游"
-- **THEN** 弹窗 SHALL 显示"基础配置" Tab 处于激活状态
-- **AND** 基础配置底部 SHALL 有"高级配置"开关（默认关闭）
-- **AND** "高级配置" Tab 显示"高级配置未启用"提示
+### Requirement: 高级配置每项独立开关
 
-#### Scenario: 启用高级配置
-- **WHEN** 用户开启"高级配置"开关
-- **THEN** "高级配置" Tab 内容 SHALL 变为可编辑的表单
-- **AND** 高级配置中的健康检查配置 SHALL 使用预设默认值
+上游创建/编辑弹窗的"高级配置"Tab 中，每个配置项 SHALL 拥有独立开关（checkbox），控制该项是否启用。
+
+#### Scenario: 每项配置独立开关
+- **WHEN** 用户打开"高级配置"Tab
+- **THEN** 健康检查、超时配置、连接池、重试次数、重试超时、Host 策略、通信协议 SHALL 各自拥有独立 checkbox
+- **AND** checkbox OFF 时该配置项的输入控件 SHALL 置灰不可编辑
+- **AND** checkbox ON 时该配置项的输入控件 SHALL 可编辑
+
+#### Scenario: 关闭某项配置后提交
+- **WHEN** 用户关闭某项配置的 checkbox 并保存
+- **THEN** 该配置项对应的字段 SHALL 以 `null` 发送到后端
+- **AND** 后端 SHALL 将该字段写入 `NULL`
+- **AND** 发布到 Edge 时该字段 SHALL 被省略，Edge 使用默认值
+
+#### Scenario: 编辑回填 toggle 状态
+- **WHEN** 用户打开编辑已有上游弹窗
+- **THEN** 每个配置项的 toggle SHALL 根据 DB 对应字段是否为 NULL 决定
+- **AND** 字段值非 NULL → toggle ON + 回填该值
+- **AND** 字段值为 NULL → toggle OFF
+
+---
 
 ### Requirement: 高级配置包含健康检查
 
-高级配置 Tab SHALL 包含可编辑的健康检查（checks）JSON 文本域。文本域高度 SHALL 匹配默认内容行数，避免过高空白。
+高级配置 Tab SHALL 包含健康检查（checks）JSON 文本域，由独立 toggle 控制启用。
 
-#### Scenario: 健康检查文本域高度适配内容
-- **WHEN** 用户打开上游弹窗并启用高级配置
-- **THEN** 健康检查文本域高度 SHALL 为 6 行
-- **AND** 能够完整展示默认 JSON 内容 `{"passive": {}, "active": {"unhealthy": {}}}`
+#### Scenario: 健康检查 toggle ON
+- **WHEN** 用户 toggle ON 健康检查
+- **THEN** JSON 文本域 SHALL 可编辑
+- **AND** 默认显示预设 JSON `{"passive": {}, "active": {"unhealthy": {}}}`
+- **AND** 文本域高度 SHALL 为 6 行
 
-### Requirement: 基础配置始终包含健康检查和超时默认值
-无论高级配置是否开启，创建上游时 SHALL 始终包含默认的 checks 和 timeout 配置。
+#### Scenario: 健康检查 toggle OFF
+- **WHEN** 用户 toggle OFF 健康检查
+- **THEN** JSON 文本域 SHALL 置灰不可编辑
+- **AND** 提交时 SHALL 发送 `checks: null`
 
-#### Scenario: 关闭高级配置时创建上游
-- **WHEN** 用户未开启高级配置直接创建上游
-- **THEN** 提交数据 SHALL 包含默认 checks: `{"passive": {}, "active": {"unhealthy": {}}}`
-- **AND** 提交数据 SHALL 包含默认 timeout: `{"connect": 6, "send": 6, "read": 6}`
-
-### Requirement: 高级配置包含重试设置
-高级配置 Tab SHALL 包含重试次数（retries）和重试超时（retry_timeout）配置。
-
-#### Scenario: 重试次数默认值
-- **WHEN** 用户启用高级配置
-- **THEN** retries 默认值为后端可用 node 数量
-- **AND** 0 代表不启用重试机制
-
-#### Scenario: 重试超时默认值
-- **WHEN** 用户启用高级配置
-- **THEN** retry_timeout 默认值为 0（不限制重试时间）
+---
 
 ### Requirement: 高级配置包含超时设置
-高级配置 Tab SHALL 包含超时配置（timeout），包括连接超时（connect）、发送超时（send）、读取超时（read），单位为秒。
 
-#### Scenario: 设置超时配置
-- **WHEN** 用户设置 timeout.connect、timeout.send、timeout.read
-- **THEN** 提交时 SHALL 将 timeout 对象包含在请求中
+高级配置 Tab SHALL 包含超时配置（timeout），包括连接超时（connect）、发送超时（send）、读取超时（read），由独立 toggle 控制启用。
 
-### Requirement: 高级配置包含 host 策略
-高级配置 Tab SHALL 包含 pass_host 和 upstream_host 配置。
+#### Scenario: 超时配置 toggle ON
+- **WHEN** 用户 toggle ON 超时配置
+- **THEN** 三个输入框（connect、send、read）SHALL 可编辑
+- **AND** 默认值 SHALL 均为 6（秒）
+- **AND** 提交时 SHALL 将 timeout 对象包含在请求中
 
-#### Scenario: pass_host 默认值
-- **WHEN** 用户启用高级配置
-- **THEN** pass_host 默认值为 `pass`
+#### Scenario: 超时配置 toggle OFF
+- **WHEN** 用户 toggle OFF 超时配置
+- **THEN** 三个输入框 SHALL 置灰
+- **AND** 提交时 SHALL 发送 `timeout: null`
+
+---
+
+### Requirement: 高级配置包含连接池
+
+高级配置 Tab SHALL 包含连接池（keepalive_pool）配置，由独立 toggle 控制启用。默认值为 `size: 10, idle_timeout: 60, requests: 100`。
+
+#### Scenario: 连接池 toggle ON
+- **WHEN** 用户 toggle ON 连接池
+- **THEN** size、idle_timeout、requests 三个输入框 SHALL 可编辑
+- **AND** 提交时 SHALL 将 keepalive_pool 对象包含在请求中
+
+#### Scenario: 连接池 toggle OFF
+- **WHEN** 用户 toggle OFF 连接池
+- **THEN** 三个输入框 SHALL 置灰
+- **AND** 提交时 SHALL 发送 `keepalive_pool: null`
+
+---
+
+### Requirement: 重试次数用 radio 三态选择
+
+重试次数 SHALL 使用 radio 三态控件：自动（使用可用节点数）、指定重试次数、禁用重试。
+
+#### Scenario: 重试次数 radio 默认状态
+- **WHEN** 用户 toggle ON 重试次数
+- **THEN** radio SHALL 默认选中"自动"
+- **AND** 重试次数输入框 SHALL 初始为空
+
+#### Scenario: 选择"自动"并提交
+- **WHEN** 用户选中"自动"并保存
+- **THEN** 提交数据 SHALL 包含 `retries: null`
+- **AND** 后端写入 `NULL`
+- **AND** 发布时 SHALL 省略 retries 字段
+- **AND** Edge SHALL 使用可用节点数作为重试次数
+
+#### Scenario: 指定重试次数并提交
+- **WHEN** 用户选中"指定重试次数"并输入数值 N
+- **THEN** 提交数据 SHALL 包含 `retries: N`
+- **AND** 后端写入 `N`
+- **AND** 发布时 SHALL 包含 retries 字段
+
+#### Scenario: 禁用重试并提交
+- **WHEN** 用户选中"禁用重试"
+- **THEN** 提交数据 SHALL 包含 `retries: 0`
+- **AND** 后端写入 `0`
+- **AND** 发布时 SHALL 包含 retries 字段
+- **AND** Edge SHALL 不进行重试
+
+#### Scenario: 编辑回填重试次数
+- **WHEN** 用户打开编辑已有上游弹窗
+- **THEN** DB `retries = NULL` → toggle OFF
+- **AND** DB `retries = 0` → toggle ON + radio 选中"禁用"
+- **AND** DB `retries > 0` → toggle ON + radio 选中"指定"+ 回填数值
+
+---
+
+### Requirement: 重试超时独立开关
+
+重试超时 SHALL 作为独立配置项，与重试次数解耦，由独立 toggle 控制。
+
+#### Scenario: 重试超时独立 toggle
+- **WHEN** 用户 toggle ON 重试超时
+- **THEN** 输入框 SHALL 可编辑
+- **AND** toggle OFF 时输入框 SHALL 置灰
+
+#### Scenario: 重试超时提交
+- **WHEN** 用户 toggle ON 重试超时并输入数值 N
+- **THEN** 提交数据 SHALL 包含 `retry_timeout: N`
+- **AND** 用户输入 0 SHALL 表示不限制
+- **AND** toggle OFF 时 SHALL 发送 `retry_timeout: null`
+
+---
+
+### Requirement: 高级配置包含 Host 策略
+
+高级配置 Tab SHALL 包含 pass_host 和 upstream_host 配置，由独立 toggle 控制启用。
+
+#### Scenario: Host 策略 toggle ON
+- **WHEN** 用户 toggle ON Host 策略
+- **THEN** pass_host 选择器 SHALL 可编辑
+- **AND** pass_host 默认值为 `pass`
 - **AND** pass_host 可选值为 pass、node、rewrite
 
 #### Scenario: pass_host 为 rewrite 时显示 upstream_host
@@ -65,17 +147,24 @@
 - **THEN** upstream_host 输入框 SHALL 显示
 - **AND** 其他 pass_host 值时 SHALL 隐藏 upstream_host
 
+#### Scenario: Host 策略 toggle OFF
+- **WHEN** 用户 toggle OFF Host 策略
+- **THEN** pass_host 选择器 SHALL 置灰
+- **AND** 提交时 SHALL 发送 `pass_host: null`, `upstream_host: null`
+
+---
+
 ### Requirement: 高级配置包含通信协议
-高级配置 Tab SHALL 包含 scheme 配置，可选值为 http、https、tcp、udp，默认值为 http。
 
-#### Scenario: scheme 默认值
-- **WHEN** 用户启用高级配置
-- **THEN** scheme 默认值为 `http`
+高级配置 Tab SHALL 包含 scheme 配置，由独立 toggle 控制启用。
 
-### Requirement: 高级配置包含连接池
-高级配置 Tab SHALL 包含连接池（keepalive_pool）配置，包括 size、idle_timeout、requests 三个参数。
+#### Scenario: 通信协议 toggle ON
+- **WHEN** 用户 toggle ON 通信协议
+- **THEN** scheme 选择器 SHALL 可编辑
+- **AND** 可选值为 http、https、tcp、udp
+- **AND** 默认值为 http
 
-#### Scenario: 连接池配置
-- **WHEN** 用户设置 keepalive_pool 参数
-- **THEN** 提交时 SHALL 将 keepalive_pool 对象包含在请求中
-
+#### Scenario: 通信协议 toggle OFF
+- **WHEN** 用户 toggle OFF 通信协议
+- **THEN** scheme 选择器 SHALL 置灰
+- **AND** 提交时 SHALL 发送 `scheme: null`
