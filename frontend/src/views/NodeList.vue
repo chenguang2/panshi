@@ -727,7 +727,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   execProgress.percent = 0
   execProgress.status = 'active'
 
-  const prefix = record.edge_install_path || record.edge_path || '/data/openresty'
+  const prefix = record.edge_install_path
   execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
   startElapsedTimer()
 
@@ -754,7 +754,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
 function handleInstallEdge(record: any) {
   showConfirm(
     '\u786e\u8ba4\u5b89\u88c5 Edge',
-    `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 Edge\uff08${record.edge_install_path || record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 Edge\uff08${record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
     '\u786e\u8ba4\u5b89\u88c5',
     async () => {
       execTargetNode.value = record
@@ -763,7 +763,7 @@ function handleInstallEdge(record: any) {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
-      const prefix = record.edge_install_path || record.edge_path || '/work/uap-edge'
+      const prefix = record.edge_install_path || record.edge_path
       const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
       execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
       startElapsedTimer()

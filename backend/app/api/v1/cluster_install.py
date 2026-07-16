@@ -368,7 +368,7 @@ async def install_edge_stream(
     """Install Edge service on a target node via ansible, streaming real-time logs via SSE."""
     node = await _verify_node(cluster_id, node_id, db)
     prefix = node.edge_install_path or body.prefix
-    extravars = {"prefix": prefix}
+    extravars = {"prefix": prefix, "edge_target": node.edge_path}
     return StreamingResponse(
         _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_edge", extravars=extravars),
         media_type="text/event-stream",

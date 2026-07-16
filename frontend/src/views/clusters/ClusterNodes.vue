@@ -416,7 +416,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   installDialogVisible.value = false
   const node = payload.node
   execTargetNode.value = node
-  const prefix = node.edge_install_path || node.edge_path || '/data/openresty'
+  const prefix = node.edge_install_path
   execDrawerVisible.value = true
   execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
   execLogs.value = []
@@ -457,11 +457,11 @@ function handleInstallEdge() {
   if (!node) return
   showConfirm(
     '\u786e\u8ba4\u5b89\u88c5 Edge',
-    `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 Edge\uff08${node.edge_install_path || node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
+    `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 Edge\uff08${node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
     '\u786e\u8ba4\u5b89\u88c5',
     async () => {
       execTargetNode.value = node
-      const installPrefix = node.edge_install_path || node.edge_path || '/work/openresty'
+      const installPrefix = node.edge_install_path || node.edge_path
       const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix })
       execDrawerVisible.value = true
       execDrawerTitle.value = `\u5b89\u88c5 Edge - ${node.ip}`

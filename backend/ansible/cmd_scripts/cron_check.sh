@@ -15,7 +15,7 @@ cores=$(nproc)
 nginx_install_path="$prefix/nginx"
 nginx_pid_file="$nginx_install_path/logs/nginx.pid"
 
-if [[ "$prefix" =~ "uap-edge"$ ]]; then
+if [[ "$prefix" =~ uap-edge ]]; then
     nginx_pid_file="$prefix/logs/nginx.pid"
 fi
 
