@@ -60,7 +60,7 @@
           </template>
 
           <template v-if="column.key === 'edge_install_path'">
-            <span class="text-sm">{{ record.edge_install_path || '（同Edge路径）' }}</span>
+            <span class="text-sm">{{ record.edge_install_path || '（同Edge安装路径）' }}</span>
           </template>
 
           <template v-if="column.key === 'status'">
@@ -141,14 +141,14 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Edge 路径 <span class="required">*</span></label>
-            <input v-model="formData.edge_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_path }" placeholder="/usr/local/edge">
-            <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
+            <label class="form-label">Nginx安装路径 <span class="required">*</span></label>
+            <input v-model="formData.edge_install_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_install_path }" placeholder="/usr/local/nginx">
+            <span class="form-error" v-if="formErrors.edge_install_path">{{ formErrors.edge_install_path }}</span>
           </div>
           <div class="form-group">
-            <label class="form-label">安装路径</label>
-            <input v-model="formData.edge_install_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_install_path }" placeholder="留空则与Edge路径相同">
-            <span class="form-error" v-if="formErrors.edge_install_path">{{ formErrors.edge_install_path }}</span>
+            <label class="form-label">Edge安装路径 <span class="required">*</span></label>
+            <input v-model="formData.edge_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_path }" placeholder="/usr/local/edge">
+            <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
           </div>
           <div class="form-group">
             <label class="checkbox-label">
@@ -176,8 +176,8 @@
             <div class="nd-label">所属集群</div><div class="nd-value">{{ detailNode.cluster_name || '-' }}</div>
             <div class="nd-label">服务端口</div><div class="nd-value">{{ detailNode.service_port }}</div>
             <div class="nd-label">管理端口</div><div class="nd-value">{{ detailNode.management_port }}</div>
-            <div class="nd-label">Edge 路径</div><div class="nd-value">{{ detailNode.edge_path }}</div>
-          <div class="nd-label">安装路径</div><div class="nd-value">{{ detailNode.edge_install_path || '（同Edge路径）' }}</div>
+            <div class="nd-label">Edge安装路径</div><div class="nd-value">{{ detailNode.edge_path }}</div>
+          <div class="nd-label">Nginx安装路径</div><div class="nd-value">{{ detailNode.edge_install_path || '（同Edge安装路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
               <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
@@ -324,7 +324,7 @@ const formData = reactive({
   ip: '',
   service_port: 80,
   management_port: 9180,
-  edge_path: '/usr/local/edge',
+  edge_path: '',
   edge_install_path: '',
   statusCheck: true,
 })
@@ -372,8 +372,8 @@ const columns = [
   { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
   { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
   { title: '管理端口', key: 'management_port', sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0) },
-  { title: 'Edge 路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
-  { title: '安装路径', key: 'edge_install_path', sorter: (a: any, b: any) => (a.edge_install_path || '').localeCompare(b.edge_install_path || '') },
+  { title: 'Edge安装路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
+  { title: 'Nginx安装路径', key: 'edge_install_path', sorter: (a: any, b: any) => (a.edge_install_path || '').localeCompare(b.edge_install_path || '') },
   { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
   { title: 'Edge 版本', key: 'edge_version', sorter: (a: any, b: any) => ((a.status_detail?.statistic?.edge_version) || '').localeCompare((b.status_detail?.statistic?.edge_version) || '') },
   { title: '操作', key: 'actions', width: 320 },
@@ -446,7 +446,7 @@ function openAddModal() {
   formData.ip = ''
   formData.service_port = 80
   formData.management_port = 9180
-  formData.edge_path = '/usr/local/edge'
+  formData.edge_path = ''
   formData.edge_install_path = ''
   formData.statusCheck = true
   formErrors.cluster_id = ''
@@ -508,7 +508,7 @@ async function handleFormSubmit() {
     valid = false
   }
   if (!formData.edge_path) {
-    formErrors.edge_path = '请输入 Edge 路径'
+    formErrors.edge_path = '请输入 Edge 安装路径'
     valid = false
   } else if (!formData.edge_path.startsWith('/')) {
     formErrors.edge_path = '路径必须以 / 开头'
@@ -517,14 +517,15 @@ async function handleFormSubmit() {
     formErrors.edge_path = '路径末尾不能为 /'
     valid = false
   }
-  if (formData.edge_install_path) {
-    if (!formData.edge_install_path.startsWith('/')) {
-      formErrors.edge_install_path = '路径必须以 / 开头'
-      valid = false
-    } else if (formData.edge_install_path.endsWith('/')) {
-      formErrors.edge_install_path = '路径末尾不能为 /'
-      valid = false
-    }
+  if (!formData.edge_install_path) {
+    formErrors.edge_install_path = '请输入 Nginx 安装路径'
+    valid = false
+  } else if (!formData.edge_install_path.startsWith('/')) {
+    formErrors.edge_install_path = '路径必须以 / 开头'
+    valid = false
+  } else if (formData.edge_install_path.endsWith('/')) {
+    formErrors.edge_install_path = '路径末尾不能为 /'
+    valid = false
   }
   if (!valid) return
 

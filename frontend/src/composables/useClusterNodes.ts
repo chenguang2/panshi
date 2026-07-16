@@ -13,7 +13,7 @@ export const allNodeColumns = [
   { title: 'Edge版本', key: 'edge_version', width: 110 },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
-  { title: 'Edge路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
+  { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
   { title: '状态', key: 'status', sorter: true },
   { title: '操作', key: 'actions', width: 280 }
 ]
