@@ -41,28 +41,30 @@
 - Node.js 18+
 - 开发模式下后端使用 SQLite，无需额外安装数据库
 
-### 启动后端
+### 开发启动（推荐——一键启动前后端）
 
 ```bash
-cd backend
-uv sync
-mkdir -p data
-uv run uvicorn app.main:app --reload --port 9000
+# 启动
+./develop/linux/start.sh                # 后端 → 12344，前端 → 12345
+# 停止
+./develop/linux/stop.sh
 ```
 
-### 启动前端
+首次使用先执行 `chmod +x develop/linux/*.sh`。
+
+### 替代——分别启动（不推荐，端口可能与 start.sh 不同）
 
 ```bash
-cd frontend
-npm install
-npm run dev
-```
+# 后端
+cd backend && uv sync && mkdir -p data && uv run uvicorn app.main:app --reload --port 9000
 
-前端运行在 `http://localhost:9100`，Vite 自动将 `/api` 请求代理到后端 9000 端口。
+# 前端
+cd frontend && npm install && npm run dev
+```
 
 ### 登录
 
-打开 `http://localhost:9100`，使用以下账号登录：
+打开 `http://localhost:12345`，使用以下账号登录：
 
 | 用户名 | 密码 |
 |---|---|
@@ -90,18 +92,6 @@ cd ../frontend && npm install
 # 停止
 .\windows\win-stop.ps1
 ```
-
-### Linux 一键启停
-
-```bash
-# 启动
-./linux/start.sh
-
-# 停止
-./linux/stop.sh
-```
-
-首次使用先执行 `chmod +x linux/*.sh`。
 
 ## 项目结构
 
@@ -162,7 +152,7 @@ cd ../frontend && npm install
 ## 开发说明
 
 - **开发数据库**：后端使用 `backend/data/panshi.db`（SQLite），无需额外配置。首次启动自动创建表和初始数据（含演示样例库 `backend/data/sample.db`）。
-- **前端代理**：在 `vite.config.ts` 中配置，前端访问 `/api/*` 时自动转发到 `localhost:9000`。
+- **前端代理**：在 `vite.config.ts` 中配置（读取 `backend/.port` 文件，缺省 12344），前端访问 `/api/*` 时自动转发到后端。
 - **新增功能的开发顺序**：`schemas/` 定义 Pydantic 模型 → `models/` 定义 ORM 模型 → `api/v1/` 添加路由 → 前端 Composable + 页面。
 - **测试**：后端测试在 `backend/tests/`（pytest-asyncio），前端 E2E 测试在 `frontend/e2e/`（Playwright），前端单元测试在 `frontend/src/**/__tests__/`（Vitest）。
 - **需求文档**：所有功能的技术规格和变更历史都在 `openspec/` 中管理，并纳入版本控制。

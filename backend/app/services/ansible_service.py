@@ -483,9 +483,12 @@ class AnsibleRunnerService:
         prefix: str,
         srcpath: str,
         destpath: str,
+        openresty_file: str | None = None,
     ) -> dict[str, Any]:
         """Execute install_openresty tag to deploy OpenResty on target node."""
         ev = {"prefix": prefix, "srcpath": srcpath, "destpath": destpath}
+        if openresty_file:
+            ev["openresty_file"] = openresty_file
         return await self.run_playbook(ip, "install_openresty", ev)
 
     async def install_edge(

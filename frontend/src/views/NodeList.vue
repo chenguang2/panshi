@@ -244,6 +244,14 @@
       </div>
     </div>
     </Teleport>
+
+    <InstallOpenrestyDialog
+      :visible="installDialogVisible"
+      :node="installTargetNode"
+      :cluster-id="installTargetNode?.cluster_id ?? 0"
+      @confirm="onInstallConfirm"
+      @close="closeInstallDialog"
+    />
   </div>
 </template>
 
@@ -257,6 +265,7 @@ import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
+import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
@@ -668,6 +677,10 @@ function handleStatus(record: any) {
   executeAction(record, 'status', '状态查询')
 }
 
+// ── Install OpenResty Dialog ─────────────────────────────────────
+const installDialogVisible = ref(false)
+const installTargetNode = ref<any>(null)
+
 // ── Install OpenResty / Edge (streaming) ──────────────────────────
 const installStream = useInstallStream()
 const { installing: installInstalling, error: installError, status: installStatus } = installStream
@@ -695,42 +708,44 @@ function buildInstallCommand(record: any, tag: string, extravars: Record<string,
 }
 
 function handleInstallOpenresty(record: any) {
-  showConfirm(
-    '\u786e\u8ba4\u5b89\u88c5 OpenResty',
-    `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 OpenResty\uff08${record.edge_install_path || record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
-    '\u786e\u8ba4\u5b89\u88c5',
-    async () => {
-      execTargetNode.value = record
-      execDrawerTitle.value = `\u5b89\u88c5 OpenResty - ${record.ip}`
-      execDrawerVisible.value = true
-      execLogs.value = []
-      execProgress.percent = 0
-      execProgress.status = 'active'
+  installTargetNode.value = record
+  installDialogVisible.value = true
+}
 
-      const prefix = record.edge_install_path || record.edge_path || '/data/openresty'
-      const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-      const pendingCommand = buildInstallCommand(record, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath })
-      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-      startElapsedTimer()
+function closeInstallDialog() {
+  installDialogVisible.value = false
+}
 
-      installStream.start(
-        `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
-        { prefix },
-        {
-          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
-          onComplete: (rc: number, _status: string) => {
-            stopElapsedTimer()
-            execProgress.status = rc === 0 ? 'success' : 'exception'
-            execProgress.percent = 100
-            const prevCmd = execResult.value?.command || ''
-            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-          },
-          onError: (err: string) => {
-            execLogs.value = [...execLogs.value, `\u274c ${err}`]
-          },
-        },
-      )
+function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile: string }) {
+  installDialogVisible.value = false
+  const record = payload.node
+  execTargetNode.value = record
+  execDrawerTitle.value = `安装 OpenResty - ${record.ip}`
+  execDrawerVisible.value = true
+  execLogs.value = []
+  execProgress.percent = 0
+  execProgress.status = 'active'
+
+  const prefix = record.edge_install_path || record.edge_path || '/data/openresty'
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  startElapsedTimer()
+
+  installStream.start(
+    `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
+    { prefix, openresty_file: payload.openrestyFile },
+    {
+      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+      onComplete: (rc: number, _status: string) => {
+        stopElapsedTimer()
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+      },
+      onError: (err: string) => {
+        execLogs.value = [...execLogs.value, `❌ ${err}`]
+      },
     },
   )
 }

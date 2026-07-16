@@ -235,6 +235,23 @@ class TestAnsibleRunnerService:
             )
             assert result == {"rc": 0}
 
+    async def test_install_openresty_with_file_calls_run_playbook(self, service):
+        """install_openresty should include openresty_file in extravars when provided."""
+        with patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run:
+            result = await service.install_openresty(
+                ip="192.168.1.1",
+                prefix="/data/openresty",
+                srcpath="/path/to/soft",
+                destpath="/data/",
+                openresty_file="my-openresty.tar.gz",
+            )
+            mock_run.assert_called_once_with(
+                "192.168.1.1", "install_openresty",
+                {"prefix": "/data/openresty", "srcpath": "/path/to/soft", "destpath": "/data/",
+                 "openresty_file": "my-openresty.tar.gz"},
+            )
+            assert result == {"rc": 0}
+
     async def test_install_edge_calls_run_playbook(self, service):
         """install_edge should construct correct extravars and call run_playbook."""
         with patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run:

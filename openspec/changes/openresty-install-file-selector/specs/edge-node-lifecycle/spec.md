@@ -1,9 +1,4 @@
-﻿# edge-node-lifecycle Specification
-
-## Purpose
-Edge node lifecycle management: start, stop, restart, check, statistic collection via ansible-runner.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Single node start
 The system SHALL support starting the PANSHI/Edge process on a single node via `POST /clusters/{cluster_id}/nodes/{node_id}/start`. The system SHALL use ansible-runner to execute playbook `edge.yml` with tag `nginx_cmd_run` and extravar `nginx_cmd: nginx_start`. The ansible `script` module SHALL copy `cmd_scripts/nginx_cmd.sh` to the remote host and execute it with arguments `nginx_start`, `prefix`, `port`.

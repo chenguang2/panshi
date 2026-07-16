@@ -24,21 +24,23 @@
 
 ## 端口
 
-| 服务 | 开发端口 | Docker 端口 |
+| 服务 | 开发端口（start.sh） | Docker 端口 |
 |---|---|---|
-| 后端 | 9000 | 8000 |
-| 前端 | 9100 | 9100（代理转发） |
+| 后端 | 12344 | 8000 |
+| 前端 | 12345 | 9100（代理转发） |
 
-Vite 代理将 `/api` 请求转发到 `localhost:9000`。
+Vite 代理将 `/api` 请求转发到 `localhost:12344`（读取 `backend/.port` 文件，缺省 12344）。
 Docker 部署前端通过 nginx 运行在 3000 端口（`docker-compose.yml`）。
 
 ## 常用命令
 
 ```bash
-# 后端启动（开发）
-cd backend && mkdir -p data && uv sync && uv run uvicorn app.main:app --reload --port 9000
+# 📌 开发启动（推荐——一键启动前后端）
+develop/linux/start.sh                # 后端 → 12344，前端 → 12345
+develop/linux/stop.sh                 # 停止
 
-# 前端启动（开发）
+# 替代——分别启动（不推荐，端口可能与 start.sh 不同）
+cd backend && mkdir -p data && uv sync && uv run uvicorn app.main:app --reload --port 9000
 cd frontend && npm install && npm run dev
 
 # 后端测试
@@ -54,7 +56,7 @@ cd frontend && npx vitest run
 cd frontend && npm run build
 
 # 默认登录
-# admin / panshi123 访问 http://localhost:9100
+# admin / panshi123 访问 http://localhost:12345
 ```
 
 ## 项目结构

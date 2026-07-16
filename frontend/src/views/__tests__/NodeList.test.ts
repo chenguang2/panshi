@@ -30,6 +30,7 @@ const stubs = {
   ATabPane: { template: '<div v-if="activeKey === key"><slot /></div>', props: ['key', 'tab'] },
   ConfigDiff: { template: '<div class="mock-config-diff" />', props: ['visible', 'clusterId', 'initialNodeId'] },
   NodeExecutionResultDrawer: { template: '<div class="mock-exec-drawer" />', props: ['visible', 'title'] },
+  InstallOpenrestyDialog: { template: '<div class="mock-install-dialog" v-if="visible">InstallOpenrestyDialog</div>', props: ['visible', 'node', 'clusterId'] },
 }
 
 const MOCK_CLUSTERS = [
@@ -148,6 +149,17 @@ describe('NodeList.vue', () => {
     for (const call of calls) {
       expect(call[1].params.group_name).toBeDefined()
     }
+  })
+
+  it('opens InstallOpenrestyDialog when clicking install openresty', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    const vm = wrapper.vm as any
+    vm.handleInstallOpenresty(MOCK_NODES.items[0])
+    await wrapper.vm.$nextTick()
+    const dialog = wrapper.find('.mock-install-dialog')
+    expect(dialog.exists()).toBe(true)
   })
 
   it('uses normal page_size when group filter is active (no client-side loadAll for group)', async () => {

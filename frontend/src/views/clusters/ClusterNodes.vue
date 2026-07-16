@@ -202,6 +202,14 @@
       </div>
     </div>
     </Teleport>
+
+    <InstallOpenrestyDialog
+      :visible="installDialogVisible"
+      :node="installTargetNode"
+      :cluster-id="installTargetNode?.cluster_id ?? 0"
+      @confirm="onInstallConfirm"
+      @close="closeInstallDialog"
+    />
   </div>
 </template>
 
@@ -212,6 +220,7 @@ import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
@@ -356,6 +365,10 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
   }
 }
 
+// ── Install OpenResty Dialog ─────────────────────────────────────
+const installDialogVisible = ref(false)
+const installTargetNode = ref<any>(null)
+
 // ── Install OpenResty / Edge streaming ──────────────────────────────
 const installStream = useInstallStream()
 const cancelling = ref(false)
@@ -391,48 +404,50 @@ function buildInstallCommand(node: any, tag: string, extravars: Record<string, s
 function handleInstallOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
-  showConfirm(
-    '确认安装 OpenResty',
-    `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 OpenResty\uff08${node.edge_install_path || node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
-    '\u786e\u8ba4\u5b89\u88c5',
-    async () => {
-      execTargetNode.value = node
-      const prefix = node.edge_install_path || node.edge_path || '/data/openresty'
-      const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-      const pendingCommand = buildInstallCommand(node, 'install_openresty', { prefix, srcpath: '/home/qcg/panshi/backend/ansible/soft', destpath })
-      execDrawerVisible.value = true
-      execDrawerTitle.value = `\u5b89\u88c5 OpenResty - ${node.ip}`
-      execLogs.value = []
-      execProgress.percent = 0
-      execProgress.status = 'active'
-      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
-      execElapsed.value = 0
-      clearInstallTimer()
-      _installTimer = setInterval(() => {
-        execElapsed.value = (execElapsed.value ?? 0) + 1
-        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
-      }, 1000)
+  installTargetNode.value = node
+  installDialogVisible.value = true
+}
 
-      installStream.start(
-        `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
-        { prefix },
-        {
-          onLine: (line: string) => {
-            execLogs.value = [...execLogs.value, line]
-          },
-          onProgress: (percent: number) => {
-            if (percent > execProgress.percent) execProgress.percent = percent
-          },
-          onComplete: (rc: number, _status: string) => {
-            clearInstallTimer()
-            execProgress.status = rc === 0 ? 'success' : 'exception'
-            execProgress.percent = 100
-            const prevCmd = execResult.value?.command || ''
-            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
-          },
-          onError: () => { clearInstallTimer() },
-        },
-      )
+function closeInstallDialog() {
+  installDialogVisible.value = false
+}
+
+function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile: string }) {
+  installDialogVisible.value = false
+  const node = payload.node
+  execTargetNode.value = node
+  const prefix = node.edge_install_path || node.edge_path || '/data/openresty'
+  execDrawerVisible.value = true
+  execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
+  execLogs.value = []
+  execProgress.percent = 0
+  execProgress.status = 'active'
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execElapsed.value = 0
+  clearInstallTimer()
+  _installTimer = setInterval(() => {
+    execElapsed.value = (execElapsed.value ?? 0) + 1
+    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+  }, 1000)
+
+  installStream.start(
+    `/clusters/${node.cluster_id}/nodes/${node.id}/install-openresty`,
+    { prefix, openresty_file: payload.openrestyFile },
+    {
+      onLine: (line: string) => {
+        execLogs.value = [...execLogs.value, line]
+      },
+      onProgress: (percent: number) => {
+        if (percent > execProgress.percent) execProgress.percent = percent
+      },
+      onComplete: (rc: number, _status: string) => {
+        clearInstallTimer()
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        execProgress.percent = 100
+        const prevCmd = execResult.value?.command || ''
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+      },
+      onError: () => { clearInstallTimer() },
     },
   )
 }

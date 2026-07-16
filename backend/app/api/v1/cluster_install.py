@@ -8,7 +8,9 @@ registered based on deployment feature configuration:
 
 import asyncio
 import json
+import os
 import shlex
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -35,6 +37,32 @@ from app.services.ansible_service import (
 
 _ansible_service = AnsibleRunnerService()
 
+
+def list_openresty_files(soft_dir: str) -> list[dict]:
+    """List openresty-*.tar.gz files in soft_dir with name, size, size_display, mtime."""
+    soft_path = Path(soft_dir)
+    if not soft_path.is_dir():
+        return []
+
+    files = []
+    for p in sorted(soft_path.glob("openresty-*.tar.gz"), key=lambda f: f.stat().st_mtime, reverse=True):
+        st = p.stat()
+        size = st.st_size
+        if size >= 1048576:
+            size_display = f"{size / 1048576:.1f} MB"
+        elif size >= 1024:
+            size_display = f"{size / 1024:.1f} KB"
+        else:
+            size_display = f"{size} B"
+        mtime_dt = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+        files.append({
+            "name": p.name,
+            "size": size,
+            "size_display": size_display,
+            "mtime": mtime_dt.isoformat(),
+        })
+    return files
+
 # Registry mapping node_id -> SSH subprocess for install-openresty
 # (used by cancel-install).  Shared across both routers.
 _install_proc_registry: dict[int, asyncio.subprocess.Process] = {}
@@ -44,8 +72,7 @@ _install_proc_registry: dict[int, asyncio.subprocess.Process] = {}
 
 class InstallOpenrestyRequest(BaseModel):
     prefix: str
-    srcpath: str = ""
-    destpath: str = ""
+    openresty_file: str
 
 
 class InstallEdgeRequest(BaseModel):
@@ -71,9 +98,12 @@ async def _install_openresty_stream(
     srcpath: str,
     destpath: str,
     request: Request | None = None,
+    openresty_file: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream install_openresty: phase 1 = Ansible copy/decompress, phase 2 = SSH build."""
     extravars = {"prefix": prefix, "srcpath": srcpath, "destpath": destpath}
+    if openresty_file:
+        extravars["openresty_file"] = openresty_file
     ssh_proc: asyncio.subprocess.Process | None = None
 
     try:
@@ -208,6 +238,15 @@ async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss") -> tuple[int, str
 install_openresty_router = APIRouter(prefix="/clusters", tags=["clusters-install-openresty"])
 
 
+@install_openresty_router.get("/{cluster_id}/nodes/openresty-files")
+async def list_openresty_files_endpoint(cluster_id: int):
+    """List available OpenResty installation packages in the soft directory."""
+    from app.services.ansible_service import PRIVATE_DATA_DIR
+    soft_dir = os.path.join(PRIVATE_DATA_DIR, "soft")
+    files = list_openresty_files(soft_dir)
+    return {"files": files}
+
+
 @install_openresty_router.post("/{cluster_id}/nodes/{node_id}/install-openresty")
 async def install_openresty_stream(
     cluster_id: int, node_id: int,
@@ -219,10 +258,10 @@ async def install_openresty_stream(
     node = await _verify_node(cluster_id, node_id, db)
     from app.services.ansible_service import PRIVATE_DATA_DIR
     prefix = node.edge_install_path or body.prefix
-    srcpath = body.srcpath or f"{PRIVATE_DATA_DIR}/soft"
-    destpath = body.destpath or str(Path(prefix).parent) + "/"
+    srcpath = f"{PRIVATE_DATA_DIR}/soft"
+    destpath = str(Path(prefix).parent) + "/"
     return StreamingResponse(
-        _install_openresty_stream(_ansible_service, node, prefix, srcpath, destpath, request),
+        _install_openresty_stream(_ansible_service, node, prefix, srcpath, destpath, request, openresty_file=body.openresty_file),
         media_type="text/event-stream",
     )
 
