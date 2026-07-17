@@ -1,12 +1,8 @@
-- name: upgrade openresty server
+- name: upgrade edge with new openresty
   shell:
-    cmd: "source /etc/profile;{{ item.1 }}/bin/manager upgrade {{ item.2 }}uap-edge"
-    executable: /bin/bash
+    cmd: "source /etc/profile; install_dir={{ edge_target }}; parent_dir=$(dirname $install_dir); dir_name=$(basename $install_dir); cd $parent_dir; {{ item.1 }}/bin/manager upgrade $dir_name;"
+  loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
   when: inventory_hostname == item.0
-  with_together:
-    - "{{ ips.split(',') }}"
-    - "{{ prefix.split(',') }}"
-    - "{{ destpath.split(',') }}"
   tags:
     - upgrade_openresty
 

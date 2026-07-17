@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
 from pydantic import ValidationError
+from unittest.mock import AsyncMock, patch
 
 
 class TestListOpenrestyFiles:
@@ -188,4 +189,78 @@ class TestInstallEdgeRouter:
     def test_install_edge_endpoint_exists(self, client):
         """POST /api/v1/clusters/{id}/nodes/{nid}/install-edge should exist."""
         resp = client.post("/api/v1/clusters/99999/nodes/99999/install-edge", json={"prefix": "/test"})
+
+
+class TestEdgePackListEndpoint:
+    """GET /clusters/{id}/nodes/{nid}/edge-pack-list"""
+
+    @pytest.fixture
+    def client(self):
+        from app.main import app
+        with TestClient(app) as c:
+            yield c
+
+    def test_endpoint_exists(self, client):
+        resp = client.get("/api/v1/clusters/99999/nodes/99999/edge-pack-list")
+        assert resp.status_code in (404, 422)
+
+    def test_edge_pack_files_endpoint_exists(self, client):
+        resp = client.get("/api/v1/clusters/1/nodes/edge-pack-files")
+        assert resp.status_code in (200, 404)
+
+
+class TestEdgePackAddEndpoint:
+    """POST /clusters/{id}/nodes/{nid}/edge-pack-add"""
+
+    @pytest.fixture
+    def client(self):
+        from app.main import app
+        with TestClient(app) as c:
+            yield c
+
+    def test_endpoint_exists(self, client):
+        resp = client.post(
+            "/api/v1/clusters/99999/nodes/99999/edge-pack-add",
+            json={"pack_file": "edge-pack-test.tgz"},
+        )
+        assert resp.status_code in (404, 422)
+
+
+class TestEdgePackRebaseEndpoint:
+    """POST /clusters/{id}/nodes/{nid}/edge-pack-rebase"""
+
+    @pytest.fixture
+    def client(self):
+        from app.main import app
+        with TestClient(app) as c:
+            yield c
+
+    def test_endpoint_exists(self, client):
+        resp = client.post(
+            "/api/v1/clusters/99999/nodes/99999/edge-pack-rebase",
+            json={"version": "2.7.6.26020421"},
+        )
+        assert resp.status_code in (404, 422)
+
+
+class TestAssociateNewOpenrestyRouter:
+    """associate-new-openresty endpoint should exist."""
+
+    @pytest.fixture
+    def client(self):
+        from app.main import app
+        with TestClient(app) as c:
+            yield c
+
+    def test_endpoint_exists(self, client):
+        """POST /api/v1/clusters/{id}/nodes/{nid}/associate-new-openresty should exist."""
+        resp = client.post(
+            "/api/v1/clusters/99999/nodes/99999/associate-new-openresty",
+            json={"prefix": "/test"},
+        )
+        assert resp.status_code in (404, 422)  # 404=cluster not found, 422=validation
+
+    def test_endpoint_rejects_without_body(self, client):
+        """POST associate-new-openresty without body should return 422."""
+        resp = client.post("/api/v1/clusters/1/nodes/1/associate-new-openresty")
         assert resp.status_code in (404, 422)

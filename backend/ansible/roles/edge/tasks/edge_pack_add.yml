@@ -1,0 +1,22 @@
+---
+- name: Create remote temp directory
+  file:
+    path: "{{ destpath }}/soft/"
+    state: directory
+  loop: "{{ ips.split(',') | zip(destpath.split(',')) | list }}"
+  when: inventory_hostname == item.0
+  tags: [edge_pack_add]
+
+- name: Copy pack file
+  copy:
+    src: "{{ srcpath }}/{{ pack_file }}"
+    dest: "{{ destpath }}/soft/{{ pack_file }}"
+  loop: "{{ ips.split(',') | zip(destpath.split(',')) | list }}"
+  when: inventory_hostname == item.0
+  tags: [edge_pack_add]
+
+- name: Manager pack-add
+  shell:
+    cmd: "source /etc/profile; {{ item.1 }}/bin/manager pack-add {{ destpath.split(',')[item|int] }}/soft/{{ pack_file }};"
+  loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
+  tags: [edge_pack_add]

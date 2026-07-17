@@ -63,6 +63,34 @@ def list_openresty_files(soft_dir: str) -> list[dict]:
         })
     return files
 
+
+def list_edge_pack_files(soft_dir: str) -> list[dict]:
+    """List edge-pack-*.tgz/tar.gz files in soft_dir with name, size, size_display, mtime."""
+    soft_path = Path(soft_dir)
+    if not soft_path.is_dir():
+        return []
+
+    files = []
+    for p in sorted(soft_path.glob("edge-pack-*"), key=lambda f: f.stat().st_mtime, reverse=True):
+        name = p.name
+        if not (name.startswith("edge-pack-") and p.suffix in (".tgz", ".gz")):
+            continue
+        st = p.stat()
+        size = st.st_size
+        size_display = (
+            f"{size / 1048576:.1f} MB" if size >= 1048576 else
+            f"{size / 1024:.1f} KB" if size >= 1024 else
+            f"{size} B"
+        )
+        mtime_dt = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+        files.append({
+            "name": name,
+            "size": size,
+            "size_display": size_display,
+            "mtime": mtime_dt.isoformat(),
+        })
+    return files
+
 # Registry mapping node_id -> SSH subprocess for install-openresty
 # (used by cancel-install).  Shared across both routers.
 _install_proc_registry: dict[int, asyncio.subprocess.Process] = {}
@@ -77,6 +105,14 @@ class InstallOpenrestyRequest(BaseModel):
 
 class InstallEdgeRequest(BaseModel):
     prefix: str
+
+
+class EdgePackAddRequest(BaseModel):
+    pack_file: str
+
+
+class EdgePackRebaseRequest(BaseModel):
+    version: str
 
 
 # ── helper functions ──────────────────────────────────────────────────
@@ -354,9 +390,103 @@ async def cancel_install(
     return {"status": "success", "steps": steps}
 
 
-# ── Router B: install-edge (pure ansible, no SSH process) ────────────
+# ── Router B: install-edge / upgrade edge / pack management ────────────
 
 install_edge_router = APIRouter(prefix="/clusters", tags=["clusters-install-edge"])
+
+
+@install_edge_router.post("/{cluster_id}/nodes/{node_id}/associate-new-openresty")
+async def associate_new_openresty_stream(
+    cluster_id: int, node_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Associate an existing Edge instance with a new OpenResty installation.
+    
+    The node's edge_install_path must already be updated to point to the new
+    OpenResty before calling this endpoint. Ansible runs manager upgrade + init.
+    """
+    node = await _verify_node(cluster_id, node_id, db)
+    prefix = node.edge_install_path
+    if not prefix:
+        raise HTTPException(status_code=422, detail="节点 Nginx安装路径为空，请先编辑节点")
+    extravars = {"prefix": prefix, "edge_target": node.edge_path}
+    return StreamingResponse(
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="upgrade_openresty", extravars=extravars),
+        media_type="text/event-stream",
+    )
+
+
+@install_edge_router.get("/{cluster_id}/nodes/{node_id}/edge-pack-list")
+async def edge_pack_list(
+    cluster_id: int, node_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """List available edge version packs on the target node via ansible."""
+    node = await _verify_node(cluster_id, node_id, db)
+    try:
+        result = await _ansible_service.generic_run(
+            ip=node.ip, tag="edge_pack_list",
+            extravars={"edge_target": node.edge_path},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"节点 {node.ip} 连接失败: {str(e)}")
+
+    stdout = result.get("shell_stdout") or ""
+    versions = []
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        current = line.startswith("[*]")
+        name = line.replace("[*]", "").strip()
+        versions.append({"name": name, "current": current})
+    return {"versions": versions}
+
+
+@install_edge_router.get("/{cluster_id}/nodes/edge-pack-files")
+async def list_edge_pack_files_endpoint(cluster_id: int):
+    """List available Edge pack files in the soft directory."""
+    from app.services.ansible_service import PRIVATE_DATA_DIR
+    soft_dir = os.path.join(PRIVATE_DATA_DIR, "soft")
+    files = list_edge_pack_files(soft_dir)
+    return {"files": files}
+
+
+@install_edge_router.post("/{cluster_id}/nodes/{node_id}/edge-pack-add")
+async def edge_pack_add_stream(
+    cluster_id: int, node_id: int,
+    body: EdgePackAddRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Add an edge version pack to the target node: copy file + manager pack-add."""
+    from app.services.ansible_service import PRIVATE_DATA_DIR
+    node = await _verify_node(cluster_id, node_id, db)
+    prefix = node.edge_install_path
+    srcpath = f"{PRIVATE_DATA_DIR}/soft"
+    destpath = str(Path(prefix).parent) + "/"
+    extravars = {
+        "srcpath": srcpath, "destpath": destpath,
+        "pack_file": body.pack_file, "prefix": prefix,
+    }
+    return StreamingResponse(
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_add", extravars=extravars),
+        media_type="text/event-stream",
+    )
+
+
+@install_edge_router.post("/{cluster_id}/nodes/{node_id}/edge-pack-rebase")
+async def edge_pack_rebase_stream(
+    cluster_id: int, node_id: int,
+    body: EdgePackRebaseRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Switch edge version: pack-rebase + init + reload."""
+    node = await _verify_node(cluster_id, node_id, db)
+    extravars = {"edge_target": node.edge_path, "version": body.version}
+    return StreamingResponse(
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_rebase", extravars=extravars),
+        media_type="text/event-stream",
+    )
 
 
 @install_edge_router.post("/{cluster_id}/nodes/{node_id}/install-edge")

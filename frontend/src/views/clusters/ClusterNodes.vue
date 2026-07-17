@@ -14,6 +14,8 @@
           <a-menu>
             <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-menu-item>
             <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-menu-item>
+            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleAssociateNewOpenresty" :disabled="!cluster.selectedNode">关联新OpenResty</a-menu-item>
+            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleEdgePackManagement" :disabled="!cluster.selectedNode">升级Edge小版本</a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>
@@ -210,17 +212,24 @@
       @confirm="onInstallConfirm"
       @close="closeInstallDialog"
     />
+
+    <EdgePackManagementDialog
+      v-model:visible="edgePackDialogVisible"
+      :node="edgePackDialogNode"
+      :cluster-id="edgePackDialogNode?.cluster_id ?? 0"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, onMounted, onUnmounted } from 'vue'
 import { DownOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
+import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
@@ -570,6 +579,122 @@ function handleCancelInstall() {
     },
   )
 }
+
+// ── 关联新OpenResty ──
+
+function handleAssociateNewOpenresty() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  const prefix = node.edge_install_path || ''
+  showConfirm(
+    '关联新OpenResty',
+    `即将把节点 ${node.ip} 的 Edge（${node.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,
+    '确认关联',
+    async () => {
+      execTargetNode.value = node
+      execDrawerVisible.value = true
+      execDrawerTitle.value = `关联新OpenResty - ${node.ip}`
+      execLogs.value = []
+      execProgress.percent = 0
+      execProgress.status = 'active'
+      execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+      execElapsed.value = 0
+      clearInstallTimer()
+      _installTimer = setInterval(() => {
+        execElapsed.value = (execElapsed.value ?? 0) + 1
+        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+      }, 1000)
+
+      installStream.start(
+        `/clusters/${node.cluster_id}/nodes/${node.id}/associate-new-openresty`,
+        {},
+        {
+          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onComplete: (rc: number, _status: string) => {
+            clearInstallTimer()
+            execProgress.status = rc === 0 ? 'success' : 'exception'
+            execProgress.percent = 100
+            const prevCmd = execResult.value?.command || ''
+            execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+          },
+          onError: () => { clearInstallTimer() },
+        },
+      )
+    },
+  )
+}
+
+// ── 升级Edge小版本 ──
+
+const edgePackDialogVisible = ref(false)
+const edgePackDialogNode = ref<any>(null)
+
+function handleEdgePackManagement() {
+  edgePackDialogNode.value = props.cluster.selectedNode
+  edgePackDialogVisible.value = true
+}
+
+function streamEdgeAction(node: any, title: string, url: string, body: Record<string, any>) {
+  execTargetNode.value = node
+  execDrawerVisible.value = true
+  execDrawerTitle.value = title
+  execLogs.value = []
+  execProgress.percent = 0
+  execProgress.status = 'active'
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execElapsed.value = 0
+  clearInstallTimer()
+  _installTimer = setInterval(() => {
+    execElapsed.value = (execElapsed.value ?? 0) + 1
+    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+  }, 1000)
+
+  installStream.start(url, body, {
+    onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
+    onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+    onComplete: (rc: number, _status: string) => {
+      clearInstallTimer()
+      execProgress.status = rc === 0 ? 'success' : 'exception'
+      execProgress.percent = 100
+      const prevCmd = execResult.value?.command || ''
+      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
+    },
+    onError: () => { clearInstallTimer() },
+  })
+}
+
+function onEdgePackAdd(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (!detail?.node) return
+  streamEdgeAction(
+    detail.node,
+    `添加版本包 - ${detail.node.ip}`,
+    `/clusters/${detail.clusterId}/nodes/${detail.node.id}/edge-pack-add`,
+    { pack_file: detail.packFile },
+  )
+}
+
+function onEdgePackRebase(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (!detail?.node) return
+  streamEdgeAction(
+    detail.node,
+    `切换版本 - ${detail.node.ip}`,
+    `/clusters/${detail.clusterId}/nodes/${detail.node.id}/edge-pack-rebase`,
+    { version: detail.version },
+  )
+}
+
+onMounted(() => {
+  window.addEventListener('edge-pack-add', onEdgePackAdd)
+  window.addEventListener('edge-pack-rebase', onEdgePackRebase)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('edge-pack-add', onEdgePackAdd)
+  window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
+})
 </script>
 
 <style scoped>

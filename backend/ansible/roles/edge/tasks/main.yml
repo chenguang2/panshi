@@ -20,3 +20,6 @@
 - import_tasks: install_openresty.yml
 - import_tasks: upgrade_openresty.yml
 - import_tasks: upgrade_edge.yml
+- import_tasks: edge_pack_list.yml
+- import_tasks: edge_pack_add.yml
+- import_tasks: edge_pack_rebase.yml

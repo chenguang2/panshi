@@ -47,20 +47,12 @@ cmd: "{{ item.1 }}/bin/manager upgrade {{ item.2 }}uap-edge"
 
 ### Ansible
 
-修改 `backend/ansible/roles/edge/tasks/upgrade_openresty.yml`，改用 `edge_target` 动态获取 Edge 目录名（支持 `uap-edge2` 等自定义命名），增加 init 步骤：
+修改 `backend/ansible/roles/edge/tasks/upgrade_openresty.yml`，改用 `edge_target` 动态获取 Edge 目录名（支持 `uap-edge2` 等自定义命名），`manager upgrade` 内部自动处理初始化：
 
 ```yaml
 - name: upgrade edge with new openresty
   shell:
     cmd: "source /etc/profile; install_dir={{ edge_target }}; parent_dir=$(dirname $install_dir); dir_name=$(basename $install_dir); cd $parent_dir; {{ item.1 }}/bin/manager upgrade $dir_name;"
-  loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
-  when: inventory_hostname == item.0
-  tags:
-    - upgrade_openresty
-
-- name: edge init (sync config templates from new openresty)
-  shell:
-    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge init;"
   loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
   when: inventory_hostname == item.0
   tags:

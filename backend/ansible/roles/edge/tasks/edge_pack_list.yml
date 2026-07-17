@@ -1,0 +1,16 @@
+---
+- name: pack list
+  shell:
+    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge pack-list"
+  register: pack_output
+  changed_when: false
+  failed_when: false
+  tags:
+    - edge_pack_list
+
+- name: out
+  debug:
+    msg: "{{ pack_output.stdout_lines }}"
+  when: pack_output.stdout is defined
+  tags:
+    - edge_pack_list

@@ -1,0 +1,16 @@
+---
+- name: pack rebase
+  shell:
+    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge pack-rebase {{ version }};"
+  tags: [edge_pack_rebase]
+
+- name: edge init
+  shell:
+    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge init;"
+  tags: [edge_pack_rebase]
+
+- name: edge reload
+  shell:
+    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge reload;"
+  failed_when: false
+  tags: [edge_pack_rebase]
