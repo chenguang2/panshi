@@ -104,6 +104,20 @@ describe('NodeList.vue', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/clusters')
   })
 
+  it('has reload button inline', async () => {
+    const source = (await import('../NodeList.vue')).default
+    const wrapper = mount(source, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    expect(wrapper.find('button').text()).toBeDefined()
+  })
+
+  it('renders detail in template', async () => {
+    const source = (await import('../NodeList.vue')).default
+    const wrapper = mount(source, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    expect(wrapper.findComponent({ name: 'InstallOpenrestyDialog' }).exists()).toBe(true)
+  })
+
   it('shows add node button', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })

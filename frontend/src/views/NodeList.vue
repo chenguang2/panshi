@@ -76,12 +76,13 @@
             <div class="node-actions-wrap">
               <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
               <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
+              <button class="btn btn-ghost btn-sm" @click="handleReload(record)">⟳ reload</button>
               <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
-              <button class="btn btn-ghost btn-sm" @click="viewDetail(record)">ⓘ 详情</button>
               <a-dropdown :trigger="['click']">
                 <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
                 <template #overlay>
                   <a-menu>
+                    <a-menu-item @click="viewDetail(record)">ⓘ 详情</a-menu-item>
                     <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
                     <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
                     <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
@@ -605,7 +606,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   execDrawerVisible.value = true
 
   // Build pending command for display even on failure
-  const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', status: 'edge_statistic' }
+  const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', reload: 'nginx_reload', status: 'edge_statistic' }
   const nginxCmd = nginxCmdMap[action] || action
   const tag = nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'
   const ev = JSON.stringify({ prefix: record.edge_path || '', ports: String(record.management_port), ips: record.ip })
@@ -627,6 +628,8 @@ async function executeAction(record: any, action: string, actionLabel: string) {
       res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/start`)
     } else if (action === 'stop') {
       res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/stop`)
+    } else if (action === 'reload') {
+      res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/reload`)
     } else if (action === 'status') {
       res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/statistic`, { ports: String(record.management_port) })
     }
@@ -680,6 +683,15 @@ function handleStop(record: any) {
     `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
     async () => { await executeAction(record, 'stop', '停止') },
+  )
+}
+
+function handleReload(record: any) {
+  showConfirm(
+    '确认重新加载节点',
+    `即将对节点 ${record.ip} 执行"reload"操作，重新加载配置，确认继续？`,
+    '确认reload',
+    async () => { await executeAction(record, 'reload', 'reload') },
   )
 }
 

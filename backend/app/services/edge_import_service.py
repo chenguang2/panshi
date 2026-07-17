@@ -631,6 +631,9 @@ class EdgeImportService:
                 "ssl_protocols": ssl_protocols,
                 "status": raw_data.get("status", 1),
                 "current_version": None,
+                "gm": raw_data.get("gm", False),
+                "sign_cert": (raw_data.get("certs") or [None])[0] or "",
+                "sign_key": (raw_data.get("keys") or [None])[0] or "",
             },
         }
 

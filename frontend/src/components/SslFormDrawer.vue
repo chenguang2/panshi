@@ -46,10 +46,16 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书类型</label>
-            <select v-model="form.cert_type" class="form-input">
-              <option value="server">server（服务端）</option>
-              <option value="client">client（客户端）</option>
-            </select>
+            <a-select v-model:value="form.cert_type" style="width:100%;">
+              <a-select-option value="server">
+                <div style="font-weight:600;font-size:13px;">server（服务端）</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">接收浏览器访问</div>
+              </a-select-option>
+              <a-select-option value="client">
+                <div style="font-weight:600;font-size:13px;">client（客户端）</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">访问后端负载</div>
+              </a-select-option>
+            </a-select>
           </div>
           <div class="form-group" style="flex:2;">
             <label class="form-label">SSL 协议版本</label>
@@ -89,6 +95,37 @@
         </div>
 
         <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="form.gm"> <span>国密双证书 (GM/NTLS)</span>
+          </label>
+        </div>
+
+        <template v-if="form.gm">
+          <div class="form-row">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">签名证书 (sign_cert) <span class="required">*</span></label>
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-ghost btn-sm" :class="{ active: signCertInputMode === 'file' }" @click="signCertInputMode = 'file'">上传文件</button>
+                <button class="btn btn-ghost btn-sm" :class="{ active: signCertInputMode === 'text' }" @click="signCertInputMode = 'text'">粘贴文本</button>
+              </div>
+              <input v-if="signCertInputMode === 'file'" type="file" accept=".crt,.pem" @change="onSignCertFileChange" style="width:100%;" :class="{ 'has-error': formErrors.sign_cert }" />
+              <textarea v-else v-model="form.sign_cert" class="form-input" :class="{ 'has-error': formErrors.sign_cert }" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+              <div v-if="formErrors.sign_cert" class="form-error">{{ formErrors.sign_cert }}</div>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">签名私钥 (sign_key) <span class="required">*</span></label>
+              <div style="display:flex;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-ghost btn-sm" :class="{ active: signKeyInputMode === 'file' }" @click="signKeyInputMode = 'file'">上传文件</button>
+                <button class="btn btn-ghost btn-sm" :class="{ active: signKeyInputMode === 'text' }" @click="signKeyInputMode = 'text'">粘贴文本</button>
+              </div>
+              <input v-if="signKeyInputMode === 'file'" type="file" accept=".key,.pem" @change="onSignKeyFileChange" style="width:100%;" :class="{ 'has-error': formErrors.sign_key }" />
+              <textarea v-else v-model="form.sign_key" class="form-input" :class="{ 'has-error': formErrors.sign_key }" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+              <div v-if="formErrors.sign_key" class="form-error">{{ formErrors.sign_key }}</div>
+            </div>
+          </div>
+        </template>
+
+        <div class="form-group">
           <label class="form-label">描述</label>
           <textarea v-model="form.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
         </div>
@@ -120,6 +157,8 @@ const SSL_PROTOCOLS = ['TLSv1.1', 'TLSv1.2', 'TLSv1.3']
 
 const certInputMode = ref<'file' | 'text'>('file')
 const keyInputMode = ref<'file' | 'text'>('file')
+const signCertInputMode = ref<'file' | 'text'>('file')
+const signKeyInputMode = ref<'file' | 'text'>('file')
 const submitting = ref(false)
 
 const sniTags = ref<string[]>([])
@@ -156,6 +195,9 @@ const form = reactive({
   key: '',
   ssl_protocols: [] as string[],
   description: '',
+  gm: false,
+  sign_cert: '',
+  sign_key: '',
 })
 
 const formErrors = reactive<Record<string, string>>({})
@@ -172,6 +214,10 @@ function validate(): boolean {
   if (sniTags.value.length === 0) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
   if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
   if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
+  if (form.gm) {
+    if (!form.sign_cert.trim()) { formErrors.sign_cert = '国密模式下请上传签名证书'; valid = false }
+    if (!form.sign_key.trim()) { formErrors.sign_key = '国密模式下请上传签名私钥'; valid = false }
+  }
   return valid
 }
 
@@ -186,6 +232,8 @@ watch(() => props.visible, (v) => {
   clearErrors()
   certInputMode.value = 'file'
   keyInputMode.value = 'file'
+  signCertInputMode.value = 'file'
+  signKeyInputMode.value = 'file'
   if (props.editingCert) {
     const c = props.editingCert
     form.name = c.name
@@ -196,6 +244,9 @@ watch(() => props.visible, (v) => {
     form.key = c.key || c.private_key || ''
     form.ssl_protocols = c.ssl_protocols ? (() => { try { return JSON.parse(c.ssl_protocols) } catch { return ['TLSv1.2', 'TLSv1.3'] } })() : ['TLSv1.2', 'TLSv1.3']
     form.description = c.description || ''
+    form.gm = c.gm || false
+    form.sign_cert = c.sign_cert || ''
+    form.sign_key = c.sign_key || ''
   } else {
     form.name = ''
     form.cluster_id = ''
@@ -205,6 +256,9 @@ watch(() => props.visible, (v) => {
     form.key = ''
     form.ssl_protocols = ['TLSv1.2', 'TLSv1.3']
     form.description = ''
+    form.gm = false
+    form.sign_cert = ''
+    form.sign_key = ''
   }
 })
 
@@ -224,6 +278,22 @@ function onKeyFileChange(e: Event) {
   reader.readAsText(file)
 }
 
+function onSignCertFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => { form.sign_cert = reader.result as string }
+  reader.readAsText(file)
+}
+
+function onSignKeyFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => { form.sign_key = reader.result as string }
+  reader.readAsText(file)
+}
+
 async function handleSubmit() {
   if (!validate()) return
   submitting.value = true
@@ -236,6 +306,11 @@ async function handleSubmit() {
       cert: form.cert,
       private_key: form.key,
       description: form.description || undefined,
+      gm: form.gm || undefined,
+    }
+    if (form.gm) {
+      data.sign_cert = form.sign_cert
+      data.sign_key = form.sign_key
     }
     if (form.ssl_protocols.length > 0) {
       data.ssl_protocols = JSON.stringify(form.ssl_protocols)

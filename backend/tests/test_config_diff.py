@@ -542,6 +542,24 @@ def _compare_ssl_certificate(db: dict, edge_data: dict | None) -> dict:
         equal = str(db_v) == str(edge_v)
         fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
+    # gm
+    db_gm = db.get("gm", False)
+    edge_gm = edge_data.get("gm", False)
+    equal = str(db_gm) == str(edge_gm)
+    fields.append({"name": "gm", "db": str(db_gm), "edge": str(edge_gm), "status": "equal" if equal else "diff"})
+
+    # sign_cert ↔ Edge certs
+    db_sign = db.get("sign_cert", "")
+    edge_sign = (edge_data.get("certs") or [""])[0]
+    equal = str(db_sign) == str(edge_sign)
+    fields.append({"name": "sign_cert", "db": str(db_sign), "edge": str(edge_sign), "status": "equal" if equal else "diff"})
+
+    # sign_key ↔ Edge keys
+    db_sk = db.get("sign_key", "")
+    edge_sk = (edge_data.get("keys") or [""])[0]
+    equal = str(db_sk) == str(edge_sk)
+    fields.append({"name": "sign_key", "db": str(db_sk), "edge": str(edge_sk), "status": "equal" if equal else "diff"})
+
     return {"name": db.get("name", ""), "id": db.get("edge_uuid", ""), "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
 
@@ -604,6 +622,21 @@ class TestCompareSslCertificate:
         names = {f["name"] for f in r["fields"]}
         for key in ("name", "sni", "cert_type", "cert", "private_key", "status"):
             assert key in names, f"{key} should be present"
+
+    def test_gm_fields_match(self):
+        db = {"name": "gm", "edge_uuid": "u6", "sni": "gm.local", "cert_type": "server", "cert": "enc", "private_key": "ek", "status": 1, "gm": True, "sign_cert": "sc", "sign_key": "sk"}
+        edge = {"name": "gm", "sni": "gm.local", "type": "server", "cert": "enc", "key": "ek", "status": 1, "gm": True, "certs": ["sc"], "keys": ["sk"]}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "match"
+        names = {f["name"] for f in r["fields"]}
+        for key in ("gm", "sign_cert", "sign_key"):
+            assert key in names, f"{key} should be present"
+
+    def test_gm_fields_mismatch(self):
+        db = {"name": "gm", "edge_uuid": "u7", "sni": "gm.local", "cert_type": "server", "cert": "enc", "private_key": "ek", "status": 1, "gm": True, "sign_cert": "old-sc", "sign_key": "sk"}
+        edge = {"name": "gm", "sni": "gm.local", "type": "server", "cert": "enc", "key": "ek", "status": 1, "gm": True, "certs": ["new-sc"], "keys": ["sk"]}
+        r = _compare_ssl_certificate(db, edge)
+        assert r["status"] == "mismatch"
 
 
 class TestComparePluginMetadata:

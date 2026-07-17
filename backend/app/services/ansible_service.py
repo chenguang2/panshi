@@ -537,6 +537,12 @@ class AnsibleRunnerService:
                 "nginx_status": "started",
                 "nginx_pid": pid_match.group(1) if pid_match else None,
             }
+        if re.search(r"Nginx\s+configuration\s+has\s+been\s+reloaded", clean, re.IGNORECASE):
+            return {
+                "nginx_running": True,
+                "nginx_status": "running",
+                "nginx_pid": None,
+            }
         # Stopped / not-running indicators
         if re.search(r"Nginx\s+process\s+does\s+not\s+exist", clean, re.IGNORECASE):
             return {"nginx_running": False, "nginx_status": "not_exist", "nginx_pid": None}

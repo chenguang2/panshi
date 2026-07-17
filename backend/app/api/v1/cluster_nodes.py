@@ -279,8 +279,8 @@ async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(ge
     }
 
 
-@router.post("/{cluster_id}/nodes/{node_id}/restart")
-async def restart_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
+@router.post("/{cluster_id}/nodes/{node_id}/reload")
+async def reload_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
     node = await _verify_node(cluster_id, node_id, db)
     result = await _run_and_update(
         db, node, "nginx_cmd_run",
@@ -825,6 +825,24 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         edge_v = edge_data.get("status", 1)
         equal = str(db_v) == str(edge_v)
         fields.append({"name": "status", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # gm
+        db_v = db_cert.gm or False
+        edge_v = edge_data.get("gm", False)
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "gm", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # sign_cert ↔ Edge certs
+        db_v = db_cert.sign_cert or ""
+        edge_v = (edge_data.get("certs") or [None])[0] or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "sign_cert", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # sign_key ↔ Edge keys
+        db_v = db_cert.sign_key or ""
+        edge_v = (edge_data.get("keys") or [None])[0] or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "sign_key", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
         return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 

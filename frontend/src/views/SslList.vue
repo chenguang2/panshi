@@ -50,7 +50,7 @@
         </div>
         <div class="ssl-card-body">
           <div class="ssl-card-row"><label>SNI</label><span>{{ cert.sni }}</span></div>
-          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}</span></div>
+          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.gm" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密</span></span></div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
         <div class="ssl-card-actions">

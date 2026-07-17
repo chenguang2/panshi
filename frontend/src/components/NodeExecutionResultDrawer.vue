@@ -189,7 +189,7 @@ const nginxStatus = computed(() => {
   if (lines.length === 0) {
     return { known: false, running: false, pid: null }
   }
-  const hasRunning = (l: string) => /\b(running|started)\b/i.test(l) && /nginx/i.test(l)
+  const hasRunning = (l: string) => /\b(running|started|reloaded)\b/i.test(l) && /nginx/i.test(l)
   const hasPid = lines.some(l => /PID\s*:\s*\d+/i.test(l))
   const running = lines.some(hasRunning) || hasPid
   const pidLine = lines.find(l => /PID\s*:\s*\d+/i.test(l))

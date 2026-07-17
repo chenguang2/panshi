@@ -7,6 +7,7 @@
       <a-divider type="vertical" />
       <a-button size="small" @click="handleNodeStart" :disabled="!cluster.selectedNode">▶ 启动</a-button>
       <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
+      <a-button size="small" @click="handleNodeReload" :disabled="!cluster.selectedNode">⟳ reload</a-button>
       <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
       <a-dropdown v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" :trigger="['click']">
         <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
@@ -351,6 +352,17 @@ function handleNodeStop() {
     `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
     () => executeNodeAction(node as any, 'stop', '停止'),
+  )
+}
+
+function handleNodeReload() {
+  const node = props.cluster.selectedNode
+  if (!node) return
+  showConfirm(
+    '确认重新加载节点',
+    `即将对节点 ${node.ip} 执行"reload"操作，重新加载配置，确认继续？`,
+    '确认reload',
+    () => executeNodeAction(node as any, 'reload', 'reload'),
   )
 }
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.core.database import Base
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 
 
 class SslCertificate(Base):
@@ -20,6 +20,9 @@ class SslCertificate(Base):
     cert_type = Column(String(20), nullable=False, default="server")
     ssl_protocols = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
+    gm = Column(Boolean, nullable=False, default=False)
+    sign_cert = Column(Text, nullable=True)
+    sign_key = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)
     status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

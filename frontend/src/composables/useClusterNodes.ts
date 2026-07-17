@@ -324,12 +324,12 @@ export function useClusterNodes(options: {
     return `ansible-playbook -i inventory edge.yml --tags ${tag} -e "${evParts.join(' ')}"`
   }
 
-  const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart', actionLabel: string) => {
+  const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart' | 'reload', actionLabel: string) => {
     const cluster = clusters.value.find(c => c.id === node.cluster_id)
     if (!cluster) return
 
     // Build command string upfront so it's available even on failure
-    const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', restart: 'nginx_reload' }
+    const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', restart: 'nginx_reload', reload: 'nginx_reload' }
     const nginxCmd = nginxCmdMap[action] || action
     const cmdExtravars: Record<string, string> = {
       ips: node.ip,

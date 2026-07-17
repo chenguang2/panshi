@@ -310,3 +310,14 @@ class TestAnsibleRunnerService:
         assert '"status": "successful"' in last
         assert '"percent": 100' in last
         assert last.endswith("\n\n")
+
+
+class TestParseNginxStatus:
+
+    def test_reload_success_indicates_running(self):
+        """'Nginx configuration has been reloaded' should indicate nginx is running."""
+        from app.services.ansible_service import AnsibleRunnerService
+        stdout = "Nginx configuration has been reloaded.\nprefix: /data/edge\nport: 16620\n"
+        result = AnsibleRunnerService._parse_nginx_status(stdout)
+        assert result["nginx_running"] is True
+        assert result["nginx_status"] == "running"

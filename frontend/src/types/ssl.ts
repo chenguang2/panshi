@@ -16,6 +16,9 @@ export interface SslCertificate {
   updated_at?: string
   cluster_name?: string
   cluster_group_name?: string
+  gm?: boolean
+  sign_cert?: string
+  sign_key?: string
 }
 
 export interface SslCertificateCreate {
@@ -28,6 +31,9 @@ export interface SslCertificateCreate {
   key?: string
   ssl_protocols?: string
   description?: string
+  gm?: boolean
+  sign_cert?: string
+  sign_key?: string
 }
 
 export interface SslCertificateUpdate {
@@ -39,6 +45,9 @@ export interface SslCertificateUpdate {
   cert_type?: string
   ssl_protocols?: string
   description?: string
+  gm?: boolean
+  sign_cert?: string
+  sign_key?: string
 }
 
 export interface SslListResponse {

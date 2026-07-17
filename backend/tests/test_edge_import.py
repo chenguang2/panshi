@@ -695,6 +695,30 @@ class TestEdgeImportConverters:
         result = service.convert_ssl_certificate(edge_ssl)
         assert result["ssl_certificate"]["sni"] == "example.com"
 
+    def test_convert_ssl_certificate_gm(self):
+        """convert_ssl_certificate should extract gm/sign_cert/sign_key when present."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_ssl = {
+            "key": "/edge/admin/ssl/gm-cert",
+            "value": {
+                "id": "gm-cert",
+                "cert": "enc-crt",
+                "key": "enc-key",
+                "certs": ["sign-crt"],
+                "keys": ["sign-key"],
+                "gm": True,
+            },
+        }
+        result = service.convert_ssl_certificate(edge_ssl)
+        cert = result["ssl_certificate"]
+        assert cert["gm"] is True
+        assert cert["sign_cert"] == "sign-crt"
+        assert cert["sign_key"] == "sign-key"
+        assert cert["cert"] == "enc-crt"
+
     @patch("app.services.edge_import_service._load_builtin_names")
     def test_convert_route_with_plugins(self, mock_load):
         mock_load.return_value = {"limit-req", "cors", "proxy_rewrite"}

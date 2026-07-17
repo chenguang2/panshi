@@ -14,6 +14,9 @@ class SslCertificateBase(BaseModel):
     private_key: str = Field(default="", alias="key")
     ssl_protocols: Optional[str] = None
     description: Optional[str] = None
+    gm: bool = False
+    sign_cert: Optional[str] = None
+    sign_key: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -25,6 +28,13 @@ class SslCertificateCreate(SslCertificateBase):
     cert: str = Field(..., min_length=1)
     private_key: str = Field(..., min_length=1, alias="key")
 
+    @field_validator("sign_cert", "sign_key")
+    @classmethod
+    def validate_gm_fields(cls, v, info):
+        if info.data.get("gm") and not (v or "").strip():
+            raise ValueError("国密模式下签名证书和签名私钥为必填")
+        return v or ""
+
 
 class SslCertificateUpdate(BaseModel):
     name: Optional[str] = None
@@ -34,6 +44,9 @@ class SslCertificateUpdate(BaseModel):
     cert_type: Optional[str] = None
     ssl_protocols: Optional[str] = None
     description: Optional[str] = None
+    gm: Optional[bool] = None
+    sign_cert: Optional[str] = None
+    sign_key: Optional[str] = None
 
     class Config:
         populate_by_name = True

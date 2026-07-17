@@ -137,6 +137,9 @@ COLUMN_MIGRATIONS = [
     ("ps_stream_proxy", "retry_timeout", "INTEGER"),
     ("ps_stream_proxy", "proxy_type", "VARCHAR(10) DEFAULT 'normal'"),
     ("ps_stream_proxy", "dns_config", "TEXT"),
+    ("ps_ssl_certificate", "gm", "INTEGER DEFAULT 0"),
+    ("ps_ssl_certificate", "sign_cert", "TEXT"),
+    ("ps_ssl_certificate", "sign_key", "TEXT"),
 ]
 
 

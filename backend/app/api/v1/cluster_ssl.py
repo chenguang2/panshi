@@ -114,6 +114,10 @@ async def update_ssl_certificate(
     update_data = data.model_dump(exclude_unset=True)
     for k, v in update_data.items():
         setattr(cert, k, v)
+    # 取消国密时清空签名证书数据
+    if "gm" in update_data and not update_data["gm"]:
+        cert.sign_cert = None
+        cert.sign_key = None
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -171,6 +175,10 @@ async def publish_ssl_certificate(
             config_data["ssl_protocols"] = json.loads(cert.ssl_protocols)
         except (json.JSONDecodeError, TypeError):
             pass
+    if cert.gm:
+        config_data["certs"] = [cert.sign_cert] if cert.sign_cert else []
+        config_data["keys"] = [cert.sign_key] if cert.sign_key else []
+        config_data["gm"] = True
 
     new_version = await edge_sync.create_config_version(db, "ssl", cert_id, cluster_id, config_data, cert)
 
