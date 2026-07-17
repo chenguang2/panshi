@@ -40,7 +40,7 @@ interface UpstreamFormData {
   key: string
   checks: Record<string, unknown> | null
   retriesInput: number | undefined
-  retry_timeout: number
+  retry_timeout: number | undefined
   timeout: { connect: number | undefined; send: number | undefined; read: number | undefined }
   pass_host: string
   upstream_host: string

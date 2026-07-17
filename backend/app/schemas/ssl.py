@@ -1,6 +1,6 @@
 """SSL certificate Pydantic schemas."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -17,6 +17,7 @@ class SslCertificateBase(BaseModel):
     gm: bool = False
     sign_cert: Optional[str] = None
     sign_key: Optional[str] = None
+    create_method: str = "upload"
 
     class Config:
         populate_by_name = True
@@ -70,3 +71,23 @@ class SslCertificateResponse(SslCertificateBase):
 
     class Config:
         from_attributes = True
+
+
+class SslCertificateGenerateRequest(BaseModel):
+    """Request schema for SM2 certificate generation."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+    common_name: str = Field(..., min_length=1)
+    dns_sans: list[str] = Field(default_factory=list)
+    ip_sans: list[str] = Field(default_factory=list)
+    validity_days: int = Field(default=365, ge=1, le=36500)
+    dual_cert: bool = True
+    cert_type: str = Field(default="server", pattern=r"^(server|client)$")
+    mode: str = Field(..., pattern=r"^(local|remote)$")
+    node_id: int | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_remote_node_id(self):
+        if self.mode == "remote" and self.node_id is None:
+            raise ValueError("远程生成时必须指定节点 (node_id)")
+        return self

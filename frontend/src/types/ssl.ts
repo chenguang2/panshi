@@ -19,6 +19,19 @@ export interface SslCertificate {
   gm?: boolean
   sign_cert?: string
   sign_key?: string
+  create_method?: string
+}
+
+export interface SslCertificateGenerateRequest {
+  name: string
+  common_name: string
+  dns_sans?: string[]
+  ip_sans?: string[]
+  validity_days?: number
+  dual_cert?: boolean
+  cert_type?: string
+  mode: 'local' | 'remote'
+  node_id?: number | null
 }
 
 export interface SslCertificateCreate {

@@ -24,6 +24,7 @@ class SslCertificate(Base):
     sign_cert = Column(Text, nullable=True)
     sign_key = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)
+    create_method = Column(String(32), nullable=False, default="upload")
     status = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

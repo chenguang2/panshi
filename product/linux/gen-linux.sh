@@ -180,6 +180,20 @@ npm run build
 cp -r "$PROJECT_ROOT/frontend/dist/"* "$TARGET_DIR/frontend/dist/"
 echo "  前端构建产物已拷贝到: $TARGET_DIR/frontend/dist/"
 
+# ---------- 拷贝 Tongsuo openssl（国密证书生成用）----------
+echo ""
+echo "[5.5/5] 拷贝 Tongsuo openssl..."
+TONGSUO_SRC="$SCRIPT_DIR/tongsuo/bin/openssl"
+TONGSUO_DST="$TARGET_DIR/backend/bin/openssl"
+if [ -f "$TONGSUO_SRC" ]; then
+    mkdir -p "$TARGET_DIR/backend/bin"
+    cp "$TONGSUO_SRC" "$TONGSUO_DST"
+    chmod +x "$TONGSUO_DST"
+    echo "  Tongsuo openssl 已拷贝到: $TONGSUO_DST"
+else
+    echo "  警告: 未找到 $TONGSUO_SRC，跳过（国密证书本地生成将不可用）"
+fi
+
 # ---------- 拷贝启停脚本 ----------
 echo ""
 echo "拷贝启停脚本..."

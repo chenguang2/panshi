@@ -25,6 +25,14 @@
           <pre class="cert-preview">{{ cert.cert }}</pre>
           <a-divider>私钥内容 (PEM)</a-divider>
           <pre class="cert-preview">{{ cert.key || cert.private_key }}</pre>
+          <template v-if="cert.gm && cert.sign_cert">
+            <a-divider>签名证书 (sign_cert)</a-divider>
+            <pre class="cert-preview">{{ cert.sign_cert }}</pre>
+          </template>
+          <template v-if="cert.gm && cert.sign_key">
+            <a-divider>签名私钥 (sign_key)</a-divider>
+            <pre class="cert-preview">{{ cert.sign_key }}</pre>
+          </template>
         </div>
       </div>
       <div class="modal-footer">

@@ -2,7 +2,8 @@
   <div class="ssl-page">
     <PageHeader title="SSL 证书" description="管理 Edge 网关的 SSL 证书">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateDrawer">+ 添加证书</button>
+        <button class="btn btn-primary" @click="openCreateDrawer">+ 添加已有证书</button>
+        <button class="btn btn-primary" @click="openGenerateDialog" style="margin-left:8px;">生成国密证书</button>
       </template>
     </PageHeader>
 
@@ -50,7 +51,7 @@
         </div>
         <div class="ssl-card-body">
           <div class="ssl-card-row"><label>SNI</label><span>{{ cert.sni }}</span></div>
-          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.gm" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密</span></span></div>
+          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.gm && cert.sign_cert" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密双证书</span><span v-else-if="cert.gm" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密单证书</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span><span v-else-if="cert.create_method === 'remote_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">远程生成</span></span></div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
         <div class="ssl-card-actions">
@@ -68,6 +69,8 @@
 
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" />
 
+    <SslGenerateDialog :visible="generateVisible" :clusters="clusters" @close="generateVisible = false" @success="onGenerateSuccess" />
+
     <VersionManagementModal v-model:open="vmVisible" resource-type="ssl" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadCerts" @published="loadCerts" />
 
     <PublishConfirmModal v-model:visible="publishVisible" title="发布 SSL 证书" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
@@ -82,6 +85,7 @@ import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import SslFormDrawer from '@/components/SslFormDrawer.vue'
 import SslViewDrawer from '@/components/SslViewDrawer.vue'
+import SslGenerateDialog from '@/components/SslGenerateDialog.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
@@ -126,6 +130,7 @@ const displayedCerts = computed(() => {
 
 const formVisible = ref(false)
 const editingCert = ref<any | null>(null)
+const generateVisible = ref(false)
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
@@ -179,6 +184,8 @@ async function loadClusters() {
 function openCreateDrawer() { editingCert.value = null; formVisible.value = true }
 function openEditDrawer(cert: any) { editingCert.value = cert; formVisible.value = true }
 function closeForm() { formVisible.value = false; editingCert.value = null; loadCerts() }
+function openGenerateDialog() { generateVisible.value = true }
+function onGenerateSuccess() { generateVisible.value = false; loadCerts() }
 
 function viewCert(cert: any) {
   viewingCert.value = cert

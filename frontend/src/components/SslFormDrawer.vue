@@ -214,7 +214,8 @@ function validate(): boolean {
   if (sniTags.value.length === 0) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
   if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
   if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
-  if (form.gm) {
+  // 创建时国密模式要求签名证书必填；编辑时不强制（可能是单证书模式）
+  if (form.gm && !props.editingCert) {
     if (!form.sign_cert.trim()) { formErrors.sign_cert = '国密模式下请上传签名证书'; valid = false }
     if (!form.sign_key.trim()) { formErrors.sign_key = '国密模式下请上传签名私钥'; valid = false }
   }
@@ -244,7 +245,8 @@ watch(() => props.visible, (v) => {
     form.key = c.key || c.private_key || ''
     form.ssl_protocols = c.ssl_protocols ? (() => { try { return JSON.parse(c.ssl_protocols) } catch { return ['TLSv1.2', 'TLSv1.3'] } })() : ['TLSv1.2', 'TLSv1.3']
     form.description = c.description || ''
-    form.gm = c.gm || false
+    // gm 表示"国密双证书模式"：只有既有 gm 标记又有 sign_cert 时才视为双证书
+    form.gm = !!(c.gm && c.sign_cert)
     form.sign_cert = c.sign_cert || ''
     form.sign_key = c.sign_key || ''
   } else {
@@ -316,10 +318,10 @@ async function handleSubmit() {
       data.ssl_protocols = JSON.stringify(form.ssl_protocols)
     }
     if (props.editingCert) {
-      await updateSslCertificate(form.cluster_id, props.editingCert.id, data)
+      await updateSslCertificate(Number(form.cluster_id), props.editingCert.id, data)
       message.success('已更新')
     } else {
-      await createSslCertificate(form.cluster_id, data)
+      await createSslCertificate(Number(form.cluster_id), data)
       message.success('已创建')
     }
     emit('close')

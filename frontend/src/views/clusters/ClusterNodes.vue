@@ -483,7 +483,7 @@ function handleInstallEdge() {
     async () => {
       execTargetNode.value = node
       const installPrefix = node.edge_install_path || node.edge_path
-      const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix })
+      const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix || '' })
       execDrawerVisible.value = true
       execDrawerTitle.value = `\u5b89\u88c5 Edge - ${node.ip}`
       execLogs.value = []

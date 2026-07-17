@@ -44,6 +44,9 @@ product/linux/panshi/
 product/linux/panshi-*/
 product/mac/panshi/
 
+# Tongsuo openssl 二进制（国密证书生成）
+product/linux/tongsuo/bin/openssl
+
 # =============================================
 # logs
 logs/
