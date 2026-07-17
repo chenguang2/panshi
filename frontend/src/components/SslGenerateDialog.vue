@@ -149,7 +149,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  success: []
+  success: [cert: any]
 }>()
 
 const dnsInputRef = ref<HTMLInputElement | null>(null)
@@ -288,8 +288,8 @@ async function handleGenerate() {
     })
     setStepDone(4)
 
-    message.success('国密证书生成成功')
-    emit('success')
+    const certData = result?.data || result
+    emit('success', certData)
     handleClose()
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '生成失败'

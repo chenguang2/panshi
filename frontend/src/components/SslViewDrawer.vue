@@ -21,16 +21,28 @@
             </a-descriptions-item>
             <a-descriptions-item label="版本" v-if="cert.current_version">v{{ cert.current_version }}</a-descriptions-item>
           </a-descriptions>
-          <a-divider>证书内容 (PEM)</a-divider>
+          <div class="section-header">
+            <a-divider style="flex:1;min-width:0;">证书内容 (PEM)</a-divider>
+            <button class="btn btn-ghost btn-sm download-btn" @click="downloadCert('cert', cert.cert, `${cert.name}_cert.pem`)">📥 下载</button>
+          </div>
           <pre class="cert-preview">{{ cert.cert }}</pre>
-          <a-divider>私钥内容 (PEM)</a-divider>
+          <div class="section-header">
+            <a-divider style="flex:1;min-width:0;">私钥内容 (PEM)</a-divider>
+            <button class="btn btn-ghost btn-sm download-btn" @click="downloadCert('key', cert.key || cert.private_key, `${cert.name}_key.pem`)">📥 下载</button>
+          </div>
           <pre class="cert-preview">{{ cert.key || cert.private_key }}</pre>
           <template v-if="cert.gm && cert.sign_cert">
-            <a-divider>签名证书 (sign_cert)</a-divider>
+            <div class="section-header">
+              <a-divider style="flex:1;min-width:0;">签名证书 (sign_cert)</a-divider>
+              <button class="btn btn-ghost btn-sm download-btn" @click="downloadCert('sign_cert', cert.sign_cert, `${cert.name}_sign_cert.pem`)">📥 下载</button>
+            </div>
             <pre class="cert-preview">{{ cert.sign_cert }}</pre>
           </template>
           <template v-if="cert.gm && cert.sign_key">
-            <a-divider>签名私钥 (sign_key)</a-divider>
+            <div class="section-header">
+              <a-divider style="flex:1;min-width:0;">签名私钥 (sign_key)</a-divider>
+              <button class="btn btn-ghost btn-sm download-btn" @click="downloadCert('sign_key', cert.sign_key, `${cert.name}_sign_key.pem`)">📥 下载</button>
+            </div>
             <pre class="cert-preview">{{ cert.sign_key }}</pre>
           </template>
         </div>
@@ -44,6 +56,8 @@
 </template>
 
 <script setup lang="ts">
+import { downloadPem } from '@/utils/download'
+
 defineProps<{
   visible: boolean
   cert: any | null
@@ -52,9 +66,23 @@ defineProps<{
 defineEmits<{
   'update:visible': [value: boolean]
 }>()
+
+function downloadCert(_type: string, content: string, filename: string) {
+  if (content) downloadPem(content, filename)
+}
 </script>
 
 <style scoped>
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.download-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 12px;
+}
 .cert-preview {
   font-size: 11px;
   white-space: pre-wrap;

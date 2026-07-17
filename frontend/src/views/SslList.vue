@@ -56,6 +56,7 @@
         </div>
         <div class="ssl-card-actions">
           <button class="btn btn-ghost btn-sm ssl-action-btn" @click="viewCert(cert)">查看</button>
+          <button class="btn btn-ghost btn-sm ssl-action-btn" @click="openDownloadDialog(cert)">下载证书</button>
           <button class="btn btn-ghost btn-sm ssl-action-btn" @click="openEditDrawer(cert)">编辑</button>
           <button class="btn btn-ghost btn-sm ssl-action-btn" style="color:var(--danger);" @click="deleteCert(cert)">删除</button>
           <span style="flex:1"></span>
@@ -70,6 +71,8 @@
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" />
 
     <SslGenerateDialog :visible="generateVisible" :clusters="clusters" @close="generateVisible = false" @success="onGenerateSuccess" />
+
+    <SslCertDownloadDialog :visible="downloadVisible" :cert="downloadCertData" @close="downloadVisible = false" />
 
     <VersionManagementModal v-model:open="vmVisible" resource-type="ssl" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadCerts" @published="loadCerts" />
 
@@ -86,6 +89,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import SslFormDrawer from '@/components/SslFormDrawer.vue'
 import SslViewDrawer from '@/components/SslViewDrawer.vue'
 import SslGenerateDialog from '@/components/SslGenerateDialog.vue'
+import SslCertDownloadDialog from '@/components/SslCertDownloadDialog.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
@@ -131,6 +135,8 @@ const displayedCerts = computed(() => {
 const formVisible = ref(false)
 const editingCert = ref<any | null>(null)
 const generateVisible = ref(false)
+const downloadVisible = ref(false)
+const downloadCertData = ref<any | null>(null)
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
@@ -185,7 +191,18 @@ function openCreateDrawer() { editingCert.value = null; formVisible.value = true
 function openEditDrawer(cert: any) { editingCert.value = cert; formVisible.value = true }
 function closeForm() { formVisible.value = false; editingCert.value = null; loadCerts() }
 function openGenerateDialog() { generateVisible.value = true }
-function onGenerateSuccess() { generateVisible.value = false; loadCerts() }
+function openDownloadDialog(cert: any) { downloadCertData.value = cert; downloadVisible.value = true }
+function onGenerateSuccess(cert: any) {
+  generateVisible.value = false
+  loadCerts()
+  if (cert?.id) {
+    message.success({
+      content: '国密证书生成成功',
+      duration: 4,
+      onClick: () => viewCert(cert),
+    })
+  }
+}
 
 function viewCert(cert: any) {
   viewingCert.value = cert
