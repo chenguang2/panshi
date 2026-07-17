@@ -17,6 +17,6 @@
 
 - name: Manager pack-add
   shell:
-    cmd: "source /etc/profile; {{ item.1 }}/bin/manager pack-add {{ destpath.split(',')[item|int] }}/soft/{{ pack_file }};"
+    cmd: "source /etc/profile; {{ prefix.split(',')[item|int] }}/bin/manager pack-add {{ destpath.split(',')[item|int] }}/soft/{{ pack_file }};"
   loop: "{{ lookup('ansible.utils.index_of', ips.split(','), 'eq', inventory_hostname, wantlist=True) }}"
   tags: [edge_pack_add]
