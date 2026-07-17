@@ -2248,3 +2248,70 @@ docs/edge/user-guide/使用手册.md
 包括：大版本升级 upgrade 和 小版本升级的 pack-* 命令
 
 你研究一下文档和现在的系统情况，给出几个方案，如何做来实现呢？ 
+
+====================================
+
+请阅读文档: 
+docs/superpowers/specs/2026-07-16-edge-upgrade-design.md
+
+需要修改：
+1. 大版本升级 upgrade 时间上为有新的openresty 后，绑定新的openresty 并同步新的openresty中的配置模板，
+   按照这个功能起一个菜单名字
+2. 不用新建 `backend/ansible/roles/edge/tasks/manager_upgrade.yml` ，直接修改 upgrade_openresty.yml 文件
+3. 相关的名称，包括接口名等也改成一致的
+
+==================================
+
+edge-upgrade
+
+/brainstorming 请仔细阅读 openspec/changes/edge-upgrade/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/edge-upgrade/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+===================================
+
+使用 /opsx-propose 命令， 增加节点管理的 reload 功能
+
+在节点管理的列表页中，现在只有启动，停止，没有 reload 命令，参考启动/停止的实现 ，添加reload 命令
+reload 命令放在现在详情的位置， 详情放到更多菜单里，放在编辑的上面
+
+node-reload-button
+
+/brainstorming 请仔细阅读 openspec/changes/node-reload-button/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/node-reload-button/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+====================================
+
+请阅读文档中 
+docs/edge/user-guide/国密功能配置.md 
+
+目前系统已经实现了单证书认证，现在要实现国密（NTLS/TLCP）双证书的功能
+
+你研究一下现在的ssl 界面，看看如何加入，包括界面和api 部分， 给出几个方案，我看看 
+
+
+使用 /opsx-propose 命令, 来生成这个国密的需求
+
+ssl-gm-certificate
+
+/brainstorming 请仔细阅读 openspec/changes/ssl-gm-certificate/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/ssl-gm-certificate/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+
+# 这是一个更完善的命令示例（假设你已经有 openssl.cnf 配置文件）
+../openssl req -new -key sm2.key -out sm2.csr -sm3 \
+  -sigopt "sm2_id:1234567812345678" \
+  -subj "/C=CN/ST=Beijing/O=QCG/CN=qcg.com" \
+  -addext "subjectAltName=DNS:qcg.com"
