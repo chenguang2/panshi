@@ -3,80 +3,93 @@
 ## 概述
 
 在现有 Edge 安装功能（`manager install`）和已存在的 `upgrade_edge.yml`（自动化组合升级流）基础上，增加：
-- 大版本升级 `manager upgrade`（独立的 in-place 升级）
-- 小版本独立操作 `pack-list`、`pack-add`、`pack-rebase`
+- **关联新OpenResty**：安装新 OpenResty 后，将现有 Edge 实例绑定到新 OpenResty 并同步配置模板
+- **小版本管理**：独立暴露 `pack-list`、`pack-add`、`pack-rebase` 三个操作
 
 ## 现有基础设施
 
-`backend/ansible/roles/edge/tasks/upgrade_edge.yml` 已存在，做的是**组合升级流**：
+`backend/ansible/roles/edge/tasks/upgrade_openresty.yml` 已存在，跑的是 `manager upgrade`：
+```yaml
+cmd: "{{ item.1 }}/bin/manager upgrade {{ item.2 }}uap-edge"
+```
+本次在其基础上增加 `bin/edge init` 步骤（同步新 OpenResty 的配置模板），并补齐后端 endpoint 和前端入口。
+
+`backend/ansible/roles/edge/tasks/upgrade_edge.yml` 已存在，做的是**组合小版本升级流**：
 1. copy 文件到远端
 2. `manager pack-add`
 3. `manager pack-list`
 4. 提取第二行版本号
 5. `manager pack-rebase`
 
-这个保留不动。本次新增的是独立暴露的各操作。
+这个保留不动。本次新增的是独立暴露的 pack-* 操作。
 
 ## 操作入口
 
 节点操作下拉菜单新增两项：
 
 ```
-└─ 升级Edge大版本       — manager upgrade（独立）
-└─ 升级Edge小版本       — 弹出对话框
+└─ 关联新OpenResty              — 修改 upgrade_openresty.yml（manager upgrade + init）
+└─ 升级Edge小版本               — 弹出对话框
     ├─ 版本列表 (pack-list)
     ├─ 添加版本包 (pack-add)
     └─ 切换版本 (pack-rebase)
 ```
 
-## 1. 大版本升级 (manager_upgrade)
+## 1. 关联新OpenResty
+
+### 业务语义
+
+用户已安装新版本的 OpenResty（通过已有的 `install_openresty`），需要将现有 Edge 实例指向新 OpenResty，并同步新 OpenResty 中的配置模板。
+
+流程：
+1. `manager upgrade {edge_dir}` — 用新 OpenResty 的 manager 升级 Edge
+2. `bin/edge init` — 重新初始化，从新 OpenResty 同步配置模板
 
 ### Ansible
 
-新建 `backend/ansible/roles/edge/tasks/manager_upgrade.yml`（与 `install_edge.yml` 对称）：
+修改 `backend/ansible/roles/edge/tasks/upgrade_openresty.yml`，改用 `edge_target` 动态获取 Edge 目录名（支持 `uap-edge2` 等自定义命名），增加 init 步骤：
 
 ```yaml
-- name: upgrade edge
+- name: upgrade edge with new openresty
   shell:
     cmd: "source /etc/profile; install_dir={{ edge_target }}; parent_dir=$(dirname $install_dir); dir_name=$(basename $install_dir); cd $parent_dir; {{ item.1 }}/bin/manager upgrade $dir_name;"
   loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
   when: inventory_hostname == item.0
   tags:
-    - manager_upgrade
+    - upgrade_openresty
+
+- name: edge init (sync config templates from new openresty)
+  shell:
+    cmd: "source /etc/profile; cd {{ edge_target }}; bin/edge init;"
+  loop: "{{ ips.split(',') | zip(prefix.split(',')) | list }}"
+  when: inventory_hostname == item.0
+  tags:
+    - upgrade_openresty
 ```
-
-与 `install_edge.yml` 的区别仅在于 `install` → `upgrade`。
-
-在 `main.yml` 中 `import_tasks: manager_upgrade.yml`。
 
 ### 后端
-
-**`ansible_service.py`** — 新增方法：
-
-```python
-async def upgrade_edge(self, ip: str, prefix: str) -> dict[str, Any]:
-    """Execute manager_upgrade tag (manager upgrade)."""
-    ev = {"prefix": prefix}
-    return await self.run_playbook(ip, "manager_upgrade", ev)
-```
 
 **`cluster_install.py`** — 新增 endpoint：
 
 ```
-POST /clusters/{cluster_id}/nodes/{node_id}/manager-upgrade
-Body: { prefix: string }（prefix 由后端从 node.edge_install_path 自动填充）
+POST /clusters/{cluster_id}/nodes/{node_id}/associate-new-openresty
+Body: { prefix: string }
 
 → StreamingResponse (SSE)
 ```
 
-逻辑与 `install_edge_stream` 相同，仅 tag 改为 `manager_upgrade`。
+后端自动推导逻辑（与 `install_edge` 一致）：
+```python
+prefix = node.edge_install_path or body.prefix
+extravars = {"prefix": prefix, "edge_target": node.edge_path}
+```
 
 ### 前端
 
-**NodeList.vue / ClusterNodes.vue** 的节点操作下拉菜单新增 **"升级Edge大版本"** 按钮：
+**NodeList.vue / ClusterNodes.vue** 的节点操作下拉菜单新增 **"关联新OpenResty"** 按钮：
 
-- 点击 → `showConfirm` 确认对话框（显示升级路径）
-- 确认后 → `installStream.start()` 调用 `/manager-upgrade` endpoint
+- 点击 → 弹出确认对话框，显示当前 Edge 路径和将关联的新 OpenResty 路径
+- 确认后 → `installStream.start()` 调用 `/associate-new-openresty` endpoint
 - 走现有 `NodeExecutionResultDrawer` SSE 流式输出
 
 ## 2. 小版本管理
@@ -248,7 +261,6 @@ Body: { version: string }
 
 | 路径 | 说明 |
 |---|---|
-| `backend/ansible/roles/edge/tasks/manager_upgrade.yml` | `manager upgrade` 大版本升级 |
 | `backend/ansible/roles/edge/tasks/edge_pack_list.yml` | `pack-list` 小版本列表 |
 | `backend/ansible/roles/edge/tasks/edge_pack_add.yml` | `pack-add` 添加小版本包 |
 | `backend/ansible/roles/edge/tasks/edge_pack_rebase.yml` | `pack-rebase` 切换小版本 |
@@ -258,18 +270,18 @@ Body: { version: string }
 
 | 路径 | 说明 |
 |---|---|
-| `backend/app/services/ansible_service.py` | 新增 `manager_upgrade()` 方法 |
+| `backend/ansible/roles/edge/tasks/upgrade_openresty.yml` | 改用 `edge_target`，增加 `bin/edge init` 步骤 |
 | `backend/app/api/v1/cluster_install.py` | 新增 4 个 endpoint + edge-pack-files 路由 |
-| `frontend/src/views/NodeList.vue` | 新增"升级Edge大版本/小版本"菜单项 |
+| `frontend/src/views/NodeList.vue` | 新增"关联新OpenResty/升级Edge小版本"菜单项 |
 | `frontend/src/views/clusters/ClusterNodes.vue` | 同上 |
-| `backend/ansible/roles/edge/tasks/main.yml` | 新增 4 个 `import_tasks` |
-| `backend/ansible/roles/edge/tasks/install_edge.yml` | `edge_target` 改为 `edge_path`（对齐命名） |
+| `backend/ansible/roles/edge/tasks/main.yml` | 新增 `edge_pack_list/add/rebase` 的 `import_tasks` |
 
 ## 注意事项
 
-- `manager_upgrade` 是**大版本升级**（`manager upgrade`），和现有的 `upgrade_edge.yml`（自动化 pack-add + pack-rebase 组合流）不同
+- `upgrade_openresty.yml` 对应**关联新OpenResty**功能（`manager upgrade` + `bin/edge init`），不是 OpenResty 安装
+- `upgrade_edge.yml`（已存在）是自动化组合升级流（pack-add + rebase），本次新增的是独立 pack-* 操作
 - pack-add 的 copy 模式参照 `install_openresty.yml`，文件传到 `{destpath}/soft/` 下
 - pack-list 输出解析注意 `[*]` 前缀
 - pack-rebase 的 reload 用 `failed_when: false`
 - `edge-pack-files` 接口过滤模式：`edge-pack-*.tgz` / `edge-pack-*.tar.gz`
-- `manager_upgrade` 的 prefix 传递逻辑与 `install_edge` 一致（后端取 `node.edge_install_path`）
+- 所有 endpoint 的 prefix 传递逻辑与 `install_edge` 一致（后端取 `node.edge_install_path`）
