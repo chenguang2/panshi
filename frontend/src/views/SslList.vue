@@ -3,7 +3,7 @@
     <PageHeader title="SSL 证书" description="管理 Edge 网关的 SSL 证书">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateDrawer">+ 添加已有证书</button>
-        <button class="btn btn-primary" @click="openGenerateDialog" style="margin-left:8px;">生成国密证书</button>
+        <button class="btn btn-primary" @click="openGenerateDialog" style="margin-left:8px;">生成证书</button>
       </template>
     </PageHeader>
 
@@ -51,7 +51,7 @@
         </div>
         <div class="ssl-card-body">
           <div class="ssl-card-row"><label>SNI</label><span>{{ cert.sni }}</span></div>
-          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.gm && cert.sign_cert" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密双证书</span><span v-else-if="cert.gm" class="badge badge-primary" style="margin-left:6px;font-size:10px;">国密单证书</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span><span v-else-if="cert.create_method === 'remote_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">远程生成</span></span></div>
+          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.algorithm === 'sm2' && cert.sign_cert" class="badge badge-primary" style="margin-left:6px;font-size:10px;">SM2 双证书</span><span v-else-if="cert.algorithm === 'sm2'" class="badge badge-primary" style="margin-left:6px;font-size:10px;">SM2 单证书</span><span v-else-if="cert.algorithm === 'rsa'" class="badge badge-secondary" style="margin-left:6px;font-size:10px;">RSA 2048</span><span v-else-if="cert.algorithm === 'ecc'" class="badge badge-secondary" style="margin-left:6px;font-size:10px;">ECC P-256</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span><span v-else-if="cert.create_method === 'remote_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">远程生成</span></span></div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
         <div class="ssl-card-actions">
@@ -196,8 +196,10 @@ function onGenerateSuccess(cert: any) {
   generateVisible.value = false
   loadCerts()
   if (cert?.id) {
+    const algoLabel: Record<string, string> = { sm2: '国密', rsa: 'RSA', ecc: 'ECC' }
+    const label = algoLabel[cert.algorithm] || '证书'
     message.success({
-      content: '国密证书生成成功',
+      content: `${label}证书生成成功`,
       duration: 4,
       onClick: () => viewCert(cert),
     })
