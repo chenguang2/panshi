@@ -6,7 +6,7 @@
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="text-muted" style="margin-bottom:12px;">证书：{{ cert?.name }}<span v-if="cert?.algorithm" style="margin-left:8px;font-weight:600;">({{ {sm2:'SM2',rsa:'RSA 2048',ecc:'ECC P-256'}[cert.algorithm] || cert.algorithm }})</span></p>
+        <p class="text-muted" style="margin-bottom:12px;">证书：{{ cert?.name }}<span v-if="cert?.algorithm" style="margin-left:8px;font-weight:600;">({{ algoLabel(cert.algorithm) }})</span></p>
         <label class="checkbox-row" v-for="item in fileOptions" :key="item.key">
           <input type="checkbox" v-model="item.checked" :disabled="downloading">
           <span>{{ item.label }}</span>
@@ -73,6 +73,11 @@ async function handleDownload() {
   } finally {
     downloading.value = false
   }
+}
+
+const algoMap: Record<string, string> = { sm2: 'SM2', rsa: 'RSA 2048', ecc: 'ECC P-256' }
+function algoLabel(algo: string): string {
+  return algoMap[algo] || algo
 }
 
 function handleClose() {
