@@ -318,40 +318,26 @@ async def _generate_local(
     from app.services.cert_generator import LocalProvider
 
     provider = LocalProvider()
-    if not provider.sm2_supported:
+    if not provider.openssl_path:
         raise HTTPException(
             status_code=400,
-            detail="本地 openssl 不支持 SM2 曲线，请使用远程生成方式",
+            detail="本地无可用 openssl，请使用远程生成方式",
         )
 
     try:
-        if req.dual_cert:
-            result = provider.generate_dual_certificates(
-                common_name=req.common_name,
-                dns_sans=req.dns_sans or [],
-                ip_sans=req.ip_sans or [],
-                validity_days=req.validity_days,
-            )
-        else:
-            from app.services.cert_generator import (
-                generate_sm2_keypair, generate_csr, self_sign_certificate,
-            )
-            key_pem = generate_sm2_keypair(provider.openssl_path)
-            csr_pem = generate_csr(
-                provider.openssl_path, key_pem,
-                req.common_name, req.dns_sans or [], req.ip_sans or [],
-                provider.flavor,
-            )
-            cert_pem = self_sign_certificate(
-                provider.openssl_path, csr_pem, key_pem,
-                req.validity_days, provider.flavor,
-            )
-            result = {"cert": cert_pem, "key": key_pem}
-
+        result = provider.generate_certificate(
+            algorithm=req.algorithm,
+            common_name=req.common_name,
+            dns_sans=req.dns_sans or [],
+            ip_sans=req.ip_sans or [],
+            validity_days=req.validity_days,
+            dual_cert=req.dual_cert,
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
     # Save to database
+    is_gm = req.algorithm == "sm2"
     sni_str = ",".join(req.dns_sans or [])
     cert = SslCertificate(
         cluster_id=cluster_id,
@@ -360,9 +346,10 @@ async def _generate_local(
         cert=result.get("cert", ""),
         private_key=result.get("key", ""),
         cert_type=req.cert_type,
-        gm=True,
-        sign_cert=result.get("sign_cert"),
-        sign_key=result.get("sign_key"),
+        gm=is_gm,
+        algorithm=req.algorithm,
+        sign_cert=result.get("sign_cert") if is_gm else None,
+        sign_key=result.get("sign_key") if is_gm else None,
         create_method="local_generate",
     )
     db.add(cert)
@@ -379,12 +366,10 @@ async def _generate_remote(
     """Generate certificate using remote node's openssl (via SSH)."""
     from app.models.cluster import Node
 
-    # Get node
     node = await db.get(Node, req.node_id)
     if not node or node.cluster_id != cluster_id:
         raise HTTPException(status_code=400, detail="指定节点不属于该集群")
 
-    # Build remote openssl commands
     from app.services.ansible_service import (
         get_ssh_user, get_ssh_password, _run_ssh_with_fallback,
     )
@@ -393,26 +378,33 @@ async def _generate_remote(
     ssh_password = get_ssh_password(node.ip)
     remote_openssl = f"{node.edge_install_path}/bin/openssl" if node.edge_install_path else "openssl"
 
-    # First check SM2 support
-    check_cmd = f"{remote_openssl} ecparam -list_curves 2>&1 | grep SM2 || true"
+    # Check openssl availability
+    check_cmd = f"{remote_openssl} version 2>&1 || true"
     rc, stdout, stderr = await _run_ssh_with_fallback(
         node.ip, ssh_user, check_cmd, password=ssh_password,
     )
-    if "SM2" not in stdout:
+    if not stdout or "openssl" not in stdout.lower():
         raise HTTPException(
             status_code=400,
-            detail=f"节点 {node.ip} 的 openssl 不支持 SM2 曲线",
+            detail=f"节点 {node.ip} 的 openssl 不可用",
         )
 
-    # Get openssl version for flavor detection
-    ver_cmd = f"{remote_openssl} version"
-    rc, ver_stdout, _ = await _run_ssh_with_fallback(
-        node.ip, ssh_user, ver_cmd, password=ssh_password,
-    )
-    flavor = "tongsuo" if "tongsuo" in ver_stdout.lower() or "babassl" in ver_stdout.lower() else "standard"
+    flavor = "tongsuo" if "tongsuo" in stdout.lower() or "babassl" in stdout.lower() else "standard"
+
+    # For SM2, verify SM2 curve support
+    if req.algorithm == "sm2":
+        sm2_check = f"{remote_openssl} ecparam -list_curves 2>&1 | grep SM2 || true"
+        rc, sm2_stdout, _ = await _run_ssh_with_fallback(
+            node.ip, ssh_user, sm2_check, password=ssh_password,
+        )
+        if "SM2" not in sm2_stdout:
+            raise HTTPException(
+                status_code=400,
+                detail=f"节点 {node.ip} 的 openssl 不支持 SM2 曲线",
+            )
 
     try:
-        if req.dual_cert:
+        if req.algorithm == "sm2" and req.dual_cert:
             result = await _remote_generate_dual(
                 node.ip, ssh_user, ssh_password, remote_openssl,
                 req.common_name, req.dns_sans or [], req.ip_sans or [],
@@ -423,11 +415,12 @@ async def _generate_remote(
                 node.ip, ssh_user, ssh_password, remote_openssl,
                 req.common_name, req.dns_sans or [], req.ip_sans or [],
                 req.validity_days, flavor,
+                algorithm=req.algorithm,
             )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Save to database
+    is_gm = req.algorithm == "sm2"
     sni_str = ",".join(req.dns_sans or [])
     cert = SslCertificate(
         cluster_id=cluster_id,
@@ -436,9 +429,10 @@ async def _generate_remote(
         cert=result.get("cert", ""),
         private_key=result.get("key", ""),
         cert_type=req.cert_type,
-        gm=True,
-        sign_cert=result.get("sign_cert"),
-        sign_key=result.get("sign_key"),
+        gm=is_gm,
+        algorithm=req.algorithm,
+        sign_cert=result.get("sign_cert") if is_gm else None,
+        sign_key=result.get("sign_key") if is_gm else None,
         create_method="remote_generate",
     )
     db.add(cert)
@@ -471,13 +465,17 @@ async def _remote_generate_single(
     openssl: str, common_name: str,
     dns_sans: list[str], ip_sans: list[str],
     validity_days: int, flavor: str,
+    algorithm: str = "sm2",
 ) -> dict:
-    """Generate a single SM2 certificate remotely via SSH."""
-    sigopt = _sigopt_flag(flavor)
+    """Generate a single certificate remotely via SSH."""
     san_opt = _san_arg(dns_sans, ip_sans)
     tmpdir = f"/tmp/panshi_gen_{os.urandom(4).hex()}"
+    cn_quoted = shlex.quote(common_name)
+    subj = shlex.quote(f"/CN={common_name}")
 
-    script = f"""set -e
+    if algorithm == "sm2":
+        sigopt = _sigopt_flag(flavor)
+        script = f"""set -e
 mkdir -p {tmpdir}
 cd {tmpdir}
 {openssl} ecparam -genkey -name SM2 -out key.pem
@@ -488,10 +486,50 @@ string_mask = utf8only
 default_md = sm3
 prompt = no
 [ req_distinguished_name ]
-commonName = {shlex.quote(common_name)}
+commonName = {cn_quoted}
 CNF
-{openssl} req -new -key key.pem -out request.csr -sm3 -subj {shlex.quote(f"/CN={common_name}")} -config openssl.cnf -nodes {sigopt} {san_opt}
+{openssl} req -new -key key.pem -out request.csr -sm3 -subj {subj} -config openssl.cnf -nodes {sigopt} {san_opt}
 {openssl} x509 -req -in request.csr -signkey key.pem -out cert.crt -sm3 -days {validity_days} {sigopt}
+cat cert.crt
+echo "---KEY---"
+cat key.pem
+rm -rf {tmpdir}
+"""
+    elif algorithm == "rsa":
+        script = f"""set -e
+mkdir -p {tmpdir}
+cd {tmpdir}
+cat > openssl.cnf << 'CNF'
+[ req ]
+distinguished_name = req_distinguished_name
+string_mask = utf8only
+default_md = sha256
+prompt = no
+[ req_distinguished_name ]
+commonName = {cn_quoted}
+CNF
+{openssl} genrsa -out key.pem 2048
+{openssl} req -new -x509 -key key.pem -out cert.crt -days {validity_days} -subj {subj} -sha256 -config openssl.cnf {san_opt}
+cat cert.crt
+echo "---KEY---"
+cat key.pem
+rm -rf {tmpdir}
+"""
+    else:
+        script = f"""set -e
+mkdir -p {tmpdir}
+cd {tmpdir}
+cat > openssl.cnf << 'CNF'
+[ req ]
+distinguished_name = req_distinguished_name
+string_mask = utf8only
+default_md = sha256
+prompt = no
+[ req_distinguished_name ]
+commonName = {cn_quoted}
+CNF
+{openssl} ecparam -genkey -name prime256v1 -out key.pem
+{openssl} req -new -x509 -key key.pem -out cert.crt -days {validity_days} -subj {subj} -sha256 -config openssl.cnf {san_opt}
 cat cert.crt
 echo "---KEY---"
 cat key.pem

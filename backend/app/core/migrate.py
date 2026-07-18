@@ -141,6 +141,7 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "sign_cert", "TEXT"),
     ("ps_ssl_certificate", "sign_key", "TEXT"),
     ("ps_ssl_certificate", "create_method", "VARCHAR(32) DEFAULT 'upload'"),
+    ("ps_ssl_certificate", "algorithm", "VARCHAR(16)"),
 ]
 
 
@@ -193,8 +194,41 @@ def run_migrations(engine: Engine) -> None:
     # Ensure ForeignKey on ps_ssl_certificate.cluster_id (existing tables may lack it)
     _ensure_ssl_foreign_key(engine)
 
+    # Backfill algorithm column for existing certificates
+    _backfill_cert_algorithm(engine)
+
     if not migrated_any:
         logger.info("All schema constraints check passed")
+
+def _backfill_cert_algorithm(engine: Engine) -> None:
+    """Detect and fill algorithm for SSL certificates missing it."""
+    from app.services.cert_generator import detect_cert_algorithm, detect_openssl
+    openssl_info = detect_openssl()
+    if not openssl_info["path"]:
+        return
+    with engine.connect() as conn:
+        try:
+            inspector = inspect(engine)
+            columns = [c["name"] for c in inspector.get_columns("ps_ssl_certificate")]
+            if "algorithm" not in columns:
+                return
+            result = conn.execute(
+                text("SELECT id, cert FROM ps_ssl_certificate WHERE algorithm IS NULL")
+            )
+            rows = result.fetchall()
+            for row in rows:
+                cert_id, cert_pem = row
+                algo = detect_cert_algorithm(cert_pem)
+                if algo:
+                    conn.execute(
+                        text("UPDATE ps_ssl_certificate SET algorithm = :algo WHERE id = :id"),
+                        {"algo": algo, "id": cert_id},
+                    )
+            if rows:
+                conn.commit()
+                logger.info("Backfilled algorithm for %d SSL certificates", len(rows))
+        except Exception as e:
+            logger.warning("Could not backfill certificate algorithms: %s", e)
 
 
 def _migrate_null_group_name(engine: Engine) -> None:

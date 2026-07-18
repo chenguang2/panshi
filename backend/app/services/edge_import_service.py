@@ -619,6 +619,19 @@ class EdgeImportService:
             import json as _json
             ssl_protocols = _json.dumps(sp) if isinstance(sp, list) else str(sp)
 
+        gm_val = raw_data.get("gm", False)
+        if gm_val:
+            algorithm = "sm2"
+        else:
+            algorithm = None
+            cert_pem = raw_data.get("cert", "")
+            if cert_pem:
+                try:
+                    from app.services.cert_generator import detect_cert_algorithm
+                    algorithm = detect_cert_algorithm(cert_pem)
+                except Exception:
+                    pass
+
         return {
             "ssl_certificate": {
                 "edge_uuid": ssl_id,
@@ -631,7 +644,8 @@ class EdgeImportService:
                 "ssl_protocols": ssl_protocols,
                 "status": raw_data.get("status", 1),
                 "current_version": None,
-                "gm": raw_data.get("gm", False),
+                "gm": gm_val,
+                "algorithm": algorithm,
                 "sign_cert": (raw_data.get("certs") or [None])[0] or "",
                 "sign_key": (raw_data.get("keys") or [None])[0] or "",
             },
