@@ -21,6 +21,7 @@ class SslCertificate(Base):
     ssl_protocols = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     gm = Column(Boolean, nullable=False, default=False)
+    algorithm = Column(String(16), nullable=True)
     sign_cert = Column(Text, nullable=True)
     sign_key = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)

@@ -61,6 +61,7 @@ def detect_openssl() -> dict:
         - version: str      (version string, empty if not found)
         - sm2_supported: bool
         - flavor: str       ("tongsuo" | "standard" | "unknown")
+        - available: bool   (True if any openssl binary was found)
     """
     candidates = []
 
@@ -87,9 +88,10 @@ def detect_openssl() -> dict:
                 "version": version,
                 "sm2_supported": sm2,
                 "flavor": flavor,
+                "available": True,
             }
 
-    # No SM2-capable openssl found
+    # No SM2-capable openssl found, but may have plain openssl
     if candidates:
         last = candidates[0]
         flavor = _detect_flavor(last)
@@ -103,6 +105,7 @@ def detect_openssl() -> dict:
             "version": version,
             "sm2_supported": False,
             "flavor": flavor,
+            "available": True,
         }
 
     return {
@@ -110,24 +113,51 @@ def detect_openssl() -> dict:
         "version": "",
         "sm2_supported": False,
         "flavor": "unknown",
+        "available": False,
     }
 
 
-def generate_openssl_cnf(common_name: str) -> str:
-    """Generate a minimal openssl.cnf for SM2 CSR generation.
-
-    Tongsuo's openssl requires a config file because its compiled-in
-    default path does not exist on the target system.
-    """
+def generate_openssl_cnf(common_name: str, hash_alg: str = "sm3") -> str:
+    """Generate a minimal openssl.cnf for CSR generation."""
     return f"""[ req ]
 distinguished_name = req_distinguished_name
 string_mask = utf8only
-default_md = sm3
+default_md = {hash_alg}
 prompt = no
 
 [ req_distinguished_name ]
 commonName = {common_name}
 """
+
+
+def generate_rsa_keypair(openssl_path: str) -> str:
+    """Generate an RSA 2048-bit key pair and return the private key PEM."""
+    with tempfile.TemporaryDirectory(prefix="panshi_rsa_") as tmpdir:
+        key_file = Path(tmpdir) / "rsa.key"
+        result = _run_openssl(
+            ["genrsa", "-out", str(key_file), "2048"],
+            openssl_path,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"RSA key generation failed: {result.stderr.strip()}"
+            )
+        return key_file.read_text()
+
+
+def generate_ecdsa_keypair(openssl_path: str) -> str:
+    """Generate an ECDSA P-256 key pair and return the private key PEM."""
+    with tempfile.TemporaryDirectory(prefix="panshi_ecc_") as tmpdir:
+        key_file = Path(tmpdir) / "ecc.key"
+        result = _run_openssl(
+            ["ecparam", "-genkey", "-name", "prime256v1", "-out", str(key_file)],
+            openssl_path,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"ECDSA key generation failed: {result.stderr.strip()}"
+            )
+        return key_file.read_text()
 
 
 def generate_sm2_keypair(openssl_path: str) -> str:
@@ -145,15 +175,16 @@ def generate_sm2_keypair(openssl_path: str) -> str:
         return key_file.read_text()
 
 
-def _sigopt_args(flavor: str) -> list[str]:
-    """Return extra args for SM2 signing based on openssl flavor.
-    
-    Tongsuo/BabaSSL requires -sigopt for SM2 ID,
-    standard OpenSSL 3.x uses a built-in default.
-    """
-    if flavor == "tongsuo":
+def _sigopt_args(flavor: str, hash_alg: str = "sm3") -> list[str]:
+    if flavor == "tongsuo" and hash_alg == "sm3":
         return ["-sigopt", "sm2_id:1234567812345678"]
     return []
+
+
+def _digest_flag(hash_alg: str) -> list[str]:
+    if hash_alg == "sm3":
+        return ["-sm3"]
+    return [f"-{hash_alg}"]
 
 
 def _build_san_args(dns_sans: list[str], ip_sans: list[str]) -> str:
@@ -173,8 +204,9 @@ def generate_csr(
     dns_sans: list[str],
     ip_sans: list[str],
     flavor: str,
+    hash_alg: str = "sm3",
 ) -> str:
-    """Generate a CSR using the given SM2 private key."""
+    """Generate a CSR using the given private key."""
     with tempfile.TemporaryDirectory(prefix="panshi_csr_") as tmpdir:
         tmp = Path(tmpdir)
         key_file = tmp / "key.pem"
@@ -182,21 +214,21 @@ def generate_csr(
         cnf_file = tmp / "openssl.cnf"
 
         key_file.write_text(key_pem)
-        cnf_file.write_text(generate_openssl_cnf(common_name))
+        cnf_file.write_text(generate_openssl_cnf(common_name, hash_alg=hash_alg))
 
         cmd = [
             "req", "-new",
             "-key", str(key_file),
             "-out", str(csr_file),
-            "-sm3",
             "-subj", f"/CN={common_name}",
             "-config", str(cnf_file),
             "-nodes",
         ]
+        cmd.extend(_digest_flag(hash_alg))
         san = _build_san_args(dns_sans, ip_sans)
         if san:
             cmd.extend(["-addext", f"subjectAltName={san}"])
-        cmd.extend(_sigopt_args(flavor))
+        cmd.extend(_sigopt_args(flavor, hash_alg))
 
         result = _run_openssl(cmd, openssl_path)
         if result.returncode != 0:
@@ -211,8 +243,9 @@ def self_sign_certificate(
     key_pem: str,
     validity_days: int,
     flavor: str,
+    hash_alg: str = "sm3",
 ) -> str:
-    """Self-sign a CSR to produce an SM2 certificate."""
+    """Self-sign a CSR to produce a certificate."""
     with tempfile.TemporaryDirectory(prefix="panshi_cert_") as tmpdir:
         tmp = Path(tmpdir)
         csr_file = tmp / "request.csr"
@@ -227,10 +260,10 @@ def self_sign_certificate(
             "-in", str(csr_file),
             "-signkey", str(key_file),
             "-out", str(cert_file),
-            "-sm3",
             "-days", str(validity_days),
         ]
-        cmd.extend(_sigopt_args(flavor))
+        cmd.extend(_digest_flag(hash_alg))
+        cmd.extend(_sigopt_args(flavor, hash_alg))
 
         result = _run_openssl(cmd, openssl_path)
         if result.returncode != 0:
@@ -285,9 +318,10 @@ def generate_dual_certificates(
 
 
 class LocalProvider:
-    """SM2 certificate generation using local openssl.
+    """Certificate generation using local openssl.
 
     Auto-detects the best available openssl binary.
+    Supports SM2, RSA, and ECDSA algorithms.
     """
 
     def __init__(self):
@@ -296,6 +330,54 @@ class LocalProvider:
         self.flavor = info["flavor"]
         self.sm2_supported = info["sm2_supported"]
         self.version = info["version"]
+        self.available = info["available"]
+
+    def generate_certificate(
+        self,
+        algorithm: str = "sm2",
+        common_name: str = "",
+        dns_sans: list[str] | None = None,
+        ip_sans: list[str] | None = None,
+        validity_days: int = 365,
+        dual_cert: bool = True,
+    ) -> dict:
+        if not self.openssl_path:
+            raise RuntimeError("No openssl binary available")
+
+        if algorithm == "sm2":
+            if not self.sm2_supported:
+                raise RuntimeError("Openssl does not support SM2 curve")
+            if dual_cert:
+                return generate_dual_certificates(
+                    openssl_path=self.openssl_path,
+                    common_name=common_name,
+                    dns_sans=dns_sans or [],
+                    ip_sans=ip_sans or [],
+                    validity_days=validity_days,
+                    flavor=self.flavor,
+                )
+            else:
+                key_pem = generate_sm2_keypair(self.openssl_path)
+                csr_pem = generate_csr(
+                    self.openssl_path, key_pem,
+                    common_name, dns_sans or [], ip_sans or [],
+                    self.flavor, hash_alg="sm3",
+                )
+                cert_pem = self_sign_certificate(
+                    self.openssl_path, csr_pem, key_pem,
+                    validity_days, self.flavor, hash_alg="sm3",
+                )
+                return {"cert": cert_pem, "key": key_pem}
+        else:
+            return generate_standard_certificate(
+                openssl_path=self.openssl_path,
+                common_name=common_name,
+                dns_sans=dns_sans or [],
+                ip_sans=ip_sans or [],
+                validity_days=validity_days,
+                flavor=self.flavor,
+                algorithm=algorithm,
+            )
 
     def generate_dual_certificates(
         self,
@@ -304,19 +386,72 @@ class LocalProvider:
         ip_sans: list[str] | None = None,
         validity_days: int = 365,
     ) -> dict:
-        """Generate SM2 dual certificates using local openssl."""
-        if not self.openssl_path:
-            raise RuntimeError("No openssl binary available")
-        if not self.sm2_supported:
-            raise RuntimeError("Openssl does not support SM2 curve")
-        return generate_dual_certificates(
-            openssl_path=self.openssl_path,
+        return self.generate_certificate(
+            algorithm="sm2", dual_cert=True,
             common_name=common_name,
-            dns_sans=dns_sans or [],
-            ip_sans=ip_sans or [],
+            dns_sans=dns_sans, ip_sans=ip_sans,
             validity_days=validity_days,
-            flavor=self.flavor,
         )
+
+def generate_standard_certificate(
+    openssl_path: str,
+    common_name: str,
+    dns_sans: list[str],
+    ip_sans: list[str],
+    validity_days: int,
+    flavor: str,
+    algorithm: str = "rsa",
+) -> dict:
+    """Generate a single standard certificate (RSA or ECDSA).
+
+    Returns dict with keys: cert, key (sign_cert and sign_key are None).
+    """
+    if algorithm == "rsa":
+        key_pem = generate_rsa_keypair(openssl_path)
+    else:
+        key_pem = generate_ecdsa_keypair(openssl_path)
+
+    csr_pem = generate_csr(
+        openssl_path, key_pem,
+        common_name, dns_sans, ip_sans, flavor,
+        hash_alg="sha256",
+    )
+    cert_pem = self_sign_certificate(
+        openssl_path, csr_pem, key_pem,
+        validity_days, flavor,
+        hash_alg="sha256",
+    )
+    return {"cert": cert_pem, "key": key_pem}
+
+
+def detect_cert_algorithm(cert_pem: str) -> str:
+    """Detect certificate algorithm from PEM content.
+
+    Returns 'rsa', 'ecc', or 'sm2' based on the Signature Algorithm field.
+    """
+    openssl_info = detect_openssl()
+    if not openssl_info["path"]:
+        return ""
+
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory(prefix="panshi_detect_") as tmpdir:
+        cert_file = Path(tmpdir) / "cert.pem"
+        cert_file.write_text(cert_pem)
+        result = _run_openssl(
+            ["x509", "-in", str(cert_file), "-text", "-noout"],
+            openssl_info["path"],
+        )
+        output = result.stdout
+
+        if "sm2-with-SM3" in output or "SM2-with-SM3" in output:
+            return "sm2"
+        if "ecdsa-with-SHA256" in output or "ecdsa-with-SHA384" in output:
+            return "ecc"
+        if "sha256WithRSAEncryption" in output or "sha384WithRSAEncryption" in output or "sha512WithRSAEncryption" in output:
+            return "rsa"
+
+        return ""
 
 
 def _find_on_path(name: str) -> str | None:

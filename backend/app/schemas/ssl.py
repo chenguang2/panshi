@@ -15,6 +15,7 @@ class SslCertificateBase(BaseModel):
     ssl_protocols: Optional[str] = None
     description: Optional[str] = None
     gm: bool = False
+    algorithm: Optional[str] = None
     sign_cert: Optional[str] = None
     sign_key: Optional[str] = None
     create_method: str = "upload"
@@ -36,6 +37,18 @@ class SslCertificateCreate(SslCertificateBase):
             raise ValueError("国密模式下签名证书和签名私钥为必填")
         return v or ""
 
+    @model_validator(mode="after")
+    def auto_detect_algorithm(self):
+        if not self.algorithm and self.cert:
+            try:
+                from app.services.cert_generator import detect_cert_algorithm
+                algo = detect_cert_algorithm(self.cert)
+                if algo:
+                    self.algorithm = algo
+            except Exception:
+                pass
+        return self
+
 
 class SslCertificateUpdate(BaseModel):
     name: Optional[str] = None
@@ -46,6 +59,7 @@ class SslCertificateUpdate(BaseModel):
     ssl_protocols: Optional[str] = None
     description: Optional[str] = None
     gm: Optional[bool] = None
+    algorithm: Optional[str] = None
     sign_cert: Optional[str] = None
     sign_key: Optional[str] = None
 
@@ -74,7 +88,7 @@ class SslCertificateResponse(SslCertificateBase):
 
 
 class SslCertificateGenerateRequest(BaseModel):
-    """Request schema for SM2 certificate generation."""
+    """Request schema for certificate generation."""
 
     name: str = Field(..., min_length=1, max_length=100)
     common_name: str = Field(..., min_length=1)
@@ -85,6 +99,7 @@ class SslCertificateGenerateRequest(BaseModel):
     cert_type: str = Field(default="server", pattern=r"^(server|client)$")
     mode: str = Field(..., pattern=r"^(local|remote)$")
     node_id: int | None = Field(default=None)
+    algorithm: str = Field(default="sm2", pattern=r"^(sm2|rsa|ecc)$")
 
     @model_validator(mode="after")
     def validate_remote_node_id(self):
