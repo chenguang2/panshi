@@ -34,6 +34,8 @@ class TestSslCertificateModel:
         assert cert.cert_type == "server"
         assert cert.status == 1
         assert cert.created_at is not None
+        # algorithm field exists (may be None for old records)
+        assert hasattr(cert, "algorithm")
 
     async def test_create_ssl_full(self, test_db):
         cert = SslCertificate(
