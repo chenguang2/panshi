@@ -803,9 +803,10 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         equal = db_v == edge_v
         fields.append({"name": "sni", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
-        # cert_type → type — Edge 没有 type 时默认 server
-        db_v = db_cert.cert_type or "server"
-        edge_v = edge_data.get("type", "server") or "server"
+        # cert_type → type
+        ct_default = _rules.get_field_default("ssl_certificate", "cert_type") or ""
+        db_v = db_cert.cert_type or ct_default
+        edge_v = edge_data.get("type", ct_default) or ""
         equal = str(db_v) == str(edge_v)
         fields.append({"name": "cert_type", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
@@ -822,8 +823,9 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         fields.append({"name": "private_key", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
         # status
-        db_v = db_cert.status
-        edge_v = edge_data.get("status", 1)
+        s_default = _rules.get_field_default("ssl_certificate", "status")
+        db_v = db_cert.status if db_cert.status is not None else s_default
+        edge_v = edge_data.get("status", s_default)
         equal = str(db_v) == str(edge_v)
         fields.append({"name": "status", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 

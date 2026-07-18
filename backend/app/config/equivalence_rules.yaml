@@ -185,6 +185,14 @@ plugin_metadata:
   ignore_edge_fields:
     - id
 
+ssl_certificate:
+  field_aliases:
+    cert_type: type
+    private_key: key
+  field_defaults:
+    cert_type: server
+    status: 1
+
 global_rule:
   json_field: plugins
   ignore_edge_plugin_fields:
