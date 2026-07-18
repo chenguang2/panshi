@@ -2,7 +2,7 @@ import { ref, reactive, computed, watch, h } from 'vue'
 import type { Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
-import type { Cluster, Upstream, Route } from '@/types'
+import type { Cluster, Upstream, Route, HealthCheckConfig } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
@@ -10,7 +10,7 @@ import { PAGE_SIZE_DROPDOWN } from '@/constants'
 interface UpstreamExtras {
   hash_on?: string
   key?: string
-  checks?: string | Record<string, unknown>
+  checks?: string | HealthCheckConfig
   retries?: number
   retry_timeout?: number
   timeout?: string | { connect?: number; send?: number; read?: number }
@@ -38,7 +38,7 @@ interface UpstreamFormData {
   targets: UpstreamTargetForm[]
   hash_on: string
   key: string
-  checks: Record<string, unknown> | null
+  checks: HealthCheckConfig | null
   retriesInput: number | undefined
   retry_timeout: number | undefined
   timeout: { connect: number | undefined; send: number | undefined; read: number | undefined }
@@ -138,18 +138,9 @@ const formErrors = reactive<Record<string, string>>({})
 
   let upstreamTargetKey = 0
 
-  const defaultChecksObj = {
-    passive: {},
-    active: {
-      unhealthy: {},
-    },
-  }
-
-  const defaultChecksJson = JSON.stringify(defaultChecksObj, null, 2)
+  const checksMode = ref<'active' | 'passive' | 'both'>('active')
 
   const defaultTimeout = { connect: 6, send: 6, read: 6 }
-
-  const checksJson = ref(defaultChecksJson)
 
   const allUpstreamColumns = [
     { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
@@ -207,14 +198,6 @@ const formErrors = reactive<Record<string, string>>({})
       }
     },
   )
-
-  watch(checksJson, (newVal) => {
-    try {
-      upstreamForm.checks = JSON.parse(newVal) as Record<string, unknown>
-    } catch {
-      // Invalid JSON, don't update
-    }
-  })
 
   // ── Core: load upstreams ──
   const loadUpstreams = async (cluster: Cluster) => {
@@ -379,9 +362,8 @@ const formErrors = reactive<Record<string, string>>({})
     formErrors.retry_timeout = ''
     formErrors.pass_host = ''
     let valid = true
-    if (toggleChecks.value) {
-      try { JSON.parse(checksJson.value) }
-      catch { formErrors.checks = 'JSON 格式不正确，请检查'; valid = false }
+    if (toggleChecks.value && !upstreamForm.checks) {
+      formErrors.checks = '健康检查配置不完整'; valid = false
     }
     if (toggleTimeout.value) {
       const cv = readDomValue('connect')
@@ -448,9 +430,8 @@ const formErrors = reactive<Record<string, string>>({})
     toggleHost.value = false
     toggleScheme.value = false
     retriesRadio.value = 'auto'
-    const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    upstreamForm.checks = defaultParsed
-    checksJson.value = defaultChecksJson
+    checksMode.value = 'active'
+    upstreamForm.checks = null  // null = use HealthCheckForm defaults when toggled on
     upstreamForm.retriesInput = undefined
     upstreamForm.retry_timeout = 0
     upstreamForm.timeout = { ...defaultTimeout }
@@ -498,12 +479,15 @@ const formErrors = reactive<Record<string, string>>({})
     toggleChecks.value = u.checks !== null && u.checks !== undefined && u.checks !== '{}'
     if (u.checks) {
       const checksObj = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
-      upstreamForm.checks = checksObj as Record<string, unknown>
-      checksJson.value = JSON.stringify(checksObj, null, 2)
+      upstreamForm.checks = checksObj as HealthCheckConfig
+      const c = checksObj as HealthCheckConfig
+      if (c.active && c.passive) checksMode.value = 'both'
+      else if (c.active) checksMode.value = 'active'
+      else if (c.passive) checksMode.value = 'passive'
+      else checksMode.value = 'active'
     } else {
-      const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
-      upstreamForm.checks = defaultParsed
-      checksJson.value = defaultChecksJson
+      upstreamForm.checks = null
+      checksMode.value = 'active'
     }
 
     toggleTimeout.value = u.timeout !== null && u.timeout !== undefined
@@ -780,8 +764,7 @@ const formErrors = reactive<Record<string, string>>({})
     upstreamFormRef,
     targetValidation,
     formErrors,
-    checksJson,
-    defaultChecksJson,
+    checksMode,
     defaultTimeout,
 
     // Toggle states (used by ClusterUpstreams.vue template)

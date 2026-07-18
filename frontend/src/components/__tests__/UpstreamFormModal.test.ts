@@ -20,6 +20,17 @@ const stubs = {
   AInput: { template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />', props: ['value', 'placeholder'] },
   ATextarea: { template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />', props: ['value', 'rows'] },
   AInputNumber: { template: '<input type="number" :value="value" @input="$emit(\'update:value\', parseFloat($event.target.value) || 0)" />', props: ['value', 'min', 'max', 'placeholder', 'style'] },
+  HealthCheckForm: {
+    template: '<div class="mock-health-check" />',
+    props: ['checks', 'enabled', 'modelMode'],
+    watch: {
+      enabled(val: boolean) {
+        if (val && !this.checks) {
+          this.$emit('update:checks', { active: { type: 'http', concurrency: 10, http_path: '/', timeout: 1, healthy: { interval: 5, successes: 2, http_statuses: [200, 302, 403, 404] }, unhealthy: { interval: 3, http_failures: 5, http_statuses: [429, 500, 501, 502, 503, 504, 505], tcp_failures: 2, timeouts: 3 } }, passive: { type: 'http', healthy: { successes: 5, http_statuses: [200, 308] }, unhealthy: { http_failures: 5, http_statuses: [429, 500, 503], tcp_failures: 2, timeouts: 7 } } })
+        }
+      },
+    },
+  },
   ASelect: { template: '<select :value="value" :disabled="disabled" @change="$emit(\'update:value\', $event.target.value)"><slot /></select>', props: ['value', 'disabled'] },
   ASelectOption: { template: '<option :value="value"><slot /></option>', props: ['value'] },
   ATable: { template: '<div class="mock-table"><template v-for="(item, i) in dataSource"><slot name="bodyCell" :column="{ key: \'ip\' }" :record="item" :index="i" /><slot name="bodyCell" :column="{ key: \'port\' }" :record="item" :index="i" /><slot name="bodyCell" :column="{ key: \'weight\' }" :record="item" :index="i" /><slot name="bodyCell" :column="{ key: \'action\' }" :record="item" :index="i" /></template></div>', props: ['columns', 'dataSource', 'pagination', 'size', 'rowKey'] },

@@ -112,10 +112,11 @@
               <input type="checkbox" v-model="toggleChecks">
               <span>健康检查</span>
             </label>
-            <textarea v-model="checksJson" class="form-input" rows="6"
-              style="font-family:var(--font-mono);font-size:12px;resize:vertical;"
-              :disabled="!toggleChecks">
-            </textarea>
+            <HealthCheckForm
+              v-model:checks="form.checks"
+              v-model:enabled="toggleChecks"
+              v-model:modelMode="checksMode"
+            />
             <div v-if="formErrors.checks" class="form-error" style="margin-top:6px;">{{ formErrors.checks }}</div>
           </div>
 
@@ -256,6 +257,7 @@
 import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import HealthCheckForm from '@/components/HealthCheckForm.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -271,6 +273,7 @@ const emit = defineEmits<{
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
 
+const checksMode = ref<'active' | 'passive' | 'both'>('active')
 const activeTab = ref('basic')
 const submitting = ref(false)
 const formErrors = reactive<Record<string, string>>({})
@@ -298,7 +301,6 @@ const retriesSubmitValue = computed<number | null>(() => {
   }
 })
 
-const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
 const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
 const form = reactive({
@@ -319,19 +321,12 @@ const form = reactive({
   checks: null as Record<string, unknown> | null,
 })
 
-const checksJson = ref(defaultChecksJson)
-
 // Watch load_balance change - reset hash fields when not chash
 watch(() => form.load_balance, (val) => {
   if (val !== 'chash') {
     form.hash_on = 'vars'
     form.key = ''
   }
-})
-
-// Watch checksJson -> update form.checks
-watch(checksJson, (val) => {
-  try { form.checks = JSON.parse(val) as Record<string, unknown> } catch { /* ignore */ }
 })
 
 // Populate form when visible changes
@@ -348,6 +343,7 @@ function populateForm() {
   activeTab.value = 'basic'
 
   // Reset all toggles to OFF
+  checksMode.value = 'active'
   toggleChecks.value = false
   toggleTimeout.value = false
   togglePool.value = false
@@ -371,11 +367,14 @@ function populateForm() {
     if (u.checks) {
       const c = typeof u.checks === 'string' ? JSON.parse(u.checks) : u.checks
       form.checks = c
-      checksJson.value = JSON.stringify(c, null, 2)
+      const ch = c as { active?: unknown; passive?: unknown }
+      if (ch.active && ch.passive) checksMode.value = 'both'
+      else if (ch.active) checksMode.value = 'active'
+      else if (ch.passive) checksMode.value = 'passive'
+      else checksMode.value = 'active'
     } else {
-      const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
-      form.checks = defaultParsed
-      checksJson.value = defaultChecksJson
+      form.checks = null
+      checksMode.value = 'active'
     }
 
     toggleTimeout.value = u.timeout !== null && u.timeout !== undefined
@@ -427,15 +426,14 @@ function populateForm() {
     form.description = ''
     form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
     form.retriesInput = undefined
+    checksMode.value = 'active'
     form.retry_timeout = 0
     form.timeout = { ...defaultTimeout }
     form.pass_host = 'pass'
     form.upstream_host = ''
     form.scheme = 'http'
     form.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
-    const defaultParsed = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    form.checks = defaultParsed
-    checksJson.value = defaultChecksJson
+    form.checks = null
   }
 }
 
@@ -483,13 +481,9 @@ function validateForm(): boolean {
   formErrors.retries = ''
   formErrors.retry_timeout = ''
   formErrors.pass_host = ''
-  if (toggleChecks.value) {
-    try {
-      JSON.parse(checksJson.value)
-    } catch {
-      formErrors.checks = 'JSON 格式不正确，请检查'
-      valid = false
-    }
+  if (toggleChecks.value && !form.checks) {
+    formErrors.checks = '健康检查配置不完整'
+    valid = false
   }
   if (toggleTimeout.value) {
     const t = form.timeout

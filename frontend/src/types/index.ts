@@ -209,6 +209,42 @@ export interface StreamProxy {
   ref_node_id?: number
 }
 
+// ── Health Check Types ──
+export interface HealthCheckConfig {
+  active?: ActiveHealthCheck
+  passive?: PassiveHealthCheck
+}
+
+export interface ActiveHealthCheck {
+  type?: 'http' | 'tcp'
+  concurrency?: number
+  http_path?: string
+  https_verify_certificate?: boolean
+  timeout?: number
+  healthy?: HealthThreshold
+  unhealthy?: UnhealthyThreshold
+}
+
+export interface PassiveHealthCheck {
+  type?: 'http' | 'tcp'
+  healthy?: HealthThreshold
+  unhealthy?: UnhealthyThreshold
+}
+
+export interface HealthThreshold {
+  http_statuses?: number[]
+  successes?: number
+  interval?: number
+}
+
+export interface UnhealthyThreshold {
+  http_failures?: number
+  http_statuses?: number[]
+  interval?: number
+  tcp_failures?: number
+  timeouts?: number
+}
+
 export interface PortItem {
   port: number
   status: 'available' | 'in_use' | 'not_in_config'

@@ -1,10 +1,6 @@
-# upstream-health-check-default Specification
+# upstream-health-check-default (Delta Specification)
 
-## Purpose
-
-Enable passive and active health monitoring for upstreams by providing structured default health check configuration. Defaults are mode-based with full default values instead of a minimal JSON object.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Upstream health check default configuration
 
@@ -48,3 +44,15 @@ The system SHALL provide structured default health check configuration for upstr
 - **THEN** user SHALL be able to modify parameters via the structured form
 - **AND** user SHALL be able to switch between active/passive/both modes
 - **AND** user SHALL be able to edit raw JSON via the JSON editor button
+
+## REMOVED Requirements
+
+### Requirement: Upstream health check default configuration (original)
+
+**Reason**: Default config approach has changed from a single minimal JSON to mode-based structured defaults
+
+**Migration**: The old default `{"passive": {}, "active": {"unhealthy": {}}}` is replaced by the new "仅主动检查" mode with full default values.
+
+### Requirement: Upstream timeout default configuration
+
+**Reason**: Timeout defaults are not part of this change scope

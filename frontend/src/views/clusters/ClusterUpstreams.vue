@@ -163,7 +163,11 @@
                     <input type="checkbox" v-model="toggleChecks">
                     <span>健康检查</span>
                   </label>
-                  <a-textarea v-model:value="checksJson" :rows="6" placeholder="健康检查JSON配置" :disabled="!toggleChecks" />
+                  <HealthCheckForm
+                    v-model:checks="upstreamForm.checks"
+                    v-model:enabled="toggleChecks"
+                    v-model:modelMode="checksMode"
+                  />
                   <div v-if="formErrors.checks" style="color:var(--danger);font-size:12px;margin-top:6px;">{{ formErrors.checks }}</div>
                 </div>
 
@@ -290,6 +294,7 @@ import { ref, computed } from 'vue'
 import type { Cluster } from '@/types'
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 
 const props = defineProps<{
@@ -314,7 +319,7 @@ const {
   upstreamFormRef,
   targetValidation,
   formErrors,
-  checksJson,
+  checksMode,
   allUpstreamColumns,
   upstreamColumnPopoverVisible,
   upstreamColumnsSelected,
