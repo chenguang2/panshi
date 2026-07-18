@@ -1,8 +1,4 @@
-## Purpose
-
-支持在平台内直接生成 SSL 证书，支持 SM2 国密（含双证书模式）以及 RSA/ECDSA 标准证书，无需通过外部工具手动生成后再上传。生成的证书自动保存为 SSL 证书记录，复用现有的发布、版本历史、回滚、配置比对等基础设施。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 生成 SM2 自签名证书
 
@@ -58,37 +54,6 @@
 - **WHEN** 用户不提供 `algorithm`
 - **THEN** 系统 SHALL 默认使用 `sm2`（向后兼容）
 
-### Requirement: OpenSSL 版本和参数适配
-
-系统 SHALL 根据 openssl 发行版类型和算法类型自动适配命令行参数。
-
-#### Scenario: bundled Tongsuo + SM2 加 sigopt
-- **WHEN** 检测到 openssl 来源为 `backend/bin/openssl`（bundled Tongsuo）
-- **AND** `openssl version` 输出含 "Tongsuo"
-- **AND** 当前算法为 SM2（`hash_alg=sm3`）
-- **THEN** 签名操作 SHALL 添加 `-sigopt "sm2_id:1234567812345678"` 参数
-
-#### Scenario: 标准算法不传递 sigopt
-- **WHEN** 当前算法为 RSA 或 ECDSA（`hash_alg=sha256`）
-- **THEN** 签名操作 SHALL 不添加 `-sigopt` 参数
-- **AND** CSR 和签名操作 SHALL 使用 `-sha256` 而非 `-sm3`
-
-#### Scenario: 远程节点 Tongsuo + SM2 加 sigopt
-- **WHEN** 远程节点 `openssl version` 输出含 "Tongsuo" 或 "BabaSSL"
-- **AND** 当前算法为 SM2
-- **THEN** 签名操作 SHALL 添加 `-sigopt "sm2_id:1234567812345678"` 参数
-
-#### Scenario: 生成的证书签名算法
-- **WHEN** 生成 SM2 证书成功
-- **THEN** 证书的 Signature Algorithm SHALL 为 `SM2-with-SM3`
-- **AND** 公钥 ASN1 OID SHALL 为 `SM2`
-- **WHEN** 生成 RSA 证书成功
-- **THEN** 证书的 Signature Algorithm SHALL 为 `sha256WithRSAEncryption`
-- **AND** 公钥算法 SHALL 为 `RSA (2048 bits)`
-- **WHEN** 生成 ECDSA 证书成功
-- **THEN** 证书的 Signature Algorithm SHALL 为 `ecdsa-with-SHA256`
-- **AND** 公钥曲线 SHALL 为 `prime256v1 (P-256)`
-
 ### Requirement: 证书生成 API 端点
 
 系统 SHALL 提供 REST API 端点用于生成证书，支持 SM2、RSA、ECDSA 三种算法。
@@ -104,6 +69,8 @@
 - **THEN** 系统 SHALL 返回 HTTP 400
 - **WHEN** 传入 `algorithm` 值为 `sm2`、`rsa`、`ecc` 之外的字符串
 - **THEN** 系统 SHALL 返回 HTTP 422
+
+## ADDED Requirements
 
 ### Requirement: 生成 API 根据 algorithm 分发
 
@@ -142,13 +109,14 @@
 #### Scenario: 远程生成 RSA 证书
 - **WHEN** `algorithm=rsa`、`mode=remote`
 - **THEN** 远程脚本 SHALL 使用 `genrsa -out key 2048` 生成密钥
-- **AND** 使用 `req -new -sha256` 和 `-config openssl.cnf` 生成 CSR 并自签名（避免 Tongsuo 默认路径不存在问题）
+- **AND** 使用 `req -new -sha256` 生成 CSR
+- **AND** 使用 `x509 -req -sha256` 自签名
 - **AND** 不带 `-sm3` 和 `-sigopt` 参数
 
 #### Scenario: 远程生成 ECDSA 证书
 - **WHEN** `algorithm=ecc`、`mode=remote`
 - **THEN** 远程脚本 SHALL 使用 `ecparam -genkey -name prime256v1` 生成密钥
-- **AND** 使用 SHA-256 摘要并传递 `-config openssl.cnf`
+- **AND** 使用 SHA-256 摘要
 
 ### Requirement: 上传时自动检测算法
 
@@ -160,20 +128,3 @@
 - **AND** 检测结果写入 `algorithm` 字段
 - **WHEN** `algorithm` 已指定
 - **THEN** 跳过自动检测，以用户指定值为准
-
-### Requirement: 域名和 IP 的 SAN 处理
-
-系统 SHALL 在生成 CSR 时自动区分域名 SAN 和 IP SAN 的格式。
-
-#### Scenario: DNS SAN 格式化
-- **WHEN** 用户传入 `dns_sans: ["example.com", "www.example.com"]`
-- **THEN** CSR 的 subjectAltName 扩展 SHALL 包含 `DNS:example.com,DNS:www.example.com`
-
-#### Scenario: IP SAN 格式化
-- **WHEN** 用户传入 `ip_sans: ["10.0.0.1", "192.168.1.1"]`
-- **THEN** CSR 的 subjectAltName 扩展 SHALL 包含 `IP:10.0.0.1,IP:192.168.1.1`
-
-#### Scenario: 域名和 IP 合并
-- **WHEN** 用户同时传入 `dns_sans` 和 `ip_sans`
-- **THEN** subjectAltName 扩展 SHALL 包含所有域名和 IP，使用正确的 `DNS:` / `IP:` 前缀
-- **AND** 格式为 `DNS:example.com,IP:10.0.0.1,DNS:www.example.com`
