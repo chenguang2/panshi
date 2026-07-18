@@ -636,7 +636,7 @@ class EdgeImportService:
             "ssl_certificate": {
                 "edge_uuid": ssl_id,
                 "cluster_id": self.cluster_id,
-                "name": ssl_id,
+                "name": raw_data.get("name", "") or ssl_id,
                 "sni": sni_str,
                 "cert": raw_data.get("cert", ""),
                 "private_key": raw_data.get("key", ""),
@@ -1212,7 +1212,6 @@ class EdgeImportService:
                         continue
                     existing_ssl_uuids.add(sc_data["edge_uuid"])
                     sc_data["current_version"] = 1
-                    sc_data.pop("edge_uuid", None)
                     ssl_obj = SslCertificate(**sc_data)
                     session.add(ssl_obj)
                     await session.flush()
