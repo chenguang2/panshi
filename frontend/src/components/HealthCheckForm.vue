@@ -349,11 +349,11 @@ function applyJsonEditor() {
     else if (hasPassive) emit('update:modelMode', 'passive')
     // Backfill active section
     if (hasActive && parsed.active) {
-      Object.assign(activeForm, mergeDeep(createDefaultActive(), parsed.active))
+      Object.assign(activeForm, mergeDeep(createDefaultActive(), parsed.active as Record<string, unknown>))
     }
     // Backfill passive section
     if (hasPassive && parsed.passive) {
-      Object.assign(passiveForm, mergeDeep(createDefaultPassive(), parsed.passive))
+      Object.assign(passiveForm, mergeDeep(createDefaultPassive(), parsed.passive as Record<string, unknown>))
     }
     jsonModalVisible.value = false
   } catch {
@@ -361,11 +361,11 @@ function applyJsonEditor() {
   }
 }
 
-function mergeDeep(defaults: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...defaults }
+function mergeDeep(defaults: object, override: Record<string, unknown>): object {
+  const result = { ...defaults } as Record<string, unknown>
   for (const [key, val] of Object.entries(override)) {
     if (val !== null && typeof val === 'object' && !Array.isArray(val) && key in result && typeof result[key] === 'object') {
-      result[key] = mergeDeep(result[key] as Record<string, unknown>, val as Record<string, unknown>)
+      result[key] = mergeDeep(result[key] as object, val as Record<string, unknown>)
     } else if (val !== undefined) {
       result[key] = val
     }

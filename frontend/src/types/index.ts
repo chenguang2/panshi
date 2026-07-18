@@ -221,14 +221,14 @@ export interface ActiveHealthCheck {
   http_path?: string
   https_verify_certificate?: boolean
   timeout?: number
-  healthy?: HealthThreshold
-  unhealthy?: UnhealthyThreshold
+  healthy: HealthThreshold
+  unhealthy: UnhealthyThreshold
 }
 
 export interface PassiveHealthCheck {
   type?: 'http' | 'tcp'
-  healthy?: HealthThreshold
-  unhealthy?: UnhealthyThreshold
+  healthy: HealthThreshold
+  unhealthy: UnhealthyThreshold
 }
 
 export interface HealthThreshold {
