@@ -488,7 +488,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         edge_ssl_certificates = {}
         for c in client.list_ssl():
             cd = _edge_val(c)
-            cid = cd.get("id", "")
+            cid = cd.get("id", "") or (c.get("key", "").rsplit("/", 1)[-1] if isinstance(c, dict) and c.get("key") else "")
             if cid:
                 edge_ssl_certificates[cid] = cd
     except Exception:
