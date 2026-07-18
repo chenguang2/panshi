@@ -17,6 +17,7 @@ export interface SslCertificate {
   cluster_name?: string
   cluster_group_name?: string
   gm?: boolean
+  algorithm?: string
   sign_cert?: string
   sign_key?: string
   create_method?: string
@@ -32,6 +33,7 @@ export interface SslCertificateGenerateRequest {
   cert_type?: string
   mode: 'local' | 'remote'
   node_id?: number | null
+  algorithm?: 'sm2' | 'rsa' | 'ecc'
 }
 
 export interface SslCertificateCreate {

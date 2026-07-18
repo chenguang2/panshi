@@ -2,13 +2,30 @@
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal modal-wide" style="max-width:680px;">
       <div class="modal-header">
-        <h2>生成国密证书</h2>
+        <h2>生成证书</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
 
       <div class="modal-body">
-        <!-- 生成方式 -->
+        <!-- 算法选择 -->
         <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">证书算法 <span class="required">*</span></label>
+            <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="generating">
+              <a-select-option value="sm2">
+                <div style="font-weight:600;font-size:13px;">SM2 国密</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
+              </a-select-option>
+              <a-select-option value="rsa">
+                <div style="font-weight:600;font-size:13px;">RSA 2048</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容</div>
+              </a-select-option>
+              <a-select-option value="ecc">
+                <div style="font-weight:600;font-size:13px;">ECC P-256</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容，密钥更小</div>
+              </a-select-option>
+            </a-select>
+          </div>
           <div class="form-group">
             <label class="form-label">生成方式</label>
             <div class="radio-group">
@@ -64,24 +81,24 @@
         <!-- 域名 SAN -->
         <div class="form-group">
           <label class="form-label">域名 SAN</label>
-          <div class="tag-input" @click="dnsInputRef?.focus()">
-            <span v-for="(tag, i) in dnsTags" :key="i" class="tag-item">
-              <span class="tag-text">{{ tag }}</span>
-              <span class="tag-remove" @click.stop="removeDnsTag(i)">&times;</span>
+          <div class="sni-tag-input" @click="dnsInputRef?.focus()">
+            <span v-for="(tag, i) in dnsTags" :key="i" class="sni-tag">
+              <span class="sni-tag-text">{{ tag }}</span>
+              <span class="sni-tag-remove" @click.stop="removeDnsTag(i)">&times;</span>
             </span>
-            <input ref="dnsInputRef" v-model="dnsInput" type="text" class="tag-input-field" placeholder="输入域名后按 Enter" :disabled="generating" @keydown.enter.prevent="addDnsTag" @keydown.="addDnsTagOnComma">
+            <input ref="dnsInputRef" v-model="dnsInput" type="text" class="sni-input-inline" placeholder="输入域名后按 Enter" :disabled="generating" @keydown.enter.prevent="addDnsTag" @keydown.="addDnsTagOnComma">
           </div>
         </div>
 
         <!-- IP SAN -->
         <div class="form-group">
           <label class="form-label">IP SAN</label>
-          <div class="tag-input" @click="ipInputRef?.focus()">
-            <span v-for="(tag, i) in ipTags" :key="i" class="tag-item">
-              <span class="tag-text">{{ tag }}</span>
-              <span class="tag-remove" @click.stop="removeIpTag(i)">&times;</span>
+          <div class="sni-tag-input" @click="ipInputRef?.focus()">
+            <span v-for="(tag, i) in ipTags" :key="i" class="sni-tag">
+              <span class="sni-tag-text">{{ tag }}</span>
+              <span class="sni-tag-remove" @click.stop="removeIpTag(i)">&times;</span>
             </span>
-            <input ref="ipInputRef" v-model="ipInput" type="text" class="tag-input-field" placeholder="输入 IP 后按 Enter" :disabled="generating" @keydown.enter.prevent="addIpTag" @keydown.="addIpTagOnComma">
+            <input ref="ipInputRef" v-model="ipInput" type="text" class="sni-input-inline" placeholder="输入 IP 后按 Enter" :disabled="generating" @keydown.enter.prevent="addIpTag" @keydown.="addIpTagOnComma">
           </div>
         </div>
 
@@ -107,7 +124,7 @@
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" v-if="form.algorithm === 'sm2'">
           <label class="checkbox-label">
             <input type="checkbox" v-model="form.dual_cert" :disabled="generating" />
             同时生成加密证书和签名证书（双证书模式）
@@ -157,6 +174,7 @@ const ipInputRef = ref<HTMLInputElement | null>(null)
 
 const form = reactive({
   mode: 'local' as 'local' | 'remote',
+  algorithm: 'sm2' as 'sm2' | 'rsa' | 'ecc',
   cluster_id: '',
   node_id: '' as number | '',
   name: '',
@@ -281,6 +299,7 @@ async function handleGenerate() {
       dns_sans: dnsTags.value.length > 0 ? dnsTags.value : undefined,
       ip_sans: ipTags.value.length > 0 ? ipTags.value : undefined,
       validity_days: form.validity_days,
+      algorithm: form.algorithm,
       dual_cert: form.dual_cert,
       cert_type: form.cert_type,
       mode: form.mode,
@@ -333,6 +352,7 @@ function removeIpTag(i: number) { ipTags.value.splice(i, 1) }
 watch(() => props.visible, (v) => {
   if (v) {
     form.mode = 'local'
+    form.algorithm = 'sm2'
     form.cluster_id = ''
     form.node_id = ''
     form.name = ''
@@ -355,13 +375,14 @@ watch(() => props.visible, (v) => {
 .radio-label input { margin: 0; }
 .checkbox-label { cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .checkbox-label input { margin: 0; }
-.tag-input { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius); min-height: 36px; cursor: text; background: var(--surface); }
-.tag-input:focus-within { border-color: var(--primary); }
-.tag-item { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
-.tag-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag-remove { cursor: pointer; font-size: 14px; line-height: 1; color: var(--muted); margin-left: 2px; }
-.tag-remove:hover { color: var(--danger); }
-.tag-input-field { border: none; outline: none; flex: 1; min-width: 120px; font-size: 13px; background: transparent; padding: 2px 0; }
+.sni-tag-input { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: text; min-height: 40px; transition: border-color 0.15s; }
+.sni-tag-input:focus-within { border-color: var(--accent); }
+.sni-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 10px; border-radius: 12px; font-size: 12px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 10%); border: 1px solid oklch(56% 0.16 210 / 20%); color: var(--accent); white-space: nowrap; }
+.sni-tag-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sni-tag-remove { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; font-size: 14px; line-height: 1; cursor: pointer; color: var(--muted); transition: all 0.1s; }
+.sni-tag-remove:hover { background: var(--danger); color: #fff; }
+.sni-input-inline { border: none; outline: none; flex: 1; min-width: 120px; font-size: 13px; background: transparent; padding: 2px 0; font-family: var(--font-mono); }
+.sni-input-inline::placeholder { color: var(--muted); font-size: 12px; font-family: var(--font-body); }
 .form-hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .progress-section { margin-top: 16px; padding: 12px; background: var(--bg); border-radius: var(--radius); }
 .progress-step { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; color: var(--muted); }
