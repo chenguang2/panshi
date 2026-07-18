@@ -34,6 +34,9 @@
         <div class="ssl-card-topbar" :style="getGroupColorStyle(cert.cluster_group_name)">
           <span>{{ cert.cluster_name || '-' }}</span>
           <span v-if="cert.cluster_group_name" class="group-badge">{{ cert.cluster_group_name }}</span>
+          <span class="topbar-spacer"></span>
+          <span v-if="cert.algorithm === 'sm2'" class="algo-badge algo-sm">🇨🇳 国密</span>
+          <span v-else class="algo-badge algo-international">🌐 国际</span>
         </div>
         <div class="ssl-card-header">
           <div class="ssl-card-info">
@@ -51,7 +54,7 @@
         </div>
         <div class="ssl-card-body">
           <div class="ssl-card-row"><label>SNI</label><span>{{ cert.sni }}</span></div>
-          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.algorithm === 'sm2' && cert.sign_cert" class="badge badge-primary" style="margin-left:6px;font-size:10px;">SM2 双证书</span><span v-else-if="cert.algorithm === 'sm2'" class="badge badge-primary" style="margin-left:6px;font-size:10px;">SM2 单证书</span><span v-else-if="cert.algorithm === 'rsa'" class="badge badge-secondary" style="margin-left:6px;font-size:10px;">RSA 2048</span><span v-else-if="cert.algorithm === 'ecc'" class="badge badge-secondary" style="margin-left:6px;font-size:10px;">ECC P-256</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span><span v-else-if="cert.create_method === 'remote_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">远程生成</span></span></div>
+          <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.algorithm === 'sm2' && cert.sign_cert" class="badge algo-sm" style="margin-left:6px;font-size:10px;">🇨🇳 国密 SM2 双证书</span><span v-else-if="cert.algorithm === 'sm2'" class="badge algo-sm" style="margin-left:6px;font-size:10px;">🇨🇳 国密 SM2 单证书</span><span v-else-if="cert.algorithm === 'rsa'" class="badge algo-international" style="margin-left:6px;font-size:10px;">🌐 国际 RSA 2048</span><span v-else-if="cert.algorithm === 'ecc'" class="badge algo-international" style="margin-left:6px;font-size:10px;">🌐 国际 ECC P-256</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span><span v-else-if="cert.create_method === 'remote_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">远程生成</span></span></div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
         <div class="ssl-card-actions">
@@ -288,6 +291,24 @@ onMounted(() => { loadClusters().then(() => loadCerts()) })
 .ssl-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .ssl-action-btn { background: none !important; background-color: transparent !important; }
 .ssl-action-btn:hover { background: var(--bg) !important; }
+.topbar-spacer { flex: 1; }
+.algo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 3px;
+  line-height: 1.6;
+}
+.algo-sm {
+  background: oklch(65% 0.18 30 / 18%);
+  color: oklch(50% 0.22 30);
+  border: 1px solid oklch(65% 0.18 30 / 30%);
+}
+.algo-international {
+  background: oklch(55% 0.12 240 / 14%);
+  color: oklch(42% 0.14 240);
+  border: 1px solid oklch(55% 0.12 240 / 25%);
+}
 .text-sm { font-size: 12px; }
 .text-muted { color: var(--muted); }
 @media (max-width: 768px) {
