@@ -3,46 +3,102 @@
 Supports local generation (bundled Tongsuo or system openssl)
 and remote generation (SSH to cluster nodes).
 """
+import json
+import logging
 import os
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 # Project root relative to this file (backend/app/services/ -> project root)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _BUNDLED_OPENSSL = _PROJECT_ROOT / "backend" / "bin" / "openssl"
 
 
-def _run_openssl(cmd: list[str], openssl_path: str) -> subprocess.CompletedProcess:
-    """Run an openssl command and return the result."""
+@dataclass
+class CommandResult:
+    """Enhanced result from an openssl command execution."""
+    command: str
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+_cert_logger: logging.Logger | None = None
+
+
+def _get_cert_logger() -> logging.Logger:
+    global _cert_logger
+    if _cert_logger is None:
+        _cert_logger = logging.getLogger("cert_generate")
+        _cert_logger.setLevel(logging.INFO)
+        _cert_logger.propagate = False
+        log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        handler = logging.FileHandler(
+            str(log_dir / "cert_generate.log"), mode="a", encoding="utf-8",
+        )
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        _cert_logger.handlers.clear()
+        _cert_logger.addHandler(handler)
+    return _cert_logger
+
+
+def log_cert_commands(cluster_id: int, cluster_name: str, cert_name: str, logs: list[CommandResult]) -> None:
+    logger = _get_cert_logger()
+    for entry in logs:
+        record: dict[str, Any] = {
+            "time": __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "cluster_id": cluster_id,
+            "cluster_name": cluster_name,
+            "cert_name": cert_name,
+            "command": entry.command,
+            "exit_code": entry.returncode,
+            "stderr": entry.stderr[-500:] if entry.stderr else "",
+        }
+        logger.info(json.dumps(record, ensure_ascii=False))
+
+
+def _run_openssl(cmd: list[str], openssl_path: str) -> CommandResult:
+    """Run an openssl command and return the result with command info."""
     full_cmd = [openssl_path] + cmd
-    return subprocess.run(
+    result = subprocess.run(
         full_cmd,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    return CommandResult(
+        command=" ".join(str(a) for a in full_cmd),
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+    )
 
 
-def _check_sm2_support(openssl_path: str) -> bool:
+def _check_sm2_support(openssl_path: str, logs: list[CommandResult]) -> bool:
     """Check if the given openssl binary supports SM2 curve."""
     try:
         result = _run_openssl(["ecparam", "-list_curves"], openssl_path)
+        logs.append(result)
         return "SM2" in result.stdout
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return False
 
 
-def _detect_flavor(openssl_path: str) -> str:
+def _detect_flavor(openssl_path: str, logs: list[CommandResult]) -> str:
     """Detect openssl flavor: 'tongsuo', 'standard', or 'unknown'."""
     try:
         result = _run_openssl(["version"], openssl_path)
+        logs.append(result)
         version_output = result.stdout.lower()
         if "tongsuo" in version_output:
             return "tongsuo"
         if "babassl" in version_output:
-            return "tongsuo"  # BabaSSL is Tongsuo-based
+            return "tongsuo"
         if "openssl" in version_output:
             return "standard"
         return "unknown"
@@ -50,10 +106,13 @@ def _detect_flavor(openssl_path: str) -> str:
         return "unknown"
 
 
-def detect_openssl() -> dict:
+def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
     """Detect available openssl binary.
 
     Priority: bundled Tongsuo -> system PATH.
+
+    Args:
+        detect_logs: optional list to append detection command results to.
 
     Returns:
         dict with keys:
@@ -63,6 +122,8 @@ def detect_openssl() -> dict:
         - flavor: str       ("tongsuo" | "standard" | "unknown")
         - available: bool   (True if any openssl binary was found)
     """
+    logs = detect_logs if detect_logs is not None else []
+
     candidates = []
 
     # 1. Bundled Tongsuo
@@ -75,10 +136,11 @@ def detect_openssl() -> dict:
         candidates.append(system_openssl)
 
     for candidate in candidates:
-        sm2 = _check_sm2_support(candidate)
-        flavor = _detect_flavor(candidate)
+        sm2 = _check_sm2_support(candidate, logs)
+        flavor = _detect_flavor(candidate, logs)
         try:
             result = _run_openssl(["version"], candidate)
+            logs.append(result)
             version = result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             version = ""
@@ -91,12 +153,12 @@ def detect_openssl() -> dict:
                 "available": True,
             }
 
-    # No SM2-capable openssl found, but may have plain openssl
     if candidates:
         last = candidates[0]
-        flavor = _detect_flavor(last)
+        flavor = _detect_flavor(last, logs)
         try:
             result = _run_openssl(["version"], last)
+            logs.append(result)
             version = result.stdout.strip()
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             version = ""
@@ -130,8 +192,8 @@ commonName = {common_name}
 """
 
 
-def generate_rsa_keypair(openssl_path: str) -> str:
-    """Generate an RSA 2048-bit key pair and return the private key PEM."""
+def generate_rsa_keypair(openssl_path: str) -> tuple[str, list[CommandResult]]:
+    """Generate an RSA 2048-bit key pair. Returns (private_key_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_rsa_") as tmpdir:
         key_file = Path(tmpdir) / "rsa.key"
         result = _run_openssl(
@@ -139,14 +201,12 @@ def generate_rsa_keypair(openssl_path: str) -> str:
             openssl_path,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"RSA key generation failed: {result.stderr.strip()}"
-            )
-        return key_file.read_text()
+            raise RuntimeError(f"RSA key generation failed: {result.stderr.strip()}")
+        return key_file.read_text(), [result]
 
 
-def generate_ecdsa_keypair(openssl_path: str) -> str:
-    """Generate an ECDSA P-256 key pair and return the private key PEM."""
+def generate_ecdsa_keypair(openssl_path: str) -> tuple[str, list[CommandResult]]:
+    """Generate an ECDSA P-256 key pair. Returns (private_key_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_ecc_") as tmpdir:
         key_file = Path(tmpdir) / "ecc.key"
         result = _run_openssl(
@@ -154,14 +214,12 @@ def generate_ecdsa_keypair(openssl_path: str) -> str:
             openssl_path,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"ECDSA key generation failed: {result.stderr.strip()}"
-            )
-        return key_file.read_text()
+            raise RuntimeError(f"ECDSA key generation failed: {result.stderr.strip()}")
+        return key_file.read_text(), [result]
 
 
-def generate_sm2_keypair(openssl_path: str) -> str:
-    """Generate an SM2 key pair and return the private key PEM."""
+def generate_sm2_keypair(openssl_path: str) -> tuple[str, list[CommandResult]]:
+    """Generate an SM2 key pair. Returns (private_key_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_sm2_") as tmpdir:
         key_file = Path(tmpdir) / "sm2.key"
         result = _run_openssl(
@@ -169,10 +227,8 @@ def generate_sm2_keypair(openssl_path: str) -> str:
             openssl_path,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"SM2 key generation failed: {result.stderr.strip()}"
-            )
-        return key_file.read_text()
+            raise RuntimeError(f"SM2 key generation failed: {result.stderr.strip()}")
+        return key_file.read_text(), [result]
 
 
 def _sigopt_args(flavor: str, hash_alg: str = "sm3") -> list[str]:
@@ -205,8 +261,8 @@ def generate_csr(
     ip_sans: list[str],
     flavor: str,
     hash_alg: str = "sm3",
-) -> str:
-    """Generate a CSR using the given private key."""
+) -> tuple[str, list[CommandResult]]:
+    """Generate a CSR using the given private key. Returns (csr_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_csr_") as tmpdir:
         tmp = Path(tmpdir)
         key_file = tmp / "key.pem"
@@ -234,7 +290,7 @@ def generate_csr(
         if result.returncode != 0:
             raise RuntimeError(f"CSR generation failed: {result.stderr.strip()}")
 
-        return csr_file.read_text()
+        return csr_file.read_text(), [result]
 
 
 def self_sign_certificate(
@@ -244,8 +300,8 @@ def self_sign_certificate(
     validity_days: int,
     flavor: str,
     hash_alg: str = "sm3",
-) -> str:
-    """Self-sign a CSR to produce a certificate."""
+) -> tuple[str, list[CommandResult]]:
+    """Self-sign a CSR to produce a certificate. Returns (cert_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_cert_") as tmpdir:
         tmp = Path(tmpdir)
         csr_file = tmp / "request.csr"
@@ -271,7 +327,7 @@ def self_sign_certificate(
                 f"Certificate self-sign failed: {result.stderr.strip()}"
             )
 
-        return cert_file.read_text()
+        return cert_file.read_text(), [result]
 
 
 def generate_dual_certificates(
@@ -281,40 +337,80 @@ def generate_dual_certificates(
     ip_sans: list[str],
     validity_days: int,
     flavor: str,
-) -> dict:
+) -> tuple[dict, list[CommandResult]]:
     """Generate SM2 dual certificates (encryption + signing).
 
-    Returns dict with keys: cert, key, sign_cert, sign_key.
-    Both certs share the same CN/SAN but use different key pairs.
+    Returns (result_dict, logs) where result_dict has keys:
+    cert, key, sign_cert, sign_key.
     """
+    logs: list[CommandResult] = []
+
     # Encryption key pair
-    enc_key = generate_sm2_keypair(openssl_path)
-    enc_csr = generate_csr(
+    enc_key, key_logs = generate_sm2_keypair(openssl_path)
+    logs.extend(key_logs)
+    enc_csr, csr_logs = generate_csr(
         openssl_path, enc_key,
         common_name, dns_sans, ip_sans, flavor,
     )
-    enc_cert = self_sign_certificate(
+    logs.extend(csr_logs)
+    enc_cert, cert_logs = self_sign_certificate(
         openssl_path, enc_csr, enc_key,
         validity_days, flavor,
     )
+    logs.extend(cert_logs)
 
     # Signing key pair
-    sign_key = generate_sm2_keypair(openssl_path)
-    sign_csr = generate_csr(
+    sign_key, key_logs2 = generate_sm2_keypair(openssl_path)
+    logs.extend(key_logs2)
+    sign_csr, csr_logs2 = generate_csr(
         openssl_path, sign_key,
         common_name, dns_sans, ip_sans, flavor,
     )
-    sign_cert = self_sign_certificate(
+    logs.extend(csr_logs2)
+    sign_cert, cert_logs2 = self_sign_certificate(
         openssl_path, sign_csr, sign_key,
         validity_days, flavor,
     )
+    logs.extend(cert_logs2)
 
     return {
         "cert": enc_cert,
         "key": enc_key,
         "sign_cert": sign_cert,
         "sign_key": sign_key,
-    }
+    }, logs
+
+
+def generate_standard_certificate(
+    openssl_path: str,
+    common_name: str,
+    dns_sans: list[str],
+    ip_sans: list[str],
+    validity_days: int,
+    flavor: str,
+    algorithm: str = "rsa",
+) -> tuple[dict, list[CommandResult]]:
+    """Generate a single standard certificate (RSA or ECDSA).
+
+    Returns (result_dict, logs) where result_dict has keys: cert, key.
+    """
+    if algorithm == "rsa":
+        key_pem, key_logs = generate_rsa_keypair(openssl_path)
+    else:
+        key_pem, key_logs = generate_ecdsa_keypair(openssl_path)
+
+    csr_pem, csr_logs = generate_csr(
+        openssl_path, key_pem,
+        common_name, dns_sans, ip_sans, flavor,
+        hash_alg="sha256",
+    )
+    cert_pem, cert_logs = self_sign_certificate(
+        openssl_path, csr_pem, key_pem,
+        validity_days, flavor,
+        hash_alg="sha256",
+    )
+
+    return {"cert": cert_pem, "key": key_pem}, key_logs + csr_logs + cert_logs
 
 
 class LocalProvider:
@@ -324,8 +420,8 @@ class LocalProvider:
     Supports SM2, RSA, and ECDSA algorithms.
     """
 
-    def __init__(self):
-        info = detect_openssl()
+    def __init__(self, detect_logs: list[CommandResult] | None = None):
+        info = detect_openssl(detect_logs=detect_logs)
         self.openssl_path = info["path"]
         self.flavor = info["flavor"]
         self.sm2_supported = info["sm2_supported"]
@@ -340,7 +436,8 @@ class LocalProvider:
         ip_sans: list[str] | None = None,
         validity_days: int = 365,
         dual_cert: bool = True,
-    ) -> dict:
+    ) -> tuple[dict, list[CommandResult]]:
+        """Generate a certificate. Returns (cert_dict, logs)."""
         if not self.openssl_path:
             raise RuntimeError("No openssl binary available")
 
@@ -348,7 +445,7 @@ class LocalProvider:
             if not self.sm2_supported:
                 raise RuntimeError("Openssl does not support SM2 curve")
             if dual_cert:
-                return generate_dual_certificates(
+                result, logs = generate_dual_certificates(
                     openssl_path=self.openssl_path,
                     common_name=common_name,
                     dns_sans=dns_sans or [],
@@ -356,20 +453,25 @@ class LocalProvider:
                     validity_days=validity_days,
                     flavor=self.flavor,
                 )
+                return result, logs
             else:
-                key_pem = generate_sm2_keypair(self.openssl_path)
-                csr_pem = generate_csr(
+                logs: list[CommandResult] = []
+                key_pem, key_logs = generate_sm2_keypair(self.openssl_path)
+                logs.extend(key_logs)
+                csr_pem, csr_logs = generate_csr(
                     self.openssl_path, key_pem,
                     common_name, dns_sans or [], ip_sans or [],
                     self.flavor, hash_alg="sm3",
                 )
-                cert_pem = self_sign_certificate(
+                logs.extend(csr_logs)
+                cert_pem, cert_logs = self_sign_certificate(
                     self.openssl_path, csr_pem, key_pem,
                     validity_days, self.flavor, hash_alg="sm3",
                 )
-                return {"cert": cert_pem, "key": key_pem}
+                logs.extend(cert_logs)
+                return {"cert": cert_pem, "key": key_pem}, logs
         else:
-            return generate_standard_certificate(
+            result, logs = generate_standard_certificate(
                 openssl_path=self.openssl_path,
                 common_name=common_name,
                 dns_sans=dns_sans or [],
@@ -378,6 +480,7 @@ class LocalProvider:
                 flavor=self.flavor,
                 algorithm=algorithm,
             )
+            return result, logs
 
     def generate_dual_certificates(
         self,
@@ -386,42 +489,13 @@ class LocalProvider:
         ip_sans: list[str] | None = None,
         validity_days: int = 365,
     ) -> dict:
-        return self.generate_certificate(
+        result, logs = self.generate_certificate(
             algorithm="sm2", dual_cert=True,
             common_name=common_name,
             dns_sans=dns_sans, ip_sans=ip_sans,
             validity_days=validity_days,
         )
-
-def generate_standard_certificate(
-    openssl_path: str,
-    common_name: str,
-    dns_sans: list[str],
-    ip_sans: list[str],
-    validity_days: int,
-    flavor: str,
-    algorithm: str = "rsa",
-) -> dict:
-    """Generate a single standard certificate (RSA or ECDSA).
-
-    Returns dict with keys: cert, key (sign_cert and sign_key are None).
-    """
-    if algorithm == "rsa":
-        key_pem = generate_rsa_keypair(openssl_path)
-    else:
-        key_pem = generate_ecdsa_keypair(openssl_path)
-
-    csr_pem = generate_csr(
-        openssl_path, key_pem,
-        common_name, dns_sans, ip_sans, flavor,
-        hash_alg="sha256",
-    )
-    cert_pem = self_sign_certificate(
-        openssl_path, csr_pem, key_pem,
-        validity_days, flavor,
-        hash_alg="sha256",
-    )
-    return {"cert": cert_pem, "key": key_pem}
+        return result
 
 
 def detect_cert_algorithm(cert_pem: str) -> str:
@@ -433,8 +507,6 @@ def detect_cert_algorithm(cert_pem: str) -> str:
     if not openssl_info["path"]:
         return ""
 
-    import tempfile
-    from pathlib import Path
     with tempfile.TemporaryDirectory(prefix="panshi_detect_") as tmpdir:
         cert_file = Path(tmpdir) / "cert.pem"
         cert_file.write_text(cert_pem)
