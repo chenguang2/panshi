@@ -57,9 +57,9 @@
                   <div class="view-log-step">{{ entry.step }}</div>
                   <div class="view-log-command" @click="toggleViewLog(i)">
                     <code>{{ entry.command.length > 100 ? entry.command.slice(0, 100) + '...' : entry.command }}</code>
-                    <span class="view-log-toggle">{{ viewExpanded[i] ? '▲' : '▼' }}</span>
+                    <span class="view-log-toggle">{{ viewExpanded[String(i)] ? '▲' : '▼' }}</span>
                   </div>
-                  <div v-if="viewExpanded[i]" class="view-log-detail">
+                  <div v-if="viewExpanded[String(i)]" class="view-log-detail">
                     <pre class="view-log-pre">{{ entry.command }}</pre>
                     <div v-if="entry.stderr" class="view-log-stderr"><pre>{{ entry.stderr }}</pre></div>
                   </div>
@@ -90,18 +90,22 @@ defineEmits<{
   'update:visible': [value: boolean]
 }>()
 
-const viewExpanded = ref<boolean[]>([])
+const viewExpanded = ref<Record<string, boolean>>({})
 
 watch(() => props.cert, (cert) => {
   if (cert?.generate_log) {
-    viewExpanded.value = cert.generate_log.map(() => false)
+    const map: Record<string, boolean> = {}
+    for (let i = 0; i < cert.generate_log.length; i++) {
+      map[String(i)] = false
+    }
+    viewExpanded.value = map
   } else {
-    viewExpanded.value = []
+    viewExpanded.value = {}
   }
 })
 
-function toggleViewLog(index: number) {
-  viewExpanded.value[index] = !viewExpanded.value[index]
+function toggleViewLog(index: string | number) {
+  viewExpanded.value[String(index)] = !viewExpanded.value[String(index)]
 }
 
 function downloadCert(_type: string, content: string, filename: string) {
