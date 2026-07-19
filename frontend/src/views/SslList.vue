@@ -196,7 +196,6 @@ function closeForm() { formVisible.value = false; editingCert.value = null; load
 function openGenerateDialog() { generateVisible.value = true }
 function openDownloadDialog(cert: any) { downloadCertData.value = cert; downloadVisible.value = true }
 function onGenerateSuccess(cert: any) {
-  generateVisible.value = false
   loadCerts()
   if (cert?.id) {
     const algoLabel: Record<string, string> = { sm2: '国密', rsa: 'RSA', ecc: 'ECC' }

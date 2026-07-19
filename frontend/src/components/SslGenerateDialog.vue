@@ -131,11 +131,30 @@
           </label>
         </div>
 
-        <!-- 进度提示 -->
+        <!-- 生成中状态 -->
         <div v-if="generating" class="progress-section">
-          <div class="progress-step" v-for="(step, i) in steps" :key="i" :class="{ active: step.active, done: step.done, error: step.error }">
-            <span class="step-icon">{{ step.done ? '✓' : step.error ? '✗' : step.active ? '○' : '○' }}</span>
-            <span class="step-text">{{ step.label }}</span>
+          <div class="progress-step active">
+            <span class="step-icon">◌</span>
+            <span class="step-text">正在生成证书...</span>
+          </div>
+        </div>
+
+        <!-- 命令日志（生成完成后展示） -->
+        <div v-if="commandLog.length > 0" class="log-section">
+          <div class="log-title">执行记录</div>
+          <div v-for="(entry, i) in commandLog" :key="i" class="log-entry" :class="{ 'log-error': entry.exit_code !== 0 }">
+            <span class="log-icon">{{ entry.exit_code === 0 ? '✓' : '✗' }}</span>
+            <div class="log-body">
+              <div class="log-step">{{ entry.step }}</div>
+              <div class="log-command" @click="toggleLog(i)">
+                <code>{{ entry.command.length > 120 ? entry.command.slice(0, 120) + '...' : entry.command }}</code>
+                <span class="log-toggle">{{ expandedLogs[i] ? '▲' : '▼' }}</span>
+              </div>
+              <div v-if="expandedLogs[i]" class="log-detail">
+                <pre class="log-pre">{{ entry.command }}</pre>
+                <div v-if="entry.stderr" class="log-stderr">错误输出:<pre>{{ entry.stderr }}</pre></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -144,8 +163,8 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-ghost" @click="handleClose" :disabled="generating">取消</button>
-        <button class="btn btn-primary" @click="handleGenerate" :disabled="generating || !canGenerate">
+        <button class="btn btn-ghost" @click="handleClose" :disabled="generating">{{ commandLog.length > 0 ? '关闭' : '取消' }}</button>
+        <button v-if="commandLog.length === 0" class="btn btn-primary" @click="handleGenerate" :disabled="generating || !canGenerate">
           {{ generating ? '生成中...' : '生成并保存' }}
         </button>
       </div>
@@ -192,13 +211,8 @@ const nodes = ref<any[]>([])
 const nodesLoading = ref(false)
 const generating = ref(false)
 const errorMsg = ref('')
-const steps = ref([
-  { label: '检测环境', active: false, done: false, error: false },
-  { label: '生成密钥对', active: false, done: false, error: false },
-  { label: '生成 CSR', active: false, done: false, error: false },
-  { label: '签发证书', active: false, done: false, error: false },
-  { label: '保存记录', active: false, done: false, error: false },
-])
+const commandLog = ref<any[]>([])
+const expandedLogs = ref<boolean[]>([])
 
 const errors = reactive({
   cluster_id: '',
@@ -225,24 +239,8 @@ function validate(): boolean {
   return valid
 }
 
-function resetSteps() {
-  steps.value = steps.value.map(s => ({ ...s, active: false, done: false, error: false }))
-}
-
-function setStepActive(index: number) {
-  steps.value[index].active = true
-  steps.value[index].done = false
-  steps.value[index].error = false
-}
-
-function setStepDone(index: number) {
-  steps.value[index].active = false
-  steps.value[index].done = true
-}
-
-function setStepError(index: number) {
-  steps.value[index].active = false
-  steps.value[index].error = true
+function toggleLog(index: number) {
+  expandedLogs.value[index] = !expandedLogs.value[index]
 }
 
 async function onClusterChange() {
@@ -273,26 +271,10 @@ async function handleGenerate() {
   if (!validate()) return
   generating.value = true
   errorMsg.value = ''
-  resetSteps()
+  commandLog.value = []
+  expandedLogs.value = []
 
   try {
-    setStepActive(0)
-    await new Promise(r => setTimeout(r, 300)) // simulate check
-    setStepDone(0)
-
-    setStepActive(1)
-    await new Promise(r => setTimeout(r, 200))
-    setStepDone(1)
-
-    setStepActive(2)
-    await new Promise(r => setTimeout(r, 200))
-    setStepDone(2)
-
-    setStepActive(3)
-    await new Promise(r => setTimeout(r, 200))
-    setStepDone(3)
-
-    setStepActive(4)
     const result = await generateSslCertificate(Number(form.cluster_id), {
       name: form.name.trim(),
       common_name: form.common_name.trim(),
@@ -305,18 +287,17 @@ async function handleGenerate() {
       mode: form.mode,
       node_id: form.mode === 'remote' ? (form.node_id || null) : null,
     })
-    setStepDone(4)
 
     const certData = result?.data || result
+    const logs = certData.generate_log || []
+    commandLog.value = logs
+    expandedLogs.value = logs.map(() => false)
+    generating.value = false
+
     emit('success', certData)
-    handleClose()
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '生成失败'
     errorMsg.value = typeof detail === 'string' ? detail : '生成失败'
-    // Mark the active step as failed
-    const activeIdx = steps.value.findIndex(s => s.active)
-    if (activeIdx >= 0) setStepError(activeIdx)
-  } finally {
     generating.value = false
   }
 }
@@ -364,7 +345,16 @@ watch(() => props.visible, (v) => {
     ipTags.value = []
     nodes.value = []
     errorMsg.value = ''
-    resetSteps()
+    commandLog.value = []
+    expandedLogs.value = []
+  }
+})
+
+// When switching to remote mode with cluster already selected, load nodes
+watch(() => form.mode, (mode) => {
+  if (mode === 'remote' && form.cluster_id) {
+    form.node_id = ''
+    loadNodes()
   }
 })
 </script>
@@ -387,7 +377,20 @@ watch(() => props.visible, (v) => {
 .progress-section { margin-top: 16px; padding: 12px; background: var(--bg); border-radius: var(--radius); }
 .progress-step { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; color: var(--muted); }
 .progress-step.active { color: var(--primary); }
-.progress-step.done { color: var(--success); }
-.progress-step.error { color: var(--danger); }
 .step-icon { width: 18px; text-align: center; font-weight: bold; }
+.log-section { margin-top: 16px; }
+.log-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.log-entry { display: flex; gap: 8px; padding: 6px 8px; margin-bottom: 4px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+.log-entry.log-error { border-color: var(--danger); background: oklch(65% 0.2 20 / 6%); }
+.log-icon { width: 18px; text-align: center; font-weight: bold; flex-shrink: 0; color: var(--success); }
+.log-error .log-icon { color: var(--danger); }
+.log-body { flex: 1; min-width: 0; }
+.log-step { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.log-command { font-size: 12px; font-family: var(--font-mono); color: var(--muted); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; word-break: break-all; }
+.log-command code { flex: 1; min-width: 0; }
+.log-toggle { flex-shrink: 0; font-size: 10px; color: var(--muted); }
+.log-detail { margin-top: 6px; }
+.log-pre { font-size: 11px; background: oklch(20% 0 0 / 5%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; }
+.log-stderr { margin-top: 4px; }
+.log-stderr pre { font-size: 11px; color: var(--danger); background: oklch(65% 0.2 20 / 8%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
 </style>

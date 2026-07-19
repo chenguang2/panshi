@@ -45,6 +45,28 @@
             </div>
             <pre class="cert-preview">{{ cert.sign_key }}</pre>
           </template>
+          <!-- 生成命令日志 -->
+          <template v-if="cert.generate_log && cert.generate_log.length > 0 && (cert.create_method === 'local_generate' || cert.create_method === 'remote_generate')">
+            <div class="section-header">
+              <a-divider style="flex:1;min-width:0;">生成日志</a-divider>
+            </div>
+            <div class="view-log-section">
+              <div v-for="(entry, i) in cert.generate_log" :key="i" class="view-log-entry" :class="{ 'view-log-error': entry.exit_code !== 0 }">
+                <span class="view-log-icon" :class="entry.exit_code === 0 ? 'ok' : 'fail'">{{ entry.exit_code === 0 ? '✓' : '✗' }}</span>
+                <div class="view-log-body">
+                  <div class="view-log-step">{{ entry.step }}</div>
+                  <div class="view-log-command" @click="toggleViewLog(i)">
+                    <code>{{ entry.command.length > 100 ? entry.command.slice(0, 100) + '...' : entry.command }}</code>
+                    <span class="view-log-toggle">{{ viewExpanded[i] ? '▲' : '▼' }}</span>
+                  </div>
+                  <div v-if="viewExpanded[i]" class="view-log-detail">
+                    <pre class="view-log-pre">{{ entry.command }}</pre>
+                    <div v-if="entry.stderr" class="view-log-stderr"><pre>{{ entry.stderr }}</pre></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
       <div class="modal-footer">
@@ -56,9 +78,10 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { downloadPem } from '@/utils/download'
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
   cert: any | null
 }>()
@@ -66,6 +89,20 @@ defineProps<{
 defineEmits<{
   'update:visible': [value: boolean]
 }>()
+
+const viewExpanded = ref<boolean[]>([])
+
+watch(() => props.cert, (cert) => {
+  if (cert?.generate_log) {
+    viewExpanded.value = cert.generate_log.map(() => false)
+  } else {
+    viewExpanded.value = []
+  }
+})
+
+function toggleViewLog(index: number) {
+  viewExpanded.value[index] = !viewExpanded.value[index]
+}
 
 function downloadCert(_type: string, content: string, filename: string) {
   if (content) downloadPem(content, filename)
@@ -95,4 +132,19 @@ function downloadCert(_type: string, content: string, filename: string) {
   border: 1px solid var(--border);
   font-family: var(--font-mono);
 }
+.view-log-section { margin-top: 4px; }
+.view-log-entry { display: flex; gap: 8px; padding: 6px 8px; margin-bottom: 4px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+.view-log-entry.view-log-error { border-color: var(--danger); background: oklch(65% 0.2 20 / 6%); }
+.view-log-icon { width: 18px; text-align: center; font-weight: bold; flex-shrink: 0; }
+.view-log-icon.ok { color: var(--success); }
+.view-log-icon.fail { color: var(--danger); }
+.view-log-body { flex: 1; min-width: 0; }
+.view-log-step { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.view-log-command { font-size: 12px; font-family: var(--font-mono); color: var(--muted); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; word-break: break-all; }
+.view-log-command code { flex: 1; min-width: 0; }
+.view-log-toggle { flex-shrink: 0; font-size: 10px; color: var(--muted); }
+.view-log-detail { margin-top: 6px; }
+.view-log-pre { font-size: 11px; background: oklch(20% 0 0 / 5%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; }
+.view-log-stderr { margin-top: 4px; }
+.view-log-stderr pre { font-size: 11px; color: var(--danger); background: oklch(65% 0.2 20 / 8%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
 </style>

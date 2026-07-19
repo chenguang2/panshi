@@ -1,3 +1,11 @@
+export interface CommandLogEntry {
+  step: string
+  command: string
+  exit_code: number
+  stdout?: string
+  stderr?: string
+}
+
 export interface SslCertificate {
   id: number
   edge_uuid: string
@@ -21,6 +29,7 @@ export interface SslCertificate {
   sign_cert?: string
   sign_key?: string
   create_method?: string
+  generate_log?: CommandLogEntry[]
 }
 
 export interface SslCertificateGenerateRequest {
