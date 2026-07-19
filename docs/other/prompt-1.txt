@@ -2371,3 +2371,19 @@ improve-health-check-ui
 请读取 openspec/changes/improve-health-check-ui/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+===========================================================================================
+
+讨论：
+
+请查看 /home/qcg/panshi/docs/edge/user-guide/插件手册.md  中 log_process 的数据属性 metadata 的 stream 模式的设置
+
+现在需要在系统中加入对 log_process 的 插件元数据的 stream 模式的设置，
+
+请查看代码，看看加到哪里比较合适？ 请给出几个方案，包括界面，我看看
+
+使用 /opsx-propose 命令, 来生成这个需求
+
+add-stream-log-process-plugin
+
+/brainstorming 请仔细阅读 openspec/changes/add-stream-log-process-plugin/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
