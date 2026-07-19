@@ -142,6 +142,7 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "sign_key", "TEXT"),
     ("ps_ssl_certificate", "create_method", "VARCHAR(32) DEFAULT 'upload'"),
     ("ps_ssl_certificate", "algorithm", "VARCHAR(16)"),
+    ("ps_ssl_certificate", "generate_log", "TEXT"),
 ]
 
 

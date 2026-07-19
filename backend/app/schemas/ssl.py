@@ -1,8 +1,19 @@
 """SSL certificate Pydantic schemas."""
 
+import json
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
+
+
+class CommandLogEntry(BaseModel):
+    """A single command execution record during certificate generation."""
+
+    step: str = Field(..., description="步骤名称，如'生成密钥对'、'生成 CSR'")
+    command: str = Field(..., description="完整命令行")
+    exit_code: int = Field(..., description="进程退出码，0 表示成功")
+    stdout: str = Field(default="", description="标准输出（过长时截断前 500 字符）")
+    stderr: str = Field(default="", description="标准错误输出")
 
 
 class SslCertificateBase(BaseModel):
@@ -73,6 +84,7 @@ class SslCertificateResponse(SslCertificateBase):
     cluster_id: int
     current_version: Optional[int] = None
     status: int = 1
+    generate_log: Optional[list[CommandLogEntry]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -81,6 +93,16 @@ class SslCertificateResponse(SslCertificateBase):
     def convert_datetime(cls, v):
         if isinstance(v, datetime):
             return v.isoformat() + "Z"
+        return v
+
+    @field_validator("generate_log", mode="before")
+    @classmethod
+    def convert_generate_log(cls, v):
+        if isinstance(v, str):
+            try:
+                return [CommandLogEntry(**item) for item in json.loads(v)]
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return None
         return v
 
     class Config:
