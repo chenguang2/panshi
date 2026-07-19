@@ -89,21 +89,22 @@ def _check_sm2_support(openssl_path: str, logs: list[CommandResult]) -> bool:
         return False
 
 
-def _detect_flavor(openssl_path: str, logs: list[CommandResult]) -> str:
-    """Detect openssl flavor: 'tongsuo', 'standard', or 'unknown'."""
+def _detect_flavor(openssl_path: str, logs: list[CommandResult]) -> tuple[str, str]:
+    """Detect openssl flavor. Returns (flavor, version_string)."""
     try:
         result = _run_openssl(["version"], openssl_path)
         logs.append(result)
         version_output = result.stdout.lower()
+        raw_version = result.stdout.strip()
         if "tongsuo" in version_output:
-            return "tongsuo"
+            return "tongsuo", raw_version
         if "babassl" in version_output:
-            return "tongsuo"
+            return "tongsuo", raw_version
         if "openssl" in version_output:
-            return "standard"
-        return "unknown"
+            return "standard", raw_version
+        return "unknown", raw_version
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return "unknown"
+        return "unknown", ""
 
 
 def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
@@ -137,13 +138,7 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
 
     for candidate in candidates:
         sm2 = _check_sm2_support(candidate, logs)
-        flavor = _detect_flavor(candidate, logs)
-        try:
-            result = _run_openssl(["version"], candidate)
-            logs.append(result)
-            version = result.stdout.strip()
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            version = ""
+        flavor, version = _detect_flavor(candidate, logs)
         if sm2:
             return {
                 "path": candidate,
@@ -155,13 +150,7 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
 
     if candidates:
         last = candidates[0]
-        flavor = _detect_flavor(last, logs)
-        try:
-            result = _run_openssl(["version"], last)
-            logs.append(result)
-            version = result.stdout.strip()
-        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            version = ""
+        flavor, version = _detect_flavor(last, logs)
         return {
             "path": last,
             "version": version,
