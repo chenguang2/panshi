@@ -24,6 +24,7 @@
           <a-statistic title="❌ 差异" :value="summary.mismatch" :value-style="{ color: '#ff4d4f' }" />
           <a-statistic title="➕ 仅数据库" :value="summary.only_in_db" :value-style="{ color: '#faad14' }" />
           <a-statistic title="➖ 仅Edge" :value="summary.only_in_edge" :value-style="{ color: '#1890ff' }" />
+          <a-statistic title="⏸ 无需发布" :value="summary.expected_only_in_db" :value-style="{ color: '#8c8c8c' }" />
         </div>
 
         <div v-if="nodeAddr" class="node-addr-info">Edge 节点：{{ nodeAddr }}</div>
@@ -40,6 +41,7 @@
               <span v-if="groupStats(group).mismatch" class="stat-diff">{{ groupStats(group).mismatch }} 差异</span>
               <span v-if="groupStats(group).only_in_db" class="stat-db-only">{{ groupStats(group).only_in_db }} 仅DB</span>
               <span v-if="groupStats(group).only_in_edge" class="stat-edge-only">{{ groupStats(group).only_in_edge }} 仅Edge</span>
+              <span v-if="groupStats(group).expected_only_in_db" class="stat-expected-only">{{ groupStats(group).expected_only_in_db }} 无需发布</span>
             </span>
           </div>
 
@@ -52,21 +54,26 @@
               <span class="col-action"></span>
             </div>
 
-            <div v-for="item in group.items" :key="item.id">
+              <div v-for="item in group.items" :key="item.id">
               <div
                 class="diff-row"
-                :class="{ 'row-mismatch': item.status === 'mismatch', 'row-only-db': item.status === 'only_in_db', 'row-only-edge': item.status === 'only_in_edge' }"
-                @click="item.status === 'mismatch' && toggleExpand('diffs', item)"
+                :class="{ 'row-mismatch': item.status === 'mismatch', 'row-only-db': item.status === 'only_in_db', 'row-only-edge': item.status === 'only_in_edge', 'row-expected-only': item.status === 'expected_only_in_db' }"
               >
                 <span class="col-status">
                   <span v-if="item.status === 'match'" style="color:#52c41a">✅</span>
                   <span v-else-if="item.status === 'mismatch'" style="color:#ff4d4f">❌</span>
                   <span v-else-if="item.status === 'only_in_db'" style="color:#faad14">➕</span>
-                  <span v-else style="color:#1890ff">➖</span>
+                  <span v-else-if="item.status === 'only_in_edge'" style="color:#1890ff">➖</span>
+                  <span v-else style="color:#8c8c8c">⏸</span>
                 </span>
                 <span class="col-name">{{ item.name }}</span>
                 <span class="col-db">{{ item.status === 'only_in_edge' ? '—' : '已配置' }}</span>
-                <span class="col-edge">{{ item.status === 'only_in_db' ? '—' : '已配置' }}</span>
+                <span class="col-edge">
+                  <template v-if="item.status === 'expected_only_in_db'">
+                    <span style="color:var(--muted);font-size:12px;">无需发布 — {{ item.reason || '' }}</span>
+                  </template>
+                  <template v-else>{{ item.status === 'only_in_db' ? '—' : '已配置' }}</template>
+                </span>
                 <span class="col-action">
                   <a v-if="item.fields?.length" style="font-size:12px;margin-right:8px;cursor:pointer" @click.stop="toggleExpand('fields', item)">
                     {{ expandedMode[item.id] === 'fields' ? '收起字段' : '查看字段' }}
@@ -158,7 +165,7 @@ const fieldLabel = (groupType: string, field: string): string => {
 }
 
 const groupStats = (group: any) => {
-  const s: Record<string, number> = { match: 0, mismatch: 0, only_in_db: 0, only_in_edge: 0 }
+  const s: Record<string, number> = { match: 0, mismatch: 0, only_in_db: 0, only_in_edge: 0, expected_only_in_db: 0 }
   for (const it of group.items) {
     if (s[it.status] !== undefined) s[it.status]++
   }
@@ -297,6 +304,8 @@ watch(() => props.visible, async (val) => {
 .diff-row.row-mismatch:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .diff-row.row-only-db { background: color-mix(in srgb, var(--warning) 8%, transparent); }
 .diff-row.row-only-edge { background: oklch(56% 0.16 210 / 10%); }
+.diff-row.row-expected-only { background: color-mix(in srgb, #8c8c8c 6%, transparent); }
+.stat-expected-only { color: #8c8c8c; }
 
 .col-status { width: 40px; text-align: center; }
 .col-name { flex: 2; font-weight: 500; }
