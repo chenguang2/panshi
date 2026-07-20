@@ -24,6 +24,8 @@ class SslCertificate(Base):
     algorithm = Column(String(16), nullable=True)
     sign_cert = Column(Text, nullable=True)
     sign_key = Column(Text, nullable=True)
+    is_ca = Column(Boolean, nullable=False, default=False)
+    ca_cert_id = Column(Integer, ForeignKey("ps_ssl_certificate.id"), nullable=True)
     current_version = Column(Integer, nullable=True)
     create_method = Column(String(32), nullable=False, default="upload")
     generate_log = Column(Text, nullable=True)

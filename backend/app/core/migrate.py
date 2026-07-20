@@ -143,6 +143,8 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "create_method", "VARCHAR(32) DEFAULT 'upload'"),
     ("ps_ssl_certificate", "algorithm", "VARCHAR(16)"),
     ("ps_ssl_certificate", "generate_log", "TEXT"),
+    ("ps_ssl_certificate", "is_ca", "INTEGER DEFAULT 0"),
+    ("ps_ssl_certificate", "ca_cert_id", "INTEGER"),
 ]
 
 
