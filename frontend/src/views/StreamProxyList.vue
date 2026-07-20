@@ -1,8 +1,8 @@
 <template>
   <div class="sp-page">
-    <PageHeader title="四层代理" description="管理集群级的 TCP/UDP 四层代理转发规则，支持多种负载均衡策略。">
+    <PageHeader :title="pageTitle" :description="pageDesc">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
+        <button class="btn btn-primary" @click="openCreateWizard">{{ createButtonText }}</button>
       </template>
     </PageHeader>
 
@@ -52,7 +52,7 @@
         <div class="sp-card-details">
           <div class="sp-detail-row">
             <span class="sp-detail-label">协议</span>
-            <span class="sp-detail-value">UDP</span>
+            <span class="sp-detail-value">{{ schemeLabel(p.scheme) }}</span>
           </div>
           <span class="sp-detail-sep">&middot;</span>
           <div class="sp-detail-row">
@@ -109,6 +109,7 @@
       :visible="wizardVisible"
       :clusters="clusters"
       :editing-proxy="editingProxy"
+      :default-proxy-type="proxyType"
       @close="wizardVisible = false; editingProxy = null"
       @saved="onWizardSaved"
     />
@@ -125,13 +126,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 import { message } from 'ant-design-vue'
 import type { StreamProxy } from '@/types'
-import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'
@@ -140,43 +140,25 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import { useStreamProxyList } from '@/composables/useStreamProxyList'
 
+// ── Proxy type from route query ──
+const proxyType = computed<'normal' | 'dns'>(() =>
+  route.query.type === 'dns' ? 'dns' : 'normal'
+)
 
-// ── State ──
-
-const proxies = ref<StreamProxy[]>([])
-const clusters = ref<any[]>([])
-const totalCount = ref(0)
-const loading = ref(false)
-const searchText = ref('')
-const clusterFilter = ref<string | number>('')
-const groupFilter = ref('__all__')
-
-const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map(c => c.group_name || ''))
-  return Array.from(names).filter(Boolean).sort()
-})
-
-const filteredClusters = computed(() => {
-  if (groupFilter.value === '__all__') return clusters.value
-  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
-  return clusters.value.filter(c => c.group_name === groupFilter.value)
-})
+const {
+  proxies, clusters, totalCount, loading,
+  searchText, clusterFilter, groupFilter,
+  pageTitle, pageDesc, createButtonText,
+  groupOptions, filteredClusters, displayedProxies,
+  loadProxies, loadClusters,
+} = useStreamProxyList(proxyType)
 
 function onGroupChange() {
   clusterFilter.value = ''
   loadProxies()
 }
-
-const displayedProxies = computed(() => {
-  return [...proxies.value].sort((a, b) => {
-    const ga = a.cluster_group_name || ''
-    const gb = b.cluster_group_name || ''
-    if (ga && !gb) return 1
-    if (!ga && gb) return -1
-    return ga.localeCompare(gb)
-  })
-})
 
 // Wizard
 const wizardVisible = ref(false)
@@ -239,33 +221,6 @@ function onSearch() {
   searchTimer = setTimeout(() => {
     loadProxies()
   }, 300)
-}
-
-// ── Data Loading ──
-
-async function loadProxies() {
-  loading.value = true
-  try {
-    const params: Record<string, any> = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
-    if (searchText.value) params.search = searchText.value
-    const res = await api.get('/stream-proxies', { params })
-    proxies.value = res.data.items || []
-    totalCount.value = res.data.total || 0
-  } catch (e: any) {
-    const detail = e?.response?.data?.detail
-    const msg = typeof detail === 'string' ? detail : (e?.message || '加载四层代理列表失败')
-    message.error('加载失败: ' + msg)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadClusters() {
-  try {
-    const res = await api.get('/clusters')
-    clusters.value = res.data?.items || res.data || []
-  } catch { /* ignore */ }
 }
 
 // ── CRUD Actions ──
@@ -385,6 +340,11 @@ onMounted(async () => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   await loadClusters()
+  loadProxies()
+})
+
+// 侧边栏切换 TCP/DNS 时重新加载数据（组件复用，onMounted 只触发一次）
+watch(() => route.query.type, () => {
   loadProxies()
 })
 

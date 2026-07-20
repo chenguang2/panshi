@@ -22,11 +22,23 @@ The system SHALL allow authorized users to create a Layer 4 (TCP/UDP) stream pro
 - **THEN** the system rejects the creation with an error message "端口已被占用"
 
 ### Requirement: User can list stream proxies
-The system SHALL display all stream proxies in a card-grid layout, filterable by cluster and searchable by name.
+The system SHALL display stream proxies in a card-grid layout with two separate views: TCP 代理 and DNS 代理，通过侧边栏菜单和 `route.query.type` 参数区分。共享逻辑通过 `useStreamProxyList` composable 复用。
 
-#### Scenario: List all stream proxies
-- **WHEN** user navigates to the "四层代理" page
-- **THEN** the system displays all stream proxies as cards in a 3-column grid, each showing: cluster name, proxy name, description, listen port, load balance algorithm, upstream targets, publish status
+#### Scenario: List TCP proxies
+- **WHEN** user clicks "TCP代理" in sidebar
+- **THEN** the system navigates to `/stream-proxies?type=normal`
+- **AND** displays only `proxy_type=normal` proxies as cards
+- **AND** page title SHALL be "TCP 代理"
+
+#### Scenario: List DNS proxies
+- **WHEN** user clicks "DNS代理" in sidebar
+- **THEN** the system navigates to `/stream-proxies?type=dns`
+- **AND** displays only `proxy_type=dns` proxies as cards
+- **AND** page title SHALL be "DNS 代理"
+
+#### Scenario: Switch between TCP/DNS views
+- **WHEN** user clicks the other proxy type in the sidebar
+- **THEN** the system SHALL reload data with the new `proxy_type` filter without full page reload
 
 #### Scenario: Filter by cluster
 - **WHEN** user selects a cluster from the filter dropdown
@@ -35,6 +47,14 @@ The system SHALL display all stream proxies in a card-grid layout, filterable by
 #### Scenario: Search by name
 - **WHEN** user types a search keyword
 - **THEN** the system filters stream proxies whose name matches the keyword
+
+### Requirement: 共享 composable
+StreamProxy 列表页的 script 逻辑 SHALL 抽取为 `useStreamProxyList(proxyType)` composable，两个视图共享。
+
+#### Scenario: composable 提供共享状态
+- **WHEN** TCP 或 DNS 页面执行加载/筛选/CRUD/发布/版本管理操作
+- **THEN** 所有逻辑 SHALL 来自 composable
+- **AND** 后端 API 请求 SHALL 携带 `proxy_type` 参数
 
 ### Requirement: User can view a stream proxy
 The system SHALL display the full configuration of a stream proxy in a read-only view.

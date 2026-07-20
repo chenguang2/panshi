@@ -100,9 +100,13 @@ async def list_all_stream_proxies(
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     group_name: str = Query("__all__"),
     search: Optional[str] = None,
+    proxy_type: Optional[str] = Query(None, pattern="^(normal|dns)$"),
 ):
     """List stream proxies across all clusters (global view)."""
     query = select(StreamProxy).order_by(StreamProxy.created_at.desc())
+
+    if proxy_type:
+        query = query.where(StreamProxy.proxy_type == proxy_type)
 
     if group_name == "__ung__":
         query = query.join(Cluster, StreamProxy.cluster_id == Cluster.id).where(

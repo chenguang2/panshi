@@ -91,8 +91,8 @@
           <div class="form-group" style="margin-top:12px;">
             <label class="form-label">代理类型 <span class="required">*</span></label>
             <div class="spwf-toggle">
-              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'">普通四层代理</button>
-              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'">DNS 服务器</button>
+              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }">TCP代理</button>
+              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }">DNS代理</button>
             </div>
           </div>
 
@@ -336,6 +336,7 @@ const props = defineProps<{
   visible: boolean
   clusters: Cluster[]
   editingProxy?: StreamProxy | null
+  defaultProxyType?: 'normal' | 'dns'
 }>()
 
 const emit = defineEmits<{
@@ -832,7 +833,7 @@ watch(() => props.visible, async (v) => {
     form.listen_port = 0
     form.name = ''
     form.description = ''
-    form.proxy_type = 'normal'
+    form.proxy_type = props.defaultProxyType || 'normal'
     form.scheme = 'tcp'
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'
