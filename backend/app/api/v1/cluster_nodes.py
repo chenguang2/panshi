@@ -787,6 +787,10 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
 
     def _compare_ssl_certificate(db_cert, edge_data: dict | None):
         """对比 SSL 证书配置（DB vs Edge）"""
+        if db_cert.is_ca:
+            return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "expected_only_in_db", "reason": "CA 根证书无需发布到 Edge 节点", "fields": []}
+        if db_cert.cert_type == "client":
+            return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "expected_only_in_db", "reason": "客户端证书无需发布到 Edge 节点", "fields": []}
         if not edge_data:
             return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "only_in_db", "fields": []}
         fields = []
@@ -862,7 +866,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
 
     # ---------- 4. 构建分组 ----------
     groups = []
-    summary = {"total": 0, "match": 0, "mismatch": 0, "only_in_db": 0, "only_in_edge": 0}
+    summary = {"total": 0, "match": 0, "mismatch": 0, "only_in_db": 0, "only_in_edge": 0, "expected_only_in_db": 0}
 
     def _add_group(label: str, type_name: str, items: list):
         groups.append({"type": type_name, "label": label, "items": items or []})
