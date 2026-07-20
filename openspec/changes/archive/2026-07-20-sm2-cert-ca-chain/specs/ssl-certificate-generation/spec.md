@@ -1,14 +1,10 @@
-## Purpose
-
-支持在平台内直接生成 SSL 证书，支持 SM2 国密（双证书模式）以及 RSA/ECDSA 标准证书，无需通过外部工具手动生成后再上传。生成的证书自动保存为 SSL 证书记录，复用现有的发布、版本历史、回滚、配置比对等基础设施。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 生成 SM2 证书
 
 系统 SHALL 提供 API 端点为指定集群生成 SM2 国密证书。SM2 **强制双证书模式**（加密+签名），不再支持单证书。SM2 证书必须由 CA 签发，不再支持自签名。
 
-#### Scenario: 生成本地双证书（国密标准模式）
+#### Scenario: 生成本地双证书（国密标准模式）【改造：CA 签发】
 
 - **WHEN** 用户调用生成 API，指定 `algorithm=sm2`
 - **AND** `dual_cert` 参数被忽略，SM2 始终按双证书生成
@@ -54,7 +50,7 @@
   - 客户端签名证书（由 CA 签发，存入独立 `SslCertificate` 记录，`cert_type=client`）
   - 客户端加密证书（由 CA 签发，存入同一客户端记录）
 
-#### Scenario: 参数验证
+#### Scenario: 参数验证精简
 
 - **WHEN** 用户调用生成 API，不提供 `common_name`
 - **THEN** 系统 SHALL 返回 422，提示"通用名称（CN）为必填"
@@ -84,6 +80,8 @@
 ### Requirement: OpenSSL 版本和参数适配
 
 系统 SHALL 根据 openssl 发行版类型和算法类型自动适配命令行参数。
+
+*(此部分与原有 spec 一致，仅移除远程相关场景)*
 
 #### Scenario: bundled Tongsuo + SM2 加 sigopt
 - **WHEN** 检测到 openssl 来源为 `backend/bin/openssl`（bundled Tongsuo）
@@ -136,16 +134,6 @@
 - **THEN** `generate_log` SHALL 包含每个 `_run_openssl()` 调用的记录
 - **AND** 探测阶段的命令（如 `openssl version`、`openssl ecparam -list_curves`）SHALL 也计入 `generate_log`
 
-#### Scenario: 响应模型增加字段
-- **WHEN** 用户通过生成 API 创建证书
-- **THEN** 返回的 `SslCertificateResponse` SHALL 包含 `generate_log` 字段
-- **AND** `generate_log` SHALL 持久化到数据库 `SslCertificate.generate_log` 字段
-
-#### Scenario: 查询时返回历史日志
-- **WHEN** 用户通过 `GET /api/v1/clusters/{cluster_id}/ssl/{cert_id}` 查询证书
-- **THEN** 如果该证书有 `generate_log` 数据
-- **AND** 响应中的 `generate_log` SHALL 包含该证书生成时的命令记录
-
 ### Requirement: 生成 API 根据 algorithm 分发
 
 系统 SHALL 在 `_generate_local()` 中根据 `algorithm` 参数执行不同逻辑。
@@ -160,19 +148,6 @@
 - **THEN** 保存的证书记录 SHALL `gm=false`、`sign_cert=null`、`sign_key=null`
 - **WHEN** 用户指定 `algorithm=sm2`
 - **THEN** 保存的证书记录 SHALL `gm=true`、`sign_cert` 和 `sign_key` 有值（SM2 始终是双证书）
-
-### Requirement: 共用函数支持多算法
-
-`generate_openssl_cnf()`、`generate_csr()`、`self_sign_certificate()` SHALL 接受 `hash_alg` 参数以避免硬编码国密算法。
-
-#### Scenario: 不同算法使用不同摘要
-- **WHEN** `algorithm=rsa` 或 `algorithm=ecc`
-- **THEN** CSR 生成和证书签名 SHALL 使用 SHA-256 摘要（`-sha256`）
-- **AND** openssl.cnf 的 `default_md` 设为 `sha256`
-- **AND** 不传递 `-sigopt` 参数
-- **WHEN** `algorithm=sm2`
-- **THEN** CSR 生成和证书签名 SHALL 使用 SM3 摘要（`-sm3`）
-- **AND** Tongsuo flavor 时传递 `-sigopt sm2_id:1234567812345678`
 
 ### Requirement: 证书发布时携带 CA 链
 
@@ -198,74 +173,3 @@
 - **WHEN** 用户试图发布一个 `is_ca=true` 的 SSL 证书
 - **THEN** 前端 SHALL 不显示"发布"按钮
 - **AND** API 层面 SHALL 返回 400，提示"CA 证书不需要发布到 Edge 节点"
-
-### Requirement: 上传时自动检测算法
-
-系统 SHALL 在创建 SSL 证书时自动检测算法。
-
-#### Scenario: 创建端点自动检测
-- **WHEN** 用户发送 POST 到 `/api/v1/clusters/{cluster_id}/ssl` 且 `algorithm` 为空
-- **THEN** 系统 SHALL 调用 `detect_cert_algorithm()` 从 `cert` PEM 解析算法
-- **AND** 检测结果写入 `algorithm` 字段
-- **WHEN** `algorithm` 已指定
-- **THEN** 跳过自动检测，以用户指定值为准
-
-### Requirement: 域名和 IP 的 SAN 处理
-
-系统 SHALL 在生成 CSR 时自动区分域名 SAN 和 IP SAN 的格式。
-
-#### Scenario: DNS SAN 格式化
-- **WHEN** 用户传入 `dns_sans: ["example.com", "www.example.com"]`
-- **THEN** CSR 的 subjectAltName 扩展 SHALL 包含 `DNS:example.com,DNS:www.example.com`
-
-#### Scenario: IP SAN 格式化
-- **WHEN** 用户传入 `ip_sans: ["10.0.0.1", "192.168.1.1"]`
-- **THEN** CSR 的 subjectAltName 扩展 SHALL 包含 `IP:10.0.0.1,IP:192.168.1.1`
-
-#### Scenario: 域名和 IP 合并
-- **WHEN** 用户同时传入 `dns_sans` 和 `ip_sans`
-- **THEN** subjectAltName 扩展 SHALL 包含所有域名和 IP，使用正确的 `DNS:` / `IP:` 前缀
-- **AND** 格式为 `DNS:example.com,IP:10.0.0.1,DNS:www.example.com`
-
-### Requirement: 生成命令写入日志文件
-
-系统 SHALL 将证书生成过程中的所有命令写入文件日志，用于事后排查。
-
-#### Scenario: 日志文件路径
-- **WHEN** 系统执行证书生成
-- **THEN** 命令日志 SHALL 写入 `logs/cert_generate.log`（不在 `logs/edge/` 目录下）
-- **AND** 日志格式为 JSON Lines（每行一个 JSON 对象）
-- **AND** 每个 JSON 对象包含：`time`、`cluster_id`、`cluster_name`、`cert_name`、`step`、`command`、`exit_code`、`stderr`
-
-#### Scenario: 使用 Python logging 写入
-- **WHEN** 系统写入命令日志
-- **THEN** SHALL 使用 `logging.getLogger("cert_generate")` + 独立 FileHandler，不与 EdgeLogger 耦合
-- **AND** `propagate` SHALL 设为 `False`，避免重复写入 `app.log`
-- **AND** formatter SHALL 只输出 `%(message)s`（JSON 文本）
-
-#### Scenario: 日志内容完整
-- **WHEN** 生成本地证书
-- **THEN** 日志 SHALL 记录所有 `_run_openssl()` 调用的命令、退出码和 stderr
-- **AND** 包括 openssl 探测阶段的命令
-
-### Requirement: 前端展示真实命令日志
-
-证书生成对话框 SHALL 在生成完成后展示命令执行记录，替代当前假进度动画。
-
-#### Scenario: 生成完成展示命令列表
-- **WHEN** 证书生成成功
-- **THEN** 对话框 SHALL 按顺序展示 `generate_log` 中的所有步骤
-- **AND** 每个步骤显示：步骤名称、命令文本（可折叠展开）、退出码
-- **AND** 所有步骤标记为"已完成"（绿色勾）
-
-#### Scenario: 生成失败展示错误命令
-- **WHEN** 证书生成失败
-- **THEN** 对话框 SHALL 展示已成功执行的步骤（绿色勾）
-- **AND** 失败步骤 SHALL 显示红色叉号和错误命令
-- **AND** 失败步骤的 `stderr` SHALL 直接展示给用户
-- **AND** 失败步骤之后的步骤 SHALL 不显示
-
-#### Scenario: 证书详情查看命令日志
-- **WHEN** 用户查看一个通过"生成"方式创建的证书（`create_method` 为 `local_generate`）
-- **THEN** 查看弹窗 SHALL 包含"生成日志"可折叠区块
-- **AND** 展示该证书生成时的命令执行记录（从 DB 读取）
