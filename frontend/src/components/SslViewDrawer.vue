@@ -11,16 +11,51 @@
           <a-descriptions :column="1" bordered :label-style="{ width: '140px' }">
             <a-descriptions-item label="名称">{{ cert.name }}</a-descriptions-item>
             <a-descriptions-item label="SNI">{{ cert.sni }}</a-descriptions-item>
-            <a-descriptions-item label="证书类型">{{ cert.cert_type }}</a-descriptions-item>
+            <a-descriptions-item label="证书类型">{{ cert.cert_type }}<span v-if="cert.is_ca" style="margin-left:6px;">(CA 根证书)</span></a-descriptions-item>
             <a-descriptions-item label="所属集群">{{ cert.cluster_name || cert.cluster_id }}</a-descriptions-item>
             <a-descriptions-item label="SSL 协议">{{ cert.ssl_protocols || '-' }}</a-descriptions-item>
             <a-descriptions-item label="描述">{{ cert.description || '-' }}</a-descriptions-item>
             <a-descriptions-item label="状态">
-              <a-tag v-if="cert.current_version" color="green">已发布</a-tag>
+              <a-tag v-if="cert.is_ca" color="purple">CA 根证书</a-tag>
+              <a-tag v-else-if="cert.current_version" color="green">已发布</a-tag>
               <a-tag v-else color="orange">未发布</a-tag>
             </a-descriptions-item>
             <a-descriptions-item label="版本" v-if="cert.current_version">v{{ cert.current_version }}</a-descriptions-item>
           </a-descriptions>
+
+          <!-- CA 特定操作 -->
+          <div v-if="cert.is_ca" class="ca-actions" style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" @click="downloadCaCert(cert)">下载 CA 证书 (.crt)</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click="caKeyConfirmVisible = true">下载 CA 私钥</button>
+          </div>
+
+          <!-- CA 私钥下载确认弹窗 -->
+          <div class="modal-overlay" :style="{ display: caKeyConfirmVisible ? 'flex' : 'none' }">
+            <div class="modal" style="max-width:420px;">
+              <div class="modal-header">
+                <h2>下载 CA 私钥</h2>
+                <button class="modal-close" @click="caKeyConfirmVisible = false">&times;</button>
+              </div>
+              <div class="modal-body">
+                <p style="font-size:14px;line-height:1.6;">
+                  下载 CA 私钥属于<strong style="color:var(--danger);">高风险操作</strong>，确认后私钥将以明文形式下载。
+                </p>
+                <p style="font-size:13px;color:var(--muted);margin-top:8px;">请确保在安全环境中操作。</p>
+                <div v-if="caKeyError" class="form-error" style="margin-top:12px;">{{ caKeyError }}</div>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-ghost" @click="caKeyConfirmVisible = false">取消</button>
+                <button class="btn btn-danger" @click="doDownloadCaKey" :disabled="caKeyDownloading">
+                  {{ caKeyDownloading ? '下载中...' : '确认下载' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 客户端证书特定操作 -->
+          <div v-if="cert.cert_type === 'client'" style="margin-top:12px;">
+            <button class="btn btn-primary btn-sm" @click="downloadClientBundle(cert)">下载客户端证书包</button>
+          </div>
           <div class="section-header">
             <a-divider style="flex:1;min-width:0;">证书内容 (PEM)</a-divider>
             <button class="btn btn-ghost btn-sm download-btn" @click="downloadCert('cert', cert.cert, `${cert.name}_cert.pem`)">📥 下载</button>
@@ -79,7 +114,9 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { downloadPem } from '@/utils/download'
+import { message } from 'ant-design-vue'
+import { downloadPem, buildCertZip, downloadBlob } from '@/utils/download'
+import api from '@/api'
 
 const props = defineProps<{
   visible: boolean
@@ -91,6 +128,9 @@ defineEmits<{
 }>()
 
 const viewExpanded = ref<Record<string, boolean>>({})
+const caKeyConfirmVisible = ref(false)
+const caKeyDownloading = ref(false)
+const caKeyError = ref('')
 
 watch(() => props.cert, (cert) => {
   if (cert?.generate_log) {
@@ -110,6 +150,41 @@ function toggleViewLog(index: string | number) {
 
 function downloadCert(_type: string, content: string, filename: string) {
   if (content) downloadPem(content, filename)
+}
+
+function downloadCaCert(cert: any) {
+  if (cert.cert) downloadPem(cert.cert, `${cert.name}_ca.crt`)
+}
+
+async function doDownloadCaKey() {
+  if (!props.cert) return
+  caKeyDownloading.value = true
+  caKeyError.value = ''
+  try {
+    const res = await api.get(`/ssl/${props.cert.id}/ca-key`)
+    const keyPem = res.data?.private_key
+    if (keyPem) {
+      downloadPem(keyPem, `${props.cert.name}_ca_key.pem`)
+      message.success('CA 私钥已下载')
+      caKeyConfirmVisible.value = false
+    } else {
+      caKeyError.value = 'CA 私钥不可用'
+    }
+  } catch {
+    caKeyError.value = '下载 CA 私钥失败'
+  } finally {
+    caKeyDownloading.value = false
+  }
+}
+
+async function downloadClientBundle(cert: any) {
+  try {
+    const blob = await buildCertZip(cert, ['sign_cert', 'sign_key', 'cert', 'key'])
+    downloadBlob(blob, `${cert.name}_client_bundle.zip`)
+    message.success('客户端证书包已下载')
+  } catch {
+    message.error('打包下载失败')
+  }
 }
 </script>
 
