@@ -294,7 +294,7 @@ class TestSslMigration:
 
 
 class TestSslGenerateRequest:
-    """Tests for SslCertificateGenerateRequest schema."""
+    """Tests for SslCertificateGenerateRequest schema (simplified)."""
 
     def test_required_fields(self):
         from app.schemas.ssl import SslCertificateGenerateRequest
@@ -302,46 +302,25 @@ class TestSslGenerateRequest:
         req = SslCertificateGenerateRequest(
             name="test-cert",
             common_name="test.com",
-            mode="local",
         )
         assert req.name == "test-cert"
         assert req.common_name == "test.com"
-        assert req.mode == "local"
         assert req.validity_days == 365  # default
         assert req.dual_cert is True  # default
+        assert req.ca_cert_id is None
+        assert req.generate_client_certs is False
 
-    def test_remote_requires_node_id(self):
-        from app.schemas.ssl import SslCertificateGenerateRequest
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            SslCertificateGenerateRequest(
-                name="test",
-                common_name="test.com",
-                mode="remote",
-                # missing node_id
-            )
-
-    def test_local_does_not_require_node_id(self):
+    def test_ca_cert_id_and_client_certs(self):
         from app.schemas.ssl import SslCertificateGenerateRequest
 
         req = SslCertificateGenerateRequest(
             name="test",
             common_name="test.com",
-            mode="local",
+            ca_cert_id=42,
+            generate_client_certs=True,
         )
-        assert req.node_id is None
-
-    def test_invalid_mode_rejected(self):
-        from app.schemas.ssl import SslCertificateGenerateRequest
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            SslCertificateGenerateRequest(
-                name="test",
-                common_name="test.com",
-                mode="invalid",
-            )
+        assert req.ca_cert_id == 42
+        assert req.generate_client_certs is True
 
     def test_sans_optional(self):
         from app.schemas.ssl import SslCertificateGenerateRequest
@@ -349,12 +328,113 @@ class TestSslGenerateRequest:
         req = SslCertificateGenerateRequest(
             name="test",
             common_name="test.com",
-            mode="local",
             dns_sans=["a.com", "b.com"],
             ip_sans=["10.0.0.1"],
         )
         assert req.dns_sans == ["a.com", "b.com"]
         assert req.ip_sans == ["10.0.0.1"]
+
+    def test_algorithms_accepted(self):
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        for alg in ("sm2", "rsa", "ecc"):
+            req = SslCertificateGenerateRequest(
+                name="test", common_name="test.com", algorithm=alg,
+            )
+            assert req.algorithm == alg
+
+
+class TestCaCertificateGenerateRequest:
+    """Tests for CaCertificateGenerateRequest schema."""
+
+    def test_required_name(self):
+        from app.schemas.ssl import CaCertificateGenerateRequest
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CaCertificateGenerateRequest()
+
+    def test_defaults(self):
+        from app.schemas.ssl import CaCertificateGenerateRequest
+
+        req = CaCertificateGenerateRequest(name="My CA")
+        assert req.name == "My CA"
+        assert req.common_name is None
+        assert req.validity_days == 3650
+
+    def test_all_fields(self):
+        from app.schemas.ssl import CaCertificateGenerateRequest
+
+        req = CaCertificateGenerateRequest(
+            name="My CA", common_name="My Root CA", validity_days=7300,
+        )
+        assert req.name == "My CA"
+        assert req.common_name == "My Root CA"
+        assert req.validity_days == 7300
+
+
+class TestSslCertificateGenerateResponse:
+    """Tests for SslCertificateGenerateResponse schema."""
+
+    def test_server_required_client_optional(self):
+        from app.schemas.ssl import (
+            SslCertificateGenerateResponse, SslCertificateResponse,
+        )
+
+        server = SslCertificateResponse(
+            id=1, edge_uuid="uuid", cluster_id=1,
+            name="srv", sni="srv.local", cert="crt", key="key",
+        )
+        resp = SslCertificateGenerateResponse(server=server)
+        assert resp.server.id == 1
+        assert resp.client is None
+
+    def test_with_client(self):
+        from app.schemas.ssl import (
+            SslCertificateGenerateResponse, SslCertificateResponse,
+        )
+
+        server = SslCertificateResponse(
+            id=1, edge_uuid="uuid", cluster_id=1,
+            name="srv", sni="srv.local", cert="crt", key="key",
+        )
+        client = SslCertificateResponse(
+            id=2, edge_uuid="uuid2", cluster_id=1,
+            name="client", sni="client.local", cert="crt", key="key",
+            cert_type="client",
+        )
+        resp = SslCertificateGenerateResponse(server=server, client=client)
+        assert resp.server.id == 1
+        assert resp.client is not None
+        assert resp.client.id == 2
+        assert resp.client.cert_type == "client"
+
+
+class TestSslResponseIsCaFields:
+    """Tests for is_ca and ca_cert_id in response schema."""
+
+    def test_response_has_is_ca_field(self):
+        from app.schemas.ssl import SslCertificateResponse
+
+        fields = SslCertificateResponse.model_fields
+        assert "is_ca" in fields
+
+    def test_response_has_ca_cert_id_field(self):
+        from app.schemas.ssl import SslCertificateResponse
+
+        fields = SslCertificateResponse.model_fields
+        assert "ca_cert_id" in fields
+
+    def test_ca_response_masks_private_key(self):
+        from app.schemas.ssl import SslCertificateResponse
+
+        resp = SslCertificateResponse(
+            id=1, edge_uuid="uuid", cluster_id=1,
+            name="ca", sni="ca.local", cert="crt", key="secret-key",
+            is_ca=True,
+        )
+        assert resp.is_ca is True
+        assert resp.private_key == "", "CA response should mask private_key"
 
 
 class TestSslPublishConfig:

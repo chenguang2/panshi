@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import date, datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -326,13 +327,24 @@ def generate_dual_certificates(
     ip_sans: list[str],
     validity_days: int,
     flavor: str,
+    ca_cert_pem: str,
+    ca_key_pem: str,
 ) -> tuple[dict, list[CommandResult]]:
-    """Generate SM2 dual certificates (encryption + signing).
+    """Generate SM2 dual certificates (encryption + signing), signed by a CA.
 
     Returns (result_dict, logs) where result_dict has keys:
     cert, key, sign_cert, sign_key.
     """
     logs: list[CommandResult] = []
+
+    enc_ext = """[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = critical, keyEncipherment, dataEncipherment
+"""
+    sign_ext = """[ v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, nonRepudiation
+"""
 
     # Encryption key pair
     enc_key, key_logs = generate_sm2_keypair(openssl_path)
@@ -342,9 +354,11 @@ def generate_dual_certificates(
         common_name, dns_sans, ip_sans, flavor,
     )
     logs.extend(csr_logs)
-    enc_cert, cert_logs = self_sign_certificate(
-        openssl_path, enc_csr, enc_key,
+    enc_cert, cert_logs = ca_sign_csr(
+        openssl_path, enc_csr, ca_cert_pem, ca_key_pem,
         validity_days, flavor,
+        extensions_section="v3_req",
+        ext_file_content=enc_ext,
     )
     logs.extend(cert_logs)
 
@@ -356,9 +370,11 @@ def generate_dual_certificates(
         common_name, dns_sans, ip_sans, flavor,
     )
     logs.extend(csr_logs2)
-    sign_cert, cert_logs2 = self_sign_certificate(
-        openssl_path, sign_csr, sign_key,
+    sign_cert, cert_logs2 = ca_sign_csr(
+        openssl_path, sign_csr, ca_cert_pem, ca_key_pem,
         validity_days, flavor,
+        extensions_section="v3_req",
+        ext_file_content=sign_ext,
     )
     logs.extend(cert_logs2)
 
@@ -368,6 +384,152 @@ def generate_dual_certificates(
         "sign_cert": sign_cert,
         "sign_key": sign_key,
     }, logs
+
+
+def generate_ca_certificate(
+    openssl_path: str,
+    common_name: str,
+    validity_days: int,
+    flavor: str,
+) -> tuple[dict, list[CommandResult]]:
+    """Generate a self-signed SM2 CA root certificate.
+
+    Returns (result_dict, logs) where result_dict has keys: ca_cert, ca_key.
+    """
+    logs: list[CommandResult] = []
+
+    # Generate CA key pair
+    ca_key, key_logs = generate_sm2_keypair(openssl_path)
+    logs.extend(key_logs)
+
+    # Generate CSR
+    ca_csr, csr_logs = generate_csr(
+        openssl_path, ca_key,
+        common_name, [], [], flavor,
+    )
+    logs.extend(csr_logs)
+
+    # Self-sign with CA extensions
+    with tempfile.TemporaryDirectory(prefix="panshi_ca_") as tmpdir:
+        tmp = Path(tmpdir)
+        csr_file = tmp / "ca.csr"
+        key_file = tmp / "ca.key"
+        cert_file = tmp / "ca.crt"
+        ext_file = tmp / "ca_ext.cnf"
+
+        csr_file.write_text(ca_csr)
+        key_file.write_text(ca_key)
+
+        ext_content = """[ v3_ca ]
+basicConstraints = critical, CA:TRUE, pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+"""
+        ext_file.write_text(ext_content)
+
+        cmd = [
+            "x509", "-req",
+            "-in", str(csr_file),
+            "-signkey", str(key_file),
+            "-out", str(cert_file),
+            "-days", str(validity_days),
+            "-extfile", str(ext_file),
+            "-extensions", "v3_ca",
+        ]
+        cmd.extend(_digest_flag("sm3"))
+        cmd.extend(_sigopt_args(flavor, "sm3"))
+
+        result = _run_openssl(cmd, openssl_path)
+        logs.append(result)
+        if result.returncode != 0:
+            raise RuntimeError(f"CA certificate self-sign failed: {result.stderr.strip()}")
+
+        ca_cert_pem = cert_file.read_text()
+
+    return {"ca_cert": ca_cert_pem, "ca_key": ca_key}, logs
+
+
+def ca_sign_csr(
+    openssl_path: str,
+    csr_pem: str,
+    ca_cert_pem: str,
+    ca_key_pem: str,
+    validity_days: int,
+    flavor: str,
+    extensions_section: str,
+    ext_file_content: str,
+    hash_alg: str = "sm3",
+) -> tuple[str, list[CommandResult]]:
+    """Sign a CSR using a CA certificate.
+
+    Auto-truncates validity_days to not exceed the CA certificate's expiry.
+
+    Returns (cert_pem, logs).
+    """
+    logs: list[CommandResult] = []
+
+    # Truncate validity to not exceed CA
+    ca_expiry = get_cert_expiry(openssl_path, ca_cert_pem)
+    from datetime import date
+    remaining = (ca_expiry - date.today()).days
+    actual_days = min(validity_days, remaining)
+
+    with tempfile.TemporaryDirectory(prefix="panshi_ca_sign_") as tmpdir:
+        tmp = Path(tmpdir)
+        csr_file = tmp / "request.csr"
+        ca_cert_file = tmp / "ca.pem"
+        ca_key_file = tmp / "ca.key"
+        cert_file = tmp / "cert.crt"
+        ext_file = tmp / "ext.cnf"
+
+        csr_file.write_text(csr_pem)
+        ca_cert_file.write_text(ca_cert_pem)
+        ca_key_file.write_text(ca_key_pem)
+        ext_file.write_text(ext_file_content)
+
+        cmd = [
+            "x509", "-req",
+            "-in", str(csr_file),
+            "-CA", str(ca_cert_file),
+            "-CAkey", str(ca_key_file),
+            "-CAcreateserial",
+            "-out", str(cert_file),
+            "-days", str(actual_days),
+            "-extfile", str(ext_file),
+            "-extensions", extensions_section,
+        ]
+        cmd.extend(_digest_flag(hash_alg))
+        cmd.extend(_sigopt_args(flavor, hash_alg))
+
+        result = _run_openssl(cmd, openssl_path)
+        logs.append(result)
+        if result.returncode != 0:
+            raise RuntimeError(f"CA signing failed: {result.stderr.strip()}")
+
+        return cert_file.read_text(), logs
+
+
+def get_cert_expiry(openssl_path: str, cert_pem: str) -> date:
+    """Parse a PEM certificate and return its notAfter date."""
+    with tempfile.TemporaryDirectory(prefix="panshi_expiry_") as tmpdir:
+        cert_file = Path(tmpdir) / "cert.pem"
+        cert_file.write_text(cert_pem)
+
+        result = _run_openssl(
+            ["x509", "-in", str(cert_file), "-enddate", "-noout"],
+            openssl_path,
+        )
+        if result.returncode != 0:
+            raise ValueError(f"Failed to parse certificate: {result.stderr.strip()}")
+
+        # Output format: notAfter=Jul 20 12:00:00 2036 GMT
+        line = result.stdout.strip()
+        if "notAfter=" not in line:
+            raise ValueError(f"Unexpected openssl output: {line}")
+        date_str = line.split("notAfter=", 1)[1].strip()
+
+        return datetime.strptime(date_str, "%b %d %H:%M:%S %Y %Z").date()
 
 
 def generate_standard_certificate(
@@ -425,40 +587,31 @@ class LocalProvider:
         ip_sans: list[str] | None = None,
         validity_days: int = 365,
         dual_cert: bool = True,
+        ca_cert_pem: str | None = None,
+        ca_key_pem: str | None = None,
     ) -> tuple[dict, list[CommandResult]]:
-        """Generate a certificate. Returns (cert_dict, logs)."""
+        """Generate a certificate. Returns (cert_dict, logs).
+
+        For SM2: generates dual certs (enc+sign) always, requires CA params.
+        For RSA/ECC: generates single cert, self-signed, CA params ignored.
+        """
         if not self.openssl_path:
             raise RuntimeError("No openssl binary available")
 
         if algorithm == "sm2":
             if not self.sm2_supported:
                 raise RuntimeError("Openssl does not support SM2 curve")
-            if dual_cert:
-                result, logs = generate_dual_certificates(
-                    openssl_path=self.openssl_path,
-                    common_name=common_name,
-                    dns_sans=dns_sans or [],
-                    ip_sans=ip_sans or [],
-                    validity_days=validity_days,
-                    flavor=self.flavor,
-                )
-                return result, logs
-            else:
-                logs: list[CommandResult] = []
-                key_pem, key_logs = generate_sm2_keypair(self.openssl_path)
-                logs.extend(key_logs)
-                csr_pem, csr_logs = generate_csr(
-                    self.openssl_path, key_pem,
-                    common_name, dns_sans or [], ip_sans or [],
-                    self.flavor, hash_alg="sm3",
-                )
-                logs.extend(csr_logs)
-                cert_pem, cert_logs = self_sign_certificate(
-                    self.openssl_path, csr_pem, key_pem,
-                    validity_days, self.flavor, hash_alg="sm3",
-                )
-                logs.extend(cert_logs)
-                return {"cert": cert_pem, "key": key_pem}, logs
+            result, logs = generate_dual_certificates(
+                openssl_path=self.openssl_path,
+                common_name=common_name,
+                dns_sans=dns_sans or [],
+                ip_sans=ip_sans or [],
+                validity_days=validity_days,
+                flavor=self.flavor,
+                ca_cert_pem=ca_cert_pem,
+                ca_key_pem=ca_key_pem,
+            )
+            return result, logs
         else:
             result, logs = generate_standard_certificate(
                 openssl_path=self.openssl_path,
@@ -477,12 +630,16 @@ class LocalProvider:
         dns_sans: list[str] | None = None,
         ip_sans: list[str] | None = None,
         validity_days: int = 365,
+        ca_cert_pem: str | None = None,
+        ca_key_pem: str | None = None,
     ) -> dict:
         result, logs = self.generate_certificate(
-            algorithm="sm2", dual_cert=True,
+            algorithm="sm2",
             common_name=common_name,
             dns_sans=dns_sans, ip_sans=ip_sans,
             validity_days=validity_days,
+            ca_cert_pem=ca_cert_pem,
+            ca_key_pem=ca_key_pem,
         )
         return result
 

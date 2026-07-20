@@ -328,7 +328,11 @@ class TestGenerateStandardCertificate:
 # ===== 2.7 generate_dual_certificates() =====
 
 class TestGenerateDualCertificates:
-    """Tests for dual certificate generation (enc + sign)."""
+    """Tests for dual certificate generation (enc + sign) updated for CA signing."""
+
+    def _setup_ca(self, openssl_path, flavor):
+        from app.services.cert_generator import generate_ca_certificate
+        return generate_ca_certificate(openssl_path, "DualTestCA", 3650, flavor)
 
     def test_returns_both_certs(self):
         from app.services.cert_generator import (
@@ -338,6 +342,7 @@ class TestGenerateDualCertificates:
         if not openssl["sm2_supported"]:
             pytest.skip("No SM2-capable openssl available")
 
+        ca, _ = self._setup_ca(openssl["path"], openssl["flavor"])
         result, logs = generate_dual_certificates(
             openssl_path=openssl["path"],
             common_name="dual.test.com",
@@ -345,6 +350,8 @@ class TestGenerateDualCertificates:
             ip_sans=[],
             validity_days=365,
             flavor=openssl["flavor"],
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
         )
         assert isinstance(result, dict)
         assert "cert" in result
@@ -520,6 +527,10 @@ class TestGenerateEcdsaKeypair:
 
 class TestLocalProviderAlgorithm:
 
+    def _setup_ca(self, openssl_path, flavor):
+        from app.services.cert_generator import generate_ca_certificate
+        return generate_ca_certificate(openssl_path, "LPCA", 3650, flavor)
+
     def test_provider_has_generate_method(self):
         from app.services.cert_generator import LocalProvider
         provider = LocalProvider()
@@ -531,9 +542,12 @@ class TestLocalProviderAlgorithm:
         provider = LocalProvider()
         if not provider.sm2_supported:
             pytest.skip("No SM2-capable openssl available")
+        ca, _ = self._setup_ca(provider.openssl_path, provider.flavor)
         result, logs = provider.generate_certificate(
             algorithm="sm2",
             common_name="lp-sm2.test.com",
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
         )
         assert "cert" in result
         assert "key" in result
@@ -542,21 +556,24 @@ class TestLocalProviderAlgorithm:
         assert result["key"] != result["sign_key"]
         assert len(logs) >= 1
 
-    def test_generate_sm2_single_no_sign(self):
+    def test_sm2_single_cert_removed_returns_dual(self):
+        """SM2 single cert path removed: dual_cert=False still generates dual."""
         from app.services.cert_generator import LocalProvider
         provider = LocalProvider()
         if not provider.sm2_supported:
             pytest.skip("No SM2-capable openssl available")
+        ca, _ = self._setup_ca(provider.openssl_path, provider.flavor)
         result, logs = provider.generate_certificate(
             algorithm="sm2",
             dual_cert=False,
             common_name="lp-sm2-single.test.com",
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
         )
         assert "cert" in result
         assert "key" in result
-        assert result.get("sign_cert") is None
-        assert result.get("sign_key") is None
-        assert len(logs) >= 1
+        assert "sign_cert" in result
+        assert "sign_key" in result
 
     def test_generate_rsa_returns_single(self):
         from app.services.cert_generator import LocalProvider
@@ -607,16 +624,23 @@ class TestLocalProvider:
         assert provider.flavor in ("tongsuo", "standard")
 
     def test_provider_generates_dual_certs(self):
-        from app.services.cert_generator import LocalProvider
+        from app.services.cert_generator import (
+            LocalProvider, generate_ca_certificate,
+        )
         provider = LocalProvider()
         if not provider.sm2_supported:
             pytest.skip("No SM2-capable openssl available")
+        ca, _ = generate_ca_certificate(
+            provider.openssl_path, "DualCertCA", 3650, provider.flavor,
+        )
 
         result = provider.generate_dual_certificates(
             common_name="provider.test.com",
             dns_sans=["provider.test.com"],
             ip_sans=[],
             validity_days=365,
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
         )
         assert "cert" in result
         assert "key" in result
@@ -727,17 +751,20 @@ class TestGeneratorReturnsLogs:
 
     def test_generate_dual_certificates_returns_logs(self):
         from app.services.cert_generator import (
-            generate_dual_certificates, detect_openssl,
+            generate_dual_certificates, generate_ca_certificate, detect_openssl,
         )
         openssl = detect_openssl()
         if not openssl["sm2_supported"]:
             pytest.skip("No SM2-capable openssl available")
+        ca, _ = generate_ca_certificate(openssl["path"], "LogTestCA", 3650, openssl["flavor"])
         result, logs = generate_dual_certificates(
             openssl_path=openssl["path"],
             common_name="test-dual-logs.test.com",
             dns_sans=[], ip_sans=[],
             validity_days=365,
             flavor=openssl["flavor"],
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
         )
         assert isinstance(result, dict)
         assert "cert" in result
@@ -763,63 +790,6 @@ class TestGeneratorReturnsLogs:
         assert "cert" in result
         assert isinstance(logs, list)
         assert len(logs) >= 1
-
-
-# ===== NEW: Remote marker parsing (Tasks 3.1-3.3) =====
-
-class TestRemoteMarkerParsing:
-    """Tests for remote SSH marker parsing logic."""
-
-    def test_parse_single_stdout_with_markers(self):
-        from app.api.v1.cluster_ssl import _parse_remote_markers
-
-        stdout = """===PASHI_STEP:genkey===
-openssl ecparam -genkey -name SM2 -out key.pem
-===PASHI_EXIT:0===
-===PASHI_STEP:csr===
-openssl req -new -key key.pem -out request.csr -sm3
-===PASHI_EXIT:0===
-===PASHI_STEP:sign===
-openssl x509 -req -in request.csr -signkey key.pem -out cert.crt -sm3 -days 365
-===PASHI_EXIT:0===
-"""
-        steps = _parse_remote_markers(stdout)
-        assert len(steps) == 3
-        assert steps[0]["step"] == "genkey"
-        assert "ecparam" in steps[0]["command"]
-        assert steps[0]["exit_code"] == 0
-        assert steps[1]["step"] == "csr"
-        assert "req -new" in steps[1]["command"]
-        assert steps[2]["step"] == "sign"
-        assert "x509 -req" in steps[2]["command"]
-
-    def test_parse_mixed_output_and_markers(self):
-        from app.api.v1.cluster_ssl import _parse_remote_markers
-
-        stdout = """some debug output
-===PASHI_STEP:genkey===
-openssl ecparam -genkey -name SM2 -out key.pem
-some result here
-===PASHI_EXIT:0===
-garbage line
-===PASHI_STEP:sign===
-openssl x509 -req -in request.csr -signkey key.pem
-===PASHI_EXIT:0===
-"""
-        steps = _parse_remote_markers(stdout)
-        assert len(steps) == 2
-        assert "ecparam" in steps[0]["command"]
-
-    def test_parse_failure_exit_code(self):
-        from app.api.v1.cluster_ssl import _parse_remote_markers
-
-        stdout = """===PASHI_STEP:genkey===
-openssl ecparam -genkey -name SM2 -out key.pem
-===PASHI_EXIT:1===
-"""
-        steps = _parse_remote_markers(stdout)
-        assert len(steps) == 1
-        assert steps[0]["exit_code"] == 1
 
 
 # ===== NEW: CommandLogEntry Schema (Task 1.1 / 9.1) =====
@@ -882,3 +852,380 @@ class TestSslCertificateResponseGenerateLog:
             name="test", sni="test.com", cert="", key="",
         )
         assert instance.generate_log is None
+
+
+# ===== NEW: Task 1.5 — LocalProvider SM2 always dual cert, requires CA =====
+
+class TestLocalProviderSm2CA:
+    """Tests for LocalProvider SM2 path with CA signing."""
+
+    def _setup_ca(self, openssl_path, flavor):
+        from app.services.cert_generator import generate_ca_certificate
+        return generate_ca_certificate(openssl_path, "ProviderCA", 3650, flavor)
+
+    def test_sm2_always_dual_cert(self):
+        from app.services.cert_generator import LocalProvider
+        provider = LocalProvider()
+        if not provider.sm2_supported:
+            pytest.skip("No SM2-capable openssl available")
+        ca, _ = self._setup_ca(provider.openssl_path, provider.flavor)
+        result, logs = provider.generate_certificate(
+            algorithm="sm2",
+            common_name="always-dual.test.com",
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
+        )
+        assert "cert" in result
+        assert "key" in result
+        assert "sign_cert" in result
+        assert "sign_key" in result
+
+    def test_sm2_requires_ca_params(self):
+        from app.services.cert_generator import LocalProvider
+        provider = LocalProvider()
+        if not provider.sm2_supported:
+            pytest.skip("No SM2-capable openssl available")
+        with pytest.raises(TypeError):
+            provider.generate_certificate(
+                algorithm="sm2",
+                common_name="no-ca.test.com",
+            )
+
+    def test_sm2_ignores_dual_cert_param(self):
+        from app.services.cert_generator import LocalProvider
+        provider = LocalProvider()
+        if not provider.sm2_supported:
+            pytest.skip("No SM2-capable openssl available")
+        ca, _ = self._setup_ca(provider.openssl_path, provider.flavor)
+        with_ca, _ = provider.generate_certificate(
+            algorithm="sm2", common_name="ignored-param.test.com",
+            dual_cert=False,
+            ca_cert_pem=ca["ca_cert"], ca_key_pem=ca["ca_key"],
+        )
+        assert "sign_cert" in with_ca
+        assert "sign_key" in with_ca
+
+
+# ===== NEW: Task 1.4 — generate_dual_certificates() with CA =====
+
+class TestGenerateDualCertificatesWithCA:
+    """Tests for dual cert generation using CA signing."""
+
+    def _setup_ca(self, openssl_path, flavor):
+        from app.services.cert_generator import generate_ca_certificate
+        return generate_ca_certificate(openssl_path, "DualCA", 3650, flavor)
+
+    def test_requires_ca_params(self):
+        from app.services.cert_generator import generate_dual_certificates
+        import inspect
+        sig = inspect.signature(generate_dual_certificates)
+        assert "ca_cert_pem" in sig.parameters
+        assert "ca_key_pem" in sig.parameters
+
+    def test_returns_dual_certs_signed_by_ca(self):
+        from app.services.cert_generator import (
+            generate_dual_certificates, _run_openssl, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        ca, _ = self._setup_ca(openssl["path"], openssl["flavor"])
+        result, logs = generate_dual_certificates(
+            openssl_path=openssl["path"],
+            common_name="dual-ca.test.com",
+            dns_sans=[],
+            ip_sans=[],
+            validity_days=365,
+            flavor=openssl["flavor"],
+            ca_cert_pem=ca["ca_cert"],
+            ca_key_pem=ca["ca_key"],
+        )
+        assert isinstance(result, dict)
+        assert "cert" in result
+        assert "key" in result
+        assert "sign_cert" in result
+        assert "sign_key" in result
+        assert "-----BEGIN CERTIFICATE-----" in result["cert"]
+        assert "-----BEGIN CERTIFICATE-----" in result["sign_cert"]
+
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            cert_file = Path(d) / "cert.crt"
+            cert_file.write_text(result["cert"])
+            r = _run_openssl(
+                ["x509", "-in", str(cert_file), "-noout", "-issuer"],
+                openssl["path"],
+            )
+            assert "CN = DualCA" in r.stdout or "CN=DualCA" in r.stdout, (
+                f"Expected issuer CN=DualCA, got {r.stdout}"
+            )
+
+    def test_self_sign_fallback_removed(self):
+        """Calling without ca params should raise TypeError."""
+        from app.services.cert_generator import generate_dual_certificates, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        with pytest.raises(TypeError):
+            generate_dual_certificates(
+                openssl_path=openssl["path"],
+                common_name="no-ca.test.com",
+                dns_sans=[], ip_sans=[],
+                validity_days=365,
+                flavor=openssl["flavor"],
+            )
+
+
+# ===== NEW: Task 1.3 — ca_sign_csr() =====
+
+class TestCaSignCsr:
+    """Tests for CA-signed CSR generation."""
+
+    def _setup(self, openssl_path, flavor):
+        from app.services.cert_generator import (
+            generate_ca_certificate, generate_sm2_keypair, generate_csr,
+        )
+        ca, _ = generate_ca_certificate(openssl_path, "TestCA", 3650, flavor)
+        key, _ = generate_sm2_keypair(openssl_path)
+        csr, _ = generate_csr(openssl_path, key, "test.panshi.com", [], [], flavor)
+        return ca["ca_cert"], ca["ca_key"], csr
+
+    def test_function_exists(self):
+        from app.services.cert_generator import ca_sign_csr
+        assert callable(ca_sign_csr)
+
+    def test_signs_csr_and_returns_pem(self):
+        from app.services.cert_generator import ca_sign_csr, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        ca_cert, ca_key, csr = self._setup(openssl["path"], openssl["flavor"])
+        cert, logs = ca_sign_csr(
+            openssl_path=openssl["path"],
+            csr_pem=csr,
+            ca_cert_pem=ca_cert,
+            ca_key_pem=ca_key,
+            validity_days=365,
+            flavor=openssl["flavor"],
+            extensions_section="v3_req",
+            ext_file_content="""[ v3_req ]\nbasicConstraints = CA:FALSE\nkeyUsage = critical, digitalSignature\n""",
+        )
+        assert isinstance(cert, str)
+        assert "-----BEGIN CERTIFICATE-----" in cert
+        assert "-----END CERTIFICATE-----" in cert
+        assert isinstance(logs, list)
+        assert len(logs) >= 1
+
+    def test_issuer_is_ca_subject(self):
+        from app.services.cert_generator import ca_sign_csr, _run_openssl, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        ca_cert, ca_key, csr = self._setup(openssl["path"], openssl["flavor"])
+        cert, _ = ca_sign_csr(
+            openssl_path=openssl["path"],
+            csr_pem=csr,
+            ca_cert_pem=ca_cert,
+            ca_key_pem=ca_key,
+            validity_days=365,
+            flavor=openssl["flavor"],
+            extensions_section="v3_req",
+            ext_file_content="""[ v3_req ]\nbasicConstraints = CA:FALSE\nkeyUsage = critical, digitalSignature\n""",
+        )
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            cert_file = Path(d) / "cert.crt"
+            cert_file.write_text(cert)
+            r = _run_openssl(
+                ["x509", "-in", str(cert_file), "-noout", "-issuer"],
+                openssl["path"],
+            )
+            assert "CN = TestCA" in r.stdout or "CN=TestCA" in r.stdout, (
+                f"Expected issuer CN=TestCA, got {r.stdout}"
+            )
+
+    def test_validity_truncated_to_ca(self):
+        from app.services.cert_generator import (
+            ca_sign_csr, get_cert_expiry, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        ca_cert, ca_key, csr = self._setup(openssl["path"], openssl["flavor"])
+        ca_expiry = get_cert_expiry(openssl["path"], ca_cert)
+
+        # Request 100 years - should be truncated to CA expiry
+        cert, _ = ca_sign_csr(
+            openssl_path=openssl["path"],
+            csr_pem=csr,
+            ca_cert_pem=ca_cert,
+            ca_key_pem=ca_key,
+            validity_days=36500,
+            flavor=openssl["flavor"],
+            extensions_section="v3_req",
+            ext_file_content="""[ v3_req ]\nbasicConstraints = CA:FALSE\nkeyUsage = critical, digitalSignature\n""",
+        )
+        cert_expiry = get_cert_expiry(openssl["path"], cert)
+        assert cert_expiry <= ca_expiry, (
+            f"Cert expiry {cert_expiry} should not exceed CA expiry {ca_expiry}"
+        )
+
+    def test_validity_not_truncated_when_shorter(self):
+        from app.services.cert_generator import (
+            ca_sign_csr, get_cert_expiry, detect_openssl,
+        )
+        from datetime import date, timedelta
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+        ca_cert, ca_key, csr = self._setup(openssl["path"], openssl["flavor"])
+        cert, _ = ca_sign_csr(
+            openssl_path=openssl["path"],
+            csr_pem=csr,
+            ca_cert_pem=ca_cert,
+            ca_key_pem=ca_key,
+            validity_days=1,
+            flavor=openssl["flavor"],
+            extensions_section="v3_req",
+            ext_file_content="""[ v3_req ]\nbasicConstraints = CA:FALSE\nkeyUsage = critical, digitalSignature\n""",
+        )
+        cert_expiry = get_cert_expiry(openssl["path"], cert)
+        expected = date.today() + timedelta(days=1)
+        assert cert_expiry == expected, (
+            f"Expected {expected}, got {cert_expiry}"
+        )
+
+
+# ===== NEW: Task 1.2 — get_cert_expiry() =====
+
+class TestGetCertExpiry:
+    """Tests for certificate expiry date extraction."""
+
+    def test_function_exists(self):
+        from app.services.cert_generator import get_cert_expiry
+        assert callable(get_cert_expiry)
+
+    def test_returns_date_object(self):
+        from app.services.cert_generator import (
+            get_cert_expiry, generate_ca_certificate, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["path"]:
+            pytest.skip("No openssl available")
+        ca, _ = generate_ca_certificate(openssl["path"], "Test", 3650, openssl["flavor"])
+        from datetime import date
+        expiry = get_cert_expiry(openssl["path"], ca["ca_cert"])
+        assert isinstance(expiry, date)
+
+    def test_expiry_within_expected_range(self):
+        from app.services.cert_generator import (
+            get_cert_expiry, generate_ca_certificate, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["path"]:
+            pytest.skip("No openssl available")
+        ca, _ = generate_ca_certificate(openssl["path"], "Test", 3650, openssl["flavor"])
+        from datetime import date, timedelta
+        expiry = get_cert_expiry(openssl["path"], ca["ca_cert"])
+        expected_min = date.today() + timedelta(days=3649)
+        expected_max = date.today() + timedelta(days=3651)
+        assert expected_min <= expiry <= expected_max, (
+            f"Expected ~3650 days from now, got {expiry}"
+        )
+
+    def test_expiry_with_short_validity(self):
+        from app.services.cert_generator import (
+            get_cert_expiry, generate_ca_certificate, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["path"]:
+            pytest.skip("No openssl available")
+        ca, _ = generate_ca_certificate(openssl["path"], "Test", 1, openssl["flavor"])
+        from datetime import date, timedelta
+        expiry = get_cert_expiry(openssl["path"], ca["ca_cert"])
+        expected = date.today() + timedelta(days=1)
+        assert expiry == expected, f"Expected {expected}, got {expiry}"
+
+
+# ===== NEW: Task 1.1 — generate_ca_certificate() =====
+
+class TestGenerateCaCertificate:
+    """Tests for CA certificate generation."""
+
+    def test_function_exists(self):
+        from app.services.cert_generator import generate_ca_certificate
+        assert callable(generate_ca_certificate)
+
+    def test_returns_ca_cert_and_key(self):
+        from app.services.cert_generator import generate_ca_certificate, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+
+        result, logs = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="Test Root CA",
+            validity_days=3650,
+            flavor=openssl["flavor"],
+        )
+        assert isinstance(result, dict)
+        assert "ca_cert" in result
+        assert "ca_key" in result
+        assert "-----BEGIN CERTIFICATE-----" in result["ca_cert"]
+        assert "-----END CERTIFICATE-----" in result["ca_cert"]
+        assert "-----BEGIN PRIVATE KEY-----" in result["ca_key"]
+        assert "-----END PRIVATE KEY-----" in result["ca_key"]
+        assert isinstance(logs, list)
+        assert len(logs) >= 1
+
+    def test_ca_cert_has_ca_true_extension(self):
+        from app.services.cert_generator import (
+            generate_ca_certificate, _run_openssl, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+
+        result, _ = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="CA Ext Test",
+            validity_days=3650,
+            flavor=openssl["flavor"],
+        )
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            cert_file = Path(d) / "ca.crt"
+            cert_file.write_text(result["ca_cert"])
+            r = _run_openssl(["x509", "-in", str(cert_file), "-text", "-noout"], openssl["path"])
+            output = r.stdout
+            assert "CA:TRUE" in output, f"Expected CA:TRUE in output, got: {output[:500]}"
+            assert "Certificate Sign" in output, "Expected Certificate Sign in Key Usage"
+            assert "CRL Sign" in output, "Expected CRL Sign in Key Usage"
+
+    def test_ca_cert_has_correct_subject(self):
+        from app.services.cert_generator import (
+            generate_ca_certificate, _run_openssl, detect_openssl,
+        )
+        openssl = detect_openssl()
+        if not openssl["sm2_supported"]:
+            pytest.skip("No SM2-capable openssl available")
+
+        result, _ = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="MyCustomCA",
+            validity_days=3650,
+            flavor=openssl["flavor"],
+        )
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            cert_file = Path(d) / "ca.crt"
+            cert_file.write_text(result["ca_cert"])
+            r = _run_openssl(
+                ["x509", "-in", str(cert_file), "-noout", "-subject"],
+                openssl["path"],
+            )
+            assert "CN = MyCustomCA" in r.stdout or "CN=MyCustomCA" in r.stdout
