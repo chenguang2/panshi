@@ -30,6 +30,8 @@ class SslCertificateBase(BaseModel):
     sign_cert: Optional[str] = None
     sign_key: Optional[str] = None
     create_method: str = "upload"
+    is_ca: bool = False
+    ca_cert_id: Optional[int] = None
 
     class Config:
         populate_by_name = True
@@ -73,6 +75,8 @@ class SslCertificateUpdate(BaseModel):
     algorithm: Optional[str] = None
     sign_cert: Optional[str] = None
     sign_key: Optional[str] = None
+    is_ca: Optional[bool] = None
+    ca_cert_id: Optional[int] = None
 
     class Config:
         populate_by_name = True
@@ -105,8 +109,23 @@ class SslCertificateResponse(SslCertificateBase):
                 return None
         return v
 
+    @model_validator(mode="after")
+    def mask_ca_private_key(self):
+        """Mask private_key for CA certificates in responses."""
+        if self.is_ca:
+            self.private_key = ""
+        return self
+
     class Config:
         from_attributes = True
+
+
+class CaCertificateGenerateRequest(BaseModel):
+    """Request schema for CA root certificate generation."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="CA 证书显示名称")
+    common_name: Optional[str] = Field(default=None, description="CA 证书 CN，默认取 name")
+    validity_days: int = Field(default=3650, ge=1, le=36500, description="CA 有效期（天）")
 
 
 class SslCertificateGenerateRequest(BaseModel):
@@ -119,12 +138,16 @@ class SslCertificateGenerateRequest(BaseModel):
     validity_days: int = Field(default=365, ge=1, le=36500)
     dual_cert: bool = True
     cert_type: str = Field(default="server", pattern=r"^(server|client)$")
-    mode: str = Field(..., pattern=r"^(local|remote)$")
-    node_id: int | None = Field(default=None)
     algorithm: str = Field(default="sm2", pattern=r"^(sm2|rsa|ecc)$")
+    ca_cert_id: int | None = Field(default=None, description="SM2 必填，引用已有 CA")
+    generate_client_certs: bool = Field(default=False, description="SM2 可选，是否同时生成客户端双证书")
 
-    @model_validator(mode="after")
-    def validate_remote_node_id(self):
-        if self.mode == "remote" and self.node_id is None:
-            raise ValueError("远程生成时必须指定节点 (node_id)")
-        return self
+
+class SslCertificateGenerateResponse(BaseModel):
+    """Response schema for certificate generation.
+
+    Wraps server cert record and optional client cert record.
+    """
+
+    server: SslCertificateResponse
+    client: Optional[SslCertificateResponse] = None
