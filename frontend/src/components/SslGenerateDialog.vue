@@ -11,7 +11,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书算法 <span class="required">*</span></label>
-            <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="generating">
+            <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="generating" @change="onAlgorithmChange">
               <a-select-option value="sm2">
                 <div style="font-weight:600;font-size:13px;">SM2 国密</div>
                 <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
@@ -26,19 +26,6 @@
               </a-select-option>
             </a-select>
           </div>
-          <div class="form-group">
-            <label class="form-label">生成方式</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" v-model="form.mode" value="local" :disabled="generating" />
-                本地生成
-              </label>
-              <label class="radio-label">
-                <input type="radio" v-model="form.mode" value="remote" :disabled="generating" />
-                远程生成
-              </label>
-            </div>
-          </div>
         </div>
 
         <!-- 集群 -->
@@ -51,16 +38,25 @@
             </select>
             <div v-if="errors.cluster_id" class="form-error">{{ errors.cluster_id }}</div>
           </div>
+        </div>
 
-          <!-- 远程时显示节点 -->
-          <div v-if="form.mode === 'remote'" class="form-group">
-            <label class="form-label">执行节点 <span class="required">*</span></label>
-            <select v-model="form.node_id" class="form-input" :class="{ 'has-error': errors.node_id }" :disabled="generating || nodesLoading">
-              <option value="">请选择节点</option>
-              <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port || '22' }}</option>
-            </select>
-            <div v-if="errors.node_id" class="form-error">{{ errors.node_id }}</div>
-            <div v-if="!form.cluster_id && form.mode === 'remote'" class="form-hint">请先选择集群</div>
+        <!-- SM2: CA 选择器 -->
+        <div v-if="form.algorithm === 'sm2'" class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">签发 CA（根证书）<span class="required">*</span></label>
+            <a-select v-model:value="form.ca_cert_id" style="width:100%;" :disabled="generating || caCertsLoading" placeholder="请选择 CA 根证书">
+              <a-select-option v-for="ca in caCerts" :key="ca.id" :value="ca.id">{{ ca.name }}</a-select-option>
+            </a-select>
+            <div v-if="caCerts.length === 0 && !caCertsLoading" class="form-hint" style="color:var(--danger);">
+              该集群没有 CA 根证书，
+              <a style="cursor:pointer;text-decoration:underline;" @click="$emit('openCaCreate')">请先创建 CA</a>
+            </div>
+          </div>
+          <div class="form-group" style="flex:0 0 auto;padding-top:24px;">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="form.generate_client_certs" :disabled="generating" />
+              同时生成客户端证书
+            </label>
           </div>
         </div>
 
@@ -109,26 +105,6 @@
             <input v-model.number="form.validity_days" type="number" class="form-input" min="1" max="36500" :disabled="generating">
             <div class="form-hint">天，默认 365</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">证书类型</label>
-            <a-select v-model:value="form.cert_type" style="width:100%;" :disabled="generating">
-              <a-select-option value="server">
-                <div style="font-weight:600;font-size:13px;">server（服务端）</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">接收浏览器访问</div>
-              </a-select-option>
-              <a-select-option value="client">
-                <div style="font-weight:600;font-size:13px;">client（客户端）</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">用于网关之间的认证</div>
-              </a-select-option>
-            </a-select>
-          </div>
-        </div>
-
-        <div class="form-group" v-if="form.algorithm === 'sm2'">
-          <label class="checkbox-label">
-            <input type="checkbox" v-model="form.dual_cert" :disabled="generating" />
-            同时生成加密证书和签名证书（双证书模式）
-          </label>
         </div>
 
         <!-- 生成中状态 -->
@@ -158,6 +134,16 @@
           </div>
         </div>
 
+        <!-- 生成成功结果 -->
+        <div v-if="resultData" class="result-section" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:var(--radius);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">生成成功</div>
+          <div style="font-size:12px;">服务端证书：<strong>{{ resultData.server?.name }}</strong></div>
+          <div v-if="resultData.client" style="font-size:12px;margin-top:4px;">
+            客户端证书：<strong>{{ resultData.client.name }}</strong>
+            <button class="btn btn-ghost btn-sm" style="margin-left:8px;" @click="downloadClientBundle(resultData.client)">下载客户端证书包</button>
+          </div>
+        </div>
+
         <!-- 错误信息 -->
         <div v-if="errorMsg" class="form-error" style="margin-top:12px;">{{ errorMsg }}</div>
       </div>
@@ -176,7 +162,6 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
-import { getClusterNodes } from '@/api/nodes'
 
 const props = defineProps<{
   visible: boolean
@@ -186,56 +171,58 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   success: [cert: any]
+  openCaCreate: []
 }>()
 
 const dnsInputRef = ref<HTMLInputElement | null>(null)
 const ipInputRef = ref<HTMLInputElement | null>(null)
 
 const form = reactive({
-  mode: 'local' as 'local' | 'remote',
   algorithm: 'sm2' as 'sm2' | 'rsa' | 'ecc',
   cluster_id: '',
-  node_id: '' as number | '',
   name: '',
   common_name: '',
   validity_days: 365,
-  cert_type: 'server',
-  dual_cert: true,
+  ca_cert_id: null as number | null,
+  generate_client_certs: false,
 })
 
 const dnsInput = ref('')
 const ipInput = ref('')
 const dnsTags = ref<string[]>([])
 const ipTags = ref<string[]>([])
-const nodes = ref<any[]>([])
-const nodesLoading = ref(false)
 const generating = ref(false)
 const errorMsg = ref('')
 const commandLog = ref<any[]>([])
 const expandedLogs = ref<boolean[]>([])
+const resultData = ref<any>(null)
+
+const caCerts = ref<any[]>([])
+const caCertsLoading = ref(false)
 
 const errors = reactive({
   cluster_id: '',
-  node_id: '',
   name: '',
   common_name: '',
 })
 
 const canGenerate = computed(() => {
   return form.name.trim() && form.common_name.trim() && form.cluster_id &&
-    (form.mode === 'local' || (form.mode === 'remote' && form.node_id !== ''))
+    (form.algorithm !== 'sm2' || form.ca_cert_id !== null)
 })
 
 function validate(): boolean {
   errors.cluster_id = ''
-  errors.node_id = ''
   errors.name = ''
   errors.common_name = ''
   let valid = true
   if (!form.cluster_id) { errors.cluster_id = '请选择集群'; valid = false }
   if (!form.name.trim()) { errors.name = '请输入证书名称'; valid = false }
   if (!form.common_name.trim()) { errors.common_name = '请输入通用名称'; valid = false }
-  if (form.mode === 'remote' && form.node_id === '') { errors.node_id = '请选择执行节点'; valid = false }
+  if (form.algorithm === 'sm2' && !form.ca_cert_id) {
+    message.warning('SM2 证书必须选择签发 CA')
+    valid = false
+  }
   return valid
 }
 
@@ -243,28 +230,35 @@ function toggleLog(index: number) {
   expandedLogs.value[index] = !expandedLogs.value[index]
 }
 
-async function onClusterChange() {
-  form.node_id = ''
-  nodes.value = []
-  if (!form.cluster_id || form.mode !== 'remote') return
-  await loadNodes()
-}
-
-async function loadNodes() {
-  if (!form.cluster_id) return
-  nodesLoading.value = true
+async function loadCaCerts() {
+  if (!form.cluster_id) { caCerts.value = []; return }
+  caCertsLoading.value = true
   try {
-    const res = await getClusterNodes(Number(form.cluster_id))
-    nodes.value = res.data?.items || []
-    // 自动选中第一个节点
-    if (nodes.value.length > 0 && !form.node_id) {
-      form.node_id = nodes.value[0].id
+    const { default: api } = await import('@/api')
+    const res = await api.get(`/clusters/${form.cluster_id}/ssl`, { params: { page_size: 500 } })
+    const items: any[] = res.data?.items || []
+    caCerts.value = items.filter((c: any) => c.is_ca)
+    if (caCerts.value.length === 0) {
+      form.ca_cert_id = null
     }
   } catch {
-    nodes.value = []
+    caCerts.value = []
   } finally {
-    nodesLoading.value = false
+    caCertsLoading.value = false
   }
+}
+
+function onAlgorithmChange() {
+  if (form.algorithm !== 'sm2') {
+    form.ca_cert_id = null
+    form.generate_client_certs = false
+  }
+}
+
+async function onClusterChange() {
+  form.ca_cert_id = null
+  caCerts.value = []
+  await loadCaCerts()
 }
 
 async function handleGenerate() {
@@ -273,6 +267,7 @@ async function handleGenerate() {
   errorMsg.value = ''
   commandLog.value = []
   expandedLogs.value = []
+  resultData.value = null
 
   try {
     const result = await generateSslCertificate(Number(form.cluster_id), {
@@ -282,19 +277,26 @@ async function handleGenerate() {
       ip_sans: ipTags.value.length > 0 ? ipTags.value : undefined,
       validity_days: form.validity_days,
       algorithm: form.algorithm,
-      dual_cert: form.dual_cert,
-      cert_type: form.cert_type,
-      mode: form.mode,
-      node_id: form.mode === 'remote' ? (form.node_id || null) : null,
+      cert_type: 'server',
+      ca_cert_id: form.algorithm === 'sm2' ? form.ca_cert_id : undefined,
+      generate_client_certs: form.algorithm === 'sm2' ? form.generate_client_certs : undefined,
     })
 
-    const certData = result?.data || result
-    const logs = certData.generate_log || []
-    commandLog.value = logs
-    expandedLogs.value = logs.map(() => false)
-    generating.value = false
-
-    emit('success', certData)
+    const resp = result?.data || result
+    if (resp.server) {
+      resultData.value = resp
+      const logs = resp.server.generate_log || []
+      commandLog.value = logs
+      expandedLogs.value = logs.map(() => false)
+      generating.value = false
+      emit('success', resp.server)
+    } else {
+      const logs = resp.generate_log || []
+      commandLog.value = logs
+      expandedLogs.value = logs.map(() => false)
+      generating.value = false
+      emit('success', resp)
+    }
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '生成失败'
     errorMsg.value = typeof detail === 'string' ? detail : '生成失败'
@@ -329,32 +331,27 @@ function addIpTagOnComma(e: KeyboardEvent) {
 function removeDnsTag(i: number) { dnsTags.value.splice(i, 1) }
 function removeIpTag(i: number) { ipTags.value.splice(i, 1) }
 
+function downloadClientBundle(clientCert: any) {
+  window.open(`/api/v1/ssl/${clientCert.id}/download`, '_blank')
+}
+
 // Reset form when opened
 watch(() => props.visible, (v) => {
   if (v) {
-    form.mode = 'local'
     form.algorithm = 'sm2'
     form.cluster_id = ''
-    form.node_id = ''
     form.name = ''
     form.common_name = ''
     form.validity_days = 365
-    form.cert_type = 'server'
-    form.dual_cert = true
+    form.ca_cert_id = null
+    form.generate_client_certs = false
     dnsTags.value = []
     ipTags.value = []
-    nodes.value = []
+    caCerts.value = []
     errorMsg.value = ''
     commandLog.value = []
     expandedLogs.value = []
-  }
-})
-
-// When switching to remote mode with cluster already selected, load nodes
-watch(() => form.mode, (mode) => {
-  if (mode === 'remote' && form.cluster_id) {
-    form.node_id = ''
-    loadNodes()
+    resultData.value = null
   }
 })
 </script>

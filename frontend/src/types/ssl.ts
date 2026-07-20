@@ -30,6 +30,8 @@ export interface SslCertificate {
   sign_key?: string
   create_method?: string
   generate_log?: CommandLogEntry[]
+  is_ca?: boolean
+  ca_cert_id?: number | null
 }
 
 export interface SslCertificateGenerateRequest {
@@ -40,9 +42,20 @@ export interface SslCertificateGenerateRequest {
   validity_days?: number
   dual_cert?: boolean
   cert_type?: string
-  mode: 'local' | 'remote'
-  node_id?: number | null
   algorithm?: 'sm2' | 'rsa' | 'ecc'
+  ca_cert_id?: number | null
+  generate_client_certs?: boolean
+}
+
+export interface CaCertificateGenerateRequest {
+  name: string
+  common_name?: string
+  validity_days?: number
+}
+
+export interface SslCertificateGenerateResponse {
+  server: SslCertificate
+  client?: SslCertificate | null
 }
 
 export interface SslCertificateCreate {
@@ -72,6 +85,8 @@ export interface SslCertificateUpdate {
   gm?: boolean
   sign_cert?: string
   sign_key?: string
+  is_ca?: boolean
+  ca_cert_id?: number | null
 }
 
 export interface SslListResponse {
