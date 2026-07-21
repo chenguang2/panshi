@@ -50,6 +50,8 @@ export interface SslCertificateGenerateRequest {
   algorithm?: 'sm2' | 'rsa' | 'ecc'
   ca_cert_id?: number | null
   generate_client_certs?: boolean
+  organization?: string
+  organizational_unit?: string
   client_ca?: string
   client_depth?: number
   skip_mtls_uri_regex?: string

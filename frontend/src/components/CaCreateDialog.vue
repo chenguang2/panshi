@@ -45,7 +45,10 @@
           <div class="form-hint">天，默认 3650（10 年）</div>
         </div>
 
-        <div v-if="errorMsg" class="form-error" style="margin-top:12px;">{{ errorMsg }}</div>
+        <div v-if="errorMsg" class="error-detail-box">
+          <div class="error-detail-header">操作失败</div>
+          <div class="error-detail-body">{{ errorMsg }}</div>
+        </div>
       </div>
 
       <div class="modal-footer">
@@ -125,3 +128,27 @@ watch(() => props.visible, (v) => {
   }
 })
 </script>
+
+<style scoped>
+.error-detail-box {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+}
+.error-detail-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ff4d4f;
+  margin-bottom: 4px;
+}
+.error-detail-body {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono, monospace);
+}
+</style>

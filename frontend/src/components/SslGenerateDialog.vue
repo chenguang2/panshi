@@ -209,7 +209,10 @@
         </div>
 
         <!-- 错误信息 -->
-        <div v-if="errorMsg" class="form-error" style="margin-top:12px;">{{ errorMsg }}</div>
+        <div v-if="errorMsg" class="error-detail-box">
+          <div class="error-detail-header">操作失败</div>
+          <div class="error-detail-body">{{ errorMsg }}</div>
+        </div>
       </div>
 
       <div class="modal-footer">
@@ -372,20 +375,13 @@ async function handleGenerate() {
     })
 
     const resp = result?.data || result
-    if (resp.server) {
-      resultData.value = resp
-      const logs = resp.server.generate_log || []
-      commandLog.value = logs
-      expandedLogs.value = logs.map(() => false)
-      generating.value = false
-      emit('success', resp.server)
-    } else {
-      const logs = resp.generate_log || []
-      commandLog.value = logs
-      expandedLogs.value = logs.map(() => false)
-      generating.value = false
-      emit('success', resp)
-    }
+    const serverCert = resp.server || resp
+    resultData.value = resp
+    const logs = serverCert.generate_log || []
+    commandLog.value = logs
+    expandedLogs.value = logs.map(() => false)
+    generating.value = false
+    emit('success', serverCert)
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '生成失败'
     errorMsg.value = typeof detail === 'string' ? detail : '生成失败'
@@ -568,4 +564,27 @@ watch(() => props.visible, (v) => {
 .log-pre { font-size: 11px; background: oklch(20% 0 0 / 5%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; }
 .log-stderr { margin-top: 4px; }
 .log-stderr pre { font-size: 11px; color: var(--danger); background: oklch(65% 0.2 20 / 8%); padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; }
+
+/* ── Error Detail Box ── */
+.error-detail-box {
+  margin-top: 12px;
+  padding: 12px;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: var(--radius-md, 6px);
+}
+.error-detail-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ff4d4f;
+  margin-bottom: 4px;
+}
+.error-detail-body {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono, monospace);
+}
 </style>

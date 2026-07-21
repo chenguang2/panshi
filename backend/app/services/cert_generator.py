@@ -109,9 +109,10 @@ def _detect_flavor(openssl_path: str, logs: list[CommandResult]) -> tuple[str, s
 
 
 def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
-    """Detect available openssl binary.
+    """Detect the bundled Tongsuo openssl binary.
 
-    Priority: bundled Tongsuo -> system PATH.
+    Only uses backend/bin/openssl (bundled Tongsuo). Does NOT fall back to
+    system PATH openssl — see _BUNDLED_OPENSSL_FIX for setup instructions.
 
     Args:
         detect_logs: optional list to append detection command results to.
@@ -122,40 +123,18 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
         - version: str      (version string, empty if not found)
         - sm2_supported: bool
         - flavor: str       ("tongsuo" | "standard" | "unknown")
-        - available: bool   (True if any openssl binary was found)
+        - available: bool   (True if bundled openssl was found)
     """
     logs = detect_logs if detect_logs is not None else []
 
-    candidates = []
-
-    # 1. Bundled Tongsuo
     if _BUNDLED_OPENSSL.exists() and os.access(str(_BUNDLED_OPENSSL), os.X_OK):
-        candidates.append(str(_BUNDLED_OPENSSL))
-
-    # 2. System PATH
-    system_openssl = _find_on_path("openssl")
-    if system_openssl:
-        candidates.append(system_openssl)
-
-    for candidate in candidates:
+        candidate = str(_BUNDLED_OPENSSL)
         sm2 = _check_sm2_support(candidate, logs)
         flavor, version = _detect_flavor(candidate, logs)
-        if sm2:
-            return {
-                "path": candidate,
-                "version": version,
-                "sm2_supported": sm2,
-                "flavor": flavor,
-                "available": True,
-            }
-
-    if candidates:
-        last = candidates[0]
-        flavor, version = _detect_flavor(last, logs)
         return {
-            "path": last,
+            "path": candidate,
             "version": version,
-            "sm2_supported": False,
+            "sm2_supported": sm2,
             "flavor": flavor,
             "available": True,
         }
@@ -739,11 +718,9 @@ def detect_cert_algorithm(cert_pem: str) -> str:
         return ""
 
 
-def _find_on_path(name: str) -> str | None:
-    """Find an executable on system PATH."""
-    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
-    for d in path_dirs:
-        candidate = Path(d) / name
-        if candidate.exists() and os.access(str(candidate), os.X_OK):
-            return str(candidate)
-    return None
+BUNDLED_OPENSSL_FIX = (
+    f"请执行以下命令将 Tongsuo 复制到 {_BUNDLED_OPENSSL}：\n"
+    f"mkdir -p {_BUNDLED_OPENSSL.parent}\n"
+    f"cp product/linux/tongsuo/bin/openssl {_BUNDLED_OPENSSL}\n"
+    f"chmod +x {_BUNDLED_OPENSSL}"
+)

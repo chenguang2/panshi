@@ -45,7 +45,11 @@ async def create_ca_certificate(
     detect_logs: list[CommandResult] = []
     openssl_info = detect_openssl(detect_logs=detect_logs)
     if not openssl_info["path"]:
-        raise HTTPException(status_code=400, detail="本地无可用 openssl")
+        from app.services.cert_generator import BUNDLED_OPENSSL_FIX
+        raise HTTPException(
+            status_code=400,
+            detail=f"本地无可用 openssl（仅使用捆绑的 Tongsuo，不回退到系统 openssl）\n{BUNDLED_OPENSSL_FIX}",
+        )
     if not openssl_info["sm2_supported"]:
         raise HTTPException(status_code=400, detail="本地 openssl 不支持 SM2 曲线")
 
@@ -459,7 +463,11 @@ async def _generate_local(
     detect_logs: list[CommandResult] = []
     provider = LocalProvider(detect_logs=detect_logs)
     if not provider.openssl_path:
-        raise HTTPException(status_code=400, detail="本地无可用 openssl")
+        from app.services.cert_generator import BUNDLED_OPENSSL_FIX
+        raise HTTPException(
+            status_code=400,
+            detail=f"本地无可用 openssl（仅使用捆绑的 Tongsuo，不回退到系统 openssl）\n{BUNDLED_OPENSSL_FIX}",
+        )
 
     ca_cert_pem = None
     ca_key_pem = None

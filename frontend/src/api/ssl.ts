@@ -1,5 +1,5 @@
 import api from '@/api/index'
-import type { SslCertificate, SslCertificateCreate, SslCertificateUpdate, SslCertificateGenerateRequest, SslListResponse } from '@/types/ssl'
+import type { SslCertificate, SslCertificateCreate, SslCertificateUpdate, SslCertificateGenerateRequest, SslCertificateGenerateResponse, SslListResponse } from '@/types/ssl'
 
 export function listSslCertificates(clusterId?: number) {
   if (clusterId) {
@@ -33,5 +33,5 @@ export function getSslHistory(clusterId: number, certId: number) {
 }
 
 export function generateSslCertificate(clusterId: number, data: SslCertificateGenerateRequest) {
-  return api.post<SslCertificate>(`/clusters/${clusterId}/ssl/generate`, data)
+  return api.post<SslCertificateGenerateResponse>(`/clusters/${clusterId}/ssl/generate`, data)
 }
