@@ -157,10 +157,12 @@ class TestGenerateCsr:
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as d:
+            cnf = Path(d) / "null.cnf"
+            cnf.write_text("[req]\ndistinguished_name = req_distinguished_name\n[req_distinguished_name]\ncommonName = optional\n")
             csr_file = Path(d) / "test.csr"
             csr_file.write_text(csr)
             result = _run_openssl(
-                ["req", "-in", str(csr_file), "-noout", "-subject"],
+                ["req", "-config", str(cnf), "-in", str(csr_file), "-noout", "-subject"],
                 openssl["path"],
             )
             assert "CN = mycert.test.com" in result.stdout or "CN=mycert.test.com" in result.stdout
@@ -376,11 +378,13 @@ class TestDetectCertAlgorithm:
         import tempfile, pathlib
         with tempfile.TemporaryDirectory() as d:
             tmp = pathlib.Path(d)
+            cnf = tmp / "null.cnf"
+            cnf.write_text("[req]\ndistinguished_name = req_distinguished_name\n[req_distinguished_name]\ncommonName = optional\n")
             key = tmp / "key.pem"
             cert = tmp / "cert.pem"
             _run_openssl(["genrsa", "-out", str(key), "2048"], openssl_path)
             _run_openssl([
-                "req", "-new", "-x509",
+                "req", "-config", str(cnf), "-new", "-x509",
                 "-key", str(key), "-out", str(cert),
                 "-days", "365",
                 "-subj", "/CN=test.com",
@@ -393,11 +397,13 @@ class TestDetectCertAlgorithm:
         import tempfile, pathlib
         with tempfile.TemporaryDirectory() as d:
             tmp = pathlib.Path(d)
+            cnf = tmp / "null.cnf"
+            cnf.write_text("[req]\ndistinguished_name = req_distinguished_name\n[req_distinguished_name]\ncommonName = optional\n")
             key = tmp / "key.pem"
             cert = tmp / "cert.pem"
             _run_openssl(["ecparam", "-genkey", "-name", "prime256v1", "-out", str(key)], openssl_path)
             _run_openssl([
-                "req", "-new", "-x509",
+                "req", "-config", str(cnf), "-new", "-x509",
                 "-key", str(key), "-out", str(cert),
                 "-days", "365",
                 "-subj", "/CN=test.com",

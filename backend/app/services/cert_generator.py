@@ -169,8 +169,16 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
     }
 
 
-def generate_openssl_cnf(common_name: str, hash_alg: str = "sm3") -> str:
-    """Generate a minimal openssl.cnf for CSR generation."""
+def generate_openssl_cnf(
+    common_name: str,
+    hash_alg: str = "sm3",
+    country: str = "CN",
+    state: str = "Beijing",
+    locality: str = "Beijing",
+    org: str = "EMBRACE",
+    ou: str = "EDGE",
+) -> str:
+    """Generate openssl.cnf for CSR generation with full distinguished name."""
     return f"""[ req ]
 distinguished_name = req_distinguished_name
 string_mask = utf8only
@@ -178,6 +186,11 @@ default_md = {hash_alg}
 prompt = no
 
 [ req_distinguished_name ]
+countryName = {country}
+stateOrProvinceName = {state}
+localityName = {locality}
+0.organizationName = {org}
+organizationalUnitName = {ou}
 commonName = {common_name}
 """
 
@@ -251,6 +264,11 @@ def generate_csr(
     ip_sans: list[str],
     flavor: str,
     hash_alg: str = "sm3",
+    country: str = "CN",
+    state: str = "Beijing",
+    locality: str = "Beijing",
+    org: str = "EMBRACE",
+    ou: str = "EDGE",
 ) -> tuple[str, list[CommandResult]]:
     """Generate a CSR using the given private key. Returns (csr_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_csr_") as tmpdir:
@@ -260,13 +278,17 @@ def generate_csr(
         cnf_file = tmp / "openssl.cnf"
 
         key_file.write_text(key_pem)
-        cnf_file.write_text(generate_openssl_cnf(common_name, hash_alg=hash_alg))
+        cnf_file.write_text(generate_openssl_cnf(
+            common_name, hash_alg=hash_alg,
+            country=country, state=state, locality=locality,
+            org=org, ou=ou,
+        ))
 
         cmd = [
             "req", "-new",
             "-key", str(key_file),
             "-out", str(csr_file),
-            "-subj", f"/CN={common_name}",
+            "-subj", f"/C={country}/ST={state}/L={locality}/O={org}/OU={ou}/CN={common_name}",
             "-config", str(cnf_file),
             "-nodes",
         ]
@@ -290,6 +312,8 @@ def self_sign_certificate(
     validity_days: int,
     flavor: str,
     hash_alg: str = "sm3",
+    ext_file_content: str | None = None,
+    extensions_section: str = "v3_req",
 ) -> tuple[str, list[CommandResult]]:
     """Self-sign a CSR to produce a certificate. Returns (cert_pem, logs)."""
     with tempfile.TemporaryDirectory(prefix="panshi_cert_") as tmpdir:
@@ -308,6 +332,10 @@ def self_sign_certificate(
             "-out", str(cert_file),
             "-days", str(validity_days),
         ]
+        if ext_file_content:
+            ext_file = tmp / "ext.cnf"
+            ext_file.write_text(ext_file_content)
+            cmd.extend(["-extfile", str(ext_file), "-extensions", extensions_section])
         cmd.extend(_digest_flag(hash_alg))
         cmd.extend(_sigopt_args(flavor, hash_alg))
 
@@ -329,6 +357,8 @@ def generate_dual_certificates(
     flavor: str,
     ca_cert_pem: str,
     ca_key_pem: str,
+    org: str = "EMBRACE",
+    ou: str = "EDGE",
 ) -> tuple[dict, list[CommandResult]]:
     """Generate SM2 dual certificates (encryption + signing), signed by a CA.
 
@@ -337,14 +367,27 @@ def generate_dual_certificates(
     """
     logs: list[CommandResult] = []
 
-    enc_ext = """[ v3_req ]
-basicConstraints = CA:FALSE
-keyUsage = critical, keyEncipherment, dataEncipherment
-"""
-    sign_ext = """[ v3_req ]
-basicConstraints = CA:FALSE
-keyUsage = critical, digitalSignature, nonRepudiation
-"""
+    san_str = _build_san_args(dns_sans, ip_sans)
+
+    enc_ext_lines = [
+        "[ v3_req ]",
+        "basicConstraints = CA:FALSE",
+        "keyUsage = keyAgreement, keyEncipherment, dataEncipherment",
+        "extendedKeyUsage = serverAuth, clientAuth",
+    ]
+    if san_str:
+        enc_ext_lines.append(f"subjectAltName = {san_str}")
+    enc_ext = "\n".join(enc_ext_lines) + "\n"
+
+    sign_ext_lines = [
+        "[ v3_req ]",
+        "basicConstraints = CA:FALSE",
+        "keyUsage = nonRepudiation, digitalSignature",
+        "extendedKeyUsage = serverAuth, clientAuth",
+    ]
+    if san_str:
+        sign_ext_lines.append(f"subjectAltName = {san_str}")
+    sign_ext = "\n".join(sign_ext_lines) + "\n"
 
     # Encryption key pair
     enc_key, key_logs = generate_sm2_keypair(openssl_path)
@@ -352,6 +395,7 @@ keyUsage = critical, digitalSignature, nonRepudiation
     enc_csr, csr_logs = generate_csr(
         openssl_path, enc_key,
         common_name, dns_sans, ip_sans, flavor,
+        org=org, ou=ou,
     )
     logs.extend(csr_logs)
     enc_cert, cert_logs = ca_sign_csr(
@@ -368,6 +412,7 @@ keyUsage = critical, digitalSignature, nonRepudiation
     sign_csr, csr_logs2 = generate_csr(
         openssl_path, sign_key,
         common_name, dns_sans, ip_sans, flavor,
+        org=org, ou=ou,
     )
     logs.extend(csr_logs2)
     sign_cert, cert_logs2 = ca_sign_csr(
@@ -391,6 +436,8 @@ def generate_ca_certificate(
     common_name: str,
     validity_days: int,
     flavor: str,
+    org: str = "EMBRACE",
+    ou: str = "EDGE",
 ) -> tuple[dict, list[CommandResult]]:
     """Generate a self-signed SM2 CA root certificate.
 
@@ -406,6 +453,7 @@ def generate_ca_certificate(
     ca_csr, csr_logs = generate_csr(
         openssl_path, ca_key,
         common_name, [], [], flavor,
+        org=org, ou=ou,
     )
     logs.extend(csr_logs)
 
@@ -421,10 +469,10 @@ def generate_ca_certificate(
         key_file.write_text(ca_key)
 
         ext_content = """[ v3_ca ]
-basicConstraints = critical, CA:TRUE, pathlen:0
-keyUsage = critical, keyCertSign, cRLSign
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = critical, CA:true
+keyUsage = critical, digitalSignature, cRLSign, keyCertSign
 """
         ext_file.write_text(ext_content)
 
@@ -540,6 +588,8 @@ def generate_standard_certificate(
     validity_days: int,
     flavor: str,
     algorithm: str = "rsa",
+    org: str = "EMBRACE",
+    ou: str = "EDGE",
 ) -> tuple[dict, list[CommandResult]]:
     """Generate a single standard certificate (RSA or ECDSA).
 
@@ -554,11 +604,24 @@ def generate_standard_certificate(
         openssl_path, key_pem,
         common_name, dns_sans, ip_sans, flavor,
         hash_alg="sha256",
+        org=org, ou=ou,
     )
+    san_str = _build_san_args(dns_sans, ip_sans)
+    ext_lines = [
+        "[ v3_req ]",
+        "basicConstraints = CA:FALSE",
+        "keyUsage = nonRepudiation, digitalSignature, keyEncipherment",
+        "extendedKeyUsage = serverAuth, clientAuth",
+    ]
+    if san_str:
+        ext_lines.append(f"subjectAltName = {san_str}")
+    ext_content = "\n".join(ext_lines) + "\n"
+
     cert_pem, cert_logs = self_sign_certificate(
         openssl_path, csr_pem, key_pem,
         validity_days, flavor,
         hash_alg="sha256",
+        ext_file_content=ext_content,
     )
 
     return {"cert": cert_pem, "key": key_pem}, key_logs + csr_logs + cert_logs
@@ -589,6 +652,8 @@ class LocalProvider:
         dual_cert: bool = True,
         ca_cert_pem: str | None = None,
         ca_key_pem: str | None = None,
+        org: str = "EMBRACE",
+        ou: str = "EDGE",
     ) -> tuple[dict, list[CommandResult]]:
         """Generate a certificate. Returns (cert_dict, logs).
 
@@ -610,6 +675,7 @@ class LocalProvider:
                 flavor=self.flavor,
                 ca_cert_pem=ca_cert_pem,
                 ca_key_pem=ca_key_pem,
+                org=org, ou=ou,
             )
             return result, logs
         else:
@@ -621,6 +687,7 @@ class LocalProvider:
                 validity_days=validity_days,
                 flavor=self.flavor,
                 algorithm=algorithm,
+                org=org, ou=ou,
             )
             return result, logs
 

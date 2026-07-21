@@ -648,6 +648,9 @@ class EdgeImportService:
                 "algorithm": algorithm,
                 "sign_cert": (raw_data.get("certs") or [None])[0] or "",
                 "sign_key": (raw_data.get("keys") or [None])[0] or "",
+                "client_ca": (raw_data.get("client") or {}).get("ca"),
+                "client_depth": (raw_data.get("client") or {}).get("depth"),
+                "skip_mtls_uri_regex": (raw_data.get("client") or {}).get("skip_mtls_uri_regex"),
             },
         }
 

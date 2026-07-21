@@ -32,6 +32,11 @@ class SslCertificateBase(BaseModel):
     create_method: str = "upload"
     is_ca: bool = False
     ca_cert_id: Optional[int] = None
+    organization: Optional[str] = None
+    organizational_unit: Optional[str] = None
+    client_ca: Optional[str] = None
+    client_depth: Optional[int] = None
+    skip_mtls_uri_regex: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -77,6 +82,11 @@ class SslCertificateUpdate(BaseModel):
     sign_key: Optional[str] = None
     is_ca: Optional[bool] = None
     ca_cert_id: Optional[int] = None
+    organization: Optional[str] = None
+    organizational_unit: Optional[str] = None
+    client_ca: Optional[str] = None
+    client_depth: Optional[int] = None
+    skip_mtls_uri_regex: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -125,6 +135,8 @@ class CaCertificateGenerateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100, description="CA 证书显示名称")
     common_name: Optional[str] = Field(default=None, description="CA 证书 CN，默认取 name")
+    organization: Optional[str] = Field(default=None, description="组织 (O)，默认 CUN")
+    organizational_unit: Optional[str] = Field(default=None, description="组织单位 (OU)，默认 BB")
     validity_days: int = Field(default=3650, ge=1, le=36500, description="CA 有效期（天）")
 
 
@@ -141,6 +153,11 @@ class SslCertificateGenerateRequest(BaseModel):
     algorithm: str = Field(default="sm2", pattern=r"^(sm2|rsa|ecc)$")
     ca_cert_id: int | None = Field(default=None, description="SM2 必填，引用已有 CA")
     generate_client_certs: bool = Field(default=False, description="SM2 可选，是否同时生成客户端双证书")
+    organization: Optional[str] = Field(default=None, description="组织 (O)，证书主体中的组织名称")
+    organizational_unit: Optional[str] = Field(default=None, description="组织单位 (OU)，证书主体中的部门名称")
+    client_ca: Optional[str] = Field(default=None, description="双向认证 CA 证书 PEM")
+    client_depth: Optional[int] = Field(default=None, description="双向认证证书链深度")
+    skip_mtls_uri_regex: Optional[str] = Field(default=None, description="跳过双向认证的 URI 正则")
 
 
 class SslCertificateGenerateResponse(BaseModel):

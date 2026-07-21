@@ -32,6 +32,11 @@ export interface SslCertificate {
   generate_log?: CommandLogEntry[]
   is_ca?: boolean
   ca_cert_id?: number | null
+  organization?: string
+  organizational_unit?: string
+  client_ca?: string
+  client_depth?: number
+  skip_mtls_uri_regex?: string
 }
 
 export interface SslCertificateGenerateRequest {
@@ -45,6 +50,9 @@ export interface SslCertificateGenerateRequest {
   algorithm?: 'sm2' | 'rsa' | 'ecc'
   ca_cert_id?: number | null
   generate_client_certs?: boolean
+  client_ca?: string
+  client_depth?: number
+  skip_mtls_uri_regex?: string
 }
 
 export interface CaCertificateGenerateRequest {
@@ -71,6 +79,9 @@ export interface SslCertificateCreate {
   gm?: boolean
   sign_cert?: string
   sign_key?: string
+  client_ca?: string
+  client_depth?: number
+  skip_mtls_uri_regex?: string
 }
 
 export interface SslCertificateUpdate {
@@ -87,6 +98,11 @@ export interface SslCertificateUpdate {
   sign_key?: string
   is_ca?: boolean
   ca_cert_id?: number | null
+  organization?: string
+  organizational_unit?: string
+  client_ca?: string
+  client_depth?: number
+  skip_mtls_uri_regex?: string
 }
 
 export interface SslListResponse {

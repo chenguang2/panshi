@@ -145,6 +145,11 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "generate_log", "TEXT"),
     ("ps_ssl_certificate", "is_ca", "INTEGER DEFAULT 0"),
     ("ps_ssl_certificate", "ca_cert_id", "INTEGER"),
+    ("ps_ssl_certificate", "client_ca", "TEXT"),
+    ("ps_ssl_certificate", "client_depth", "INTEGER DEFAULT 1"),
+    ("ps_ssl_certificate", "skip_mtls_uri_regex", "TEXT"),
+    ("ps_ssl_certificate", "organization", "VARCHAR(200)"),
+    ("ps_ssl_certificate", "organizational_unit", "VARCHAR(200)"),
 ]
 
 

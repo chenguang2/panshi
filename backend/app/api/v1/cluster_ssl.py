@@ -50,12 +50,16 @@ async def create_ca_certificate(
         raise HTTPException(status_code=400, detail="本地 openssl 不支持 SM2 曲线")
 
     cn = data.common_name or data.name
+    org = data.organization or "EMBRACE"
+    ou = data.organizational_unit or "EDGE"
     try:
         result, gen_logs = generate_ca_certificate(
             openssl_path=openssl_info["path"],
             common_name=cn,
             validity_days=data.validity_days,
             flavor=openssl_info["flavor"],
+            org=org,
+            ou=ou,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -86,6 +90,8 @@ async def create_ca_certificate(
         gm=True,
         algorithm="sm2",
         is_ca=True,
+        organization=org,
+        organizational_unit=ou,
         create_method="local_generate",
         generate_log=json.dumps(
             [log.model_dump() for log in generate_log],
@@ -209,6 +215,9 @@ async def update_ssl_certificate(
     if "gm" in update_data and not update_data["gm"]:
         cert.sign_cert = None
         cert.sign_key = None
+        cert.client_ca = None
+        cert.client_depth = None
+        cert.skip_mtls_uri_regex = None
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -305,6 +314,15 @@ async def publish_ssl_certificate(
                 ca_pem = (ca_record.cert or "").strip()
                 if sign_pem and ca_pem:
                     config_data["cert_chain"] = sign_pem + "\n" + ca_pem
+
+        # mTLS: add client object when client_ca is set
+        if cert.gm and cert.client_ca:
+            client = {"ca": cert.client_ca}
+            if cert.client_depth is not None:
+                client["depth"] = cert.client_depth
+            if cert.skip_mtls_uri_regex:
+                client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
+            config_data["client"] = client
 
     new_version = await edge_sync.create_config_version(db, "ssl", cert_id, cluster_id, config_data, cert)
 
@@ -477,6 +495,8 @@ async def _generate_local(
         ca_cert_pem = ca_record.cert
         ca_key_pem = ca_record.private_key
 
+    org = req.organization or "EMBRACE"
+    ou = req.organizational_unit or "EDGE"
     try:
         if is_sm2:
             cert_result, gen_logs = generate_dual_certificates(
@@ -488,6 +508,7 @@ async def _generate_local(
                 flavor=provider.flavor,
                 ca_cert_pem=ca_cert_pem,
                 ca_key_pem=ca_key_pem,
+                org=org, ou=ou,
             )
         else:
             cert_result, gen_logs = provider.generate_certificate(
@@ -497,6 +518,7 @@ async def _generate_local(
                 ip_sans=req.ip_sans or [],
                 validity_days=req.validity_days,
                 dual_cert=req.dual_cert,
+                org=org, ou=ou,
             )
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -532,7 +554,7 @@ async def _generate_local(
     server_cert = SslCertificate(
         cluster_id=cluster_id,
         name=req.name,
-        sni=sni_str or req.common_name,
+        sni=sni_str,
         cert=cert_result.get("cert", ""),
         private_key=cert_result.get("key", ""),
         cert_type=req.cert_type,
@@ -541,6 +563,11 @@ async def _generate_local(
         sign_cert=cert_result.get("sign_cert") if is_sm2 else None,
         sign_key=cert_result.get("sign_key") if is_sm2 else None,
         ca_cert_id=req.ca_cert_id if is_sm2 else None,
+        organization=org,
+        organizational_unit=ou,
+        client_ca=req.client_ca,
+        client_depth=req.client_depth,
+        skip_mtls_uri_regex=req.skip_mtls_uri_regex,
         create_method="local_generate",
         generate_log=json.dumps(
             [log.model_dump() for log in generate_log],
@@ -556,6 +583,7 @@ async def _generate_local(
         client_result, client_logs = _generate_client_dual_certs(
             provider, cn_client, req.dns_sans, req.ip_sans,
             req.validity_days, ca_cert_pem, ca_key_pem,
+            org=org, ou=ou,
         )
         client_cert_record = SslCertificate(
             cluster_id=cluster_id,
@@ -569,6 +597,8 @@ async def _generate_local(
             sign_cert=client_result["sign_cert"],
             sign_key=client_result["sign_key"],
             ca_cert_id=req.ca_cert_id,
+            organization=org,
+            organizational_unit=ou,
             create_method="local_generate",
         )
         db.add(client_cert_record)
@@ -588,7 +618,7 @@ async def _generate_local(
 
 def _generate_client_dual_certs(
     provider, common_name, dns_sans, ip_sans, validity_days,
-    ca_cert_pem, ca_key_pem,
+    ca_cert_pem, ca_key_pem, org="EMBRACE", ou="EDGE",
 ) -> tuple[dict, list]:
     """Generate client dual certs (sign+enc) using the given CA."""
     from app.services.cert_generator import generate_dual_certificates
@@ -601,6 +631,7 @@ def _generate_client_dual_certs(
         flavor=provider.flavor,
         ca_cert_pem=ca_cert_pem,
         ca_key_pem=ca_key_pem,
+        org=org, ou=ou,
     )
     return result, logs
 

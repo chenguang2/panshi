@@ -74,11 +74,11 @@
         <div class="ssl-card-actions">
           <button class="btn btn-ghost btn-sm ssl-action-btn" @click="viewCert(cert)">查看</button>
           <button class="btn btn-ghost btn-sm ssl-action-btn" @click="openDownloadDialog(cert)">下载证书</button>
-          <button class="btn btn-ghost btn-sm ssl-action-btn" @click="openEditDrawer(cert)">编辑</button>
+          <button v-if="!cert.is_ca" class="btn btn-ghost btn-sm ssl-action-btn" @click="openEditDrawer(cert)">编辑</button>
           <button class="btn btn-ghost btn-sm ssl-action-btn" style="color:var(--danger);" @click="deleteCert(cert)">删除</button>
           <span style="flex:1"></span>
           <button v-if="!cert.is_ca && cert.cert_type !== 'client'" class="btn btn-secondary btn-sm" @click="publishCert(cert)">发布</button>
-          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(cert)">版本管理</button>
+          <button v-if="!cert.is_ca" class="btn btn-secondary btn-sm" @click="openVersionManagement(cert)">版本管理</button>
         </div>
       </div>
     </div>

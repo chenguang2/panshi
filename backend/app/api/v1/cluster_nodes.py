@@ -851,6 +851,25 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         equal = str(db_v) == str(edge_v)
         fields.append({"name": "sign_key", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
 
+        # mTLS client_ca ↔ Edge client.ca
+        edge_client = edge_data.get("client") or {}
+        db_v = db_cert.client_ca or ""
+        edge_v = edge_client.get("ca", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "client_ca", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
+        # client_depth ↔ Edge client.depth
+        db_v = db_cert.client_depth
+        edge_v = edge_client.get("depth")
+        equal = str(db_v or "") == str(edge_v or "")
+        fields.append({"name": "client_depth", "db": str(db_v or ""), "edge": str(edge_v or ""), "status": "equal" if equal else "diff"})
+
+        # skip_mtls_uri_regex ↔ Edge client.skip_mtls_uri_regex
+        db_v = db_cert.skip_mtls_uri_regex or ""
+        edge_v = edge_client.get("skip_mtls_uri_regex", "") or ""
+        equal = str(db_v) == str(edge_v)
+        fields.append({"name": "skip_mtls_uri_regex", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
+
         return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
     def _find_only_in_edge(edge_dict, db_items, id_attr="id"):

@@ -54,10 +54,58 @@
           </div>
           <div class="form-group" style="flex:0 0 auto;padding-top:24px;">
             <label class="checkbox-label">
-              <input type="checkbox" v-model="form.generate_client_certs" :disabled="generating" />
+              <input type="checkbox" :checked="form.generate_client_certs" disabled />
               同时生成客户端证书
+              <a-tooltip title="国密 SM2 默认同时生成客户端双证书">
+                <span class="tooltip-icon">ⓘ</span>
+              </a-tooltip>
             </label>
           </div>
+        </div>
+
+        <!-- 双向认证 (mTLS) — SM2+server 时显示 -->
+        <div v-if="form.algorithm === 'sm2'">
+          <div class="form-group" style="margin-top:8px;">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="mtlsEnabled"> <span>启用双向认证 (mTLS)</span>
+            </label>
+          </div>
+          <template v-if="mtlsEnabled">
+            <div class="collapse-section">
+              <div class="collapse-header" @click="mtlsExpanded = !mtlsExpanded">
+                <span class="collapse-arrow">{{ mtlsExpanded ? '▼' : '▶' }}</span>
+                <span class="collapse-title">mTLS 配置</span>
+                <span class="collapse-badge" v-if="form.client_ca">已配置</span>
+              </div>
+              <div v-show="mtlsExpanded" class="collapse-body">
+                <div class="form-group">
+                  <label class="form-label">客户端 CA 证书 (client_ca)</label>
+                  <textarea v-model="form.client_ca" class="form-input" rows="6" placeholder="留空则自动使用当前 CA 的证书（勾选同时生成客户端证书时）&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                  <div class="form-hint">客户端的 CA 根证书 PEM，勾选"同时生成客户端证书"且留空时自动填充</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">证书链深度 (client_depth)</label>
+                    <input v-model.number="form.client_depth" type="number" class="form-input" min="0" max="10" placeholder="默认 1">
+                    <div class="form-hint">默认 1，0 表示不限制</div>
+                  </div>
+                  <div class="form-group" style="flex:2;">
+                    <label class="form-label">跳过 mTLS 的 URI 正则</label>
+                    <div class="mtls-uri-list">
+                      <div v-for="(tag, i) in mtlsSkipTags" :key="i" class="mtls-uri-item">
+                        <code class="mtls-uri-code">{{ tag }}</code>
+                        <button class="btn btn-ghost btn-sm" @click="removeMtlsSkipTag(i)">删除</button>
+                      </div>
+                      <div class="mtls-uri-add-row">
+                        <input v-model="mtlsSkipInput" type="text" class="form-input" placeholder="输入正则表达式" @keydown.enter.prevent="addMtlsSkipTag">
+                        <button class="btn btn-primary btn-sm" @click="addMtlsSkipTag">添加</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- 证书参数 -->
@@ -74,16 +122,32 @@
           </div>
         </div>
 
+        <!-- 组织信息 -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">组织 (O)</label>
+            <input v-model="form.organization" type="text" class="form-input" placeholder="默认 EMBRACE" :disabled="generating">
+            <div class="form-hint">机构/公司名称，不填使用默认值</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">组织单位 (OU)</label>
+            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="默认 EDGE" :disabled="generating">
+            <div class="form-hint">部门名称，不填使用默认值</div>
+          </div>
+        </div>
+
         <!-- 域名 SAN -->
         <div class="form-group">
-          <label class="form-label">域名 SAN</label>
-          <div class="sni-tag-input" @click="dnsInputRef?.focus()">
+          <label class="form-label">域名 SAN <span class="required">*</span></label>
+          <div class="sni-tag-input" :class="{ 'has-error': errors.dns_sans }" @click="dnsInputRef?.focus()">
             <span v-for="(tag, i) in dnsTags" :key="i" class="sni-tag">
               <span class="sni-tag-text">{{ tag }}</span>
               <span class="sni-tag-remove" @click.stop="removeDnsTag(i)">&times;</span>
             </span>
             <input ref="dnsInputRef" v-model="dnsInput" type="text" class="sni-input-inline" placeholder="输入域名后按 Enter" :disabled="generating" @keydown.enter.prevent="addDnsTag" @keydown.="addDnsTagOnComma">
           </div>
+          <div v-if="errors.dns_sans" class="form-error" style="margin-top:4px;">{{ errors.dns_sans }}</div>
+          <div v-else class="form-hint">至少添加一个域名 SAN 或 IP SAN</div>
         </div>
 
         <!-- IP SAN -->
@@ -182,15 +246,23 @@ const form = reactive({
   cluster_id: '',
   name: '',
   common_name: '',
+  organization: '',
+  organizational_unit: '',
   validity_days: 365,
   ca_cert_id: null as number | null,
   generate_client_certs: false,
+  client_ca: '',
+  client_depth: 1,
 })
 
 const dnsInput = ref('')
 const ipInput = ref('')
 const dnsTags = ref<string[]>([])
 const ipTags = ref<string[]>([])
+const mtlsEnabled = ref(false)
+const mtlsSkipTags = ref<string[]>([])
+const mtlsSkipInput = ref('')
+const mtlsExpanded = ref(false)
 const generating = ref(false)
 const errorMsg = ref('')
 const commandLog = ref<any[]>([])
@@ -204,6 +276,7 @@ const errors = reactive({
   cluster_id: '',
   name: '',
   common_name: '',
+  dns_sans: '',
 })
 
 const canGenerate = computed(() => {
@@ -215,10 +288,15 @@ function validate(): boolean {
   errors.cluster_id = ''
   errors.name = ''
   errors.common_name = ''
+  errors.dns_sans = ''
   let valid = true
   if (!form.cluster_id) { errors.cluster_id = '请选择集群'; valid = false }
   if (!form.name.trim()) { errors.name = '请输入证书名称'; valid = false }
   if (!form.common_name.trim()) { errors.common_name = '请输入通用名称'; valid = false }
+  if (dnsTags.value.length === 0 && ipTags.value.length === 0) {
+    errors.dns_sans = '请至少添加一个域名 SAN 或 IP SAN'
+    valid = false
+  }
   if (form.algorithm === 'sm2' && !form.ca_cert_id) {
     message.warning('SM2 证书必须选择签发 CA')
     valid = false
@@ -251,7 +329,6 @@ async function loadCaCerts() {
 function onAlgorithmChange() {
   if (form.algorithm !== 'sm2') {
     form.ca_cert_id = null
-    form.generate_client_certs = false
   }
 }
 
@@ -260,6 +337,13 @@ async function onClusterChange() {
   caCerts.value = []
   await loadCaCerts()
 }
+
+watch([mtlsEnabled, () => form.ca_cert_id], ([enabled, caId]) => {
+  if (form.algorithm === 'sm2' && enabled && caId && !form.client_ca) {
+    const ca = caCerts.value.find((c: any) => c.id === caId)
+    if (ca) form.client_ca = ca.cert
+  }
+})
 
 async function handleGenerate() {
   if (!validate()) return
@@ -280,6 +364,11 @@ async function handleGenerate() {
       cert_type: 'server',
       ca_cert_id: form.algorithm === 'sm2' ? form.ca_cert_id : undefined,
       generate_client_certs: form.algorithm === 'sm2' ? form.generate_client_certs : undefined,
+      organization: form.organization.trim() || undefined,
+      organizational_unit: form.organizational_unit.trim() || undefined,
+      client_ca: mtlsEnabled.value && form.algorithm === 'sm2' ? (form.client_ca || undefined) : undefined,
+      client_depth: mtlsEnabled.value && form.algorithm === 'sm2' ? form.client_depth : undefined,
+      skip_mtls_uri_regex: mtlsEnabled.value && form.algorithm === 'sm2' && mtlsSkipTags.value.length > 0 ? JSON.stringify(mtlsSkipTags.value) : undefined,
     })
 
     const resp = result?.data || result
@@ -331,6 +420,13 @@ function addIpTagOnComma(e: KeyboardEvent) {
 function removeDnsTag(i: number) { dnsTags.value.splice(i, 1) }
 function removeIpTag(i: number) { ipTags.value.splice(i, 1) }
 
+function addMtlsSkipTag() {
+  const v = mtlsSkipInput.value.trim()
+  if (v && !mtlsSkipTags.value.includes(v)) mtlsSkipTags.value.push(v)
+  mtlsSkipInput.value = ''
+}
+function removeMtlsSkipTag(i: number) { mtlsSkipTags.value.splice(i, 1) }
+
 function downloadClientBundle(clientCert: any) {
   window.open(`/api/v1/ssl/${clientCert.id}/download`, '_blank')
 }
@@ -344,9 +440,15 @@ watch(() => props.visible, (v) => {
     form.common_name = ''
     form.validity_days = 365
     form.ca_cert_id = null
-    form.generate_client_certs = false
+    form.generate_client_certs = true
+    form.client_ca = ''
+    form.client_depth = 1
+    form.organization = ''
+    form.organizational_unit = ''
     dnsTags.value = []
     ipTags.value = []
+    mtlsSkipTags.value = []
+    mtlsExpanded.value = false
     caCerts.value = []
     errorMsg.value = ''
     commandLog.value = []
@@ -362,6 +464,8 @@ watch(() => props.visible, (v) => {
 .radio-label input { margin: 0; }
 .checkbox-label { cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
 .checkbox-label input { margin: 0; }
+.tooltip-icon { cursor: help; font-size: 14px; color: var(--muted); transition: color 0.15s; }
+.tooltip-icon:hover { color: var(--accent); }
 .sni-tag-input { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: text; min-height: 40px; transition: border-color 0.15s; }
 .sni-tag-input:focus-within { border-color: var(--accent); }
 .sni-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 10px; border-radius: 12px; font-size: 12px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 10%); border: 1px solid oklch(56% 0.16 210 / 20%); color: var(--accent); white-space: nowrap; }
@@ -375,6 +479,80 @@ watch(() => props.visible, (v) => {
 .progress-step { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; color: var(--muted); }
 .progress-step.active { color: var(--primary); }
 .step-icon { width: 18px; text-align: center; font-weight: bold; }
+
+/* ── Collapse Section ── */
+.collapse-section {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.collapse-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  transition: background 0.15s;
+}
+.collapse-header:hover {
+  background: oklch(56% 0.16 210 / 5%);
+}
+.collapse-arrow {
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.collapse-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+}
+.collapse-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: oklch(65% 0.2 150 / 15%);
+  color: oklch(45% 0.18 150);
+}
+.collapse-body {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* ── mTLS URI List ── */
+.mtls-uri-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mtls-uri-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.mtls-uri-code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  word-break: break-all;
+}
+.mtls-uri-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.mtls-uri-add-row .form-input {
+  flex: 1;
+}
 .log-section { margin-top: 16px; }
 .log-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
 .log-entry { display: flex; gap: 8px; padding: 6px 8px; margin-bottom: 4px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }

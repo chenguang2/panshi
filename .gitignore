@@ -85,3 +85,5 @@ pdf_extract.txt
 
 backend/ansible/soft/
 backend/ansible/collections/ansible_collections/
+backend/bin/
+docs/other/

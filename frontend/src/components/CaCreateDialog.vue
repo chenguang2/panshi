@@ -26,6 +26,19 @@
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">组织 (O)</label>
+            <input v-model="form.organization" type="text" class="form-input" placeholder="默认 EMBRACE" :disabled="creating">
+            <div class="form-hint">机构/公司名称，显示在证书的"颁发对象"中</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">组织单位 (OU)</label>
+            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="默认 EDGE" :disabled="creating">
+            <div class="form-hint">部门名称，显示在证书的"颁发对象"中</div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label class="form-label">有效期</label>
           <input v-model.number="form.validity_days" type="number" class="form-input" min="1" max="36500" :disabled="creating">
@@ -63,6 +76,8 @@ const form = reactive({
   cluster_id: null as number | null,
   name: '',
   common_name: '',
+  organization: '',
+  organizational_unit: '',
   validity_days: 3650,
 })
 
@@ -79,6 +94,8 @@ async function handleCreate() {
     await api.post(`/clusters/${form.cluster_id}/ssl/ca`, {
       name: form.name.trim(),
       common_name: form.common_name.trim() || undefined,
+      organization: form.organization.trim() || undefined,
+      organizational_unit: form.organizational_unit.trim() || undefined,
       validity_days: form.validity_days,
     })
     message.success('CA 根证书创建成功')
@@ -101,6 +118,8 @@ watch(() => props.visible, (v) => {
     form.cluster_id = null
     form.name = ''
     form.common_name = ''
+    form.organization = ''
+    form.organizational_unit = ''
     form.validity_days = 3650
     errorMsg.value = ''
   }

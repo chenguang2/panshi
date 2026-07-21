@@ -125,9 +125,67 @@
           </div>
         </template>
 
+        <!-- 双向认证 (mTLS) -->
+        <template v-if="form.gm && form.cert_type === 'server'">
+          <div class="form-group" style="margin-top:8px;">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="mtlsEnabled"> <span>启用双向认证 (mTLS)</span>
+            </label>
+          </div>
+          <template v-if="mtlsEnabled">
+            <div class="collapse-section">
+              <div class="collapse-header" @click="mtlsExpanded = !mtlsExpanded">
+                <span class="collapse-arrow">{{ mtlsExpanded ? '▼' : '▶' }}</span>
+                <span class="collapse-title">mTLS 配置</span>
+                <span class="collapse-badge" v-if="form.client_ca">已配置</span>
+              </div>
+              <div v-show="mtlsExpanded" class="collapse-body">
+                <div class="form-group">
+                  <label class="form-label">客户端 CA 证书 (client_ca)</label>
+                  <textarea v-model="form.client_ca" class="form-input" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                  <div class="form-hint">客户端的 CA 根证书 PEM，用于验证客户端证书</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">证书链深度 (client_depth)</label>
+                    <input v-model.number="form.client_depth" type="number" class="form-input" min="0" max="10" placeholder="默认 1">
+                    <div class="form-hint">客户端证书链最大深度，0 表示不限制</div>
+                  </div>
+                  <div class="form-group" style="flex:2;">
+                    <label class="form-label">跳过 mTLS 的 URI 正则</label>
+                    <div class="mtls-uri-list">
+                      <div v-for="(tag, i) in mtlsSkipTags" :key="i" class="mtls-uri-item">
+                        <code class="mtls-uri-code">{{ tag }}</code>
+                        <button class="btn btn-ghost btn-sm" @click="removeMtlsSkipTag(i)">删除</button>
+                      </div>
+                      <div class="mtls-uri-add-row">
+                        <input v-model="mtlsSkipInputValue" type="text" class="form-input" placeholder="输入正则表达式" @keydown.enter.prevent="addMtlsSkipTag">
+                        <button class="btn btn-primary btn-sm" @click="addMtlsSkipTag">添加</button>
+                      </div>
+                    </div>
+                    <div class="form-hint">匹配这些 URI 的请求跳过 mTLS 验证</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+
         <div class="form-group">
           <label class="form-label">描述</label>
           <textarea v-model="form.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">组织 (O)</label>
+            <input v-model="form.organization" type="text" class="form-input" placeholder="如 EMBRACE">
+            <div class="form-hint">显示在证书的"颁发对象"中</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">组织单位 (OU)</label>
+            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="如 EDGE">
+            <div class="form-hint">显示在证书的"颁发对象"中</div>
+          </div>
         </div>
       </div>
 
@@ -165,6 +223,11 @@ const sniTags = ref<string[]>([])
 const sniInputValue = ref('')
 const sniInputRef = ref<HTMLInputElement | null>(null)
 
+const mtlsEnabled = ref(false)
+const mtlsExpanded = ref(false)
+const mtlsSkipTags = ref<string[]>([])
+const mtlsSkipInputValue = ref('')
+
 function addSniTag() {
   const val = sniInputValue.value.trim()
   if (!val) return
@@ -186,6 +249,21 @@ function onSniBackspace() {
   }
 }
 
+function addMtlsSkipTag() {
+  const val = mtlsSkipInputValue.value.trim()
+  if (!val) return
+  if (mtlsSkipTags.value.includes(val)) {
+    mtlsSkipInputValue.value = ''
+    return
+  }
+  mtlsSkipTags.value.push(val)
+  mtlsSkipInputValue.value = ''
+}
+
+function removeMtlsSkipTag(index: number) {
+  mtlsSkipTags.value.splice(index, 1)
+}
+
 const form = reactive({
   name: '',
   cluster_id: '' as number | string,
@@ -198,6 +276,11 @@ const form = reactive({
   gm: false,
   sign_cert: '',
   sign_key: '',
+  organization: '',
+  organizational_unit: '',
+  client_ca: '',
+  client_depth: '' as number | string,
+  skip_mtls_uri_regex: [] as string[],
 })
 
 const formErrors = reactive<Record<string, string>>({})
@@ -211,7 +294,7 @@ function validate(): boolean {
   let valid = true
   if (!form.name.trim()) { formErrors.name = '请输入证书名称'; valid = false }
   if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; valid = false }
-  if (sniTags.value.length === 0) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
+  if (sniTags.value.length === 0 && !props.editingCert) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
   if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
   if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
   // 创建时国密模式要求签名证书必填；编辑时不强制（可能是单证书模式）
@@ -249,6 +332,18 @@ watch(() => props.visible, (v) => {
     form.gm = !!(c.gm && c.sign_cert)
     form.sign_cert = c.sign_cert || ''
     form.sign_key = c.sign_key || ''
+    form.organization = c.organization || ''
+    form.organizational_unit = c.organizational_unit || ''
+    // mTLS 回填：任一字段有值即视为已启用
+    mtlsEnabled.value = !!(c.client_ca || c.client_depth != null || c.skip_mtls_uri_regex)
+    form.client_ca = c.client_ca || ''
+    form.client_depth = c.client_depth ?? ''
+    if (c.skip_mtls_uri_regex) {
+      try { mtlsSkipTags.value = JSON.parse(c.skip_mtls_uri_regex) } catch { mtlsSkipTags.value = [c.skip_mtls_uri_regex] }
+    } else {
+      mtlsSkipTags.value = []
+    }
+    mtlsExpanded.value = mtlsEnabled.value
   } else {
     form.name = ''
     form.cluster_id = ''
@@ -261,6 +356,13 @@ watch(() => props.visible, (v) => {
     form.gm = false
     form.sign_cert = ''
     form.sign_key = ''
+    form.organization = ''
+    form.organizational_unit = ''
+    mtlsEnabled.value = false
+    form.client_ca = ''
+    form.client_depth = ''
+    mtlsSkipTags.value = []
+    mtlsExpanded.value = false
   }
 })
 
@@ -309,6 +411,8 @@ async function handleSubmit() {
       private_key: form.key,
       description: form.description || undefined,
       gm: form.gm || undefined,
+      organization: form.organization.trim() || undefined,
+      organizational_unit: form.organizational_unit.trim() || undefined,
     }
     if (form.gm) {
       data.sign_cert = form.sign_cert
@@ -316,6 +420,11 @@ async function handleSubmit() {
     }
     if (form.ssl_protocols.length > 0) {
       data.ssl_protocols = JSON.stringify(form.ssl_protocols)
+    }
+    if (mtlsEnabled.value && form.gm && form.cert_type === 'server') {
+      if (form.client_ca) data.client_ca = form.client_ca
+      if (form.client_depth !== '' && form.client_depth != null) data.client_depth = Number(form.client_depth)
+      if (mtlsSkipTags.value.length > 0) data.skip_mtls_uri_regex = JSON.stringify(mtlsSkipTags.value)
     }
     if (props.editingCert) {
       await updateSslCertificate(Number(form.cluster_id), props.editingCert.id, data)
@@ -436,5 +545,79 @@ function handleClose() {
   color: var(--muted);
   font-size: 12px;
   font-family: var(--font-body);
+}
+
+/* ── Collapse Section ── */
+.collapse-section {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.collapse-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--surface);
+  transition: background 0.15s;
+}
+.collapse-header:hover {
+  background: oklch(56% 0.16 210 / 5%);
+}
+.collapse-arrow {
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.collapse-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+}
+.collapse-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: oklch(65% 0.2 150 / 15%);
+  color: oklch(45% 0.18 150);
+}
+.collapse-body {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/* ── mTLS URI List ── */
+.mtls-uri-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mtls-uri-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.mtls-uri-code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  word-break: break-all;
+}
+.mtls-uri-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.mtls-uri-add-row .form-input {
+  flex: 1;
 }
 </style>

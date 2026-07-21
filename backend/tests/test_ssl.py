@@ -437,6 +437,357 @@ class TestSslResponseIsCaFields:
         assert resp.private_key == "", "CA response should mask private_key"
 
 
+class TestSslMtlsMigration:
+    """Migration tests for new mTLS column additions."""
+
+    def test_client_ca_in_column_migrations(self):
+        from app.core.migrate import COLUMN_MIGRATIONS
+        assert any(
+            table == "ps_ssl_certificate" and col == "client_ca"
+            for table, col, _ in COLUMN_MIGRATIONS
+        ), "client_ca migration entry missing in COLUMN_MIGRATIONS"
+
+    def test_client_depth_in_column_migrations(self):
+        from app.core.migrate import COLUMN_MIGRATIONS
+        assert any(
+            table == "ps_ssl_certificate" and col == "client_depth"
+            for table, col, _ in COLUMN_MIGRATIONS
+        ), "client_depth migration entry missing in COLUMN_MIGRATIONS"
+
+    def test_skip_mtls_uri_regex_in_column_migrations(self):
+        from app.core.migrate import COLUMN_MIGRATIONS
+        assert any(
+            table == "ps_ssl_certificate" and col == "skip_mtls_uri_regex"
+            for table, col, _ in COLUMN_MIGRATIONS
+        ), "skip_mtls_uri_regex migration entry missing in COLUMN_MIGRATIONS"
+
+
+class TestSslMtlsSchemaFields:
+    """Tests for mTLS fields in Pydantic schemas (Tasks 2.1-2.4)."""
+
+    def test_base_schema_has_mtls_fields(self):
+        from app.schemas.ssl import SslCertificateBase
+
+        fields = SslCertificateBase.model_fields
+        assert "client_ca" in fields
+        assert "client_depth" in fields
+        assert "skip_mtls_uri_regex" in fields
+
+    def test_base_schema_mtls_fields_optional(self):
+        from app.schemas.ssl import SslCertificateBase
+
+        base = SslCertificateBase(cluster_id=1)
+        assert base.client_ca is None
+        assert base.client_depth is None
+        assert base.skip_mtls_uri_regex is None
+
+    def test_base_schema_mtls_fields_settable(self):
+        from app.schemas.ssl import SslCertificateBase
+
+        base = SslCertificateBase(
+            cluster_id=1,
+            client_ca="ca-pem",
+            client_depth=2,
+            skip_mtls_uri_regex="/health",
+        )
+        assert base.client_ca == "ca-pem"
+        assert base.client_depth == 2
+        assert base.skip_mtls_uri_regex == "/health"
+
+    def test_create_schema_inherits_mtls_fields(self):
+        from app.schemas.ssl import SslCertificateCreate
+
+        fields = SslCertificateCreate.model_fields
+        assert "client_ca" in fields
+        assert "client_depth" in fields
+        assert "skip_mtls_uri_regex" in fields
+
+    def test_update_schema_has_mtls_fields(self):
+        from app.schemas.ssl import SslCertificateUpdate
+
+        fields = SslCertificateUpdate.model_fields
+        assert "client_ca" in fields
+        assert "client_depth" in fields
+        assert "skip_mtls_uri_regex" in fields
+
+    def test_response_schema_has_mtls_fields(self):
+        from app.schemas.ssl import SslCertificateResponse
+
+        fields = SslCertificateResponse.model_fields
+        assert "client_ca" in fields
+        assert "client_depth" in fields
+        assert "skip_mtls_uri_regex" in fields
+
+    def test_generate_request_has_mtls_fields(self):
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        fields = SslCertificateGenerateRequest.model_fields
+        assert "client_ca" in fields
+        assert "client_depth" in fields
+        assert "skip_mtls_uri_regex" in fields
+
+    def test_generate_request_mtls_fields_optional(self):
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        req = SslCertificateGenerateRequest(name="test", common_name="test.com")
+        assert req.client_ca is None
+        assert req.client_depth is None
+        assert req.skip_mtls_uri_regex is None
+
+    def test_generate_request_mtls_fields_settable(self):
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        req = SslCertificateGenerateRequest(
+            name="test", common_name="test.com",
+            client_ca="ca-pem",
+            client_depth=3,
+            skip_mtls_uri_regex="/health,/metrics",
+        )
+        assert req.client_ca == "ca-pem"
+        assert req.client_depth == 3
+        assert req.skip_mtls_uri_regex == "/health,/metrics"
+
+
+class TestSslMtlsUpdateClear:
+    async def test_update_handler_clears_mtls_on_gm_false(self, test_db):
+        from app.schemas.ssl import SslCertificateUpdate
+
+        cert = SslCertificate(
+            cluster_id=1, name="gm-mtls", sni="mtls.local",
+            cert="crt", private_key="key",
+            gm=True, sign_cert="sc", sign_key="sk",
+            client_ca="ca-pem", client_depth=2, skip_mtls_uri_regex="/health",
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+
+        update_data = SslCertificateUpdate(gm=False).model_dump(exclude_unset=True)
+        for k, v in update_data.items():
+            setattr(cert, k, v)
+        if "gm" in update_data and not update_data["gm"]:
+            cert.sign_cert = None
+            cert.sign_key = None
+            cert.client_ca = None
+            cert.client_depth = None
+            cert.skip_mtls_uri_regex = None
+        await test_db.commit()
+        await test_db.refresh(cert)
+
+        assert cert.client_ca is None
+        assert cert.client_depth is None
+        assert cert.skip_mtls_uri_regex is None
+
+    async def test_mtls_persists_when_gm_unchanged(self, test_db):
+        from app.schemas.ssl import SslCertificateUpdate
+
+        cert = SslCertificate(
+            cluster_id=1, name="keep-mtls", sni="keep.local",
+            cert="crt", private_key="key",
+            gm=True, sign_cert="sc", sign_key="sk",
+            client_ca="ca-pem", client_depth=1, skip_mtls_uri_regex="/status",
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+
+        update_data = SslCertificateUpdate(description="updated").model_dump(exclude_unset=True)
+        for k, v in update_data.items():
+            setattr(cert, k, v)
+        if "gm" in update_data and not update_data["gm"]:
+            cert.client_ca = None
+        await test_db.commit()
+        await test_db.refresh(cert)
+
+        assert cert.client_ca == "ca-pem"
+        assert cert.client_depth == 1
+        assert cert.skip_mtls_uri_regex == "/status"
+
+
+class TestSslCertificateMtlsFields:
+    """Tests for mTLS fields on SslCertificate model (Task 1.1)."""
+
+    async def test_model_has_client_ca_field(self, test_db):
+        """SslCertificate should have client_ca field (Text, nullable)."""
+        cert = SslCertificate(
+            cluster_id=1,
+            name="mtls-cert",
+            sni="mtls.local",
+            cert="crt",
+            private_key="key",
+            client_ca="-----BEGIN CERTIFICATE-----\nMTLS_CA\n-----END CERTIFICATE-----",
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+        assert hasattr(cert, "client_ca")
+        assert cert.client_ca is not None
+        assert "MTLS_CA" in cert.client_ca
+
+    async def test_model_client_ca_nullable(self, test_db):
+        """client_ca should default to None."""
+        cert = SslCertificate(
+            cluster_id=1,
+            name="no-mtls-cert",
+            sni="test.local",
+            cert="crt",
+            private_key="key",
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+        assert cert.client_ca is None
+
+    async def test_model_has_client_depth_field(self, test_db):
+        """SslCertificate should have client_depth field (Integer, nullable, default=1)."""
+        cert = SslCertificate(
+            cluster_id=1,
+            name="mtls-depth",
+            sni="depth.local",
+            cert="crt",
+            private_key="key",
+            client_depth=2,
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+        assert hasattr(cert, "client_depth")
+        assert cert.client_depth == 2
+
+    async def test_model_has_skip_mtls_uri_regex_field(self, test_db):
+        """SslCertificate should have skip_mtls_uri_regex field (Text, nullable)."""
+        cert = SslCertificate(
+            cluster_id=1,
+            name="mtls-skip",
+            sni="skip.local",
+            cert="crt",
+            private_key="key",
+            skip_mtls_uri_regex="/health",
+        )
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+        assert hasattr(cert, "skip_mtls_uri_regex")
+        assert cert.skip_mtls_uri_regex == "/health"
+
+
+class TestSslEdgeImportMtls:
+    """Tests for mTLS field parsing in Edge import (Task 4.2)."""
+
+    def _make_import_service(self):
+        from app.services.edge_import_service import EdgeImportService
+        svc = EdgeImportService.__new__(EdgeImportService)
+        svc.cluster_id = 1
+        return svc
+
+    def test_import_parses_client_object(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-123",
+            "name": "mtls-cert",
+            "cert": "cert-pem",
+            "key": "key-pem",
+            "type": "server",
+            "gm": True,
+            "certs": ["sign-pem"],
+            "keys": ["sign-key"],
+            "client": {
+                "ca": "mtls-ca-pem",
+                "depth": 2,
+                "skip_mtls_uri_regex": "/health",
+            },
+        }
+        result = svc.convert_ssl_certificate(edge_data)
+        sc = result["ssl_certificate"]
+        assert sc["client_ca"] == "mtls-ca-pem"
+        assert sc["client_depth"] == 2
+        assert sc["skip_mtls_uri_regex"] == "/health"
+
+    def test_import_no_client_defaults_none(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-456",
+            "name": "normal-cert",
+            "cert": "cert-pem",
+            "key": "key-pem",
+            "type": "server",
+        }
+        result = svc.convert_ssl_certificate(edge_data)
+        sc = result["ssl_certificate"]
+        assert sc["client_ca"] is None
+        assert sc["client_depth"] is None
+        assert sc["skip_mtls_uri_regex"] is None
+
+    def test_import_partial_client(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-789",
+            "name": "partial-mtls",
+            "cert": "cert-pem",
+            "key": "key-pem",
+            "type": "server",
+            "client": {"ca": "just-ca"},
+        }
+        result = svc.convert_ssl_certificate(edge_data)
+        sc = result["ssl_certificate"]
+        assert sc["client_ca"] == "just-ca"
+        assert sc["client_depth"] is None
+        assert sc["skip_mtls_uri_regex"] is None
+
+
+class TestSslDiffMtlsComparison:
+    """Tests for mTLS field comparison in config diff (Task 5.1)."""
+
+    @staticmethod
+    def _compare_mtls_field(db_cert, edge_data, field_name, edge_key):
+        db_v = getattr(db_cert, field_name, None) or ""
+        edge_client = edge_data.get("client", {}) if isinstance(edge_data, dict) else {}
+        edge_v = edge_client.get(edge_key, "") or ""
+        equal = str(db_v) == str(edge_v)
+        return {"name": field_name, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"}
+
+    def _make_fake_cert(self, **kwargs):
+        class FakeCert:
+            client_ca = ""
+            client_depth = None
+            skip_mtls_uri_regex = None
+        for k, v in kwargs.items():
+            setattr(FakeCert, k, v)
+        return FakeCert
+
+    def test_mtls_client_ca_equal(self):
+        cert = self._make_fake_cert(client_ca="ca-pem")
+        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
+        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
+        assert result["status"] == "equal"
+
+    def test_mtls_client_ca_diff(self):
+        cert = self._make_fake_cert(client_ca="ca-pem-a")
+        edge = {"client": {"ca": "ca-pem-b", "depth": 2, "skip_mtls_uri_regex": "/health"}}
+        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
+        assert result["status"] == "diff"
+
+    def test_mtls_client_depth_equal(self):
+        cert = self._make_fake_cert(client_depth=2)
+        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
+        result = self._compare_mtls_field(cert, edge, "client_depth", "depth")
+        assert result["status"] == "equal"
+
+    def test_mtls_skip_uri_regex_equal(self):
+        cert = self._make_fake_cert(skip_mtls_uri_regex="/health")
+        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
+        result = self._compare_mtls_field(cert, edge, "skip_mtls_uri_regex", "skip_mtls_uri_regex")
+        assert result["status"] == "equal"
+
+    def test_mtls_no_client_on_edge(self):
+        cert = self._make_fake_cert(client_ca="ca-pem")
+        edge = {}
+        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
+        assert result["status"] == "diff"
+        assert result["db"] == "ca-pem"
+        assert result["edge"] == ""
+
+
 class TestSslPublishConfig:
     """SSL publish config_data assembly logic."""
 
@@ -451,6 +802,13 @@ class TestSslPublishConfig:
             config["certs"] = [cert.sign_cert]
             config["keys"] = [cert.sign_key]
             config["gm"] = True
+            if cert.client_ca:
+                client = {"ca": cert.client_ca}
+                if cert.client_depth is not None:
+                    client["depth"] = cert.client_depth
+                if cert.skip_mtls_uri_regex:
+                    client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
+                config["client"] = client
         return config
 
     def test_gm_publish_includes_sign_fields(self):
@@ -462,6 +820,9 @@ class TestSslPublishConfig:
             gm = True
             sign_cert = "sign-pem"
             sign_key = "sign-key-pem"
+            client_ca = ""
+            client_depth = None
+            skip_mtls_uri_regex = None
 
         data = self._publish_data(FakeCert())
         assert data["cert"] == "enc-pem"
@@ -469,6 +830,59 @@ class TestSslPublishConfig:
         assert data["certs"] == ["sign-pem"]
         assert data["keys"] == ["sign-key-pem"]
         assert data["gm"] is True
+
+    def test_gm_mtls_publish_includes_client_object(self):
+        """When gm=true and client_ca is set, publish data should include client object."""
+        class FakeCert:
+            cert = "enc-pem"
+            private_key = "enc-key-pem"
+            cert_type = "server"
+            sni = "mtls.local"
+            gm = True
+            sign_cert = "sign-pem"
+            sign_key = "sign-key-pem"
+            client_ca = "mtls-ca-pem"
+            client_depth = 2
+            skip_mtls_uri_regex = "/health"
+
+        data = self._publish_data(FakeCert())
+        assert data["client"]["ca"] == "mtls-ca-pem"
+        assert data["client"]["depth"] == 2
+        assert data["client"]["skip_mtls_uri_regex"] == "/health"
+
+    def test_gm_mtls_no_client_object_when_ca_empty(self):
+        """When gm=true but client_ca is empty, no client object in publish data."""
+        class FakeCert:
+            cert = "enc-pem"
+            private_key = "enc-key-pem"
+            cert_type = "server"
+            sni = "gm.local"
+            gm = True
+            sign_cert = "sign-pem"
+            sign_key = "sign-key-pem"
+            client_ca = ""
+            client_depth = None
+            skip_mtls_uri_regex = None
+
+        data = self._publish_data(FakeCert())
+        assert "client" not in data
+
+    def test_non_gm_mtls_no_client_object(self):
+        """When gm=false, no client object even if client_ca is set."""
+        class FakeCert:
+            cert = "crt"
+            private_key = "key"
+            cert_type = "server"
+            sni = "test.local"
+            gm = False
+            sign_cert = ""
+            sign_key = ""
+            client_ca = "mtls-ca"
+            client_depth = 1
+            skip_mtls_uri_regex = "/status"
+
+        data = self._publish_data(FakeCert())
+        assert "client" not in data
 
     def test_normal_publish_no_gm_fields(self):
         class FakeCert:
@@ -479,6 +893,9 @@ class TestSslPublishConfig:
             gm = False
             sign_cert = ""
             sign_key = ""
+            client_ca = ""
+            client_depth = None
+            skip_mtls_uri_regex = None
 
         data = self._publish_data(FakeCert())
         assert "certs" not in data
