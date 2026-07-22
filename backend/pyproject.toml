@@ -21,6 +21,7 @@ dependencies = [
     "ansible-runner>=2.3.0",
     "ansible-core>=2.17.0",
     "clickhouse-driver>=0.2.6",
+    "openpyxl>=3.1.0",
 ]
 
 [project.optional-dependencies]

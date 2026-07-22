@@ -4,6 +4,7 @@ from app.api.v1 import (
     cluster_upstreams, cluster_plugin_configs, cluster_global_rules, cluster_nodes,
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
     cluster_edge_env, cluster_stream_proxies, cluster_ssl,
+    cluster_export,
     plugins, dashboard,
     upstreams, routes, plugin_configs, global_rules, nodes, static_resources,
     plugin_metadata,
@@ -37,6 +38,7 @@ api_router.include_router(plugin_configs.router)
 api_router.include_router(global_rules.router)
 api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
+api_router.include_router(cluster_export.router)
 api_router.include_router(plugin_metadata.router)
 api_router.include_router(cluster_stream_proxies.global_router)
 # ── Feature-gated routers (conditionally registered in main.py) ────

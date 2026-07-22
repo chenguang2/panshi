@@ -203,6 +203,7 @@
             <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
             <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
             <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+            <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(cluster)">导出 Excel</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click.stop="deleteCluster(cluster)">删除</button>
           </div>
         </div>
@@ -378,6 +379,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import { showDeleteConfirm, buildDeleteProgressContent, executeDeleteWithProgress, showNameConfirm } from '@/composables/useClusterUtils'
+import { downloadBlob } from '@/utils/download'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import type { Cluster, Upstream, Plugin } from '@/types'
@@ -963,6 +965,25 @@ const deleteCluster = async (cluster: Cluster) => {
       })
     },
   })
+}
+
+// ── Export cluster data to Excel ──
+const exportingClusters = ref<Set<number>>(new Set())
+
+async function exportCluster(cluster: Cluster) {
+  if (exportingClusters.value.has(cluster.id)) return
+  exportingClusters.value.add(cluster.id)
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/export`, {
+      responseType: 'blob',
+    })
+    const filename = `${cluster.name}_配置导出.xlsx`
+    downloadBlob(res.data as Blob, filename)
+  } catch (e: any) {
+    message.error(e.response?.data?.detail || e.message || '导出失败')
+  } finally {
+    exportingClusters.value.delete(cluster.id)
+  }
 }
 
 // Wire showDeleteConfirm for route composable (must be after showDeleteConfirm definition)
