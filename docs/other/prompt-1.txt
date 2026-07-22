@@ -2426,3 +2426,42 @@ sm2-cert-ca-chain
 请读取 openspec/changes/sm2-cert-ca-chain/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+=================================================================
+
+使用 /opsx-propose 命令, 来生成这个国密的需求
+
+add-ssl-mtls-config
+
+/brainstorming 请仔细阅读 openspec/changes/add-ssl-mtls-config/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/add-ssl-mtls-config/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+./curl-Linux-X64 -k --tlcp --resolve qcg.com:16610:192.168.100.123  https://qcg.com:16610/hello1/hhh
+now is edge-3 123:8111 port!
+
+=====================================================================
+
+现在使用 创建CA根证书功能，生成的证书，导入到浏览器后，访问网站，在界面里报非法证书，
+通过 /home/qcg/panshi/docs/edge/user-guide/mkcert.sh 这个脚本运行的就可以，这个脚本会读 /home/qcg/panshi/docs/edge/user-guide/ca.cnf
+/home/qcg/panshi/docs/edge/user-guide/subca.cnf  这两个文件
+
+你分析一下，我怀疑是因为以前是否是缺了一些字段，导致 浏览器认为生成的证书是非法的？ 你分析一下
+
+
+=============================================================
+修改：
+1. 创建ca 证书后，在卡片里点编辑，不是 ca 证书的编辑页面，是 ssl 证书的编辑页面
+
+===============================================================
+修改：
+点击生成证书按钮后：
+
+1. 这个界面中 域名 SAN  和 IP SAN 两个必须填一个，这个要加验证，而且要加明显的提示
+2. 点击 启用双向认证 (mTLS) 后， 保存后， 再点编辑， 这个 check 状态没了？ 
+3. 编辑框中，也要带入， 生成框中的可以修改的字段
+
+   
