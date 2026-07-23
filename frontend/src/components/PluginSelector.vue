@@ -165,6 +165,7 @@ const CATEGORY_META: Record<string, { label: string }> = {
 const availableCategories = computed(() => {
   const catMap: Record<string, { key: string; label: string; plugins: Plugin[] }> = {}
   for (const plugin of props.plugins) {
+    if (plugin.name === 'dns_upstream') continue
     const key = plugin.category || 'other'
     if (!catMap[key]) {
       catMap[key] = {

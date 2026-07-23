@@ -279,7 +279,7 @@ function editRoute(r: any) { editingRoute.value = r; isCopy.value = false; formM
 function hasDnsPlugin(r: any): boolean {
   return Array.isArray(r.plugins) && r.plugins.some((p: any) => p.plugin_name === 'dns_upstream')
 }
-function alertDnsRoute(r: any) {
+function alertDnsRoute(_r: any) {
   message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
 }
 function closeFormModal() { formModalVisible.value = false; editingRoute.value = null; isCopy.value = false }

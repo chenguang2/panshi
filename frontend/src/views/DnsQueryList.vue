@@ -242,6 +242,7 @@ interface DnsHostEntry {
   nodes: Record<string, string[]>
   type: string
   ttl_valid?: number
+  checks?: { type?: string; active?: unknown; passive?: unknown }
 }
 
 function dnsHosts(r: any): Record<string, DnsHostEntry> | null {
