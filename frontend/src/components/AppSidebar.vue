@@ -110,7 +110,8 @@ const navSections = computed<NavSection[]>(() => {
       items: [
         { label: 'edge.env 配置', route: '/edge-env', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg>', feature: 'edge_env' },
         { label: 'TCP代理', route: '/stream-proxies?type=normal', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg>', feature: 'stream_proxy' },
-        { label: 'DNS代理', route: '/stream-proxies?type=dns', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>', feature: 'stream_proxy' },
+        { label: 'DNS代理 [UDP]', route: '/stream-proxies?type=dns', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>', feature: 'stream_proxy' },
+        { label: 'DNS代理[HTTP]', route: '/dns-queries', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>' },
       ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
     {
@@ -154,6 +155,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/stream-proxies?type=normal') return name === 'StreamProxyList' && route.query.type === 'normal'
   if (item.route === '/stream-proxies?type=dns') return name === 'StreamProxyList' && route.query.type === 'dns'
   if (item.route === '/edge-env') return name === 'EdgeEnv'
+  if (item.route === '/dns-queries') return name === 'DnsQueryList'
   if (item.route === '/upstreams') return name === 'UpstreamList'
   if (item.route === '/routes') return name === 'RouteList'
   if (item.route === '/plugin-configs') return name === 'PluginConfigList'

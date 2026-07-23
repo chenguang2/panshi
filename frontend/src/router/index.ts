@@ -75,6 +75,7 @@ const coreRoutes: RouteRecordRaw[] = [
       { path: 'clusters', name: 'ClusterList', component: () => import('@/views/ClusterList.vue') },
       { path: 'upstreams', name: 'UpstreamList', component: () => import('@/views/UpstreamList.vue') },
       { path: 'routes', name: 'RouteList', component: () => import('@/views/RouteList.vue') },
+      { path: 'dns-queries', name: 'DnsQueryList', component: () => import('@/views/DnsQueryList.vue') },
       { path: 'plugin-configs', name: 'PluginConfigList', component: () => import('@/views/PluginConfigList.vue') },
       { path: 'global-rules', name: 'GlobalRuleList', component: () => import('@/views/GlobalRuleList.vue') },
       { path: 'static-resources', name: 'StaticResourceList', component: () => import('@/views/StaticResourceList.vue') },
