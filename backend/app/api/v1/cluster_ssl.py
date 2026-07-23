@@ -475,8 +475,7 @@ async def _generate_local(
     ca_key_pem = None
     is_sm2 = req.algorithm == "sm2"
 
-    if is_sm2 and req.ca_cert_id is None:
-        # SM2 always requires CA
+    if req.ca_cert_id is None:
         ca_exists = await db.execute(
             select(SslCertificate).where(
                 SslCertificate.cluster_id == cluster_id,
@@ -486,7 +485,7 @@ async def _generate_local(
         if ca_exists.scalar_one_or_none():
             raise HTTPException(
                 status_code=400,
-                detail="SM2 证书生成必须指定 CA 根证书 (ca_cert_id)",
+                detail="证书生成必须指定 CA 根证书 (ca_cert_id)",
             )
         else:
             raise HTTPException(
@@ -494,14 +493,13 @@ async def _generate_local(
                 detail="该集群没有 CA 根证书，请先创建 CA (POST /clusters/{id}/ssl/ca)",
             )
 
-    if req.ca_cert_id is not None:
-        ca_record = await db.get(SslCertificate, req.ca_cert_id)
-        if not ca_record or not ca_record.is_ca:
-            raise HTTPException(status_code=400, detail="指定的 CA 证书无效")
-        if ca_record.cluster_id != cluster_id:
-            raise HTTPException(status_code=400, detail="CA 证书不属于该集群")
-        ca_cert_pem = ca_record.cert
-        ca_key_pem = ca_record.private_key
+    ca_record = await db.get(SslCertificate, req.ca_cert_id)
+    if not ca_record or not ca_record.is_ca:
+        raise HTTPException(status_code=400, detail="指定的 CA 证书无效")
+    if ca_record.cluster_id != cluster_id:
+        raise HTTPException(status_code=400, detail="CA 证书不属于该集群")
+    ca_cert_pem = ca_record.cert
+    ca_key_pem = ca_record.private_key
 
     org = req.organization or "EMBRACE"
     ou = req.organizational_unit or "EDGE"

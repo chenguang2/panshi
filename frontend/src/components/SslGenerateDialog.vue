@@ -43,8 +43,8 @@
         <!-- CA 选择器 -->
         <div class="form-row">
           <div class="form-group" style="flex:1;">
-            <label class="form-label">签发 CA（根证书）{{ form.algorithm === 'sm2' ? ' *' : '' }}</label>
-            <a-select v-model:value="form.ca_cert_id" style="width:100%;" :disabled="generating || caCertsLoading" placeholder="不选择则自签名" :allow-clear="form.algorithm !== 'sm2'">
+            <label class="form-label">签发 CA（根证书）<span class="required">*</span></label>
+            <a-select v-model:value="form.ca_cert_id" style="width:100%;" :disabled="generating || caCertsLoading" placeholder="请选择 CA 根证书">
               <a-select-option v-for="ca in filteredCaCerts" :key="ca.id" :value="ca.id">{{ ca.name }} ({{ ca.algorithm || 'sm2' }})</a-select-option>
             </a-select>
             <div v-if="filteredCaCerts.length === 0 && caCerts.length > 0" class="form-hint">
@@ -285,7 +285,6 @@ const algorithmLabel = computed(() => {
 
 const filteredCaCerts = computed(() => {
   return caCerts.value.filter((ca: any) => {
-    if (form.algorithm === 'sm2') return true
     return (ca.algorithm || 'sm2') === form.algorithm
   })
 })
@@ -315,8 +314,8 @@ function validate(): boolean {
     errors.dns_sans = '请至少添加一个域名 SAN 或 IP SAN'
     valid = false
   }
-  if (form.algorithm === 'sm2' && !form.ca_cert_id) {
-    message.warning('SM2 证书必须选择签发 CA')
+  if (!form.ca_cert_id) {
+    message.warning('请选择签发 CA 根证书')
     valid = false
   }
   return valid
@@ -345,12 +344,7 @@ async function loadCaCerts() {
 }
 
 function onAlgorithmChange() {
-  if (form.algorithm !== 'sm2' && form.ca_cert_id) {
-    const ca = caCerts.value.find((c: any) => c.id === form.ca_cert_id)
-    if (ca && (ca.algorithm || 'sm2') !== form.algorithm) {
-      form.ca_cert_id = null
-    }
-  }
+  form.ca_cert_id = null
 }
 
 async function onClusterChange() {
