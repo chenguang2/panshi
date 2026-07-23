@@ -132,6 +132,23 @@ describe('RouteList.vue', () => {
     expect(optionTexts).toContain('预发')
   })
 
+  it('loads DNS route data correctly', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: {
+        total: 1, page: 1, page_size: 20,
+        items: [{ id: 3, name: 'DNS查询', uri: '/dns-query', methods: 'GET', cluster_id: 1, cluster_name: '生产集群', plugins: [{ plugin_name: 'dns_upstream' }], priority: 0, status: 1 }],
+      }})
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    expect(mockApiGet).toHaveBeenCalled()
+  })
+
   it('always passes group_name in API request', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })

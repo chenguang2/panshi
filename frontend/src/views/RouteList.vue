@@ -59,7 +59,10 @@
           <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
         </template>
         <template v-if="column.key === 'name'">
-          <div class="cell-primary">{{ record.name }}</div>
+          <div class="cell-primary">
+            {{ record.name }}
+            <span v-if="hasDnsPlugin(record)" class="dns-route-badge">DNS</span>
+          </div>
           <div class="cell-secondary">{{ record.description || '-' }}</div>
         </template>
 
@@ -88,18 +91,23 @@
         </template>
 
         <template v-if="column.key === 'actions'">
-          <a-dropdown :trigger="['click']">
-            <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
-                <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
-                <a-menu-item @click="publishRoute(record)">发布</a-menu-item>
-                <a-menu-item @click="openVersionManagement(record)">版本管理</a-menu-item>
-                <a-menu-item danger @click="deleteRoute(record)">删除</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
+          <template v-if="hasDnsPlugin(record)">
+            <a-button type="text" size="small" class="action-trigger-btn" @click="alertDnsRoute(record)">⋯</a-button>
+          </template>
+          <template v-else>
+            <a-dropdown :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
+                  <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
+                  <a-menu-item @click="publishRoute(record)">发布</a-menu-item>
+                  <a-menu-item @click="openVersionManagement(record)">版本管理</a-menu-item>
+                  <a-menu-item danger @click="deleteRoute(record)">删除</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </template>
         </template>
       </template>
 
@@ -268,6 +276,12 @@ function onClusterChange() {
 
 function openCreateModal() { editingRoute.value = null; isCopy.value = false; formModalVisible.value = true }
 function editRoute(r: any) { editingRoute.value = r; isCopy.value = false; formModalVisible.value = true }
+function hasDnsPlugin(r: any): boolean {
+  return Array.isArray(r.plugins) && r.plugins.some((p: any) => p.plugin_name === 'dns_upstream')
+}
+function alertDnsRoute(r: any) {
+  message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
+}
 function closeFormModal() { formModalVisible.value = false; editingRoute.value = null; isCopy.value = false }
 function onSaved() { loadRoutes(); closeFormModal() }
 
@@ -422,6 +436,19 @@ onUnmounted(() => { cancelSearch() })
   color: var(--muted) !important;
 }
 
+.dns-route-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: oklch(55% 0.18 280 / 18%);
+  color: oklch(40% 0.18 280);
+  border: 1px solid oklch(55% 0.18 280 / 30%);
+  line-height: 1.4;
+  margin-left: 6px;
+  vertical-align: middle;
+}
 .empty-state { text-align: center; color: var(--muted); padding: 32px; }
 .empty-state-icon { font-size: 32px; margin-bottom: 8px; }
 </style>
