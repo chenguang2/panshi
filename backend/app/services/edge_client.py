@@ -468,6 +468,10 @@ class EdgeClient:
                         edge_plugins[plugin_name] = {}
             if edge_plugins:
                 edge_route["plugins"] = edge_plugins
+                # DNS query routes with dns_upstream plugin but no upstream
+                # need a dummy upstream for Edge API compatibility
+                if not upstream_edge_uuid and "dns_upstream" in edge_plugins:
+                    edge_route["upstream"] = {"nodes": {"127.0.0.1:1": 1}}
 
         return edge_route
 
