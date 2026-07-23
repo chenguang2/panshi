@@ -40,19 +40,22 @@
           </div>
         </div>
 
-        <!-- SM2: CA 选择器 -->
-        <div v-if="form.algorithm === 'sm2'" class="form-row">
+        <!-- CA 选择器 -->
+        <div class="form-row">
           <div class="form-group" style="flex:1;">
-            <label class="form-label">签发 CA（根证书）<span class="required">*</span></label>
-            <a-select v-model:value="form.ca_cert_id" style="width:100%;" :disabled="generating || caCertsLoading" placeholder="请选择 CA 根证书">
-              <a-select-option v-for="ca in caCerts" :key="ca.id" :value="ca.id">{{ ca.name }}</a-select-option>
+            <label class="form-label">签发 CA（根证书）{{ form.algorithm === 'sm2' ? ' *' : '' }}</label>
+            <a-select v-model:value="form.ca_cert_id" style="width:100%;" :disabled="generating || caCertsLoading" placeholder="不选择则自签名" :allow-clear="form.algorithm !== 'sm2'">
+              <a-select-option v-for="ca in filteredCaCerts" :key="ca.id" :value="ca.id">{{ ca.name }} ({{ ca.algorithm || 'sm2' }})</a-select-option>
             </a-select>
-            <div v-if="caCerts.length === 0 && !caCertsLoading" class="form-hint" style="color:var(--danger);">
+            <div v-if="filteredCaCerts.length === 0 && caCerts.length > 0" class="form-hint">
+              该集群没有 {{ algorithmLabel }} 类型的 CA，<a style="cursor:pointer;text-decoration:underline;" @click="$emit('openCaCreate')">创建 {{ algorithmLabel }} CA</a>
+            </div>
+            <div v-else-if="caCerts.length === 0 && !caCertsLoading" class="form-hint" style="color:var(--danger);">
               该集群没有 CA 根证书，
               <a style="cursor:pointer;text-decoration:underline;" @click="$emit('openCaCreate')">请先创建 CA</a>
             </div>
           </div>
-          <div class="form-group" style="flex:0 0 auto;padding-top:24px;">
+          <div v-if="form.algorithm === 'sm2'" class="form-group" style="flex:0 0 auto;padding-top:24px;">
             <label class="checkbox-label">
               <input type="checkbox" :checked="form.generate_client_certs" disabled />
               同时生成客户端证书
@@ -275,6 +278,18 @@ const resultData = ref<any>(null)
 const caCerts = ref<any[]>([])
 const caCertsLoading = ref(false)
 
+const algorithmLabel = computed(() => {
+  const map: Record<string, string> = { sm2: 'SM2', rsa: 'RSA', ecc: 'ECC' }
+  return map[form.algorithm] || form.algorithm
+})
+
+const filteredCaCerts = computed(() => {
+  return caCerts.value.filter((ca: any) => {
+    if (form.algorithm === 'sm2') return true
+    return (ca.algorithm || 'sm2') === form.algorithm
+  })
+})
+
 const errors = reactive({
   cluster_id: '',
   name: '',
@@ -330,8 +345,11 @@ async function loadCaCerts() {
 }
 
 function onAlgorithmChange() {
-  if (form.algorithm !== 'sm2') {
-    form.ca_cert_id = null
+  if (form.algorithm !== 'sm2' && form.ca_cert_id) {
+    const ca = caCerts.value.find((c: any) => c.id === form.ca_cert_id)
+    if (ca && (ca.algorithm || 'sm2') !== form.algorithm) {
+      form.ca_cert_id = null
+    }
   }
 }
 
@@ -365,7 +383,7 @@ async function handleGenerate() {
       validity_days: form.validity_days,
       algorithm: form.algorithm,
       cert_type: 'server',
-      ca_cert_id: form.algorithm === 'sm2' ? form.ca_cert_id : undefined,
+      ca_cert_id: form.ca_cert_id || undefined,
       generate_client_certs: form.algorithm === 'sm2' ? form.generate_client_certs : undefined,
       organization: form.organization.trim() || undefined,
       organizational_unit: form.organizational_unit.trim() || undefined,

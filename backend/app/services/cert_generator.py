@@ -579,12 +579,15 @@ def generate_standard_certificate(
     validity_days: int,
     flavor: str,
     algorithm: str = "rsa",
+    ca_cert_pem: str | None = None,
+    ca_key_pem: str | None = None,
     org: str = "EMBRACE",
     ou: str = "EDGE",
 ) -> tuple[dict, list[CommandResult]]:
     """Generate a single standard certificate (RSA or ECDSA).
 
-    Returns (result_dict, logs) where result_dict has keys: cert, key.
+    If ca_cert_pem and ca_key_pem are provided, signs with the CA
+    instead of self-signing. Returns (result_dict, logs) with keys: cert, key.
     """
     if algorithm == "rsa":
         key_pem, key_logs = generate_rsa_keypair(openssl_path)
@@ -608,12 +611,22 @@ def generate_standard_certificate(
         ext_lines.append(f"subjectAltName = {san_str}")
     ext_content = "\n".join(ext_lines) + "\n"
 
-    cert_pem, cert_logs = self_sign_certificate(
-        openssl_path, csr_pem, key_pem,
-        validity_days, flavor,
-        hash_alg="sha256",
-        ext_file_content=ext_content,
-    )
+    if ca_cert_pem and ca_key_pem:
+        cert_pem, cert_logs = ca_sign_csr(
+            openssl_path, csr_pem,
+            ca_cert_pem, ca_key_pem,
+            validity_days, flavor,
+            extensions_section="v3_req",
+            ext_file_content=ext_content,
+            hash_alg="sha256",
+        )
+    else:
+        cert_pem, cert_logs = self_sign_certificate(
+            openssl_path, csr_pem, key_pem,
+            validity_days, flavor,
+            hash_alg="sha256",
+            ext_file_content=ext_content,
+        )
 
     return {"cert": cert_pem, "key": key_pem}, key_logs + csr_logs + cert_logs
 
@@ -649,7 +662,7 @@ class LocalProvider:
         """Generate a certificate. Returns (cert_dict, logs).
 
         For SM2: generates dual certs (enc+sign) always, requires CA params.
-        For RSA/ECC: generates single cert, self-signed, CA params ignored.
+        For RSA/ECC: generates single cert, CA-signed if CA params given.
         """
         if not self.openssl_path:
             raise RuntimeError("No openssl binary available")
@@ -678,6 +691,8 @@ class LocalProvider:
                 validity_days=validity_days,
                 flavor=self.flavor,
                 algorithm=algorithm,
+                ca_cert_pem=ca_cert_pem,
+                ca_key_pem=ca_key_pem,
                 org=org, ou=ou,
             )
             return result, logs

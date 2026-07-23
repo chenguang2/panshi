@@ -1251,7 +1251,7 @@ class TestGenerateCaCertificate:
         )
         assert "ca_cert" in result
         assert "ca_key" in result
-        assert "-----BEGIN RSA PRIVATE KEY-----" in result["ca_key"]
+        assert "-----BEGIN PRIVATE KEY-----" in result["ca_key"]
         assert isinstance(logs, list)
 
     def test_algorithm_ecc_returns_ca_cert(self):

@@ -475,33 +475,31 @@ async def _generate_local(
     ca_key_pem = None
     is_sm2 = req.algorithm == "sm2"
 
-    if is_sm2:
-        # SM2 requires CA
-        if req.ca_cert_id is None:
-            # Check if cluster has any CA at all for better error message
-            ca_exists = await db.execute(
-                select(SslCertificate).where(
-                    SslCertificate.cluster_id == cluster_id,
-                    SslCertificate.is_ca == True,
-                ).limit(1)
+    if is_sm2 and req.ca_cert_id is None:
+        # SM2 always requires CA
+        ca_exists = await db.execute(
+            select(SslCertificate).where(
+                SslCertificate.cluster_id == cluster_id,
+                SslCertificate.is_ca == True,
+            ).limit(1)
+        )
+        if ca_exists.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail="SM2 证书生成必须指定 CA 根证书 (ca_cert_id)",
             )
-            if ca_exists.scalar_one_or_none():
-                raise HTTPException(
-                    status_code=400,
-                    detail="SM2 证书生成必须指定 CA 根证书 (ca_cert_id)",
-                )
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="该集群没有 CA 根证书，请先创建 CA (POST /clusters/{id}/ssl/ca)",
-                )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="该集群没有 CA 根证书，请先创建 CA (POST /clusters/{id}/ssl/ca)",
+            )
 
+    if req.ca_cert_id is not None:
         ca_record = await db.get(SslCertificate, req.ca_cert_id)
         if not ca_record or not ca_record.is_ca:
             raise HTTPException(status_code=400, detail="指定的 CA 证书无效")
         if ca_record.cluster_id != cluster_id:
             raise HTTPException(status_code=400, detail="CA 证书不属于该集群")
-
         ca_cert_pem = ca_record.cert
         ca_key_pem = ca_record.private_key
 
@@ -528,6 +526,8 @@ async def _generate_local(
                 ip_sans=req.ip_sans or [],
                 validity_days=req.validity_days,
                 dual_cert=req.dual_cert,
+                ca_cert_pem=ca_cert_pem,
+                ca_key_pem=ca_key_pem,
                 org=org, ou=ou,
             )
     except RuntimeError as e:
@@ -572,7 +572,7 @@ async def _generate_local(
         algorithm=req.algorithm,
         sign_cert=cert_result.get("sign_cert") if is_sm2 else None,
         sign_key=cert_result.get("sign_key") if is_sm2 else None,
-        ca_cert_id=req.ca_cert_id if is_sm2 else None,
+        ca_cert_id=req.ca_cert_id,
         organization=org,
         organizational_unit=ou,
         client_ca=req.client_ca,
