@@ -1223,5 +1223,13 @@ BUILTIN_PLUGINS = [
                 "hints": "只有优先级在此插件之后的才有效"
             }
         }
+    },
+    {
+        "name": "dns_upstream",
+        "display_name": "DNS 上游解析",
+        "category": "process",
+        "description": "智能 DNS 域名解析及动态负载调度（在 HTTP 路由中覆盖 DNS 解析行为）",
+        "enable_metadata": False,
+        "schema": {}
     }
 ]
