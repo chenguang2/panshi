@@ -7,21 +7,30 @@
       </div>
 
       <div class="modal-body">
-        <!-- 算法选择 -->
-        <div class="form-group">
-          <label class="form-label">证书算法 <span class="required">*</span></label>
-          <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="creating">
-            <a-select-option value="sm2">SM2 国密</a-select-option>
-            <a-select-option value="rsa">RSA</a-select-option>
-            <a-select-option value="ecc">ECC</a-select-option>
-          </a-select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">所属集群 <span class="required">*</span></label>
-          <a-select v-model:value="form.cluster_id" style="width:100%;" :disabled="creating" placeholder="请选择集群">
-            <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-          </a-select>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">证书算法 <span class="required">*</span></label>
+            <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="creating">
+              <a-select-option value="sm2">
+                <div style="font-weight:600;font-size:13px;">SM2 国密</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
+              </a-select-option>
+              <a-select-option value="rsa">
+                <div style="font-weight:600;font-size:13px;">RSA 2048</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容</div>
+              </a-select-option>
+              <a-select-option value="ecc">
+                <div style="font-weight:600;font-size:13px;">ECC P-256</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容，密钥更小</div>
+              </a-select-option>
+            </a-select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">所属集群 <span class="required">*</span></label>
+            <a-select v-model:value="form.cluster_id" style="width:100%;" :disabled="creating" placeholder="请选择集群">
+              <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
+            </a-select>
+          </div>
         </div>
 
         <div class="form-row">
@@ -143,6 +152,8 @@ watch(() => props.visible, (v) => {
 </script>
 
 <style scoped>
+.form-row { display: flex; gap: 16px; margin-bottom: 0; }
+.form-row .form-group { flex: 1; }
 .error-detail-box {
   margin-top: 12px;
   padding: 12px;
