@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,7 +164,11 @@ async def list_all_routes(
         for rp in plugin_rows.scalars().all():
             if rp.route_id not in plugin_map:
                 plugin_map[rp.route_id] = []
-            plugin_map[rp.route_id].append({"plugin_name": rp.plugin_name})
+            try:
+                cfg = json.loads(rp.config) if rp.config else {}
+            except (json.JSONDecodeError, TypeError):
+                cfg = {}
+            plugin_map[rp.route_id].append({"plugin_name": rp.plugin_name, "config": cfg})
 
     items = []
     for r in routes:

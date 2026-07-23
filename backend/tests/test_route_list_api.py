@@ -116,3 +116,5 @@ class TestRouteListAPI:
             for item in data["items"]:
                 plugin_names = [p["plugin_name"] for p in item.get("plugins", [])]
                 assert "proxy_rewrite" in plugin_names, f"route {item['name']} missing proxy_rewrite"
+                for p in item["plugins"]:
+                    assert "config" in p, f"plugin {p['plugin_name']} missing config field"
