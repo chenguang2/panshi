@@ -415,23 +415,35 @@ def generate_ca_certificate(
     common_name: str,
     validity_days: int,
     flavor: str,
+    algorithm: str = "sm2",
     org: str = "EMBRACE",
     ou: str = "EDGE",
 ) -> tuple[dict, list[CommandResult]]:
-    """Generate a self-signed SM2 CA root certificate.
+    """Generate a self-signed CA root certificate.
+
+    Supports sm2, rsa, and ecc algorithms.
 
     Returns (result_dict, logs) where result_dict has keys: ca_cert, ca_key.
     """
     logs: list[CommandResult] = []
 
-    # Generate CA key pair
-    ca_key, key_logs = generate_sm2_keypair(openssl_path)
+    hash_alg = "sm3" if algorithm == "sm2" else "sha256"
+
+    if algorithm == "sm2":
+        ca_key, key_logs = generate_sm2_keypair(openssl_path)
+    elif algorithm == "rsa":
+        ca_key, key_logs = generate_rsa_keypair(openssl_path)
+    elif algorithm == "ecc":
+        ca_key, key_logs = generate_ecdsa_keypair(openssl_path)
+    else:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
     logs.extend(key_logs)
 
     # Generate CSR
     ca_csr, csr_logs = generate_csr(
         openssl_path, ca_key,
         common_name, [], [], flavor,
+        hash_alg=hash_alg,
         org=org, ou=ou,
     )
     logs.extend(csr_logs)
@@ -464,8 +476,8 @@ keyUsage = critical, digitalSignature, cRLSign, keyCertSign
             "-extfile", str(ext_file),
             "-extensions", "v3_ca",
         ]
-        cmd.extend(_digest_flag("sm3"))
-        cmd.extend(_sigopt_args(flavor, "sm3"))
+        cmd.extend(_digest_flag(hash_alg))
+        cmd.extend(_sigopt_args(flavor, hash_alg))
 
         result = _run_openssl(cmd, openssl_path)
         logs.append(result)

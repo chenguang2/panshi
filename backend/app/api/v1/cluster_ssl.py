@@ -50,7 +50,7 @@ async def create_ca_certificate(
             status_code=400,
             detail=f"本地无可用 openssl（仅使用捆绑的 Tongsuo，不回退到系统 openssl）\n{BUNDLED_OPENSSL_FIX}",
         )
-    if not openssl_info["sm2_supported"]:
+    if data.algorithm == "sm2" and not openssl_info["sm2_supported"]:
         raise HTTPException(status_code=400, detail="本地 openssl 不支持 SM2 曲线")
 
     cn = data.common_name or data.name
@@ -62,6 +62,7 @@ async def create_ca_certificate(
             common_name=cn,
             validity_days=data.validity_days,
             flavor=openssl_info["flavor"],
+            algorithm=data.algorithm,
             org=org,
             ou=ou,
         )
@@ -84,6 +85,7 @@ async def create_ca_certificate(
     cluster_name = cluster_obj.display_name or cluster_obj.name or str(cluster_id) if cluster_obj else str(cluster_id)
     log_cert_commands(cluster_id, cluster_name, data.name, all_steps)
 
+    is_gm = data.algorithm == "sm2"
     cert = SslCertificate(
         cluster_id=cluster_id,
         name=data.name,
@@ -91,8 +93,8 @@ async def create_ca_certificate(
         cert=result["ca_cert"],
         private_key=result["ca_key"],
         cert_type="server",
-        gm=True,
-        algorithm="sm2",
+        gm=is_gm,
+        algorithm=data.algorithm,
         is_ca=True,
         organization=org,
         organizational_unit=ou,

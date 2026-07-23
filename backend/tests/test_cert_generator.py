@@ -1235,3 +1235,53 @@ class TestGenerateCaCertificate:
                 openssl["path"],
             )
             assert "CN = MyCustomCA" in r.stdout or "CN=MyCustomCA" in r.stdout
+
+    def test_algorithm_rsa_returns_ca_cert(self):
+        from app.services.cert_generator import generate_ca_certificate, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["available"]:
+            pytest.skip("No openssl available")
+
+        result, logs = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="RSA Test CA",
+            validity_days=365,
+            flavor=openssl["flavor"],
+            algorithm="rsa",
+        )
+        assert "ca_cert" in result
+        assert "ca_key" in result
+        assert "-----BEGIN RSA PRIVATE KEY-----" in result["ca_key"]
+        assert isinstance(logs, list)
+
+    def test_algorithm_ecc_returns_ca_cert(self):
+        from app.services.cert_generator import generate_ca_certificate, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["available"]:
+            pytest.skip("No openssl available")
+
+        result, logs = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="ECC Test CA",
+            validity_days=365,
+            flavor=openssl["flavor"],
+            algorithm="ecc",
+        )
+        assert "ca_cert" in result
+        assert "ca_key" in result
+        assert "-----BEGIN EC PRIVATE KEY-----" in result["ca_key"]
+        assert isinstance(logs, list)
+
+    def test_algorithm_default_is_sm2(self):
+        from app.services.cert_generator import generate_ca_certificate, detect_openssl
+        openssl = detect_openssl()
+        if not openssl["available"]:
+            pytest.skip("No openssl available")
+
+        result, _ = generate_ca_certificate(
+            openssl_path=openssl["path"],
+            common_name="Default Test CA",
+            validity_days=365,
+            flavor=openssl["flavor"],
+        )
+        assert "ca_key" in result

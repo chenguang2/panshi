@@ -372,6 +372,24 @@ class TestCaCertificateGenerateRequest:
         assert req.common_name == "My Root CA"
         assert req.validity_days == 7300
 
+    def test_default_algorithm_is_sm2(self):
+        from app.schemas.ssl import CaCertificateGenerateRequest
+
+        req = CaCertificateGenerateRequest(name="CA")
+        assert req.algorithm == "sm2"
+
+    def test_algorithm_accepts_rsa_ecc(self):
+        from app.schemas.ssl import CaCertificateGenerateRequest
+        from pydantic import ValidationError
+
+        req = CaCertificateGenerateRequest(name="CA", algorithm="rsa")
+        assert req.algorithm == "rsa"
+        req2 = CaCertificateGenerateRequest(name="CA", algorithm="ecc")
+        assert req2.algorithm == "ecc"
+
+        with pytest.raises(ValidationError):
+            CaCertificateGenerateRequest(name="CA", algorithm="invalid")
+
 
 class TestSslCertificateGenerateResponse:
     """Tests for SslCertificateGenerateResponse schema."""

@@ -138,6 +138,7 @@ class CaCertificateGenerateRequest(BaseModel):
     organization: Optional[str] = Field(default=None, description="组织 (O)，默认 CUN")
     organizational_unit: Optional[str] = Field(default=None, description="组织单位 (OU)，默认 BB")
     validity_days: int = Field(default=3650, ge=1, le=36500, description="CA 有效期（天）")
+    algorithm: str = Field(default="sm2", pattern=r"^(sm2|rsa|ecc)$", description="证书算法")
 
 
 class SslCertificateGenerateRequest(BaseModel):

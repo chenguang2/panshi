@@ -7,6 +7,16 @@
       </div>
 
       <div class="modal-body">
+        <!-- 算法选择 -->
+        <div class="form-group">
+          <label class="form-label">证书算法 <span class="required">*</span></label>
+          <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="creating">
+            <a-select-option value="sm2">SM2 国密</a-select-option>
+            <a-select-option value="rsa">RSA</a-select-option>
+            <a-select-option value="ecc">ECC</a-select-option>
+          </a-select>
+        </div>
+
         <div class="form-group">
           <label class="form-label">所属集群 <span class="required">*</span></label>
           <a-select v-model:value="form.cluster_id" style="width:100%;" :disabled="creating" placeholder="请选择集群">
@@ -82,6 +92,7 @@ const form = reactive({
   organization: '',
   organizational_unit: '',
   validity_days: 3650,
+  algorithm: 'sm2' as 'sm2' | 'rsa' | 'ecc',
 })
 
 const creating = ref(false)
@@ -100,6 +111,7 @@ async function handleCreate() {
       organization: form.organization.trim() || undefined,
       organizational_unit: form.organizational_unit.trim() || undefined,
       validity_days: form.validity_days,
+      algorithm: form.algorithm,
     })
     message.success('CA 根证书创建成功')
     emit('success')
@@ -124,6 +136,7 @@ watch(() => props.visible, (v) => {
     form.organization = ''
     form.organizational_unit = ''
     form.validity_days = 3650
+    form.algorithm = 'sm2'
     errorMsg.value = ''
   }
 })
