@@ -3,7 +3,7 @@
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal modal-wide" style="max-width:1000px;">
       <div class="modal-header">
-        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : resourceType === 'stream_proxy' ? '四层代理' : resourceType === 'ssl' ? 'SSL 证书' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
+        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : resourceType === 'stream_proxy' ? 'TCP 代理' : resourceType === 'dns_proxy' ? 'DNS 代理' : resourceType === 'ssl' ? 'SSL 证书' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
 
@@ -113,7 +113,7 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env' | 'stream_proxy' | 'ssl'
+  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env' | 'stream_proxy' | 'dns_proxy' | 'ssl'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -239,6 +239,8 @@ const loadHistory = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history`
       : props.resourceType === 'stream_proxy'
       ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history`
+      : props.resourceType === 'dns_proxy'
+      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history`
       : props.resourceType === 'ssl'
       ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history`
       : props.resourceType === 'edge_env'
@@ -522,6 +524,8 @@ const handleRepublish = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
       : props.resourceType === 'ssl'
       ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
+      : props.resourceType === 'dns_proxy'
+      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
       : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success('已切换到版本 v' + selectedVersion.value)
@@ -556,6 +560,8 @@ const handleDelete = async () => {
       ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'stream_proxy'
       ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
+      : props.resourceType === 'dns_proxy'
+      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'ssl'
       ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history/${selectedVersionData.value.id}`
       : props.resourceType === 'edge_env'

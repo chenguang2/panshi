@@ -1,51 +1,22 @@
 ## Purpose
 
 SSL 证书的独立管理功能，包括证书的上传、列表展示、编辑、删除、发布到 Edge 节点、版本历史管理。
-
 ## Requirements
-
 ### Requirement: SSL 证书列表展示
 
-系统 SHALL 提供一个独立 SSL 证书管理页面（`/ssl`），以卡片网格形式展示所有集群的 SSL 证书。
+系统 SHALL 提供一个独立 SSL 证书管理页面（`/ssl`），以卡片网格形式展示所有集群的 SSL 证书。该页面 SHALL 受 `ssl_cert` 部署特性控制：当 `ssl_cert` 禁用时，前端路由和侧边栏菜单 SHALL NOT 注册/显示，API 端点 SHALL 返回 404。
 
 #### Scenario: 页面入口
-- **WHEN** 用户点击侧边栏"SSL 证书"菜单项
+- **WHEN** `features.yaml` 中 `ssl_cert` 为 `true`
+- **AND** 用户点击侧边栏"SSL 证书"菜单项
 - **THEN** 导航到 `/ssl` 路由
 - **AND** 页面显示 `PageHeader`，标题为"SSL 证书"
 
-#### Scenario: 卡片网格展示
-- **WHEN** 页面加载完成
-- **THEN** 以多列卡片网格展示所有 SSL 证书
-- **AND** 每张卡片显示：证书名称、SNI 域名、证书状态（已发布/未发布/已过期）、所属集群、SSL 协议版本、来源标识（上传不显示，生成的证书显示"国密生成"）
-- **AND** 卡片顶部 SHALL 显示算法分类标签（🇨🇳 国密 / 🌐 国际）
-- **AND** 算法 badge SHALL 包含图标和分类前缀（`🇨🇳 国密 SM2 单证书` / `🌐 国际 RSA 2048`）
-- **AND** 国密与使用红色系配色，国际算法使用蓝色系配色
-- **AND** 卡片支持按集群筛选和搜索
-
-#### Scenario: 国密生成标记
-- **WHEN** 证书的 `create_method` 为 `local_generate` 或 `remote_generate`
-- **THEN** 证书卡片 SHALL 显示"国密生成"标记
-- **AND** 标记与国密（GM）标识可叠加显示
-
-#### Scenario: 查看界面增加下载
-- **WHEN** 用户打开 SSL 证书查看弹窗
-- **THEN** 每个 PEM 展示区域旁 SHALL 显示"下载"按钮
-- **AND** 点击后下载对应的 `.pem` 文件
-
-#### Scenario: 生成成功快捷下载
-- **WHEN** 国密证书生成成功
-- **THEN** 成功提示中 SHALL 提供"下载证书"操作入口
-- **AND** 点击后打开该证书的查看弹窗（用户可在查看界面下载文件）
-
-#### Scenario: 卡片下载按钮
-- **WHEN** 用户查看 SSL 证书列表页
-- **THEN** 每张证书卡片操作栏 SHALL 显示"下载"按钮
-- **AND** 点击后弹出文件选择对话框
-
-#### Scenario: 列表加载成功（含空值容错）
-- **WHEN** 数据库中存在 SSL 证书记录（含 cert 或 private_key 或 name 或 sni 为空值的记录）
-- **THEN** 系统 SHALL 正常返回所有证书列表
-- **AND** 前端 SHALL 正常展示证书卡片
+#### Scenario: 功能禁用时隐藏
+- **WHEN** `features.yaml` 中 `ssl_cert` 为 `false`
+- **THEN** 侧边栏"SSL 证书"菜单项 SHALL NOT 显示
+- **AND** `/ssl` 路由 SHALL NOT 注册
+- **AND** 用户直接访问 `/ssl` SHALL 显示 404
 
 ### Requirement: 上传 SSL 证书（增加生成入口）
 
@@ -289,3 +260,4 @@ Edge 直连页面 SSL 证书 Tab 中的查看和删除弹窗 SHALL 与其他 Tab
 - **AND** DB 中的证书 `gm=true`、`sign_cert="sign_pem"`，Edge 端 `certs=["sign_pem"]`
 - **THEN** `_compare_ssl_certificate` SHALL 检测 `sign_cert`/`certs` 一致
 - **AND** 对比结果 SHALL 包含 `gm`、`sign_cert`、`sign_key` 字段的对比信息
+

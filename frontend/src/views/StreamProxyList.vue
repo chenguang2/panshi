@@ -1,8 +1,8 @@
 <template>
   <div class="sp-page">
-    <PageHeader :title="pageTitle" :description="pageDesc">
+    <PageHeader title="TCP 代理" description="管理 TCP 四层代理转发规则">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateWizard">{{ createButtonText }}</button>
+        <button class="btn btn-primary" @click="openCreateWizard">+ 新建 TCP 代理</button>
       </template>
     </PageHeader>
 
@@ -150,7 +150,6 @@ const proxyType = computed<'normal' | 'dns'>(() =>
 const {
   proxies, clusters, totalCount, loading,
   searchText, clusterFilter, groupFilter,
-  pageTitle, pageDesc, createButtonText,
   groupOptions, filteredClusters, displayedProxies,
   loadProxies, loadClusters,
 } = useStreamProxyList(proxyType)

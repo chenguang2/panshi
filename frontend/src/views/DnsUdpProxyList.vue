@@ -1,6 +1,6 @@
 <template>
   <div class="sp-page">
-    <PageHeader :title="pageTitle" :description="pageDesc">
+    <PageHeader title="DNS 代理" description="管理集群级的 DNS 代理规则">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateWizard">+ 新建 DNS 代理</button>
       </template>
@@ -8,7 +8,7 @@
 
     <div class="sp-header-actions">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索 DNS 代理名称..." class="form-input" @input="onSearch">
+        <input v-model="searchText" type="text" placeholder="搜索 DNS 代理..." class="form-input" @input="onSearch">
         <span class="search-icon">&#128269;</span>
       </div>
       <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;" @change="onGroupChange">
@@ -55,125 +55,241 @@
             <span class="sp-detail-value sp-port">{{ p.listen_port }}</span>
           </div>
         </div>
+
+        <!-- DNS hosts info -->
         <div class="sp-card-dns" v-if="dnsHosts(p)">
-          <div v-for="(hostInfo, domain) in dnsHosts(p)" :key="domain" class="dns-domain-block">
-            <div class="dns-domain-name">{{ domain }}</div>
-            <div class="dns-host-info">
-              <span v-if="hostInfo.weight" class="dns-tag">{{ hostInfo.weight }}</span>
-              <span v-if="hostInfo.ttl" class="dns-tag">TTL {{ hostInfo.ttl }}</span>
-              <span v-if="hostInfo.checks" class="dns-tag dns-tag-check">健康检查</span>
-              <div v-if="hostInfo.upstream_id" class="dns-upstream-id">upstream#{{ hostInfo.upstream_id }}</div>
+          <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
+            <div class="sp-dns-domain-name">{{ domain }}</div>
+            <div class="sp-dns-domain-lb" style="display:flex;gap:12px;">
+              <span>类型: {{ dnsLbLabel(host.type) }}</span>
+              <span v-if="host.ttl_valid != null">TTL: {{ host.ttl_valid }}s</span>
             </div>
-            <div v-if="hostInfo.nodes" class="dns-nodes">
-              <span v-for="(node, ni) in hostInfo.nodes" :key="ni" class="dns-node-tag">{{ node.ip || node.host }}:{{ node.port }}</span>
+            <div class="sp-dns-nodes">
+              <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="sp-target-tag">{{ nodeIp }}</span>
             </div>
           </div>
         </div>
-        <div class="sp-card-dns" v-else>
-          <div class="dns-empty">暂无 DNS 主机映射</div>
+        <div v-else class="sp-card-targets">
+          <span class="sp-no-targets">无 DNS 配置</span>
+        </div>
+
+        <div class="sp-card-actions">
+          <button class="btn btn-ghost btn-sm sp-action-btn" @click="viewProxy(p)">查看</button>
+          <button class="btn btn-ghost btn-sm sp-action-btn" @click="editProxy(p)">编辑</button>
+          <button class="btn btn-ghost btn-sm sp-action-btn" style="color:var(--danger);" @click="deleteProxy(p)">删除</button>
+          <span style="flex:1"></span>
+          <button class="btn btn-secondary btn-sm" @click="publishProxyAction(p)">发布</button>
+          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(p)">版本管理</button>
         </div>
       </div>
     </div>
 
+    <!-- Create/Edit Form Wizard -->
     <StreamProxyFormWizard
-      v-if="showWizard"
-      :mode="'create'"
-      :proxy-type="'dns'"
-      @close="showWizard = false"
-      @created="onCreated"
+      :visible="wizardVisible"
+      :clusters="clusters"
+      :editing-proxy="editingProxy"
+      :default-proxy-type="'dns'"
+      @close="wizardVisible = false; editingProxy = null"
+      @saved="onWizardSaved"
     />
 
-    <VersionManagementModal
-      v-if="showVersionModal"
-      :visible="showVersionModal"
-      :resource-type="'stream_proxy'"
-      :resource-id="versionModalProxyId"
-      :cluster-id="versionModalClusterId"
-      :resource-name="versionModalProxyName"
-      @close="showVersionModal = false"
-      @rolled-back="loadProxies"
-    />
+    <!-- View Modal -->
+    <StreamProxyViewDrawer v-model:visible="viewDrawerVisible" :proxy="viewingProxy" />
+
+    <!-- Version Management -->
+    <VersionManagementModal v-model:open="vmVisible" resource-type="dns_proxy" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadProxies" @published="loadProxies" />
+
+    <!-- Publish -->
+    <PublishConfirmModal v-model:visible="publishVisible" title="发布 DNS 代理" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { useStreamProxyList } from '@/composables/useStreamProxyList'
+import { ref, computed } from 'vue'
+import { message } from 'ant-design-vue'
+import type { StreamProxy } from '@/types'
+import api from '@/api'
+import PageHeader from '@/components/PageHeader.vue'
 import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'
+import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import { useStreamProxyList } from '@/composables/useStreamProxyList'
 
-const route = useRoute()
 const proxyType = computed<'dns'>(() => 'dns')
 
 const {
   proxies, clusters, totalCount, loading,
   searchText, clusterFilter, groupFilter,
-  pageTitle, pageDesc,
   groupOptions, filteredClusters, displayedProxies,
   loadProxies, loadClusters,
 } = useStreamProxyList(proxyType)
-
-const showWizard = ref(false)
-const showVersionModal = ref(false)
-const versionModalProxyId = ref(0)
-const versionModalClusterId = ref(0)
-const versionModalProxyName = ref('')
-
-// ── Group color utilities (copied from StreamProxyList for consistency) ──
-const groupColors: Record<string, string> = {}
-const colorPalette = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
-
-function getGroupColor(groupName: string): string {
-  if (!groupName || groupName === '') return ''
-  if (!groupColors[groupName]) {
-    const idx = Object.keys(groupColors).length % colorPalette.length
-    groupColors[groupName] = colorPalette[idx]
-  }
-  return groupColors[groupName]
-}
-
-function getGroupColorStyle(groupName: string): Record<string, string> {
-  const color = getGroupColor(groupName)
-  return color ? { backgroundColor: color + '22', borderBottom: `2px solid ${color}` } : {}
-}
-
-function getCardBorderStyle(groupName: string): Record<string, string> {
-  const color = getGroupColor(groupName)
-  return color ? { borderLeft: `3px solid ${color}` } : {}
-}
-
-// ── Search debounce ──
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { loadProxies() }, 400)
-}
 
 function onGroupChange() {
   clusterFilter.value = ''
   loadProxies()
 }
 
-function openCreateWizard() {
-  showWizard.value = true
+// Wizard
+const wizardVisible = ref(false)
+const editingProxy = ref<StreamProxy | null>(null)
+
+// View
+const viewDrawerVisible = ref(false)
+const viewingProxy = ref<StreamProxy | null>(null)
+
+// Version management
+const vmVisible = ref(false)
+const vmId = ref<number | null>(null)
+const vmClusterId = ref<number | null>(null)
+const vmName = ref('')
+
+// Publish
+const publishVisible = ref(false)
+const publishClusterId = ref(0)
+const publishingProxy = ref<StreamProxy | null>(null)
+
+// ── Helpers ──
+
+function dnsLbLabel(algo: string | undefined): string {
+  const map: Record<string, string> = { roundrobin: '轮询', chash: '一致性哈希', least_conn: '最少连接' }
+  return map[algo || ''] || algo || '轮询'
 }
 
-function onCreated() {
-  showWizard.value = false
+function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> | null {
+  try {
+    const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
+    return cfg?.hosts || null
+  } catch { return null }
+}
+
+function formatDate(d: string | null | undefined): string {
+  if (!d) return '-'
+  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) } catch { return d }
+}
+
+function dnsApiPath(clusterId: number, proxyId: number, action: string = ''): string {
+  return `/clusters/${clusterId}/dns-proxies/${proxyId}${action}`
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { loadProxies() }, 300)
+}
+
+// ── CRUD Actions ──
+
+function openCreateWizard() {
+  editingProxy.value = null
+  wizardVisible.value = true
+}
+
+function editProxy(p: StreamProxy) {
+  editingProxy.value = p
+  wizardVisible.value = true
+}
+
+function onWizardSaved() {
+  wizardVisible.value = false
+  editingProxy.value = null
   loadProxies()
 }
 
-function dnsHosts(proxy: any): Record<string, any> | null {
-  if (!proxy.dns_config) return null
-  const cfg = typeof proxy.dns_config === 'string' ? JSON.parse(proxy.dns_config) : proxy.dns_config
-  return cfg?.hosts || null
+function viewProxy(p: StreamProxy) {
+  viewingProxy.value = p
+  viewDrawerVisible.value = true
 }
 
-function formatDate(ts: string): string {
-  if (!ts) return ''
-  const d = new Date(ts)
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+async function deleteProxy(p: StreamProxy) {
+  let nodes: { id: number; ip: string; management_port: number }[] = []
+  try {
+    const res = await api.get(`/clusters/${p.cluster_id}/nodes`)
+    nodes = res.data?.items || []
+  } catch { /* ignore */ }
+
+  showDeleteConfirm({
+    title: `确定要删除 DNS 代理 "${p.name}" 吗？`,
+    apiEndpoint: dnsApiPath(p.cluster_id, p.id),
+    nodes,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      await executeDeleteWithProgress({
+        title: `删除 DNS 代理: ${p.name}`,
+        apiEndpoint: dnsApiPath(p.cluster_id, p.id),
+        cluster: { id: p.cluster_id, nodes } as any,
+        deleteDb,
+        deleteEdge,
+        nodeIds,
+        refreshFn: loadProxies,
+        clearSelectedFn: () => {},
+      })
+    },
+  })
+}
+
+function publishProxyAction(p: StreamProxy) {
+  publishingProxy.value = p
+  publishClusterId.value = p.cluster_id
+  publishVisible.value = true
+}
+
+async function onPublishConfirm(nodeIds: number[]) {
+  publishVisible.value = false
+  const p = publishingProxy.value
+  if (!p) return
+  await executePublish({
+    title: `发布 DNS 代理: ${p.name}`,
+    apiEndpoint: dnsApiPath(p.cluster_id, p.id, '/publish'),
+    nodeIds,
+    refreshFn: loadProxies,
+    handleResult: (data, addLog, progress) => {
+      addLog(`状态: ${data.status || '-'}`)
+      addLog(`消息: ${data.message || '-'}`)
+      if (data.version !== undefined) addLog(`版本: v${data.version}`)
+
+      if (data.results && data.results.length > 0) {
+        addLog('')
+        addLog('══════ 节点同步结果 ══════')
+        for (const r of data.results) {
+          const icon = r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌'
+          addLog(`${icon} 节点: ${r.node || r.scope || '-'}`)
+          addLog(`   状态: ${r.status}`)
+          if (r.message) addLog(`   消息: ${r.message}`)
+          if (r.error) addLog(`   错误: ${r.error}`)
+          if (r.stdout) {
+            for (const line of r.stdout.split('\n')) {
+              if (line.trim()) addLog(`   ${line}`)
+            }
+          }
+          addLog('')
+        }
+      } else {
+        addLog('⚠️ 无节点同步结果')
+      }
+
+      progress.percent = 100
+      if (data.status === 'ok') {
+        progress.status = 'success'
+        addLog('✅ 发布成功')
+      } else if (data.status === 'partial') {
+        progress.status = 'exception'
+        addLog('⚠️ 部分节点发布失败')
+      } else {
+        progress.status = 'exception'
+        addLog('❌ 发布失败')
+      }
+    },
+  })
+}
+
+function openVersionManagement(p: StreamProxy) {
+  vmId.value = p.id
+  vmClusterId.value = p.cluster_id
+  vmName.value = p.name
+  vmVisible.value = true
 }
 
 // ── Initial load ──
@@ -182,41 +298,46 @@ loadProxies()
 </script>
 
 <style scoped>
-/* Reuse sp-page styles from StreamProxyList.vue — scoped so no conflict */
-.sp-page { padding: 24px; max-width: 1400px; margin: 0 auto; }
-.sp-header-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-.search-input-wrap { position: relative; flex: 1; min-width: 200px; }
-.search-input-wrap .form-input { width: 100%; padding-right: 32px; }
-.search-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; color: #999; pointer-events: none; }
-.loading-state { text-align: center; padding: 60px 0; color: #999; }
-.sp-empty { text-align: center; padding: 80px 0; color: #ccc; }
-.sp-empty-icon { font-size: 48px; margin-bottom: 12px; }
-.sp-empty-text { font-size: 16px; }
-.sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
-.sp-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; transition: box-shadow 0.2s; border-left: 3px solid transparent; }
-.sp-card-topbar { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 12px; color: #666; background: #f8f9fa; }
-.dns-badge { background: #e8f5e9; color: #2e7d32; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-.group-badge { background: #e3f2fd; color: #1565c0; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
-.sp-card-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 14px 8px; }
-.sp-card-info { flex: 1; min-width: 0; }
-.sp-card-name { font-size: 15px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sp-card-desc { font-size: 12px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sp-card-meta { text-align: right; flex-shrink: 0; }
-.sp-version-text { font-size: 11px; color: #999; margin-top: 2px; }
-.sp-card-details { display: flex; align-items: center; gap: 8px; padding: 4px 14px 8px; font-size: 13px; }
-.sp-detail-row { display: flex; align-items: center; gap: 4px; }
-.sp-detail-label { color: #888; }
-.sp-detail-value { color: #333; font-weight: 500; }
-.sp-detail-sep { color: #ddd; }
-.sp-port { font-family: 'SF Mono', 'Fira Code', monospace; font-weight: 600; }
-.sp-card-dns { padding: 0 14px 12px; }
-.dns-domain-block { background: #f5f5f5; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; }
-.dns-domain-name { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
-.dns-host-info { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
-.dns-tag { background: #e3f2fd; color: #1565c0; padding: 0 6px; border-radius: 4px; font-size: 11px; }
-.dns-tag-check { background: #fff3e0; color: #e65100; }
-.dns-upstream-id { font-size: 11px; color: #888; }
-.dns-nodes { display: flex; flex-wrap: wrap; gap: 4px; }
-.dns-node-tag { background: #f3e5f5; color: #7b1fa2; padding: 0 6px; border-radius: 4px; font-size: 11px; font-family: 'SF Mono', 'Fira Code', monospace; }
-.dns-empty { text-align: center; padding: 12px; color: #bbb; font-size: 13px; }
+.sp-page { padding: 20px 24px; }
+.sp-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
+.loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
+.sp-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
+.sp-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
+.sp-empty-text { font-size: 14px; color: var(--muted); }
+
+.sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.sp-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
+.sp-card:hover { box-shadow: var(--shadow-md); }
+.sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
+.group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
+.dns-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(55% 0.18 280 / 18%); color: oklch(40% 0.18 280); border: 1px solid oklch(55% 0.18 280 / 30%); line-height: 1.4; flex-shrink: 0; }
+.sp-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
+.sp-card-info { flex: 1; }
+.sp-card-name { font-size: 15px; font-weight: 600; }
+.sp-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+.sp-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
+.sp-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
+.sp-card-details { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 8px; padding: 0 20px; }
+.sp-detail-row { display: inline-flex; align-items: center; gap: 4px; }
+.sp-detail-label { font-size: 11px; color: var(--muted); }
+.sp-detail-value { font-size: 12px; font-weight: 500; color: var(--fg); }
+.sp-detail-value.sp-port { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+.sp-card-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 20px; }
+.sp-target-tag { display: inline-flex; align-items: center; gap: 2px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
+.sp-no-targets { font-size: 11px; color: var(--muted); font-style: italic; }
+.sp-card-dns { padding: 0 20px 8px; }
+.sp-dns-domain { margin-bottom: 8px; padding: 8px; background: var(--bg); border-radius: var(--radius-md); border: 1px solid var(--border); }
+.sp-dns-domain-name { font-size: 12px; font-weight: 600; color: var(--accent); font-family: var(--font-mono); margin-bottom: 2px; }
+.sp-dns-domain-lb { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.sp-dns-nodes { display: flex; flex-wrap: wrap; gap: 4px; }
+.sp-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
+.sp-action-btn { background: none !important; background-color: transparent !important; }
+.sp-action-btn:hover { background: var(--bg) !important; }
+
+.text-sm { font-size: 12px; }
+.text-muted { color: var(--muted); }
+
+@media (max-width: 768px) {
+  .sp-grid { grid-template-columns: 1fr; }
+}
 </style>
