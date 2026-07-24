@@ -370,6 +370,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     }
 
     editingRoute.value = routeData
+    copyingRoute.value = false
     currentClusterId.value = cluster.id
     routeForm.name = routeData.name
     routeForm.uri = routeData.uri
