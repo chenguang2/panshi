@@ -3,7 +3,7 @@ from app.api.v1 import (
     auth, users, clusters,
     cluster_upstreams, cluster_plugin_configs, cluster_global_rules, cluster_nodes,
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
-    cluster_edge_env, cluster_stream_proxies, cluster_ssl,
+    cluster_edge_env, cluster_stream_proxies, cluster_dns_proxies, cluster_ssl,
     cluster_export,
     plugins, dashboard,
     upstreams, routes, plugin_configs, global_rules, nodes, static_resources,
@@ -29,8 +29,7 @@ api_router.include_router(cluster_routes.router)
 api_router.include_router(plugins.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(cluster_plugin_metadata.router)
-api_router.include_router(cluster_ssl.router)
-api_router.include_router(cluster_ssl.global_router)
+# SSL cert routes are now feature-gated via feature_routers["ssl_cert"]
 api_router.include_router(cluster_static_resources.router)
 api_router.include_router(upstreams.router)
 api_router.include_router(routes.router)
@@ -41,6 +40,12 @@ api_router.include_router(static_resources.router)
 api_router.include_router(cluster_export.router)
 api_router.include_router(plugin_metadata.router)
 api_router.include_router(cluster_stream_proxies.global_router)
+
+# ── Combined router for SSL (router + global_router share the same feature gate) ──
+ssl_router = APIRouter()
+ssl_router.include_router(cluster_ssl.router)
+ssl_router.include_router(cluster_ssl.global_router)
+
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
 feature_routers: dict[str, APIRouter] = {
@@ -52,4 +57,6 @@ feature_routers: dict[str, APIRouter] = {
     "plugin_switches": plugin_switches.router,
     "metrics": metrics.router,
     "stream_proxy": cluster_stream_proxies.router,
+    "dns_proxy_udp": cluster_dns_proxies.router,
+    "ssl_cert": ssl_router,
 }

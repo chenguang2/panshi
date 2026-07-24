@@ -36,6 +36,21 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     name: 'StreamProxyList',
     component: () => import('@/views/StreamProxyList.vue'),
   },
+  dns_proxy_udp: {
+    path: 'dns-proxies',
+    name: 'DnsUdpProxyList',
+    component: () => import('@/views/DnsUdpProxyList.vue'),
+  },
+  ssl_cert: {
+    path: 'ssl',
+    name: 'SslList',
+    component: () => import('@/views/SslList.vue'),
+  },
+  dns_proxy_http: {
+    path: 'dns-queries',
+    name: 'DnsQueryList',
+    component: () => import('@/views/DnsQueryList.vue'),
+  },
   edge_env: {
     path: 'edge-env',
     name: 'EdgeEnv',
@@ -75,13 +90,11 @@ const coreRoutes: RouteRecordRaw[] = [
       { path: 'clusters', name: 'ClusterList', component: () => import('@/views/ClusterList.vue') },
       { path: 'upstreams', name: 'UpstreamList', component: () => import('@/views/UpstreamList.vue') },
       { path: 'routes', name: 'RouteList', component: () => import('@/views/RouteList.vue') },
-      { path: 'dns-queries', name: 'DnsQueryList', component: () => import('@/views/DnsQueryList.vue') },
       { path: 'plugin-configs', name: 'PluginConfigList', component: () => import('@/views/PluginConfigList.vue') },
       { path: 'global-rules', name: 'GlobalRuleList', component: () => import('@/views/GlobalRuleList.vue') },
       { path: 'static-resources', name: 'StaticResourceList', component: () => import('@/views/StaticResourceList.vue') },
       { path: 'plugin-metadata', name: 'PluginMetadataList', component: () => import('@/views/PluginMetadataList.vue') },
       { path: 'nodes', name: 'NodeList', component: () => import('@/views/NodeList.vue') },
-      { path: 'ssl', name: 'SslList', component: () => import('@/views/SslList.vue') },
     ],
   },
 ]

@@ -7,6 +7,10 @@ features:
   plugin_switches: true
   metrics: true
   edge_env: true
+  stream_proxy: true
+  ssl_cert: true
+  dns_proxy_udp: true
+  dns_proxy_http: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

@@ -394,3 +394,25 @@ class TestProxyTypeFilter:
     def test_global_list_rejects_invalid_proxy_type(self, client):
         resp = client.get("/api/v1/stream-proxies?proxy_type=invalid")
         assert resp.status_code == 422
+
+
+class TestDnsUdpProxyModule:
+    """Tests for the new cluster_dns_proxies module (TDD: starts failing)."""
+
+    def test_module_importable(self):
+        """cluster_dns_proxies module should be importable."""
+        import app.api.v1.cluster_dns_proxies as mod  # noqa: F401
+
+    def test_module_has_router_with_routes(self):
+        """The module should expose a router with at least one route."""
+        import app.api.v1.cluster_dns_proxies as mod
+        assert hasattr(mod, "router")
+        assert len(mod.router.routes) > 0
+
+    def test_dns_udp_router_path_prefix(self):
+        """DNS UDP router should use /dns-proxies prefix."""
+        from app.api.v1.cluster_dns_proxies import router
+        for route in router.routes:
+            assert "dns-proxies" in route.path, (
+                f"Route {route.path} doesn't contain /dns-proxies"
+            )

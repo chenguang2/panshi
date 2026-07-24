@@ -1,4 +1,4 @@
-"""Tests for GET /api/v1/system/features endpoint."""
+"""Tests for GET /api/v1/system/features endpoint and feature-gated routes."""
 
 import json
 import tempfile
@@ -64,3 +64,26 @@ class TestSystemFeaturesEndpoint:
         assert resp.status_code == 200
         # Verify it's the real endpoint, not a redirect to login
         assert "/api/v1/system/features" in str(resp.url)
+
+
+class TestFeatureRoutersDict:
+    """Unit tests for the feature_routers dict."""
+
+    def test_ssl_cert_in_feature_routers(self):
+        """feature_routers should contain ssl_cert key with a router."""
+        from app.api.v1 import feature_routers
+        assert "ssl_cert" in feature_routers
+        assert feature_routers["ssl_cert"] is not None
+        assert len(feature_routers["ssl_cert"].routes) > 0
+
+    def test_dns_proxy_udp_in_feature_routers(self):
+        """dns_proxy_udp should be in feature_routers with a router."""
+        from app.api.v1 import feature_routers
+        assert "dns_proxy_udp" in feature_routers
+        assert feature_routers["dns_proxy_udp"] is not None
+        assert len(feature_routers["dns_proxy_udp"].routes) > 0
+
+    def test_dns_proxy_http_not_yet_in_feature_routers(self):
+        """dns_proxy_http not yet added (will be added in Task 5)."""
+        from app.api.v1 import feature_routers
+        assert "dns_proxy_http" not in feature_routers

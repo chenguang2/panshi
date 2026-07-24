@@ -39,6 +39,40 @@ async def _proxy_response_with_cluster_name(proxy, cluster_id: int, db):
 ALLOWED_SORT_FIELDS = {"name", "listen_port", "load_balance", "created_at"}
 
 
+# ── Shared helpers for DNS UDP proxy module ──────────────────────────
+
+
+async def _build_publish_map(db: AsyncSession, proxy_ids: list[int], resource_type: str = "stream_proxy") -> dict:
+    """Build a map of proxy id → latest published timestamp."""
+    if not proxy_ids:
+        return {}
+    pub_result = await db.execute(
+        select(
+            ConfigVersion.resource_id,
+            func.max(ConfigVersion.created_at).label("latest_ts"),
+        ).where(
+            ConfigVersion.resource_type == resource_type,
+            ConfigVersion.resource_id.in_(proxy_ids),
+        ).group_by(ConfigVersion.resource_id)
+    )
+    return {r.resource_id: r.latest_ts for r in pub_result.all()}
+
+
+async def _get_proxy_or_404(db: AsyncSession, proxy_id: int, cluster_id: int, detail: str = "四层代理不存在"):
+    """Get a stream proxy or raise 404."""
+    return await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail=detail)
+
+
+async def _delete_proxy_versions(db: AsyncSession, proxy_id: int, resource_type: str = "stream_proxy"):
+    """Delete all config versions for a proxy."""
+    await db.execute(
+        ConfigVersion.__table__.delete().where(
+            ConfigVersion.resource_type == resource_type,
+            ConfigVersion.resource_id == proxy_id,
+        )
+    )
+
+
 @router.get("/{cluster_id}/stream-proxies", response_model=dict)
 async def list_stream_proxies(
     cluster_id: int,
@@ -47,7 +81,10 @@ async def list_stream_proxies(
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     search: Optional[str] = None,
 ):
-    query = select(StreamProxy).where(StreamProxy.cluster_id == cluster_id)
+    query = select(StreamProxy).where(
+        StreamProxy.cluster_id == cluster_id,
+        StreamProxy.proxy_type == "normal",
+    )
 
     if search:
         pattern = f"%{search}%"
@@ -358,12 +395,7 @@ async def delete_stream_proxy(
         results.extend(edge_results)
 
     if body.delete_db:
-        await db.execute(
-            ConfigVersion.__table__.delete().where(
-                ConfigVersion.resource_type == "stream_proxy",
-                ConfigVersion.resource_id == proxy_id,
-            )
-        )
+        await _delete_proxy_versions(db, proxy_id, "stream_proxy")
         await db.delete(proxy)
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
@@ -381,69 +413,40 @@ async def publish_stream_proxy(
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
 
     _protocol = proxy.scheme.upper() if proxy.scheme else None
-    is_dns = proxy.proxy_type == "dns"
 
-    if is_dns:
-        edge_body: dict = {
-            "server_port": proxy.listen_port,
-            "name": proxy.name or "",
-        }
-        if _protocol:
-            edge_body["protocol"] = _protocol
+    targets = json.loads(proxy.targets) if proxy.targets else []
+    nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
 
-        dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
-        hosts = dns_cfg.get("hosts", {})
-        # Apply stream-level checks to each domain if set
-        dns_checks = json.loads(proxy.checks) if proxy.checks else {}
-        if dns_checks and any(k for k in dns_checks if k in ('active', 'passive')):
-            for domain_name in hosts:
-                if 'checks' not in hosts[domain_name]:
-                    hosts[domain_name]['checks'] = dns_checks
-        plugins: dict = {
-            "dns_upstream": {
-                "disable": False,
-                "hosts": hosts,
-            }
-        }
-        log_process = dns_cfg.get("log_process")
-        if log_process:
-            plugins["log_process"] = log_process
-        edge_body["plugins"] = plugins
-    else:
-        # 普通模式：标准 upstream
-        targets = json.loads(proxy.targets) if proxy.targets else []
-        nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
+    lb_map = {"weighted_roundrobin": "roundrobin"}
+    lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
 
-        lb_map = {"weighted_roundrobin": "roundrobin"}
-        lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
+    upstream_data: dict = {
+        "nodes": nodes_dict,
+        "type": lb_type,
+        "scheme": proxy.scheme or "tcp",
+    }
+    if proxy.hash_on and proxy.key:
+        upstream_data["hash_on"] = proxy.hash_on
+        upstream_data["key"] = proxy.key
+    if proxy.retries is not None:
+        upstream_data["retries"] = proxy.retries
+    if proxy.retry_timeout is not None:
+        upstream_data["retry_timeout"] = proxy.retry_timeout
+    if proxy.checks:
+        upstream_data["checks"] = json.loads(proxy.checks)
 
-        upstream_data: dict = {
-            "nodes": nodes_dict,
-            "type": lb_type,
-            "scheme": proxy.scheme or "tcp",
-        }
-        if proxy.hash_on and proxy.key:
-            upstream_data["hash_on"] = proxy.hash_on
-            upstream_data["key"] = proxy.key
-        if proxy.retries is not None:
-            upstream_data["retries"] = proxy.retries
-        if proxy.retry_timeout is not None:
-            upstream_data["retry_timeout"] = proxy.retry_timeout
-        if proxy.checks:
-            upstream_data["checks"] = json.loads(proxy.checks)
-
-        edge_body: dict = {
-            "server_port": proxy.listen_port,
-            "upstream": upstream_data,
-        }
-        if _protocol:
-            edge_body["protocol"] = _protocol
-        if proxy.sni:
-            edge_body["sni"] = proxy.sni
-        if proxy.remote_addr:
-            edge_body["remote_addr"] = proxy.remote_addr
-        if proxy.name:
-            edge_body["name"] = proxy.name
+    edge_body: dict = {
+        "server_port": proxy.listen_port,
+        "upstream": upstream_data,
+    }
+    if _protocol:
+        edge_body["protocol"] = _protocol
+    if proxy.sni:
+        edge_body["sni"] = proxy.sni
+    if proxy.remote_addr:
+        edge_body["remote_addr"] = proxy.remote_addr
+    if proxy.name:
+        edge_body["name"] = proxy.name
 
     config_data = StreamProxyResponse.model_validate(proxy).model_dump()
     new_version = await edge_sync.create_config_version(db, "stream_proxy", proxy_id, cluster_id, config_data, proxy)

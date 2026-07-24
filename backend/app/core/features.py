@@ -27,6 +27,9 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "metrics",
     "edge_env",
     "stream_proxy",
+    "ssl_cert",
+    "dns_proxy_udp",
+    "dns_proxy_http",
 })
 
 # ── Module-level cache (set once at startup) ───────────────────────────

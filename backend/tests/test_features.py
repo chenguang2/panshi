@@ -189,6 +189,90 @@ class TestFeaturesModule:
         load_features(str(cfg))
         assert feature_enabled("metrics") is False
 
+    # ── ssl_cert feature ─────────────────────────────────
+
+    def test_ssl_cert_feature_recognized(self, tmp_path: Path):
+        """ssl_cert is a known feature, should not cause SystemExit."""
+        from app.core.features import load_features, feature_enabled
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {"ssl_cert": False},
+        }))
+
+        load_features(str(cfg))
+        assert feature_enabled("ssl_cert") is False
+
+    def test_ssl_cert_feature_default_enabled(self):
+        """ssl_cert should default to enabled when not configured."""
+        from app.core.features import load_features, feature_enabled
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
+            f.write(yaml.dump({"features": {}}))
+            p = f.name
+
+        try:
+            load_features(p)
+            assert feature_enabled("ssl_cert") is True
+        finally:
+            Path(p).unlink()
+
+    # ── dns_proxy_udp feature ────────────────────────────
+
+    def test_dns_proxy_udp_feature_recognized(self, tmp_path: Path):
+        """dns_proxy_udp is a known feature, should not cause SystemExit."""
+        from app.core.features import load_features, feature_enabled
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {"dns_proxy_udp": False},
+        }))
+
+        load_features(str(cfg))
+        assert feature_enabled("dns_proxy_udp") is False
+
+    def test_dns_proxy_udp_feature_default_enabled(self):
+        """dns_proxy_udp should default to enabled when not configured."""
+        from app.core.features import load_features, feature_enabled
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
+            f.write(yaml.dump({"features": {}}))
+            p = f.name
+
+        try:
+            load_features(p)
+            assert feature_enabled("dns_proxy_udp") is True
+        finally:
+            Path(p).unlink()
+
+    # ── dns_proxy_http feature ───────────────────────────
+
+    def test_dns_proxy_http_feature_recognized(self, tmp_path: Path):
+        """dns_proxy_http is a known feature, should not cause SystemExit."""
+        from app.core.features import load_features, feature_enabled
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {"dns_proxy_http": False},
+        }))
+
+        load_features(str(cfg))
+        assert feature_enabled("dns_proxy_http") is False
+
+    def test_dns_proxy_http_feature_default_enabled(self):
+        """dns_proxy_http should default to enabled when not configured."""
+        from app.core.features import load_features, feature_enabled
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
+            f.write(yaml.dump({"features": {}}))
+            p = f.name
+
+        try:
+            load_features(p)
+            assert feature_enabled("dns_proxy_http") is True
+        finally:
+            Path(p).unlink()
+
     # ── features not a dict ──────────────────────────────
 
     def test_features_not_dict_raises_systemexit(self, tmp_path: Path):

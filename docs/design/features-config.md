@@ -113,6 +113,41 @@ enabled_plugins: []        # 插件白名单（空 = 不限制）
 **禁用时**：插件开关 API 返回 404，菜单和路由均不存在。
 **注意**：即使此功能禁用，`enabled_plugins` 白名单仍然生效。
 
+### `ssl_cert` — SSL 证书管理
+
+| 项目 | 说明 |
+|---|---|
+| 默认值 | `true` |
+| 控制范围 | 后端 `GET/POST /clusters/{id}/ssl/*` + `GET /ssl/*` 全部端点 |
+| | 前端 `/ssl` 路由 |
+| | 左侧菜单"SSL 证书"项 |
+
+**启用时**：用户可管理 SSL 证书（上传、编辑、删除、发布）。
+**禁用时**：SSL 证书 API 返回 404，菜单和路由均不存在。
+
+### `dns_proxy_udp` — DNS 代理[UDP]
+
+| 项目 | 说明 |
+|---|---|
+| 默认值 | `true` |
+| 控制范围 | 后端 `GET/POST /clusters/{id}/dns-proxies/*` 全部端点 |
+| | 前端 `/dns-proxies` 路由 |
+| | 左侧菜单"DNS代理[UDP]"项 |
+
+**启用时**：用户可管理 UDP DNS 四层代理规则。
+**禁用时**：DNS 代理[UDP] API 返回 404，菜单和路由均不存在。
+
+### `dns_proxy_http` — DNS 代理[HTTP]（DNS 查询管理）
+
+| 项目 | 说明 |
+|---|---|
+| 默认值 | `true` |
+| 控制范围 | 前端 `/dns-queries` 路由（仅前端控制，复用 Routes API） |
+| | 左侧菜单"DNS代理[HTTP]"项 |
+
+**启用时**：用户可通过独立页面管理 HTTP 层的 DNS 查询路由。
+**禁用时**：菜单和路由均不存在，但 Routes API 仍然可用（独立页面仅为管理入口）。
+
 ## 插件白名单
 
 ### `enabled_plugins` — 插件可用性限制

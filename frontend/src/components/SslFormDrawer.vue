@@ -94,7 +94,7 @@
           </div>
         </div>
 
-        <div class="form-group">
+        <div v-if="showGmCheckbox" class="form-group">
           <label class="checkbox-label">
             <input type="checkbox" v-model="form.gm"> <span>国密双证书 (GM/NTLS)</span>
           </label>
@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { createSslCertificate, updateSslCertificate } from '@/api/ssl'
 import type { SslCertificate } from '@/types/ssl'
@@ -281,6 +281,12 @@ const form = reactive({
   client_ca: '',
   client_depth: '' as number | string,
   skip_mtls_uri_regex: [] as string[],
+})
+
+const showGmCheckbox = computed(() => {
+  if (!props.editingCert) return true
+  const algo = props.editingCert.algorithm
+  return algo !== 'rsa' && algo !== 'ecc'
 })
 
 const formErrors = reactive<Record<string, string>>({})
