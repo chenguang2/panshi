@@ -885,7 +885,7 @@ watch(() => props.visible, async (v) => {
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'
     form.key = 'remote_addr'
-    form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
+    form.targets = [{ key: ++targetKey, host: '', port: 80, weight: 100 }]
     form.dns_domains = []
     form.retries = undefined
     form.retry_timeout = 0

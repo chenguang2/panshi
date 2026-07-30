@@ -2633,3 +2633,8 @@ stream-proxy-node-domain-support
 请读取 openspec/changes/stream-proxy-node-domain-support/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+
+使用 /opsx-propose 命令, 需要给TCP管理的协议改成下拉选择，scheme 支持 tcp udp  tls 3种
+
+菜单有 TCP代理改为
