@@ -90,12 +90,21 @@
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="form.advancedEnabled">
-              <span>开启高级匹配</span>
-            </label>
-            <div class="form-hint">开启后在"高级匹配"页配置请求条件</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="form.advancedEnabled">
+                <span>开启高级匹配</span>
+              </label>
+              <div class="form-hint">开启后在"高级匹配"页配置请求条件</div>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="form.enableWebsocket">
+                <span>启用 WebSocket</span>
+              </label>
+              <div class="form-hint">开启 WebSocket 代理支持，允许双向通信</div>
+            </div>
           </div>
         </div>
 
@@ -192,6 +201,7 @@ const form = reactive({
   cluster_id: '' as number | string,
   upstream_id: '' as number | string | null,
   description: '', advancedEnabled: false,
+  enableWebsocket: false,
   advancedMatch: { vars: [] as [string, string, string][] },
   plugins: [] as any[],
 })
@@ -267,6 +277,7 @@ watch(() => props.visible, async (v) => {
     form.methods = (r.methods || '').split(',').filter(Boolean)
     form.advancedEnabled = !!(r.advanced_match_enabled || (r.vars && r.vars.length > 0))
     form.advancedMatch = { vars: (r.vars || []) as any }
+    form.enableWebsocket = !!(r.enable_websocket)
     pluginConfigIds.value = r.plugin_config_ids || []
     // Load plugins from API
     if (r.id && r.cluster_id) {
@@ -286,7 +297,7 @@ watch(() => props.visible, async (v) => {
   } else {
     form.name = ''; form.uri = ''; form.priority = 0; form.status = 1
     form.cluster_id = ''; form.description = ''; form.upstream_id = ''
-    form.methods = []; form.advancedEnabled = false
+    form.methods = []; form.advancedEnabled = false; form.enableWebsocket = false
     form.advancedMatch = { vars: [] }; form.plugins = []
   }
   activeTab.value = 'basic'
@@ -323,6 +334,7 @@ async function handleSubmit() {
     }
     if (form.advancedEnabled) data.vars = form.advancedMatch.vars
     data.plugin_config_ids = pluginConfigIds.value
+    if (form.enableWebsocket) data.enable_websocket = true
     const cid = form.cluster_id
     let routeId: number | null = null
     if (props.editingRoute && !props.copyingRoute) {

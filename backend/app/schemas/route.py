@@ -16,6 +16,7 @@ class RouteBase(BaseModel):
     vars: Optional[List[List[Any]]] = Field(default=None, description='条件匹配表达式 [["var", "op", "val"], ...]')
     advanced_match_enabled: Optional[bool] = Field(default=False, description="是否启用高级匹配")
     plugin_config_ids: Optional[List[str]] = Field(default=None, description="关联的插件组 edge_uuid 列表")
+    enable_websocket: Optional[bool] = Field(default=None, description="是否启用 WebSocket 代理")
 
 
 class RouteCreate(RouteBase):
@@ -35,6 +36,7 @@ class RouteUpdate(BaseModel):
     vars: Optional[List[List[Any]]] = None
     advanced_match_enabled: Optional[bool] = None
     plugin_config_ids: Optional[List[str]] = None
+    enable_websocket: Optional[bool] = None
 
 
 class RouteResponse(RouteBase):

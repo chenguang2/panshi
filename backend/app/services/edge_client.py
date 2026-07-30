@@ -420,7 +420,8 @@ class EdgeClient:
         vars_json: str | None,
         plugins: list[dict] | None,
         status: int = 1,
-        plugin_config_ids: list[str] | None = None
+        plugin_config_ids: list[str] | None = None,
+        enable_websocket: bool | None = None,
     ) -> dict[str, Any]:
         """Convert local route format to edge API format."""
         edge_route = {
@@ -451,6 +452,9 @@ class EdgeClient:
 
         if plugin_config_ids:
             edge_route["plugin_config_ids"] = plugin_config_ids
+
+        if enable_websocket:
+            edge_route["enable_websocket"] = True
 
         if plugins:
             edge_plugins = {}

@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, Text, ForeignKey, Column, UniqueConstraint
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, Column, UniqueConstraint
 from datetime import datetime
 import uuid
 from app.core.database import Base
@@ -90,6 +90,7 @@ class Route(Base):
     remote_addrs = Column(String(500), nullable=True)
     vars = Column(Text, nullable=True)
     advanced_match_enabled = Column(Integer, nullable=False, default=0)
+    enable_websocket = Column(Boolean, nullable=False, default=False)
     plugin_config_ids = Column(Text, nullable=True)  # JSON array of plugin_config edge_uuids
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -8,6 +8,40 @@ class TestDnsUpstreamPublish:
     """Routes with dns_upstream plugin but no upstream_id should still
     produce valid Edge payload with a dummy upstream."""
 
+    def test_convert_route_websocket_default_not_in_output(self):
+        """enable_websocket not passed: not in output."""
+        edge_data = EdgeClient.convert_route_to_edge_format(
+            edge_uuid="test-uuid", name="test", uri="/test",
+            methods=None, hosts=None,
+            upstream_edge_uuid=None, priority=0,
+            vars_json=None, plugins=None, status=1,
+        )
+        assert "enable_websocket" not in edge_data
+
+    def test_convert_route_websocket_true_in_output(self):
+        """enable_websocket=True: included in output."""
+        edge_data = EdgeClient.convert_route_to_edge_format(
+            edge_uuid="test-uuid", name="ws-test", uri="/ws",
+            methods=None, hosts=None,
+            upstream_edge_uuid=None, priority=0,
+            vars_json=None, plugins=None, status=1,
+            enable_websocket=True,
+        )
+        assert edge_data.get("enable_websocket") is True
+
+    def test_convert_route_websocket_false_not_in_output(self):
+        """enable_websocket=False: not in output (Edge defaults to false)."""
+        edge_data = EdgeClient.convert_route_to_edge_format(
+            edge_uuid="test-uuid", name="no-ws", uri="/no-ws",
+            methods=None, hosts=None,
+            upstream_edge_uuid=None, priority=0,
+            vars_json=None, plugins=None, status=1,
+            enable_websocket=False,
+        )
+        assert "enable_websocket" not in edge_data
+    """Routes with dns_upstream plugin but no upstream_id should still
+    produce valid Edge payload with a dummy upstream."""
+
     def test_convert_route_no_upstream_no_plugin_produces_no_upstream(self):
         """Route without upstream AND without plugin: no upstream in edge format."""
         edge_data = EdgeClient.convert_route_to_edge_format(

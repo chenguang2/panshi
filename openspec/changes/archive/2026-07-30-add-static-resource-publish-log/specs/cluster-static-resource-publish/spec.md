@@ -1,8 +1,4 @@
-## Purpose
-
-集群管理页静态资源发布到 Edge 节点功能。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 发布到 Edge 节点
 
@@ -26,12 +22,3 @@
 - **THEN** 进度条显示红色异常，展示失败节点及其错误信息
 - **AND** 记录当前版本的发布结果到数据库
 - **AND** 日志记录 Status: FAILED 并包含错误信息
-
-### Requirement: 弹窗选择节点
-
-发布弹窗 SHALL 复用现有插件组的节点选择模式。
-
-#### Scenario: 节点列表
-- **WHEN** 打开发布弹窗
-- **THEN** 显示集群中所有活跃节点，默认全选
-- **AND** 用户可以取消勾选不想发布的节点

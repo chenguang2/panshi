@@ -153,10 +153,16 @@
                 <a-form-item label="描述" name="description">
                   <a-textarea v-model:value="routeForm.description" :rows="2" />
                 </a-form-item>
-                <a-form-item label="高级匹配" name="advancedMatch">
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <label class="toggle"><input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" /><span class="toggle-slider"></span></label>
-                    <span style="color:#999;font-size:12px;">开启后在"高级匹配"页配置请求条件</span>
+                <a-form-item label="功能开关">
+                  <div style="display:flex;gap:24px;flex-wrap:wrap;">
+                    <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;">
+                      <input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" />
+                      <span>开启高级匹配</span>
+                    </label>
+                    <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;">
+                      <input type="checkbox" v-model="routeForm.enableWebsocket" />
+                      <span>启用 WebSocket</span>
+                    </label>
                   </div>
                 </a-form-item>
               </a-form>

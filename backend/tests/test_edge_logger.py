@@ -1,7 +1,8 @@
-"""Test EdgeLogger publish logging for plugin_config, global_rule, plugin_metadata."""
+"""Test EdgeLogger publish logging for plugin_config, global_rule, plugin_metadata, static_resource."""
 import json
 from unittest.mock import patch, call
 from app.services.edge_logger import EdgeLogger, get_edge_logger, reset_edge_logger
+from app.services.edge_client import EdgeConnectionError
 
 
 class TestEdgeLoggerPublishLogging:
@@ -223,3 +224,72 @@ class TestEdgeLoggerPublishLogging:
         assert lines.count("---") == 2
         assert "cfg1" in log_file.read_text(encoding="utf-8")
         assert "cfg2" in log_file.read_text(encoding="utf-8")
+
+
+class TestEdgeLoggerStaticResourcePublishLogging:
+    """Test EdgeLogger log_publish_result for static_resource."""
+
+    def test_resource_log_config_has_static_resource(self):
+        """RESOURCE_LOG_CONFIG MUST contain static_resource entry."""
+        assert "static_resource" in EdgeLogger.RESOURCE_LOG_CONFIG
+        entry = EdgeLogger.RESOURCE_LOG_CONFIG["static_resource"]
+        assert "file" in entry
+        assert "label" in entry
+
+    def test_log_publish_result_static_resource_success(self, tmp_path):
+        """log_publish_result with static_resource SHALL write success entry."""
+        log_file = tmp_path / "static_resource.log"
+        logger = EdgeLogger()
+        logger.STATIC_RESOURCE_LOG_FILE = str(log_file)
+
+        logger.log_publish_result(
+            resource_type="static_resource",
+            cluster_id=1,
+            cluster_name="test-cluster",
+            resource_id=42,
+            resource_name="my-sr",
+            method="PUT",
+            path="/edge/panshi/admin_static_resources?edge_uuid=abc123",
+            request_body=None,
+            encrypted_body=None,
+            response_status=200,
+            response_body={"status": "ok"},
+            error=None,
+        )
+
+        content = log_file.read_text(encoding="utf-8")
+        assert "StaticResource:my-sr (ID:42)" in content
+        assert "Cluster:test-cluster (ID:1)" in content
+        assert "Request: PUT" in content
+        assert "Response: 200" in content
+        assert "Response Body:" in content
+        assert "Status: SUCCESS" in content
+        assert "---" in content
+
+    def test_log_publish_result_static_resource_error(self, tmp_path):
+        """log_publish_result with static_resource SHALL write FAILED entry."""
+        log_file = tmp_path / "static_resource.log"
+        logger = EdgeLogger()
+        logger.STATIC_RESOURCE_LOG_FILE = str(log_file)
+
+        logger.log_publish_result(
+            resource_type="static_resource",
+            cluster_id=1,
+            cluster_name="test-cluster",
+            resource_id=42,
+            resource_name="my-sr",
+            method="PUT",
+            path="/edge/panshi/admin_static_resources?edge_uuid=abc123",
+            request_body=None,
+            encrypted_body=None,
+            response_status=None,
+            response_body=None,
+            error=EdgeConnectionError("Connection refused"),
+        )
+
+        content = log_file.read_text(encoding="utf-8")
+        assert "StaticResource:my-sr (ID:42)" in content
+        assert "Status: FAILED" in content
+        assert "Error: Connection refused" in content
+        assert "Response:" not in content
+        assert "Encrypted:" not in content

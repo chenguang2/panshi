@@ -72,7 +72,7 @@
               <table class="inline-table">
                 <thead>
                   <tr>
-                    <th>IP 地址</th>
+                    <th>主机/域名</th>
                     <th>端口</th>
                     <th>权重</th>
                     <th style="width:60px;">操作</th>
@@ -81,8 +81,8 @@
                 <tbody>
                   <tr v-for="(t, i) in form.targets" :key="t.key">
                     <td>
-                      <input v-model="t.ip" type="text" class="form-input" placeholder="IP地址" style="height:30px;font-size:12px;">
-                      <div v-if="targetValidation[i]?.ip" class="form-error">{{ targetValidation[i].ip }}</div>
+                      <input v-model="t.host" type="text" class="form-input" placeholder="主机地址（IP 或域名）" style="height:30px;font-size:12px;">
+                      <div v-if="targetValidation[i]?.host" class="form-error">{{ targetValidation[i].host }}</div>
                     </td>
                     <td>
                       <input v-model.number="t.port" type="number" class="form-input" min="1" max="65535" placeholder="端口" style="height:30px;font-size:12px;">
@@ -271,13 +271,64 @@ const emit = defineEmits<{
 }>()
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
+const DOMAIN_LABEL_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
+
+function buildTarget(host: string, port: number): string {
+  if (host.includes(':') && !host.startsWith('[')) return `[${host}]:${port}`
+  return `${host}:${port}`
+}
+
+function parseTarget(target: string): { host: string; port: number } {
+  if (target.startsWith('[')) {
+    // IPv6: [::1]:80
+    const close = target.indexOf(']')
+    const host = target.slice(0, close + 1)
+    const port = target[close + 1] === ':' ? parseInt(target.slice(close + 2)) || 80 : 80
+    return { host, port }
+  }
+  const colon = target.lastIndexOf(':')
+  if (colon === -1) return { host: target, port: 80 }
+  return { host: target.slice(0, colon), port: parseInt(target.slice(colon + 1)) || 80 }
+}
+
+function validateHost(host: string): { valid: boolean; error: string } {
+  if (!host) return { valid: false, error: '主机地址不能为空' }
+
+  // IPv4
+  if (IP_PATTERN.test(host)) return { valid: true, error: '' }
+  // Failed IPv4 — looks like 4 numeric octets but values out of range
+  if (/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.test(host)) {
+    return { valid: false, error: 'IPv4 地址不合法：每段取值范围 0-255' }
+  }
+
+  // IPv6 (with or without brackets)
+  const ipv6 = host.startsWith('[') ? host.slice(1, -1) : host
+  if (ipv6.includes(':') && /^[0-9a-fA-F:.]+$/.test(ipv6)) {
+    return { valid: true, error: '' }
+  }
+
+  // Domain — must contain at least one dot
+  if (!host.includes('.')) {
+    return { valid: false, error: '请输入主机地址（IP 或域名）' }
+  }
+  if (host.length > 253) {
+    return { valid: false, error: '域名长度不能超过 253 个字符' }
+  }
+  const labels = host.split('.')
+  for (const label of labels) {
+    if (!label) return { valid: false, error: '域名包含空段' }
+    if (!DOMAIN_LABEL_RE.test(label)) {
+      return { valid: false, error: `"${label}" 包含非法字符或以中划线开头/结尾` }
+    }
+  }
+  return { valid: true, error: '' }
+}
 
 const checksMode = ref<'active' | 'passive' | 'both'>('active')
 const activeTab = ref('basic')
 const submitting = ref(false)
 const formErrors = reactive<Record<string, string>>({})
-const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
+const targetValidation = ref<Record<string, { host?: string; port?: string; weight?: string }>>({})
 let targetKey = 0
 
 // ── Individual toggle states ──
@@ -310,7 +361,7 @@ const form = reactive({
   hash_on: 'vars',
   key: '',
   description: '',
-  targets: [] as { key: number; ip: string; port: number; weight: number }[],
+  targets: [] as { key: number; host: string; port: number; weight: number }[],
   retriesInput: undefined as number | undefined,
   retry_timeout: undefined as number | undefined,
   timeout: { ...defaultTimeout } as { connect: number | undefined; send: number | undefined; read: number | undefined },
@@ -414,8 +465,8 @@ function populateForm() {
     }
 
     form.targets = (u.targets || []).map((t: any) => {
-      const [ip, port] = t.target.split(':')
-      return { key: ++targetKey, ip: ip || '', port: port ? parseInt(port) : 80, weight: t.weight }
+      const parsed = parseTarget(t.target)
+      return { key: ++targetKey, host: parsed.host, port: parsed.port, weight: t.weight }
     })
   } else {
     form.cluster_id = ''
@@ -424,7 +475,7 @@ function populateForm() {
     form.hash_on = 'vars'
     form.key = ''
     form.description = ''
-    form.targets = [{ key: ++targetKey, ip: '', port: 80, weight: 100 }]
+    form.targets = [{ key: ++targetKey, host: '', port: 80, weight: 100 }]
     form.retriesInput = undefined
     checksMode.value = 'active'
     form.retry_timeout = 0
@@ -438,7 +489,7 @@ function populateForm() {
 }
 
 function addTarget() {
-  form.targets.push({ key: ++targetKey, ip: '', port: 80, weight: 100 })
+  form.targets.push({ key: ++targetKey, host: '', port: 80, weight: 100 })
 }
 
 function removeTarget(index: number) {
@@ -462,13 +513,16 @@ function validateForm(): boolean {
   const seen = new Set<string>()
   form.targets.forEach((t, i) => {
     const errors: Record<string, string> = {}
-    if (!t.ip) { errors.ip = 'IP不能为空'; valid = false }
-    else if (!isValidIP(t.ip)) { errors.ip = 'IP不合法'; valid = false }
+    if (!t.host) { errors.host = '主机地址不能为空'; valid = false }
+    else {
+      const hostResult = validateHost(t.host)
+      if (!hostResult.valid) { errors.host = hostResult.error; valid = false }
+    }
     if (!t.port || t.port < 1 || t.port > 65535) { errors.port = '端口不合法'; valid = false }
     if (!t.weight || t.weight < 1 || t.weight > 100) { errors.weight = '权重不合法'; valid = false }
-    if (t.ip && t.port) {
-      const key = `${t.ip}:${t.port}`
-      if (seen.has(key)) { errors.ip = `IP和端口与第 ${[...seen].indexOf(key) + 1} 行重复`; valid = false }
+    if (t.host && t.port) {
+      const key = `${t.host}:${t.port}`
+      if (seen.has(key)) { errors.host = `主机和端口与第 ${[...seen].indexOf(key) + 1} 行重复`; valid = false }
       seen.add(key)
     }
     targetValidation.value[`${i}`] = errors
@@ -530,7 +584,7 @@ async function handleSubmit() {
       name: form.name,
       load_balance: form.load_balance,
       description: form.description,
-      targets: form.targets.map(t => ({ target: `${t.ip}:${t.port}`, weight: t.weight })),
+      targets: form.targets.map(t => ({ target: buildTarget(t.host, t.port), weight: t.weight })),
     }
     if (form.load_balance === 'chash') {
       submitData.hash_on = form.hash_on

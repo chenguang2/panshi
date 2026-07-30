@@ -126,6 +126,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     },
     plugins: [] as RoutePlugin[],
     plugin_config_ids: [] as string[],
+    enableWebsocket: false,
   })
 
   // ── column / search config ──────────────────────────────────────────
@@ -384,6 +385,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       routeData.advanced_match_enabled ||
       (routeForm.advancedMatch.vars.length > 0)
     )
+    routeForm.enableWebsocket = !!(routeData as any).enable_websocket
     routeForm.plugins = []
     routeForm.plugin_config_ids = (routeData as unknown as Record<string, unknown>).plugin_config_ids
       ? [...((routeData as unknown as Record<string, unknown>).plugin_config_ids as string[])]
@@ -463,6 +465,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       }
 
       payload.plugin_config_ids = routeForm.plugin_config_ids
+      if (routeForm.enableWebsocket) payload.enable_websocket = true
 
       if (routeForm.advancedMatchEnabled) {
         payload.vars = routeForm.advancedMatch?.vars || []

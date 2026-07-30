@@ -26,7 +26,7 @@ type UpstreamFull = Upstream & UpstreamExtras
 
 interface UpstreamTargetForm {
   key: number
-  ip: string
+  host: string
   port: number
   weight: number
 }
@@ -55,8 +55,50 @@ interface KeepalivePoolData {
 }
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+const DOMAIN_LABEL_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
 
-const isValidIP = (ip: string): boolean => IP_PATTERN.test(ip)
+function validateHost(host: string): { valid: boolean; error: string } {
+  if (!host) return { valid: false, error: '主机地址不能为空' }
+  if (IP_PATTERN.test(host)) return { valid: true, error: '' }
+  if (/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.test(host)) {
+    return { valid: false, error: 'IPv4 地址不合法：每段取值范围 0-255' }
+  }
+  const ipv6 = host.startsWith('[') ? host.slice(1, -1) : host
+  if (ipv6.includes(':') && /^[0-9a-fA-F:.]+$/.test(ipv6)) {
+    return { valid: true, error: '' }
+  }
+  if (!host.includes('.')) {
+    return { valid: false, error: '请输入主机地址（IP 或域名）' }
+  }
+  if (host.length > 253) {
+    return { valid: false, error: '域名长度不能超过 253 个字符' }
+  }
+  const labels = host.split('.')
+  for (const label of labels) {
+    if (!label) return { valid: false, error: '域名包含空段' }
+    if (!DOMAIN_LABEL_RE.test(label)) {
+      return { valid: false, error: `"${label}" 包含非法字符或以中划线开头/结尾` }
+    }
+  }
+  return { valid: true, error: '' }
+}
+
+function buildTarget(host: string, port: number): string {
+  if (host.includes(':') && !host.startsWith('[')) return `[${host}]:${port}`
+  return `${host}:${port}`
+}
+
+function parseTarget(target: string): { host: string; port: number } {
+  if (target.startsWith('[')) {
+    const close = target.indexOf(']')
+    const host = target.slice(0, close + 1)
+    const port = target[close + 1] === ':' ? parseInt(target.slice(close + 2)) || 80 : 80
+    return { host, port }
+  }
+  const colon = target.lastIndexOf(':')
+  if (colon === -1) return { host: target, port: 80 }
+  return { host: target.slice(0, colon), port: parseInt(target.slice(colon + 1)) || 80 }
+}
 
 const getLoadBalanceLabel = (value: string): string => {
   const labels: Record<string, string> = {
@@ -96,7 +138,7 @@ export function useClusterUpstreams(options: {
 
   const upstreamFormRef = ref()
 
-  const targetValidation = ref<Record<string, { ip?: string; port?: string; weight?: string }>>({})
+  const targetValidation = ref<Record<string, { host?: string; port?: string; weight?: string }>>({})
 const formErrors = reactive<Record<string, string>>({})
 
   // ── Individual toggle states ──
@@ -303,7 +345,7 @@ const formErrors = reactive<Record<string, string>>({})
   const addUpstreamTarget = () => {
     upstreamForm.targets.push({
       key: ++upstreamTargetKey,
-      ip: '',
+      host: '',
       port: 80,
       weight: 100,
     })
@@ -319,12 +361,15 @@ const formErrors = reactive<Record<string, string>>({})
     const seen = new Set<string>()
     upstreamForm.targets.forEach((t, i) => {
       const errors: Record<string, string> = {}
-      if (!t.ip) {
-        errors.ip = 'IP不能为空'
+      if (!t.host) {
+        errors.host = '主机地址不能为空'
         valid = false
-      } else if (!isValidIP(t.ip)) {
-        errors.ip = 'IP不合法'
-        valid = false
+      } else {
+        const hostResult = validateHost(t.host)
+        if (!hostResult.valid) {
+          errors.host = hostResult.error
+          valid = false
+        }
       }
       if (!t.port || t.port < 1 || t.port > 65535) {
         errors.port = '端口不合法'
@@ -334,11 +379,11 @@ const formErrors = reactive<Record<string, string>>({})
         errors.weight = '权重不合法'
         valid = false
       }
-      // 检查重复 IP:端口
-      if (t.ip && t.port) {
-        const key = `${t.ip}:${t.port}`
+      // 检查重复 主机:端口
+      if (t.host && t.port) {
+        const key = `${t.host}:${t.port}`
         if (seen.has(key)) {
-          errors.ip = `IP和端口与第 ${[...seen].indexOf(key) + 1} 行重复`
+          errors.host = `主机和端口与第 ${[...seen].indexOf(key) + 1} 行重复`
           valid = false
         }
         seen.add(key)
@@ -419,7 +464,7 @@ const formErrors = reactive<Record<string, string>>({})
     upstreamForm.name = ''
     upstreamForm.load_balance = 'weighted_roundrobin'
     upstreamForm.description = ''
-    upstreamForm.targets = [{ key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 }]
+    upstreamForm.targets = [{ key: ++upstreamTargetKey, host: '', port: 80, weight: 100 }]
     upstreamForm.hash_on = 'vars'
     upstreamForm.key = ''
     toggleChecks.value = false
@@ -534,17 +579,17 @@ const formErrors = reactive<Record<string, string>>({})
 
     if (upstream.targets && upstream.targets.length > 0) {
       upstreamForm.targets = upstream.targets.map((t) => {
-        const [ip, port] = t.target.split(':')
+        const parsed = parseTarget(t.target)
         return {
           key: ++upstreamTargetKey,
-          ip: ip || '',
-          port: port ? parseInt(port) : 80,
+          host: parsed.host,
+          port: parsed.port,
           weight: t.weight,
         }
       })
     } else {
       upstreamForm.targets = [
-        { key: ++upstreamTargetKey, ip: '', port: 80, weight: 100 },
+        { key: ++upstreamTargetKey, host: '', port: 80, weight: 100 },
       ]
     }
     targetValidation.value = {}
@@ -577,7 +622,7 @@ const formErrors = reactive<Record<string, string>>({})
         load_balance: upstreamForm.load_balance,
         description: upstreamForm.description,
         targets: upstreamForm.targets.map((t) => ({
-          target: `${t.ip}:${t.port}`,
+          target: buildTarget(t.host, t.port),
           weight: t.weight,
         })),
       }
@@ -819,7 +864,7 @@ const formErrors = reactive<Record<string, string>>({})
     getUpstreamActionButtonTitle,
     handleUpstreamAction,
     getLoadBalanceLabel,
-    isValidIP,
+    validateHost,
 
     // Shared utilities (used by delete/publish progress)
     buildDeleteProgressContent,

@@ -150,6 +150,7 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "skip_mtls_uri_regex", "TEXT"),
     ("ps_ssl_certificate", "organization", "VARCHAR(200)"),
     ("ps_ssl_certificate", "organizational_unit", "VARCHAR(200)"),
+    ("ps_route", "enable_websocket", "INTEGER DEFAULT 0"),
 ]
 
 

@@ -530,6 +530,7 @@ class EdgeImportService:
             "description": edge_route.get("desc"),
             "current_version": None,
             "plugin_config_ids": plugin_config_ids,
+            "enable_websocket": edge_route.get("enable_websocket"),
         }
 
         edge_plugins = edge_route.get("plugins") or {}

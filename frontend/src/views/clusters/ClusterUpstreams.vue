@@ -131,9 +131,9 @@
                 <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
                   <a-table :columns="targetColumns" :data-source="upstreamForm.targets" :pagination="false" size="small" row-key="key">
                     <template #bodyCell="{ column, record, index }">
-                      <template v-if="column.key === 'ip'">
-                        <a-input v-model:value="record.ip" placeholder="IP地址" />
-                        <div v-if="targetValidation[index]?.ip" class="ant-form-item-explain-error">{{ targetValidation[index].ip }}</div>
+                      <template v-if="column.key === 'host'">
+                        <a-input v-model:value="record.host" placeholder="主机地址（IP 或域名）" />
+                        <div v-if="targetValidation[index]?.host" class="ant-form-item-explain-error">{{ targetValidation[index].host }}</div>
                       </template>
                       <template v-else-if="column.key === 'port'">
                         <a-input-number v-model:value="record.port" :min="1" :max="65535" style="width: 100%" placeholder="端口" />
@@ -376,7 +376,7 @@ const onSectionInput = (e: Event) => {
 }
 
 const targetColumns = [
-  { title: 'IP地址', key: 'ip', width: 200 },
+  { title: '主机/域名', key: 'host', width: 200 },
   { title: '端口', key: 'port', width: 120 },
   { title: '权重', key: 'weight', width: 100 },
   { title: '操作', key: 'action', width: 80 },

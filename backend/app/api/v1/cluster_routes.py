@@ -328,7 +328,8 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
         "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
         "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
         "plugins": plugins_edge_format,
-        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None}
+        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
+        "enable_websocket": route.enable_websocket or False}
     new_version = await edge_sync.create_config_version(db, "route", route_id, cluster_id, config_data, route)
 
     if req and req.node_ids:
@@ -345,7 +346,8 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
         upstream_edge_uuid=upstream_edge_uuid, priority=route.priority or 0,
         vars_json=route.vars if isinstance(route.vars, str) else None,
         plugins=plugins, status=route.status,
-        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None)
+        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
+        enable_websocket=route.enable_websocket)
 
     edge_logger = get_edge_logger()
 
@@ -451,6 +453,7 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
     route.advanced_match_enabled = 1 if config_data.get("advanced_match_enabled") else 0
     pids = config_data.get("plugin_config_ids")
     route.plugin_config_ids = json.dumps(pids) if pids else None
+    route.enable_websocket = config_data.get("enable_websocket", route.enable_websocket)
     route.current_version = version
 
     await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))

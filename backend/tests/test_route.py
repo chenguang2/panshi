@@ -2,6 +2,169 @@ import pytest
 from app.models.cluster import Route, RoutePlugin, ConfigVersion
 from sqlalchemy import select
 
+
+class TestRouteWebsocketSchema:
+    """Schema tests for enable_websocket field."""
+
+    def test_route_base_has_enable_websocket(self):
+        from app.schemas.route import RouteBase
+
+        fields = RouteBase.model_fields
+        assert "enable_websocket" in fields
+
+    def test_route_base_enable_websocket_optional(self):
+        from app.schemas.route import RouteBase
+
+        r = RouteBase(name="test", uri="/test")
+        assert r.enable_websocket is None
+
+    def test_route_create_has_enable_websocket(self):
+        from app.schemas.route import RouteCreate
+
+        fields = RouteCreate.model_fields
+        assert "enable_websocket" in fields
+
+    def test_route_update_has_enable_websocket(self):
+        from app.schemas.route import RouteUpdate
+
+        fields = RouteUpdate.model_fields
+        assert "enable_websocket" in fields
+
+    def test_route_response_has_enable_websocket(self):
+        from app.schemas.route import RouteResponse
+
+        fields = RouteResponse.model_fields
+        assert "enable_websocket" in fields
+
+
+class TestRouteWebsocketEdgeImport:
+    """Tests for enable_websocket in Edge import (Task 4.1)."""
+
+    def _make_import_service(self):
+        from app.services.edge_import_service import EdgeImportService
+        svc = EdgeImportService.__new__(EdgeImportService)
+        svc.cluster_id = 1
+        return svc
+
+    def test_import_parses_enable_websocket_true(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-123",
+            "name": "ws-route",
+            "uri": "/ws",
+            "enable_websocket": True,
+        }
+        result = svc.convert_route(edge_data, {})
+        rd = result["route"]
+        assert rd.get("enable_websocket") is True
+
+    def test_import_parses_enable_websocket_false(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-456",
+            "name": "no-ws",
+            "uri": "/no-ws",
+            "enable_websocket": False,
+        }
+        result = svc.convert_route(edge_data, {})
+        rd = result["route"]
+        assert rd.get("enable_websocket") is False
+
+    def test_import_missing_websocket_defaults_none(self):
+        svc = self._make_import_service()
+        edge_data = {
+            "id": "uuid-789",
+            "name": "old-route",
+            "uri": "/old",
+        }
+        result = svc.convert_route(edge_data, {})
+        rd = result["route"]
+        assert rd.get("enable_websocket") is None
+
+
+class TestRouteWebsocketConfigDiff:
+    """Tests for enable_websocket in config diff (Task 5.1)."""
+
+    @staticmethod
+    def _compare_field(db_r, edge_data, field_name):
+        db_v = getattr(db_r, field_name, None)
+        edge_v = edge_data.get(field_name)
+        equal = str(db_v or "") == str(edge_v or "")
+        return {"name": field_name, "db": str(db_v or ""), "edge": str(edge_v or ""), "status": "equal" if equal else "diff"}
+
+    def _make_route(self, **kwargs):
+        from app.models.cluster import Route
+        return type("FakeRoute", (), {"enable_websocket": False, **kwargs})()
+
+    def test_websocket_equal_true(self):
+        r = self._make_route(enable_websocket=True)
+        edge = {"enable_websocket": True}
+        result = self._compare_field(r, edge, "enable_websocket")
+        assert result["status"] == "equal"
+
+    def test_websocket_equal_false(self):
+        r = self._make_route(enable_websocket=False)
+        edge = {"enable_websocket": False}
+        result = self._compare_field(r, edge, "enable_websocket")
+        assert result["status"] == "equal"
+
+    def test_websocket_diff(self):
+        r = self._make_route(enable_websocket=True)
+        edge = {"enable_websocket": False}
+        result = self._compare_field(r, edge, "enable_websocket")
+        assert result["status"] == "diff"
+
+    def test_websocket_only_in_db(self):
+        r = self._make_route(enable_websocket=True)
+        edge = {}
+        result = self._compare_field(r, edge, "enable_websocket")
+        assert result["status"] == "diff"
+        assert result["db"] == "True"
+        assert result["edge"] == ""
+
+
+class TestRouteWebsocketMigration:
+    """Migration tests for enable_websocket column."""
+
+    def test_enable_websocket_in_column_migrations(self):
+        from app.core.migrate import COLUMN_MIGRATIONS
+        assert any(
+            table == "ps_route" and col == "enable_websocket"
+            for table, col, _ in COLUMN_MIGRATIONS
+        ), "enable_websocket migration entry missing in COLUMN_MIGRATIONS"
+
+
+async def test_route_enable_websocket_default_false(test_db):
+    route = Route(
+        cluster_id=1,
+        name="ws-route",
+        uri="/ws/*",
+        priority=0,
+        status=1,
+    )
+    test_db.add(route)
+    await test_db.commit()
+    await test_db.refresh(route)
+
+    assert hasattr(route, "enable_websocket")
+    assert route.enable_websocket is False
+
+
+async def test_route_enable_websocket_set_true(test_db):
+    route = Route(
+        cluster_id=1,
+        name="ws-route-enabled",
+        uri="/ws-enabled/*",
+        priority=0,
+        status=1,
+        enable_websocket=True,
+    )
+    test_db.add(route)
+    await test_db.commit()
+    await test_db.refresh(route)
+
+    assert route.enable_websocket is True
+
 async def test_create_route(test_db):
     route = Route(
         cluster_id=1,

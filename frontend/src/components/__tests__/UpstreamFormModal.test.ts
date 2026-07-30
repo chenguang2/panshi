@@ -84,7 +84,7 @@ describe('UpstreamFormModal.vue', () => {
   async function fillAndSubmit(wrapper: any, editing = false) {
     const vm = wrapper.vm as any
     vm.form.cluster_id = 1
-    vm.form.targets = [{ key: 1, ip: '10.0.0.1', port: 8080, weight: 100 }]
+    vm.form.targets = [{ key: 1, host: '10.0.0.1', port: 8080, weight: 100 }]
     vm.form.name = 'test-upstream'
     await wrapper.vm.$nextTick()
     const saveBtn = wrapper.findAll('button').filter((w: any) => w.text().includes('保存'))
@@ -229,7 +229,7 @@ describe('UpstreamFormModal.vue', () => {
     vm.form.timeout.send = undefined as any
     vm.form.timeout.read = undefined as any
     vm.form.cluster_id = 1
-    vm.form.targets = [{ key: 1, ip: '10.0.0.1', port: 8080, weight: 100 }]
+    vm.form.targets = [{ key: 1, host: '10.0.0.1', port: 8080, weight: 100 }]
     vm.form.name = 'test-upstream'
     await vm.$nextTick()
     // Click save button
@@ -257,5 +257,165 @@ describe('UpstreamFormModal.vue', () => {
     expect(body.checks).not.toBeNull()
     expect(body.checks).toHaveProperty('passive')
     expect(body.checks).toHaveProperty('active')
+  })
+
+  // ── UI text labels ──────────────────────────────
+
+  describe('UI text labels', () => {
+    it('shows 主机/域名 in table header', async () => {
+      const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+      const wrapper = mount(UpstreamFormModal, {
+        props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+        global: { stubs }
+      })
+      expect(wrapper.html()).toContain('主机/域名')
+    })
+
+    it('shows 主机地址 in placeholder', async () => {
+      const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+      const wrapper = mount(UpstreamFormModal, {
+        props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+        global: { stubs }
+      })
+      expect(wrapper.html()).toContain('主机地址')
+    })
+  })
+
+  // ── validateHost ────────────────────────────────────
+
+  describe('validateHost', () => {
+    async function createVm() {
+      const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+      const wrapper = mount(UpstreamFormModal, {
+        props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+        global: { stubs }
+      })
+      return wrapper.vm as any
+    }
+
+    it('accepts valid IPv4 addresses', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('192.168.1.1').valid).toBe(true)
+      expect(vm.validateHost('10.0.0.1').valid).toBe(true)
+      expect(vm.validateHost('0.0.0.0').valid).toBe(true)
+      expect(vm.validateHost('255.255.255.255').valid).toBe(true)
+    })
+
+    it('rejects invalid IPv4 addresses', async () => {
+      const vm = await createVm()
+      const r = vm.validateHost('256.1.1.1')
+      expect(r.valid).toBe(false)
+      expect(r.error).toContain('IPv4')
+    })
+
+    it('accepts valid domain names', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('foo.com').valid).toBe(true)
+      expect(vm.validateHost('my-service.example.com').valid).toBe(true)
+      expect(vm.validateHost('a.b.c').valid).toBe(true)
+    })
+
+    it('rejects domain names with invalid characters', async () => {
+      const vm = await createVm()
+      const r = vm.validateHost('foo_bar.com')
+      expect(r.valid).toBe(false)
+      expect(r.error).toBeTruthy()
+    })
+
+    it('rejects domain labels starting or ending with hyphen', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('-foo.com').valid).toBe(false)
+      expect(vm.validateHost('foo-.com').valid).toBe(false)
+    })
+
+    it('accepts IPv6 with brackets', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('[::1]').valid).toBe(true)
+      expect(vm.validateHost('[2001:db8::1]').valid).toBe(true)
+    })
+
+    it('accepts IPv6 without brackets', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('::1').valid).toBe(true)
+      expect(vm.validateHost('2001:db8::1').valid).toBe(true)
+    })
+
+    it('rejects non-IP non-domain strings', async () => {
+      const vm = await createVm()
+      expect(vm.validateHost('').valid).toBe(false)
+      expect(vm.validateHost('localhost').valid).toBe(false)
+    })
+  })
+
+  // ── parseTarget ─────────────────────────────────
+
+  describe('parseTarget', () => {
+    async function createVm() {
+      const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+      const wrapper = mount(UpstreamFormModal, {
+        props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+        global: { stubs }
+      })
+      return wrapper.vm as any
+    }
+
+    it('parses IPv4 target correctly', async () => {
+      const vm = await createVm()
+      const r = vm.parseTarget('192.168.1.1:80')
+      expect(r.host).toBe('192.168.1.1')
+      expect(r.port).toBe(80)
+    })
+
+    it('parses IPv6 target with brackets', async () => {
+      const vm = await createVm()
+      const r = vm.parseTarget('[::1]:80')
+      expect(r.host).toBe('[::1]')
+      expect(r.port).toBe(80)
+    })
+
+    it('parses domain target correctly', async () => {
+      const vm = await createVm()
+      const r = vm.parseTarget('foo.com:8080')
+      expect(r.host).toBe('foo.com')
+      expect(r.port).toBe(8080)
+    })
+
+    it('parses target without port', async () => {
+      const vm = await createVm()
+      const r = vm.parseTarget('192.168.1.1')
+      expect(r.host).toBe('192.168.1.1')
+      expect(r.port).toBe(80)
+    })
+  })
+
+  // ── IPv6 bracket auto-wrap ─────────────────────
+
+  describe('IPv6 bracket on submit', () => {
+    async function createVm2() {
+      const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+      const wrapper = mount(UpstreamFormModal, {
+        props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
+        global: { stubs }
+      })
+      return wrapper.vm as any
+    }
+
+    it('wraps IPv6 host in brackets when building target', async () => {
+      const vm = (await createVm2())
+      const built = vm.buildTarget('::1', 80)
+      expect(built).toBe('[::1]:80')
+    })
+
+    it('does not wrap IPv4 in brackets', async () => {
+      const vm = (await createVm2())
+      const built = vm.buildTarget('192.168.1.1', 80)
+      expect(built).toBe('192.168.1.1:80')
+    })
+
+    it('does not wrap domain in brackets', async () => {
+      const vm = (await createVm2())
+      const built = vm.buildTarget('foo.com', 8080)
+      expect(built).toBe('foo.com:8080')
+    })
   })
 })

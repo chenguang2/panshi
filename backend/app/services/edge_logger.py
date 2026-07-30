@@ -16,6 +16,7 @@ class EdgeLogger:
         "plugin_metadata": {"file": "logs/edge/plugin_metadata.log", "label": "PluginMetadata:{name}"},
         "stream_proxy": {"file": "logs/edge/stream_proxy.log", "label": "StreamProxy:{name} (ID:{id})"},
         "ssl": {"file": "logs/edge/ssl.log", "label": "SSL:{name} (ID:{id})"},
+        "static_resource": {"file": "logs/edge/static_resource.log", "label": "StaticResource:{name} (ID:{id})"},
     }
 
     def __init__(self):

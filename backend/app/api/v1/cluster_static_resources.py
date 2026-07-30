@@ -22,6 +22,7 @@ from app.schemas.static_resource import (
 from app.services import edge_sync
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest, ConfigVersionResponse, ConfigVersionListResponse
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])
 
@@ -391,6 +392,9 @@ async def publish_static_resource(
     if not resource.storage_path or not os.path.exists(resource.storage_path):
         raise HTTPException(status_code=400, detail="请先上传 zip 文件")
 
+    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
+    cluster = cluster_result.scalar_one_or_none()
+
     if req and req.node_ids:
         nodes_result = await db.execute(
             select(Node).where(Node.id.in_(req.node_ids), Node.cluster_id == cluster_id)
@@ -411,6 +415,9 @@ async def publish_static_resource(
 
     results = []
     all_success = True
+    edge_logger = get_edge_logger()
+    edge_uuid = resource.edge_uuid or ""
+    path = f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}"
 
     for node in nodes:
         try:
@@ -419,13 +426,42 @@ async def publish_static_resource(
                 node_ip=node.ip,
                 node_port=node.management_port,
             )
-            edge_uuid = resource.edge_uuid or ""
-            client.raw_put(f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}", zip_data)
+            response = client.raw_put(path, zip_data)
 
             results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
+
+            edge_logger.log_publish_result(
+                resource_type="static_resource",
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                resource_id=resource.id,
+                resource_name=resource.name,
+                method="PUT",
+                path=path,
+                request_body=None,
+                encrypted_body=None,
+                response_status=200,
+                response_body=response,
+                error=None,
+            )
         except (EdgeConnectionError, EdgeAPIError) as e:
             results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
             all_success = False
+
+            edge_logger.log_publish_result(
+                resource_type="static_resource",
+                cluster_id=cluster_id,
+                cluster_name=cluster.name if cluster else str(cluster_id),
+                resource_id=resource.id,
+                resource_name=resource.name,
+                method="PUT",
+                path=path,
+                request_body=None,
+                encrypted_body=None,
+                response_status=getattr(e, 'status_code', None),
+                response_body=getattr(e, 'response_body', None),
+                error=e,
+            )
 
     return {
         "success": all_success,

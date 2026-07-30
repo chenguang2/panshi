@@ -593,6 +593,18 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
                     "edge": str(edge_v),
                     "status": "equal" if equal else "diff",
                 })
+        # enable_websocket
+        db_ws = getattr(db_r, "enable_websocket", None)
+        edge_ws = edge_data.get("enable_websocket")
+        if db_ws or edge_ws:
+            equal = str(db_ws or "") == str(edge_ws or "")
+            fields.append({
+                "name": "enable_websocket",
+                "db": str(db_ws or ""),
+                "edge": str(edge_ws or ""),
+                "status": "equal" if equal else "diff",
+            })
+
         # 高级匹配 vars
         db_vars = json.loads(db_r.vars) if db_r.vars else None
         edge_vars = edge_data.get("vars")

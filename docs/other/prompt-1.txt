@@ -2559,3 +2559,63 @@ ca-cert-multi-algorithm
 请读取 openspec/changes/ca-cert-multi-algorithm/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+
+================================================================
+
+
+使用 /opsx-propose 命令, 来实现这个路由增加 websocket 支持
+
+请阅读
+/home/qcg/panshi/docs/edge/framework/routes.log
+
+其中 enable_websocket
+是否启用 websocket(boolean)
+缺省 false
+
+这个开启 websocket 功能加到路由的基础配置中，默认不选中
+
+
+route-websocket-support
+
+/brainstorming 请仔细阅读 openspec/changes/route-websocket-support/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/route-websocket-support/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+===============================================================
+
+使用 /opsx-propose 命令, 现在发布静态资源，没有日志，需要加上
+
+放到路由等的日志一样的地方
+
+add-static-resource-publish-log
+
+/brainstorming 请仔细阅读 openspec/changes/add-static-resource-publish-log/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/add-static-resource-publish-log/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+===============================================================
+
+使用 /opsx-propose 命令, 需要给上游管理的节点中加上域名支持
+
+阅读：
+/home/qcg/panshi/docs/edge/framework/upstreams.log
+
+其中：nodes 支持域名
+
+首先先讨论，你要如何支持？ 给出几个方案，包括前端界面，我先看看
+
+upstream-node-domain-support
+
+/brainstorming 请仔细阅读 openspec/changes/upstream-node-domain-support/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/upstream-node-domain-support/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
