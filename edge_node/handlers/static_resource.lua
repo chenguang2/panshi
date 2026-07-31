@@ -40,6 +40,7 @@ nginx_prefix = nginx_prefix:gsub("/$", "")
 local default_base_path = nginx_prefix .. "/static"
 local DEFAULT_CACHE_MAX_AGE = 3600
 local DEFAULT_INDEX_FILE = "index.html"
+local DEFAULT_SPA_FALLBACK = true
 
 local MIME_TYPES = {
     html = "text/html; charset=utf-8",
@@ -246,7 +247,7 @@ local default_attr_schema = {
 local default_attr = {
     cache_max_age = DEFAULT_CACHE_MAX_AGE,
     index_file = DEFAULT_INDEX_FILE,
-    spa_fallback = false,
+    spa_fallback = DEFAULT_SPA_FALLBACK,
     app_base = ""
 }
 
@@ -283,6 +284,10 @@ function _M.access(conf, ctx)
 
     local base_path = conf.base_path or default_base_path
     local index_file = conf.index_file or DEFAULT_INDEX_FILE
+    local spa_fallback = conf.spa_fallback
+    if spa_fallback == nil then
+        spa_fallback = DEFAULT_SPA_FALLBACK
+    end
     local route_id = ctx.var.route_id or ""
     local matched_route = ctx.var.matched_route or {}
     local base_uri = matched_route["uri"] or ""
@@ -301,7 +306,7 @@ function _M.access(conf, ctx)
 
     local content, filepath = try_candidate(base_dir, relative_path, index_file)
 
-    if not content and not (conf.spa_fallback and not is_resource_request(relative_path)) then
+    if not content and not (spa_fallback and not is_resource_request(relative_path)) then
         -- base 剥离：app_base 精确剥离，或单段前缀试探（仅当原路径完全不存在时）
         local original_exists = io.open(base_dir .. "/" .. relative_path, "r")
         if original_exists then
@@ -328,7 +333,7 @@ function _M.access(conf, ctx)
         end
     end
 
-    if not content and conf.spa_fallback and not is_resource_request(relative_path) then
+    if not content and spa_fallback and not is_resource_request(relative_path) then
         content, filepath = try_candidate(base_dir, index_file, index_file)
     end
 

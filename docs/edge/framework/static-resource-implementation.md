@@ -119,7 +119,7 @@ local _M = plugin.new({
 | `base_path` | string | `/data/edge/static` | 静态资源根目录 |
 | `cache_max_age` | integer | 3600 | Cache-Control max-age（秒） |
 | `index_file` | string | `index.html` | 目录默认首页文件 |
-| `spa_fallback` | boolean | `false` | SPA history 路由回退：开启后，无扩展名（或扩展名不在 MIME 表）的导航请求找不到文件时返回根 `index.html` |
+| `spa_fallback` | boolean | `true` | SPA history 路由回退：无扩展名（或扩展名不在 MIME 表）的导航请求找不到文件时返回根 `index.html`（默认开启，与 nginx `@router` 兜底一致；显式设为 `false` 恢复严格 404） |
 | `app_base` | string | `""` | 构建 base 前缀：`extractPath` 解析出的相对路径以此前缀开头时剥离后再解析；多段 base（如 `/apps/webTrade`）必须配置 |
 
 ### 请求处理流程（access 阶段，两阶段解析）

@@ -65,8 +65,12 @@ def site(tmp_path):
     return base
 
 
-def _call(lua, uri, base_dir, spa_fallback=False, app_base="", if_none_match=None):
-    """Drive M.access() with the given request URI and config."""
+def _call(lua, uri, base_dir, spa_fallback=None, app_base="", if_none_match=None):
+    """Drive M.access() with the given request URI and config.
+
+    spa_fallback=None simulates an unset plugin config ({}) -> the Lua side
+    falls back to its DEFAULT_SPA_FALLBACK (true). Pass True/False to pin it.
+    """
     lua.globals().ngx.var.uri = uri
     if if_none_match is None:
         lua.globals().ngx.var.http_if_none_match = None
@@ -74,14 +78,16 @@ def _call(lua, uri, base_dir, spa_fallback=False, app_base="", if_none_match=Non
         lua.globals().ngx.var.http_if_none_match = if_none_match
     # reset captured headers
     lua.execute("ngx.header = {}")
-    conf = lua.table(
-        base_path=str(base_dir.parent),
-        route_id="route1",
-        index_file="index.html",
-        cache_max_age=3600,
-        spa_fallback=spa_fallback,
-        app_base=app_base,
-    )
+    conf_args = {
+        "base_path": str(base_dir.parent),
+        "route_id": "route1",
+        "index_file": "index.html",
+        "cache_max_age": 3600,
+    }
+    if spa_fallback is not None:
+        conf_args["spa_fallback"] = spa_fallback
+    conf_args["app_base"] = app_base
+    conf = lua.table(**conf_args)
     ctx = lua.table(
         var=lua.table(
             route_id="route1",
@@ -335,6 +341,20 @@ class TestAccessSpaFallback:
         status, _body = _call(lua, "/login", site, spa_fallback=False)
         assert status == 404
 
+    def test_default_config_empty_falls_back(self, lua, site):
+        status, body = _call(lua, "/login", site)
+        assert status == 200
+        assert body == "<html>root index</html>"
+
+    def test_default_config_empty_falls_back_nested(self, lua, site):
+        status, body = _call(lua, "/user/profile", site)
+        assert status == 200
+        assert body == "<html>root index</html>"
+
+    def test_default_config_empty_missing_resource_still_404(self, lua, site):
+        status, _body = _call(lua, "/assets/js/missing.js", site)
+        assert status == 404
+
     def test_fallback_returns_html_content_type(self, lua, site):
         _call(lua, "/login", site, spa_fallback=True)
         headers = _headers(lua)
@@ -385,12 +405,12 @@ class TestAccessBaseStripping:
         assert body == "<html>root index</html>"
 
     def test_single_segment_probe_serves_index_without_slash(self, lua, site):
-        status, body = _call(lua, "/webTrade", site, spa_fallback=True)
+        status, body = _call(lua, "/webTrade", site)
         assert status == 200
         assert body == "<html>root index</html>"
 
-    def test_single_segment_no_slash_without_spa_fallback_404(self, lua, site):
-        status, _body = _call(lua, "/webTrade", site)
+    def test_single_segment_no_slash_with_explicit_false_404(self, lua, site):
+        status, _body = _call(lua, "/webTrade", site, spa_fallback=False)
         assert status == 404
 
     def test_multi_segment_without_app_base_returns_404(self, lua, site):
@@ -450,8 +470,13 @@ class TestAccessBasicResolution:
         status, _body = _call(lua, "/nope.html", site)
         assert status == 404
 
-    def test_directory_without_index_returns_404(self, lua, site):
-        status, _body = _call(lua, "/css", site)
+    def test_directory_without_index_falls_back_to_root_index(self, lua, site):
+        status, body = _call(lua, "/css", site)
+        assert status == 200
+        assert body == "<html>root index</html>"
+
+    def test_directory_without_index_404_when_spa_fallback_disabled(self, lua, site):
+        status, _body = _call(lua, "/css", site, spa_fallback=False)
         assert status == 404
 
     def test_html_content_type_for_index(self, lua, site):
@@ -571,8 +596,8 @@ class TestSchemaFields:
         props = plugin.attr_schema["properties"]
         assert props["app_base"]["type"] == "string"
 
-    def test_default_attr_has_spa_fallback_false(self, plugin):
-        assert plugin.default_attr["spa_fallback"] is False
+    def test_default_attr_has_spa_fallback_true(self, plugin):
+        assert plugin.default_attr["spa_fallback"] is True
 
     def test_default_attr_has_app_base_empty(self, plugin):
         assert plugin.default_attr["app_base"] == ""

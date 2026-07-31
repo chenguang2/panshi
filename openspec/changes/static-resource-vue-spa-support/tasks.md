@@ -1,6 +1,6 @@
 ## 1. 插件 Lua 实现（edge_node/handlers/static_resource.lua）
 
-- [x] 1.1 在 schema、attr_schema、default_attr_schema、default_attr 中增加 `spa_fallback`（boolean，默认 false）与 `app_base`（string，默认空字符串）字段声明
+- [x] 1.1 在 schema、attr_schema、default_attr_schema、default_attr 中增加 `spa_fallback`（boolean，默认 true）与 `app_base`（string，默认空字符串）字段声明
 - [x] 1.2 新增 `strip_app_base(relative_path, app_base)` 辅助函数：app_base 归一化（去尾部 `/`），相对路径以归一化前缀开头且边界为 `/` 或结尾时剥离前缀，否则返回原路径
 - [x] 1.3 新增 `is_resource_request(relative_path)` 辅助函数：提取最后路径段扩展名，扩展名在 MIME_TYPES 表中 → 资源请求（不回退）；无扩展名或扩展名不在表中 → 导航请求（可回退）
 - [x] 1.4 重构 `access()` 为两阶段：阶段一纯解析（不设置任何响应头）——`extractPath`（空串 → index_file，`..` → 403）→ 候选探测 → 剥离试探/app_base → SPA 回退 → 404
@@ -12,7 +12,7 @@
 
 ## 2. 后端插件 schema（backend/app/config/plugin_definitions.py）
 
-- [x] 2.1 在 `static_resource` 插件定义的 properties 中增加 `spa_fallback`（boolean，default false，description 说明 SPA history 回退）
+- [x] 2.1 在 `static_resource` 插件定义的 properties 中增加 `spa_fallback`（boolean，default true，description 说明 SPA history 回退）
 - [x] 2.2 增加 `app_base`（string，default ""，description 说明构建 base 前缀剥离，多段 base 必须配置）
 - [x] 2.3 确保新增字段出现在前端插件编辑器渲染所需的 schema 结构中（不破坏现有字段）
 
@@ -25,14 +25,14 @@
 
 ## 4. 部署与联调（节点 192.168.0.13）
 
-> 已通过 SSH（jboss@192.168.0.13）完成真实部署：上传插件 → 重启 edge → 发布路由（spa_fallback=true）→ 全部场景实测通过。error.log 无新增报错。
+> 已通过 SSH（jboss@192.168.0.13）完成真实部署：上传插件 → 重启 edge → 全部场景实测通过。**spa_fallback 已改为默认 true**（所有静态资源默认 SPA 兜底），配置 `{}` 时 history 路由刷新/直达正常，资源请求仍严格 404。error.log 无新增报错。
 
-- [x] 4.1 将新 `static_resource.lua` 复制到节点 `/work/jboss/uapm/openresty/lualib/edge-root/edge/plugins/static_resource.lua`（覆盖）— 已上传（含备份 .bak.20260731220208）
+- [x] 4.1 将新 `static_resource.lua` 复制到节点 `/work/jboss/uapm/openresty/lualib/edge-root/edge/plugins/static_resource.lua`（覆盖）— 已上传（含备份 .bak.20260731220208、.bak.20260731230522）
 - [x] 4.2 重启 edge 节点：`bin/edge stop && bin/edge start` — 已执行，master+4 workers 正常
 - [x] 4.3 验证 `GET /` 返回 200 index.html（目录索引）— 实测 200
 - [x] 4.4 验证 `GET /webTrade/assets/js/index-DAVGGJ_A.js` 返回 200（单段剥离试探，webTrade 包 base=/webTrade/）— 实测 200
 - [x] 4.5 验证 `GET /webTrade/` 返回 200 index.html（剥离后空路径 → 目录索引）— 实测 200
-- [x] 4.6 验证 `GET /webTrade/login`（导航请求）在开启 spa_fallback 后返回 index.html — 实测 200（含 /user/profile、/v1.0）
+- [x] 4.6 验证 `GET /webTrade/login`（导航请求）返回 index.html — 实测 200（spa_fallback 默认 true，含 /user/profile、/v1.0、/webTrade/index 直达）
 - [x] 4.7 验证资源缺失仍 404（如 `GET /webTrade/assets/missing.js`，`.js` 在 MIME 表）— 实测 404（含 missing.css）
 - [x] 4.8 验证导航路径 `/webTrade/v1.0`（扩展名不在 MIME 表）在开启 spa_fallback 后返回 index.html — 实测 200
 - [x] 4.9 检查节点 `/work/jboss/uapm/uap-edge/logs` error.log 无新增报错，必要时加临时调试日志并清理 — error.log 3 行均为重启 notice，无新增 error

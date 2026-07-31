@@ -512,9 +512,9 @@ BUILTIN_PLUGINS = [
             },
             "spa_fallback": {
                 "type": "boolean",
-                "default": False,
+                "default": True,
                 "description": "SPA history 路由回退",
-                "hints": "开启后，无扩展名的导航请求找不到文件时返回根 index.html"
+                "hints": "开启后，无扩展名的导航请求找不到文件时返回根 index.html；默认开启"
             },
             "app_base": {
                 "type": "string",

@@ -17,7 +17,7 @@
 
 - **`edge_node/handlers/static_resource.lua`**：实现 nginx `try_files` 等价语义：
   - 目录索引：请求路径解析为空、以 `/` 结尾、或解析到的路径是目录时，返回对应目录下的 `index_file`（默认 `index.html`）
-  - SPA 回退（新增配置 `spa_fallback`，默认 `false`）：文件不存在且请求为**导航请求**（无扩展名或扩展名不在 MIME 表中）时，回退返回根 `index.html`；扩展名在 MIME 表中的资源请求（`.js/.css/.png/.json/...`）仍严格 404，避免资源缺失被静默替换为 HTML
+  - SPA 回退（新增配置 `spa_fallback`，默认 `true`）：文件不存在且请求为**导航请求**（无扩展名或扩展名不在 MIME 表中）时，回退返回根 `index.html`；扩展名在 MIME 表中的资源请求（`.js/.css/.png/.json/...`）仍严格 404，避免资源缺失被静默替换为 HTML
   - base 前缀剥离：请求的 relative_path 以 `app_base`（新增配置，默认空）开头时剥离后再解析；`app_base` 为空时默认对单段前缀做**剥离试探**（无状态，无缓存，天然兼容多 worker）
 - **`backend/app/config/plugin_definitions.py`**：`static_resource` 插件 schema 增加 `spa_fallback`、`app_base` 字段，暴露给前端插件编辑器
 - **`edge_node/handlers/static_resource.lua` schema**：同步增加 `spa_fallback`、`app_base` 字段声明

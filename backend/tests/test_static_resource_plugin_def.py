@@ -12,10 +12,10 @@ class TestStaticResourcePluginSchema:
         plugin = _static_resource_plugin()
         assert "spa_fallback" in plugin["schema"]
 
-    def test_spa_fallback_is_boolean_default_false(self):
+    def test_spa_fallback_is_boolean_default_true(self):
         field = _static_resource_plugin()["schema"]["spa_fallback"]
         assert field["type"] == "boolean"
-        assert field["default"] is False
+        assert field["default"] is True
 
     def test_spa_fallback_has_description(self):
         field = _static_resource_plugin()["schema"]["spa_fallback"]

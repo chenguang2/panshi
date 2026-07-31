@@ -27,7 +27,7 @@ local f, err = io.open(filepath, "r")  -- L260，失败返回 404
 **向后兼容说明（精确表述）：**
 - 常规文件访问（`/index.html`、`/js/app.js`、`/css/style.css`）行为**完全不变**——候选 1 直接命中
 - **目录索引**（根路径/目录请求 404 → 200）与**剥离试探**（未知前缀可命中包根文件）为默认生效的**修复性增强**：前者修复现有目录 404 缺陷，后者按 A1/B2 决策接受语义模糊（不新增信息暴露面，行为与 nginx `@router` 一致）
-- **SPA 回退**为唯一配置门控的新行为（`spa_fallback` 默认 false，保持严格 404）
+- **SPA 回退**为默认开启的新行为（`spa_fallback` 默认 true，与 nginx `@router` 兜底语义一致；显式设为 false 可恢复严格 404）
 
 **Non-Goals:**
 - 不修改上传/解压链路（`admin_static_resources.lua` 无需改动）；zip 根目录约束仅文档化，上传校验留待后续独立 change
@@ -81,10 +81,12 @@ local f, err = io.open(filepath, "r")  -- L260，失败返回 404
 
 **多段 base 边界（B2）**：剥离试探仅支持单段前缀自动剥离；多段 base（如 `/apps/webTrade/`）必须显式配置 `app_base`，未配置时 404（失败模式安全，可自愈）。
 
-### D3: 新增配置 `spa_fallback`（bool，默认 false）
+### D3: 新增配置 `spa_fallback`（bool，默认 true）
 
-- 默认关闭保持严格 404 行为（与现有 spec "访问不存在的文件 → 404" 兼容）
-- Vue 包场景由用户在插件配置中开启，或通过前端静态资源创建流程提示
+- **默认开启**：所有静态资源默认采用 SPA 兜底语义（导航请求找不到文件时回退 index.html），与 nginx `try_files $uri $uri/ @router` 行为一致
+- 显式设为 `false` 可恢复严格 404（与现有 spec "访问不存在的文件 → 404" 兼容）
+- 资源请求（扩展名在 MIME 表）不受影响，始终严格 404
+- 配置未设置（`config = {}`）时经 `conf.spa_fallback == nil` 判断回退到 `DEFAULT_SPA_FALLBACK = true`
 - schema 声明于插件 Lua schema + 后端 `plugin_definitions.py`，前端插件编辑器自动渲染开关
 
 ### D4: 资源/导航请求判定用 MIME 表反向判定
@@ -123,7 +125,7 @@ MIME/etag/304 **永远基于实际返回的文件**。路径遍历防护（`..` 
 `backend/app/config/plugin_definitions.py` 的 `static_resource` 插件定义增加：
 
 ```python
-spa_fallback = {"type": "boolean", "default": False, "description": "SPA history 路由回退：无扩展名导航路径不存在时返回 index.html"}
+spa_fallback = {"type": "boolean", "default": True, "description": "SPA history 路由回退：无扩展名导航路径不存在时返回 index.html（默认开启）"}
 app_base = {"type": "string", "default": "", "description": "构建 base 前缀，如 /webTrade；relative_path 以此开头时剥离后再解析（多段 base 必须配置）"}
 ```
 
