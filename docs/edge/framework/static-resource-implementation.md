@@ -1,7 +1,7 @@
 ﻿# 静态资源发布功能 — Edge 节点实现
 
 > 本文档记录 Edge 节点侧 Lua 代码的实现说明，供部署到 Edge 节点时参考。
-> 参考实现文件：`docs/edge/code/static_resource.lua`、`docs/edge/code/admin_static_resources.lua`
+> 参考实现文件：`edge_node/handlers/static_resource.lua`、`edge_node/handlers/admin_static_resources.lua`
 
 ---
 
@@ -119,41 +119,50 @@ local _M = plugin.new({
 | `base_path` | string | `/data/edge/static` | 静态资源根目录 |
 | `cache_max_age` | integer | 3600 | Cache-Control max-age（秒） |
 | `index_file` | string | `index.html` | 目录默认首页文件 |
+| `spa_fallback` | boolean | `false` | SPA history 路由回退：开启后，无扩展名（或扩展名不在 MIME 表）的导航请求找不到文件时返回根 `index.html` |
+| `app_base` | string | `""` | 构建 base 前缀：`extractPath` 解析出的相对路径以此前缀开头时剥离后再解析；多段 base（如 `/apps/webTrade`）必须配置 |
 
-### 请求处理流程（access 阶段）
+### 请求处理流程（access 阶段，两阶段解析）
 
 ```
 请求 /static/myapp/css/app.css
   │
-  ├─ 解析 URI segments → resource_name="myapp", path="css/app.css"
+  ├─ 阶段一：纯解析（不设置响应头）
+  │   ├─ extractPath → relative_path（空串 → index_file；含 ".." → 403）
+  │   ├─ 候选探测 1：base_path/route_id/relative_path
+  │   ├─ 候选探测 2：relative_path 指向目录时 → relative_path/index_file
+  │   ├─ base 剥离：app_base 精确剥离 / 单段前缀试探（webTrade/assets/x.js → assets/x.js）
+  │   │   └─ 剥空后：目录请求（原路径以 / 结尾）走目录索引；导航请求并入 SPA 回退
+  │   ├─ SPA 回退（spa_fallback 且非资源请求）→ 根 index_file
+  │   └─ 全部失败 → 404
   │
-  ├─ 安全检查：拒绝包含 ".." 的路径
-  │
-  ├─ 构建文件路径：/data/edge/static/myapp/css/app.css
-  │
-  ├─ 打开文件
-  │   ├─ 失败 → 404
-  │   └─ 成功 → 读取全部内容
-  │
-  ├─ 设置 Content-Type
-  │   ├─ .html  → text/html; charset=utf-8
-  │   ├─ .js    → application/javascript; charset=utf-8
-  │   ├─ .css   → text/css; charset=utf-8
-  │   ├─ .png   → image/png
-  │   ├─ ...    → 内置 20+ 映射
-  │   └─ 未知   → application/octet-stream
-  │
-  ├─ 设置缓存头
+  ├─ 阶段二：基于最终文件设置响应
+  │   ├─ Content-Type（按最终文件扩展名）
   │   ├─ Cache-Control: public, max-age=3600
-  │   ├─ ETag: "{sha1_prefix}-{size}"
-  │   └─ Last-Modified
-  │
-  ├─ 304 条件请求判断
-  │   ├─ If-None-Match 匹配 → 304 No Content
-  │   └─ 不匹配 → 200 + 文件内容
-  │
-  └─ 返回响应
+  │   ├─ ETag / Last-Modified
+  │   ├─ 304 条件请求判断（If-None-Match）
+  │   └─ 200 + 文件内容
 ```
+
+### 请求解析行为
+
+| 请求 | 行为 |
+|---|---|
+| `/static/myapp/index.html` | 返回文件（Content-Type: text/html） |
+| `/static/myapp/` | 目录索引 → 返回 `index.html` |
+| `/static/myapp/docs/` | 目录索引 → 返回 `docs/index.html` |
+| `/static/myapp/login`（spa_fallback 开启） | SPA 回退 → 返回根 `index.html` |
+| `/static/myapp/assets/missing.js` | 资源请求（`.js` 在 MIME 表）→ 404 |
+| `/webTrade/assets/x.js`（app_base 空，包以 `/webTrade/` 构建） | 单段剥离试探 → 返回包内 `assets/x.js` |
+| `/apps/webTrade/assets/x.js`（app_base 空） | 多段 base 单段剥离失败 → 404（需配置 `app_base=/apps/webTrade`） |
+
+### Vue SPA 包部署说明
+
+Vue（Vite）等框架构建的 SPA 包与普通 HTML 包的关键差异：
+
+1. **构建 base**：`index.html` 内资源引用可能是绝对路径（如 `base: '/webTrade/'` 时引用 `/webTrade/assets/...`）。`app_base` 为空时插件会对单段前缀自动剥离试探；**多段 base 必须显式配置 `app_base`**（与路由 uri 解耦，在 relative_path 层剥离）。
+2. **history 路由**：Vue Router 使用 `createWebHistory()` 时，刷新/直达子路由（如 `/webTrade/login`）需要服务端回退到 `index.html`——在插件配置中开启 `spa_fallback`。
+3. **zip 根目录约束**：解压后 `index.html` 必须在包根目录。若打包时多包了一层目录（如 zip 内是 `dist/index.html`），需重新打包（上传校验留待后续版本）。
 
 ### MIME 类型映射表
 
@@ -211,7 +220,9 @@ curl -X PUT 'http://127.0.0.1:9990/edge/admin/plugins/reload' \
   "plugins": {
     "static_resource": {
       "base_path": "/data/edge/static",
-      "cache_max_age": 3600
+      "cache_max_age": 3600,
+      "spa_fallback": true,
+      "app_base": "/webTrade"
     }
   },
   "status": 1

@@ -59,6 +59,25 @@ cd frontend && npm run build
 # admin / panshi123 访问 http://localhost:12345
 ```
 
+## 国内网络环境（重要约定）
+
+**本机位于中国网络环境，下载任何国外软件包/依赖/二进制文件必须优先使用国内镜像源，否则极慢或超时。** 每次安装/下载前先检查是否可换用国内源：
+
+| 场景 | 国内源配置 |
+|---|---|
+| npm 包安装 | `npm config set registry https://registry.npmmirror.com`（或 `--registry=` 单次指定） |
+| pip / uv 包安装 | `uv pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple` 或 `pip config set global.index-url` |
+| **Playwright 浏览器下载** | `PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright npx playwright install chromium`（或 `PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright`） |
+| apt 系统包 | 使用清华/阿里源（如 `mirrors.tuna.tsinghua.edu.cn`、`mirrors.aliyun.com`） |
+| Docker 镜像拉取 | 配置国内 registry mirror（`https://docker.mirrors.ustc.edu.cn` 等），或拉取后 `docker tag` 重命名 |
+| GitHub 下载（releases/源码） | 使用 `https://ghproxy.com/` 或 `https://mirror.ghproxy.com/` 前缀代理，或 `https://hub.fastgit.org` |
+| Maven / Go / Rust 等 | 分别用阿里云 Maven、`GOPROXY=https://goproxy.cn`、`https://rsproxy.cn`（crates.io 镜像） |
+
+**注意**：
+- 不要默认直连 `registry.npmjs.org`、`pypi.org`、`playwright.azureedge.net` 等国外源
+- Playwright 安装浏览器时若卡住，先 `Ctrl+C` 中断，改用 `PLAYWRIGHT_DOWNLOAD_HOST` 国内镜像重试
+- 环境变量可在命令前内联设置（临时生效），无需修改全局配置
+
 ## 项目结构
 
 ```

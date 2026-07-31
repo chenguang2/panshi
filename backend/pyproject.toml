@@ -44,6 +44,7 @@ python_functions = ["test_*"]
 [dependency-groups]
 dev = [
     "httpx",
+    "lupa>=2.8",
     "pytest",
     "pytest-asyncio",
     "pytest-timeout",

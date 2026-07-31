@@ -509,6 +509,19 @@ BUILTIN_PLUGINS = [
                 "description": "默认首页文件",
                 "examples": ["index.html"],
                 "hints": "访问目录时默认返回的文件名"
+            },
+            "spa_fallback": {
+                "type": "boolean",
+                "default": False,
+                "description": "SPA history 路由回退",
+                "hints": "开启后，无扩展名的导航请求找不到文件时返回根 index.html"
+            },
+            "app_base": {
+                "type": "string",
+                "default": "",
+                "description": "构建 base 前缀",
+                "examples": ["/webTrade"],
+                "hints": "相对路径以此前缀开头时剥离后再解析；多段 base（如 /apps/webTrade）必须配置"
             }
         }
     },
