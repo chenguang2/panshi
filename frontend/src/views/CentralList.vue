@@ -814,6 +814,7 @@ const loadClusters = async () => {
       selectedNode: null,
       selectedUpstream: null,
       selectedRoute: null,
+      selectedRouteKeys: [],
       plugin_configs: [],
       selectedPluginConfig: null,
       global_rules: [],

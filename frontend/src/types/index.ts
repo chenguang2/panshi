@@ -73,6 +73,7 @@ export interface Cluster {
   selectedNode?: Node | null
   selectedUpstream?: Upstream | null
   selectedRoute?: Route | null
+  selectedRouteKeys?: number[]
   plugin_configs?: PluginConfig[]
   selectedPluginConfig?: PluginConfig | null
   global_rules?: any[]
@@ -132,7 +133,7 @@ export interface Route {
   advanced_match_enabled?: boolean
   current_version?: number
   published_at?: string
-  plugins?: Record<string, any>
+  plugins?: RoutePlugin[]
 }
 
 export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'
