@@ -3,12 +3,12 @@
     <!-- Toolbar -->
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
-      <a-button size="small" @click="copyRoute(cluster)" :disabled="!cluster.selectedRoute">复制路由</a-button>
-      <a-button size="small" @click="editRoute(cluster)" :disabled="!cluster.selectedRoute">编辑路由</a-button>
-      <a-button size="small" danger :disabled="!cluster.selectedRoute" @click="deleteRoute(cluster)">删除路由</a-button>
+      <a-button size="small" @click="copyRoute(cluster)" :disabled="!singleOpEnabled">复制路由</a-button>
+      <a-button size="small" @click="editRoute(cluster)" :disabled="!singleOpEnabled">编辑路由</a-button>
+      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
       <a-divider type="vertical" />
-      <a-button size="small" @click="publishRoute(cluster)" :disabled="!cluster.selectedRoute">发布</a-button>
-      <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!cluster.selectedRoute">版本管理</a-button>
+      <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled">发布</a-button>
+      <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled">版本管理</a-button>
       <a-divider type="vertical" />
       <a-popover v-model:open="routeColumnPopoverVisible" trigger="click" placement="bottomRight">
         <template #title>选择显示列</template>
@@ -38,7 +38,7 @@
             v-model:value="cluster.routesSearch"
             placeholder="搜索路由"
             style="width: 150px;"
-            @search="() => { cluster.routesPagination!.page = 1; loadRoutes(cluster) }"
+            @search="() => { cluster.routesPagination!.page = 1; cluster.selectedRouteKeys = []; cluster.selectedRoute = null; loadRoutes(cluster) }"
             allow-clear
             size="small"
           />
@@ -71,7 +71,13 @@
         showQuickJumper: true
       }"
       :loading="cluster.routesLoading"
-      :row-selection="{ selectedRowKeys: cluster.selectedRoute ? [cluster.selectedRoute.id] : [], onChange: (_keys: any, rows: any) => selectRoute(cluster, rows[rows.length - 1]) }"
+      :row-selection="{
+        selectedRowKeys: cluster.selectedRouteKeys || [],
+        preserveSelectedRowKeys: true,
+        getCheckboxProps: (record: any) => ({ disabled: isDnsRoute(record) }),
+        onChange: (keys: any, rows: any) => selectRoutes(cluster, keys, rows),
+      }"
+      :custom-row="(record: any) => ({ onClick: () => { cluster.selectedRoute = record } })"
       :showSorterTooltip="false"
       size="small"
       row-key="id"
@@ -315,6 +321,8 @@ const {
   getActionButtonTitle,
   handleRouteAction,
   selectRoute,
+  selectRoutes,
+  isDnsRoute,
   loadRoutes,
   handleRouteTableChange,
   showAddRouteModal,
@@ -322,6 +330,7 @@ const {
   copyRoute,
   handleRouteSubmit,
   deleteRoute,
+  deleteRoutes,
   publishRoute,
   openRouteVersionManagement,
   hasPluginGroupsPermission,
@@ -346,6 +355,20 @@ const upstreamOptions = computed(() => {
   const upstreams = getClusterUpstreams()
   return upstreams.map(u => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
 })
+
+// ── batch delete selection state ───────────────────────────────────
+const batchCount = computed(() => (props.cluster.selectedRouteKeys || []).length)
+const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedRoute || batchCount.value === 1))
+const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedRoute ? 1 : 0))
+const deleteEnabled = computed(() => deleteCount.value > 0)
+
+function handleDeleteClick() {
+  if (batchCount.value > 0) {
+    deleteRoutes(props.cluster)
+  } else {
+    deleteRoute(props.cluster)
+  }
+}
 
 // ── Version published callback ──────────────────────────────────────
 function onVersionPublished() {
