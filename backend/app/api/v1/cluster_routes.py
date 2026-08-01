@@ -9,7 +9,7 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, PublishRequest
+from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
@@ -295,6 +295,68 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
         results.extend(edge_results)
 
     return {"message": "路由已删除", "results": results}
+
+
+@router.delete("")
+async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = Body(...), db: AsyncSession = Depends(get_db)):
+    """批量删除同一集群内的多条路由。
+
+    每条路由独立处理：单条失败（路由不存在 / Edge 同步失败 / 其他异常）
+    不阻塞其余路由。edge_uuid 为空的路由跳过 Edge 同步并记 skipped。
+    """
+
+    if not body.route_ids:
+        raise HTTPException(status_code=400, detail="route_ids 不能为空")
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
+    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
+    if body.node_ids:
+        node_query = node_query.where(Node.id.in_(body.node_ids))
+    nodes_result = await db.execute(node_query)
+    active_nodes = nodes_result.scalars().all()
+
+    results = []
+    for route_id in body.route_ids:
+        route_result: dict = {
+            "route_id": route_id,
+            "route_name": "",
+            "status": "failed",
+            "results": [],
+        }
+        try:
+            route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
+            route_result["route_name"] = route.name
+
+            if body.delete_db:
+                await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "route", ConfigVersion.resource_id == route_id))
+                await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
+                await db.delete(route)
+                await db.commit()
+                route_result["results"].append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+            if body.delete_edge:
+                if not route.edge_uuid:
+                    route_result["results"].append({
+                        "scope": "edge", "status": "skipped",
+                        "message": "该路由无 edge_uuid，跳过 Edge 同步",
+                    })
+                else:
+                    edge_results = await edge_sync.delete_on_nodes(
+                        cluster_id, active_nodes, route.edge_uuid,
+                        lambda client, uuid: client.delete_route(uuid)
+                    )
+                    route_result["results"].extend(edge_results)
+
+            route_result["status"] = "success"
+        except HTTPException as e:
+            route_result["error"] = str(e.detail)
+        except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
+            route_result["error"] = str(e)
+        results.append(route_result)
+
+    return {"message": f"批量删除完成: {len(results)} 条路由", "results": results}
 
 
 @router.post("/{route_id}/publish")

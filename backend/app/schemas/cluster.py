@@ -216,6 +216,15 @@ class DeleteClusterRequest(BaseModel):
     node_ids: Optional[List[int]] = None
 
 
+class BatchDeleteRoutesRequest(DeleteClusterRequest):
+    """批量删除路由请求：继承单删字段，额外指定 route_ids。
+
+    注意：route_ids 不做 min_length=1 约束——空列表由端点显式返回 400，
+    与 spec 语义一致（Pydantic 校验失败会返回 422）。
+    """
+    route_ids: List[int] = Field(...)
+
+
 class NodeCreate(NodeBase):
     cluster_id: Optional[int] = None
 
