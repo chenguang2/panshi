@@ -76,7 +76,7 @@ echo "  .venv 已创建"
 # ---------- 3.5 检测 glibc 版本，降级 greenlet（CentOS 7 等旧系统）----------
 echo ""
 echo "[3.5/5] 检测 glibc 版本..."
-GLIBC_VER=$(ldd --version | head -1 | grep -oP '\d+\.\d+' | head -1 || echo "0")
+GLIBC_VER=$(ldd --version | grep -oP '\d+\.\d+' | head -1 || echo "0")
 MIN_VER="2.28"
 if [ "$(printf '%s\n' "$MIN_VER" "$GLIBC_VER" | sort -V | head -1)" != "$MIN_VER" ]; then
     echo "  glibc $GLIBC_VER < 2.28，greenlet 降级到 2.x"
