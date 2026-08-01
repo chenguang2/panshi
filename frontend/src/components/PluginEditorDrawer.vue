@@ -458,6 +458,7 @@ import { InfoCircleOutlined, DownOutlined, RightOutlined, DeleteOutlined, PlusOu
 import type { Plugin, RoutePlugin } from '@/types'
 import JsonEditorVue from 'json-editor-vue'
 import { Mode } from 'vanilla-jsoneditor'
+import { usePluginConfigSync } from '@/composables/usePluginConfigSync'
 
 const textMode = Mode.text
 
@@ -667,33 +668,9 @@ const visibleSchemaFields = computed(() => {
 })
 
 const isJsonMode = ref(false)
-const jsonConfig = ref('')
-const jsonError = ref('')
-const fullJsonConfig = ref('')
-const jsonEditorValue = ref<any>({})
+const { jsonConfig, jsonError, jsonEditorValue } = usePluginConfigSync()
 const jsonEditorMode = ref<Mode>(Mode.text)
 
-// 同步 jsonEditorValue ↔ jsonConfig
-watch(jsonEditorValue, (newVal) => {
-  try {
-    jsonConfig.value = JSON.stringify(newVal)
-    jsonError.value = ''
-  } catch {
-    // keep old value
-  }
-}, { deep: true })
-
-watch(jsonConfig, (newVal) => {
-  try {
-    const parsed = JSON.parse(newVal || '{}')
-    if (JSON.stringify(parsed) !== JSON.stringify(jsonEditorValue.value)) {
-      jsonEditorValue.value = parsed
-    }
-    jsonError.value = ''
-  } catch {
-    // invalid JSON, don't sync back
-  }
-})
 const formData = ref<Record<string, any>>({})
 
 // Headers 手风琴数据
@@ -1048,7 +1025,6 @@ watch(() => props.open, (newVal) => {
     const hasFields = Object.keys(schema).length > 0
     isJsonMode.value = !hasFields
     jsonConfig.value = props.plugin.config || '{}'
-    fullJsonConfig.value = props.plugin.config || '{}'
     try { jsonEditorValue.value = JSON.parse(props.plugin.config || '{}') } catch { jsonEditorValue.value = {} }
     parseConfig(jsonConfig.value)
   }
