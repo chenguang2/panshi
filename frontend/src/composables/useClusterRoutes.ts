@@ -266,9 +266,36 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     cluster.selectedRoute = route || null
   }
 
+  function selectRoutes(cluster: Cluster, keys: number[] | (string | number)[], rows: Route[]) {
+    cluster.selectedRouteKeys = keys as number[]
+    cluster.selectedRoute = keys.length === 1 ? (rows[0] ?? null) : null
+  }
+
+  function isDnsRoute(record: Route): boolean {
+    return Array.isArray(record.plugins) && record.plugins.some((p) => p.plugin_name === 'dns_upstream')
+  }
+
+  function hasDnsRouteIn(records: Route[]): Route | undefined {
+    return records.find(isDnsRoute)
+  }
+
   // ── load routes ────────────────────────────────────────────────────
 
+  const lastRouteQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
+
   async function loadRoutes(cluster: Cluster) {
+    const prev = lastRouteQuery.get(cluster)
+    const next = {
+      search: cluster.routesSearch || '',
+      field: cluster.routesSearchField || '',
+      sortBy: cluster.routesSortBy || '',
+      sortOrder: cluster.routesSortOrder || '',
+    }
+    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
+      cluster.selectedRouteKeys = []
+      cluster.selectedRoute = null
+    }
+    lastRouteQuery.set(cluster, next)
     cluster.routesLoading = true
     try {
       const params: Record<string, unknown> = {
@@ -314,6 +341,9 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       }
       cluster.routesSortBy = fieldMap[sorter.field] || sorter.field
       cluster.routesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+      // 排序改变数据集，清除批量勾选与单选（D9）
+      cluster.selectedRouteKeys = []
+      cluster.selectedRoute = null
     } else {
       cluster.routesSortBy = ''
       cluster.routesSortOrder = 'asc'
@@ -527,10 +557,18 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       message.warning('请先选择一个路由')
       return
     }
+    if (isDnsRoute(cluster.selectedRoute)) {
+      message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
+      return
+    }
     deleteRouteByRecord(cluster, cluster.selectedRoute)
   }
 
   function deleteRouteByRecord(cluster: Cluster, route: Route) {
+    if (isDnsRoute(route)) {
+      message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
+      return
+    }
     showDeleteConfirm({
       title: `确定要删除路由 "${route.name}" 吗？`,
       apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
@@ -545,6 +583,42 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
           nodeIds,
           refreshFn: () => loadRoutes(cluster),
           clearSelectedFn: () => { cluster.selectedRoute = null },
+        })
+      },
+    })
+  }
+
+  function deleteRoutes(cluster: Cluster) {
+    const keys = cluster.selectedRouteKeys || []
+    if (keys.length === 0) {
+      message.warning('请先勾选要删除的路由')
+      return
+    }
+    const routes = (cluster.routes || []).filter((r) => keys.includes(r.id))
+    const dnsRoute = hasDnsRouteIn(routes)
+    if (dnsRoute) {
+      message.warning(`路由 "${dnsRoute.name}" 是 DNS 查询路由，请在 DNS 查询页面管理`)
+      return
+    }
+    const names = routes.map((r) => r.name)
+    const title = names.length > 3
+      ? `确定要删除选中的 ${names.length} 条路由吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
+      : `确定要删除选中的 ${names.length} 条路由吗？${names.join('、')}`
+    showDeleteConfirm({
+      title,
+      apiEndpoint: `/clusters/${cluster.id}/routes`,
+      nodes: cluster.nodes,
+      onOk: async (deleteDb, deleteEdge, nodeIds) => {
+        await executeDeleteWithProgress({
+          title: `批量删除路由: ${names.join('、')}`,
+          apiEndpoint: `/clusters/${cluster.id}/routes`,
+          routeIds: keys,
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadRoutes(cluster),
+          clearSelectedFn: () => { cluster.selectedRouteKeys = []; cluster.selectedRoute = null },
         })
       },
     })
@@ -650,6 +724,8 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     getActionButtonTitle,
     handleRouteAction,
     selectRoute,
+    selectRoutes,
+    isDnsRoute,
 
     // crud
     loadRoutes,
@@ -663,6 +739,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     handleRouteSubmit,
     deleteRoute,
     deleteRouteByRecord,
+    deleteRoutes,
 
     // publish
     publishRoute,

@@ -293,6 +293,8 @@ export interface DeleteProgressOptions {
   deleteDb: boolean
   deleteEdge: boolean
   nodeIds: number[]
+  /** 批量删除时传入 route_ids，触发批量模式（按 route 分组解析 results） */
+  routeIds?: number[]
   refreshFn: () => Promise<void>
   clearSelectedFn?: () => void
   afterDelete?: () => Promise<void>
@@ -325,61 +327,16 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
         delete_db: opts.deleteDb,
         delete_edge: opts.deleteEdge,
         node_ids: opts.nodeIds.length > 0 ? opts.nodeIds : undefined,
+        route_ids: opts.routeIds && opts.routeIds.length > 0 ? opts.routeIds : undefined,
       },
     })
     const data = res.data
     progress.percent = 60
 
-    const dbResult = data.results?.find((r: any) => r.scope === 'database')
-    if (dbResult) {
-      addLog('正在从数据库删除...')
-      let dbDetail = ''
-      if (dbResult.details) {
-        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', stream_proxies: '四层代理', ssl_certificates: 'SSL证书', nodes: '节点', config_versions: '版本历史' }
-        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details[k] ?? 0}`)
-        dbDetail = ` (${parts.join(' ')})`
-      }
-      addLog(`数据库: ${dbResult.message || '已删除'}${dbDetail}`)
-    }
-    addLog('')
-
-    const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
-    if (edgeResults.length > 0) {
-      addLog('正在从 Edge 节点同步删除...')
-      progress.percent = 80
-      updateContent()
-
-      addLog('Edge 节点同步删除结果:')
-      let successCount = 0
-      let failCount = 0
-      for (const r of edgeResults) {
-        if (r.status === 'success') successCount++
-        else failCount++
-        let detail = ''
-        if (r.details) {
-          const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据' }
-          const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${(r.details as any)[k] ?? 0}`)
-          detail = ` (${parts.join(' ')})`
-        }
-        addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)
-      }
-      addLog('')
-      addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-    } else if (opts.deleteEdge) {
-      addLog('集群中没有活跃的 Edge 节点')
-    }
-
-    progress.percent = 100
-    addLog('')
-    if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
-      progress.status = 'success'
-      addLog('✅ 删除完成!')
-    } else if (edgeResults.some((r: any) => r.status === 'failed')) {
-      progress.status = 'exception'
-      addLog('⚠️ 部分节点删除失败，请手动清理')
+    if (opts.routeIds && opts.routeIds.length > 0) {
+      logBatchDeleteResults(data, addLog, progress)
     } else {
-      progress.status = 'success'
-      addLog('✅ 已完成')
+      logSingleDeleteResults(data, opts, addLog, progress)
     }
 
     updateContent()
@@ -396,6 +353,99 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     addLog('')
     addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
     updateContent()
+  }
+}
+
+function logBatchDeleteResults(
+  data: any,
+  addLog: (text: string) => void,
+  progress: { percent: number; status: 'active' | 'success' | 'exception' },
+) {
+  const routes = data.results || []
+  addLog(`正在批量删除 ${routes.length} 条路由...`)
+  let failCount = 0
+  for (const r of routes) {
+    const parts: string[] = []
+    for (const sub of r.results || []) {
+      if (sub.scope === 'database') {
+        parts.push(sub.status === 'success' ? '数据库✅' : `数据库❌ ${sub.message || ''}`)
+      } else if (sub.scope === 'edge') {
+        parts.push(sub.status === 'success' ? `Edge ${sub.node}✅` : sub.status === 'skipped' ? 'Edge 跳过' : `Edge ${sub.node}❌ ${sub.error || ''}`)
+      }
+    }
+    if (parts.length === 0) parts.push(r.status)
+    addLog(`删除路由 ${r.route_name || r.route_id}: ${parts.join(' / ')}`)
+    if (r.status === 'failed' || (r.results || []).some((sub: any) => sub.status === 'failed')) {
+      failCount++
+    }
+  }
+  progress.percent = 100
+  addLog('')
+  const anyEdgeFail = routes.some((r: any) => (r.results || []).some((sub: any) => sub.scope === 'edge' && sub.status === 'failed'))
+  if (failCount > 0 || anyEdgeFail) {
+    progress.status = 'exception'
+    addLog('⚠️ 部分路由删除失败，请手动清理')
+  } else {
+    progress.status = 'success'
+    addLog('✅ 批量删除完成!')
+  }
+}
+
+function logSingleDeleteResults(
+  data: any,
+  opts: DeleteProgressOptions,
+  addLog: (text: string) => void,
+  progress: { percent: number; status: 'active' | 'success' | 'exception' },
+) {
+  const dbResult = data.results?.find((r: any) => r.scope === 'database')
+  if (dbResult) {
+    addLog('正在从数据库删除...')
+    let dbDetail = ''
+    if (dbResult.details) {
+      const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', stream_proxies: '四层代理', ssl_certificates: 'SSL证书', nodes: '节点', config_versions: '版本历史' }
+      const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details[k] ?? 0}`)
+      dbDetail = ` (${parts.join(' ')})`
+    }
+    addLog(`数据库: ${dbResult.message || '已删除'}${dbDetail}`)
+  }
+  addLog('')
+
+  const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+  if (edgeResults.length > 0) {
+    addLog('正在从 Edge 节点同步删除...')
+    progress.percent = 80
+
+    addLog('Edge 节点同步删除结果:')
+    let successCount = 0
+    let failCount = 0
+    for (const r of edgeResults) {
+      if (r.status === 'success') successCount++
+      else failCount++
+      let detail = ''
+      if (r.details) {
+        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据' }
+        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${(r.details as any)[k] ?? 0}`)
+        detail = ` (${parts.join(' ')})`
+      }
+      addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)
+    }
+    addLog('')
+    addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
+  } else if (opts.deleteEdge) {
+    addLog('集群中没有活跃的 Edge 节点')
+  }
+
+  progress.percent = 100
+  addLog('')
+  if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
+    progress.status = 'success'
+    addLog('✅ 删除完成!')
+  } else if (edgeResults.some((r: any) => r.status === 'failed')) {
+    progress.status = 'exception'
+    addLog('⚠️ 部分节点删除失败，请手动清理')
+  } else {
+    progress.status = 'success'
+    addLog('✅ 已完成')
   }
 }
 
