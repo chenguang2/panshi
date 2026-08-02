@@ -68,6 +68,11 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
       component: () => import('@/views/MetricsDashboard.vue'),
     },
   ],
+  task_center: {
+    path: 'node-tasks',
+    name: 'NodeTaskCenter',
+    component: () => import('@/views/NodeTaskCenter.vue'),
+  },
 }
 
 // ── Static routes (always registered) ─────────────────────────────────
