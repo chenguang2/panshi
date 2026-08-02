@@ -48,6 +48,7 @@ class BatchAction(str, Enum):
     start = "start"
     stop = "stop"
     restart = "restart"
+    reload = "reload"
     check = "check"
     statistic = "statistic"
 
@@ -474,10 +475,11 @@ async def batch_node_action(
     body: NodeActionRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    if not body.node_ids:
+        raise HTTPException(status_code=400, detail="node_ids 不能为空")
+
     # resolve nodes
-    query = select(Node).where(Node.cluster_id == cluster_id)
-    if body.node_ids:
-        query = query.where(Node.id.in_(body.node_ids))
+    query = select(Node).where(Node.cluster_id == cluster_id, Node.id.in_(body.node_ids))
     result = await db.execute(query)
     nodes = result.scalars().all()
 
@@ -493,15 +495,23 @@ async def batch_node_action(
                     db, node, "edge_statistic",
                     {"prefix": node.edge_path, "ports": str(node.management_port)},
                 )
+                detail = _ansible_service.build_status_detail("edge_statistic", r)
             else:
                 r = await _run_and_update(
                     db, node, "nginx_cmd_run",
                     _nginx_extravars(node) | {"nginx_cmd": NGINX_CMD_MAP[body.action.value]},
                 )
-            results.append({
+                detail = None
+            entry: dict[str, Any] = {
                 "node_id": node.id, "ip": node.ip,
                 "status": "success", "rc": r.get("rc"),
-            })
+                "stdout": r.get("stdout", ""),
+                "stderr": r.get("stderr", ""),
+                "command": r.get("command", ""),
+            }
+            if body.action == BatchAction.statistic:
+                entry["statistic"] = detail.get("statistic", {})
+            results.append(entry)
         except HTTPException as e:
             results.append({
                 "node_id": node.id, "ip": node.ip,

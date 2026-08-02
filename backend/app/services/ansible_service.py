@@ -212,6 +212,7 @@ NGINX_CMD_MAP = {
     "start": "nginx_start",
     "stop": "nginx_stop",
     "restart": "nginx_reload",
+    "reload": "nginx_reload",
     "check": "nginx_check",
 }
 
