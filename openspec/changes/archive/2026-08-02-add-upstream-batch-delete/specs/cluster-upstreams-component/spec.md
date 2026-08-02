@@ -1,10 +1,4 @@
-# cluster-upstreams-component
-
-## Purpose
-
-集群详情页上游 Tab 组件，渲染上游表格与工具栏（含批量删除交互）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: ClusterUpstreams component
 The system SHALL provide a `ClusterUpstreams` component that renders the upstreams tab content.

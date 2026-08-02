@@ -1,10 +1,4 @@
-# cluster-upstreams-composable
-
-## Purpose
-
-封装上游 Tab 的所有状态与操作（加载、CRUD、批量选择与批量删除）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: useClusterUpstreams composable
 The system SHALL provide a `useClusterUpstreams` composable that encapsulates all upstream related state and operations.
