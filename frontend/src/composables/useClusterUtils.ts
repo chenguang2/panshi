@@ -1,5 +1,5 @@
 import { h, render } from 'vue'
-import { message, Progress } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 
 export const resourceLabels: Record<string, string> = {
@@ -143,55 +143,49 @@ export function buildDeleteProgressContent(
   return h('div', [
     h('div', { style: 'margin-bottom: 8px;' }, [
       h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
-        h(Progress, { percent: progress.percent, status: progress.status, size: 'small', style: 'flex:1;' }),
-        h('span', { style: 'font-size:12px;color:#666;' }, `${progress.percent}%`),
+        h('div', {
+          style: `flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;`,
+        }, [
+          h('div', {
+            style: `width:${progress.percent}%;height:100%;border-radius:3px;background:${progress.status === 'exception' ? 'var(--danger)' : progress.status === 'success' ? 'var(--success)' : 'var(--accent)'};transition:width 0.3s;`,
+          }),
+        ]),
+        h('span', { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' }, `${progress.percent}%`),
       ]),
     ]),
     h('div', {
-      style: 'max-height:300px;overflow-y:auto;background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:monospace;font-size:12px;line-height:1.6;',
-    }, logs.map(l => h('div', l))),
+      style: 'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--fg);',
+    }, logs.map(l => h('div', { style: 'white-space:pre-wrap;' }, l))),
   ])
 }
 
 /**
- * 创建一个自定义进度弹窗（替代 Modal.info），与自定义 modal 风格一致
+ * 创建本系统自定义 modal-overlay 风格的进度弹窗（与 showDeleteConfirm / EdgeEnv Alert Modal 一致）
  */
 function createProgressModal(title: string, progress: { percent: number; status: string }, logs: string[]) {
   const container = document.createElement('div')
   document.body.appendChild(container)
 
   const update = () => {
-    const logLines = logs.map(l =>
-      h('div', { style: 'font-family:var(--font-mono);font-size:12px;line-height:1.6;color:#d4d4d4;' }, l)
-    )
-    const progressColor = progress.status === 'exception' ? 'var(--danger)' : progress.status === 'success' ? 'var(--success)' : 'var(--accent)'
     const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
       h('div', { class: 'modal', style: 'max-width:600px;' }, [
-        h('div', { class: 'modal-header', style: 'background:oklch(56% 0.16 210 / 10%);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);' }, [
-          h('h2', { style: 'margin:0;font-size:15px;font-weight:600;color:var(--fg);' }, title),
+        h('div', { class: 'modal-header' }, [
+          h('h2', title),
+          h('button', {
+            class: 'modal-close',
+            onClick: () => { render(null, container); container.remove() },
+          }, '\u00D7'),
         ]),
-        h('div', { class: 'modal-body', style: 'padding:20px;overflow-y:auto;' }, [
-          h('div', { style: 'margin-bottom:12px;' }, [
-            h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
-              h('div', {
-                style: `flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;`,
-              }, [
-                h('div', {
-                  style: `width:${progress.percent}%;height:100%;border-radius:3px;background:${progressColor};transition:width 0.3s;`,
-                }),
-              ]),
-              h('span', { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' }, `${progress.percent}%`),
-            ]),
-          ]),
-          h('div', {
-            style: 'max-height:300px;overflow-y:auto;background:#1e1e1e;padding:10px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:12px;line-height:1.6;',
-          }, logLines),
+        h('div', { class: 'modal-body' }, [
+          buildDeleteProgressContent(
+            progress as { percent: number; status: 'active' | 'success' | 'exception' },
+            logs,
+          ),
         ]),
-        h('div', { class: 'modal-footer', style: 'display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--border);' }, [
+        h('div', { class: 'modal-footer' }, [
           h('button', {
             class: 'btn btn-primary',
             disabled: progress.percent < 100,
-            style: progress.percent < 100 ? 'opacity:0.5;cursor:not-allowed;' : '',
             onClick: () => { render(null, container); container.remove() },
           }, '确定'),
         ]),
@@ -203,6 +197,54 @@ function createProgressModal(title: string, progress: { percent: number; status:
   update()
 
   return { update, close: () => { render(null, container); container.remove() } }
+}
+
+export interface BatchResultItem {
+  ip: string
+  status: string
+  error?: string
+}
+
+export function showBatchResultModal(title: string, items: BatchResultItem[]) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const renderModal = () => {
+    const rows = items.map((item) => {
+      const ok = item.status === 'success'
+      return h('div', { style: 'display:flex;gap:8px;padding:3px 0;font-size:12px;font-family:var(--font-mono);line-height:1.6;' }, [
+        h('span', { style: `flex-shrink:0;color:${ok ? 'var(--success)' : 'var(--danger)'};` }, ok ? '✅' : '❌'),
+        h('span', { style: 'flex-shrink:0;color:var(--fg);min-width:110px;' }, item.ip),
+        h('span', { style: `flex-shrink:0;${ok ? 'color:var(--success);' : 'color:var(--danger);'}` }, ok ? '成功' : '失败'),
+        h('span', { style: 'color:var(--muted);word-break:break-all;' }, item.error || ''),
+      ])
+    })
+    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+      h('div', { class: 'modal', style: 'max-width:600px;' }, [
+        h('div', { class: 'modal-header' }, [
+          h('h2', title),
+          h('button', {
+            class: 'modal-close',
+            onClick: () => { render(null, container); container.remove() },
+          }, '\u00D7'),
+        ]),
+        h('div', { class: 'modal-body' }, [
+          h('div', {
+            style: 'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-size:12px;',
+          }, rows),
+        ]),
+        h('div', { class: 'modal-footer' }, [
+          h('button', {
+            class: 'btn btn-primary',
+            onClick: () => { render(null, container); container.remove() },
+          }, '确定'),
+        ]),
+      ]),
+    ])
+    render(vnode, container)
+  }
+
+  renderModal()
 }
 
 export interface PublishOptions {
@@ -286,6 +328,17 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
   }
 }
 
+export interface ResourceKey {
+  /** 请求体字段名（如 'route_ids' / 'upstream_ids'） */
+  field: string
+  /** 日志文案资源名（如 '路由' / '上游'） */
+  label: string
+  /** 批量结果中的名称字段（如 'route_name' / 'upstream_name'） */
+  nameField: string
+  /** 批量删除的 id 列表 */
+  keys: number[]
+}
+
 export interface DeleteProgressOptions {
   title: string
   apiEndpoint: string
@@ -293,7 +346,9 @@ export interface DeleteProgressOptions {
   deleteDb: boolean
   deleteEdge: boolean
   nodeIds: number[]
-  /** 批量删除时传入 route_ids，触发批量模式（按 route 分组解析 results） */
+  /** 批量删除时传入 resourceKey，触发批量模式（按 resourceKey 分组解析 results） */
+  resourceKey?: ResourceKey
+  /** 兼容层：路由批量专用，等价于 resourceKey = { field: 'route_ids', label: '路由', nameField: 'route_name', keys: routeIds } */
   routeIds?: number[]
   refreshFn: () => Promise<void>
   clearSelectedFn?: () => void
@@ -322,19 +377,23 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
   await new Promise((r) => setTimeout(r, 400))
 
   try {
+    const resourceKey = opts.resourceKey
+      ?? (opts.routeIds && opts.routeIds.length > 0
+        ? { field: 'route_ids', label: '路由', nameField: 'route_name', keys: opts.routeIds }
+        : undefined)
     const res = await api.delete(opts.apiEndpoint, {
       data: {
         delete_db: opts.deleteDb,
         delete_edge: opts.deleteEdge,
         node_ids: opts.nodeIds.length > 0 ? opts.nodeIds : undefined,
-        route_ids: opts.routeIds && opts.routeIds.length > 0 ? opts.routeIds : undefined,
+        [resourceKey?.field as string]: resourceKey && resourceKey.keys.length > 0 ? resourceKey.keys : undefined,
       },
     })
     const data = res.data
     progress.percent = 60
 
-    if (opts.routeIds && opts.routeIds.length > 0) {
-      logBatchDeleteResults(data, addLog, progress)
+    if (resourceKey && resourceKey.keys.length > 0) {
+      logBatchDeleteResults(data, resourceKey, addLog, progress)
     } else {
       logSingleDeleteResults(data, opts, addLog, progress)
     }
@@ -351,20 +410,31 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     progress.percent = 100
     progress.status = 'exception'
     addLog('')
-    addLog(`❌ 删除失败: ${typeof detail === 'string' ? detail : '未知错误'}`)
+    let reason = '未知错误'
+    if (typeof detail === 'string') {
+      reason = detail
+    } else if (Array.isArray(detail)) {
+      reason = detail.map((d: any) => {
+        const loc = Array.isArray(d?.loc) ? d.loc.filter((x: string) => x !== 'body').join('.') : ''
+        return `${loc ? `${loc}: ` : ''}${d?.msg || JSON.stringify(d)}`
+      }).filter(Boolean).join('；')
+    }
+    addLog(`❌ 删除失败: ${reason}`)
     updateContent()
   }
 }
 
 function logBatchDeleteResults(
   data: any,
+  resourceKey: ResourceKey,
   addLog: (text: string) => void,
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
 ) {
-  const routes = data.results || []
-  addLog(`正在批量删除 ${routes.length} 条路由...`)
+  const items = data.results || []
+  const { label, nameField } = resourceKey
+  addLog(`正在批量删除 ${items.length} 条${label}...`)
   let failCount = 0
-  for (const r of routes) {
+  for (const r of items) {
     const parts: string[] = []
     for (const sub of r.results || []) {
       if (sub.scope === 'database') {
@@ -374,17 +444,18 @@ function logBatchDeleteResults(
       }
     }
     if (parts.length === 0) parts.push(r.status)
-    addLog(`删除路由 ${r.route_name || r.route_id}: ${parts.join(' / ')}`)
+    if (r.error) parts.push(r.error)
+    addLog(`删除${label} ${r[nameField] || r.id}: ${parts.join(' / ')}`)
     if (r.status === 'failed' || (r.results || []).some((sub: any) => sub.status === 'failed')) {
       failCount++
     }
   }
   progress.percent = 100
   addLog('')
-  const anyEdgeFail = routes.some((r: any) => (r.results || []).some((sub: any) => sub.scope === 'edge' && sub.status === 'failed'))
+  const anyEdgeFail = items.some((r: any) => (r.results || []).some((sub: any) => sub.scope === 'edge' && sub.status === 'failed'))
   if (failCount > 0 || anyEdgeFail) {
     progress.status = 'exception'
-    addLog('⚠️ 部分路由删除失败，请手动清理')
+    addLog(`⚠️ 部分${label}删除失败，请手动清理`)
   } else {
     progress.status = 'success'
     addLog('✅ 批量删除完成!')

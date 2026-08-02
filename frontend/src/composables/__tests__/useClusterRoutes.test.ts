@@ -203,7 +203,7 @@ describe('useClusterRoutes batch selection', () => {
       expect(mockShowDeleteConfirm).not.toHaveBeenCalled()
     })
 
-    it('calls executeDeleteWithProgress with routeIds on confirm', async () => {
+    it('calls executeDeleteWithProgress with resourceKey on confirm', async () => {
       const cluster = makeCluster({
         routes: [makeRoute({ id: 1, name: 'a' }), makeRoute({ id: 2, name: 'b' })],
         selectedRouteKeys: [1, 2],
@@ -215,7 +215,7 @@ describe('useClusterRoutes batch selection', () => {
       await opts.onOk(true, true, [10])
       expect(mockExecuteDeleteWithProgress).toHaveBeenCalledTimes(1)
       const progressOpts = mockExecuteDeleteWithProgress.mock.calls[0][0]
-      expect(progressOpts.routeIds).toEqual([1, 2])
+      expect(progressOpts.resourceKey).toEqual({ field: 'route_ids', label: '路由', nameField: 'route_name', keys: [1, 2] })
       expect(progressOpts.apiEndpoint).toBe('/clusters/1/routes')
     })
   })

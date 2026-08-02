@@ -612,7 +612,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         await executeDeleteWithProgress({
           title: `批量删除路由: ${names.join('、')}`,
           apiEndpoint: `/clusters/${cluster.id}/routes`,
-          routeIds: keys,
+          resourceKey: { field: 'route_ids', label: '路由', nameField: 'route_name', keys },
           cluster,
           deleteDb,
           deleteEdge,
