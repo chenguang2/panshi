@@ -812,6 +812,7 @@ const loadClusters = async () => {
       routesSortBy: '',
       routesSortOrder: 'asc' as 'asc' | 'desc',
       selectedNode: null,
+      selectedNodeKeys: [],
       selectedUpstream: null,
       selectedRoute: null,
       selectedRouteKeys: [],

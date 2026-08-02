@@ -2,13 +2,13 @@
   <div class="tab-content node-tab">
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
-      <a-button size="small" @click="editNode(cluster)" :disabled="!cluster.selectedNode">编辑节点</a-button>
-      <a-button size="small" danger :disabled="!cluster.selectedNode" @click="deleteNode(cluster)">删除节点</a-button>
+      <a-button size="small" @click="editNode(cluster)" :disabled="!singleOpEnabled">编辑节点</a-button>
+      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
       <a-divider type="vertical" />
-      <a-button size="small" @click="handleNodeStart" :disabled="!cluster.selectedNode">▶ 启动</a-button>
-      <a-button size="small" @click="handleNodeStop" :disabled="!cluster.selectedNode">⏹ 停止</a-button>
-      <a-button size="small" @click="handleNodeReload" :disabled="!cluster.selectedNode">⟳ reload</a-button>
-      <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!cluster.selectedNode">状态查询</a-button>
+      <a-button size="small" @click="handleNodeStart" :disabled="!singleOpEnabled">▶ 启动</a-button>
+      <a-button size="small" @click="handleNodeStop" :disabled="!singleOpEnabled">⏹ 停止</a-button>
+      <a-button size="small" @click="handleNodeReload" :disabled="!singleOpEnabled">⟳ reload</a-button>
+      <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!singleOpEnabled">状态查询</a-button>
       <a-dropdown v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" :trigger="['click']">
         <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
         <template #overlay>
@@ -54,7 +54,7 @@
             v-model:value="cluster.nodesSearch"
             placeholder="搜索节点"
             style="width: 150px;"
-            @search="() => { cluster.nodesPagination!.page = 1; loadNodes(cluster) }"
+            @search="() => { cluster.nodesPagination!.page = 1; cluster.selectedNodeKeys = []; cluster.selectedNode = null; loadNodes(cluster) }"
             allow-clear
             size="small"
           />
@@ -84,7 +84,8 @@
         pageSizeOptions: ['10', '20', '50', '100'],
         showQuickJumper: true
       }"
-      :row-selection="{ selectedRowKeys: cluster.selectedNode ? [cluster.selectedNode.id] : [], onChange: (_keys: unknown, rows: unknown[]) => selectNode(cluster, (rows[rows.length - 1]) as import('@/types').Node | undefined) }"
+      :row-selection="{ selectedRowKeys: cluster.selectedNodeKeys || [], preserveSelectedRowKeys: true, onChange: (keys: unknown, rows: unknown[]) => selectNodes(cluster, keys as number[], rows as import('@/types').Node[]) }"
+      :custom-row="(record: import('@/types').Node) => ({ onClick: () => { cluster.selectedNode = record } })"
       :loading="cluster.nodesLoading"
       :showSorterTooltip="false"
       size="small"
@@ -126,13 +127,26 @@
 
     <Teleport to="body">
     <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
-      <div class="modal">
+      <div class="modal" :style="nodeImportMode === 'batch' ? 'max-width: 960px;' : 'max-width: 720px;'">
         <div class="modal-header">
-          <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
+          <h2>{{ editingNode ? '编辑节点' : nodeImportMode === 'batch' ? '批量导入节点' : '添加节点' }}</h2>
           <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+          <div v-if="!editingNode" style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">
+            <button
+              class="btn btn-sm"
+              :class="nodeImportMode === 'single' ? 'btn-primary' : 'btn-secondary'"
+              @click="nodeImportMode = 'single'"
+            >单个添加</button>
+            <button
+              class="btn btn-sm"
+              :class="nodeImportMode === 'batch' ? 'btn-primary' : 'btn-secondary'"
+              @click="nodeImportMode = 'batch'"
+            >批量导入</button>
+          </div>
+
+          <a-form v-if="nodeImportMode === 'single'" ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
             <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
               <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
             </a-form-item>
@@ -155,10 +169,112 @@
               </a-select>
             </a-form-item>
           </a-form>
+
+          <template v-else>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <button
+                class="btn btn-sm"
+                :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportTab = 'text'"
+              >文本粘贴</button>
+              <button
+                class="btn btn-sm"
+                :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportTab = 'csv'"
+              >CSV 上传</button>
+            </div>
+
+            <template v-if="nodeImportTab === 'text'">
+              <textarea
+                v-model="nodeImportText"
+                rows="6"
+                style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-md);font-family:var(--font-mono);font-size:12px;"
+                placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
+              ></textarea>
+              <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+                <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
+                <span style="font-size:12px;color:var(--muted);">已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span>
+              </div>
+            </template>
+
+            <template v-else>
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+                <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size:12px;" />
+                <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
+              </div>
+              <div v-if="nodeImportRows.length > 0" style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+                已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
+              </div>
+            </template>
+
+            <div style="display:flex;gap:10px;align-items:center;margin:12px 0 8px;font-size:12px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px;">
+              <span style="color:var(--muted);font-weight:500;">默认值（应用于所有行）</span>
+              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
+                服务端口
+                <input v-model.number="nodeImportDefaults.service_port" type="number" style="width:70px;" />
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
+                管理端口
+                <input v-model.number="nodeImportDefaults.management_port" type="number" style="width:70px;" />
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
+                Edge路径
+                <input v-model="nodeImportDefaults.edge_path" style="width:130px;" placeholder="/edge" />
+              </label>
+              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
+                Nginx安装目录
+                <input v-model="nodeImportDefaults.edge_install_path" style="width:150px;" placeholder="/usr/local/nginx" />
+              </label>
+            </div>
+
+            <div v-if="nodeImportRows.length > 0" style="margin-top:6px;">
+              <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);">
+                <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                  <thead>
+                    <tr style="background:var(--bg);color:var(--muted);text-align:left;">
+                      <th style="padding:6px 8px;">IP</th>
+                      <th style="padding:6px 8px;">服务端口</th>
+                      <th style="padding:6px 8px;">管理端口</th>
+                      <th style="padding:6px 8px;">Edge路径</th>
+                      <th style="padding:6px 8px;">Nginx安装目录</th>
+                      <th style="padding:6px 8px;">状态</th>
+                      <th style="padding:6px 8px;">原因</th>
+                      <th style="padding:6px 8px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
+                      <td style="padding:4px 8px;"><input v-model="row.ip" style="width:110px;" /></td>
+                      <td style="padding:4px 8px;"><input v-model.number="row.service_port" type="number" style="width:70px;" /></td>
+                      <td style="padding:4px 8px;"><input v-model.number="row.management_port" type="number" style="width:70px;" /></td>
+                      <td style="padding:4px 8px;"><input v-model="row.edge_path" style="width:130px;" /></td>
+                      <td style="padding:4px 8px;"><input v-model="row.edge_install_path" style="width:150px;" /></td>
+                      <td style="padding:4px 8px;">
+                        <select v-model.number="row.status" style="width:70px;">
+                          <option :value="1">正常</option>
+                          <option :value="0">禁用</option>
+                        </select>
+                      </td>
+                      <td style="padding:4px 8px;color:var(--danger);font-size:11px;">{{ row.error || '' }}</td>
+                      <td style="padding:4px 8px;">
+                        <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
+          <button
+            v-if="nodeImportMode === 'batch'"
+            class="btn btn-primary"
+            :disabled="validImportCount === 0"
+            @click="handleImportSubmit"
+          >创建 {{ validImportCount }} 个节点</button>
+          <button v-else class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
         </div>
       </div>
     </div>
@@ -283,10 +399,23 @@ const {
   handleNodeTableChange,
   loadNodes,
   selectNode,
+  selectNodes,
   showAddNodeModal,
   editNode,
+  copyNode,
   handleNodeSubmit,
+  importNodes,
+  nodeImportMode,
+  nodeImportTab,
+  nodeImportText,
+  nodeImportRows,
+  nodeImportDefaults,
+  currentClusterId,
+  parseIpList,
+  parseNodeCsv,
+  buildNodeCsvTemplate,
   deleteNode,
+  deleteNodes,
   startNode,
   stopNode,
   queryNodeStatus,
@@ -303,6 +432,87 @@ const {
   clusters,
   onRefresh,
 })
+
+// ── batch delete selection state ─────────────────────────────
+const batchCount = computed(() => (props.cluster.selectedNodeKeys || []).length)
+const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedNode || batchCount.value === 1))
+const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedNode ? 1 : 0))
+const deleteEnabled = computed(() => deleteCount.value > 0)
+
+function handleDeleteClick() {
+  if (batchCount.value > 0) {
+    deleteNodes(props.cluster)
+  } else {
+    deleteNode(props.cluster)
+  }
+}
+
+// ── Node batch import helpers ────────────────────────────────
+const validImportCount = computed(() => nodeImportRows.value.filter((r) => r.valid).length)
+
+function parseTextToRows() {
+  const parsed = parseIpList(nodeImportText.value)
+  nodeImportRows.value = parsed.map((row) => ({
+    ip: row.ip,
+    service_port: nodeImportDefaults.service_port,
+    management_port: nodeImportDefaults.management_port,
+    edge_path: nodeImportDefaults.edge_path,
+    edge_install_path: nodeImportDefaults.edge_install_path,
+    status: nodeImportDefaults.status,
+    valid: row.valid,
+    error: row.error,
+  }))
+}
+
+function onCsvFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const rows = parseNodeCsv(String(reader.result || ''))
+    nodeImportRows.value = rows.map((r) => ({
+      ip: r.ip,
+      service_port: r.service_port,
+      management_port: r.management_port,
+      edge_path: r.edge_path || nodeImportDefaults.edge_path,
+      edge_install_path: r.edge_install_path || nodeImportDefaults.edge_install_path,
+      status: r.status,
+      valid: r.valid,
+      error: r.error,
+    }))
+  }
+  reader.readAsText(file)
+}
+
+function downloadNodeCsvTemplate() {
+  const blob = new Blob([buildNodeCsvTemplate()], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'node-import-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function removeImportRow(index: number) {
+  nodeImportRows.value.splice(index, 1)
+}
+
+function rowStyle(row: { valid: boolean; error?: string }, idx: number) {
+  const duplicateIp = !row.valid ? false : nodeImportRows.value.some(
+    (other, otherIdx) => otherIdx !== idx && other.ip === row.ip,
+  )
+  if (!row.valid) return 'background:color-mix(in srgb, var(--danger) 12%, transparent);'
+  if (duplicateIp) return 'background:color-mix(in srgb, var(--warning) 15%, transparent);'
+  return ''
+}
+
+async function handleImportSubmit() {
+  const cluster = clusters.value.find((c) => c.id === currentClusterId?.value)
+  if (!cluster) return
+  await importNodes(cluster, nodeImportRows.value)
+}
 
 // ── Custom Confirm (matches NodeList.vue pattern) ──
 const confirmState = reactive({

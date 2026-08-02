@@ -3,8 +3,9 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
-import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
+import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent, showBatchResultModal, type BatchResultItem } from './useClusterUtils'
 import { stripAnsi } from '@/utils/ansi'
+import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImport'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
@@ -20,6 +21,7 @@ export const allNodeColumns = [
 
 export const allNodeActionButtons = [
   { key: 'edit', title: '编辑' },
+  { key: 'copy', title: '复制' },
   { key: 'delete', title: '删除' },
   { key: 'diff', title: '数据库对比' },
   { key: 'start', title: '启动' },
@@ -106,6 +108,35 @@ export function useClusterNodes(options: {
     status: 1
   })
 
+  // ── Batch import state ────────────────────────────────────────
+  const nodeImportMode = ref<'single' | 'batch'>('single')
+  const nodeImportTab = ref<'text' | 'csv'>('text')
+  const nodeImportText = ref('')
+  const nodeImportRows = ref<Array<{
+    ip: string
+    service_port: number
+    management_port: number
+    edge_path: string
+    edge_install_path: string
+    status: number
+    valid: boolean
+    line?: number
+    error?: string
+  }>>([])
+  const nodeImportDefaults = reactive({
+    service_port: 80,
+    management_port: 9180,
+    status: 1,
+    edge_path: '/edge',
+    edge_install_path: '/usr/local/nginx',
+  })
+
+  watch(nodeImportMode, (mode) => {
+    if (mode === 'batch') {
+      editingNode.value = null
+    }
+  })
+
   const validateIP = (_rule: unknown, value: string, callback: (error?: string) => void) => {
     if (!value) {
       callback('请输入IP地址')
@@ -126,6 +157,9 @@ export function useClusterNodes(options: {
     switch (action) {
       case 'edit':
         editNode(cluster, record)
+        break
+      case 'copy':
+        copyNode(cluster, record)
         break
       case 'delete':
         deleteNode(cluster, record)
@@ -162,6 +196,9 @@ export function useClusterNodes(options: {
       }
       cluster.nodesSortBy = fieldMap[sorter.field as string] || (sorter.field as string)
       cluster.nodesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+      // 排序改变数据集，清除批量勾选与单选（D8）
+      cluster.selectedNodeKeys = []
+      cluster.selectedNode = null
     } else {
       cluster.nodesSortBy = ''
       cluster.nodesSortOrder = 'asc'
@@ -169,7 +206,21 @@ export function useClusterNodes(options: {
     loadNodes(cluster)
   }
 
+  const lastNodeQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
+
   const loadNodes = async (cluster: Cluster) => {
+    const prev = lastNodeQuery.get(cluster)
+    const next = {
+      search: cluster.nodesSearch || '',
+      field: cluster.nodesSearchField || '',
+      sortBy: cluster.nodesSortBy || '',
+      sortOrder: cluster.nodesSortOrder || '',
+    }
+    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
+      cluster.selectedNodeKeys = []
+      cluster.selectedNode = null
+    }
+    lastNodeQuery.set(cluster, next)
     cluster.nodesLoading = true
     try {
       const params: Record<string, unknown> = {
@@ -204,6 +255,11 @@ export function useClusterNodes(options: {
     cluster.selectedNode = node || null
   }
 
+  const selectNodes = (cluster: Cluster, keys: number[] | (string | number)[], rows: Node[]) => {
+    cluster.selectedNodeKeys = keys as number[]
+    cluster.selectedNode = keys.length === 1 ? (rows[0] ?? null) : null
+  }
+
   const showAddNodeModal = async (cluster: Cluster) => {
     await loadNodes(cluster)
     editingNode.value = null
@@ -233,6 +289,21 @@ export function useClusterNodes(options: {
     nodeForm.edge_path = target.edge_path || ''
     nodeForm.edge_install_path = target.edge_install_path || ''
     nodeForm.status = target.status
+    nodeModalVisible.value = true
+  }
+
+  const copyNode = (cluster: Cluster, node: Node) => {
+    editingNode.value = null
+    currentClusterId.value = cluster.id
+    nodeImportMode.value = 'single'
+    Object.assign(nodeForm, {
+      ip: '',
+      service_port: node.service_port,
+      management_port: node.management_port,
+      edge_path: node.edge_path || '',
+      edge_install_path: node.edge_install_path || '',
+      status: node.status,
+    })
     nodeModalVisible.value = true
   }
 
@@ -266,6 +337,52 @@ export function useClusterNodes(options: {
     }
   }
 
+  const importNodes = async (cluster: Cluster, rows: Array<{
+    ip: string
+    service_port: number
+    management_port: number
+    edge_path: string
+    edge_install_path: string
+    status: number
+    valid: boolean
+  }>) => {
+    const validRows = rows.filter((r) => r.valid)
+    if (validRows.length === 0) {
+      message.warning('没有有效的节点可创建')
+      return
+    }
+    try {
+      const res = await api.post(`/clusters/${cluster.id}/nodes/batch`, {
+        nodes: validRows.map((r) => ({
+          ip: r.ip,
+          service_port: r.service_port,
+          management_port: r.management_port,
+          edge_path: r.edge_path,
+          edge_install_path: r.edge_install_path,
+          status: r.status,
+        })),
+      })
+      const data = res.data
+      const results: BatchResultItem[] = data?.results || []
+      const hasFailure = results.some((r) => r.status !== 'success')
+      if (hasFailure) {
+        showBatchResultModal(data?.message || '批量创建结果', results)
+      } else {
+        message.success(data?.message || `成功创建 ${validRows.length} 条节点`)
+      }
+      nodeModalVisible.value = false
+      nodeImportRows.value = []
+      nodeImportText.value = ''
+      const nodeRes = await api.get(`/clusters/${cluster.id}/nodes`)
+      cluster.nodes = nodeRes.data.items
+      cluster.node_count = cluster.nodes!.length
+      onRefresh()
+    } catch (error: unknown) {
+      const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+      message.error(typeof detail === 'string' ? detail : '批量创建失败')
+    }
+  }
+
   const deleteNode = (cluster: Cluster, node?: Node) => {
     const target = node || cluster.selectedNode
     if (!target) {
@@ -290,6 +407,36 @@ export function useClusterNodes(options: {
     })
   }
 
+  const deleteNodes = (cluster: Cluster) => {
+    const keys = cluster.selectedNodeKeys || []
+    if (keys.length === 0) {
+      message.warning('请先勾选要删除的节点')
+      return
+    }
+    const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
+    const ips = nodes.map((n) => n.ip)
+    const title = ips.length > 3
+      ? `确定要删除选中的 ${ips.length} 条节点吗？${ips.slice(0, 3).join('、')} 等 ${ips.length} 条`
+      : `确定要删除选中的 ${ips.length} 条节点吗？${ips.join('、')}`
+    showDeleteConfirm({
+      title,
+      apiEndpoint: `/clusters/${cluster.id}/nodes`,
+      onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
+        await executeDeleteWithProgress({
+          title: `批量删除节点: ${ips.join('、')}`,
+          apiEndpoint: `/clusters/${cluster.id}/nodes`,
+          resourceKey: { field: 'node_ids', label: '节点', nameField: 'node_ip', keys },
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadNodes(cluster),
+          clearSelectedFn: () => { cluster.selectedNodeKeys = []; cluster.selectedNode = null },
+        })
+      }
+    })
+  }
+
   /** Extract key lines from nginx_cmd.sh stdout for user-facing highlights. */
   const extractKeyInfo = (stdout: string): string[] => {
     const highlights: string[] = []
@@ -299,8 +446,7 @@ export function useClusterNodes(options: {
       // Nginx process status
       if (/Nginx process/i.test(trimmed) || /Nginx.*(PID|running|stopped|started|exist)/i.test(trimmed)) {
         highlights.push(trimmed)
-      }
-      // Error / failure lines
+      }      // Error / failure lines
       if (/Failed to|Error|Invalid command/i.test(trimmed) && !highlights.includes(trimmed)) {
         highlights.push(trimmed)
       }
@@ -639,10 +785,22 @@ export function useClusterNodes(options: {
     handleNodeTableChange,
     loadNodes,
     selectNode,
+    selectNodes,
     showAddNodeModal,
     editNode,
+    copyNode,
     handleNodeSubmit,
+    importNodes,
+    nodeImportMode,
+    nodeImportTab,
+    nodeImportText,
+    nodeImportRows,
+    nodeImportDefaults,
+    parseIpList,
+    parseNodeCsv,
+    buildNodeCsvTemplate,
     deleteNode,
+    deleteNodes,
     startNode,
     stopNode,
     queryNodeStatus,
