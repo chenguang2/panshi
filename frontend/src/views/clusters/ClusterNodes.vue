@@ -515,7 +515,7 @@ function removeImportRow(index: number) {
   nodeImportRows.value.splice(index, 1)
 }
 
-function rowStyle(row: { valid: boolean; error?: string }, idx: number) {
+function rowStyle(row: { ip: string; valid: boolean; error?: string }, idx: number) {
   const duplicateIp = !row.valid ? false : nodeImportRows.value.some(
     (other, otherIdx) => otherIdx !== idx && other.ip === row.ip,
   )
