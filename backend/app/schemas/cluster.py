@@ -225,6 +225,15 @@ class BatchDeleteRoutesRequest(DeleteClusterRequest):
     route_ids: List[int] = Field(...)
 
 
+class BatchDeleteUpstreamsRequest(DeleteClusterRequest):
+    """批量删除上游请求：继承单删字段，额外指定 upstream_ids。
+
+    注意：upstream_ids 不做 min_length=1 约束——空列表由端点显式返回 400，
+    与 spec 语义一致（Pydantic 校验失败会返回 422）。
+    """
+    upstream_ids: List[int] = Field(...)
+
+
 class NodeCreate(NodeBase):
     cluster_id: Optional[int] = None
 
@@ -234,6 +243,32 @@ class NodeCreate(NodeBase):
         if v.endswith('/'):
             raise ValueError('Edge路径末尾不能为 /')
         return v
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v: int) -> int:
+        if v not in (0, 1):
+            raise ValueError('状态只能为 0（禁用）或 1（正常）')
+        return v
+
+
+class BatchCreateNodesRequest(BaseModel):
+    """批量创建节点请求：nodes 列表。
+
+    注意：nodes 不做 min_length=1 约束——空列表由端点显式返回 400，
+    与 spec 语义一致（Pydantic 校验失败会返回 422）。
+    max_length=1000 与前端 EXPANSION_LIMIT 一致。
+    """
+    nodes: List[NodeCreate] = Field(..., max_length=1000)
+
+
+class BatchDeleteNodesRequest(DeleteClusterRequest):
+    """批量删除节点请求：继承单删字段，额外指定 node_ids。
+
+    注意：node_ids 不做 min_length=1 约束——空列表由端点显式返回 400，
+    与 spec 语义一致（Pydantic 校验失败会返回 422）。
+    """
+    node_ids: List[int] = Field(...)
 
 
 class NodeUpdate(BaseModel):

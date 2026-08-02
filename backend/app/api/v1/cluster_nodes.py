@@ -14,7 +14,7 @@ from app.models.ssl import SslCertificate
 from app.models.user import User
 from app.schemas.cluster import (
     NodeCreate, NodeUpdate, NodeResponse,
-    DeleteClusterRequest,
+    DeleteClusterRequest, BatchCreateNodesRequest, BatchDeleteNodesRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.config_diff import EquivalenceRules
@@ -206,6 +206,54 @@ async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depe
     return NodeResponse.model_validate(db_node)
 
 
+@router.post("/{cluster_id}/nodes/batch")
+async def create_nodes_batch(cluster_id: int, body: BatchCreateNodesRequest = Body(...), db: AsyncSession = Depends(get_db)):
+    """批量创建同一集群内的多个节点。
+
+    每条节点独立处理：单条失败（同 IP+edge_path+service_port 组合重复 /
+    数据错误 / 其他异常）不阻塞其余节点。同 IP 不同 edge_path 或 service_port 合法。
+    """
+
+    if not body.nodes:
+        raise HTTPException(status_code=400, detail="nodes 不能为空")
+
+    await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
+
+    results = []
+    success_count = 0
+    fail_count = 0
+    for node in body.nodes:
+        node_result: dict = {
+            "ip": node.ip,
+            "status": "failed",
+        }
+        try:
+            existing = await db.execute(select(Node).where(
+                Node.cluster_id == cluster_id,
+                Node.ip == node.ip,
+                Node.edge_path == node.edge_path,
+                Node.service_port == node.service_port,
+            ))
+            if existing.scalars().first() is not None:
+                node_result["error"] = "该集群已存在相同 IP、Edge 路径与服务端口的节点"
+                results.append(node_result)
+                fail_count += 1
+                continue
+
+            db_node = Node(cluster_id=cluster_id, **node.model_dump(exclude={"cluster_id"}))
+            db.add(db_node)
+            await db.commit()
+            node_result["status"] = "success"
+            success_count += 1
+        except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
+            await db.rollback()
+            node_result["error"] = str(e)
+            fail_count += 1
+        results.append(node_result)
+
+    return {"message": f"成功创建 {success_count} 条，失败 {fail_count} 条", "results": results}
+
+
 @router.put("/{cluster_id}/nodes/{node_id}", response_model=NodeResponse)
 async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
@@ -243,6 +291,54 @@ async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest 
         results.append({"scope": "edge", "status": "skipped", "message": "节点是 Edge 运行时，无对应的 Edge API 删除操作"})
 
     return {"message": "节点已删除", "results": results}
+
+
+@router.delete("/{cluster_id}/nodes")
+async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Body(...), db: AsyncSession = Depends(get_db)):
+    """批量删除同一集群内的多个节点。
+
+    每条节点独立处理：单条失败（节点不存在 / 数据错误 / 其他异常）不阻塞其余节点。
+    Edge 阶段固定 skipped——节点是 Edge 运行时，无对应的 Edge API 删除操作。
+    """
+
+    if not body.node_ids:
+        raise HTTPException(status_code=400, detail="node_ids 不能为空")
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
+    results = []
+    for node_id in body.node_ids:
+        node_result: dict = {
+            "node_id": node_id,
+            "node_ip": "",
+            "status": "failed",
+            "results": [],
+        }
+        try:
+            node = await edge_sync.get_or_404(db, Node, id=node_id, cluster_id=cluster_id, detail="节点不存在")
+            node_result["node_ip"] = node.ip
+
+            if body.delete_db:
+                await db.delete(node)
+                await db.commit()
+                node_result["results"].append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+            if body.delete_edge:
+                node_result["results"].append({
+                    "scope": "edge", "status": "skipped",
+                    "message": "节点是 Edge 运行时，无对应的 Edge API 删除操作",
+                })
+
+            node_result["status"] = "success"
+        except HTTPException as e:
+            node_result["error"] = str(e.detail)
+        except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
+            await db.rollback()
+            node_result["error"] = str(e)
+        results.append(node_result)
+
+    return {"message": f"批量删除完成: {len(results)} 条节点", "results": results}
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/start")

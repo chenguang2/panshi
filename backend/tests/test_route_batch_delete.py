@@ -146,3 +146,27 @@ class TestBatchDeleteRoutes:
         # 每个路由的 edge_uuid 应被传入
         uuids = [call.args[0] for call in mock_client.delete_route.call_args_list]
         assert len(set(uuids)) == 3
+
+    async def test_db_exception_does_not_cascade_pending_rollback(self, test_db):
+        cid = await _setup_cluster_with_routes(test_db)
+        from app.api.v1.cluster_routes import delete_routes_batch
+
+        route_ids = await _get_route_ids(test_db, cid)
+
+        # 注入一条与 r1 相同 edge_uuid 的路由（违反 uq_route_cluster_edge 唯一约束），
+        # 不 flush，让端点内部的第一次 commit 触发真实 IntegrityError。
+        # 用 no_autoflush 块 add 使入口 node_query 不提前触发 autoflush
+        from sqlalchemy import select
+        r1 = (await test_db.execute(select(Route).where(Route.cluster_id == cid, Route.name == "r1"))).scalar_one()
+        test_db.add(Route(cluster_id=cid, name="dup", uri="/dup", edge_uuid=r1.edge_uuid))
+        test_db.autoflush = False
+
+        result = await delete_routes_batch(
+            cid, BatchDeleteRoutesRequest(route_ids=route_ids, delete_db=True), test_db
+        )
+
+        test_db.autoflush = True
+        failed = [r for r in result["results"] if r["status"] == "failed"]
+        succeeded = [r for r in result["results"] if r["status"] == "success"]
+        assert len(failed) == 1
+        assert len(succeeded) == 2

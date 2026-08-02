@@ -353,6 +353,7 @@ async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = 
         except HTTPException as e:
             route_result["error"] = str(e.detail)
         except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
+            await db.rollback()
             route_result["error"] = str(e)
         results.append(route_result)
 
