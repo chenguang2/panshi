@@ -74,4 +74,43 @@ describe('features store', () => {
     expect(store.loaded).toBe(false)
     expect(store.has('anything')).toBe(false)
   })
+
+  it('load() parses concurrency values from response', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { features: {}, enabled_plugins: [], concurrency: { batch_action: 10, max_playbooks: 7 } }
+    })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.concurrency).toEqual({ batch_action: 10, max_playbooks: 7 })
+  })
+
+  it('concurrencyOf() returns configured value after load', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { features: {}, enabled_plugins: [], concurrency: { batch_action: 10 } }
+    })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.concurrencyOf('batch_action', 5)).toBe(10)
+  })
+
+  it('concurrencyOf() returns default when response has no concurrency field', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: { features: {}, enabled_plugins: [] }
+    })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.concurrencyOf('batch_action', 5)).toBe(5)
+    expect(store.concurrencyOf('max_playbooks', 5)).toBe(5)
+  })
+
+  it('concurrencyOf() returns default before load completes', () => {
+    const store = useFeaturesStore()
+    expect(store.concurrencyOf('batch_action', 5)).toBe(5)
+  })
 })

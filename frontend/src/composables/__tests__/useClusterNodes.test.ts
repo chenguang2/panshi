@@ -11,6 +11,7 @@ const mockShowBatchResultModal = vi.fn()
 const mockShowBatchStatusModal = vi.fn()
 const mockShowDeleteConfirm = vi.fn()
 const mockExecuteDeleteWithProgress = vi.fn()
+const mockConcurrencyOf = vi.fn((name: string, defaultVal: number) => defaultVal)
 
 vi.mock('@/api', () => ({
   default: {
@@ -19,6 +20,13 @@ vi.mock('@/api', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
+}))
+
+vi.mock('@/stores/features', () => ({
+  useFeaturesStore: () => ({
+    has: () => false,
+    concurrencyOf: (...args: any[]) => mockConcurrencyOf(...args),
+  }),
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -77,6 +85,7 @@ describe('useClusterNodes batch import', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+    mockConcurrencyOf.mockImplementation((name: string, defaultVal: number) => defaultVal)
   })
 
   describe('copyNode', () => {
@@ -397,6 +406,59 @@ describe('useClusterNodes batch import', () => {
       expect(maxInFlight).toBeLessThanOrEqual(5)
       const items = batchProgressItems.value
       expect(items).toHaveLength(6)
+      expect(items.every((i) => i.status === 'success')).toBe(true)
+    })
+
+    it('clamps concurrency to max_playbooks when batch_action is larger', async () => {
+      mockConcurrencyOf.mockImplementation((name: string, defaultVal: number) => {
+        if (name === 'batch_action') return 10
+        if (name === 'max_playbooks') return 2
+        return defaultVal
+      })
+      const cluster = makeCluster({
+        nodes: [
+          makeNode({ id: 1, ip: '10.0.0.1' }),
+          makeNode({ id: 2, ip: '10.0.0.2' }),
+          makeNode({ id: 3, ip: '10.0.0.3' }),
+          makeNode({ id: 4, ip: '10.0.0.4' }),
+          makeNode({ id: 5, ip: '10.0.0.5' }),
+        ],
+        selectedNodeKeys: [1, 2, 3, 4, 5],
+      })
+      const { batchNodeAction, batchProgressItems } = await makeComposable(cluster)
+
+      let inFlight = 0
+      let maxInFlight = 0
+      const resolveFns: Array<() => void> = []
+      mockApiPost.mockImplementation(() => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        return new Promise((resolve) => {
+          resolveFns.push(() => {
+            inFlight--
+            resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'cmd' } })
+          })
+        })
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 5, items: [] } })
+
+      const actionPromise = batchNodeAction(cluster, 'start', '启动')
+
+      await new Promise((r) => setTimeout(r, 100))
+      // batch_action=10 但 max_playbooks=2 → 实际并发被 clamp 到 2
+      expect(maxInFlight).toBeLessThanOrEqual(2)
+      expect(resolveFns.length).toBe(2)
+
+      for (let round = 0; round < 5; round++) {
+        const fn = resolveFns.shift()
+        if (fn) fn()
+        await new Promise((r) => setTimeout(r, 30))
+      }
+      await actionPromise
+
+      expect(maxInFlight).toBeLessThanOrEqual(2)
+      const items = batchProgressItems.value
+      expect(items).toHaveLength(5)
       expect(items.every((i) => i.status === 'success')).toBe(true)
     })
 

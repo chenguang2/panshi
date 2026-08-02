@@ -2,6 +2,7 @@ import { ref, reactive, computed, watch, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
+import { useFeaturesStore } from '@/stores/features'
 import { useColumnConfig } from './useColumnConfig'
 import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent, showBatchResultModal, showBatchStatusModal, type BatchResultItem } from './useClusterUtils'
 import { stripAnsi } from '@/utils/ansi'
@@ -52,6 +53,15 @@ export function useClusterNodes(options: {
   onRefresh: () => void | Promise<void>
 }) {
   const { clusters, onRefresh } = options
+
+  const featuresStore = useFeaturesStore()
+
+  function batchActionConcurrency(): number {
+    return Math.min(
+      featuresStore.concurrencyOf('batch_action', BATCH_ACTION_CONCURRENCY),
+      featuresStore.concurrencyOf('max_playbooks', BATCH_ACTION_CONCURRENCY),
+    )
+  }
 
   const nodeModalVisible = ref(false)
   const editingNode = ref<Node | null>(null)
@@ -480,7 +490,8 @@ export function useClusterNodes(options: {
     batchProgressItems.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
     batchProgressVisible.value = true
 
-    await runWithConcurrency(nodes, BATCH_ACTION_CONCURRENCY, async (node, i) => {
+    const concurrency = batchActionConcurrency()
+    await runWithConcurrency(nodes, concurrency, async (node, i) => {
       batchProgressItems.value[i].status = 'running'
       batchProgressItems.value[i].logs = [`开始对节点 ${node.ip} 执行 ${label} 操作...`]
       try {
@@ -536,7 +547,8 @@ export function useClusterNodes(options: {
       stdout?: string
       stderr?: string
     }> = []
-    await runWithConcurrency(nodes, BATCH_ACTION_CONCURRENCY, async (node, i) => {
+    const concurrency = batchActionConcurrency()
+    await runWithConcurrency(nodes, concurrency, async (node, i) => {
       batchProgressItems.value[i].status = 'running'
       batchProgressItems.value[i].logs = [`开始查询节点 ${node.ip} 状态...`]
       try {

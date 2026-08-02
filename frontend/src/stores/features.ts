@@ -5,6 +5,7 @@ import api from '@/api'
 export const useFeaturesStore = defineStore('features', () => {
   const features = ref<Record<string, boolean>>({})
   const enabledPlugins = ref<string[]>([])
+  const concurrency = ref<Record<string, number>>({})
   const loaded = ref(false)
 
   async function load(): Promise<void> {
@@ -12,6 +13,7 @@ export const useFeaturesStore = defineStore('features', () => {
     const res = await api.get('/system/features')
     features.value = res.data.features || {}
     enabledPlugins.value = res.data.enabled_plugins || []
+    concurrency.value = res.data.concurrency || {}
     loaded.value = true
   }
 
@@ -20,5 +22,10 @@ export const useFeaturesStore = defineStore('features', () => {
     return features.value[feature] !== false
   }
 
-  return { features, enabledPlugins, loaded, load, has }
+  function concurrencyOf(name: string, defaultVal: number): number {
+    if (!loaded.value) return defaultVal
+    return concurrency.value[name] ?? defaultVal
+  }
+
+  return { features, enabledPlugins, concurrency, loaded, load, has, concurrencyOf }
 })
