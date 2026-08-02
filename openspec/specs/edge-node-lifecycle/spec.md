@@ -171,6 +171,15 @@ The system SHALL enforce `asyncio.Semaphore(5)` for concurrent ansible-runner ex
 - **THEN** 5 SHALL execute immediately, the 6th SHALL wait
 - **AND** no request SHALL fail due to concurrency overflow
 
+#### Scenario: 任务化操作受全局信号量约束
+- **WHEN** 节点操作以任务形式执行
+- **THEN** 每个节点子任务 SHALL 在获取 `max_playbooks` 信号量后才执行（与同步操作共享槽位）
+
+#### Scenario: 同一节点任务互斥
+- **WHEN** 同一节点存在运行中的任务子项
+- **THEN** 后续涉及该节点的任务子项 SHALL 等待锁释放后再执行（per-node 互斥锁）
+- **AND** 同一节点 SHALL NOT 同时执行两个任务子项
+
 ### Requirement: Execution result persistence
 The system SHALL persist each ansible-runner execution result in `Node.status_detail` (JSON).
 
@@ -181,6 +190,25 @@ The system SHALL persist each ansible-runner execution result in `Node.status_de
 #### Scenario: failed execution
 - **WHEN** a start operation fails (SSH connection refused)
 - **THEN** `Node.status_detail` SHALL be updated with `last_status: "failed"`, `last_rc: non-zero`, `last_error: "message"`
+
+#### Scenario: 任务化结果写入任务表
+- **WHEN** 节点操作以任务形式执行并完成
+- **THEN** 该节点的 rc/stdout/stderr/command/日志 SHALL 持久化到任务子任务记录
+- **AND** 同步单节点操作的 `node.status_detail` 行为 SHALL 不受影响（双轨并存）
+
+### Requirement: 任务化生命周期操作
+
+start/stop/reload/check/statistic 类节点生命周期操作 SHALL 支持以任务形式批量执行（task_type: start/stop/reload/check/statistic），由后端引擎并发调度，替代前端 runWithConcurrency 编排。
+
+#### Scenario: 批量 start 任务化
+- **WHEN** 用户创建 task_type=start 的多节点任务
+- **THEN** 每个节点子任务 SHALL 调用 `nginx_cmd_run`（nginx_cmd=nginx_start，prefix/ports 逐节点取自节点记录）
+- **AND** 后端引擎 SHALL 按信号量并发驱动，节点间互不阻塞
+
+#### Scenario: 批量 statistic 任务化
+- **WHEN** 用户创建 task_type=statistic 的多节点任务
+- **THEN** 每个节点子任务 SHALL 调用 `edge_statistic` 采集状态
+- **AND** 完成后前端任务中心 SHALL 可查看每节点采集结果
 
 ### Requirement: Node status query
 The system SHALL return last known status including ansible execution results.
