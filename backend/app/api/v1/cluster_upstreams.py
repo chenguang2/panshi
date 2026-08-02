@@ -6,13 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion, Node
+from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion, Node, Route
 from app.models.user import User
 from app.schemas.cluster import (
     UpstreamCreate, UpstreamUpdate,
     UpstreamWithTargets, UpstreamTargetSchema,
     ConfigVersionResponse, ConfigVersionListResponse,
-    DeleteClusterRequest, PublishRequest,
+    DeleteClusterRequest, PublishRequest, BatchDeleteUpstreamsRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
@@ -183,14 +183,86 @@ async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteCluster
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     if body.delete_edge:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
-        edge_results = await edge_sync.delete_on_nodes(
-            cluster_id, active_nodes, upstream.edge_uuid,
-            lambda client, uuid: client.delete_upstream(uuid)
-        )
-        results.extend(edge_results)
+        if not upstream.edge_uuid:
+            results.append({
+                "scope": "edge", "status": "skipped",
+                "message": "该上游无 edge_uuid，跳过 Edge 同步",
+            })
+        else:
+            active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
+            edge_results = await edge_sync.delete_on_nodes(
+                cluster_id, active_nodes, upstream.edge_uuid,
+                lambda client, uuid: client.delete_upstream(uuid)
+            )
+            results.extend(edge_results)
 
     return {"message": "上游服务已删除", "results": results}
+
+
+@router.delete("/{cluster_id}/upstreams")
+async def delete_upstreams_batch(cluster_id: int, body: BatchDeleteUpstreamsRequest = Body(...), db: AsyncSession = Depends(get_db)):
+    """批量删除同一集群内的多条上游。
+
+    每条上游独立处理：单条失败（上游不存在 / 被路由引用 / Edge 同步失败 / 其他异常）
+    不阻塞其余上游。被路由引用的上游无条件拦截（与 delete_db/delete_edge 组合无关）。
+    edge_uuid 为空的上游跳过 Edge 同步并记 skipped。
+    """
+
+    if not body.upstream_ids:
+        raise HTTPException(status_code=400, detail="upstream_ids 不能为空")
+
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
+    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, body.node_ids if body.node_ids else None)
+
+    results = []
+    for upstream_id in body.upstream_ids:
+        upstream_result: dict = {
+            "upstream_id": upstream_id,
+            "upstream_name": "",
+            "status": "failed",
+            "results": [],
+        }
+        try:
+            upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
+            upstream_result["upstream_name"] = upstream.name
+
+            linked = await db.execute(select(Route).where(Route.upstream_id == upstream_id))
+            if linked.scalars().first() is not None:
+                upstream_result["error"] = "该上游已被路由引用，请先删除引用路由"
+                results.append(upstream_result)
+                continue
+
+            if body.delete_db:
+                await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+                await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "upstream", ConfigVersion.resource_id == upstream_id))
+                await db.delete(upstream)
+                await db.commit()
+                upstream_result["results"].append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+            if body.delete_edge:
+                if not upstream.edge_uuid:
+                    upstream_result["results"].append({
+                        "scope": "edge", "status": "skipped",
+                        "message": "该上游无 edge_uuid，跳过 Edge 同步",
+                    })
+                else:
+                    edge_results = await edge_sync.delete_on_nodes(
+                        cluster_id, active_nodes, upstream.edge_uuid,
+                        lambda client, uuid: client.delete_upstream(uuid)
+                    )
+                    upstream_result["results"].extend(edge_results)
+
+            upstream_result["status"] = "success"
+        except HTTPException as e:
+            upstream_result["error"] = str(e.detail)
+        except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
+            await db.rollback()
+            upstream_result["error"] = str(e)
+        results.append(upstream_result)
+
+    return {"message": f"批量删除完成: {len(results)} 条上游", "results": results}
 
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/publish")
