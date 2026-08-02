@@ -29,8 +29,59 @@ features:
   install_openresty: true  # 在网关上安装 OpenResty
   install_edge: true       # 在网关上安装 Edge 运行时
   plugin_switches: true    # 插件启用/禁用管理页面
+  task_center: true        # 节点任务中心（/node-tasks）
 
 enabled_plugins: []        # 插件白名单（空 = 不限制）
+
+concurrency:
+  max_playbooks: 5         # 后端全局 ansible 并发上限（1-50）
+  batch_action: 5          # 前端批量节点操作并发数（1-50）
+```
+
+## 节点任务中心（task_center）
+
+`task_center` 开关控制节点操作任务中心：全局 `/node-tasks` 页面、任务化 API 路由、侧边栏「运维管理 → 节点任务」菜单。默认 `true`。
+
+**启用时**：用户可将节点运维操作（安装/升级/启动/停止/状态查询等）以持久化异步任务执行，在任务中心查看进度、日志、取消/重试。
+**禁用时**：任务中心路由与菜单消失，任务化 API 返回 404；现有单节点 SSE 操作不受影响（双轨并存）。
+
+详细说明见 [node-task-center.md](node-task-center.md)。
+
+## 并发参数（concurrency）
+
+`concurrency` 命名空间控制批量节点操作（启动/停止/reload/状态查询）的并发数，默认均为 `5`，取值范围 `1-50`。
+
+| 参数 | 默认值 | 控制范围 |
+|---|---|---|
+| `max_playbooks` | `5` | 后端全局同时执行的 ansible playbook 数（`AnsibleRunnerService` 信号量，跨所有走 ansible 的操作） |
+| `batch_action` | `5` | 前端批量节点操作同时发出的 HTTP 请求数（`runWithConcurrency` worker 数） |
+
+**联动规则（clamp）**：前端实际并发为 `min(batch_action, max_playbooks)`——即使只调大 `batch_action`，也不会超过后端信号量上限。这是为了防止前端并发请求在后端排队超过 axios 30s 超时导致的**超时假失败**（前端显示失败，后端实际仍在排队执行）。建议两值联动调整，以后端 `max_playbooks` 为准（SSH 并发、ansible 进程资源是真正的瓶颈）。
+
+**多 worker 进程注意**：若后端以多 worker 部署（如 `uvicorn --workers N`），每个进程各自持有一把信号量，实际并发 = `进程数 × max_playbooks`。
+
+**配置校验**：`concurrency` 必须是映射，参数名必须是 `max_playbooks` / `batch_action` 之一（未知参数名启动即报错退出），值必须是非布尔整数且 1-50。配置错误时后端启动失败并输出明确错误信息。
+
+**生效方式**：
+- 后端：`max_playbooks` 在启动时读取，修改需**重启后端**生效
+- 前端：`batch_action` 由前端在启动时经 `GET /api/v1/system/features` 拉取，**页面会话内冻结**——修改 features.yaml 后需**刷新前端页面 + 重启后端**才生效（前端未配置该字段时降级为默认 5）
+
+**Docker 部署要求**：Docker 镜像内必须包含 `features.yaml`（Dockerfile 已 `COPY features.yaml`，compose 已只读挂载 `./backend/features.yaml:/app/features.yaml:ro`）。若镜像/容器内缺少该文件，系统会**静默使用默认配置**（不报错），concurrency 乃至全部功能配置都不生效。
+
+**配置示例**：
+
+```yaml
+# 资源充足，提升批量操作并发
+concurrency:
+  max_playbooks: 10
+  batch_action: 10
+```
+
+```yaml
+# 仅放宽前端并发（实际仍受 max_playbooks clamp 约束）
+concurrency:
+  max_playbooks: 5
+  batch_action: 10   # 实际并发 = min(10, 5) = 5
 ```
 
 ## 功能项详细说明

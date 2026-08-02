@@ -2871,3 +2871,39 @@ TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写�
 请读取 openspec/changes/add-node-batch-action/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+======================================================================
+
+讨论：
+现在在统一管理中的集群的集群节点管理中， 批量启动停止等命令的并发数，包括前后端都是写死的是 5 ， 这个能否调整，如何调整？ 如何优雅的调整呢？ 
+
+
+
+
+configurable-batch-concurrency
+
+/brainstorming 请仔细阅读 openspec/changes/configurable-batch-concurrency 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/configurable-batch-concurrency/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+=====================================================================
+
+讨论：
+是否有必要进行多节点的 安装openresty 操作？ 参考一下现在的安装过程， 应该如何实现？ 你给出几个方案，包括界面，我看看
+
+
+node-operation-task-center
+
+/brainstorming 请仔细阅读 openspec/changes/node-operation-task-center 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+node-operation-task-center
+
+请读取 openspec/changes/node-operation-task-center/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。

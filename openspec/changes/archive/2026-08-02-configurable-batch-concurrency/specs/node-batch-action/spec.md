@@ -1,12 +1,9 @@
-# node-batch-action
+# node-batch-action — Delta Spec
 
-## Purpose
-
-单集群内批量节点操作——启动/停止/reload/状态查询批量执行，前端并发限流（同时 5 个）调用单节点端点，过程弹窗展示逐节点执行过程 + 结果表格（状态查询）。后端批量端点保留增强（reload 映射 + 空 node_ids 防护 + 日志/统计字段）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Batch node action (start/stop/reload)
+
 The system SHALL allow admins to batch-execute start/stop/reload operations on multiple nodes within a single cluster from the cluster detail page's nodes tab.
 
 #### Scenario: Batch action button with selection
@@ -37,6 +34,7 @@ The system SHALL allow admins to batch-execute start/stop/reload operations on m
 - **THEN** the node list SHALL be refreshed on completion
 
 ### Requirement: Batch node status query
+
 The system SHALL allow admins to query the status of multiple nodes at once, showing a progress modal during execution and a results table after completion.
 
 #### Scenario: Batch status query shows progress then results table
@@ -52,24 +50,7 @@ The system SHALL allow admins to query the status of multiple nodes at once, sho
 - **THEN** the system SHALL query each node's status by calling the per-node statistic endpoint (`POST /clusters/{cluster_id}/nodes/{node_id}/statistic`), with a concurrency limit (defaulting to 5, configurable via the deployment `features.yaml` `concurrency.batch_action` value)
 - **THEN** the node list SHALL be refreshed after completion (to reflect updated Edge versions)
 
-### Requirement: Batch action API enhancement
-The system SHALL enhance the batch node action endpoint to support reload and return full execution logs and statistic data (backend defensive, front-end uses per-node endpoints).
-
-#### Scenario: BatchAction supports reload
-- **WHEN** a batch action request uses action `reload`
-- **THEN** the backend SHALL map it to `nginx_reload` and execute
-
-#### Scenario: Empty node_ids rejected
-- **WHEN** a batch action request has an empty `node_ids` list
-- **THEN** the system SHALL return a 400 error (prevent operating all cluster nodes)
-
-#### Scenario: Batch results include stdout/stderr/command
-- **WHEN** the batch action endpoint returns per-node results
-- **THEN** each successful result SHALL include `stdout`, `stderr`, and `command` fields
-
-#### Scenario: Batch statistic results include statistic data
-- **WHEN** a batch action uses action `statistic`
-- **THEN** each successful result SHALL include the `statistic` field (with edge_version and nginx_running)
+## ADDED Requirements
 
 ### Requirement: 并发上限由部署配置驱动
 
