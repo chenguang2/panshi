@@ -30,6 +30,7 @@ services:
       - panshi-network
     volumes:
       - ./backend/data:/app/data
+      - ./backend/features.yaml:/app/features.yaml:ro
 
   frontend:
     build:

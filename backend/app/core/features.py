@@ -30,6 +30,14 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "ssl_cert",
     "dns_proxy_udp",
     "dns_proxy_http",
+    "task_center",
+})
+
+# Known concurrency parameter names in the `concurrency` namespace.
+# Add new tunables here when introducing them.
+KNOWN_CONCURRENCY_KEYS: frozenset[str] = frozenset({
+    "max_playbooks",
+    "batch_action",
 })
 
 # ── Module-level cache (set once at startup) ───────────────────────────
@@ -54,6 +62,11 @@ def feature_enabled(name: str) -> bool:
 def get_enabled_plugins() -> list[str]:
     """Return the enabled-plugins whitelist (empty list = no restriction)."""
     return get_features().get("enabled_plugins", [])
+
+
+def get_concurrency(name: str, default: int) -> int:
+    """Return a concurrency parameter value (default when not configured)."""
+    return get_features().get("concurrency", {}).get(name, default)
 
 
 # ── Loading & validation ──────────────────────────────────────────────
@@ -84,6 +97,7 @@ def load_features(path: str = "features.yaml") -> dict:
         sys.exit(1)
 
     _validate(raw)
+    _validate_concurrency(raw)
     _features = raw  # type: ignore[assignment]
     return _features
 
@@ -123,3 +137,32 @@ def _validate(config: dict) -> None:
     elif not isinstance(plugins, list):
         print("错误: features.yaml 中 'enabled_plugins' 必须是列表", file=sys.stderr)
         sys.exit(1)
+
+
+def _validate_concurrency(config: dict) -> None:
+    """Validate the ``concurrency`` namespace; prints error and exits on failure."""
+    cc = config.get("concurrency", {})
+    if cc is None:
+        config["concurrency"] = {}
+        return
+    if not isinstance(cc, dict):
+        print("错误: features.yaml 中 'concurrency' 必须是映射（字典）", file=sys.stderr)
+        sys.exit(1)
+
+    unknown = [k for k in cc if k not in KNOWN_CONCURRENCY_KEYS]
+    if unknown:
+        print(
+            f"错误: features.yaml 包含未知并发参数 {unknown}。"
+            f" 允许的参数名: {sorted(KNOWN_CONCURRENCY_KEYS)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    for key, val in cc.items():
+        if isinstance(val, bool) or not isinstance(val, int) or not (1 <= val <= 50):
+            print(
+                f"错误: features.yaml 中 'concurrency.{key}' 必须是 1-50 的整数，"
+                f" 当前值: {val} (类型: {type(val).__name__})",
+                file=sys.stderr,
+            )
+            sys.exit(1)

@@ -286,3 +286,151 @@ class TestFeaturesModule:
 
         with pytest.raises(SystemExit):
             load_features(str(cfg))
+
+    # ── concurrency: get_concurrency ─────────────────────
+
+    def test_get_concurrency_configured_value(self, tmp_path: Path):
+        """get_concurrency should return the configured value."""
+        from app.core.features import get_concurrency, load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbooks": 10, "batch_action": 7},
+        }))
+
+        load_features(str(cfg))
+        assert get_concurrency("max_playbooks", 5) == 10
+        assert get_concurrency("batch_action", 5) == 7
+
+    def test_get_concurrency_default_when_missing(self, tmp_path: Path):
+        """get_concurrency should return default when param not configured."""
+        from app.core.features import get_concurrency, load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}}))
+
+        load_features(str(cfg))
+        assert get_concurrency("max_playbooks", 5) == 5
+        assert get_concurrency("batch_action", 5) == 5
+
+    def test_get_concurrency_after_empty_concurrency_mapping(self, tmp_path: Path):
+        """concurrency: {} or null should be treated as empty config."""
+        from app.core.features import get_concurrency, load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {},
+        }))
+
+        load_features(str(cfg))
+        assert get_concurrency("max_playbooks", 5) == 5
+
+    # ── concurrency: validation errors ───────────────────
+
+    def test_concurrency_not_dict_raises_systemexit(self, tmp_path: Path):
+        """concurrency that is not a mapping should cause SystemExit."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": "not-a-mapping",
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_concurrency_unknown_key_raises_systemexit(self, tmp_path: Path):
+        """Unknown concurrency key (e.g. typo) should cause SystemExit."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbook": 5},  # typo!
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_concurrency_boolean_value_raises_systemexit(self, tmp_path: Path):
+        """Boolean concurrency value (bool is int subclass) should be rejected."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbooks": True},
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_concurrency_zero_raises_systemexit(self, tmp_path: Path):
+        """concurrency value 0 should be rejected (must be 1-50)."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbooks": 0},
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_concurrency_over_50_raises_systemexit(self, tmp_path: Path):
+        """concurrency value > 50 should be rejected."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbooks": 51},
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_concurrency_string_value_raises_systemexit(self, tmp_path: Path):
+        """String concurrency value should be rejected."""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {},
+            "concurrency": {"max_playbooks": "5"},
+        }))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    # ── task_center feature ─────────────────────────────
+
+    def test_task_center_feature_recognized(self, tmp_path: Path):
+        """task_center is a known feature, should not cause SystemExit."""
+        from app.core.features import load_features, feature_enabled
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
+            "features": {"task_center": False},
+        }))
+
+        load_features(str(cfg))
+        assert feature_enabled("task_center") is False
+
+    def test_task_center_feature_default_enabled(self):
+        """task_center should default to enabled when not configured."""
+        from app.core.features import load_features, feature_enabled
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml", mode="w", delete=False) as f:
+            f.write(yaml.dump({"features": {}}))
+            p = f.name
+
+        try:
+            load_features(p)
+            assert feature_enabled("task_center") is True
+        finally:
+            Path(p).unlink()

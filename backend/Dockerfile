@@ -7,6 +7,7 @@ RUN pip install uv && uv sync
 
 COPY app ./app
 COPY .env.production ./.env
+COPY features.yaml ./features.yaml
 
 RUN mkdir -p /app/data
 
