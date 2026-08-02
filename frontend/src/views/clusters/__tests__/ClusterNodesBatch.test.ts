@@ -6,6 +6,8 @@ import { setActivePinia, createPinia } from 'pinia'
 const mockDeleteNode = vi.fn()
 const mockDeleteNodes = vi.fn()
 const mockSelectNodes = vi.fn()
+const mockBatchNodeAction = vi.fn()
+const mockBatchNodeStatus = vi.fn()
 
 vi.mock('@/composables/useClusterNodes', () => ({
   useClusterNodes: () => ({
@@ -45,6 +47,8 @@ vi.mock('@/composables/useClusterNodes', () => ({
     buildNodeCsvTemplate: () => '',
     deleteNode: (c: any) => mockDeleteNode(c),
     deleteNodes: (c: any) => mockDeleteNodes(c),
+    batchNodeAction: (c: any, action: any, label: any) => mockBatchNodeAction(c, action, label),
+    batchNodeStatus: (c: any) => mockBatchNodeStatus(c),
     startNode: vi.fn(),
     stopNode: vi.fn(),
     queryNodeStatus: vi.fn(),
@@ -174,5 +178,61 @@ describe('ClusterNodes.vue batch delete', () => {
     const buttons = wrapper.findAll('.mock-btn')
     const editBtn = buttons.find((b) => b.text().includes('编辑'))
     expect(editBtn?.attributes('disabled')).toBeDefined()
+  })
+
+  it('shows action buttons with count suffix when batch selected', async () => {
+    const cluster = makeCluster({
+      selectedNodeKeys: [1, 2],
+      selectedNode: null,
+      nodes: [
+        { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' },
+        { id: 2, ip: '10.0.0.2', cluster_id: 1, edge_path: '/edge/n2' },
+      ],
+    })
+    const wrapper = await mountClusterNodes(cluster)
+    const buttons = wrapper.findAll('.mock-btn')
+    const startBtn = buttons.find((b) => b.text().includes('启动'))
+    expect(startBtn?.text()).toContain('(2)')
+    const statusBtn = buttons.find((b) => b.text().includes('状态查询'))
+    expect(statusBtn?.text()).toContain('(2)')
+  })
+
+  it('enables action buttons in batch mode and opens batch confirm dialog', async () => {
+    const cluster = makeCluster({
+      selectedNodeKeys: [1, 2],
+      selectedNode: null,
+      nodes: [
+        { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' },
+        { id: 2, ip: '10.0.0.2', cluster_id: 1, edge_path: '/edge/n2' },
+      ],
+    })
+    const wrapper = await mountClusterNodes(cluster)
+    const buttons = wrapper.findAll('.mock-btn')
+    const startBtn = buttons.find((b) => b.text().includes('启动'))
+    expect(startBtn?.attributes('disabled')).toBeUndefined()
+    await startBtn?.trigger('click')
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.confirmState?.visible).toBe(true)
+    expect(vm.confirmState?.title).toContain('确认批量启动节点')
+  })
+
+  it('status query button opens batch status confirm dialog in batch mode', async () => {
+    const cluster = makeCluster({
+      selectedNodeKeys: [1, 2],
+      selectedNode: null,
+      nodes: [
+        { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' },
+        { id: 2, ip: '10.0.0.2', cluster_id: 1, edge_path: '/edge/n2' },
+      ],
+    })
+    const wrapper = await mountClusterNodes(cluster)
+    const buttons = wrapper.findAll('.mock-btn')
+    const statusBtn = buttons.find((b) => b.text().includes('状态查询'))
+    await statusBtn?.trigger('click')
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.confirmState?.visible).toBe(true)
+    expect(vm.confirmState?.title).toContain('确认批量状态查询')
   })
 })

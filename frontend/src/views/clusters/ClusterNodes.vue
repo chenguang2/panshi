@@ -5,10 +5,10 @@
       <a-button size="small" @click="editNode(cluster)" :disabled="!singleOpEnabled">编辑节点</a-button>
       <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
       <a-divider type="vertical" />
-      <a-button size="small" @click="handleNodeStart" :disabled="!singleOpEnabled">▶ 启动</a-button>
-      <a-button size="small" @click="handleNodeStop" :disabled="!singleOpEnabled">⏹ 停止</a-button>
-      <a-button size="small" @click="handleNodeReload" :disabled="!singleOpEnabled">⟳ reload</a-button>
-      <a-button size="small" @click="queryNodeStatus(cluster.selectedNode!)" :disabled="!singleOpEnabled">状态查询</a-button>
+      <a-button size="small" @click="handleNodeStart" :disabled="!(singleOpEnabled || batchOpEnabled)">▶ 启动{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
+      <a-button size="small" @click="handleNodeStop" :disabled="!(singleOpEnabled || batchOpEnabled)">⏹ 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
+      <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)">⟳ reload{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
+      <a-button size="small" @click="handleNodeStatusQuery" :disabled="!(singleOpEnabled || batchOpEnabled)">状态查询{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
       <a-dropdown v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" :trigger="['click']">
         <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
         <template #overlay>
@@ -301,6 +301,14 @@
       @cancel="handleCancelInstall"
     />
 
+    <BatchActionProgressModal
+      v-model:visible="batchProgressVisible"
+      :title="batchProgressTitle"
+      :items="batchProgressItems"
+      :expanded-ip="batchProgressExpandedIp"
+      @toggle-expand="batchProgressExpandedIp = (batchProgressExpandedIp === $event ? null : $event)"
+    />
+
     <!-- Custom Confirm Modal -->
     <Teleport to="body">
     <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
@@ -348,6 +356,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
@@ -414,9 +423,15 @@ const {
   parseIpList,
   parseNodeCsv,
   buildNodeCsvTemplate,
-  deleteNode,
-  deleteNodes,
-  startNode,
+    deleteNode,
+    deleteNodes,
+    batchNodeAction,
+    batchNodeStatus,
+    batchProgressVisible,
+    batchProgressTitle,
+    batchProgressItems,
+    batchProgressExpandedIp,
+    startNode,
   stopNode,
   queryNodeStatus,
   executeNodeAction,
@@ -436,6 +451,7 @@ const {
 // ── batch delete selection state ─────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedNodeKeys || []).length)
 const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedNode || batchCount.value === 1))
+const batchOpEnabled = computed(() => batchCount.value > 1)
 const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedNode ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
 
@@ -543,8 +559,29 @@ async function executeConfirm() {
   }
 }
 
+function selectedNodeIps(): string[] {
+  const keys = props.cluster.selectedNodeKeys || []
+  return (props.cluster.nodes || []).filter((n) => keys.includes(n.id)).map((n) => n.ip)
+}
+
+function confirmTitle(count: number, ips: string[]): string {
+  return count > 3
+    ? `确认对选中的 ${count} 个节点执行操作？${ips.slice(0, 3).join('、')} 等 ${count} 条`
+    : `确认对选中的 ${count} 个节点执行操作？${ips.join('、')}`
+}
+
 function handleNodeStart() {
   const node = props.cluster.selectedNode
+  if (batchCount.value > 0) {
+    const ips = selectedNodeIps()
+    showConfirm(
+      '确认批量启动节点',
+      confirmTitle(batchCount.value, ips),
+      `确认启动(${batchCount.value})`,
+      () => batchNodeAction(props.cluster, 'start', '启动'),
+    )
+    return
+  }
   if (!node) return
   showConfirm(
     '确认启动节点',
@@ -556,6 +593,16 @@ function handleNodeStart() {
 
 function handleNodeStop() {
   const node = props.cluster.selectedNode
+  if (batchCount.value > 0) {
+    const ips = selectedNodeIps()
+    showConfirm(
+      '确认批量停止节点',
+      `${confirmTitle(batchCount.value, ips)}。停止后所有选中节点上的流量将中断，请确认操作无误。`,
+      `确认停止(${batchCount.value})`,
+      () => batchNodeAction(props.cluster, 'stop', '停止'),
+    )
+    return
+  }
   if (!node) return
   showConfirm(
     '确认停止节点',
@@ -567,6 +614,16 @@ function handleNodeStop() {
 
 function handleNodeReload() {
   const node = props.cluster.selectedNode
+  if (batchCount.value > 0) {
+    const ips = selectedNodeIps()
+    showConfirm(
+      '确认批量 reload 节点',
+      confirmTitle(batchCount.value, ips),
+      `确认reload(${batchCount.value})`,
+      () => batchNodeAction(props.cluster, 'reload', 'reload'),
+    )
+    return
+  }
   if (!node) return
   showConfirm(
     '确认重新加载节点',
@@ -574,6 +631,21 @@ function handleNodeReload() {
     '确认reload',
     () => executeNodeAction(node as any, 'reload', 'reload'),
   )
+}
+
+function handleNodeStatusQuery() {
+  if (batchCount.value > 0) {
+    const ips = selectedNodeIps()
+    showConfirm(
+      '确认批量状态查询',
+      confirmTitle(batchCount.value, ips),
+      `确认查询(${batchCount.value})`,
+      () => batchNodeStatus(props.cluster),
+    )
+    return
+  }
+  const node = props.cluster.selectedNode
+  if (node) queryNodeStatus(node)
 }
 
 function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: string) {

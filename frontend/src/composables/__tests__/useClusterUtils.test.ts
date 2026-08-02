@@ -378,4 +378,88 @@ describe('executeDeleteWithProgress', () => {
     expect(document.querySelector('.modal-header h2')?.textContent).toContain('删除上游')
     expect(document.querySelector('.modal-footer .btn-primary')).not.toBeNull()
   })
+
+  it('renders batch status modal as a table with version and health columns', async () => {
+    const { showBatchStatusModal } = await import('../useClusterUtils')
+    showBatchStatusModal('批量状态查询', [
+      { ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true },
+      { ip: '10.0.0.2', status: 'error', detail: '连接超时', version: '', healthy: false },
+    ])
+
+    const modal = document.querySelector('.modal-overlay .modal')
+    expect(modal).not.toBeNull()
+    const text = document.body.textContent || ''
+    expect(text).toContain('10.0.0.1')
+    expect(text).toContain('v1.2.3')
+    expect(text).toContain('健康')
+    expect(text).toContain('10.0.0.2')
+    expect(text).toContain('连接超时')
+    expect(text).toContain('失败')
+  })
+
+  it('batch status modal shows failure rows with detail', async () => {
+    const { showBatchStatusModal } = await import('../useClusterUtils')
+    showBatchStatusModal('批量状态查询', [
+      { ip: '10.0.0.9', status: 'error', detail: 'Edge 节点不可达', version: '', healthy: false },
+    ])
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('10.0.0.9')
+    expect(text).toContain('Edge 节点不可达')
+  })
+
+  it('batch status modal expands row to show process details', async () => {
+    const { showBatchStatusModal } = await import('../useClusterUtils')
+    showBatchStatusModal('批量状态查询', [
+      {
+        ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true,
+        command: 'ansible-playbook ...', stdout: 'cpu_usage: 1.5', stderr: '',
+      },
+    ])
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('详情')
+    // 默认不展开，点击详情后显示命令/stdout
+    const detailBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('详情'))
+    expect(detailBtn).toBeTruthy()
+    detailBtn!.click()
+    const expanded = document.body.textContent || ''
+    expect(expanded).toContain('ansible-playbook')
+    expect(expanded).toContain('cpu_usage')
+  })
+
+  it('expanded details wrap long lines without horizontal overflow', async () => {
+    const { showBatchStatusModal } = await import('../useClusterUtils')
+    const longLine = 'TASK [edge : run] ' + 'x'.repeat(2000)
+    showBatchStatusModal('批量状态查询', [
+      {
+        ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true,
+        command: longLine, stdout: 'stdout', stderr: '',
+      },
+    ])
+
+    const detailBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('详情'))
+    detailBtn!.click()
+
+    // 详情容器应无水平溢出（超长行被强制换行）
+    const detailBox = document.querySelector('.batch-status-detail') as HTMLElement
+    expect(detailBox).toBeTruthy()
+    expect(detailBox.scrollWidth).toBeLessThanOrEqual(detailBox.clientWidth)
+  })
+
+  it('health status column does not wrap vertically', async () => {
+    const { showBatchStatusModal } = await import('../useClusterUtils')
+    showBatchStatusModal('批量状态查询', [
+      { ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true, detail: '' },
+    ])
+
+    const table = document.querySelector('table') as HTMLTableElement
+    expect(table).toBeTruthy()
+    // table-layout fixed 保证列宽稳定，健康状态列不被长内容挤压
+    expect(table.style.tableLayout || getComputedStyle(table).tableLayout).toBe('fixed')
+    // 健康状态单元格不折行（white-space nowrap）
+    const healthCell = Array.from(document.querySelectorAll('td')).find((td) => td.textContent === '健康')
+    expect(healthCell).toBeTruthy()
+    expect(getComputedStyle(healthCell!).whiteSpace).toBe('nowrap')
+  })
 })

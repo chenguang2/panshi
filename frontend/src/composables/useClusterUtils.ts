@@ -247,6 +247,107 @@ export function showBatchResultModal(title: string, items: BatchResultItem[]) {
   renderModal()
 }
 
+export interface BatchStatusItem {
+  ip: string
+  status: string
+  version?: string
+  healthy?: boolean
+  detail?: string
+  command?: string
+  stdout?: string
+  stderr?: string
+}
+
+export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const expandedIps = new Set<string>()
+
+  const renderModal = () => {
+    const bodyRows: any[] = []
+    for (const item of items) {
+      const ok = item.status === 'success'
+      const healthy = item.healthy
+      const healthText = ok
+        ? (healthy === true ? '健康' : healthy === false ? '离线' : '未知')
+        : '失败'
+      const healthColor = ok
+        ? (healthy === true ? 'var(--success)' : healthy === false ? 'var(--danger)' : 'var(--muted)')
+        : 'var(--danger)'
+      const hasDetails = item.command || item.stdout || item.stderr || item.detail
+      bodyRows.push(h('tr', { style: 'border-bottom:1px solid var(--border);' }, [
+        h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.ip),
+        h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.version || '-'),
+        h('td', { style: `padding:6px 8px;color:${healthColor};white-space:nowrap;` }, healthText),
+        h('td', { style: 'padding:6px 8px;color:var(--danger);font-size:11px;word-break:break-all;' }, item.detail || ''),
+        h('td', { style: 'padding:6px 8px;text-align:right;' }, hasDetails
+          ? h('button', {
+              class: 'btn btn-ghost btn-sm',
+              onClick: () => {
+                if (expandedIps.has(item.ip)) expandedIps.delete(item.ip)
+                else expandedIps.add(item.ip)
+                renderModal()
+              },
+            }, expandedIps.has(item.ip) ? '收起' : '详情')
+          : ''),
+      ]))
+      if (expandedIps.has(item.ip) && hasDetails) {
+        const detailLines: string[] = []
+        if (item.command) detailLines.push(`命令: ${item.command}`)
+        if (item.stdout) detailLines.push('--- stdout ---', item.stdout)
+        if (item.stderr) detailLines.push('--- stderr ---', item.stderr)
+        if (item.detail) detailLines.push(`失败: ${item.detail}`)
+        bodyRows.push(h('tr', { style: 'border-bottom:1px solid var(--border);background:var(--bg);' }, [
+          h('td', { colSpan: 5, style: 'padding:6px 12px;' }, [
+            h('div', {
+              class: 'batch-status-detail',
+              style: 'background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word;',
+            }, detailLines.map((l) => h('div', l))),
+          ]),
+        ]))
+      }
+    }
+    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+      h('div', { class: 'modal', style: 'max-width:860px;' }, [
+        h('div', { class: 'modal-header' }, [
+          h('h2', title),
+          h('button', {
+            class: 'modal-close',
+            onClick: () => { render(null, container); container.remove() },
+          }, '\u00D7'),
+        ]),
+        h('div', { class: 'modal-body' }, [
+          h('div', {
+            style: 'max-height:360px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);',
+          }, [
+            h('table', { style: 'width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;' }, [
+              h('thead', [
+                h('tr', { style: 'background:var(--bg);color:var(--muted);text-align:left;' }, [
+                  h('th', { style: 'padding:6px 8px;width:140px;' }, '节点IP'),
+                  h('th', { style: 'padding:6px 8px;width:110px;' }, 'Edge版本'),
+                  h('th', { style: 'padding:6px 8px;width:90px;' }, '健康状态'),
+                  h('th', { style: 'padding:6px 8px;' }, '失败原因'),
+                  h('th', { style: 'padding:6px 8px;width:70px;' }, ''),
+                ]),
+              ]),
+              h('tbody', bodyRows),
+            ]),
+          ]),
+        ]),
+        h('div', { class: 'modal-footer' }, [
+          h('button', {
+            class: 'btn btn-primary',
+            onClick: () => { render(null, container); container.remove() },
+          }, '确定'),
+        ]),
+      ]),
+    ])
+    render(vnode, container)
+  }
+
+  renderModal()
+}
+
 export interface PublishOptions {
   title: string
   apiEndpoint: string

@@ -3,11 +3,29 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
-import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent, showBatchResultModal, type BatchResultItem } from './useClusterUtils'
+import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent, showBatchResultModal, showBatchStatusModal, type BatchResultItem } from './useClusterUtils'
 import { stripAnsi } from '@/utils/ansi'
 import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImport'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
+export const BATCH_ACTION_CONCURRENCY = 5
+
+export async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0
+  const worker = async () => {
+    while (nextIndex < items.length) {
+      const i = nextIndex++
+      await task(items[i], i)
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  await Promise.all(workers)
+}
 
 export const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
@@ -55,6 +73,17 @@ export function useClusterNodes(options: {
   const execHighlights = ref<string[]>([])
   const execStatistics = ref<Record<string, string> | null>(null)
   const execElapsed = ref<number | null>(null)
+
+  // ── Batch action progress state ─────────────────────────────
+  const batchProgressVisible = ref(false)
+  const batchProgressTitle = ref('')
+  const batchProgressItems = ref<Array<{
+    ip: string
+    status: 'pending' | 'running' | 'success' | 'error'
+    logs: string[]
+    rc?: number
+  }>>([])
+  const batchProgressExpandedIp = ref<string | null>(null)
 
   let _pulseTimer: ReturnType<typeof setInterval> | null = null
   let _elapsedTimer: ReturnType<typeof setInterval> | null = null
@@ -437,6 +466,126 @@ export function useClusterNodes(options: {
     })
   }
 
+  const batchNodeAction = async (cluster: Cluster, action: 'start' | 'stop' | 'reload', label: string) => {
+    const keys = cluster.selectedNodeKeys || []
+    if (keys.length === 0) {
+      message.warning('请先勾选要操作的节点')
+      return
+    }
+    const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
+    cluster.selectedNodeKeys = []
+    cluster.selectedNode = null
+
+    batchProgressTitle.value = `批量${label}节点`
+    batchProgressItems.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+    batchProgressVisible.value = true
+
+    await runWithConcurrency(nodes, BATCH_ACTION_CONCURRENCY, async (node, i) => {
+      batchProgressItems.value[i].status = 'running'
+      batchProgressItems.value[i].logs = [`开始对节点 ${node.ip} 执行 ${label} 操作...`]
+      try {
+        const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
+        const data = res.data || {}
+        const rc = data.rc
+        const logs: string[] = []
+        if (data.command) logs.push(`执行命令: ${data.command}`)
+        logs.push(`返回码 (rc): ${rc}`)
+        if (data.stdout) logs.push('--- stdout ---', data.stdout)
+        if (data.stderr) logs.push('--- stderr ---', data.stderr)
+        logs.push(rc === 0 ? `✅ 节点 ${label} 成功` : `❌ 节点 ${label} 失败`)
+        batchProgressItems.value[i] = {
+          ip: node.ip,
+          status: rc === 0 ? 'success' : 'error',
+          logs,
+          rc,
+        }
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { detail?: string } }; message?: string }
+        const detail = err.response?.data?.detail || err.message || '未知错误'
+        batchProgressItems.value[i] = {
+          ip: node.ip,
+          status: 'error',
+          logs: [...batchProgressItems.value[i].logs, `❌ ${label}失败: ${detail}`],
+        }
+      }
+    })
+    await loadNodes(cluster)
+  }
+
+  const batchNodeStatus = async (cluster: Cluster) => {
+    const keys = cluster.selectedNodeKeys || []
+    if (keys.length === 0) {
+      message.warning('请先勾选要查询的节点')
+      return
+    }
+    const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
+    cluster.selectedNodeKeys = []
+    cluster.selectedNode = null
+
+    batchProgressTitle.value = '批量状态查询节点'
+    batchProgressItems.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+    batchProgressVisible.value = true
+
+    const rows: Array<{
+      ip: string
+      status: string
+      version: string
+      healthy?: boolean
+      detail: string
+      command?: string
+      stdout?: string
+      stderr?: string
+    }> = []
+    await runWithConcurrency(nodes, BATCH_ACTION_CONCURRENCY, async (node, i) => {
+      batchProgressItems.value[i].status = 'running'
+      batchProgressItems.value[i].logs = [`开始查询节点 ${node.ip} 状态...`]
+      try {
+        const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, {
+          ports: String(node.management_port),
+        })
+        const data = res.data || {}
+        const rc = data.rc
+        const logs: string[] = []
+        if (data.command) logs.push(`执行命令: ${data.command}`)
+        logs.push(`返回码 (rc): ${rc}`)
+        if (data.stdout) logs.push('--- stdout ---', data.stdout)
+        if (data.stderr) logs.push('--- stderr ---', data.stderr)
+        logs.push(rc === 0 ? '✅ 节点状态查询成功' : '❌ 节点状态查询失败')
+        batchProgressItems.value[i] = { ip: node.ip, status: rc === 0 ? 'success' : 'error', logs, rc }
+        let detail = ''
+        if (rc !== 0) {
+          const errText = data.stderr || data.stdout || ''
+          const errLines = errText.split('\n').filter((l: string) =>
+            /error|failed|refused|timeout|unreachable|fatal/i.test(l),
+          )
+          detail = errLines.slice(0, 2).join(' | ') || `返回码非 0 (rc=${rc})`
+        }
+        rows.push({
+          ip: node.ip,
+          status: rc === 0 ? 'success' : 'error',
+          version: data.statistic?.edge_version || '',
+          healthy: rc === 0 ? node.status === 1 : false,
+          detail,
+          command: data.command || '',
+          stdout: data.stdout || '',
+          stderr: data.stderr || '',
+        })
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { detail?: string } }; message?: string }
+        const detail = err.response?.data?.detail || err.message || '查询失败'
+        batchProgressItems.value[i] = {
+          ip: node.ip,
+          status: 'error',
+          logs: [...batchProgressItems.value[i].logs, `❌ 状态查询失败: ${detail}`],
+        }
+        rows.push({ ip: node.ip, status: 'error', version: '', healthy: false, detail })
+      }
+    })
+    batchProgressVisible.value = false
+    showBatchStatusModal('批量状态查询', rows)
+    await loadNodes(cluster)
+  }
+
   /** Extract key lines from nginx_cmd.sh stdout for user-facing highlights. */
   const extractKeyInfo = (stdout: string): string[] => {
     const highlights: string[] = []
@@ -801,6 +950,12 @@ export function useClusterNodes(options: {
     buildNodeCsvTemplate,
     deleteNode,
     deleteNodes,
+    batchNodeAction,
+    batchNodeStatus,
+    batchProgressVisible,
+    batchProgressTitle,
+    batchProgressItems,
+    batchProgressExpandedIp,
     startNode,
     stopNode,
     queryNodeStatus,

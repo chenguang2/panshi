@@ -8,6 +8,7 @@ const mockApiGet = vi.fn()
 const mockMessageSuccess = vi.fn()
 const mockMessageError = vi.fn()
 const mockShowBatchResultModal = vi.fn()
+const mockShowBatchStatusModal = vi.fn()
 const mockShowDeleteConfirm = vi.fn()
 const mockExecuteDeleteWithProgress = vi.fn()
 
@@ -34,6 +35,7 @@ vi.mock('@/composables/useClusterUtils', () => ({
   executeDeleteWithProgress: (...args: any[]) => mockExecuteDeleteWithProgress(...args),
   buildDeleteProgressContent: () => '',
   showBatchResultModal: (...args: any[]) => mockShowBatchResultModal(...args),
+  showBatchStatusModal: (...args: any[]) => mockShowBatchStatusModal(...args),
 }))
 
 function makeNode(overrides: Partial<Node> = {}): Node {
@@ -314,6 +316,180 @@ describe('useClusterNodes batch import', () => {
       const { handleNodeTableChange } = await makeComposable(cluster)
       handleNodeTableChange(cluster, { current: 2, pageSize: 20 }, {})
       expect(cluster.selectedNodeKeys).toEqual([1])
+    })
+  })
+
+  describe('batchNodeAction', () => {
+    it('opens progress modal and calls per-node endpoint with concurrency limit', async () => {
+      const cluster = makeCluster({
+        nodes: [makeNode({ id: 1, ip: '10.0.0.1' }), makeNode({ id: 2, ip: '10.0.0.2' })],
+        selectedNodeKeys: [1, 2],
+      })
+      const { batchNodeAction, batchProgressVisible, batchProgressItems } = await makeComposable(cluster)
+      mockApiPost.mockImplementation((url: string) => {
+        if (url.endsWith('/1/start') || url.endsWith('/2/start')) {
+          return Promise.resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'cmd' } })
+        }
+        return Promise.reject(new Error('unexpected url: ' + url))
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+
+      await batchNodeAction(cluster, 'start', '启动')
+
+      // 每个节点独立调用单节点端点
+      expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/start')
+      expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/2/start')
+      expect(batchProgressVisible.value).toBe(true)
+      const items = batchProgressItems.value
+      expect(items).toHaveLength(2)
+      expect(items[0].status).toBe('success')
+      expect(items[1].status).toBe('success')
+      expect(cluster.selectedNodeKeys).toEqual([])
+      expect(cluster.selectedNode).toBeNull()
+    })
+
+    it('limits concurrent requests and queues remaining nodes', async () => {
+      const cluster = makeCluster({
+        nodes: [
+          makeNode({ id: 1, ip: '10.0.0.1' }),
+          makeNode({ id: 2, ip: '10.0.0.2' }),
+          makeNode({ id: 3, ip: '10.0.0.3' }),
+          makeNode({ id: 4, ip: '10.0.0.4' }),
+          makeNode({ id: 5, ip: '10.0.0.5' }),
+          makeNode({ id: 6, ip: '10.0.0.6' }),
+        ],
+        selectedNodeKeys: [1, 2, 3, 4, 5, 6],
+      })
+      const { batchNodeAction, batchProgressItems } = await makeComposable(cluster)
+
+      // 追踪每个请求的 in-flight 并发数
+      let inFlight = 0
+      let maxInFlight = 0
+      const resolveFns: Array<() => void> = []
+      mockApiPost.mockImplementation(() => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        return new Promise((resolve) => {
+          resolveFns.push(() => {
+            inFlight--
+            resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'cmd' } })
+          })
+        })
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 6, items: [] } })
+
+      const actionPromise = batchNodeAction(cluster, 'start', '启动')
+
+      // 等待首批请求发出，断言并发被限制在 5 以内
+      await new Promise((r) => setTimeout(r, 100))
+      expect(maxInFlight).toBeLessThanOrEqual(5)
+      // 首批只应发出 5 个（并发上限），第 6 个排队
+      expect(resolveFns.length).toBe(5)
+
+      // 逐个释放已收集的，每释放一个应补发一个排队请求
+      for (let round = 0; round < 6; round++) {
+        const fn = resolveFns.shift()
+        if (fn) fn()
+        await new Promise((r) => setTimeout(r, 30))
+      }
+      await actionPromise
+
+      expect(maxInFlight).toBeLessThanOrEqual(5)
+      const items = batchProgressItems.value
+      expect(items).toHaveLength(6)
+      expect(items.every((i) => i.status === 'success')).toBe(true)
+    })
+
+    it('marks a node failed when its per-node call rejects', async () => {
+      const cluster = makeCluster({
+        nodes: [makeNode({ id: 1, ip: '10.0.0.1' }), makeNode({ id: 2, ip: '10.0.0.2' })],
+        selectedNodeKeys: [1, 2],
+      })
+      const { batchNodeAction, batchProgressItems } = await makeComposable(cluster)
+      mockApiPost.mockImplementation((url: string) => {
+        if (url.endsWith('/1/start')) return Promise.resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'c' } })
+        if (url.endsWith('/2/start')) return Promise.reject({ response: { data: { detail: '连接超时' } } })
+        return Promise.reject(new Error('unexpected'))
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+
+      await batchNodeAction(cluster, 'start', '启动')
+
+      const items = batchProgressItems.value
+      expect(items[0].status).toBe('success')
+      expect(items[1].status).toBe('error')
+      expect(items[1].logs.join('')).toContain('连接超时')
+    })
+
+    it('warns when no nodes checked', async () => {
+      const cluster = makeCluster()
+      const { batchNodeAction } = await makeComposable(cluster)
+      await batchNodeAction(cluster, 'start', '启动')
+      expect(mockApiPost).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('batchNodeStatus', () => {
+    it('uses progress modal with concurrency then shows status table with parsed rows', async () => {
+      const cluster = makeCluster({
+        nodes: [makeNode({ id: 1, ip: '10.0.0.1' }), makeNode({ id: 2, ip: '10.0.0.2' })],
+        selectedNodeKeys: [1, 2],
+      })
+      const { batchNodeStatus, batchProgressVisible, batchProgressItems } = await makeComposable(cluster)
+      mockApiPost.mockImplementation((url: string) => {
+        if (url.endsWith('/1/statistic') || url.endsWith('/2/statistic')) {
+          return Promise.resolve({
+            data: { rc: 0, statistic: { edge_version: 'v1.2.3', nginx_running: true }, stdout: 's', stderr: '', command: 'c' },
+          })
+        }
+        return Promise.reject(new Error('unexpected url: ' + url))
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+
+      await batchNodeStatus(cluster)
+
+      // 并发调用单节点 statistic 端点
+      expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/statistic', { ports: '9180' })
+      expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/2/statistic', { ports: '9180' })
+      // 过程弹窗已关闭（完成后转结果表格），但 items 记录了执行结果
+      expect(batchProgressVisible.value).toBe(false)
+      const items = batchProgressItems.value
+      expect(items).toHaveLength(2)
+      expect(items[0].status).toBe('success')
+      expect(items[1].status).toBe('success')
+      // 最终结果表格展示版本/健康
+      expect(mockShowBatchStatusModal).toHaveBeenCalledTimes(1)
+      const rows = mockShowBatchStatusModal.mock.calls[0][1]
+      expect(rows[0]).toMatchObject({ ip: '10.0.0.1', version: 'v1.2.3', healthy: true })
+      // 收集了过程信息供详情展开
+      expect(rows[0].command).toBe('c')
+      expect(rows[0].stdout).toBe('s')
+    })
+
+    it('fills failure reason when rc is non-zero with stderr', async () => {
+      const cluster = makeCluster({
+        nodes: [makeNode({ id: 1, ip: '10.0.0.1' })],
+        selectedNodeKeys: [1],
+      })
+      const { batchNodeStatus } = await makeComposable(cluster)
+      mockApiPost.mockResolvedValue({
+        data: {
+          rc: 4,
+          statistic: {},
+          stdout: 'PLAY [Run edge]\nTASK [edge : run]\nfatal: [10.0.0.1]: FAILED! => connection refused',
+          stderr: '',
+          command: 'cmd',
+        },
+      })
+      mockApiGet.mockResolvedValue({ data: { total: 1, items: [] } })
+
+      await batchNodeStatus(cluster)
+
+      const rows = mockShowBatchStatusModal.mock.calls[0][1]
+      expect(rows[0].status).toBe('error')
+      expect(rows[0].detail).toContain('connection refused')
+      // 摘要不应包含整段 stdout（只提取关键行）
+      expect(rows[0].detail).not.toContain('PLAY [Run edge]')
     })
   })
 })
