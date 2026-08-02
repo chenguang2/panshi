@@ -95,6 +95,29 @@ def list_edge_pack_files(soft_dir: str) -> list[dict]:
 # (used by cancel-install).  Shared across both routers.
 _install_proc_registry: dict[int, asyncio.subprocess.Process] = {}
 
+# Task-dimensioned reverse index (V3): task_id -> {node_id: Process}.
+# The node_id index above keeps the existing cancel-install endpoint working;
+# this index lets the task engine cancel/clean up all procs of a task.
+_task_procs: dict[int, dict[int, asyncio.subprocess.Process]] = {}
+
+
+def _register_proc(task_id: int | None, node_id: int, proc: asyncio.subprocess.Process) -> None:
+    """Register an SSH subprocess in both indices."""
+    _install_proc_registry[node_id] = proc
+    if task_id is not None:
+        _task_procs.setdefault(task_id, {})[node_id] = proc
+
+
+def _unregister_proc(task_id: int | None, node_id: int) -> None:
+    """Remove a node's process from both indices without touching sibling nodes."""
+    _install_proc_registry.pop(node_id, None)
+    if task_id is not None:
+        procs = _task_procs.get(task_id)
+        if procs:
+            procs.pop(node_id, None)
+            if not procs:
+                _task_procs.pop(task_id, None)
+
 
 # ── request schemas ───────────────────────────────────────────────────
 

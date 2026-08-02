@@ -14,6 +14,8 @@ import queue
 
 import yaml
 
+from app.core.features import get_concurrency
+
 logger = logging.getLogger(__name__)
 
 # Resolve ansible project root: backend/ansible/ relative to this file
@@ -319,7 +321,12 @@ class AnsibleRunnerService:
     ):
         self._private_data_dir = private_data_dir
         self._job_timeout = job_timeout
-        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_PLAYBOOKS)
+        # This singleton is constructed at import time (module-level in
+        # cluster_nodes.py, during main.py's api_router import), so the first
+        # get_concurrency() call loads features.yaml here, before main.py:27's
+        # explicit load_features(). Both share the module-level cache, making
+        # this equivalent to a single read at startup.
+        self._semaphore = asyncio.Semaphore(get_concurrency("max_playbooks", MAX_CONCURRENT_PLAYBOOKS))
         # Ensure SSH ControlPath directory exists for ControlMaster sockets
         os.makedirs("/tmp/panshi-cp", exist_ok=True)
 
@@ -332,6 +339,8 @@ class AnsibleRunnerService:
         extravars: dict[str, Any] | None = None,
         event_handler: Any = None,
         job_timeout: int | None = None,
+        cancel_event: asyncio.Event | None = None,
+        on_progress: Any = None,
     ) -> dict[str, Any]:
         """Execute an ansible playbook tag against a single target host.
 
@@ -342,6 +351,12 @@ class AnsibleRunnerService:
         event_handler: Optional callback for real-time event streaming.
                        Called for each ansible-runner event.
         job_timeout: Playbook timeout in seconds (default 60, use 600+ for install).
+        cancel_event: Optional asyncio.Event; when set, ansible-runner's
+                      cancel_callback is armed so the playbook process group
+                      gets SIGKILLed (only cancel_callback can stop the
+                      playbook -- wait_for/to_thread cannot kill it).
+        on_progress: Optional callback receiving each ansible event dict
+                     (used by the task engine to collect per-line logs).
 
         Returns:
             Dict with keys ``rc``, ``status``, ``stdout``, ``stderr``.
@@ -381,6 +396,10 @@ class AnsibleRunnerService:
         )
         if event_handler is not None:
             runner_kwargs["event_handler"] = event_handler
+        elif on_progress is not None:
+            runner_kwargs["event_handler"] = on_progress
+        if cancel_event is not None:
+            runner_kwargs["cancel_callback"] = lambda: cancel_event.is_set()
 
         async with self._semaphore:
             try:

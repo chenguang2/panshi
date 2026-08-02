@@ -18,11 +18,16 @@ from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
 from app.services.edge_logger import get_edge_logger
+from app.services.ansible_service import AnsibleRunnerService
 
 router = APIRouter(prefix="/clusters", tags=["stream-proxies"])
 
 # Global stream proxy list endpoint (not cluster-scoped)
 global_router = APIRouter(prefix="/stream-proxies", tags=["stream-proxies"])
+
+# Module-level singleton (V1/V6): all callers share the same instance so the
+# max_playbooks semaphore is a true process-wide limit.
+_ansible_service = AnsibleRunnerService()
 
 
 ALLOWED_SEARCH_FIELDS = {"name", "description"}
@@ -243,10 +248,8 @@ async def detect_stream_proxy_ports(
     if not node or node.cluster_id != cluster_id:
         raise HTTPException(status_code=404, detail="节点不存在或不属于该集群")
 
-    from app.services.ansible_service import AnsibleRunnerService
-    ansible = AnsibleRunnerService()
     try:
-        result = await ansible.generic_run(
+        result = await _ansible_service.generic_run(
             ip=node.ip, tag="edge_read_env",
             extravars={"edge_path": node.edge_path},
         )

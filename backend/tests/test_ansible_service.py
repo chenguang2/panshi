@@ -220,6 +220,20 @@ class TestAnsibleRunnerService:
     def service(self):
         return AnsibleRunnerService(private_data_dir="/tmp")
 
+    def test_semaphore_uses_configured_max_playbooks(self):
+        """Semaphore capacity should follow get_concurrency('max_playbooks')."""
+        from app.services import ansible_service as mod
+        with patch.object(mod, "get_concurrency", return_value=8):
+            svc = AnsibleRunnerService(private_data_dir="/tmp")
+        assert svc._semaphore._value == 8
+
+    def test_semaphore_uses_default_max_playbooks(self):
+        """Semaphore capacity should fall back to MAX_CONCURRENT_PLAYBOOKS default."""
+        from app.services import ansible_service as mod
+        with patch.object(mod, "get_concurrency", return_value=5):
+            svc = AnsibleRunnerService(private_data_dir="/tmp")
+        assert svc._semaphore._value == 5
+
     async def test_install_openresty_calls_run_playbook(self, service):
         """install_openresty should construct correct extravars and call run_playbook."""
         with patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run:
@@ -264,6 +278,80 @@ class TestAnsibleRunnerService:
                 {"prefix": "/work/openresty"},
             )
             assert result == {"rc": 0}
+
+    async def test_run_playbook_passes_cancel_callback_from_cancel_event(self, service):
+        """run_playbook should accept cancel_event and pass a cancel_callback to ansible_runner.run."""
+        import asyncio
+
+        captured = {}
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        def fake_ansible_run(**kwargs):
+            captured["kwargs"] = kwargs
+            return fake_runner
+
+        with patch("ansible_runner.run", side_effect=fake_ansible_run):
+            cancel_event = asyncio.Event()
+            result = await service.run_playbook(
+                ip="10.0.0.1",
+                tag="nginx_cmd_run",
+                extravars={"nginx_cmd": "nginx_start"},
+                cancel_event=cancel_event,
+            )
+
+        assert "cancel_callback" in captured["kwargs"], (
+            f"ansible_runner.run must receive cancel_callback, got keys={list(captured['kwargs'].keys())}"
+        )
+        # cancel_callback should be a callable that reflects cancel_event.is_set()
+        cc = captured["kwargs"]["cancel_callback"]
+        assert callable(cc)
+        assert cc() is False
+        cancel_event.set()
+        assert cc() is True
+        assert result["rc"] == 0
+
+    async def test_run_playbook_on_progress_receives_events(self, service):
+        """run_playbook should forward ansible events to on_progress callback."""
+        captured = {}
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        def fake_ansible_run(**kwargs):
+            captured["kwargs"] = kwargs
+            return fake_runner
+
+        received = []
+
+        def on_progress(event):
+            received.append(event)
+
+        with patch("ansible_runner.run", side_effect=fake_ansible_run):
+            await service.run_playbook(
+                ip="10.0.0.1",
+                tag="nginx_cmd_run",
+                extravars={},
+                on_progress=on_progress,
+            )
+
+        assert "event_handler" in captured["kwargs"], (
+            f"on_progress should be wired through event_handler, got keys={list(captured['kwargs'].keys())}"
+        )
+        eh = captured["kwargs"]["event_handler"]
+        assert callable(eh)
+        eh({"event": "runner_on_ok", "event_data": {"res": {"stdout": "ok"}}})
+        assert len(received) == 1
+        assert received[0]["event"] == "runner_on_ok"
 
     async def test_run_ansible_stream_yields_sse_events(self):
         """_run_ansible_stream should yield SSE-formatted events from ansible output."""

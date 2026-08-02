@@ -12,6 +12,7 @@ from app.api.v1 import (
     edge_client, edge_import, plugin_switches,
     cluster_install,
     metrics,
+    node_tasks,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -46,6 +47,11 @@ ssl_router = APIRouter()
 ssl_router.include_router(cluster_ssl.router)
 ssl_router.include_router(cluster_ssl.global_router)
 
+# ── Combined router for node tasks (cluster-scoped + global task center) ──
+node_task_router = APIRouter()
+node_task_router.include_router(node_tasks.router)
+node_task_router.include_router(node_tasks.global_router)
+
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
 feature_routers: dict[str, APIRouter] = {
@@ -59,4 +65,5 @@ feature_routers: dict[str, APIRouter] = {
     "stream_proxy": cluster_stream_proxies.router,
     "dns_proxy_udp": cluster_dns_proxies.router,
     "ssl_cert": ssl_router,
+    "task_center": node_task_router,
 }

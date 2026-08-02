@@ -32,7 +32,11 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with AsyncSessionLocal() as session:
         await seed_data(session)
+    from app.services.node_task_service import recover_interrupted_tasks
+    await recover_interrupted_tasks()
     yield
+    from app.services.node_task_service import get_node_task_service
+    get_node_task_service().shutdown_sync()
     await close_db()
 
 
