@@ -2,11 +2,11 @@
   <div class="tab-content">
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
-      <a-button size="small" @click="editUpstream(cluster)" :disabled="!cluster.selectedUpstream">编辑上游</a-button>
-      <a-button size="small" danger :disabled="!cluster.selectedUpstream" @click="deleteUpstream(cluster)">删除上游</a-button>
+      <a-button size="small" @click="editUpstream(cluster)" :disabled="!singleOpEnabled">编辑上游</a-button>
+      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除上游{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
       <a-divider type="vertical" />
-      <a-button size="small" @click="publishUpstream(cluster)" :disabled="!cluster.selectedUpstream">发布</a-button>
-      <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!cluster.selectedUpstream">版本管理</a-button>
+      <a-button size="small" @click="publishUpstream(cluster)" :disabled="!singleOpEnabled">发布</a-button>
+      <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!singleOpEnabled">版本管理</a-button>
       <a-divider type="vertical" />
       <a-popover v-model:open="upstreamColumnPopoverVisible" trigger="click" placement="bottomRight">
         <template #title>选择显示列</template>
@@ -43,7 +43,7 @@
             v-model:value="cluster.upstreamsSearch"
             placeholder="搜索上游"
             style="width: 150px;"
-            @search="() => { cluster.upstreamsPagination!.page = 1; loadUpstreams(cluster) }"
+            @search="() => { cluster.upstreamsPagination!.page = 1; cluster.selectedUpstreamKeys = []; cluster.selectedUpstream = null; loadUpstreams(cluster) }"
             allow-clear
             size="small"
           />
@@ -73,7 +73,8 @@
         showQuickJumper: true
       }"
       :loading="cluster.upstreamsLoading"
-      :row-selection="{ selectedRowKeys: cluster.selectedUpstream ? [cluster.selectedUpstream.id] : [], onChange: (_keys: any, rows: any) => selectUpstream(cluster, rows[rows.length - 1]) }"
+      :row-selection="{ selectedRowKeys: cluster.selectedUpstreamKeys || [], preserveSelectedRowKeys: true, onChange: (keys: any, rows: any) => selectUpstreams(cluster, keys, rows) }"
+      :custom-row="(record: any) => ({ onClick: () => { cluster.selectedUpstream = record } })"
       :showSorterTooltip="false"
       size="small"
       row-key="id"
@@ -330,10 +331,12 @@ const {
   loadUpstreams,
   handleUpstreamTableChange,
   selectUpstream,
+  selectUpstreams,
   showAddUpstreamModal,
   editUpstream,
   handleUpstreamSubmit,
   deleteUpstream,
+  deleteUpstreams,
   publishUpstream,
   openUpstreamVersionManagement,
   addUpstreamTarget,
@@ -358,6 +361,20 @@ const {
   versionModalEdgeUuid,
   openPublishModal: props.openPublishModal,
 })
+
+// ── batch delete selection state ───────────────────────────────────
+const batchCount = computed(() => (props.cluster.selectedUpstreamKeys || []).length)
+const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedUpstream || batchCount.value === 1))
+const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedUpstream ? 1 : 0))
+const deleteEnabled = computed(() => deleteCount.value > 0)
+
+function handleDeleteClick() {
+  if (batchCount.value > 0) {
+    deleteUpstreams(props.cluster)
+  } else {
+    deleteUpstream(props.cluster)
+  }
+}
 
 // Catch native input events from antdv InputNumber to force model update on clear
 const onSectionInput = (e: Event) => {

@@ -242,7 +242,21 @@ const formErrors = reactive<Record<string, string>>({})
   )
 
   // ── Core: load upstreams ──
+  const lastUpstreamQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
+
   const loadUpstreams = async (cluster: Cluster) => {
+    const prev = lastUpstreamQuery.get(cluster)
+    const next = {
+      search: cluster.upstreamsSearch || '',
+      field: cluster.upstreamsSearchField || '',
+      sortBy: cluster.upstreamsSortBy || '',
+      sortOrder: cluster.upstreamsSortOrder || '',
+    }
+    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
+      cluster.selectedUpstreamKeys = []
+      cluster.selectedUpstream = null
+    }
+    lastUpstreamQuery.set(cluster, next)
     cluster.upstreamsLoading = true
     try {
       const params: Record<string, unknown> = {
@@ -292,6 +306,9 @@ const formErrors = reactive<Record<string, string>>({})
       }
       cluster.upstreamsSortBy = fieldMap[sorter.field] || sorter.field
       cluster.upstreamsSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
+      // 排序改变数据集，清除批量勾选与单选（D9）
+      cluster.selectedUpstreamKeys = []
+      cluster.selectedUpstream = null
     } else {
       cluster.upstreamsSortBy = ''
       cluster.upstreamsSortOrder = 'asc'
@@ -301,6 +318,11 @@ const formErrors = reactive<Record<string, string>>({})
 
   const selectUpstream = (cluster: Cluster, upstream: Upstream | undefined) => {
     cluster.selectedUpstream = upstream || null
+  }
+
+  const selectUpstreams = (cluster: Cluster, keys: number[] | (string | number)[], rows: Upstream[]) => {
+    cluster.selectedUpstreamKeys = keys as number[]
+    cluster.selectedUpstream = keys.length === 1 ? (rows[0] ?? null) : null
   }
 
   // ── Helpers ──
@@ -740,6 +762,60 @@ const formErrors = reactive<Record<string, string>>({})
     })
   }
 
+  const deleteUpstreams = async (cluster: Cluster) => {
+    const keys = cluster.selectedUpstreamKeys || []
+    if (keys.length === 0) {
+      message.warning('请先勾选要删除的上游')
+      return
+    }
+    const upstreams = (cluster.upstreams || []).filter((u) => keys.includes(u.id))
+    if (!cluster.routes || cluster.routes.length === 0) {
+      try {
+        const res = await api.get(
+          `/clusters/${cluster.id}/routes`,
+          { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
+        )
+        cluster.routes = res.data.items
+      } catch {
+        // 加载失败时放弃前端守卫，交给后端拦截
+      }
+    }
+    const referenced = upstreams.filter((u) =>
+      (cluster.routes || []).some((r) => r.upstream_id === u.id),
+    )
+    if (referenced.length > 0) {
+      const names = referenced.map((u) => u.name).join('、')
+      message.warning(`上游 "${names}" 已被路由引用，已跳过删除，请先删除引用路由`)
+    }
+    const deletable = upstreams.filter((u) =>
+      !(cluster.routes || []).some((r) => r.upstream_id === u.id),
+    )
+    if (deletable.length === 0) return
+    const names = deletable.map((u) => u.name)
+    const title = names.length > 3
+      ? `确定要删除选中的 ${names.length} 条上游吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
+      : `确定要删除选中的 ${names.length} 条上游吗？${names.join('、')}`
+    const deletableIds = deletable.map((u) => u.id)
+    showDeleteConfirm({
+      title,
+      apiEndpoint: `/clusters/${cluster.id}/upstreams`,
+      nodes: cluster.nodes,
+      onOk: async (deleteDb, deleteEdge, nodeIds) => {
+        await executeDeleteWithProgress({
+          title: `批量删除上游: ${names.join('、')}`,
+          apiEndpoint: `/clusters/${cluster.id}/upstreams`,
+          resourceKey: { field: 'upstream_ids', label: '上游', nameField: 'upstream_name', keys: deletableIds },
+          cluster,
+          deleteDb,
+          deleteEdge,
+          nodeIds,
+          refreshFn: () => loadUpstreams(cluster),
+          clearSelectedFn: () => { cluster.selectedUpstreamKeys = []; cluster.selectedUpstream = null },
+        })
+      },
+    })
+  }
+
   // ── Publish upstream ──
   const publishUpstream = async (cluster: Cluster) => {
     if (!cluster.selectedUpstream) {
@@ -835,6 +911,7 @@ const formErrors = reactive<Record<string, string>>({})
     loadUpstreams,
     handleUpstreamTableChange,
     selectUpstream,
+    selectUpstreams,
 
     // Modal CRUD
     showAddUpstreamModal,
@@ -845,6 +922,7 @@ const formErrors = reactive<Record<string, string>>({})
     // Delete
     deleteUpstream,
     deleteUpstreamByRecord,
+    deleteUpstreams,
 
     // Publish
     publishUpstream,

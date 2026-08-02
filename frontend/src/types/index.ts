@@ -71,7 +71,9 @@ export interface Cluster {
   routesSortBy?: string
   routesSortOrder?: 'asc' | 'desc'
   selectedNode?: Node | null
+  selectedNodeKeys?: number[]
   selectedUpstream?: Upstream | null
+  selectedUpstreamKeys?: number[]
   selectedRoute?: Route | null
   selectedRouteKeys?: number[]
   plugin_configs?: PluginConfig[]
