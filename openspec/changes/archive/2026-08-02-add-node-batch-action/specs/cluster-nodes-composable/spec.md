@@ -1,10 +1,4 @@
-# cluster-nodes-composable
-
-## Purpose
-
-封装集群节点 Tab 的所有状态与操作（加载、CRUD、复制、批量导入、批量删除、批量操作）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: useClusterNodes composable
 The system SHALL provide a `useClusterNodes` composable that encapsulates all cluster node related state and operations.
@@ -21,16 +15,6 @@ The system SHALL provide a `useClusterNodes` composable that encapsulates all cl
 #### Scenario: deleteNode calls delete API
 - **WHEN** `deleteNode(clusterId, nodeId, options)` is called
 - **THEN** it SHALL call `DELETE /api/v1/clusters/{clusterId}/nodes/{nodeId}` with delete options
-
-#### Scenario: copyNode opens add modal with template
-- **WHEN** `copyNode(cluster, node)` is called
-- **THEN** the add modal SHALL open in single-add mode with the node's fields pre-filled except ip
-- **AND** the modal title SHALL indicate 复制节点
-
-#### Scenario: importNodes calls batch API
-- **WHEN** `importNodes(cluster, rows)` is called with valid node rows
-- **THEN** it SHALL call `POST /api/v1/clusters/{clusterId}/nodes/batch` with the nodes
-- **THEN** on success it SHALL refresh the node list
 
 #### Scenario: Batch selection state on cluster
 - **WHEN** nodes are checked via the table's row-selection
@@ -50,16 +34,13 @@ The system SHALL provide a `useClusterNodes` composable that encapsulates all cl
 
 #### Scenario: Batch node action executes on selected nodes
 - **WHEN** `batchNodeAction(cluster, action, label)` is called with multiple checked nodes
-- **THEN** the system SHALL clear the selection immediately (before sending the request)
-- **AND** it SHALL execute the action on each node with a concurrency limit (up to 5) by calling the per-node endpoint (`POST /api/v1/clusters/{clusterId}/nodes/{nodeId}/{action}`)
-- **AND** a progress modal SHALL show each node's live status (等待中/执行中/成功/失败) with expandable logs
-- **AND** failure of one node SHALL NOT block the remaining nodes
-- **AND** upon completion the node list SHALL be refreshed
+- **THEN** the system SHALL show a confirmation dialog listing the selected node IPs
+- **AND** on confirm it SHALL call `POST /api/v1/clusters/{clusterId}/nodes/action` with `{ action, node_ids }`
+- **AND** the results SHALL be shown per node (success/failure + error reason)
+- **AND** upon completion `selectedNodeKeys`/`selectedNode` SHALL be cleared and the node list refreshed
 
-#### Scenario: Batch node status query shows progress then results table
+#### Scenario: Batch node status query shows results table
 - **WHEN** `batchNodeStatus(cluster)` is called with multiple checked nodes
-- **THEN** the system SHALL clear the selection immediately
-- **AND** it SHALL query each node's status with a concurrency limit (up to 5) by calling the per-node statistic endpoint (`POST /api/v1/clusters/{clusterId}/nodes/{nodeId}/statistic`)
-- **AND** a progress modal SHALL show each node's live status during execution, then close
+- **THEN** the system SHALL call `POST /api/v1/clusters/{clusterId}/nodes/action` with `{ action: 'statistic', node_ids }`
 - **AND** the results SHALL be shown in a table with IP, Edge version, health status, and failure reason
 - **AND** upon completion the node list SHALL be refreshed

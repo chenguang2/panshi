@@ -1,10 +1,4 @@
-# cluster-nodes-component
-
-## Purpose
-
-集群详情页节点 Tab 组件，渲染节点表格与工具栏（含复制、批量导入、批量删除、批量操作交互）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: ClusterNodes component
 The system SHALL provide a `ClusterNodes` component that renders the nodes tab content.
@@ -41,8 +35,7 @@ The system SHALL provide a `ClusterNodes` component that renders the nodes tab c
 #### Scenario: Action buttons support batch mode
 - **WHEN** `selectedNodeKeys.length > 1`
 - **THEN** the toolbar action buttons (启动/停止/reload/状态查询) SHALL show with a count suffix (e.g. "启动(2)")
-- **AND** clicking them SHALL open a batch confirmation dialog listing the selected node IPs (stop operations SHALL warn about traffic interruption)
-- **AND** on confirm SHALL trigger the batch operation on all checked nodes
+- **AND** clicking them SHALL trigger the batch operation on all checked nodes
 - **AND** the 编辑 button SHALL remain disabled (single-node only)
 - **WHEN** `selectedNodeKeys.length <= 1`
 - **THEN** the toolbar action buttons SHALL trigger the existing single-node operations
