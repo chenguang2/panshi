@@ -2951,3 +2951,46 @@ stdout
 
 现在这个机器的 wsl2 的 playwright 调用的 chrome 浏览器，能看到进程，但是界面打不开，查查原因，是不是文档上的原因
 
+
+==================================================================
+讨论：
+
+阅读文档
+/home/qcg/panshi/docs/edge/user-guide/使用手册.md
+
+其中： stream 部分，
+
+####### 2. Stream 路由参数
+
+| **protocol** | String | 无 | 与 `protocols` 互斥 | 匹配的单个 Stream 协议。可选值有：`"TCP"`, `"UDP"`。 |
+
+
+
+protocol 部分现在包括 2项 tcp 和 UDP
+
+
+你检查一下代码 tcp代码部分， 是否对应第二个窗口中的 协议 tcp ？ 
+
+
+========================================
+继续讨论：
+
+1. 界面中 现在的tcp ，要改为 下拉框，默认为 TCP， 还可以为 UDP和 TLS 值，
+
+udp 就是 udp 协议， TLS 是 加密的tcp协议 需要选择 tls
+
+你看看如何修改界面，和提示，包括整个 这个菜单项，因为已经支持 udp 了， 还叫 tcp 代理不合适了，包括列表页的相关的提示信息
+
+你给出几个方案，我看看
+========================================
+
+stream-proxy-protocol-options
+
+
+/brainstorming 请仔细阅读 openspec/changes/stream-proxy-protocol-options 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/stream-proxy-protocol-options/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
