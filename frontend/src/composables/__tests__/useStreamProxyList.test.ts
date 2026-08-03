@@ -20,7 +20,7 @@ describe('useStreamProxyList', () => {
     const { useStreamProxyList } = await import('../useStreamProxyList')
     const proxyType = ref<'normal' | 'dns'>('normal')
     const { pageTitle } = useStreamProxyList(proxyType)
-    expect(pageTitle.value).toBe('TCP 代理')
+    expect(pageTitle.value).toBe('四层代理')
   })
 
   it('uses dns proxyType for title', async () => {

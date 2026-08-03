@@ -12,10 +12,10 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
   const clusterFilter = ref<string | number>('')
   const groupFilter = ref('__all__')
 
-  const pageTitle = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : 'TCP 代理')
+  const pageTitle = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : '四层代理')
   const pageDesc = computed(() => proxyType.value === 'dns'
     ? '管理集群级的 DNS 代理规则'
-    : '管理集群级的 TCP/UDP 四层代理转发规则')
+    : '管理集群级的 TCP/UDP/TLS 四层转发规则')
 
   const groupOptions = computed(() => {
     const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
@@ -63,7 +63,7 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     } catch { /* ignore */ }
   }
 
-  const itemLabel = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : 'TCP 代理')
+  const itemLabel = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : '四层代理')
   const createButtonText = computed(() => `+ 新建 ${itemLabel.value}`)
 
   return {

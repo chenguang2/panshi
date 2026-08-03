@@ -132,6 +132,7 @@ const emit = defineEmits<{
 function schemeLabel(scheme: string | undefined): string {
   if (scheme === 'tcp') return 'TCP'
   if (scheme === 'udp') return 'UDP'
+  if (scheme === 'tls') return 'TLS'
   return scheme || 'TCP'
 }
 

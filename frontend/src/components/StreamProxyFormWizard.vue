@@ -91,7 +91,7 @@
           <div class="form-group" style="margin-top:12px;">
             <label class="form-label">代理类型 <span class="required">*</span></label>
             <div class="spwf-toggle">
-              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }">TCP代理</button>
+              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }">四层代理</button>
               <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }">DNS代理</button>
             </div>
           </div>
@@ -128,8 +128,27 @@
 
           <div class="form-row" style="margin-bottom:8px;">
             <div class="form-group">
-              <label class="form-label">协议</label>
-              <div><span class="spwf-protocol-badge">{{ form.proxy_type === 'dns' ? 'UDP' : 'TCP' }}</span></div>
+              <label class="form-label">协议 <span class="required">*</span></label>
+              <div v-if="form.proxy_type === 'dns'" class="spwf-protocol-badge">UDP</div>
+              <div v-else class="spwf-protocol-radio">
+                <label
+                  v-for="opt in protocolOptions"
+                  :key="opt.value"
+                  class="spwf-protocol-card"
+                  :class="{ active: form.scheme === opt.value }"
+                >
+                  <input
+                    type="radio"
+                    :name="'sp-scheme'"
+                    :value="opt.value"
+                    v-model="form.scheme"
+                    class="spwf-protocol-input"
+                  >
+                  <span class="spwf-protocol-name">{{ opt.label }}</span>
+                  <span class="spwf-protocol-desc">{{ opt.desc }}</span>
+                </label>
+              </div>
+              <div v-if="form.proxy_type !== 'dns'" class="form-hint">{{ schemeHint }}</div>
             </div>
           </div>
 
@@ -359,6 +378,19 @@ const submitting = ref(false)
 const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
 const dnsEnableLog = ref(false)
+
+// ── Protocol options (normal mode: TCP/UDP/TLS) ──
+const protocolOptions = [
+  { value: 'tcp', label: 'TCP', desc: '面向连接的流式传输，可靠有序' },
+  { value: 'udp', label: 'UDP', desc: '无连接的报文传输，低延迟' },
+  { value: 'tls', label: 'TLS', desc: '加密的 TCP 传输，保密性更高' },
+]
+
+const schemeHint = computed(() => {
+  if (form.scheme === 'udp') return '按 UDP 数据报转发，无连接语义'
+  if (form.scheme === 'tls') return '以 TLS 加密方式转发 TCP 流量'
+  return '按 TCP 协议转发到上游节点'
+})
 
 // ── Form ──
 interface DnsTarget { key: number; ip: string; port: number; cidr: string }
@@ -802,7 +834,7 @@ watch(() => props.visible, async (v) => {
     form.name = p.name
     form.proxy_type = (p as any).proxy_type === 'dns' ? 'dns' : 'normal'
     form.description = p.description || ''
-    form.scheme = p.scheme || 'tcp_udp'
+    form.scheme = (p.scheme === 'tcp' || p.scheme === 'udp' || p.scheme === 'tls') ? p.scheme : 'tcp'
     form.load_balance = p.load_balance || 'weighted_roundrobin'
     form.hash_on = p.hash_on || 'vars'
     form.key = p.key || 'remote_addr'
@@ -1097,7 +1129,7 @@ watch(() => props.visible, async (v) => {
   margin-bottom: 16px;
 }
 
-/* ── Protocol Badge ── */
+/* ── Protocol Badge (DNS fixed) ── */
 .spwf-protocol-badge {
   display: inline-flex;
   padding: 6px 18px;
@@ -1108,6 +1140,48 @@ watch(() => props.visible, async (v) => {
   font-weight: 500;
   font-family: var(--font-body);
   border: 1px solid var(--accent);
+}
+
+/* ── Protocol Radio Cards (normal: TCP/UDP/TLS) ── */
+.spwf-protocol-radio {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.spwf-protocol-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  min-width: 140px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.spwf-protocol-card:hover {
+  border-color: var(--accent);
+}
+.spwf-protocol-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+  background: oklch(56% 0.16 210 / 6%);
+}
+.spwf-protocol-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.spwf-protocol-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.spwf-protocol-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 /* ── Checkbox ── */

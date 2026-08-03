@@ -55,6 +55,26 @@ describe('StreamProxyList.vue', () => {
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
+  it('renders protocol badge for tcp/udp/tls schemes', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/stream-proxies') return Promise.resolve({ data: { total: 3, page: 1, page_size: 20, items: [
+        { id: 1, name: 'tcp-p', cluster_id: 1, listen_port: 9970, scheme: 'tcp', load_balance: 'roundrobin', targets: [], current_version: null, published_at: null },
+        { id: 2, name: 'udp-p', cluster_id: 1, listen_port: 9971, scheme: 'udp', load_balance: 'roundrobin', targets: [], current_version: null, published_at: null },
+        { id: 3, name: 'tls-p', cluster_id: 1, listen_port: 9972, scheme: 'tls', load_balance: 'roundrobin', targets: [], current_version: null, published_at: null },
+      ] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: 'c', group_name: '' }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    const texts = wrapper.text()
+    expect(texts).toContain('TCP')
+    expect(texts).toContain('UDP')
+    expect(texts).toContain('TLS')
+  })
+
   it('loads proxies on mount', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })

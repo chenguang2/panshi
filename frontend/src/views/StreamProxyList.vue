@@ -1,8 +1,8 @@
 <template>
   <div class="sp-page">
-    <PageHeader title="TCP 代理" description="管理 TCP 四层代理转发规则">
+    <PageHeader title="四层代理" description="管理 TCP/UDP/TLS 四层转发规则">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateWizard">+ 新建 TCP 代理</button>
+        <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
       </template>
     </PageHeader>
 
@@ -183,6 +183,7 @@ const publishingProxy = ref<StreamProxy | null>(null)
 function schemeLabel(scheme: string | undefined): string {
   if (scheme === 'tcp') return 'TCP'
   if (scheme === 'udp') return 'UDP'
+  if (scheme === 'tls') return 'TLS'
   return scheme || 'TCP'
 }
 

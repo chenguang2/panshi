@@ -191,7 +191,7 @@ export interface StreamProxy {
   load_balance: string
   hash_on?: string
   key?: string
-  scheme: string
+  scheme: 'tcp' | 'udp' | 'tls'
   targets?: StreamProxyTarget[]
   timeout?: Record<string, number>
   keepalive_pool?: Record<string, number>

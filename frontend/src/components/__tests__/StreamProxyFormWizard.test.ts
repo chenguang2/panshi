@@ -101,4 +101,73 @@ describe('StreamProxyFormWizard.vue', () => {
       expect(r.port).toBe(80)
     })
   })
+
+  // ── protocolOptions / schemeHint ─────────────────
+
+  describe('protocol options', () => {
+    it('exposes tcp/udp/tls protocol options', async () => {
+      const vm = await createVm()
+      const values = vm.protocolOptions.map((o: any) => o.value)
+      expect(values).toEqual(['tcp', 'udp', 'tls'])
+    })
+
+    it('defaults scheme to tcp', async () => {
+      const vm = await createVm()
+      expect(vm.form.scheme).toBe('tcp')
+    })
+
+    it('shows hint for each scheme', async () => {
+      const vm = await createVm()
+      vm.form.scheme = 'tcp'
+      expect(vm.schemeHint).toContain('TCP')
+      vm.form.scheme = 'udp'
+      expect(vm.schemeHint).toContain('UDP')
+      vm.form.scheme = 'tls'
+      expect(vm.schemeHint).toContain('TLS')
+    })
+  })
+
+  // ── editingProxy scheme normalization ────────────
+
+  describe('edit scheme normalization', () => {
+    it('falls back to tcp when editing legacy tcp_udp scheme', async () => {
+      const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+      const wrapper = mount(StreamProxyFormWizard, {
+        props: {
+          visible: false,
+          editingProxy: {
+            id: 1, edge_uuid: 'u', cluster_id: 1, name: 'legacy', listen_port: 9970,
+            scheme: 'tcp_udp', load_balance: 'weighted_roundrobin', status: 1,
+            proxy_type: 'normal', targets: [], retries: undefined, retry_timeout: 0,
+          },
+          clusters: MOCK_CLUSTERS,
+        },
+        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+      })
+      const vm = wrapper.vm as any
+      await wrapper.setProps({ visible: true })
+      await new Promise(r => setTimeout(r, 50))
+      expect(vm.form.scheme).toBe('tcp')
+    })
+
+    it('preserves valid tls scheme when editing', async () => {
+      const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+      const wrapper = mount(StreamProxyFormWizard, {
+        props: {
+          visible: false,
+          editingProxy: {
+            id: 2, edge_uuid: 'u2', cluster_id: 1, name: 'tls-p', listen_port: 9971,
+            scheme: 'tls', load_balance: 'weighted_roundrobin', status: 1,
+            proxy_type: 'normal', targets: [], retries: undefined, retry_timeout: 0,
+          },
+          clusters: MOCK_CLUSTERS,
+        },
+        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+      })
+      const vm = wrapper.vm as any
+      await wrapper.setProps({ visible: true })
+      await new Promise(r => setTimeout(r, 50))
+      expect(vm.form.scheme).toBe('tls')
+    })
+  })
 })

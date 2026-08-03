@@ -95,7 +95,7 @@ const pageNameMap: Record<string, string> = {
   PluginMetadataList: '插件元数据',
   StaticResourceList: '静态资源',
   DnsQueryList: 'DNS代理[HTTP]',
-  StreamProxyList: 'TCP 代理',
+  StreamProxyList: '四层代理',
   DnsUdpProxyList: 'DNS代理[UDP]',
   EdgeEnv: 'edge.env 配置',
   Users: '用户管理',
