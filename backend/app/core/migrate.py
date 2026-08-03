@@ -151,6 +151,9 @@ COLUMN_MIGRATIONS = [
     ("ps_ssl_certificate", "organization", "VARCHAR(200)"),
     ("ps_ssl_certificate", "organizational_unit", "VARCHAR(200)"),
     ("ps_route", "enable_websocket", "INTEGER DEFAULT 0"),
+    ("install_task_node", "log_file", "VARCHAR(255)"),
+    ("install_task_node", "log_line_count", "INTEGER DEFAULT 0"),
+    ("install_task_node", "stdout_tail", "TEXT"),
 ]
 
 

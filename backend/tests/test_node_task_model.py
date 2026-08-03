@@ -67,6 +67,36 @@ class TestNodeTaskModel:
         assert item.stdout is None
 
     @pytest.mark.asyncio
+    async def test_task_item_log_summary_columns(self, test_db):
+        """New summary columns (log_file/log_line_count/stdout_tail) should persist."""
+        task = NodeTask(cluster_id=1, task_type="install_openresty", status="running", total_nodes=1)
+        test_db.add(task)
+        await test_db.flush()
+
+        item = NodeTaskItem(
+            task_id=task.id,
+            node_id=5,
+            ip="10.0.0.5",
+            status="running",
+            log_file="task-logs/1/5.log",
+            log_line_count=120,
+            stdout_tail="...tail content...",
+        )
+        test_db.add(item)
+        await test_db.commit()
+        await test_db.refresh(item)
+
+        assert item.log_file == "task-logs/1/5.log"
+        assert item.log_line_count == 120
+        assert item.stdout_tail == "...tail content..."
+        # default when not provided
+        item2 = NodeTaskItem(task_id=task.id, node_id=6, ip="10.0.0.6", status="pending")
+        test_db.add(item2)
+        await test_db.commit()
+        assert item2.log_line_count == 0
+        assert item2.log_file is None
+
+    @pytest.mark.asyncio
     async def test_task_item_cascade_delete_with_task(self, test_db):
         """Deleting a task should cascade-delete its items (task_id FK CASCADE)."""
         task = NodeTask(cluster_id=1, task_type="start", status="pending", total_nodes=1)

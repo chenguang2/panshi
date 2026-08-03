@@ -53,10 +53,13 @@ class NodeTaskItem(Base):
     node_name = Column(String(100), nullable=True)  # snapshot
     status = Column(String(20), nullable=False, default="pending")
     rc = Column(Integer, nullable=True)
-    logs = Column(Text, nullable=True)  # JSON list of {t, level, line}
-    stdout = Column(Text, nullable=True)
+    logs = Column(Text, nullable=True)  # JSON list of {t, level, line} (deprecated: kept empty, full logs live in file)
+    stdout = Column(Text, nullable=True)  # tail summary (stdout_tail-compatible), kept for API compat
     stderr = Column(Text, nullable=True)
     command = Column(Text, nullable=True)
+    log_file = Column(String(255), nullable=True)  # relative path task-logs/{task_id}/{node_id}.log
+    log_line_count = Column(Integer, nullable=False, default=0)
+    stdout_tail = Column(Text, nullable=True)  # tail of log output (max ~8KB)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 

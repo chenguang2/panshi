@@ -210,6 +210,51 @@ class TestSshHelpers:
             assert rc == 1
             mock_run.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_run_ssh_fallback_streams_lines_with_on_line(self):
+        """When on_line provided, use the streaming subprocess runner."""
+        from app.services.ansible_service import _run_ssh_with_fallback
+        with (
+            patch("app.services.ansible_service._run_subprocess_stream",
+                  new_callable=AsyncMock,
+                  return_value=(0, "a\nb", "")) as mock_stream,
+            patch("app.services.ansible_service._run_subprocess",
+                  new_callable=AsyncMock) as mock_run,
+        ):
+            rc, out, err = await _run_ssh_with_fallback(
+                "10.0.0.1", "jboss", "make", on_line=lambda _e: None,
+            )
+            assert rc == 0
+            assert out == "a\nb"
+            mock_stream.assert_called_once()
+            mock_run.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_run_subprocess_stream_yields_lines_in_order(self):
+        """_run_subprocess_stream should call on_line per stdout line in order."""
+        from app.services.ansible_service import _run_subprocess_stream
+        received: list[dict] = []
+        rc, out, err = await _run_subprocess_stream(
+            ["sh", "-c", "printf 'one\\ntwo\\nthree\\n'"],
+            on_line=received.append,
+        )
+        assert rc == 0
+        assert out == "one\ntwo\nthree"
+        assert [e["stdout"] for e in received] == ["one", "two", "three"]
+
+    @pytest.mark.asyncio
+    async def test_run_subprocess_stream_merges_stderr(self):
+        """_run_subprocess_stream should tag stderr lines separately."""
+        from app.services.ansible_service import _run_subprocess_stream
+        received: list[dict] = []
+        rc, out, err = await _run_subprocess_stream(
+            ["sh", "-c", "echo out; echo oops >&2"],
+            on_line=received.append,
+        )
+        assert rc == 0
+        assert any(e.get("stdout") == "out" for e in received)
+        assert any(e.get("stderr") == "oops" for e in received)
+
 
 _SENTINEL = object()
 

@@ -80,6 +80,7 @@ const sectionMap: Record<string, string> = {
   EdgeClient: '运维管理',
   EdgeImport: '运维管理',
   Tools: '运维管理',
+  NodeTaskCenter: '运维管理',
 }
 
 const pageNameMap: Record<string, string> = {
@@ -105,6 +106,7 @@ const pageNameMap: Record<string, string> = {
   MetricsDashboard: '指标总览',
   PluginSwitches: '插件开关',
   SslList: 'SSL 证书',
+  NodeTaskCenter: '节点任务',
 }
 
 const currentSection = computed(() => {

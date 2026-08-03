@@ -55,4 +55,24 @@ describe('NodeTaskLogViewer', () => {
     expect(wrapper.text()).toContain('无输出')
     wrapper.unmount()
   })
+
+  it('auto-scrolls the log box to the bottom when new lines arrive', async () => {
+    const LogViewer = (await import('../NodeTaskLogViewer.vue')).default
+    const wrapper = mount(LogViewer, { props: { logs: ['one'], stdout: '', stderr: '', command: '' } })
+    const box = wrapper.find('.log-scroll').element as HTMLElement
+    // simulate being scrolled up (user reading history)
+    Object.defineProperty(box, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(box, 'clientHeight', { value: 100, configurable: true })
+    box.scrollTop = 0
+    box.dispatchEvent(new Event('scroll'))
+    await wrapper.setProps({ logs: ['one', 'two'] })
+    await new Promise((r) => setTimeout(r, 10))
+    // scrolled up => stays put, shows "回到最新"
+    expect(wrapper.find('.back-to-latest').exists()).toBe(true)
+    // click 回到最新 => scrolls to bottom and hides the button
+    await wrapper.find('.back-to-latest').trigger('click')
+    expect(box.scrollTop).toBe(2000)
+    expect(wrapper.find('.back-to-latest').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

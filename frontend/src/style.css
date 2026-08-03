@@ -546,6 +546,39 @@ select.form-input {
   padding: 12px 24px;
   border-top: 1px solid var(--border);
 }
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn {
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  height: 30px;
+  padding: 0 14px;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-default {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg) !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-default:hover {
+  background: var(--bg) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-primary {
+  background: var(--accent) !important;
+  border: none !important;
+  color: #fff !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-primary:hover {
+  background: oklch(50% 0.16 210) !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-dangerous {
+  background: var(--surface) !important;
+  border: 1px solid var(--danger) !important;
+  color: var(--danger) !important;
+}
+.ant-modal-confirm .ant-modal-confirm-btns .ant-btn-dangerous:hover {
+  background: var(--bg) !important;
+  border-color: var(--danger) !important;
+}
 .ant-modal-confirm .ant-modal-confirm-btns .ant-btn + .ant-btn {
   margin-inline-start: 0 !important;
 }

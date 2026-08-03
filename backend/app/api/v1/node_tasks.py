@@ -6,6 +6,7 @@ adds the task-based channel with a global task center view.
 """
 
 import json
+import queue as _queue
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,6 +48,10 @@ class RetryTaskRequest(BaseModel):
     node_ids: Optional[list[int]] = None
 
 
+class BatchDeleteRequest(BaseModel):
+    task_ids: list[int] = Field(min_length=1)
+
+
 # ── task_type -> (ansible tag or executor hook, required params) ──
 _TASK_TAG: dict[str, str] = {
     "install_edge": "install_edge",
@@ -66,9 +71,11 @@ def _to_item_dict(item: NodeTaskItem) -> dict:
         "status": item.status,
         "rc": item.rc,
         "logs": item.get_logs(),
-        "stdout": item.stdout,
+        "stdout": item.stdout or item.stdout_tail,
         "stderr": item.stderr,
         "command": item.command,
+        "log_file": item.log_file,
+        "log_line_count": item.log_line_count,
         "started_at": item.started_at.isoformat() if item.started_at else None,
         "finished_at": item.finished_at.isoformat() if item.finished_at else None,
     }
@@ -206,17 +213,150 @@ async def retry_node_task(
     return {"status": "retrying", "task_id": task_id}
 
 
+TERMINAL_STATUSES = {"success", "failed", "partial", "cancelled"}
+
+
+async def _delete_task_row(db: AsyncSession, task: NodeTask) -> None:
+    """Delete a task row (cascades to items via FK) and its log files."""
+    from app.services import task_log_store
+
+    task_id = task.id
+    await db.delete(task)
+    await db.commit()
+    task_log_store.delete_task_logs(task_id)
+
+
+@global_router.delete("/{task_id}")
+async def delete_node_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete a terminal task (cascades items + removes log files)."""
+    task = await db.get(NodeTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status not in TERMINAL_STATUSES:
+        raise HTTPException(status_code=409, detail="任务执行中，请先取消")
+    await _delete_task_row(db, task)
+    return {"deleted": [task_id]}
+
+
+@global_router.post("/batch-delete")
+async def batch_delete_node_tasks(
+    body: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete multiple terminal tasks; skip non-terminal / missing ones."""
+    deleted: list[int] = []
+    skipped: list[int] = []
+    tasks = (
+        await db.execute(select(NodeTask).where(NodeTask.id.in_(body.task_ids)))
+    ).scalars().all()
+    found = {t.id: t for t in tasks}
+    for task_id in body.task_ids:
+        task = found.get(task_id)
+        if task is None or task.status not in TERMINAL_STATUSES:
+            skipped.append(task_id)
+            continue
+        deleted.append(task_id)
+    for task_id in deleted:
+        await _delete_task_row(db, found[task_id])
+    return {"deleted": deleted, "skipped": skipped}
+
+
 @global_router.get("/{task_id}/stream")
 async def stream_task_events(task_id: int):
-    """SSE stream of task/node updates (fallback: poll detail endpoint)."""
+    """SSE stream of task/node updates with real-time log lines.
+
+    Emits a snapshot (task + node states) first, then incremental
+    ``log_line`` / ``node_update`` / ``task_update`` / ``done`` events.
+    """
     from fastapi.responses import StreamingResponse
 
+    from app.core.database import AsyncSessionLocal
+    from app.services import task_log_store
+
+    svc = get_node_task_service()
+
+    def sse(event: dict) -> str:
+        return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
     async def event_gen():
-        yield f"data: {json.dumps({'type': 'connected', 'task_id': task_id})}\n\n"
-        while True:
-            await asyncio_sleep(2)
+        q = svc.subscribe(task_id)
+        try:
+            async with AsyncSessionLocal() as db:
+                task = await db.get(NodeTask, task_id)
+                if task is None:
+                    yield sse({"type": "error", "task_id": task_id})
+                    return
+                yield sse({
+                    "type": "task_update", "task_id": task_id,
+                    "status": task.status,
+                    "success_nodes": task.success_nodes,
+                    "failed_nodes": task.failed_nodes,
+                    "cancelled_nodes": task.cancelled_nodes,
+                })
+                items = (
+                    await db.execute(
+                        select(NodeTaskItem).where(NodeTaskItem.task_id == task_id).order_by(NodeTaskItem.id)
+                    )
+                ).scalars().all()
+                for it in items:
+                    yield sse({
+                        "type": "node_update", "task_id": task_id,
+                        "node_id": it.node_id, "status": it.status, "rc": it.rc,
+                    })
+                    if it.log_file:
+                        for line in task_log_store.read_log(task_id, it.node_id).splitlines():
+                            yield sse({"type": "log_line", "task_id": task_id, "node_id": it.node_id, "line": line})
+
+                terminal = {"success", "failed", "partial", "cancelled"}
+                if task.status in terminal:
+                    yield sse({"type": "done", "task_id": task_id})
+                    return
+
+            while True:
+                try:
+                    event = q.get_nowait()
+                except _queue.Empty:
+                    await asyncio_sleep(0.2)
+                    continue
+                yield sse(event)
+                if event.get("type") == "done":
+                    return
+        finally:
+            svc.unsubscribe(task_id, q)
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
+
+
+@global_router.get("/{task_id}/items/{node_id}/log")
+async def get_task_item_log(
+    task_id: int,
+    node_id: int,
+    tail: int = Query(default=0, ge=0),
+):
+    """Read a task item's full log file (or its tail). text/plain."""
+    from fastapi.responses import PlainTextResponse
+
+    from app.core.database import AsyncSessionLocal
+    from app.services import task_log_store
+
+    content = task_log_store.read_log(task_id, node_id, tail=tail or None)
+    if not content:
+        async with AsyncSessionLocal() as db:
+            item = (
+                await db.execute(
+                    select(NodeTaskItem).where(
+                        NodeTaskItem.task_id == task_id,
+                        NodeTaskItem.node_id == node_id,
+                    )
+                )
+            ).scalar_one_or_none()
+        if item is None:
+            raise HTTPException(status_code=404, detail="任务节点不存在")
+        content = item.stdout or item.stdout_tail or ""
+    return PlainTextResponse(content)
 
 
 async def asyncio_sleep(seconds: float):

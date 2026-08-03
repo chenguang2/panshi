@@ -1,13 +1,13 @@
 <template>
-  <div class="page-container">
+  <div class="node-task-list">
     <PageHeader title="节点任务" description="查看和管理节点运维操作任务（安装/升级/启动/停止等），支持取消与重试">
       <template #actions>
-        <button class="btn btn-primary btn-sm" @click="openCreateModal">＋ 新建任务</button>
+        <button class="btn btn-primary" @click="openCreateModal">＋ 新建任务</button>
       </template>
     </PageHeader>
 
-    <div class="filter-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
-      <select v-model="filterStatus" class="filter-select" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);background:var(--card-bg,#fff);">
+    <div class="node-filter-bar">
+      <select v-model="filterStatus" class="form-input" style="width:140px;">
         <option value="">全部状态</option>
         <option value="pending">待执行</option>
         <option value="running">执行中</option>
@@ -16,65 +16,64 @@
         <option value="failed">失败</option>
         <option value="cancelled">已取消</option>
       </select>
-      <select v-model="filterType" class="filter-select" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);background:var(--card-bg,#fff);">
+      <select v-model="filterType" class="form-input" style="width:180px;">
         <option value="">全部类型</option>
         <option v-for="t in taskTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
       </select>
-      <button class="btn btn-secondary btn-sm" @click="loadTasks(1)">刷新</button>
+      <button class="btn btn-secondary" @click="loadTasks(1)">刷新</button>
+      <button
+        v-if="selectedRowKeys.length > 0"
+        class="btn btn-danger"
+        @click="handleBatchDelete"
+      >批量删除（{{ selectedRowKeys.length }}）</button>
     </div>
 
-    <a-table
-      :data-source="tasks"
-      :loading="loading"
-      row-key="id"
-      :pagination="{ pageSize: pageSize, total: total, current: page, showSizeChanger: false }"
-      size="middle"
-      @change="onTableChange"
-    >
-      <a-table-column title="ID" data-index="id" :width="60" />
-      <a-table-column title="任务类型" key="task_type">
-        <template #bodyCell="{ record }">
+    <div class="table-container">
+      <a-table
+        :data-source="tasks"
+        :columns="columns"
+        :loading="loading"
+        row-key="id"
+        :row-selection="{ selectedRowKeys, onChange: onSelectionChange }"
+        :pagination="{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条`, pageSizeOptions: ['10', '20', '50'] }"
+        size="middle"
+        class="node-task-table"
+        @change="onTableChange"
+      >
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.key === 'task_type'">
           {{ typeLabel(record.task_type) }}
         </template>
-      </a-table-column>
-      <a-table-column title="状态" key="status">
-        <template #bodyCell="{ record }">
+        <template v-else-if="column.key === 'status'">
           <span :class="'status-tag status-' + record.status">{{ statusLabel(record.status) }}</span>
         </template>
-      </a-table-column>
-      <a-table-column title="节点" key="nodes">
-        <template #bodyCell="{ record }">
+        <template v-else-if="column.key === 'nodes'">
           {{ record.success_nodes }}/{{ record.total_nodes }} 成功
         </template>
-      </a-table-column>
-      <a-table-column title="进度" key="progress">
-        <template #bodyCell="{ record }">
+        <template v-else-if="column.key === 'progress'">
           <div class="progress-bar-wrap" style="min-width:120px;">
             <div class="progress-bar" :class="'progress-' + progressStatus(record)" :style="{ width: progressPercent(record) + '%' }"></div>
           </div>
         </template>
-      </a-table-column>
-      <a-table-column title="创建时间" key="created_at">
-        <template #bodyCell="{ record }">
+        <template v-else-if="column.key === 'created_at'">
           {{ formatTime(record.created_at) }}
         </template>
-      </a-table-column>
-      <a-table-column title="操作" key="actions" :width="180">
-        <template #bodyCell="{ record }">
-          <button class="btn btn-ghost btn-sm" @click="openDetail(record)">详情</button>
-          <button
-            v-if="record.status === 'running' || record.status === 'pending'"
-            class="btn btn-danger btn-sm"
-            @click="handleCancel(record)"
-          >取消</button>
-          <button
-            v-if="['failed', 'partial', 'cancelled'].includes(record.status)"
-            class="btn btn-secondary btn-sm"
-            @click="handleRetry(record)"
-          >重试</button>
+        <template v-else-if="column.key === 'actions'">
+          <a-dropdown :trigger="['click']">
+            <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item @click="openDetail(record)">详情</a-menu-item>
+                <a-menu-item v-if="record.status === 'running' || record.status === 'pending'" @click="handleCancel(record)">取消</a-menu-item>
+                <a-menu-item v-if="['failed', 'partial', 'cancelled'].includes(record.status)" @click="handleRetry(record)">重试</a-menu-item>
+                <a-menu-item v-if="['success', 'failed', 'partial', 'cancelled'].includes(record.status)" danger @click="handleDelete(record)">删除</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </template>
-      </a-table-column>
+      </template>
     </a-table>
+    </div>
 
     <!-- Detail drawer -->
     <Teleport to="body">
@@ -82,7 +81,7 @@
         <div class="modal modal-wide" style="max-width:900px;">
           <div class="modal-header">
             <h2>任务详情 #{{ detail?.id }}</h2>
-            <button class="modal-close" @click="detailVisible = false">&times;</button>
+            <button class="modal-close" @click="closeDetail">&times;</button>
           </div>
           <div class="modal-body" style="max-height:80vh;overflow-y:auto;">
             <div v-if="detail" style="margin-bottom:16px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:13px;">
@@ -109,20 +108,21 @@
                 <tr v-for="item in detail?.items || []" :key="item.id">
                   <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">{{ item.ip }}<span v-if="item.node_name" style="color:var(--muted,#999);margin-left:6px;">{{ item.node_name }}</span></td>
                   <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">
-                    <span :class="'status-tag status-' + item.status">{{ statusLabel(item.status) }}</span>
+                    <span :class="'status-tag status-' + streamItem(item).status">{{ statusLabel(streamItem(item).status) }}</span>
                   </td>
-                  <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">{{ item.rc ?? '-' }}</td>
+                  <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">{{ streamItem(item).rc ?? '-' }}</td>
                   <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">{{ durationText(item) }}</td>
                   <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">
-                    <button class="btn btn-ghost btn-sm" @click="expandedIp = expandedIp === item.ip ? null : item.ip">
+                    <button class="btn btn-secondary btn-sm" @click="expandedIp = expandedIp === item.ip ? null : item.ip">
                       {{ expandedIp === item.ip ? '收起' : '展开' }}
                     </button>
+                    <button class="btn btn-secondary btn-sm" @click="loadFullLog(item)">完整日志</button>
                   </td>
                 </tr>
                 <tr v-if="expandedItem">
                   <td colspan="5" style="padding:8px;">
                     <NodeTaskLogViewer
-                      :logs="expandedItem.logs.map((l) => l.line)"
+                      :logs="streamLogLines(expandedItem)"
                       :stdout="expandedItem.stdout || ''"
                       :stderr="expandedItem.stderr || ''"
                       :command="expandedItem.command || ''"
@@ -135,7 +135,7 @@
           <div class="modal-footer">
             <button v-if="detail && (detail.status === 'running' || detail.status === 'pending')" class="btn btn-danger" @click="handleCancel(detail)">取消任务</button>
             <button v-if="detail && ['failed','partial','cancelled'].includes(detail.status)" class="btn btn-secondary" @click="handleRetry(detail)">重试失败节点</button>
-            <button class="btn btn-secondary" @click="detailVisible = false">关闭</button>
+            <button class="btn btn-secondary" @click="closeDetail">关闭</button>
           </div>
         </div>
       </div>
@@ -181,6 +181,20 @@
                 <option v-for="f in openrestyFiles" :key="f.name" :value="f.name">{{ f.name }} <template v-if="f.size_display">({{ f.size_display }})</template></option>
               </select>
             </div>
+            <div v-if="createTaskType === 'edge_pack_add'" style="margin-bottom:12px;">
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:4px;">Edge 版本包</label>
+              <select v-model="selectedPackFile" data-test="edge-pack-file" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);">
+                <option value="" disabled>请选择 Edge 版本包</option>
+                <option v-for="f in edgePackFiles" :key="f.name" :value="f.name">{{ f.name }} <template v-if="f.size_display">({{ f.size_display }})</template></option>
+              </select>
+            </div>
+            <div v-if="createTaskType === 'edge_pack_rebase'" style="margin-bottom:12px;">
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:4px;">目标版本</label>
+              <select v-model="selectedPackVersion" data-test="edge-pack-version" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);">
+                <option value="" disabled>请选择目标版本</option>
+                <option v-for="v in edgePackVersions" :key="v.name" :value="v.name" :disabled="v.current">{{ v.name }} <template v-if="v.current">(当前)</template></option>
+              </select>
+            </div>
             <div style="color:var(--muted,#999);font-size:12px;line-height:1.6;">
               任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
             </div>
@@ -189,7 +203,7 @@
             <button class="btn btn-secondary" @click="createVisible = false">取消</button>
             <button
               class="btn btn-primary"
-              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile)"
+              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile) || (createTaskType === 'edge_pack_add' && !selectedPackFile) || (createTaskType === 'edge_pack_rebase' && !selectedPackVersion)"
               @click="submitCreateTask"
             >创建</button>
           </div>
@@ -200,11 +214,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, h, render } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeTaskLogViewer from '@/components/NodeTaskLogViewer.vue'
-import { listNodeTasks, getNodeTask, cancelNodeTask, retryNodeTask, createNodeTask, type NodeTaskData, type NodeTaskItemData } from '@/composables/useNodeTasks'
+import { listNodeTasks, getNodeTask, cancelNodeTask, retryNodeTask, createNodeTask, fetchTaskItemLog, deleteNodeTask, batchDeleteNodeTasks, parseTaskEvent, type NodeTaskData, type NodeTaskItemData, type TaskStreamEvent } from '@/composables/useNodeTasks'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])
@@ -214,9 +228,15 @@ const pageSize = ref(20)
 const loading = ref(false)
 const filterStatus = ref('')
 const filterType = ref('')
+const selectedRowKeys = ref<number[]>([])
 const detailVisible = ref(false)
 const detail = ref<NodeTaskData | null>(null)
 const expandedIp = ref<string | null>(null)
+const liveLogs = ref<Record<number, string[]>>({})
+const liveDetail = ref<Record<number, NodeTaskItemData>>({})
+let eventSource: EventSource | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
+let streamTaskId = 0
 
 const createVisible = ref(false)
 const clusters = ref<Array<{ id: number; name: string; display_name?: string }>>([])
@@ -226,6 +246,10 @@ const createNodeIds = ref<number[]>([])
 const createTaskType = ref('')
 const createOpenrestyFile = ref('')
 const openrestyFiles = ref<Array<{ name: string; size_display?: string }>>([])
+const edgePackFiles = ref<Array<{ name: string; size_display?: string }>>([])
+const selectedPackFile = ref('')
+const edgePackVersions = ref<Array<{ name: string; current: boolean }>>([])
+const selectedPackVersion = ref('')
 
 const taskTypes = [
   { value: 'install_openresty', label: '安装 OpenResty' },
@@ -236,9 +260,17 @@ const taskTypes = [
   { value: 'start', label: '启动' },
   { value: 'stop', label: '停止' },
   { value: 'reload', label: 'Reload' },
-  { value: 'check', label: '配置检查' },
   { value: 'statistic', label: '状态查询' },
-  { value: 'edge_env_deploy', label: 'edge.env 部署' },
+]
+
+const columns = [
+  { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
+  { title: '任务类型', key: 'task_type' },
+  { title: '状态', key: 'status' },
+  { title: '节点', key: 'nodes' },
+  { title: '进度', key: 'progress' },
+  { title: '创建时间', key: 'created_at' },
+  { title: '操作', key: 'actions', width: 180 },
 ]
 
 function typeLabel(t: string): string {
@@ -292,20 +324,172 @@ async function loadTasks(targetPage = 1) {
     })
     tasks.value = res.items
     total.value = res.total
+    const currentIds = new Set(tasks.value.map((t) => t.id))
+    selectedRowKeys.value = selectedRowKeys.value.filter((id) => currentIds.has(id))
+    syncListPolling()
   } finally {
     loading.value = false
   }
 }
 
-function onTableChange(pagination: { current?: number }) {
+const LIST_POLL_MS = 3000
+let listPollTimer: ReturnType<typeof setInterval> | null = null
+
+function onSelectionChange(keys: number[]) {
+  selectedRowKeys.value = keys.map(Number)
+}
+
+function syncListPolling() {
+  const hasActive = tasks.value.some((t) => t.status === 'pending' || t.status === 'running')
+  if (hasActive && !listPollTimer) {
+    listPollTimer = setInterval(() => {
+      void listPollRefresh()
+    }, LIST_POLL_MS)
+  } else if (!hasActive && listPollTimer) {
+    clearInterval(listPollTimer)
+    listPollTimer = null
+  }
+}
+
+async function listPollRefresh() {
+  if (loading.value || detailVisible.value) return
+  try {
+    const res = await listNodeTasks({
+      status: filterStatus.value || undefined,
+      task_type: filterType.value || undefined,
+      page: page.value,
+      page_size: pageSize.value,
+    })
+    tasks.value = res.items
+    total.value = res.total
+    const stillActive = tasks.value.some((t) => t.status === 'pending' || t.status === 'running')
+    if (!stillActive && listPollTimer) {
+      clearInterval(listPollTimer)
+      listPollTimer = null
+    }
+  } catch {
+    // transient network error: keep polling
+  }
+}
+
+function onTableChange(pagination: { current?: number; pageSize?: number }) {
+  if (pagination.pageSize && pagination.pageSize !== pageSize.value) {
+    pageSize.value = pagination.pageSize
+  }
   if (pagination.current) loadTasks(pagination.current)
 }
 
 async function openDetail(record: NodeTaskData) {
   detailVisible.value = true
   expandedIp.value = null
+  stopStream()
+  liveLogs.value = {}
+  liveDetail.value = {}
   detail.value = await getNodeTask(record.id)
+  if (detail.value && (detail.value.status === 'pending' || detail.value.status === 'running')) {
+    startStream(detail.value.id)
+  }
 }
+
+function stopStream() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  streamTaskId = 0
+}
+
+function applyStreamEvent(ev: TaskStreamEvent) {
+  if (!detail.value || ev.task_id !== detail.value.id) return
+  if (ev.type === 'log_line' && ev.node_id && ev.line) {
+    if (!liveLogs.value[ev.node_id]) liveLogs.value[ev.node_id] = []
+    liveLogs.value[ev.node_id] = [...liveLogs.value[ev.node_id], ev.line].slice(-2000)
+  } else if (ev.type === 'node_update' && ev.node_id) {
+    const item = detail.value.items?.find((i) => i.node_id === ev.node_id)
+    if (item) {
+      liveDetail.value = { ...liveDetail.value, [ev.node_id]: { ...item, status: ev.status || item.status, rc: ev.rc ?? item.rc } }
+    }
+  } else if (ev.type === 'task_update') {
+    detail.value = {
+      ...detail.value,
+      status: ev.status || detail.value.status,
+      success_nodes: ev.success_nodes ?? detail.value.success_nodes,
+      failed_nodes: ev.failed_nodes ?? detail.value.failed_nodes,
+      cancelled_nodes: ev.cancelled_nodes ?? detail.value.cancelled_nodes,
+    }
+  }
+}
+
+function startStream(taskId: number) {
+  streamTaskId = taskId
+  eventSource = new EventSource(`/api/v1/node-tasks/${taskId}/stream`)
+  eventSource.onmessage = (msg) => {
+    const ev = parseTaskEvent(msg.data)
+    if (!ev) return
+    applyStreamEvent(ev)
+    if (ev.type === 'done') {
+      stopStream()
+      getNodeTask(taskId).then((fresh) => { detail.value = fresh })
+    }
+  }
+  eventSource.onerror = () => {
+    // Fallback to polling while disconnected; EventSource auto-reconnects.
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = setInterval(async () => {
+      if (!streamTaskId) return
+      const fresh = await getNodeTask(streamTaskId)
+      detail.value = fresh
+      if (!['pending', 'running'].includes(fresh.status)) {
+        stopStream()
+      }
+    }, 2000)
+  }
+}
+
+function streamItem(record: NodeTaskItemData): NodeTaskItemData {
+  if (streamTaskId && liveDetail.value[record.node_id]) {
+    return { ...record, ...liveDetail.value[record.node_id] }
+  }
+  return record
+}
+
+function streamLogLines(record: NodeTaskItemData): string[] {
+  if (liveLogs.value[record.node_id] && liveLogs.value[record.node_id].length > 0) {
+    return liveLogs.value[record.node_id]
+  }
+  return record.logs.map((l) => l.line)
+}
+
+async function loadFullLog(record: NodeTaskItemData) {
+  if (!detail.value) return
+  expandedIp.value = record.ip
+  try {
+    const content = await fetchTaskItemLog(detail.value.id, record.node_id)
+    if (content) {
+      const lines = content.split('\n')
+      liveLogs.value = { ...liveLogs.value, [record.node_id]: lines }
+    }
+  } catch {
+    message.warning('完整日志加载失败')
+  }
+}
+
+function isLiveTask(): boolean {
+  return !!detail.value && ['pending', 'running'].includes(detail.value.status)
+}
+
+onMounted(() => loadTasks(1))
+onBeforeUnmount(() => {
+  stopStream()
+  if (listPollTimer) {
+    clearInterval(listPollTimer)
+    listPollTimer = null
+  }
+})
 
 async function handleCancel(record: NodeTaskData) {
   await cancelNodeTask(record.id)
@@ -316,13 +500,149 @@ async function handleCancel(record: NodeTaskData) {
   loadTasks(page.value)
 }
 
-async function handleRetry(record: NodeTaskData) {
-  await retryNodeTask(record.id)
-  message.success('任务重试已发起')
-  if (detailVisible.value && detail.value?.id === record.id) {
-    detail.value = await getNodeTask(record.id)
+function showRetryConfirm(record: NodeTaskData, onOk: () => void) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const close = () => {
+    render(null, container)
+    container.remove()
   }
-  loadTasks(page.value)
+
+  const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+    h('div', { class: 'modal', style: 'max-width:520px;' }, [
+      h('div', { class: 'modal-header' }, [
+        h('h2', '确认重试任务'),
+        h('button', { class: 'modal-close', onClick: close }, '\u00D7'),
+      ]),
+      h('div', { class: 'modal-body' }, [
+        h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' },
+          `任务 #${record.id}（${typeLabel(record.task_type)}）`),
+        h('div', { style: 'font-size:13px;color:var(--fg);line-height:1.7;' }, [
+          h('p', { style: 'margin:0 0 8px;' },
+            `将重新执行该任务的失败/取消节点：失败 ${record.failed_nodes} 个、取消 ${record.cancelled_nodes} 个。`),
+          h('p', { style: 'margin:0;color:var(--muted);' },
+            '已成功的节点不会被重复执行。重试前请确认相关节点已恢复正常。'),
+        ]),
+      ]),
+      h('div', { class: 'modal-footer' }, [
+        h('button', { class: 'btn btn-secondary', onClick: close }, '取消'),
+        h('button', {
+          class: 'btn btn-danger',
+          onClick: () => {
+            close()
+            onOk()
+          },
+        }, '确认重试'),
+      ]),
+    ]),
+  ])
+
+  render(vnode, container)
+}
+
+function handleRetry(record: NodeTaskData) {
+  showRetryConfirm(record, async () => {
+    await retryNodeTask(record.id)
+    message.success('任务重试已发起')
+    if (detailVisible.value && detail.value?.id === record.id) {
+      detail.value = await getNodeTask(record.id)
+      if (['pending', 'running'].includes(detail.value.status)) {
+        startStream(detail.value.id)
+      }
+    }
+    loadTasks(page.value)
+  })
+}
+
+function showDeleteConfirm(titleLine: string, description: string, onOk: () => void) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const close = () => {
+    render(null, container)
+    container.remove()
+  }
+
+  const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
+    h('div', { class: 'modal', style: 'max-width:520px;' }, [
+      h('div', { class: 'modal-header' }, [
+        h('h2', '确认删除任务'),
+        h('button', { class: 'modal-close', onClick: close }, '\u00D7'),
+      ]),
+      h('div', { class: 'modal-body' }, [
+        h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, titleLine),
+        h('div', { style: 'font-size:13px;color:var(--fg);line-height:1.7;' }, [
+          h('p', { style: 'margin:0 0 8px;' }, description),
+          h('p', { style: 'margin:0;color:var(--muted);' }, '删除后不可恢复，请谨慎操作。'),
+        ]),
+      ]),
+      h('div', { class: 'modal-footer' }, [
+        h('button', { class: 'btn btn-secondary', onClick: close }, '取消'),
+        h('button', {
+          class: 'btn btn-danger',
+          onClick: () => {
+            close()
+            onOk()
+          },
+        }, '确认删除'),
+      ]),
+    ]),
+  ])
+
+  render(vnode, container)
+}
+
+async function handleDelete(record: NodeTaskData) {
+  showDeleteConfirm(
+    `任务 #${record.id}（${typeLabel(record.task_type)}）`,
+    '将删除该任务的数据库记录及其日志文件。',
+    async () => {
+      try {
+        await deleteNodeTask(record.id)
+        message.success('任务已删除')
+        if (detailVisible.value && detail.value?.id === record.id) {
+          closeDetail()
+        }
+        loadTasks(page.value)
+      } catch (e: any) {
+        message.error(e?.response?.data?.detail || '删除任务失败')
+      }
+    },
+  )
+}
+
+async function handleBatchDelete() {
+  const ids = [...selectedRowKeys.value]
+  if (ids.length === 0) return
+  showDeleteConfirm(
+    `将删除 ${ids.length} 个任务`,
+    '将删除所选任务的数据库记录及其日志文件；执行中/待执行任务会被跳过。',
+    async () => {
+      try {
+        const res = await batchDeleteNodeTasks(ids)
+        const deleted = res.deleted?.length || 0
+        const skipped = res.skipped?.length || 0
+        if (deleted > 0) message.success(`已删除 ${deleted} 个任务${skipped > 0 ? `，${skipped} 个跳过（执行中/不存在）` : ''}`)
+        else if (skipped > 0) message.warning('所选任务均执行中或不存在，未删除')
+        selectedRowKeys.value = []
+        if (detailVisible.value && detail.value && ids.includes(detail.value.id)) {
+          closeDetail()
+        }
+        loadTasks(page.value)
+      } catch (e: any) {
+        message.error(e?.response?.data?.detail || '批量删除失败')
+      }
+    },
+  )
+}
+
+function closeDetail() {
+  stopStream()
+  detailVisible.value = false
+  detail.value = null
+  liveLogs.value = {}
+  liveDetail.value = {}
 }
 
 async function openCreateModal() {
@@ -332,6 +652,10 @@ async function openCreateModal() {
   createTaskType.value = ''
   createOpenrestyFile.value = ''
   openrestyFiles.value = []
+  edgePackFiles.value = []
+  selectedPackFile.value = ''
+  edgePackVersions.value = []
+  selectedPackVersion.value = ''
   createNodes.value = []
   if (clusters.value.length === 0) {
     const res = await api.get('/clusters', { params: { page_size: 100 } })
@@ -339,12 +663,33 @@ async function openCreateModal() {
   }
 }
 
+async function loadEdgePackFiles() {
+  if (!createClusterId.value) return
+  const res = await api.get(`/clusters/${createClusterId.value}/nodes/edge-pack-files`)
+  edgePackFiles.value = res.data?.files || []
+}
+
+async function loadEdgePackVersions() {
+  const firstNode = createNodes.value[0]
+  if (!createClusterId.value || !firstNode) return
+  const res = await api.get(`/clusters/${createClusterId.value}/nodes/${firstNode.id}/edge-pack-list`)
+  edgePackVersions.value = res.data?.versions || []
+}
+
 async function onTaskTypeChange() {
   createOpenrestyFile.value = ''
   openrestyFiles.value = []
+  selectedPackFile.value = ''
+  selectedPackVersion.value = ''
   if (createTaskType.value === 'install_openresty' && createClusterId.value) {
     const res = await api.get(`/clusters/${createClusterId.value}/nodes/openresty-files`)
     openrestyFiles.value = res.data?.files || res.data || []
+  }
+  if (createTaskType.value === 'edge_pack_add' && createClusterId.value) {
+    loadEdgePackFiles()
+  }
+  if (createTaskType.value === 'edge_pack_rebase' && createNodeIds.value.length > 0) {
+    loadEdgePackVersions()
   }
 }
 
@@ -352,6 +697,9 @@ watch(createTaskType, () => onTaskTypeChange())
 watch(createClusterId, () => {
   createOpenrestyFile.value = ''
   openrestyFiles.value = []
+  selectedPackFile.value = ''
+  edgePackVersions.value = []
+  selectedPackVersion.value = ''
 })
 
 async function loadCreateNodes() {
@@ -362,6 +710,12 @@ async function loadCreateNodes() {
   createNodes.value = res.data.items || []
 }
 
+watch(createNodeIds, () => {
+  if (createTaskType.value === 'edge_pack_rebase' && createNodeIds.value.length > 0) {
+    loadEdgePackVersions()
+  }
+})
+
 async function submitCreateTask() {
   if (!createClusterId.value || createNodeIds.value.length === 0 || !createTaskType.value) {
     message.warning('请选择集群、节点和操作类型')
@@ -371,9 +725,23 @@ async function submitCreateTask() {
     message.warning('请选择 OpenResty 安装包')
     return
   }
+  if (createTaskType.value === 'edge_pack_add' && !selectedPackFile.value) {
+    message.warning('请选择 Edge 版本包')
+    return
+  }
+  if (createTaskType.value === 'edge_pack_rebase' && !selectedPackVersion.value) {
+    message.warning('请选择目标版本')
+    return
+  }
   const params: Record<string, unknown> = {}
   if (createTaskType.value === 'install_openresty') {
     params.openresty_file = createOpenrestyFile.value
+  }
+  if (createTaskType.value === 'edge_pack_add') {
+    params.pack_file = selectedPackFile.value
+  }
+  if (createTaskType.value === 'edge_pack_rebase') {
+    params.version = selectedPackVersion.value
   }
   try {
     await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params)
@@ -384,16 +752,76 @@ async function submitCreateTask() {
     message.error(e?.response?.data?.detail || '创建任务失败')
   }
 }
-
-onMounted(() => loadTasks(1))
 </script>
 
 <style scoped>
-.page-container {
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
+.node-task-list { padding: 20px 24px; }
+
+.node-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: nowrap;
 }
+
+/* ── 表格外框 ── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container :deep(.ant-table) {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* ── 表头 ── */
+.node-task-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(97% 0.005 250);
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+  border-bottom: 1px solid var(--border) !important;
+}
+.node-task-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+
+/* ── 行分割线 ── */
+.node-task-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px !important;
+  font-size: 13px !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.node-task-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
+}
+
+/* ── 分页脚注 ── */
+.node-task-table :deep(.ant-table-pagination) {
+  background: var(--bg) !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--border) !important;
+}
+
+.action-trigger-btn {
+  border: none !important;
+  background: transparent !important;
+  font-size: 16px !important;
+  color: var(--muted) !important;
+}
+
 .status-tag {
   display: inline-block;
   padding: 2px 10px;

@@ -18,6 +18,8 @@ export interface NodeTaskItemData {
   stdout?: string | null
   stderr?: string | null
   command?: string | null
+  log_file?: string | null
+  log_line_count?: number | null
   started_at?: string | null
   finished_at?: string | null
 }
@@ -85,20 +87,43 @@ export async function retryNodeTask(taskId: number, nodeIds?: number[]): Promise
   await api.post(`/node-tasks/${taskId}/retry`, nodeIds ? { node_ids: nodeIds } : {})
 }
 
+export async function deleteNodeTask(taskId: number): Promise<{ deleted: number[] }> {
+  const res = await api.delete(`/node-tasks/${taskId}`)
+  return res.data
+}
+
+export async function batchDeleteNodeTasks(taskIds: number[]): Promise<{ deleted: number[]; skipped: number[] }> {
+  const res = await api.post('/node-tasks/batch-delete', { task_ids: taskIds })
+  return res.data
+}
+
+export async function fetchTaskItemLog(taskId: number, nodeId: number, tail?: number): Promise<string> {
+  const res = await api.get(`/node-tasks/${taskId}/items/${nodeId}/log`, {
+    params: tail && tail > 0 ? { tail } : {},
+    responseType: 'text',
+  })
+  return typeof res.data === 'string' ? res.data : ''
+}
+
 export interface TaskStreamEvent {
   type: string
   task_id: number
   node_id?: number
   status?: string
-  progress?: number
+  rc?: number | null
   line?: string
+  progress?: number
+  success_nodes?: number
+  failed_nodes?: number
+  cancelled_nodes?: number
 }
 
 export function parseTaskEvent(raw: string): TaskStreamEvent | null {
   const trimmed = raw.trim()
-  if (!trimmed || !trimmed.startsWith('data: ')) return null
+  if (!trimmed) return null
+  const json = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed
   try {
-    return JSON.parse(trimmed.slice(6)) as TaskStreamEvent
+    return JSON.parse(json) as TaskStreamEvent
   } catch {
     return null
   }

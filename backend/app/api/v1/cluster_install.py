@@ -9,6 +9,7 @@ registered based on deployment feature configuration:
 import asyncio
 import json
 import os
+import re
 import shlex
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,10 @@ from app.services.ansible_service import (
 # ── shared module-level helpers ────────────────────────────────────────
 
 _ansible_service = AnsibleRunnerService()
+
+# Edge version names look like "3.1.1.26072208" (dotted numbers); anything
+# else is SSH login banner / motd noise from the shell.
+_VERSION_LIKE_RE = re.compile(r"^\d+(\.\d+)+$")
 
 
 def list_openresty_files(soft_dir: str) -> list[dict]:
@@ -462,6 +467,11 @@ async def edge_pack_list(
             continue
         current = line.startswith("[*]")
         name = line.replace("[*]", "").strip()
+        # Skip SSH login banner / system motd lines; keep version-like names
+        if not name or len(name) > 64:
+            continue
+        if not _VERSION_LIKE_RE.match(name):
+            continue
         versions.append({"name": name, "current": current})
     return {"versions": versions}
 

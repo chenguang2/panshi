@@ -9,7 +9,7 @@ import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Callable
 import queue
 
 import yaml
@@ -71,20 +71,62 @@ async def _run_subprocess(cmd: list[str]) -> tuple[int, str, str]:
     return rc, stdout.decode("utf-8", errors="replace").strip(), stderr.decode("utf-8", errors="replace").strip()
 
 
+async def _run_subprocess_stream(
+    cmd: list[str],
+    on_line: Callable[[dict], None] | None = None,
+) -> tuple[int, str, str]:
+    """Run a subprocess, streaming stdout/stderr lines to ``on_line`` as they arrive.
+
+    Unlike ``_run_subprocess`` (which blocks until the process exits via
+    ``communicate()``), this reads stdout line-by-line and invokes ``on_line``
+    for each line in real time. Returns (rc, full_stdout, full_stderr).
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    async def pump(stream: Any, collect: list[str], is_stderr: bool) -> None:
+        while True:
+            raw = await stream.readline()
+            if not raw:
+                break
+            line = raw.decode("utf-8", errors="replace").rstrip("\n")
+            collect.append(line)
+            if on_line is not None and line.strip():
+                on_line({"stderr": line} if is_stderr else {"stdout": line})
+
+    await asyncio.gather(
+        pump(proc.stdout, stdout_lines, False),
+        pump(proc.stderr, stderr_lines, True),
+    )
+    rc = await proc.wait()
+    return rc, "\n".join(stdout_lines), "\n".join(stderr_lines)
+
+
 async def _run_ssh_with_fallback(
     ip: str,
     ssh_user: str,
     cmd: str,
     password: str | None = None,
     status_callback=None,
+    on_line: Callable[[dict], None] | None = None,
 ) -> tuple[int, str, str]:
     """Run SSH command, retrying with password fallback on auth failure.
 
-    Returns (rc, stdout, stderr). On fallback failure, merges both error outputs.
+    When ``on_line`` is provided, stdout/stderr lines are streamed to it in
+    real time (compile output etc.). Returns (rc, stdout, stderr). On fallback
+    failure, merges both error outputs.
     """
     # Round 1: key-based
     key_cmd = _build_ssh_cmd(ip, ssh_user, cmd)
-    rc, stdout, stderr = await _run_subprocess(key_cmd)
+    if on_line is not None:
+        rc, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line)
+    else:
+        rc, stdout, stderr = await _run_subprocess(key_cmd)
     if rc == 0:
         return rc, stdout, stderr
 
@@ -106,7 +148,10 @@ async def _run_ssh_with_fallback(
     if status_callback:
         await status_callback("免密登录失败，正在尝试密码认证...")
     pass_cmd = _build_ssh_cmd(ip, ssh_user, cmd, password=password)
-    rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd)
+    if on_line is not None:
+        rc2, stdout2, stderr2 = await _run_subprocess_stream(pass_cmd, on_line)
+    else:
+        rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd)
     if rc2 == 0:
         return rc2, stdout2, stderr2
 

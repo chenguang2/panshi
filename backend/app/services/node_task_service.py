@@ -14,6 +14,8 @@ node-task-center API. Design decisions (openspec/changes/node-operation-task-cen
 
 import asyncio
 import logging
+import queue as _queue
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -22,6 +24,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node_task import NodeTask, NodeTaskItem
+from app.services import task_log_store
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,8 @@ class NodeTaskService:
         self._node_locks: dict[int, asyncio.Lock] = {}
         self._cancel_flags: dict[int, asyncio.Event] = {}
         self._running: dict[int, asyncio.Task] = {}
+        # SSE fan-out; queue.Queue because on_log runs on ansible worker threads
+        self._subscribers: dict[int, set[_queue.Queue]] = {}
         self._closed = False
 
     # ── public API ──────────────────────────────────────────────
@@ -126,6 +131,31 @@ class NodeTaskService:
         for task in self._running.values():
             task.cancel()
 
+    # ── SSE broadcast (thread-safe; on_log runs on ansible worker threads) ──
+
+    def subscribe(self, task_id: int) -> _queue.Queue:
+        q: _queue.Queue = _queue.Queue(maxsize=1000)
+        self._subscribers.setdefault(task_id, set()).add(q)
+        return q
+
+    def unsubscribe(self, task_id: int, q: _queue.Queue) -> None:
+        subs = self._subscribers.get(task_id)
+        if subs is not None:
+            subs.discard(q)
+            if not subs:
+                self._subscribers.pop(task_id, None)
+
+    def _broadcast(self, task_id: int, event: dict) -> None:
+        for q in list(self._subscribers.get(task_id, ())):
+            try:
+                q.put_nowait(event)
+            except _queue.Full:
+                try:
+                    q.get_nowait()
+                    q.put_nowait(event)
+                except _queue.Empty:
+                    pass
+
     # ── internals ───────────────────────────────────────────────
 
     async def _execute(self, task_id: int) -> None:
@@ -139,6 +169,7 @@ class NodeTaskService:
                 task.status = "running"
                 task.started_at = datetime.utcnow()
                 await db.commit()
+                self._broadcast(task_id, {"type": "task_update", "task_id": task_id, "status": "running"})
 
                 items = (
                     await db.execute(
@@ -218,29 +249,50 @@ class NodeTaskService:
 
                 item.status = "running"
                 item.started_at = datetime.utcnow()
-                logs: list[dict] = []
-                item.set_logs(logs)
+                await db.commit()
+                self._broadcast(item.task_id, {
+                    "type": "node_update", "task_id": item.task_id,
+                    "node_id": item.node_id, "status": "running",
+                })
+
+                tail_chunks: list[str] = []
+                line_count = 0
+                tail_lock = threading.Lock()
 
                 def on_log(event: dict) -> None:
+                    nonlocal line_count
                     line = event.get("stdout", "") if isinstance(event, dict) else str(event)
-                    if line:
-                        logs.append({"t": datetime.utcnow().isoformat(), "level": "info", "line": line.rstrip()})
-                        if len(logs) > 500:
-                            logs.pop(0)
-                        item.set_logs(logs)
-
-                await db.commit()
+                    if not line:
+                        return
+                    task_log_store.append_line(item.task_id, item.node_id, line)
+                    with tail_lock:
+                        tail_chunks.append(line)
+                        line_count += len(line.splitlines())
+                    self._broadcast(item.task_id, {
+                        "type": "log_line", "task_id": item.task_id,
+                        "node_id": item.node_id, "line": line,
+                    })
 
                 result = await self._executor(item.node_id, item, params, cancel_flag, on_log)
 
                 rc = result.get("rc", -1)
+                with tail_lock:
+                    tail_text = "".join(tail_chunks)
                 item.rc = rc
+                if line_count > 0:
+                    item.log_file = str(task_log_store.log_path(item.task_id, item.node_id).relative_to(task_log_store.log_root()))
+                item.log_line_count = line_count
+                item.stdout_tail = task_log_store.tail_bytes(tail_text)
                 item.stdout = result.get("stdout")
                 item.stderr = result.get("stderr")
                 item.command = result.get("command")
                 item.status = "success" if rc == 0 else "failed"
                 item.finished_at = datetime.utcnow()
                 await db.commit()
+                self._broadcast(item.task_id, {
+                    "type": "node_update", "task_id": item.task_id,
+                    "node_id": item.node_id, "status": item.status, "rc": rc,
+                })
                 return item.status
 
     async def _finalize_task(self, db: AsyncSession, task: NodeTask, results: list[str]) -> None:
@@ -259,6 +311,14 @@ class NodeTaskService:
         else:
             task.status = "partial"
         await db.commit()
+        self._broadcast(task.id, {
+            "type": "task_update", "task_id": task.id,
+            "status": task.status,
+            "success_nodes": task.success_nodes,
+            "failed_nodes": task.failed_nodes,
+            "cancelled_nodes": task.cancelled_nodes,
+        })
+        self._broadcast(task.id, {"type": "done", "task_id": task.id})
 
     async def _reset_failed_items(self, task_id: int, node_ids: list[int] | None) -> None:
         session_factory = self._db_factory or self._default_session_factory
@@ -277,6 +337,10 @@ class NodeTaskService:
                         item.started_at = None
                         item.finished_at = None
                         item.set_logs([])
+                        task_log_store.reset_log(task_id, item.node_id)
+                        item.log_file = None
+                        item.log_line_count = 0
+                        item.stdout_tail = None
             await db.commit()
 
     @staticmethod
@@ -458,8 +522,7 @@ async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], Non
     destpath = str(Path(prefix).parent) + "/"
     build_cmd = f"cd {destpath}soft/install-edge && ./install-edge.sh {prefix}"
     on_log({"stdout": f"$ {build_cmd}"})
-    rc, stdout, stderr = await _run_ssh_with_fallback(node.ip, ssh_user, build_cmd)
-    on_log({"stdout": stdout})
-    if stderr:
-        on_log({"stderr": stderr})
+    rc, stdout, stderr = await _run_ssh_with_fallback(
+        node.ip, ssh_user, build_cmd, on_line=on_log,
+    )
     return {"rc": rc, "status": "success" if rc == 0 else "failed", "stdout": stdout, "stderr": stderr, "command": build_cmd}
