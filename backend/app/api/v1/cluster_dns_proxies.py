@@ -27,6 +27,7 @@ from app.api.v1.cluster_stream_proxies import (
     _build_publish_map,
     _get_proxy_or_404,
     _delete_proxy_versions,
+    _edge_protocol,
     ALLOWED_SEARCH_FIELDS,
     ALLOWED_SORT_FIELDS,
 )
@@ -190,7 +191,7 @@ async def publish_dns_proxy(
 ):
     proxy = await _get_proxy_or_404(db, proxy_id, cluster_id, "DNS 代理不存在")
 
-    protocol = proxy.scheme.upper() if proxy.scheme else None
+    protocol = _edge_protocol(proxy.scheme)
 
     edge_body: dict = {
         "server_port": proxy.listen_port,

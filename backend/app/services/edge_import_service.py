@@ -333,6 +333,11 @@ class EdgeImportService:
         }
 
     @staticmethod
+    def _normalize_stream_scheme(scheme: Any) -> str:
+        """归一化导入的 Stream 上游 scheme：仅保留 tcp/udp/tls，其余（如历史 tcp_udp）回退为 tcp。"""
+        return scheme if scheme in ("tcp", "udp", "tls") else "tcp"
+
+    @staticmethod
     def _ensure_json(value: Any) -> Optional[str]:
         if value is None:
             return None
@@ -448,7 +453,7 @@ class EdgeImportService:
                 "load_balance": self._STREAM_PROXY_TYPE_MAP.get(
                     upstream.get("type", "roundrobin"), "weighted_roundrobin"
                 ),
-                "scheme": upstream.get("scheme", "tcp"),
+                "scheme": self._normalize_stream_scheme(upstream.get("scheme", "tcp")),
                 "description": edge_stream.get("desc"),
                 "remote_addr": edge_stream.get("remote_addr"),
                 "sni": edge_stream.get("sni"),

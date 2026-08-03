@@ -409,6 +409,19 @@ async def delete_stream_proxy(
     return {"message": "四层代理已删除", "results": results}
 
 
+def _edge_protocol(scheme: str | None) -> str | None:
+    """Map internal scheme to Edge's top-level `protocol` enum value.
+
+    Edge only accepts "TCP"/"UDP" for stream route protocol; TLS is expressed
+    via upstream.scheme="tls", so it publishes as "TCP" at protocol level.
+    """
+    if not scheme:
+        return None
+    if scheme == "udp":
+        return "UDP"
+    return "TCP"
+
+
 @router.post("/{cluster_id}/stream-proxies/{proxy_id}/publish")
 async def publish_stream_proxy(
     cluster_id: int,
@@ -418,7 +431,7 @@ async def publish_stream_proxy(
 ):
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
 
-    _protocol = proxy.scheme.upper() if proxy.scheme else None
+    _protocol = _edge_protocol(proxy.scheme)
 
     targets = json.loads(proxy.targets) if proxy.targets else []
     nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}

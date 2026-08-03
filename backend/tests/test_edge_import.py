@@ -391,6 +391,40 @@ class TestEdgeImportConverters:
         # No timeout in data
         assert result["stream_proxy"].get("timeout") is None
 
+    def test_convert_stream_proxy_normalizes_invalid_scheme(self):
+        """Import scheme must be normalized to tcp/udp/tls, never left as legacy/invalid values."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+
+        for bad in ("tcp_udp", "http", "grpc", "https"):
+            result = service.convert_stream_proxy({
+                "name": "normalize-me",
+                "id": "uuid-norm-1",
+                "server_port": 20000,
+                "upstream": {"type": "roundrobin", "scheme": bad},
+            })
+            sp = result["stream_proxy"]
+            assert sp["scheme"] == "tcp", f"scheme {bad!r} should normalize to tcp, got {sp['scheme']!r}"
+
+    def test_convert_stream_proxy_preserves_valid_schemes(self):
+        """Valid import schemes (tcp/udp/tls) must be preserved."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+
+        for good in ("tcp", "udp", "tls"):
+            result = service.convert_stream_proxy({
+                "name": "preserve-me",
+                "id": "uuid-preserve-1",
+                "server_port": 20001,
+                "upstream": {"type": "roundrobin", "scheme": good},
+            })
+            sp = result["stream_proxy"]
+            assert sp["scheme"] == good, f"scheme {good!r} should be preserved, got {sp['scheme']!r}"
+
     def test_convert_stream_proxy_name_fallback_to_id(self):
         from app.services.edge_import_service import EdgeImportService
 

@@ -235,6 +235,108 @@ class TestStreamProxySchema:
         req = DetectPortsRequest(node_id=5)
         assert req.node_id == 5
 
+    def test_create_rejects_invalid_scheme(self):
+        """StreamProxyCreate must reject non-(tcp|udp|tls) scheme values."""
+        from app.schemas.stream_proxy import StreamProxyCreate
+        for bad in ("grpc", "tcp_udp", "http", ""):
+            with pytest.raises(ValidationError):
+                StreamProxyCreate(name="bad-scheme", listen_port=9970, targets=[], scheme=bad)
+
+    def test_create_accepts_valid_schemes(self):
+        """StreamProxyCreate must accept tcp/udp/tls."""
+        from app.schemas.stream_proxy import StreamProxyCreate
+        for good in ("tcp", "udp", "tls"):
+            data = StreamProxyCreate(name="ok-scheme", listen_port=9970, targets=[], scheme=good)
+            assert data.scheme == good
+
+    def test_update_rejects_invalid_scheme(self):
+        """StreamProxyUpdate must reject non-(tcp|udp|tls) scheme values."""
+        from app.schemas.stream_proxy import StreamProxyUpdate
+        for bad in ("grpc", "tcp_udp"):
+            with pytest.raises(ValidationError):
+                StreamProxyUpdate(scheme=bad)
+
+    def test_response_accepts_legacy_scheme(self):
+        """StreamProxyResponse must stay lenient for legacy/imported scheme values."""
+        from app.schemas.stream_proxy import StreamProxyResponse
+        data = StreamProxyResponse(
+            id=1,
+            edge_uuid="abc-123",
+            cluster_id=1,
+            name="legacy",
+            listen_port=9970,
+            scheme="tcp_udp",  # legacy value must NOT break reads
+        )
+        assert data.scheme == "tcp_udp"
+
+
+class TestStreamProxySchemeMigration:
+    """Data migration: normalize legacy/invalid stream_proxy scheme values to tcp."""
+
+    def _make_engine_with_proxies(self, schemes):
+        from sqlalchemy import create_engine, text
+        engine = create_engine("sqlite://", echo=False)
+        with engine.connect() as conn:
+            conn.execute(text(
+                "CREATE TABLE ps_stream_proxy ("
+                "  id INTEGER PRIMARY KEY,"
+                "  cluster_id INTEGER NOT NULL,"
+                "  name VARCHAR(100) NOT NULL,"
+                "  listen_port INTEGER NOT NULL,"
+                "  scheme VARCHAR(10) NOT NULL DEFAULT 'tcp'"
+                ")"
+            ))
+            for i, s in enumerate(schemes):
+                conn.execute(text(
+                    "INSERT INTO ps_stream_proxy (cluster_id, name, listen_port, scheme) "
+                    "VALUES (1, :name, :port, :scheme)"
+                ), {"name": f"p-{i}", "port": 20000 + i, "scheme": s})
+            conn.commit()
+        return engine
+
+    def test_normalize_stream_schemes_cleans_legacy_values(self):
+        """Non-(tcp|udp|tls) scheme values must be normalized to tcp."""
+        from app.core.migrate import _normalize_stream_schemes
+
+        engine = self._make_engine_with_proxies(["tcp", "udp", "tls", "tcp_udp", "http"])
+        changed = _normalize_stream_schemes(engine)
+
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            rows = conn.execute(text("SELECT name, scheme FROM ps_stream_proxy ORDER BY listen_port")).fetchall()
+        schemes = {name: scheme for name, scheme in rows}
+        assert schemes["p-0"] == "tcp"
+        assert schemes["p-1"] == "udp"
+        assert schemes["p-2"] == "tls"
+        assert schemes["p-3"] == "tcp", f"tcp_udp should normalize to tcp, got {schemes['p-3']}"
+        assert schemes["p-4"] == "tcp", f"http should normalize to tcp, got {schemes['p-4']}"
+        assert changed is True
+
+    def test_normalize_stream_schemes_noop_when_all_valid(self):
+        """When all schemes are valid, migration should report no changes."""
+        from app.core.migrate import _normalize_stream_schemes
+
+        engine = self._make_engine_with_proxies(["tcp", "udp", "tls"])
+        changed = _normalize_stream_schemes(engine)
+        assert changed is False
+
+
+class TestStreamProxyPublishProtocol:
+    """Edge protocol mapping on publish: TLS is expressed via upstream.scheme, not top-level protocol."""
+
+    def test_edge_protocol_maps_tls_to_tcp(self):
+        """scheme='tls' must publish top-level protocol='TCP' (Edge enum only accepts TCP/UDP)."""
+        from app.api.v1.cluster_stream_proxies import _edge_protocol
+        assert _edge_protocol("tcp") == "TCP"
+        assert _edge_protocol("udp") == "UDP"
+        assert _edge_protocol("tls") == "TCP", "TLS must be published as TCP at protocol level"
+        assert _edge_protocol(None) is None
+
+    def test_edge_protocol_unknown_scheme_falls_back_to_tcp(self):
+        """Any unknown scheme (e.g. legacy tcp_udp) must not produce an invalid Edge enum value."""
+        from app.api.v1.cluster_stream_proxies import _edge_protocol
+        assert _edge_protocol("tcp_udp") == "TCP"
+
 
 class TestStreamProxyAPI:
     """API endpoint tests."""

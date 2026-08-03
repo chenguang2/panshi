@@ -1,6 +1,6 @@
 import json as _json
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -34,6 +34,7 @@ class StreamProxyBase(BaseModel):
 
 
 class StreamProxyCreate(StreamProxyBase):
+    scheme: Literal["tcp", "udp", "tls"] = "tcp"
     targets: Optional[List[TargetSchema]] = None
 
 
@@ -43,7 +44,7 @@ class StreamProxyUpdate(BaseModel):
     load_balance: Optional[str] = None
     hash_on: Optional[str] = None
     key: Optional[str] = None
-    scheme: Optional[str] = None
+    scheme: Optional[Literal["tcp", "udp", "tls"]] = None
     listen_port: Optional[int] = None
     ref_node_id: Optional[int] = None
     targets: Optional[List[TargetSchema]] = None

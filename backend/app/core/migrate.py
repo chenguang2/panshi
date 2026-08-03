@@ -200,6 +200,9 @@ def run_migrations(engine: Engine) -> None:
     # Migrate NULL group_name to empty string
     _migrate_null_group_name(engine)
 
+    # Normalize legacy stream_proxy scheme values (tcp_udp etc.) to tcp
+    _normalize_stream_schemes(engine)
+
     # Ensure index on ps_cluster(group_name) for JOIN performance
     _ensure_index(engine, "ps_cluster", "idx_cluster_group_name", ["group_name"])
 
@@ -254,6 +257,37 @@ def _migrate_null_group_name(engine: Engine) -> None:
                 logger.info("Migrated %d NULL group_name to ''", result.rowcount)
         except Exception as e:
             logger.warning("Could not migrate group_name: %s", e)
+
+
+def _normalize_stream_schemes(engine: Engine) -> bool:
+    """Normalize legacy/invalid ps_stream_proxy.scheme values to 'tcp'.
+
+    Historical 'tcp_udp' (removed in 3836f54) and any other non-(tcp|udp|tls)
+    values are rewritten to 'tcp' so downstream reads never see invalid schemes.
+    Returns True if any rows were changed.
+    """
+    from sqlalchemy import text as _text
+
+    try:
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("ps_stream_proxy")]
+        if "scheme" not in columns:
+            return False
+        with engine.connect() as conn:
+            result = conn.execute(
+                _text(
+                    "UPDATE ps_stream_proxy SET scheme = 'tcp' "
+                    "WHERE scheme NOT IN ('tcp', 'udp', 'tls')"
+                )
+            )
+            if result.rowcount > 0:
+                conn.commit()
+                logger.info("Normalized %d legacy stream_proxy schemes to 'tcp'", result.rowcount)
+                return True
+            return False
+    except Exception as e:
+        logger.warning("Could not normalize stream proxy schemes: %s", e)
+        return False
 
 
 def _ensure_ssl_foreign_key(engine: Engine) -> None:
