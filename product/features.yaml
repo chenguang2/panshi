@@ -11,6 +11,7 @@ features:
   ssl_cert: true
   dns_proxy_udp: true
   dns_proxy_http: true
+  task_center: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite
@@ -23,3 +24,9 @@ enabled_plugins:
   - static_resource
   - traceid
   - monitor
+  - dns_upstream
+# 并发参数：batch_action 为前端批量节点操作并发，max_playbooks 为后端全局
+# ansible 并发上限。前端实际并发为 min(batch_action, max_playbooks)，建议两值联动。
+concurrency:
+  max_playbooks: 5
+  batch_action: 5

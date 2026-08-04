@@ -206,8 +206,9 @@ echo "  启停脚本已拷贝到: $TARGET_DIR/"
 
 # 拷贝 features.yaml（部署特性配置模板）
 # 注意：start.sh 执行 cd $PROJECT_ROOT/backend，CWD 是 backend/
+# 单一权威源：backend/features.yaml（开发运行与部署共用，避免双份维护不同步）
 echo "拷贝 features.yaml..."
-cp "$PROJECT_ROOT/product/features.yaml" "$TARGET_DIR/backend/"
+cp "$PROJECT_ROOT/backend/features.yaml" "$TARGET_DIR/backend/"
 echo "  features.yaml 已拷贝到: $TARGET_DIR/backend/"
 
 # 创建 data/.gitkeep（空目录占位）

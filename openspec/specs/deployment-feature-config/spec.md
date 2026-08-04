@@ -277,11 +277,11 @@ FastAPI 应用 SHALL 在启动时根据 `features.yaml` 条件性注册 API 路�
 
 ### Requirement: 构建部署集成
 
-`gen-linux.sh` 打包脚本 SHALL 在构建离线部署包时自动包含 `features.yaml` 文件。
+`gen-linux.sh` / `gen-mac.sh` 打包脚本 SHALL 在构建离线部署包时自动包含 `features.yaml` 文件。
 
 #### Scenario: 离线打包包含配置文件
-- **WHEN** 执行 `gen-linux.sh`
-- **THEN** 脚本 SHALL 从 `product/features.yaml` 拷贝到部署根目录
+- **WHEN** 执行 `gen-linux.sh`（或 `gen-mac.sh`）
+- **THEN** 脚本 SHALL 从 `backend/features.yaml` 拷贝到部署根目录（单一权威源：开发运行与部署共用，避免双份维护不同步）
 - **AND** 部署启动后系统 SHALL 读取该配置
 
 #### Scenario: 开发模式默认配置
