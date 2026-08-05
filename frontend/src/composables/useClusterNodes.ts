@@ -143,7 +143,7 @@ export function useClusterNodes(options: {
     service_port: 80,
     management_port: 9180,
     edge_path: '',
-    edge_install_path: '',
+    openresty_path: '',
     status: 1
   })
 
@@ -156,7 +156,7 @@ export function useClusterNodes(options: {
     service_port: number
     management_port: number
     edge_path: string
-    edge_install_path: string
+    openresty_path: string
     status: number
     valid: boolean
     line?: number
@@ -167,7 +167,7 @@ export function useClusterNodes(options: {
     management_port: 9180,
     status: 1,
     edge_path: '/edge',
-    edge_install_path: '/usr/local/nginx',
+    openresty_path: '/usr/local/nginx',
   })
 
   watch(nodeImportMode, (mode) => {
@@ -308,7 +308,7 @@ export function useClusterNodes(options: {
       service_port: 80,
       management_port: 9180,
       edge_path: '',
-      edge_install_path: '',
+      openresty_path: '',
       status: 1
     })
     nodeModalVisible.value = true
@@ -326,7 +326,7 @@ export function useClusterNodes(options: {
     nodeForm.service_port = target.service_port
     nodeForm.management_port = target.management_port
     nodeForm.edge_path = target.edge_path || ''
-    nodeForm.edge_install_path = target.edge_install_path || ''
+    nodeForm.openresty_path = target.openresty_path || ''
     nodeForm.status = target.status
     nodeModalVisible.value = true
   }
@@ -340,7 +340,7 @@ export function useClusterNodes(options: {
       service_port: node.service_port,
       management_port: node.management_port,
       edge_path: node.edge_path || '',
-      edge_install_path: node.edge_install_path || '',
+      openresty_path: node.openresty_path || '',
       status: node.status,
     })
     nodeModalVisible.value = true
@@ -381,7 +381,7 @@ export function useClusterNodes(options: {
     service_port: number
     management_port: number
     edge_path: string
-    edge_install_path: string
+    openresty_path: string
     status: number
     valid: boolean
   }>) => {
@@ -397,7 +397,7 @@ export function useClusterNodes(options: {
           service_port: r.service_port,
           management_port: r.management_port,
           edge_path: r.edge_path,
-          edge_install_path: r.edge_install_path,
+          openresty_path: r.openresty_path,
           status: r.status,
         })),
       })

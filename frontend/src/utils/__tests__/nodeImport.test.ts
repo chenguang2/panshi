@@ -57,7 +57,7 @@ describe('parseIpList', () => {
 
 describe('parseNodeCsv', () => {
   it('parses rows with english headers', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n10.0.0.2,8080,9181,/edge/n2,/opt/edge,1'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n10.0.0.2,8080,9181,/edge/n2,/opt/edge,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0]).toMatchObject({
@@ -65,7 +65,7 @@ describe('parseNodeCsv', () => {
       service_port: 80,
       management_port: 9180,
       edge_path: '/edge/n1',
-      edge_install_path: '',
+      openresty_path: '',
       status: 1,
       valid: true,
     })
@@ -79,14 +79,14 @@ describe('parseNodeCsv', () => {
   })
 
   it('skips header row', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,1'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(1)
     expect(rows[0].ip).toBe('10.0.0.1')
   })
 
   it('flags invalid rows with line number and error', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,1\nbad-ip,80,9180,/edge/n2,,1'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\nbad-ip,80,9180,/edge/n2,,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0].valid).toBe(true)
@@ -96,7 +96,7 @@ describe('parseNodeCsv', () => {
   })
 
   it('keeps original line numbers when blank rows present', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n\nbad-ip,80,9180,/edge/n2,,1'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n\nbad-ip,80,9180,/edge/n2,,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0].line).toBe(2)
@@ -105,7 +105,7 @@ describe('parseNodeCsv', () => {
   })
 
   it('flags invalid status values', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,5\n10.0.0.2,80,9180,/edge/n2,,abc'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,5\n10.0.0.2,80,9180,/edge/n2,,abc'
     const rows = parseNodeCsv(csv)
     expect(rows[0].valid).toBe(false)
     expect(rows[0].error).toContain('状态')
@@ -113,14 +113,14 @@ describe('parseNodeCsv', () => {
   })
 
   it('defaults empty status to 1', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n10.0.0.1,80,9180,/edge/n1,,'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,'
     const rows = parseNodeCsv(csv)
     expect(rows[0].valid).toBe(true)
     expect(rows[0].status).toBe(1)
   })
 
   it('handles quoted fields with commas', () => {
-    const csv = 'ip,service_port,management_port,edge_path,edge_install_path,status\n"10.0.0.1",80,9180,"/edge,node1",,1'
+    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n"10.0.0.1",80,9180,"/edge,node1",,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(1)
     expect(rows[0].edge_path).toBe('/edge,node1')
@@ -131,7 +131,7 @@ describe('buildNodeCsvTemplate', () => {
   it('includes header and an example row with BOM', () => {
     const csv = buildNodeCsvTemplate()
     expect(csv.startsWith('\uFEFF')).toBe(true)
-    expect(csv).toContain('ip,service_port,management_port,edge_path,edge_install_path,status')
+    expect(csv).toContain('ip,service_port,management_port,edge_path,openresty_path,status')
     expect(csv).toContain('10.0.0.1')
   })
 })

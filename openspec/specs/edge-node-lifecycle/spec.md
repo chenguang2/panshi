@@ -59,7 +59,7 @@ The system SHALL support starting the PANSHI/Edge process on a single node via `
 
 #### Scenario: 成功关联新 OpenResty
 - **WHEN** 用户安装新 OpenResty 后，点击"关联新 OpenResty"
-- **AND** 节点 `edge_path = /work/jboss/5/uap-edge2`，`edge_install_path = /work/jboss/5/openresty-new`
+- **AND** 节点 `edge_path = /work/jboss/5/uap-edge2`，`openresty_path = /work/jboss/5/openresty-new`
 - **THEN** 后端 SHALL 调用 ansible tag `upgrade_openresty`
 - **AND** Ansible SHALL 在新 OpenResty 目录下执行 `manager upgrade /work/jboss/5/uap-edge2`
 - **AND** `manager upgrade` 内部自动完成初始化
@@ -70,7 +70,7 @@ The system SHALL support starting the PANSHI/Edge process on a single node via `
 - **THEN** 后端 SHALL 返回 404
 
 #### Scenario: 新 OpenResty 路径无效
-- **WHEN** 节点的 `edge_install_path` 为空且 body 未提供 `prefix`
+- **WHEN** 节点的 `openresty_path` 为空且 body 未提供 `prefix`
 - **THEN** 后端 SHALL 返回 422 验证错误
 
 ### Requirement: Single node stop

@@ -321,7 +321,7 @@ async def install_openresty_stream(
     """Install OpenResty on a target node via ansible + SSH, streaming real-time logs."""
     node = await _verify_node(cluster_id, node_id, db)
     from app.services.ansible_service import PRIVATE_DATA_DIR
-    prefix = node.edge_install_path or body.prefix
+    prefix = node.openresty_path or body.prefix
     srcpath = f"{PRIVATE_DATA_DIR}/soft"
     destpath = str(Path(prefix).parent) + "/"
     return StreamingResponse(
@@ -430,11 +430,11 @@ async def associate_new_openresty_stream(
 ):
     """Associate an existing Edge instance with a new OpenResty installation.
     
-    The node's edge_install_path must already be updated to point to the new
+    The node's openresty_path must already be updated to point to the new
     OpenResty before calling this endpoint. Ansible runs manager upgrade + init.
     """
     node = await _verify_node(cluster_id, node_id, db)
-    prefix = node.edge_install_path
+    prefix = node.openresty_path
     if not prefix:
         raise HTTPException(status_code=422, detail="节点 Nginx安装路径为空，请先编辑节点")
     extravars = {"prefix": prefix, "edge_target": node.edge_path}
@@ -494,7 +494,7 @@ async def edge_pack_add_stream(
     """Add an edge version pack to the target node: copy file + manager pack-add."""
     from app.services.ansible_service import PRIVATE_DATA_DIR
     node = await _verify_node(cluster_id, node_id, db)
-    prefix = node.edge_install_path
+    prefix = node.openresty_path
     srcpath = f"{PRIVATE_DATA_DIR}/soft"
     destpath = str(Path(prefix).parent) + "/"
     extravars = {
@@ -530,7 +530,7 @@ async def install_edge_stream(
 ):
     """Install Edge service on a target node via ansible, streaming real-time logs via SSE."""
     node = await _verify_node(cluster_id, node_id, db)
-    prefix = node.edge_install_path or body.prefix
+    prefix = node.openresty_path or body.prefix
     extravars = {"prefix": prefix, "edge_target": node.edge_path}
     return StreamingResponse(
         _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_edge", extravars=extravars),

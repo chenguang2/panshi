@@ -12,7 +12,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">安装路径</label>
-          <div class="form-value">{{ node?.edge_install_path || node?.edge_path || '/data/openresty' }}</div>
+          <div class="form-value">{{ node?.openresty_path || node?.edge_path || '/data/openresty' }}</div>
         </div>
         <div class="form-group">
           <label class="form-label">请选择安装包</label>

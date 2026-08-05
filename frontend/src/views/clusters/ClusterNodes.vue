@@ -156,8 +156,8 @@
             <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
               <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
             </a-form-item>
-            <a-form-item label="Nginx安装路径" name="edge_install_path" :rules="[{ required: true, message: '请输入Nginx安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
-              <a-input v-model:value="nodeForm.edge_install_path" placeholder="/usr/local/nginx" />
+            <a-form-item label="OpenResty安装路径" name="openresty_path" :rules="[{ required: true, message: '请输入OpenResty安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
+              <a-input v-model:value="nodeForm.openresty_path" placeholder="/usr/local/nginx" />
             </a-form-item>
             <a-form-item label="Edge安装路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
               <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
@@ -223,7 +223,7 @@
               </label>
               <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
                 Nginx安装目录
-                <input v-model="nodeImportDefaults.edge_install_path" style="width:150px;" placeholder="/usr/local/nginx" />
+                <input v-model="nodeImportDefaults.openresty_path" style="width:150px;" placeholder="/usr/local/nginx" />
               </label>
             </div>
 
@@ -248,7 +248,7 @@
                       <td style="padding:4px 8px;"><input v-model.number="row.service_port" type="number" style="width:70px;" /></td>
                       <td style="padding:4px 8px;"><input v-model.number="row.management_port" type="number" style="width:70px;" /></td>
                       <td style="padding:4px 8px;"><input v-model="row.edge_path" style="width:130px;" /></td>
-                      <td style="padding:4px 8px;"><input v-model="row.edge_install_path" style="width:150px;" /></td>
+                      <td style="padding:4px 8px;"><input v-model="row.openresty_path" style="width:150px;" /></td>
                       <td style="padding:4px 8px;">
                         <select v-model.number="row.status" style="width:70px;">
                           <option :value="1">正常</option>
@@ -473,7 +473,7 @@ function parseTextToRows() {
     service_port: nodeImportDefaults.service_port,
     management_port: nodeImportDefaults.management_port,
     edge_path: nodeImportDefaults.edge_path,
-    edge_install_path: nodeImportDefaults.edge_install_path,
+    openresty_path: nodeImportDefaults.openresty_path,
     status: nodeImportDefaults.status,
     valid: row.valid,
     error: row.error,
@@ -492,7 +492,7 @@ function onCsvFileChange(event: Event) {
       service_port: r.service_port,
       management_port: r.management_port,
       edge_path: r.edge_path || nodeImportDefaults.edge_path,
-      edge_install_path: r.edge_install_path || nodeImportDefaults.edge_install_path,
+      openresty_path: r.openresty_path || nodeImportDefaults.openresty_path,
       status: r.status,
       valid: r.valid,
       error: r.error,
@@ -719,7 +719,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   installDialogVisible.value = false
   const node = payload.node
   execTargetNode.value = node
-  const prefix = node.edge_install_path
+  const prefix = node.openresty_path
   execDrawerVisible.value = true
   execDrawerTitle.value = `安装 OpenResty - ${node.ip}`
   execLogs.value = []
@@ -764,7 +764,7 @@ function handleInstallEdge() {
     '\u786e\u8ba4\u5b89\u88c5',
     async () => {
       execTargetNode.value = node
-      const installPrefix = node.edge_install_path || node.edge_path
+      const installPrefix = node.openresty_path || node.edge_path
       const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix || '' })
       execDrawerVisible.value = true
       execDrawerTitle.value = `\u5b89\u88c5 Edge - ${node.ip}`
@@ -879,7 +879,7 @@ function handleCancelInstall() {
 function handleAssociateNewOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
-  const prefix = node.edge_install_path || ''
+  const prefix = node.openresty_path || ''
   showConfirm(
     '关联新OpenResty',
     `即将把节点 ${node.ip} 的 Edge（${node.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,

@@ -335,7 +335,7 @@ ps_cluster
 ├── ps_node (CASCADE)
 │   ├── cluster_id (FK → ps_cluster)
 │   ├── ip / service_port / management_port
-│   ├── edge_path / edge_install_path
+│   ├── edge_path / openresty_path
 │   ├── status (1=正常, 0=停用)
 │   └── status_detail (JSON: ansible 执行结果)
 │

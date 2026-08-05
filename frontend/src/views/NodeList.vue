@@ -59,8 +59,8 @@
             <span class="text-sm">{{ record.edge_path || '-' }}</span>
           </template>
 
-          <template v-if="column.key === 'edge_install_path'">
-            <span class="text-sm">{{ record.edge_install_path || '（同Edge安装路径）' }}</span>
+          <template v-if="column.key === 'openresty_path'">
+            <span class="text-sm">{{ record.openresty_path || '（同Edge安装路径）' }}</span>
           </template>
 
           <template v-if="column.key === 'status'">
@@ -144,9 +144,9 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Nginx安装路径 <span class="required">*</span></label>
-            <input v-model="formData.edge_install_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_install_path }" placeholder="/usr/local/nginx">
-            <span class="form-error" v-if="formErrors.edge_install_path">{{ formErrors.edge_install_path }}</span>
+            <label class="form-label">OpenResty安装路径 <span class="required">*</span></label>
+            <input v-model="formData.openresty_path" type="text" class="form-input" :class="{ 'has-error': formErrors.openresty_path }" placeholder="/usr/local/nginx">
+            <span class="form-error" v-if="formErrors.openresty_path">{{ formErrors.openresty_path }}</span>
           </div>
           <div class="form-group">
             <label class="form-label">Edge安装路径 <span class="required">*</span></label>
@@ -180,7 +180,7 @@
             <div class="nd-label">服务端口</div><div class="nd-value">{{ detailNode.service_port }}</div>
             <div class="nd-label">管理端口</div><div class="nd-value">{{ detailNode.management_port }}</div>
             <div class="nd-label">Edge安装路径</div><div class="nd-value">{{ detailNode.edge_path }}</div>
-          <div class="nd-label">Nginx安装路径</div><div class="nd-value">{{ detailNode.edge_install_path || '（同Edge安装路径）' }}</div>
+          <div class="nd-label">OpenResty安装路径</div><div class="nd-value">{{ detailNode.openresty_path || '（同Edge安装路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
               <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
@@ -335,7 +335,7 @@ const formData = reactive({
   service_port: 80,
   management_port: 9180,
   edge_path: '',
-  edge_install_path: '',
+  openresty_path: '',
   statusCheck: true,
 })
 const formErrors = reactive<Record<string, string>>({})
@@ -383,7 +383,7 @@ const columns = [
   { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
   { title: '管理端口', key: 'management_port', sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0) },
   { title: 'Edge安装路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
-  { title: 'Nginx安装路径', key: 'edge_install_path', sorter: (a: any, b: any) => (a.edge_install_path || '').localeCompare(b.edge_install_path || '') },
+  { title: 'OpenResty安装路径', key: 'openresty_path', sorter: (a: any, b: any) => (a.openresty_path || '').localeCompare(b.openresty_path || '') },
   { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
   { title: 'Edge 版本', key: 'edge_version', sorter: (a: any, b: any) => ((a.status_detail?.statistic?.edge_version) || '').localeCompare((b.status_detail?.statistic?.edge_version) || '') },
   { title: '操作', key: 'actions', width: 320 },
@@ -457,14 +457,14 @@ function openAddModal() {
   formData.service_port = 80
   formData.management_port = 9180
   formData.edge_path = ''
-  formData.edge_install_path = ''
+  formData.openresty_path = ''
   formData.statusCheck = true
   formErrors.cluster_id = ''
   formErrors.ip = ''
   formErrors.service_port = ''
   formErrors.management_port = ''
   formErrors.edge_path = ''
-  formErrors.edge_install_path = ''
+  formErrors.openresty_path = ''
   formModalVisible.value = true
 }
 
@@ -475,7 +475,7 @@ function handleEdit(record: any) {
   formData.service_port = record.service_port
   formData.management_port = record.management_port
   formData.edge_path = record.edge_path || ''
-  formData.edge_install_path = record.edge_install_path || ''
+  formData.openresty_path = record.openresty_path || ''
   formData.statusCheck = record.status === 1
   formErrors.cluster_id = ''
   formErrors.ip = ''
@@ -496,7 +496,7 @@ async function handleFormSubmit() {
   formErrors.service_port = ''
   formErrors.management_port = ''
   formErrors.edge_path = ''
-  formErrors.edge_install_path = ''
+  formErrors.openresty_path = ''
   let valid = true
   if (!formData.cluster_id) {
     formErrors.cluster_id = '请选择所属集群'
@@ -527,14 +527,14 @@ async function handleFormSubmit() {
     formErrors.edge_path = '路径末尾不能为 /'
     valid = false
   }
-  if (!formData.edge_install_path) {
-    formErrors.edge_install_path = '请输入 Nginx 安装路径'
+  if (!formData.openresty_path) {
+    formErrors.openresty_path = '请输入 Nginx 安装路径'
     valid = false
-  } else if (!formData.edge_install_path.startsWith('/')) {
-    formErrors.edge_install_path = '路径必须以 / 开头'
+  } else if (!formData.openresty_path.startsWith('/')) {
+    formErrors.openresty_path = '路径必须以 / 开头'
     valid = false
-  } else if (formData.edge_install_path.endsWith('/')) {
-    formErrors.edge_install_path = '路径末尾不能为 /'
+  } else if (formData.openresty_path.endsWith('/')) {
+    formErrors.openresty_path = '路径末尾不能为 /'
     valid = false
   }
   if (!valid) return
@@ -546,7 +546,7 @@ async function handleFormSubmit() {
       service_port: formData.service_port,
       management_port: formData.management_port,
       edge_path: formData.edge_path,
-      edge_install_path: formData.edge_install_path || undefined,
+      openresty_path: formData.openresty_path || undefined,
       status: formData.statusCheck ? 1 : 0,
     }
 
@@ -748,7 +748,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   execProgress.percent = 0
   execProgress.status = 'active'
 
-  const prefix = record.edge_install_path
+  const prefix = record.openresty_path
   execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
   startElapsedTimer()
 
@@ -784,7 +784,7 @@ function handleInstallEdge(record: any) {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
-      const prefix = record.edge_install_path || record.edge_path
+      const prefix = record.openresty_path || record.edge_path
       const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
       execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
       startElapsedTimer()
@@ -812,7 +812,7 @@ function handleInstallEdge(record: any) {
 }
 
 function handleAssociateNewOpenresty(record: any) {
-  const prefix = record.edge_install_path || ''
+  const prefix = record.openresty_path || ''
   showConfirm(
     '关联新OpenResty',
     `即将把节点 ${record.ip} 的 Edge（${record.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,

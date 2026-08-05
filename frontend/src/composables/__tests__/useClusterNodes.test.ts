@@ -54,7 +54,7 @@ function makeNode(overrides: Partial<Node> = {}): Node {
     service_port: 80,
     management_port: 9180,
     edge_path: '/edge/node1',
-    edge_install_path: '',
+    openresty_path: '',
     status: 1,
     ...overrides,
   }
@@ -114,15 +114,15 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', edge_install_path: '', status: 1, valid: true },
-        { ip: '10.0.0.3', service_port: 80, management_port: 9180, edge_path: '/edge/c', edge_install_path: '', status: 1, valid: false },
+        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
+        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1, valid: true },
+        { ip: '10.0.0.3', service_port: 80, management_port: 9180, edge_path: '/edge/c', openresty_path: '', status: 1, valid: false },
       ])
 
       expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/batch', {
         nodes: [
-          { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1 },
-          { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', edge_install_path: '', status: 1 },
+          { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1 },
+          { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1 },
         ],
       })
       expect(mockMessageSuccess).toHaveBeenCalledWith(expect.stringContaining('成功创建 2 条'))
@@ -135,7 +135,7 @@ describe('useClusterNodes batch import', () => {
       const { importNodes } = await makeComposable(cluster)
 
       await importNodes(cluster, [
-        { ip: 'bad', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1, valid: false },
+        { ip: 'bad', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: false },
       ])
 
       expect(mockApiPost).not.toHaveBeenCalled()
@@ -156,8 +156,8 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 1, items: [makeNode()] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1, valid: true },
+        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
+        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
       ])
 
       expect(mockShowBatchResultModal).toHaveBeenCalledTimes(1)
@@ -183,8 +183,8 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', edge_install_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', edge_install_path: '', status: 1, valid: true },
+        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
+        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1, valid: true },
       ])
 
       expect(mockShowBatchResultModal).not.toHaveBeenCalled()
@@ -206,11 +206,11 @@ describe('useClusterNodes batch import', () => {
       expect(editingNode.value).toBeNull()
     })
 
-    it('provides fixed edge_path and edge_install_path defaults without autoEdgePath', async () => {
+    it('provides fixed edge_path and openresty_path defaults without autoEdgePath', async () => {
       const cluster = makeCluster()
       const { nodeImportDefaults } = await makeComposable(cluster)
       expect(nodeImportDefaults.edge_path).toBe('/edge')
-      expect(nodeImportDefaults.edge_install_path).toBe('/usr/local/nginx')
+      expect(nodeImportDefaults.openresty_path).toBe('/usr/local/nginx')
       expect((nodeImportDefaults as Record<string, unknown>).autoEdgePath).toBeUndefined()
     })
   })

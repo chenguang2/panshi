@@ -190,7 +190,7 @@ def _build_workbook(data):
     for n in data["nodes"]:
         nr.append([
             n.id, n.ip, n.service_port, n.management_port, n.edge_path,
-            n.edge_install_path or "",
+            n.openresty_path or "",
             "在线" if n.status == 1 else "离线",
             _fmt_dt(n.created_at),
         ])

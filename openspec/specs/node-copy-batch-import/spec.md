@@ -11,7 +11,7 @@ The system SHALL allow admins to copy an existing node as a template for creatin
 
 #### Scenario: Copy button opens add modal with template pre-filled
 - **WHEN** admin clicks the 复制 button on a node row
-- **THEN** the add node modal SHALL open in single-add mode with the source node's service_port, management_port, edge_path, edge_install_path, status pre-filled
+- **THEN** the add node modal SHALL open in single-add mode with the source node's service_port, management_port, edge_path, openresty_path, status pre-filled
 - **AND** the ip field SHALL be empty for the admin to enter a new IP
 
 ### Requirement: Parse IP list from text
@@ -45,7 +45,7 @@ The system SHALL parse pasted text into a list of node IPs, supporting single IP
 The system SHALL parse an uploaded CSV file into node import rows, with template download support.
 
 #### Scenario: CSV columns parsed
-- **WHEN** a CSV has columns ip, service_port, management_port, edge_path, edge_install_path, status
+- **WHEN** a CSV has columns ip, service_port, management_port, edge_path, openresty_path, status
 - **THEN** each row SHALL be parsed into a node import row with those fields
 
 #### Scenario: Header row skipped
@@ -85,10 +85,10 @@ The system SHALL show an editable preview table of parsed nodes before batch cre
 
 #### Scenario: Preview table shows parsed nodes
 - **WHEN** admin parses pasted text or uploaded CSV
-- **THEN** a preview table SHALL list each node with ip, ports, edge_path, edge_install_path, status columns
+- **THEN** a preview table SHALL list each node with ip, ports, edge_path, openresty_path, status columns
 - **AND** invalid rows SHALL be highlighted in red with an error reason
 - **AND** rows sharing the same IP SHALL be highlighted with a "IP 重复，请检查" warning (not blocking creation, since same IP with different path/port is valid)
-- **AND** the edge_path and edge_install_path SHALL be filled with fixed default values (/edge and /usr/local/nginx) applied to all rows, not auto-generated per row
+- **AND** the edge_path and openresty_path SHALL be filled with fixed default values (/edge and /usr/local/nginx) applied to all rows, not auto-generated per row
 
 #### Scenario: Batch create with valid rows
 - **WHEN** admin confirms import with N valid rows

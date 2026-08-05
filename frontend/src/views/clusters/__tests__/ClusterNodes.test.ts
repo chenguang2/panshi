@@ -30,7 +30,7 @@ const stubs = {
 
 const MOCK_CLUSTER = {
   id: 1, name: 'test-cluster', display_name: '测试集群',
-  selectedNode: { id: 5, ip: '192.168.1.100', edge_install_path: '/data/openresty', cluster_id: 1 },
+  selectedNode: { id: 5, ip: '192.168.1.100', openresty_path: '/data/openresty', cluster_id: 1 },
   nodes: [], upstreams: [], routes: [],
 }
 

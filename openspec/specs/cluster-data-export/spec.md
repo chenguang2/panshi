@@ -16,7 +16,7 @@ The system SHALL provide an API endpoint that exports all configuration data of 
 - **AND** the response includes a `Content-Disposition` header with `attachment; filename*=UTF-8''{url_encoded_filename}`
 - **AND** the Excel file contains the following sheets:
   - `集群信息` — one row with cluster metadata (name, display_name, admin_url, description, group_name, status, created_at, updated_at). The `admin_key` field SHALL NOT be exported.
-  - `集群节点` — rows for each node (ID, ip, service_port, management_port, edge_path, edge_install_path, status, created_at)
+  - `集群节点` — rows for each node (ID, ip, service_port, management_port, edge_path, openresty_path, status, created_at)
   - `上游服务` — rows for each upstream (ID, name, load_balance, scheme, pass_host, upstream_host, timeout, retries, retry_timeout, checks, keepalive_pool, targets, description, created_at). The `targets` column SHALL contain all UpstreamTarget entries formatted as `ip:port(权重N)` separated by semicolons. If no targets exist, the column SHALL display `（无）`.
   - `路由规则` — rows for each route (ID, name, uri, methods, hosts, priority, status, upstream_name, upstream_id, plugin_configs, plugins, description, created_at). The `plugins` column SHALL contain all RoutePlugin entries formatted as `plugin_name: {config}` separated by semicolons. If no plugins exist, the column SHALL display `（无）`.
   - `插件组` — rows for each plugin config group (ID, name, plugins description, created_at)

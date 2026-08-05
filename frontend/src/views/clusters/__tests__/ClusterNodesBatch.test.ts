@@ -40,7 +40,7 @@ vi.mock('@/composables/useClusterNodes', () => ({
     nodeImportTab: ref('text'),
     nodeImportText: ref(''),
     nodeImportRows: ref([]),
-    nodeImportDefaults: ref({ service_port: 80, management_port: 9180, status: 1, edge_path: '/edge', edge_install_path: '/usr/local/nginx' }),
+    nodeImportDefaults: ref({ service_port: 80, management_port: 9180, status: 1, edge_path: '/edge', openresty_path: '/usr/local/nginx' }),
     currentClusterId: ref(1),
     parseIpList: () => [],
     parseNodeCsv: () => [],

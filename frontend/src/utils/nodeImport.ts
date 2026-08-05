@@ -13,7 +13,7 @@ export interface NodeImportRow {
   service_port: number
   management_port: number
   edge_path: string
-  edge_install_path: string
+  openresty_path: string
   status: number
   valid: boolean
   line?: number
@@ -103,7 +103,7 @@ const HEADER_ALIASES: Record<string, string> = {
   '管理端口': 'management_port',
   edge_path: 'edge_path',
   'edge路径': 'edge_path',
-  '安装路径': 'edge_install_path',
+  '安装路径': 'openresty_path',
   status: 'status',
   '状态': 'status',
 }
@@ -166,7 +166,7 @@ export function parseNodeCsv(csvText: string): NodeImportRow[] {
     const servicePort = Number(record.service_port)
     const managementPort = Number(record.management_port)
     const edgePath = (record.edge_path || '').trim()
-    const edgeInstallPath = (record.edge_install_path || '').trim()
+    const edgeInstallPath = (record.openresty_path || '').trim()
     const status = record.status === '' ? 1 : Number(record.status)
 
     const base = {
@@ -174,7 +174,7 @@ export function parseNodeCsv(csvText: string): NodeImportRow[] {
       service_port: servicePort,
       management_port: managementPort,
       edge_path: edgePath,
-      edge_install_path: edgeInstallPath,
+      openresty_path: edgeInstallPath,
       status,
       line: lineNo,
       valid: true,
@@ -208,7 +208,7 @@ export function parseNodeCsv(csvText: string): NodeImportRow[] {
 
 export function buildNodeCsvTemplate(): string {
   return '\uFEFF' + [
-    'ip,service_port,management_port,edge_path,edge_install_path,status',
+    'ip,service_port,management_port,edge_path,openresty_path,status',
     '10.0.0.1,80,9180,/edge/node1,,1',
   ].join('\n')
 }

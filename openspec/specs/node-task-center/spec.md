@@ -33,6 +33,12 @@
 - **THEN** 系统 SHALL 在 `install_task_node` 持久化 `log_file`（相对路径）、`log_line_count`（行数）、`stdout_tail`（末尾最多 8KB 摘要）
 - **AND** `stdout` 字段 SHALL 存储摘要尾部内容以保持 API 兼容
 
+#### Scenario: 字段迁移自愈（ps_node.openresty_path）
+- **WHEN** 数据库存在遗留 `ps_node.edge_install_path` 列（含数据）且 `openresty_path` 列已存在
+- **THEN** 启动迁移 SHALL 将 `edge_install_path` 数据回填到 `openresty_path`（仅回填新列为空的行，不覆盖已有数据）
+- **AND** 迁移后 SHALL 删除 `edge_install_path` 列
+- **AND** 迁移 SHALL 幂等（重复启动无副作用）
+
 ### Requirement: 任务执行引擎
 
 系统 SHALL 提供后台任务执行引擎，驱动任务状态机：主任务 `pending → running → success | failed | cancelled | partial`，节点子任务 `pending → running → success | failed | cancelled | skipped`。执行 SHALL 受全局 ansible 并发信号量（`max_playbooks`）约束（**共享现有 `AnsibleRunnerService` 实例的信号量，不新建实例**，V1），并保证同一节点同一时刻只执行一个任务子项。
@@ -65,7 +71,7 @@
 - **WHEN** 用户 POST `/clusters/{cluster_id}/node-tasks`（body 含 task_type、node_ids、params）
 - **THEN** 系统 SHALL 返回 201 与任务 id
 - **AND** 任务 SHALL 立即以 pending 状态进入执行队列
-- **AND** params 缺省字段 SHALL 按任务类型取节点记录值（如 install_openresty 的 prefix 缺省取 node.edge_install_path）
+- **AND** params 缺省字段 SHALL 按任务类型取节点记录值：运维类任务（start/stop/reload/check/statistic）的 prefix 缺省取 `node.edge_path`（edge 程序前缀），安装类任务（install_openresty/install_edge/associate_new_openresty/edge_pack_add）的 prefix 缺省取 `node.openresty_path`（openresty 安装路径）
 
 #### Scenario: 查询任务列表
 - **WHEN** 用户 GET `/node-tasks`（全局）或 GET `/clusters/{cluster_id}/node-tasks`（集群内）
@@ -130,10 +136,12 @@
 - **AND** 取消 SHALL 能终止 SSH 编译子进程（复用/泛化 `_install_proc_registry` 机制）
 - **WHEN** 用户创建 task_type 为 `install_edge` / `associate_new_openresty` / `edge_pack_add` / `edge_pack_rebase` 的任务
 - **THEN** 子任务 SHALL 分别调用对应 ansible tag（`install_edge` / `upgrade_openresty` / `edge_pack_add` / `edge_pack_rebase`），参数与现有端点一致
+- **AND** edge_pack_add 的 `destpath` SHALL 取 `prefix`（缺省 `node.openresty_path`）的父目录并以 `/` 结尾，与统一管理端点 `edge-pack-add` 一致（不基于 `edge_path`）
 
 #### Scenario: 运维类操作任务化
 - **WHEN** 用户创建 task_type 为 `start` / `stop` / `reload` / `check` / `statistic` 的任务
 - **THEN** 每个节点子任务 SHALL 调用 `nginx_cmd_run`（start/stop/reload/check）或 `edge_statistic`（statistic），参数（prefix/ports）逐节点取自节点记录
+- **AND** prefix 缺省 SHALL 取 `node.edge_path`（edge 程序前缀），与单节点端点一致；用户显式传入 prefix 时 SHALL 以用户参数为准
 - **AND** 多节点任务由后端引擎并发驱动（替代前端 runWithConcurrency 编排）
 
 #### Scenario: 环境类操作任务化

@@ -92,7 +92,7 @@ export interface Node {
   service_port: number
   management_port: number
   edge_path?: string
-  edge_install_path?: string
+  openresty_path?: string
   status: number
   status_detail?: Record<string, any>
   created_at?: string

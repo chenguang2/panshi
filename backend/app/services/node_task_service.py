@@ -361,15 +361,20 @@ class NodeTaskService:
         """Real executor: dispatch to AnsibleRunnerService by task_type.
 
         Node-derived params (prefix/ports/edge_target) are resolved from the
-        node record when not provided in ``params`` -- matching the per-node
-        endpoints' semantics (e.g. ``prefix = node.edge_install_path``).
+        node record when not provided in ``params``. Operations on the edge
+        program (start/stop/reload/check/statistic) use ``node.edge_path``,
+        matching the per-node endpoints; install tasks use
+        ``node.openresty_path`` (the openresty install location).
         """
         task_type = await _task_type_of(item)
         node = await _resolve_node(item.task_id, node_id)
         if node is None:
             return {"rc": -1, "status": "failed", "stderr": f"节点 {item.ip} 已不存在"}
 
-        prefix = params.get("prefix") or node.edge_install_path or node.edge_path
+        if task_type in ("start", "stop", "reload", "check", "statistic"):
+            prefix = params.get("prefix") or node.edge_path
+        else:
+            prefix = params.get("prefix") or node.openresty_path or node.edge_path
         ports = str(params.get("ports") or node.management_port or "")
 
         if task_type in ("start", "stop", "reload", "check"):
@@ -419,7 +424,7 @@ class NodeTaskService:
                 return {"rc": -1, "status": "failed", "stderr": "缺少 pack_file 参数"}
             ev = {
                 "srcpath": f"{_SOFT_DIR()}",
-                "destpath": str(Path(edge_target).parent) + "/",
+                "destpath": str(Path(prefix).parent) + "/",
                 "pack_file": pack_file,
                 "prefix": prefix,
             }

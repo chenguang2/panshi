@@ -18,7 +18,7 @@ const MOCK_FILES = [
   { name: 'openresty-edge-26071308.tar.gz', size: 41943040, size_display: '40.0 MB', mtime: '2026-06-13T08:00:00Z' },
 ]
 
-const MOCK_NODE = { ip: '192.168.1.100', edge_install_path: '/data/openresty', cluster_id: 1 }
+const MOCK_NODE = { ip: '192.168.1.100', openresty_path: '/data/openresty', cluster_id: 1 }
 
 async function createWrapper(props = {}) {
   const Dialog = (await import('../InstallOpenrestyDialog.vue')).default

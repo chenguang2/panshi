@@ -126,7 +126,7 @@ def _fix_postgresql_table(engine: Engine, table: str, bad_col: str, compound_col
 
 COLUMN_MIGRATIONS = [
     ("ps_node", "status_detail", "TEXT"),
-    ("ps_node", "edge_install_path", "VARCHAR(255)"),
+    ("ps_node", "openresty_path", "VARCHAR(255)"),
     ("ps_cluster", "current_version", "INTEGER"),
     ("ps_import_log", "stream_proxy_count", "INTEGER DEFAULT 0"),
     ("ps_stream_proxy", "ref_node_id", "INTEGER"),
@@ -178,6 +178,64 @@ def _add_column(engine: Engine, table: str, column: str, col_type: str) -> bool:
             return False
 
 
+def _rename_column(engine: Engine, table: str, old_name: str, new_name: str) -> bool:
+    """Rename a column, preserving data, if the old column exists and the new one does not."""
+    inspector = inspect(engine)
+    try:
+        columns = [c["name"] for c in inspector.get_columns(table)]
+    except Exception:
+        return False
+    if old_name not in columns or new_name in columns:
+        return False
+    with engine.connect() as conn:
+        try:
+            conn.execute(text(f'ALTER TABLE "{table}" RENAME COLUMN "{old_name}" TO "{new_name}"'))
+            conn.commit()
+            logger.info("Renamed column %s.%s -> %s", table, old_name, new_name)
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Could not rename column %s.%s: %s", table, old_name, e)
+            return False
+
+
+def _merge_legacy_column(engine: Engine, table: str, old_name: str, new_name: str) -> bool:
+    """When BOTH old and new columns exist, backfill the new column from the
+    old one (only where the new column is empty) and drop the legacy column.
+
+    This heals databases that ran an earlier migration ordering bug where
+    ``COLUMN_MIGRATIONS`` added the empty ``new_name`` column first, causing
+    the rename to be skipped while data stayed in ``old_name``.
+    """
+    inspector = inspect(engine)
+    try:
+        columns = [c["name"] for c in inspector.get_columns(table)]
+    except Exception:
+        return False
+    if old_name not in columns or new_name not in columns:
+        return False
+    with engine.connect() as conn:
+        try:
+            conn.execute(
+                text(
+                    f'UPDATE "{table}" SET "{new_name}" = "{old_name}" '
+                    f'WHERE ("{new_name}" IS NULL OR "{new_name}" = \'\') '
+                    f'AND "{old_name}" IS NOT NULL'
+                )
+            )
+            conn.execute(text(f'ALTER TABLE "{table}" DROP COLUMN "{old_name}"'))
+            conn.commit()
+            logger.info(
+                "Merged legacy column %s.%s into %s (backfill + drop)",
+                table, old_name, new_name,
+            )
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Could not merge column %s.%s: %s", table, old_name, e)
+            return False
+
+
 def run_migrations(engine: Engine) -> None:
     """Run all schema migrations after Base.metadata.create_all."""
     migrated_any = False
@@ -192,6 +250,14 @@ def run_migrations(engine: Engine) -> None:
             else:
                 _fix_postgresql_table(engine, table, bad_col, compound_cols)
             migrated_any = True
+
+    # Migrate legacy ps_node.edge_install_path -> openresty_path (data preserved).
+    # Must run BEFORE COLUMN_MIGRATIONS adds the new column, otherwise the
+    # rename is skipped because openresty_path already exists.
+    if _merge_legacy_column(engine, "ps_node", "edge_install_path", "openresty_path"):
+        migrated_any = True
+    if _rename_column(engine, "ps_node", "edge_install_path", "openresty_path"):
+        migrated_any = True
 
     for table, column, col_type in COLUMN_MIGRATIONS:
         if _add_column(engine, table, column, col_type):
