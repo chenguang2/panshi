@@ -615,6 +615,213 @@ class TestEdgeImportConverters:
         assert sp["targets"] is None  # DNS ignores upstream.nodes
         assert sp["dns_config"] is not None
 
+    def test_convert_stream_proxy_dns_type_with_wan(self):
+        """dns_upstream-ww plugin: restore wan_enabled + inline export_nodes (no port)."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-ww",
+            "name": "dns-stream-ww",
+            "server_port": 16624,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {
+                                "192.192.9.2:16610": 100,
+                                "192.192.9.3:16610": 100,
+                            },
+                        },
+                    },
+                },
+                "dns_upstream-ww": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {
+                                "192.192.9.2:16610": 100,
+                                "192.192.9.3:16610": 100,
+                            },
+                            "export_nodes": {
+                                "192.192.9.2:16610": "10.158.40.51:16610",
+                                "192.192.9.3:16610": "10.158.40.52:16610",
+                            },
+                        },
+                    },
+                    "_meta": {
+                        "priority": 2110,
+                        "filter": [
+                            ["remote_addr", "ip~", ["10.158.40.51", "10.0.0.0/8"]],
+                            ["remote_addr", "!", "ip~", ["192.168.0.3", "127.0.0.1/8"]],
+                        ],
+                    },
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        import json
+
+        dns_cfg = json.loads(sp["dns_config"])
+        assert dns_cfg["wan_enabled"] is True
+        # export_nodes inlined under the domain, WAN value stripped of port
+        assert dns_cfg["hosts"]["qcg.com"]["export_nodes"] == {
+            "192.192.9.2:16610": "10.158.40.51",
+            "192.192.9.3:16610": "10.158.40.52",
+        }
+        assert dns_cfg["wan_filter"]["include"] == ["10.158.40.51", "10.0.0.0/8"]
+        assert dns_cfg["wan_filter"]["exclude"] == ["192.168.0.3", "127.0.0.1/8"]
+
+    def test_convert_stream_proxy_dns_ww_hosts_nodes_not_merged(self):
+        """dns_upstream-ww hosts/nodes must NOT be written into dns_config.hosts nodes."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-ww2",
+            "name": "dns-stream-ww2",
+            "server_port": 16625,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                        },
+                    },
+                },
+                "dns_upstream-ww": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                            "export_nodes": {"192.192.9.2:16610": "10.158.40.51:16610"},
+                        },
+                    },
+                    "_meta": {"priority": 2110, "filter": []},
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        import json
+
+        dns_cfg = json.loads(sp["dns_config"])
+        assert set(dns_cfg["hosts"].keys()) == {"qcg.com"}
+        # hosts nodes come from dns_upstream only; export_nodes restored separately
+        assert dns_cfg["hosts"]["qcg.com"]["nodes"] == {"192.192.9.2:16610": 100}
+
+    def test_convert_stream_proxy_dns_ww_domain_missing_skipped(self):
+        """ww domain absent from inner hosts must be skipped with warning."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-ww-orphan",
+            "name": "dns-ww-orphan",
+            "server_port": 16626,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                        },
+                    },
+                },
+                "dns_upstream-ww": {
+                    "hosts": {
+                        "orphan.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                            "export_nodes": {"192.192.9.2:16610": "10.158.40.51:16610"},
+                        },
+                    },
+                    "_meta": {"priority": 2110, "filter": []},
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        import json
+
+        dns_cfg = json.loads(sp["dns_config"])
+        assert "orphan.com" not in dns_cfg["hosts"]
+        warnings = result.get("warnings") or []
+        assert any("orphan.com" in w for w in warnings), warnings
+
+    def test_convert_stream_proxy_dns_without_ww_has_no_wan_fields(self):
+        """No dns_upstream-ww plugin: dns_config must not contain wan_* fields."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-3",
+            "name": "dns-stream-3",
+            "server_port": 16627,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                        },
+                    },
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        sp = result["stream_proxy"]
+        import json
+
+        dns_cfg = json.loads(sp["dns_config"])
+        assert "wan_enabled" not in dns_cfg
+        assert "wan_filter" not in dns_cfg
+        assert "export_nodes" not in dns_cfg["hosts"]["qcg.com"]
+
+    def test_convert_stream_proxy_dns_ww_marks_invalid_mapping(self):
+        """WAN mapping key not present in nodes must be flagged in warnings."""
+        from app.services.edge_import_service import EdgeImportService
+
+        service = object.__new__(EdgeImportService)
+        service.cluster_id = 1
+        edge_item = {
+            "id": "sp-dns-ww-bad",
+            "name": "dns-ww-bad",
+            "server_port": 16628,
+            "plugins": {
+                "dns_upstream": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                        },
+                    },
+                },
+                "dns_upstream-ww": {
+                    "hosts": {
+                        "qcg.com": {
+                            "type": "chash",
+                            "nodes": {"192.192.9.2:16610": 100},
+                            "export_nodes": {
+                                "192.192.9.99:16610": "10.158.40.99:16610",
+                            },
+                        },
+                    },
+                    "_meta": {"priority": 2110, "filter": []},
+                },
+            },
+        }
+        result = service.convert_stream_proxy(edge_item)
+        warnings = result.get("warnings") or []
+        assert any("192.192.9.99:16610" in w for w in warnings), warnings
+
     def test_convert_upstream_name_empty_fallback(self):
         from app.services.edge_import_service import EdgeImportService
 

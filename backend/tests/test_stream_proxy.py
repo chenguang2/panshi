@@ -504,7 +504,6 @@ class TestDnsUdpProxyModule:
     def test_module_importable(self):
         """cluster_dns_proxies module should be importable."""
         import app.api.v1.cluster_dns_proxies as mod  # noqa: F401
-
     def test_module_has_router_with_routes(self):
         """The module should expose a router with at least one route."""
         import app.api.v1.cluster_dns_proxies as mod
@@ -517,4 +516,75 @@ class TestDnsUdpProxyModule:
         for route in router.routes:
             assert "dns-proxies" in route.path, (
                 f"Route {route.path} doesn't contain /dns-proxies"
+            )
+
+    async def test_create_dns_proxy_forces_udp_scheme(self):
+        """DNS proxy creation must force scheme='udp' even if client sends tcp."""
+        import random
+        from httpx import AsyncClient, ASGITransport
+        from app.main import app
+
+        port = random.randint(30000, 40000)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
+            headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+            r = await client.post(
+                "/api/v1/clusters/1/dns-proxies",
+                headers=headers,
+                json={
+                    "name": "scheme-force-test",
+                    "listen_port": port,
+                    "scheme": "tcp",
+                    "proxy_type": "dns",
+                    "dns_config": {"hosts": {"qcg.com": {"nodes": {"10.0.0.1:53": []}, "type": "roundrobin"}}},
+                },
+            )
+            assert r.status_code == 201, f"Create failed: {r.text}"
+            assert r.json()["scheme"] == "udp", f"DNS proxy scheme must be forced to udp, got {r.json()['scheme']}"
+            pid = r.json()["id"]
+            # cleanup
+            await client.request(
+                "DELETE",
+                f"/api/v1/clusters/1/dns-proxies/{pid}",
+                headers=headers,
+                content='{"delete_db": true, "delete_edge": false}',
+            )
+
+    async def test_update_dns_proxy_forces_udp_scheme(self):
+        """DNS proxy update must force scheme='udp' even if client sends tcp."""
+        import random
+        from httpx import AsyncClient, ASGITransport
+        from app.main import app
+
+        port = random.randint(40000, 50000)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
+            headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+            r = await client.post(
+                "/api/v1/clusters/1/dns-proxies",
+                headers=headers,
+                json={
+                    "name": "scheme-force-upd",
+                    "listen_port": port,
+                    "scheme": "udp",
+                    "proxy_type": "dns",
+                    "dns_config": {"hosts": {"qcg.com": {"nodes": {"10.0.0.1:53": []}, "type": "roundrobin"}}},
+                },
+            )
+            assert r.status_code == 201
+            pid = r.json()["id"]
+            r2 = await client.put(
+                f"/api/v1/clusters/1/dns-proxies/{pid}",
+                headers=headers,
+                json={"scheme": "tcp"},
+            )
+            assert r2.status_code == 200
+            assert r2.json()["scheme"] == "udp", f"DNS proxy update must force udp, got {r2.json()['scheme']}"
+            await client.request(
+                "DELETE",
+                f"/api/v1/clusters/1/dns-proxies/{pid}",
+                headers=headers,
+                content='{"delete_db": true, "delete_edge": false}',
             )

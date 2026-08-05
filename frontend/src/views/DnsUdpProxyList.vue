@@ -33,6 +33,7 @@
         <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
           <span>{{ p.cluster_name || '-' }}</span>
           <span class="dns-badge">DNS</span>
+          <span v-if="isWanEnabled(p)" class="wan-badge">内外网分离</span>
           <span v-if="p.cluster_group_name" class="group-badge">{{ p.cluster_group_name }}</span>
         </div>
         <div class="sp-card-header">
@@ -164,6 +165,13 @@ function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; typ
     const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
     return cfg?.hosts || null
   } catch { return null }
+}
+
+function isWanEnabled(p: any): boolean {
+  try {
+    const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
+    return !!(cfg && cfg.wan_enabled)
+  } catch { return false }
 }
 
 function formatDate(d: string | null | undefined): string {
@@ -311,6 +319,7 @@ loadProxies()
 .sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
 .group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
 .dns-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(55% 0.18 280 / 18%); color: oklch(40% 0.18 280); border: 1px solid oklch(55% 0.18 280 / 30%); line-height: 1.4; flex-shrink: 0; }
+.wan-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(65% 0.18 45 / 18%); color: oklch(50% 0.18 45); border: 1px solid oklch(65% 0.18 45 / 30%); line-height: 1.4; flex-shrink: 0; }
 .sp-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
 .sp-card-info { flex: 1; }
 .sp-card-name { font-size: 15px; font-weight: 600; }

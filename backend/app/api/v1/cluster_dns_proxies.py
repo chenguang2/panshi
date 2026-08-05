@@ -20,6 +20,7 @@ from app.schemas.stream_proxy import (
 )
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
+from app.services.dns_wan import build_dns_plugins
 from app.services.edge_client import EdgeClient
 from app.services.edge_logger import get_edge_logger
 from app.api.v1.cluster_stream_proxies import (
@@ -108,6 +109,7 @@ async def create_dns_proxy(
     if proxy_data.get("dns_config"):
         proxy_data["dns_config"] = json.dumps(proxy_data["dns_config"])
     proxy_data["proxy_type"] = "dns"
+    proxy_data["scheme"] = "udp"  # DNS 代理固定 UDP 协议，忽略客户端传入的 scheme
 
     proxy = StreamProxy(cluster_id=cluster_id, **proxy_data)
     db.add(proxy)
@@ -146,6 +148,8 @@ async def update_dns_proxy(
 
     for key, value in update_data.items():
         setattr(proxy, key, value)
+
+    proxy.scheme = "udp"  # DNS 代理固定 UDP 协议，忽略客户端传入的 scheme
 
     await db.commit()
     await db.refresh(proxy)
@@ -201,21 +205,11 @@ async def publish_dns_proxy(
         edge_body["protocol"] = protocol
 
     dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
-    hosts = dns_cfg.get("hosts", {})
     dns_checks = json.loads(proxy.checks) if proxy.checks else {}
-    if dns_checks and any(k for k in dns_checks if k in ('active', 'passive')):
-        for domain_name in hosts:
-            if 'checks' not in hosts[domain_name]:
-                hosts[domain_name]['checks'] = dns_checks
-    plugins: dict = {
-        "dns_upstream": {
-            "disable": False,
-            "hosts": hosts,
-        }
-    }
-    log_process = dns_cfg.get("log_process")
-    if log_process:
-        plugins["log_process"] = log_process
+    try:
+        plugins = build_dns_plugins(dns_cfg, dns_checks)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     edge_body["plugins"] = plugins
 
     config_data = StreamProxyResponse.model_validate(proxy).model_dump()

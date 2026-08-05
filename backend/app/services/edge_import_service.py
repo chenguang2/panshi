@@ -410,6 +410,7 @@ class EdgeImportService:
         upstream = edge_stream.get("upstream") or {}
         edge_plugins = edge_stream.get("plugins") or {}
         dns_upstream = edge_plugins.get("dns_upstream") or {}
+        warnings: list[str] = []
 
         is_dns = bool(dns_upstream)
 
@@ -420,6 +421,41 @@ class EdgeImportService:
             log_proc = edge_plugins.get("log_process")
             if log_proc:
                 dns_cfg["log_process"] = log_proc
+            # WAN/LAN separation: restore inline export_nodes from dns_upstream-ww
+            ww = edge_plugins.get("dns_upstream-ww") or {}
+            if ww:
+                dns_cfg["wan_enabled"] = True
+                inner_hosts = dns_cfg.get("hosts") or {}
+                for domain, wcfg in (ww.get("hosts") or {}).items():
+                    if domain not in inner_hosts:
+                        warnings.append(
+                            f"域名 {domain} 仅存在于外网插件中（内网 hosts 缺失），已丢弃其外网映射"
+                        )
+                        continue
+                    mapping = wcfg.get("export_nodes")
+                    if not mapping:
+                        continue
+                    nodes = (inner_hosts[domain].get("nodes") or {}).keys()
+                    for key in mapping:
+                        if key not in nodes:
+                            warnings.append(
+                                f"域名 {domain} 的外网映射内网节点 {key} 不在节点列表中"
+                            )
+                    inner_hosts[domain]["export_nodes"] = {
+                        lan: wan.rsplit(":", 1)[0] if ":" in wan else wan
+                        for lan, wan in mapping.items()
+                    }
+                include: list[str] = []
+                exclude: list[str] = []
+                for cond in (ww.get("_meta") or {}).get("filter", []):
+                    if len(cond) >= 3 and cond[0] == "remote_addr" and cond[1] == "ip~":
+                        ips = cond[2] if isinstance(cond[2], list) else [cond[2]]
+                        include.extend(ips)
+                    elif len(cond) >= 4 and cond[0] == "remote_addr" and cond[1] == "!" and cond[2] == "ip~":
+                        ips = cond[3] if isinstance(cond[3], list) else [cond[3]]
+                        exclude.extend(ips)
+                if include or exclude:
+                    dns_cfg["wan_filter"] = {"include": include, "exclude": exclude}
             targets_data: list[dict] = []
             proxy_data = {
                 "name": edge_stream.get("name") or edge_stream.get("id", ""),
@@ -438,6 +474,10 @@ class EdgeImportService:
                 "dns_config": self._ensure_json(dns_cfg),
                 "current_version": None,
             }
+            result: dict = {"stream_proxy": proxy_data, "targets": targets_data}
+            if warnings:
+                result["warnings"] = warnings
+            return result
         else:
             # 普通类型：数据存储在 upstream 中
             targets_data = self._parse_nodes(upstream.get("nodes"))

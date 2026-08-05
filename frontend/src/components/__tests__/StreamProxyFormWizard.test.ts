@@ -170,4 +170,145 @@ describe('StreamProxyFormWizard.vue', () => {
       expect(vm.form.scheme).toBe('tls')
     })
   })
+
+  // ── WAN/LAN separation (dns proxy) ────────────────
+
+  describe('WAN/LAN separation', () => {
+    async function createDnsVm() {
+      const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+      const wrapper = mount(StreamProxyFormWizard, {
+        props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS },
+        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+      })
+      const vm = wrapper.vm as any
+      vm.form.proxy_type = 'dns'
+      await new Promise(r => setTimeout(r, 50))
+      return vm
+    }
+
+    function makeDomain(targets: any[] = [{ key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '' }]) {
+      return {
+        key: 1, domain: 'qcg.com', lb_type: 'roundrobin', ttl: 10,
+        enableChecks: true, checksJson: '{}',
+        targets,
+      }
+    }
+
+    it('buildDnsConfig omits wan_* when disabled', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([{ key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' }])]
+      vm.dnsEnableLog = false
+      vm.dnsWanEnabled = false
+      const cfg = vm.buildDnsConfig()
+      expect('wan_enabled' in cfg).toBe(false)
+      expect('export_nodes' in cfg.hosts['qcg.com']).toBe(false)
+    })
+
+    it('buildDnsConfig assembles inline export_nodes when enabled', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
+      ])]
+      vm.dnsEnableLog = false
+      vm.dnsWanEnabled = true
+      vm.dnsWanFilterInclude = ['10.158.40.51', '10.0.0.0/8']
+      vm.dnsWanFilterExclude = ['192.168.0.3']
+      const cfg = vm.buildDnsConfig()
+      expect(cfg.wan_enabled).toBe(true)
+      expect(cfg.hosts['qcg.com'].export_nodes).toEqual({
+        '192.192.9.2:16610': '10.158.40.51',
+        '192.192.9.3:16610': '10.158.40.52',
+      })
+      expect(cfg.wan_filter).toEqual({
+        include: ['10.158.40.51', '10.0.0.0/8'],
+        exclude: ['192.168.0.3'],
+      })
+    })
+
+    it('buildDnsConfig skips node without wan ip', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
+      ])]
+      vm.dnsEnableLog = false
+      vm.dnsWanEnabled = true
+      const cfg = vm.buildDnsConfig()
+      expect(cfg.hosts['qcg.com'].export_nodes).toEqual({
+        '192.192.9.2:16610': '10.158.40.51',
+      })
+    })
+
+    it('validateDnsWan rejects node without wan ip when enabled', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
+      ])]
+      vm.dnsWanEnabled = true
+      expect(vm.validateDnsWan()).toBe(false)
+    })
+
+    it('validateDnsWan rejects invalid wan ip', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '999.1.1.1' },
+      ])]
+      vm.dnsWanEnabled = true
+      expect(vm.validateDnsWan()).toBe(false)
+    })
+
+    it('validateDnsWan passes with all nodes filled', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
+      ])]
+      vm.dnsWanEnabled = true
+      vm.dnsWanFilterInclude = ['10.158.40.51']
+      expect(vm.validateDnsWan()).toBe(true)
+    })
+
+    it('addWanFilter rejects malformed IP', async () => {
+      const vm = await createDnsVm()
+      vm.dnsWanEnabled = true
+      vm.wanFilterInput.exclude = '127..0.0.1'
+      vm.addWanFilter('exclude')
+      expect(vm.dnsWanFilterExclude).toEqual([])
+      expect(vm.wanFilterError).toContain('127..0.0.1')
+    })
+
+    it('addWanFilter accepts valid IP and CIDR', async () => {
+      const vm = await createDnsVm()
+      vm.dnsWanEnabled = true
+      vm.wanFilterInput.include = '10.0.0.0/8'
+      vm.addWanFilter('include')
+      vm.wanFilterInput.include = '192.168.1.1'
+      vm.addWanFilter('include')
+      expect(vm.dnsWanFilterInclude).toEqual(['10.0.0.0/8', '192.168.1.1'])
+      expect(vm.wanFilterError).toBe('')
+    })
+
+    it('addWanFilter clears error on valid input', async () => {
+      const vm = await createDnsVm()
+      vm.dnsWanEnabled = true
+      vm.wanFilterError = '旧错误'
+      vm.wanFilterInput.exclude = '127.0.0.1'
+      vm.addWanFilter('exclude')
+      expect(vm.wanFilterError).toBe('')
+      expect(vm.dnsWanFilterExclude).toEqual(['127.0.0.1'])
+    })
+
+    it('validateDnsWan rejects when no filter configured', async () => {
+      const vm = await createDnsVm()
+      vm.form.dns_domains = [makeDomain([
+        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+      ])]
+      vm.dnsWanEnabled = true
+      vm.dnsWanFilterInclude = []
+      vm.dnsWanFilterExclude = []
+      expect(vm.validateDnsWan()).toBe(false)
+    })
+  })
 })

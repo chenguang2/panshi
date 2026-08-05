@@ -93,6 +93,10 @@
             <div class="spwf-toggle">
               <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }">四层代理</button>
               <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }">DNS代理</button>
+              <label v-if="form.proxy_type === 'dns'" class="checkbox-label spwf-wan-switch" style="margin-left:16px;font-size:12px;">
+                <input type="checkbox" v-model="dnsWanEnabled">
+                <span>启用内外网分离（按来源 IP 返回内/外网地址）</span>
+              </label>
             </div>
           </div>
 
@@ -129,7 +133,10 @@
           <div class="form-row" style="margin-bottom:8px;">
             <div class="form-group">
               <label class="form-label">协议 <span class="required">*</span></label>
-              <div v-if="form.proxy_type === 'dns'" class="spwf-protocol-badge">UDP</div>
+              <div v-if="form.proxy_type === 'dns'" style="display:flex;align-items:center;gap:10px;">
+                <span class="spwf-protocol-badge">UDP</span>
+                <span style="font-size:12px;color:var(--muted);">DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</span>
+              </div>
               <div v-else class="spwf-protocol-radio">
                 <label
                   v-for="opt in protocolOptions"
@@ -208,15 +215,34 @@
 
           <!-- DNS Mode Content -->
           <template v-if="form.proxy_type === 'dns'">
-            <div class="form-group" style="margin-bottom:12px;padding:12px;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
-              <div style="font-size:12px;color:var(--muted);">DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</div>
-            </div>
-
-            <!-- DNS Upstream Placeholder -->
-            <div class="form-group">
-              <label class="form-label">上游配置 <span style="font-size:11px;color:var(--muted);font-weight:normal;">（DNS 模式固定配置）</span></label>
-              <div style="padding:8px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border);font-family:var(--font-mono);font-size:12px;color:var(--muted);">
-                {"type": "roundrobin", "scheme": "tcp"}
+            <!-- WAN/LAN Separation Panel -->
+            <div v-if="dnsWanEnabled" class="form-group" style="margin-bottom:12px;">
+              <div style="padding:10px;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px;">
+                  <span style="font-weight:600;color:var(--fg);">外网访问来源过滤 <span class="required">*</span></span>
+                  <span style="font-size:11px;">至少填写一项（包含或排除），输入后回车或点击「添加」</span>
+                </div>
+                <div class="spwf-target-row" style="gap:8px;">
+                  <div style="flex:1;display:flex;gap:6px;align-items:center;">
+                    <label class="form-label" style="font-size:11px;flex-shrink:0;">包含</label>
+                    <input v-model="wanFilterInput.include" type="text" class="form-input" placeholder="10.158.40.51 或 10.0.0.0/8" style="flex:1;" @keydown.enter.prevent="addWanFilter('include')">
+                    <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" @click="addWanFilter('include')">添加</button>
+                  </div>
+                  <div style="flex:1;display:flex;gap:6px;align-items:center;">
+                    <label class="form-label" style="font-size:11px;flex-shrink:0;">排除</label>
+                    <input v-model="wanFilterInput.exclude" type="text" class="form-input" placeholder="192.168.0.3 或 127.0.0.1/8" style="flex:1;" @keydown.enter.prevent="addWanFilter('exclude')">
+                    <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" @click="addWanFilter('exclude')">添加</button>
+                  </div>
+                </div>
+                <div v-if="wanFilterError" class="form-error" style="margin-top:4px;">{{ wanFilterError }}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+                  <span v-for="ip in dnsWanFilterInclude" :key="'i'+ip" class="wan-filter-tag">
+                    包含 {{ ip }} <a style="margin-left:4px;color:var(--danger);cursor:pointer;" @click="removeWanFilter('include', ip)">×</a>
+                  </span>
+                  <span v-for="ip in dnsWanFilterExclude" :key="'e'+ip" class="wan-filter-tag wan-filter-tag-exclude">
+                    排除 {{ ip }} <a style="margin-left:4px;color:var(--danger);cursor:pointer;" @click="removeWanFilter('exclude', ip)">×</a>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -247,7 +273,8 @@
                   <div class="spwf-target-header" style="font-size:10px;">
                     <span style="flex:2;">IP 地址</span>
                     <span style="flex:1;">端口</span>
-                    <span style="flex:1;">客户端 CIDR（可选）</span>
+                    <span v-if="showDnsCidr" style="flex:1;">客户端 CIDR（可选）</span>
+                    <span v-if="dnsWanEnabled" style="flex:1.5;">外网地址（内外网分离）</span>
                     <span style="width:60px;">操作</span>
                   </div>
                   <div v-for="(dt, dti) in dom.targets" :key="dt.key" class="spwf-target-row">
@@ -259,7 +286,11 @@
                       <input v-model.number="dt.port" type="number" class="form-input" placeholder="53" min="1" max="65535" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.port`] }" @blur="validateDnsTarget(di, dti)">
                       <span v-if="dnsFieldErrors[`${di}.t${dti}.port`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.port`] }}</span>
                     </div>
-                    <input v-model="dt.cidr" type="text" class="form-input" placeholder="192.168.0.0/16 或留空" style="flex:1;">
+                    <input v-if="showDnsCidr" v-model="dt.cidr" type="text" class="form-input" placeholder="192.168.0.0/16 或留空" style="flex:1;">
+                    <div v-if="dnsWanEnabled" style="flex:1.5;display:flex;flex-direction:column;">
+                      <input v-model="dt.wan" type="text" class="form-input" placeholder="10.158.40.51" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.wan`] }" @blur="validateDnsTarget(di, dti)">
+                      <span v-if="dnsFieldErrors[`${di}.t${dti}.wan`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.wan`] }}</span>
+                    </div>
                     <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsTarget(di, dti)">删除</button>
                   </div>
                   <button class="btn btn-ghost btn-sm" style="width:100%;border:1px dashed var(--border);font-size:11px;" @click="addDnsTarget(di)">+ 添加目标节点</button>
@@ -285,6 +316,8 @@
                 <span>生成日志（DNS 请求日志）</span>
               </label>
             </div>
+
+
           </template>
 
           <!-- Advanced Config Toggle (普通模式) -->
@@ -378,6 +411,7 @@ const submitting = ref(false)
 const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
 const dnsEnableLog = ref(false)
+const showDnsCidr = false
 
 // ── Protocol options (normal mode: TCP/UDP/TLS) ──
 const protocolOptions = [
@@ -393,7 +427,7 @@ const schemeHint = computed(() => {
 })
 
 // ── Form ──
-interface DnsTarget { key: number; ip: string; port: number; cidr: string }
+interface DnsTarget { key: number; ip: string; port: number; cidr: string; wan: string }
 interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; enableChecks: boolean; checksJson: string; targets: DnsTarget[] }
 
 const form = reactive({
@@ -416,6 +450,7 @@ const form = reactive({
 
 const advancedEnabled = ref(false)
 const formErrors = reactive<Record<string, string>>({})
+const wanFilterError = ref('')
 const targetErrors = ref<string[]>([])
 
 // Per-field DNS validation errors: key = `${di}.${field}` or `${di}.t${ti}.${field}`
@@ -452,6 +487,19 @@ function validateDnsTarget(di: number, ti: number): boolean {
     valid = false
   } else {
     delete dnsFieldErrors[`${di}.t${ti}.port`]
+  }
+  if (dnsWanEnabled.value) {
+    if (!dt.wan || !dt.wan.trim()) {
+      dnsFieldErrors[`${di}.t${ti}.wan`] = '内外网分离时外网地址必填'
+      valid = false
+    } else if (!IP_PATTERN.test(dt.wan.trim())) {
+      dnsFieldErrors[`${di}.t${ti}.wan`] = '外网地址需为合法 IPv4'
+      valid = false
+    } else {
+      delete dnsFieldErrors[`${di}.t${ti}.wan`]
+    }
+  } else {
+    delete dnsFieldErrors[`${di}.t${ti}.wan`]
   }
   return valid
 }
@@ -669,11 +717,110 @@ function removeDnsDomain(index: number) {
 }
 
 function addDnsTarget(di: number) {
-  form.dns_domains[di].targets.push({ key: ++targetKey, ip: '', port: 53, cidr: '' })
+  form.dns_domains[di].targets.push({ key: ++targetKey, ip: '', port: 53, cidr: '', wan: '' })
 }
 
 function removeDnsTarget(di: number, ti: number) {
   form.dns_domains[di].targets.splice(ti, 1)
+}
+
+// ── WAN/LAN separation ────────────────────────────────
+
+const dnsWanEnabled = ref(false)
+const dnsWanFilterInclude = ref<string[]>([])
+const dnsWanFilterExclude = ref<string[]>([])
+const wanFilterInput = reactive<{ include: string; exclude: string }>({ include: '', exclude: '' })
+
+function addWanFilter(kind: 'include' | 'exclude') {
+  const raw = (kind === 'include' ? wanFilterInput.include : wanFilterInput.exclude).trim()
+  if (!raw) return
+  if (!isValidIpOrCidr(raw)) {
+    wanFilterError.value = `「${raw}」不是合法的 IPv4 地址或网段`
+    return
+  }
+  wanFilterError.value = ''
+  const list = kind === 'include' ? dnsWanFilterInclude : dnsWanFilterExclude
+  if (!list.value.includes(raw)) {
+    list.value.push(raw)
+  }
+  if (kind === 'include') wanFilterInput.include = ''
+  else wanFilterInput.exclude = ''
+}
+
+function isValidIpOrCidr(value: string): boolean {
+  const m = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
+  if (!m) return false
+  const octets = [m[1], m[2], m[3], m[4]].map(Number)
+  if (octets.some(o => o > 255)) return false
+  if (m[6] !== undefined) {
+    const prefix = Number(m[6])
+    if (prefix < 0 || prefix > 32) return false
+  }
+  return true
+}
+
+function removeWanFilter(kind: 'include' | 'exclude', ip: string) {
+  const list = kind === 'include' ? dnsWanFilterInclude : dnsWanFilterExclude
+  list.value = list.value.filter(x => x !== ip)
+}
+
+function buildDnsConfig(): Record<string, any> {
+  const hosts: Record<string, any> = {}
+  for (const dom of form.dns_domains) {
+    if (!dom.domain.trim()) continue
+    const nodes: Record<string, string[]> = {}
+    const exportNodes: Record<string, string> = {}
+    for (const dt of dom.targets) {
+      if (!dt.ip.trim() || !dt.port) continue
+      const key = `${dt.ip}:${dt.port}`
+      nodes[key] = []
+      if (dnsWanEnabled.value && dt.wan && dt.wan.trim()) {
+        exportNodes[key] = dt.wan.trim()
+      }
+    }
+    const domainCfg: Record<string, any> = { nodes, type: dom.lb_type }
+    if (dnsWanEnabled.value && Object.keys(exportNodes).length > 0) {
+      domainCfg.export_nodes = exportNodes
+    }
+    if (dom.ttl !== undefined && dom.ttl !== null) {
+      domainCfg.ttl_valid = dom.ttl
+    }
+    if (dom.enableChecks && dom.checksJson) {
+      try { domainCfg.checks = JSON.parse(dom.checksJson) } catch { /* ignore invalid json */ }
+    }
+    hosts[dom.domain.trim()] = domainCfg
+  }
+  const dnsConfig: Record<string, any> = { hosts }
+  if (dnsEnableLog.value) {
+    dnsConfig.log_process = { logs: ['logs/process.stream.log'] }
+  }
+  if (dnsWanEnabled.value) {
+    dnsConfig.wan_enabled = true
+    if (dnsWanFilterInclude.value.length > 0 || dnsWanFilterExclude.value.length > 0) {
+      dnsConfig.wan_filter = {
+        include: [...dnsWanFilterInclude.value],
+        exclude: [...dnsWanFilterExclude.value],
+      }
+    }
+  }
+  return dnsConfig
+}
+
+function validateDnsWan(): boolean {
+  if (!dnsWanEnabled.value) return true
+  const IP_PATTERN_LOCAL = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+  for (const dom of form.dns_domains) {
+    if (!dom.domain.trim()) continue
+    if (dom.targets.length === 0) return false
+    for (const dt of dom.targets) {
+      if (!dt.wan || !dt.wan.trim()) return false
+      if (!IP_PATTERN_LOCAL.test(dt.wan.trim())) return false
+    }
+  }
+  if (dnsWanFilterInclude.value.length === 0 && dnsWanFilterExclude.value.length === 0) {
+    return false
+  }
+  return true
 }
 
 // ── Validation ──
@@ -682,6 +829,7 @@ function validateForm(): boolean {
   formErrors.name = ''
   formErrors.targets = ''
   formErrors.dns = ''
+  wanFilterError.value = ''
   targetErrors.value = []
 
   if (!form.name.trim()) { formErrors.name = '请输入代理名称'; return false }
@@ -699,6 +847,25 @@ function validateForm(): boolean {
         if (!IP_PATTERN.test(dt.ip)) { formErrors.dns = `域名 ${dom.domain} 的 IP 格式不合法`; return false }
         if (!dt.port || dt.port < 1 || dt.port > 65535) { formErrors.dns = `域名 ${dom.domain} 的端口不合法`; return false }
       }
+    }
+    if (dnsWanEnabled.value) {
+      for (const dom of form.dns_domains) {
+        for (const dt of dom.targets) {
+          if (!dt.wan || !dt.wan.trim()) {
+            formErrors.dns = `域名 ${dom.domain} 的节点 ${dt.ip} 外网地址必填`
+            return false
+          }
+          if (!IP_PATTERN.test(dt.wan.trim())) {
+            formErrors.dns = `域名 ${dom.domain} 的节点 ${dt.ip} 外网地址需为合法 IPv4`
+            return false
+          }
+        }
+      }
+      if (dnsWanFilterInclude.value.length === 0 && dnsWanFilterExclude.value.length === 0) {
+        wanFilterError.value = '外网访问来源过滤至少填写一项（包含或排除）'
+        return false
+      }
+      wanFilterError.value = ''
     }
     return true
   }
@@ -747,30 +914,13 @@ async function handleSubmit() {
     }
 
     if (form.proxy_type === 'dns') {
-      // Build dns_config from dns_domains
-      const hosts: Record<string, any> = {}
-      for (const dom of form.dns_domains) {
-        if (!dom.domain.trim()) continue
-        const nodes: Record<string, string[]> = {}
-        for (const dt of dom.targets) {
-          if (!dt.ip.trim() || !dt.port) continue
-          const cidrList: string[] = dt.cidr.trim() ? [dt.cidr.trim()] : []
-          nodes[`${dt.ip}:${dt.port}`] = cidrList
-        }
-        const domainCfg: Record<string, any> = { nodes, type: dom.lb_type }
-        if (dom.ttl !== undefined && dom.ttl !== null) {
-          domainCfg.ttl_valid = dom.ttl
-        }
-        if (dom.enableChecks && dom.checksJson) {
-          try { domainCfg.checks = JSON.parse(dom.checksJson) } catch { /* ignore invalid json */ }
-        }
-        hosts[dom.domain.trim()] = domainCfg
+      if (!validateDnsWan()) {
+        formErrors.dns = '内外网分离配置无效：请检查外网映射（内网节点必须在域名节点列表中，且每个域名都需有映射）'
+        submitting.value = false
+        return
       }
-      const dnsConfig: Record<string, any> = { hosts }
-      if (dnsEnableLog.value) {
-        dnsConfig.log_process = { logs: ['logs/process.stream.log'] }
-      }
-      submitData.dns_config = dnsConfig
+      submitData.scheme = 'udp'  // DNS 代理固定 UDP 协议
+      submitData.dns_config = buildDnsConfig()
     } else {
       submitData.load_balance = form.load_balance
       submitData.description = form.description.trim()
@@ -824,8 +974,12 @@ watch(() => props.visible, async (v) => {
   formErrors.port = ''
   formErrors.targets = ''
   formErrors.dns = ''
+  wanFilterError.value = ''
   targetErrors.value = []
   selectedPort.value = null
+  dnsWanEnabled.value = false
+  dnsWanFilterInclude.value = []
+  dnsWanFilterExclude.value = []
 
   if (props.editingProxy) {
     const p = props.editingProxy
@@ -842,6 +996,16 @@ watch(() => props.visible, async (v) => {
     if (form.proxy_type === 'dns') {
       // Load DNS config
       const dc = (p as any).dns_config
+      const exportNodesMap: Record<string, string> = {}
+      if (dc && dc.wan_enabled && dc.hosts) {
+        for (const [domain, cfg] of Object.entries(dc.hosts) as [string, any][]) {
+          if (cfg.export_nodes) {
+            for (const [lan, wan] of Object.entries(cfg.export_nodes) as [string, string][]) {
+              exportNodesMap[lan] = wan.includes(':') ? wan.split(':')[0] : wan
+            }
+          }
+        }
+      }
       if (dc && dc.hosts) {
         form.dns_domains = Object.entries(dc.hosts).map(([domain, cfg]: [string, any]) => {
           const domainKey = ++targetKey
@@ -852,6 +1016,7 @@ watch(() => props.visible, async (v) => {
               ip: ip || '',
               port: portStr ? parseInt(portStr) : 53,
               cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
+              wan: exportNodesMap[ipPort] || '',
             }
           })
           return {
@@ -866,6 +1031,10 @@ watch(() => props.visible, async (v) => {
       }
       // Load log_process state from existing config
       dnsEnableLog.value = !!(dc && dc.log_process)
+      // Load WAN/LAN separation state
+      dnsWanEnabled.value = !!(dc && dc.wan_enabled)
+      dnsWanFilterInclude.value = (dc && dc.wan_filter && dc.wan_filter.include) ? [...dc.wan_filter.include] : []
+      dnsWanFilterExclude.value = (dc && dc.wan_filter && dc.wan_filter.exclude) ? [...dc.wan_filter.exclude] : []
     } else {
       form.targets = (p.targets || []).map((t: any) => {
         const parsed = parseTarget(t.target)
@@ -925,6 +1094,11 @@ watch(() => props.visible, async (v) => {
     checksJson.value = defaultChecksJson
     advancedEnabled.value = false
     dnsEnableLog.value = false
+    dnsWanEnabled.value = false
+      dnsWanFilterInclude.value = []
+    dnsWanFilterExclude.value = []
+    wanFilterInput.include = ''
+    wanFilterInput.exclude = ''
     nodes.value = []
     ports.value = []
   }
@@ -932,6 +1106,22 @@ watch(() => props.visible, async (v) => {
 </script>
 
 <style scoped>
+/* ── WAN filter tags ── */
+.wan-filter-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: oklch(55% 0.18 280 / 12%);
+  color: oklch(40% 0.18 280);
+  border: 1px solid oklch(55% 0.18 280 / 20%);
+}
+.wan-filter-tag-exclude {
+  background: oklch(55% 0.18 45 / 12%);
+  color: oklch(50% 0.18 45);
+  border-color: oklch(55% 0.18 45 / 20%);
+}
 /* ── Step Indicator ── */
 .spwf-steps {
   display: flex;
@@ -1062,6 +1252,7 @@ watch(() => props.visible, async (v) => {
 /* ── Scheme Toggle ── */
 .spwf-toggle {
   display: flex;
+  align-items: center;
   gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);

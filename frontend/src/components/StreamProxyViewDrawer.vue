@@ -43,6 +43,13 @@
             <span class="spvd-label">版本</span>
             <span class="spvd-value">v{{ proxy.current_version }}</span>
           </div>
+          <div class="spvd-field" v-if="isDnsProxy">
+            <span class="spvd-label">内外网分离</span>
+            <span>
+              <span v-if="isWanEnabled" class="badge badge-success">已启用</span>
+              <span v-else class="badge badge-neutral">未启用</span>
+            </span>
+          </div>
           <div class="spvd-field" v-if="proxy.published_at">
             <span class="spvd-label">发布时间</span>
             <span class="spvd-value">{{ formatDate(proxy.published_at) }}</span>
@@ -135,6 +142,16 @@ function schemeLabel(scheme: string | undefined): string {
   if (scheme === 'tls') return 'TLS'
   return scheme || 'TCP'
 }
+
+const isDnsProxy = computed(() => props.proxy?.proxy_type === 'dns')
+
+const isWanEnabled = computed(() => {
+  if (!props.proxy?.dns_config) return false
+  const cfg = typeof props.proxy.dns_config === 'string'
+    ? JSON.parse(props.proxy.dns_config)
+    : props.proxy.dns_config
+  return !!(cfg && cfg.wan_enabled)
+})
 
 const lbLabel = computed(() => {
   if (!props.proxy) return '-'
