@@ -11,7 +11,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -35,6 +35,7 @@ TaskType = Literal[
     "check",
     "statistic",
     "edge_env_deploy",
+    "software_check",
 ]
 
 
@@ -123,14 +124,17 @@ async def create_node_task(
 
     snapshots = {n.id: (n.ip, n.edge_path) for n in nodes}
     svc = get_node_task_service()
-    task = await svc.create_task(
-        db=db,
-        cluster_id=cluster_id,
-        task_type=body.task_type,
-        node_ids=body.node_ids,
-        params=body.params,
-        node_snapshots=snapshots,
-    )
+    try:
+        task = await svc.create_task(
+            db=db,
+            cluster_id=cluster_id,
+            task_type=body.task_type,
+            node_ids=body.node_ids,
+            params=body.params,
+            node_snapshots=snapshots,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return _to_task_dict(task)
 
 
@@ -217,10 +221,14 @@ TERMINAL_STATUSES = {"success", "failed", "partial", "cancelled"}
 
 
 async def _delete_task_row(db: AsyncSession, task: NodeTask) -> None:
-    """Delete a task row (cascades to items via FK) and its log files."""
+    """Delete a task row and its items explicitly (not relying on FK cascade,
+    which is inactive on some SQLite connections) plus its log files."""
     from app.services import task_log_store
 
     task_id = task.id
+    await db.execute(
+        delete(NodeTaskItem).where(NodeTaskItem.task_id == task_id)
+    )
     await db.delete(task)
     await db.commit()
     task_log_store.delete_task_logs(task_id)

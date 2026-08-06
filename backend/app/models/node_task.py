@@ -12,7 +12,7 @@ Design decisions (see openspec/changes/node-operation-task-center):
 import json
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from app.core.database import Base
 
@@ -45,6 +45,9 @@ class NodeTask(Base):
 
 class NodeTaskItem(Base):
     __tablename__ = "install_task_node"
+    __table_args__ = (
+        UniqueConstraint("task_id", "node_id", name="uq_install_task_node_task_node"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("install_task.id", ondelete="CASCADE"), nullable=False)

@@ -154,6 +154,40 @@ class TestNodeTaskModel:
         assert cluster_fk == [], f"cluster_id should have no FK, got {cluster_fk}"
 
     @pytest.mark.asyncio
+    async def test_task_item_unique_task_node(self, test_db):
+        """Same (task_id, node_id) must be rejected by the unique constraint."""
+        from sqlalchemy.exc import IntegrityError
+
+        task = NodeTask(cluster_id=1, task_type="start", status="pending", total_nodes=1)
+        test_db.add(task)
+        await test_db.flush()
+
+        item1 = NodeTaskItem(task_id=task.id, node_id=5, ip="10.0.0.5", status="pending")
+        test_db.add(item1)
+        await test_db.commit()
+
+        # Duplicate (task_id, node_id) must raise IntegrityError
+        item2 = NodeTaskItem(task_id=task.id, node_id=5, ip="10.0.0.5", status="pending")
+        test_db.add(item2)
+        with pytest.raises(IntegrityError):
+            await test_db.commit()
+        await test_db.rollback()
+
+    @pytest.mark.asyncio
+    async def test_task_item_unique_task_node_allows_different_nodes(self, test_db):
+        """Different node_id under the same task must be allowed."""
+        task = NodeTask(cluster_id=1, task_type="start", status="pending", total_nodes=2)
+        test_db.add(task)
+        await test_db.flush()
+
+        test_db.add(NodeTaskItem(task_id=task.id, node_id=5, ip="10.0.0.5", status="pending"))
+        test_db.add(NodeTaskItem(task_id=task.id, node_id=6, ip="10.0.0.6", status="pending"))
+        await test_db.commit()
+
+        result = await test_db.execute(select(NodeTaskItem).where(NodeTaskItem.task_id == task.id))
+        assert len(result.scalars().all()) == 2
+
+    @pytest.mark.asyncio
     async def test_task_status_counters_update(self, test_db):
         """Status counters should be updatable after commit."""
         task = NodeTask(cluster_id=1, task_type="start", status="running", total_nodes=3)

@@ -80,3 +80,64 @@ describe('EdgeEnv.vue', () => {
     expect(optionTexts).toContain('预发')
   })
 })
+
+describe('EdgeEnv.vue publish node selection', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: MOCK_CLUSTERS })
+      if (url.startsWith('/clusters/1/nodes')) {
+        return Promise.resolve({ data: { items: [
+          { id: 10, ip: '10.0.0.1', management_port: 9180, status: 1 },
+          { id: 11, ip: '10.0.0.2', management_port: 9180, status: 1 },
+          { id: 12, ip: '10.0.0.3', management_port: 9180, status: 0 },
+        ] } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  async function mountWithClusterAndNodes() {
+    const EdgeEnv = (await import('../EdgeEnv.vue')).default
+    const wrapper = mount(EdgeEnv, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    // 选中集群1
+    const vm = wrapper.vm as any
+    vm.selectedClusterId = 1
+    await vm.onClusterChange()
+    await new Promise(r => setTimeout(r, 100))
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('selectAllPublishNodes selects all nodes and updates count', async () => {
+    const wrapper = await mountWithClusterAndNodes()
+    const vm = wrapper.vm as any
+    expect(vm.allNodes.length).toBe(3)
+    vm.selectAllPublishNodes()
+    expect(vm.selectedPublishNodeIds.length).toBe(3)
+    expect(vm.selectedPublishNodeIds).toContain(12)
+    wrapper.unmount()
+  })
+
+  it('clearAllPublishNodes deselects all', async () => {
+    const wrapper = await mountWithClusterAndNodes()
+    const vm = wrapper.vm as any
+    vm.selectAllPublishNodes()
+    vm.clearAllPublishNodes()
+    expect(vm.selectedPublishNodeIds.length).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('togglePublishNode toggles individual node', async () => {
+    const wrapper = await mountWithClusterAndNodes()
+    const vm = wrapper.vm as any
+    vm.togglePublishNode({ id: 10 })
+    expect(vm.selectedPublishNodeIds).toEqual([10])
+    vm.togglePublishNode({ id: 10 })
+    expect(vm.selectedPublishNodeIds).toEqual([])
+    wrapper.unmount()
+  })
+})

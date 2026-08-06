@@ -80,6 +80,10 @@ export function useInstallStream() {
             if (data.line) {
               logs.value.push(data.line)
               options.onLine(data.line)
+            } else if (data.type) {
+              // 结构化事件（node_start/node_done/complete 等）可能无 line 字段，
+              // 仍需转发给 onLine 让业务层处理（如 complete 决定整体状态）
+              options.onLine(JSON.stringify(data))
             }
             if (data.percent !== undefined) {
               progress.percent = data.percent
@@ -113,7 +117,14 @@ export function useInstallStream() {
     abortController = null
   }
 
+  function forceComplete() {
+    // 仅更新 UI 状态（不 abort 底层流），用于业务侧收到完成事件时立即结束加载态
+    installing.value = false
+    status.value = 'completed'
+    progress.percent = 100
+  }
+
   onUnmounted(() => cancel())
 
-  return { status, installing, progress, logs, error, start, cancel }
+  return { status, installing, progress, logs, error, start, cancel, forceComplete }
 }

@@ -106,6 +106,7 @@
 - **THEN** 弹窗 SHALL 显示集群所有节点列表（多选复选框），默认全选
 - **AND** 活跃节点（status=1）正常可选
 - **AND** 非活跃节点（status≠1）置灰不可选，旁标注"离线"
+- **AND** 弹窗顶部 SHALL 提供「全选」「取消全选」链接与「已选择 N / M 个节点」计数
 - **AND** 弹窗底部显示"确认发布"和"取消"按钮
 
 #### Scenario: 发布请求格式
@@ -145,6 +146,18 @@
 - **WHEN** 部分节点发布失败
 - **THEN** 整体发布状态 SHALL 标记为 `partial`
 - **AND** 继续发布剩余节点，不中断整个流程
+
+#### Scenario: 节点成功判定基于 ansible rc
+- **WHEN** 后端遍历节点的 ansible 执行流
+- **THEN** 后端 SHALL 从 `_run_ansible_stream` 的最后一个 SSE 事件提取 `rc`
+- **AND** 仅 `rc == 0` 时该节点 SHALL 标记为成功；`rc != 0`（含 UNREACHABLE）SHALL 标记为失败并记录 error（含 rc 值）
+- **AND** 不得仅凭"ansible 流正常结束"判定成功（此前 rc≠0 节点被误判 success）
+
+#### Scenario: 前端显示整体状态与成功/失败计数
+- **WHEN** 前端收到 complete 事件
+- **THEN** 前端 SHALL 显示整体状态（全部成功/部分成功/全部失败）
+- **AND** 附带显示「成功 N / 失败 M」计数（基于 node_results 统计）
+- **AND** complete 事件（可能无 line 字段）SHALL 被前端正确处理，不得因缺少 line 字段而丢弃
 
 ### Requirement: diff 对比
 

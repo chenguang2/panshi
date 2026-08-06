@@ -34,8 +34,9 @@ const DEFAULT_FG = '#d4d4d4'
 const FULL_ANSI_RE = /\x1b\[([\d;]*)m/g
 
 // 兜底匹配：如果浏览器渲染时 ESC 字符丢失，仅匹配可见的 [<参数>m
-// 使用负向后顾避免匹配到普通方括号内容（如 [192.168.100.42]）
-const VISIBLE_ANSI_RE = /(?:^|(?<=\s))\[(\d+(?:;\d+)*)m/g
+// ANSI SGR 序列形如 [0m / [0;32m（数字或数字+分号组合，以 m 结尾）。
+// 普通方括号内容（如 [192.168.100.42]、[edge : run]）不以 m 结尾，不会被误伤。
+const VISIBLE_ANSI_RE = /\[(\d+(?:;\d+)*)m/g
 
 /**
  * HTML 转义特殊字符，防止 XSS

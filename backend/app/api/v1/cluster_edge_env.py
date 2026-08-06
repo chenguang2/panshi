@@ -93,6 +93,7 @@ async def deploy_edge_env(
             yield f"data: {json.dumps({'type': 'node_start', 'ip': node.ip, 'index': i, 'total': len(nodes)})}\n\n"
 
             try:
+                node_rc = -1
                 async for event in _run_ansible_stream(
                     runner_method=_ansible_service,
                     ip=node.ip,
@@ -101,8 +102,20 @@ async def deploy_edge_env(
                     job_timeout=120,
                 ):
                     yield event
-                node_results.append({"ip": node.ip, "status": "success"})
-                yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'success'})}\n\n"
+                    # Capture the final rc event to determine node success
+                    try:
+                        ev = json.loads(event.removeprefix("data: ").removesuffix("\n\n"))
+                        if "rc" in ev:
+                            node_rc = ev.get("rc", -1)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if node_rc == 0:
+                    node_results.append({"ip": node.ip, "status": "success"})
+                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'success'})}\n\n"
+                else:
+                    all_success = False
+                    node_results.append({"ip": node.ip, "status": "failed", "error": f"ansible rc={node_rc}"})
+                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'failed', 'error': f'ansible rc={node_rc}'})}\n\n"
             except Exception as e:
                 all_success = False
                 node_results.append({"ip": node.ip, "status": "failed", "error": str(e)})

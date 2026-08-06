@@ -97,3 +97,75 @@ def test_both_columns_backfills_openresty_path_and_drops_legacy(tmp_path):
         assert rows[2] == "/work/edge2"
         assert rows[3] == "/work/manual"
     engine.dispose()
+
+
+def _create_task_db_with_duplicates(db_path):
+    """DB with duplicate (task_id, node_id) items in install_task_node."""
+    engine = _create_engine(db_path)
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE install_task (id INTEGER PRIMARY KEY, cluster_id INTEGER, "
+            "task_type VARCHAR(20), status VARCHAR(20), params TEXT, total_nodes INTEGER, "
+            "success_nodes INTEGER DEFAULT 0, failed_nodes INTEGER DEFAULT 0, "
+            "cancelled_nodes INTEGER DEFAULT 0, created_by INTEGER, "
+            "created_at DATETIME, started_at DATETIME, finished_at DATETIME)"
+        )
+        conn.exec_driver_sql(
+            "CREATE TABLE install_task_node (id INTEGER PRIMARY KEY, task_id INTEGER, "
+            "node_id INTEGER, ip VARCHAR(50), node_name VARCHAR(100), status VARCHAR(20), "
+            "rc INTEGER, logs TEXT, stdout TEXT, stderr TEXT, command TEXT, "
+            "log_file VARCHAR(255), log_line_count INTEGER DEFAULT 0, stdout_tail TEXT, "
+            "started_at DATETIME, finished_at DATETIME)"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO install_task (id, cluster_id, task_type, status, total_nodes) "
+            "VALUES (1, 4, 'statistic', 'partial', 3)"
+        )
+        conn.exec_driver_sql(
+            "INSERT INTO install_task_node (id, task_id, node_id, ip, status) VALUES "
+            "(42, 1, 7, '192.168.0.13', 'success'), "
+            "(43, 1, 8, '192.168.0.14', 'failed'), "
+            "(44, 1, 7, '192.168.0.13', 'success'), "
+            "(61, 1, 7, '192.168.0.13', 'success'), "
+            "(62, 1, 8, '192.168.0.14', 'success'), "
+            "(63, 1, 9, '192.168.0.15', 'success')"
+        )
+        conn.commit()
+    return engine
+
+
+def _unique_indexes(engine, table: str) -> list[str]:
+    from sqlalchemy import inspect
+
+    return [idx["name"] for idx in inspect(engine).get_indexes(table) if idx.get("unique")]
+
+
+def test_duplicate_items_cleared_before_unique_index(tmp_path):
+    """Migration must clear duplicate (task_id, node_id) items before creating unique index."""
+    engine = _create_task_db_with_duplicates(tmp_path / "dup.db")
+    run_migrations(engine)
+    unique = _unique_indexes(engine, "install_task_node")
+    assert "uq_install_task_node_task_node" in unique, f"unique index missing, got {unique}"
+    # duplicates must be gone: each (task_id, node_id) appears at most once
+    with engine.connect() as conn:
+        rows = conn.exec_driver_sql(
+            "SELECT task_id, node_id, COUNT(*) FROM install_task_node GROUP BY task_id, node_id"
+        ).fetchall()
+        for task_id, node_id, cnt in rows:
+            assert cnt == 1, f"duplicate remains: task {task_id} node {node_id} x{cnt}"
+    engine.dispose()
+
+
+def test_clean_db_gets_unique_index_without_duplicates(tmp_path):
+    """Fresh table with no duplicates should get unique index directly."""
+    engine = _create_task_db_with_duplicates(tmp_path / "clean.db")
+    # remove duplicates to simulate clean data
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "DELETE FROM install_task_node WHERE id IN (43, 44, 61)"
+        )
+        conn.commit()
+    run_migrations(engine)
+    unique = _unique_indexes(engine, "install_task_node")
+    assert "uq_install_task_node_task_node" in unique
+    engine.dispose()

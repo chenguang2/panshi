@@ -80,3 +80,41 @@ class TestDeleteEndpoint:
         body = resp.json()
         assert body["deleted"] == []
         assert body["skipped"] == [999999, 888888]
+
+
+class TestDeleteRowExplicitItems:
+    @pytest.mark.asyncio
+    async def test_delete_row_explicitly_removes_items_without_fk(self, tmp_path, monkeypatch):
+        """_delete_task_row must remove items explicitly even when FK cascade is OFF
+        (production SQLite may not cascade; residual items caused UNIQUE conflicts)."""
+        monkeypatch.setattr(task_log_store, "_log_dir", tmp_path)
+
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+        from sqlalchemy.pool import StaticPool
+
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            poolclass=StaticPool,
+            connect_args={"check_same_thread": False},
+        )
+        # NOTE: no PRAGMA foreign_keys=ON -> FK cascade NOT active
+        async with engine.begin() as conn:
+            from app.core.database import Base
+            await conn.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+
+        from app.api.v1.node_tasks import _delete_task_row
+
+        async with factory() as db:
+            task = NodeTask(cluster_id=1, task_type="start", status="success", total_nodes=1)
+            db.add(task)
+            await db.flush()
+            db.add(NodeTaskItem(task_id=task.id, node_id=1, ip="10.0.0.1", status="success"))
+            await db.commit()
+
+            await _delete_task_row(db, task)
+
+            items = (await db.execute(select(NodeTaskItem).where(NodeTaskItem.task_id == task.id))).scalars().all()
+            assert items == [], f"items must be explicitly deleted, got {[i.node_id for i in items]}"
+
+        await engine.dispose()

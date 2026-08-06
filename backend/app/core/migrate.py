@@ -272,6 +272,9 @@ def run_migrations(engine: Engine) -> None:
     # Ensure index on ps_cluster(group_name) for JOIN performance
     _ensure_index(engine, "ps_cluster", "idx_cluster_group_name", ["group_name"])
 
+    # Unique (task_id, node_id) on install_task_node (dedup first)
+    _ensure_unique_index(engine, "install_task_node", "uq_install_task_node_task_node", ["task_id", "node_id"])
+
     # Ensure ForeignKey on ps_ssl_certificate.cluster_id (existing tables may lack it)
     _ensure_ssl_foreign_key(engine)
 
@@ -388,3 +391,31 @@ def _ensure_index(engine: Engine, table: str, index_name: str, columns: list[str
         except Exception as e:
             conn.rollback()
             logger.warning("Could not create index %s: %s", index_name, e)
+
+
+def _ensure_unique_index(engine: Engine, table: str, index_name: str, columns: list[str]) -> None:
+    """Create a UNIQUE index, clearing duplicate rows first (keeps latest by id)."""
+    inspector = inspect(engine)
+    try:
+        existing = {idx["name"] for idx in inspector.get_indexes(table)}
+    except Exception:
+        return
+    if index_name in existing:
+        return
+    with engine.connect() as conn:
+        try:
+            cols = ", ".join(f'"{c}"' for c in columns)
+            conn.execute(
+                text(
+                    f'DELETE FROM "{table}" WHERE id NOT IN ('
+                    f'SELECT MAX(id) FROM "{table}" GROUP BY {cols})'
+                )
+            )
+            conn.execute(
+                text(f'CREATE UNIQUE INDEX IF NOT EXISTS "{index_name}" ON "{table}" ({cols})')
+            )
+            conn.commit()
+            logger.info("Created unique index %s on %s(%s)", index_name, table, ", ".join(columns))
+        except Exception as e:
+            conn.rollback()
+            logger.warning("Could not create unique index %s: %s", index_name, e)

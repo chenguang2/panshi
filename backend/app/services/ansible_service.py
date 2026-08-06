@@ -252,6 +252,7 @@ ALLOWED_TAGS = frozenset({
     "edge_plugins_md5",
     "edge_read_env",
     "edge_pack_list",
+    "software_check_run",
 })
 
 # Mapping from nginx_cmd values to user-facing action names

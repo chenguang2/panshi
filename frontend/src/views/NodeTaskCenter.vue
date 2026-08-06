@@ -131,6 +131,30 @@
                 </tr>
               </tbody>
             </table>
+            <div v-if="detail?.task_type === 'software_check'" style="margin-top:16px;">
+              <div style="font-size:14px;font-weight:600;margin-bottom:8px;">软件查询结果</div>
+              <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr>
+                    <th style="padding:6px 8px;border-bottom:1px solid #eee;text-align:left;">软件</th>
+                    <th v-for="item in detail?.items || []" :key="'h'+item.id" style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">{{ item.ip }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="soft in softwareMatrixRows()" :key="soft">
+                    <td style="padding:6px 8px;border-bottom:1px solid #f5f5f5;">{{ soft }}</td>
+                    <td v-for="item in detail?.items || []" :key="'c'+item.id+soft" style="padding:6px 8px;border-bottom:1px solid #f5f5f5;text-align:center;">
+                      <template v-if="softwareCell(item, soft)">
+                        <span v-if="softwareCell(item, soft)!.status === 'installed'" style="color:var(--success,#16a34a);" :title="'包: ' + softwareCell(item, soft)!.pkg + (softwareCell(item, soft)!.ver ? '\n版本: ' + softwareCell(item, soft)!.ver : '')">✓ {{ softwareCell(item, soft)!.pkg }}</span>
+                        <span v-else-if="softwareCell(item, soft)!.status === 'missing'" style="color:var(--danger,#e5484d);">✗ 未安装</span>
+                        <span v-else style="color:var(--muted,#999);">检测失败</span>
+                      </template>
+                      <span v-else style="color:var(--muted,#999);">-</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div class="modal-footer">
             <button v-if="detail && (detail.status === 'running' || detail.status === 'pending')" class="btn btn-danger" @click="handleCancel(detail)">取消任务</button>
@@ -158,7 +182,14 @@
               </select>
             </div>
             <div style="margin-bottom:12px;">
-              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:4px;">节点（{{ createNodeIds.length }} 已选）</label>
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:4px;">节点</label>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;font-size:12px;color:var(--muted,#888);">
+                <div>
+                  <a style="cursor:pointer;margin-right:12px;color:var(--accent,#4096ff);" @click="selectAllCreateNodes">全选</a>
+                  <a style="cursor:pointer;color:var(--accent,#4096ff);" @click="clearAllCreateNodes">取消全选</a>
+                </div>
+                <span>已选择 {{ createNodeIds.length }} / {{ createNodes.length }} 个节点</span>
+              </div>
               <div style="border:1px solid var(--border,#e5e5e5);border-radius:6px;padding:8px;max-height:180px;overflow-y:auto;">
                 <label v-for="n in createNodes" :key="n.id" style="display:block;padding:4px 6px;font-size:13px;cursor:pointer;">
                   <input type="checkbox" :value="n.id" v-model="createNodeIds" style="margin-right:6px;" />
@@ -195,6 +226,34 @@
                 <option v-for="v in edgePackVersions" :key="v.name" :value="v.name" :disabled="v.current">{{ v.name }} <template v-if="v.current">(当前)</template></option>
               </select>
             </div>
+            <div v-if="createTaskType === 'software_check'" style="margin-bottom:12px;">
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:6px;">软件列表</label>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                <label
+                  v-for="s in softwareOptions"
+                  :key="s.value"
+                  style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border:1px solid var(--border,#e5e5e5);border-radius:12px;cursor:pointer;"
+                  :class="{ 'soft-opt-selected': softwareSelected.includes(s.value) }"
+                >
+                  <input type="checkbox" :value="s.value" v-model="softwareSelected" style="accent-color:var(--accent,#4096ff);">
+                  <span>{{ s.label }}</span>
+                </label>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <input v-model="customSoftwareInput" data-test="custom-software" type="text" placeholder="输入软件名（如 telnet）" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);" @keydown.enter.prevent="addCustomSoftware">
+                <button class="btn btn-secondary btn-sm" @click="addCustomSoftware">添加</button>
+              </div>
+              <div v-if="customSoftwareList.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                <span
+                  v-for="s in customSoftwareList"
+                  :key="s"
+                  style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 8px;border:1px solid var(--border,#e5e5e5);border-radius:12px;background:var(--bg,#f8f8f8);"
+                >
+                  {{ s }}
+                  <a style="color:var(--danger,#e5484d);cursor:pointer;" @click="removeCustomSoftware(s)">×</a>
+                </span>
+              </div>
+            </div>
             <div style="color:var(--muted,#999);font-size:12px;line-height:1.6;">
               任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
             </div>
@@ -203,7 +262,7 @@
             <button class="btn btn-secondary" @click="createVisible = false">取消</button>
             <button
               class="btn btn-primary"
-              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile) || (createTaskType === 'edge_pack_add' && !selectedPackFile) || (createTaskType === 'edge_pack_rebase' && !selectedPackVersion)"
+              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile) || (createTaskType === 'edge_pack_add' && !selectedPackFile) || (createTaskType === 'edge_pack_rebase' && !selectedPackVersion) || (createTaskType === 'software_check' && softwareSelected.length === 0 && customSoftwareList.length === 0)"
               @click="submitCreateTask"
             >创建</button>
           </div>
@@ -243,6 +302,14 @@ const clusters = ref<Array<{ id: number; name: string; display_name?: string }>>
 const createClusterId = ref(0)
 const createNodes = ref<Array<{ id: number; ip: string; edge_path?: string }>>([])
 const createNodeIds = ref<number[]>([])
+
+function selectAllCreateNodes() {
+  createNodeIds.value = createNodes.value.map((n: any) => n.id)
+}
+
+function clearAllCreateNodes() {
+  createNodeIds.value = []
+}
 const createTaskType = ref('')
 const createOpenrestyFile = ref('')
 const openrestyFiles = ref<Array<{ name: string; size_display?: string }>>([])
@@ -250,6 +317,38 @@ const edgePackFiles = ref<Array<{ name: string; size_display?: string }>>([])
 const selectedPackFile = ref('')
 const edgePackVersions = ref<Array<{ name: string; current: boolean }>>([])
 const selectedPackVersion = ref('')
+
+// ── software_check ──
+const softwareOptions = [
+  { value: 'nc', label: 'nc' },
+  { value: 'vim', label: 'vim' },
+  { value: 'bc', label: 'bc' },
+  { value: 'make', label: 'make' },
+  { value: 'g++', label: 'gcc-c++' },
+  { value: 'dig', label: 'bind-utils' },
+  { value: 'tcpdump', label: 'tcpdump' },
+  { value: 'git', label: 'git' },
+  { value: 'lsof', label: 'lsof' },
+  { value: 'dos2unix', label: 'dos2unix' },
+]
+const softwareSelected = ref<string[]>(softwareOptions.map(s => s.value))
+const customSoftwareInput = ref('')
+const customSoftwareList = ref<string[]>([])
+
+function addCustomSoftware() {
+  const name = customSoftwareInput.value.trim()
+  if (!name) return
+  if (!softwareSelected.value.includes(name) && !customSoftwareList.value.includes(name)) {
+    customSoftwareList.value.push(name)
+    softwareSelected.value.push(name)
+  }
+  customSoftwareInput.value = ''
+}
+
+function removeCustomSoftware(name: string) {
+  customSoftwareList.value = customSoftwareList.value.filter(s => s !== name)
+  softwareSelected.value = softwareSelected.value.filter(s => s !== name)
+}
 
 const taskTypes = [
   { value: 'install_openresty', label: '安装 OpenResty' },
@@ -261,6 +360,7 @@ const taskTypes = [
   { value: 'stop', label: '停止' },
   { value: 'reload', label: 'Reload' },
   { value: 'statistic', label: '状态查询' },
+  { value: 'software_check', label: '软件查询' },
 ]
 
 const columns = [
@@ -275,6 +375,40 @@ const columns = [
 
 function typeLabel(t: string): string {
   return taskTypes.find((x) => x.value === t)?.label || t
+}
+
+// ── software_check matrix ──
+
+interface SoftwareCell { status: 'installed' | 'missing' | 'failed'; pkg: string; ver: string }
+
+function softwareMatrixRows(): string[] {
+  const items = detail.value?.items || []
+  const rows = new Set<string>()
+  for (const item of items) {
+    try {
+      const data = typeof item.stdout === 'string' ? JSON.parse(item.stdout) : (item.stdout || {})
+      Object.keys(data).forEach(k => rows.add(k))
+    } catch { /* ignore */ }
+  }
+  return Array.from(rows)
+}
+
+function softwareCell(item: NodeTaskItemData, soft: string): SoftwareCell | null {
+  try {
+    const data = typeof item.stdout === 'string' ? JSON.parse(item.stdout) : (item.stdout || {})
+    const entry = data[soft]
+    if (!entry) return null
+    if (item.status !== 'success' && entry.installed === undefined) {
+      return { status: 'failed', pkg: '', ver: '' }
+    }
+    return {
+      status: entry.installed ? 'installed' : 'missing',
+      pkg: entry.pkg || '',
+      ver: entry.ver || '',
+    }
+  } catch {
+    return null
+  }
 }
 
 function statusLabel(s: string): string {
@@ -742,6 +876,9 @@ async function submitCreateTask() {
   }
   if (createTaskType.value === 'edge_pack_rebase') {
     params.version = selectedPackVersion.value
+  }
+  if (createTaskType.value === 'software_check') {
+    params.software_list = softwareSelected.value
   }
   try {
     await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params)

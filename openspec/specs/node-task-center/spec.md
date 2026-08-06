@@ -33,6 +33,25 @@
 - **THEN** 系统 SHALL 在 `install_task_node` 持久化 `log_file`（相对路径）、`log_line_count`（行数）、`stdout_tail`（末尾最多 8KB 摘要）
 - **AND** `stdout` 字段 SHALL 存储摘要尾部内容以保持 API 兼容
 
+#### Scenario: 同任务同节点唯一性约束
+- **WHEN** 系统尝试在同一任务下为同一节点插入第二条子任务记录
+- **THEN** 数据库 SHALL 拒绝该插入（`install_task_node` 对 `(task_id, node_id)` 有唯一约束，触发完整性错误）
+- **AND** 同一任务的子任务表中 SHALL NOT 出现同 node_id 的多条记录
+
+#### Scenario: 同参数防重复创建
+- **WHEN** 用户创建节点任务，且存在相同 `(cluster_id, task_type, node_ids, params)` 的 pending/running 任务
+- **THEN** 系统 SHALL 拒绝新建并提示「相同参数的节点任务已存在，请勿重复创建」
+- **AND** 已终态（success/failed/cancelled）的相同参数任务 SHALL NOT 阻止重新创建
+
+#### Scenario: 任务节点集合调整须先删后插
+- **WHEN** 未来实现任务节点集合调整（增删节点）
+- **THEN** 调整 SHALL 采用「先删除旧 item 再插入新 item」的方式（同 node_id 二次插入会被唯一约束拒绝，禁止追加式修改）
+
+#### Scenario: 多服务多节点不受影响
+- **WHEN** 同一台服务器（同一 IP）上运行多个服务（多个 node_id，各自独立端口/edge_path）
+- **THEN** 每个服务 SHALL 以独立 node_id 参与任务，`(task_id, node_id)` 组合各不相同
+- **AND** 唯一约束 SHALL NOT 阻止多服务同时加入同一任务
+
 #### Scenario: 字段迁移自愈（ps_node.openresty_path）
 - **WHEN** 数据库存在遗留 `ps_node.edge_install_path` 列（含数据）且 `openresty_path` 列已存在
 - **THEN** 启动迁移 SHALL 将 `edge_install_path` 数据回填到 `openresty_path`（仅回填新列为空的行，不覆盖已有数据）
@@ -72,6 +91,12 @@
 - **THEN** 系统 SHALL 返回 201 与任务 id
 - **AND** 任务 SHALL 立即以 pending 状态进入执行队列
 - **AND** params 缺省字段 SHALL 按任务类型取节点记录值：运维类任务（start/stop/reload/check/statistic）的 prefix 缺省取 `node.edge_path`（edge 程序前缀），安装类任务（install_openresty/install_edge/associate_new_openresty/edge_pack_add）的 prefix 缺省取 `node.openresty_path`（openresty 安装路径）
+
+#### Scenario: 创建任务窗口节点全选
+- **WHEN** 用户在节点任务创建窗口选择目标节点
+- **THEN** 节点列表上方 SHALL 提供「全选」「取消全选」链接与「已选择 N / M 个节点」实时计数
+- **AND** 「全选」SHALL 选中全部节点，「取消全选」SHALL 清空选择
+- **AND** 计数 SHALL 随勾选实时更新
 
 #### Scenario: 查询任务列表
 - **WHEN** 用户 GET `/node-tasks`（全局）或 GET `/clusters/{cluster_id}/node-tasks`（集群内）
@@ -143,6 +168,21 @@
 - **THEN** 每个节点子任务 SHALL 调用 `nginx_cmd_run`（start/stop/reload/check）或 `edge_statistic`（statistic），参数（prefix/ports）逐节点取自节点记录
 - **AND** prefix 缺省 SHALL 取 `node.edge_path`（edge 程序前缀），与单节点端点一致；用户显式传入 prefix 时 SHALL 以用户参数为准
 - **AND** 多节点任务由后端引擎并发驱动（替代前端 runWithConcurrency 编排）
+
+#### Scenario: 软件查询操作任务化
+- **WHEN** 用户创建 task_type 为 `software_check` 的任务，params 含 `software_list`（逗号分隔软件名/命令名）
+- **THEN** 每个节点子任务 SHALL 调用 `software_check_run` ansible tag，对每个软件执行三通道检测（`command -v` 命令存在性 + `rpm -qf`/`dpkg -S` 包版本 + `--version`/`-v`/`-V` 命令自报版本）
+- **AND** 检测 SHALL 兼容多种 Linux 发行版（RHEL/CentOS/Ubuntu/Kylin/凝思等）与多种架构（x86/c86/ARM）
+- **AND** 每个软件 SHALL 输出包版本与命令版本（均可能为空但"已安装"判定基于命令存在）
+- **AND** 结构化结果 SHALL 写入子任务 stdout（如 `{"nc": {"installed": true, "pkg": "...", "ver": "..."}}`），前端任务详情「软件查询」Tab 以软件×节点矩阵展示
+- **AND** 软件名 SHALL 直接作为检测命令名（如 gcc-c++ 对应 g++、bind-utils 对应 dig）；未安装软件 SHALL 标记为未安装而非报错
+- **AND** 查询结果 SHALL 仅本次任务展示，不持久化
+- **WHEN** ansible 执行失败（如节点仅 Python 3.7 无法运行 ansible 模块）
+- **THEN** 系统 SHALL 降级为直连 SSH 执行 software_check.sh（绕过 ansible 模块的 Python 3.8+ 要求），返回同样的结构化结果
+- **WHEN** ansible 与 SSH 均失败（节点不可达等）
+- **THEN** 前端矩阵 SHALL 显示「检测失败」（区别于「未安装」），避免误判
+- **WHEN** 自定义软件名为 shell 内建命令（如 `cd`，`command -v` 为空）
+- **THEN** 脚本 SHALL 优雅处理（跳过 rpm/dpkg 查询，不报错）
 
 #### Scenario: 环境类操作任务化
 - **WHEN** 用户创建 task_type 为 `edge_env_deploy` 的任务

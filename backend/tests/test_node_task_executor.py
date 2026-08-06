@@ -177,3 +177,87 @@ class TestExecuteNodeDispatch:
             })()
             with pytest.raises(ValueError, match="unknown task type"):
                 await svc._execute_node(5, _make_item(), {}, None, lambda e: None)
+
+
+class TestSoftwareCheck:
+    """software_check: output parsing, ansible branch, SSH fallback."""
+
+    SAMPLE_OUTPUT = (
+        "OK|nc|nmap-7.80|x.x\n"
+        "OK|vim|vim-enhanced-9.0|VIM 9.0\n"
+        "MISS|dos2unix|未安装||\n"
+    )
+
+    def test_parse_software_check_output(self):
+        """Parse OK|/MISS| lines into a structured dict (pkg + ver)."""
+        from app.services.node_task_service import parse_software_check_output
+
+        result = parse_software_check_output(self.SAMPLE_OUTPUT)
+        assert result["nc"] == {"installed": True, "pkg": "nmap-7.80", "ver": "x.x"}
+        assert result["vim"] == {"installed": True, "pkg": "vim-enhanced-9.0", "ver": "VIM 9.0"}
+        assert result["dos2unix"] == {"installed": False, "pkg": "未安装", "ver": ""}
+
+    def test_parse_software_check_output_empty(self):
+        """Empty output should yield empty dict."""
+        from app.services.node_task_service import parse_software_check_output
+
+        assert parse_software_check_output("") == {}
+
+    @pytest.mark.asyncio
+    async def test_software_check_uses_ansible_and_parses(self, mock_task_type):
+        """software_check should call run_playbook with software_list extravar and return parsed JSON stdout."""
+        mock_task_type.return_value = "software_check"
+        ansible = AsyncMock()
+        ansible.run_playbook = AsyncMock(return_value={
+            "rc": 0, "status": "successful",
+            "shell_stdout": self.SAMPLE_OUTPUT,
+            "stdout": "PLAY [Run edge] ...",
+        })
+        svc = NodeTaskService(_ansible=ansible, db_factory=lambda: None)
+        svc._executor = svc._execute_node
+
+        item = _make_item()
+        with patch("app.services.node_task_service._resolve_node") as mock_resolve:
+            mock_resolve.return_value = type("N", (), {
+                "ip": "10.0.0.5", "edge_path": "/work/edge",
+                "edge_install_path": None, "openresty_path": None, "management_port": 9180,
+            })()
+            result = await svc._execute_node(
+                5, item, {"software_list": ["nc", "vim", "dos2unix"]}, None, lambda e: None,
+            )
+
+        call = ansible.run_playbook.await_args
+        assert call.args[1] == "software_check_run"
+        assert call.args[2]["software_list"] == "nc,vim,dos2unix"
+        assert result["rc"] == 0
+        import json
+        parsed = json.loads(result["stdout"])
+        assert parsed["nc"]["installed"] is True
+        assert parsed["dos2unix"]["installed"] is False
+
+    @pytest.mark.asyncio
+    async def test_software_check_falls_back_to_ssh(self, mock_task_type):
+        """When ansible fails (rc != 0), fall back to direct SSH execution."""
+        mock_task_type.return_value = "software_check"
+        ansible = AsyncMock()
+        ansible.run_playbook = AsyncMock(return_value={"rc": 1, "status": "failed", "shell_stdout": ""})
+        svc = NodeTaskService(_ansible=ansible, db_factory=lambda: None)
+        svc._executor = svc._execute_node
+
+        item = _make_item()
+        with patch("app.services.node_task_service._resolve_node") as mock_resolve, \
+             patch("app.services.ansible_service._run_ssh_with_fallback") as mock_ssh:
+            mock_resolve.return_value = type("N", (), {
+                "ip": "10.0.0.5", "edge_path": "/work/edge",
+                "edge_install_path": None, "openresty_path": None, "management_port": 9180,
+            })()
+            mock_ssh.return_value = (0, self.SAMPLE_OUTPUT, "")
+            result = await svc._execute_node(
+                5, item, {"software_list": ["nc", "vim"]}, None, lambda e: None,
+            )
+
+        assert mock_ssh.await_count == 1
+        assert result["rc"] == 0
+        import json
+        parsed = json.loads(result["stdout"])
+        assert parsed["nc"]["installed"] is True

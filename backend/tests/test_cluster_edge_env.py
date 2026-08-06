@@ -264,3 +264,94 @@ class TestEdgeEnvReadStream:
                     last_event = events[-1]
                     assert '"type": "content"' in last_event
                     assert '"content"' in last_event
+
+
+class TestEdgeEnvDeployFailureDetection:
+    """Node with ansible rc != 0 must be marked failed (not success)."""
+
+    async def test_deploy_marks_node_failed_when_ansible_rc_nonzero(self, test_db):
+        """rc != 0 in _run_ansible_stream's final event must mark node failed."""
+        import json
+        c = Cluster(name="rc-test", status=1)
+        test_db.add(c)
+        await test_db.commit()
+        await test_db.refresh(c)
+        n1 = Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1)
+        test_db.add(n1)
+        await test_db.commit()
+        await test_db.refresh(n1)
+
+        async def fake_stream_rc1(*args, **kwargs):
+            yield "data: {\"line\": \"TASK [run]\"}\n\n"
+            yield "data: {\"rc\": 1, \"status\": \"failed\", \"percent\": 100}\n\n"
+
+        mock_svc = MagicMock(spec=AnsibleRunnerService)
+        app = _make_app(test_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_rc1),
+            patch("app.api.v1.cluster_edge_env._ansible_service", mock_svc),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    assert resp.status_code == 200
+                    node_done = None
+                    complete = None
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = json.loads(line[6:])
+                        if data.get("type") == "node_done":
+                            node_done = data
+                        elif data.get("type") == "complete":
+                            complete = data
+                    assert node_done is not None, "Should emit node_done"
+                    assert node_done["status"] == "failed", f"rc!=0 node must be failed, got {node_done['status']}"
+                    assert complete["status"] == "all_failed", f"single failed node -> all_failed, got {complete['status']}"
+
+    async def test_deploy_mixed_nodes_marks_partial(self, test_db):
+        """One node rc=0, another rc=1 -> overall status partial."""
+        import json
+        c = Cluster(name="mix-test", status=1)
+        test_db.add(c)
+        await test_db.commit()
+        await test_db.refresh(c)
+        n1 = Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1)
+        n2 = Node(cluster_id=c.id, ip="192.168.1.2", service_port=80, management_port=9990, edge_path="/data/edge", status=1)
+        test_db.add_all([n1, n2])
+        await test_db.commit()
+        await test_db.refresh(n1)
+        await test_db.refresh(n2)
+
+        async def fake_stream(*args, **kwargs):
+            yield "data: {\"rc\": 0, \"status\": \"successful\", \"percent\": 100}\n\n"
+
+        mock_svc = MagicMock(spec=AnsibleRunnerService)
+        app = _make_app(test_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+        rc_values = iter([0, 1])
+        real_run_playbook = mock_svc.run_playbook
+
+        async def fake_stream_rc(*args, **kwargs):
+            rc = next(rc_values)
+            yield f"data: {{\"rc\": {rc}, \"status\": \"{'successful' if rc == 0 else 'failed'}\", \"percent\": 100}}\n\n"
+
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_rc),
+            patch("app.api.v1.cluster_edge_env._ansible_service", mock_svc),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    assert resp.status_code == 200
+                    done_statuses = []
+                    complete = None
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = json.loads(line[6:])
+                        if data.get("type") == "node_done":
+                            done_statuses.append(data["status"])
+                        elif data.get("type") == "complete":
+                            complete = data
+                    assert sorted(done_statuses) == ["failed", "success"]
+                    assert complete["status"] == "partial", f"mixed nodes -> partial, got {complete['status']}"

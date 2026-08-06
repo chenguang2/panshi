@@ -260,3 +260,49 @@ class TestConcurrency:
 
         assert max_active <= 2, f"semaphore not honored (max_active={max_active})"
         assert max_active >= 2, "expected parallelism across distinct nodes"
+
+
+class TestDuplicatePrevention:
+    """B2: create_task must reject duplicate in-flight tasks with same params."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_pending_task_rejected(self, test_db, make_service):
+        """Same (cluster_id, task_type, node_ids, params) pending task must be rejected."""
+        async def executor(node, item, params, cancel_event, on_log):
+            await asyncio.sleep(0.05)
+            return {"rc": 0}
+
+        svc = make_service(executor)
+        task1 = await svc.create_task(
+            db=test_db, cluster_id=1, task_type="start", node_ids=[1, 2], params={},
+        )
+        assert task1.status == "pending"
+
+        with pytest.raises(ValueError, match="已存在"):
+            await svc.create_task(
+                db=test_db, cluster_id=1, task_type="start", node_ids=[2, 1], params={},
+            )
+
+        await svc.wait_completed(task1.id)
+        svc.shutdown_sync()
+        await asyncio.sleep(0.1)
+
+    @pytest.mark.asyncio
+    async def test_same_params_terminal_task_allowed(self, test_db, make_service):
+        """Same params but task already terminal must allow re-creation."""
+        async def executor(node, item, params, cancel_event, on_log):
+            return {"rc": 0}
+
+        svc = make_service(executor)
+        task1 = await svc.create_task(
+            db=test_db, cluster_id=1, task_type="start", node_ids=[1], params={},
+        )
+        await svc.wait_completed(task1.id)
+        await test_db.refresh(task1)
+        assert task1.status in ("success", "failed", "partial", "cancelled")
+
+        task2 = await svc.create_task(
+            db=test_db, cluster_id=1, task_type="start", node_ids=[1], params={},
+        )
+        assert task2.id != task1.id
+        await svc.wait_completed(task2.id)

@@ -3,7 +3,11 @@ all:
     edge_cluster:
       hosts:
         192.168.0.13:
-        192.168.0.14:               
+          ansible_ssh_user: jboss
+        192.168.0.14:     
+          ansible_ssh_user: jboss111
+        192.168.0.15:     
+          ansible_ssh_user: jboss
         192.168.100.114:      
         192.168.100.44:
           ansible_ssh_user: jboss

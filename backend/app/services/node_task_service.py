@@ -13,6 +13,7 @@ node-task-center API. Design decisions (openspec/changes/node-operation-task-cen
 """
 
 import asyncio
+import json
 import logging
 import queue as _queue
 import threading
@@ -61,6 +62,38 @@ class NodeTaskService:
 
     # ── public API ──────────────────────────────────────────────
 
+    async def _assert_no_duplicate_inflight(
+        self,
+        db: AsyncSession,
+        cluster_id: int,
+        task_type: str,
+        node_ids: list[int],
+        params: dict | None,
+    ) -> None:
+        """Reject creating an in-flight task with the same params (B2)."""
+        stmt = select(NodeTask.id).where(
+            NodeTask.cluster_id == cluster_id,
+            NodeTask.task_type == task_type,
+            NodeTask.status.in_(["pending", "running"]),
+        )
+        task_ids = (await db.execute(stmt)).scalars().all()
+        if not task_ids:
+            return
+        items = (
+            await db.execute(
+                select(NodeTaskItem.node_id).where(NodeTaskItem.task_id.in_(task_ids))
+            )
+        ).scalars().all()
+        existing_node_ids = set(items)
+        same_params = False
+        for tid in task_ids:
+            task = await db.get(NodeTask, tid)
+            if task is not None and task.get_params() == (params or {}):
+                same_params = True
+                break
+        if existing_node_ids and existing_node_ids == set(node_ids) and same_params:
+            raise ValueError("相同参数的节点任务已存在，请勿重复创建")
+
     async def create_task(
         self,
         db: AsyncSession,
@@ -72,6 +105,7 @@ class NodeTaskService:
         created_by: int | None = None,
     ) -> NodeTask:
         """Persist a new task (pending) with node items and start execution."""
+        await self._assert_no_duplicate_inflight(db, cluster_id, task_type, node_ids, params)
         task = NodeTask(
             cluster_id=cluster_id,
             task_type=task_type,
@@ -348,7 +382,7 @@ class NodeTaskService:
         from app.core.database import AsyncSessionLocal
         return AsyncSessionLocal()
 
-    # ── production executor (injected in tests) ─────────────────
+# ── production executor (injected in tests) ─────────────────
 
     async def _execute_node(
         self,
@@ -385,6 +419,11 @@ class NodeTaskService:
             if self._ansible is None:
                 raise ValueError("NodeTaskService has no ansible instance")
             return await self._ansible.statistic(node.ip, prefix, ports)
+
+        if task_type == "software_check":
+            software_list = params.get("software_list") or []
+            cmd_str = ",".join(software_list)
+            return await self._software_check_node(node, cmd_str, on_log)
 
         if task_type == "install_openresty":
             srcpath = f"{_SOFT_DIR()}"
@@ -453,6 +492,62 @@ class NodeTaskService:
 
         raise ValueError(f"unknown task type: {task_type}")
 
+    async def _software_check_node(self, node, cmd_str: str, on_log) -> dict:
+        """Run software_check via ansible, falling back to direct SSH on failure."""
+        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, PRIVATE_DATA_DIR
+
+        if self._ansible is not None:
+            result = await self._ansible.run_playbook(
+                node.ip, "software_check_run",
+                {"software_list": cmd_str}, on_progress=on_log,
+            )
+            raw = result.get("shell_stdout") or ""
+            if result.get("rc") == 0 and raw:
+                return {
+                    "rc": 0, "status": "successful",
+                    "stdout": json.dumps(parse_software_check_output(raw), ensure_ascii=False),
+                    "stderr": result.get("stderr", ""),
+                }
+            on_log({"stdout": "ansible 软件查询失败，降级为 SSH 直连执行"})
+
+        ssh_user = get_ssh_user(node.ip)
+        script_path = Path(PRIVATE_DATA_DIR) / "cmd_scripts" / "software_check.sh"
+        script_content = script_path.read_text(encoding="utf-8")
+        rc, stdout, stderr = await _run_ssh_with_fallback(
+            node.ip, ssh_user, f"bash -s {cmd_str} <<'SOFT_CHECK_EOF'\n{script_content}\nSOFT_CHECK_EOF",
+            on_line=on_log,
+        )
+        return {
+            "rc": rc, "status": "successful" if rc == 0 else "failed",
+            "stdout": json.dumps(parse_software_check_output(stdout), ensure_ascii=False) if rc == 0 else stdout,
+            "stderr": stderr,
+        }
+
+
+
+def parse_software_check_output(raw: str) -> dict:
+    """Parse software_check.sh output lines into a structured dict.
+    Input lines: ``OK|<cmd>|<pkg>|<ver>`` or ``MISS|<cmd>|未安装||``.
+    Returns ``{cmd: {"installed": bool, "pkg": str, "ver": str}}``.
+    """
+    result: dict = {}
+    if not raw:
+        return result
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or "|" not in line:
+            continue
+        parts = line.split("|")
+        if len(parts) < 3:
+            continue
+        status, name = parts[0], parts[1]
+        if status == "OK":
+            pkg = parts[2] if len(parts) > 2 else ""
+            ver = parts[3] if len(parts) > 3 else ""
+            result[name] = {"installed": True, "pkg": pkg, "ver": ver}
+        elif status == "MISS":
+            result[name] = {"installed": False, "pkg": "未安装", "ver": ""}
+    return result
 
 # ── module-level singleton (V1/V6) ────────────────────────────────────
 # Reuses the shared AnsibleRunnerService instance so the max_playbooks

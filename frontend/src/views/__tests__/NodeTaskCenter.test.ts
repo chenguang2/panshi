@@ -560,6 +560,148 @@ describe('NodeTaskCenter create-task flow', () => {
   })
 })
 
+describe('NodeTaskCenter create-task node selection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  async function mountWithNodes() {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 3, items: [
+        { id: 10, ip: '10.0.0.1', edge_path: '/edge/a' },
+        { id: 11, ip: '10.0.0.2', edge_path: '/edge/b' },
+        { id: 12, ip: '10.0.0.3', edge_path: '/edge/c' },
+      ] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await flushPromises()
+    // 选集群
+    const bodySelects = Array.from(document.querySelectorAll('select'))
+    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('selectAllCreateNodes selects all and shows count', async () => {
+    const wrapper = await mountWithNodes()
+    const vm = wrapper.vm as any
+    expect(vm.createNodes.length).toBe(3)
+    expect(vm.createNodeIds.length).toBe(0)
+    vm.selectAllCreateNodes()
+    expect(vm.createNodeIds.length).toBe(3)
+    expect(vm.createNodeIds).toContain(12)
+    await flushPromises()
+    const text = document.body.textContent || ''
+    expect(text).toContain('已选择 3 / 3 个节点')
+    wrapper.unmount()
+  })
+
+  it('clearAllCreateNodes deselects all', async () => {
+    const wrapper = await mountWithNodes()
+    const vm = wrapper.vm as any
+    vm.selectAllCreateNodes()
+    vm.clearAllCreateNodes()
+    expect(vm.createNodeIds.length).toBe(0)
+    const text = document.body.textContent || ''
+    expect(text).toContain('已选择 0 / 3 个节点')
+    wrapper.unmount()
+  })
+})
+
+describe('NodeTaskCenter software_check flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('shows software list selector and passes software_list param', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await flushPromises()
+
+    let bodySelects = Array.from(document.querySelectorAll('select'))
+    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    let typeSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'task-type')
+    typeSel!.value = 'software_check'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.body.textContent || '').toContain('软件列表')
+
+    const nodeInput = document.querySelector('input[type="checkbox"]') as HTMLInputElement
+    nodeInput!.checked = true
+    nodeInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    createBtn!.click()
+    await flushPromises()
+
+    const call = vi.mocked(api.post).mock.calls[0]
+    const body = call[1] as { task_type: string; params: Record<string, unknown> }
+    expect(body.task_type).toBe('software_check')
+    expect(Array.isArray(body.params.software_list)).toBe(true)
+    expect((body.params.software_list as string[])).toContain('nc')
+    expect((body.params.software_list as string[])).toContain('vim')
+    wrapper.unmount()
+  })
+
+  it('renders software x node matrix for a software_check task detail', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 1, items: [makeTask({ id: 1, task_type: 'software_check', status: 'success' })] } })
+      if (url === '/node-tasks/1') {
+        return Promise.resolve({ data: {
+          id: 1, task_type: 'software_check', status: 'success', params: {},
+          success_nodes: 1, failed_nodes: 0, cancelled_nodes: 0, total_nodes: 1,
+          items: [
+            { id: 1, node_id: 10, ip: '10.0.0.10', status: 'success', rc: 0, logs: [],
+              stdout: JSON.stringify({
+                nc: { installed: true, pkg: 'nmap-7.80', ver: 'Ncat 7.80' },
+                vim: { installed: true, pkg: 'vim-9.0', ver: 'VIM 9.0' },
+                dos2unix: { installed: false, pkg: '未安装', ver: '' },
+              }) },
+          ],
+        } })
+      }
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('详情'))
+    detailBtn!.trigger('click')
+    await flushPromises()
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('软件查询结果')
+    expect(text).toContain('nmap-7.80')
+    expect(text).toContain('✗ 未安装')
+    wrapper.unmount()
+  })
+})
+
 describe('NodeTaskCenter live log streaming', () => {
   class MockEventSource {
     static instances: MockEventSource[] = []

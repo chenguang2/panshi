@@ -59,7 +59,7 @@
             <div>正在连接远程主机...</div>
           </div>
           <div v-if="readLogs.length > 0" class="ee-log-area">
-            <div v-for="(log, i) in readLogs" :key="i" class="ee-log-line">{{ log }}</div>
+            <div v-for="(log, i) in readLogs" :key="i" class="ee-log-line" v-html="ansiToHtml(log)"></div>
           </div>
           <div v-if="readError" class="ee-node-error" style="margin-top:8px">{{ readError }}</div>
         </div>
@@ -128,6 +128,13 @@
           <button class="modal-close" @click="publishNodeModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted);">
+            <div>
+              <a style="cursor:pointer;margin-right:12px;color:var(--accent);" @click="selectAllPublishNodes">全选</a>
+              <a style="cursor:pointer;color:var(--accent);" @click="clearAllPublishNodes">取消全选</a>
+            </div>
+            <span>已选择 {{ selectedPublishNodeIds.length }} / {{ allNodes.length }} 个节点</span>
+          </div>
           <div class="publish-node-list">
             <div
               v-for="n in allNodes"
@@ -158,7 +165,7 @@
           <button class="modal-close" @click="closePublishProgress">&times;</button>
         </div>
         <div class="modal-body">
-          <div v-if="nodeResults.length === 0 && publishing" class="ee-deploying">
+          <div v-if="nodeResults.length === 0 && publishing && !publishResult" class="ee-deploying">
             <div class="ee-spinner"></div>
             <div>正在连接远程节点...</div>
           </div>
@@ -172,10 +179,13 @@
             <div v-if="nodeResult.error" class="ee-node-error">{{ nodeResult.error }}</div>
           </div>
           <div v-if="publishLogs.length > 0" class="ee-log-area">
-            <div v-for="(log, i) in publishLogs" :key="i" class="ee-log-line">{{ log }}</div>
+            <div v-for="(log, i) in publishLogs" :key="i" class="ee-log-line" v-html="ansiToHtml(log)"></div>
           </div>
           <div v-if="publishResult" class="ee-deploy-result">
-            整体状态: <strong>{{ publishResult.status === 'all_success' ? '全部成功' : publishResult.status === 'partial' ? '部分成功' : '全部失败' }}</strong>
+            整体状态: <strong>{{ publishResult.status === 'all_success' ? '全部成功' : publishResult.status === 'all_failed' ? '全部失败' : '部分成功' }}</strong>
+            <span v-if="deploySummary" style="margin-left:8px;color:var(--muted);">
+              成功 {{ deploySummary.success }} / 失败 {{ deploySummary.failed }}
+            </span>
           </div>
         </div>
         <div class="modal-footer">
@@ -209,6 +219,7 @@ import { useInstallStream } from '@/composables/useInstallStream'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
+import { ansiToHtml } from '@/utils/ansi'
 
 const route = useRoute()
 
@@ -297,6 +308,14 @@ const publishLogs = ref<string[]>([])
 
 const installStream = useInstallStream()
 const publishing = computed(() => installStream.installing.value)
+
+const deploySummary = computed(() => {
+  const results = publishResult.value?.node_results || nodeResults.value
+  if (!Array.isArray(results) || results.length === 0) return null
+  const success = results.filter((r: any) => r.status === 'success').length
+  const failed = results.filter((r: any) => r.status === 'failed').length
+  return { success, failed }
+})
 onUnmounted(() => { installStream.cancel(); readAbort?.abort() })
 
 const noActiveNodes = computed(() => {
@@ -527,6 +546,14 @@ function togglePublishNode(n: any) {
   else selectedPublishNodeIds.value.splice(idx, 1)
 }
 
+function selectAllPublishNodes() {
+  selectedPublishNodeIds.value = allNodes.value.map((n: any) => n.id)
+}
+
+function clearAllPublishNodes() {
+  selectedPublishNodeIds.value = []
+}
+
 async function executePublish() {
   if (!selectedClusterId.value || selectedPublishNodeIds.value.length === 0) return
   publishNodeModalVisible.value = false
@@ -552,12 +579,16 @@ async function executePublish() {
           publishResult.value = data
           savedContent.value = editorContent.value
           message.success('发布完成')
+          installStream.forceComplete()
         }
       } catch { /* ansible log text */ }
     },
     onProgress() { /* no-op */ },
     onComplete(rc, _status) {
-      if (!publishResult.value) {
+      // 兜底：仅在流异常结束时（未收到 complete 事件）设置状态。
+      // rc==0 的中途节点事件不设 publishResult（整体成败由 complete 事件权威判定），
+      // 避免中途节点成功误显"全部成功"。
+      if (!publishResult.value && rc !== 0) {
         publishResult.value = { status: rc === 0 ? 'all_success' : 'all_failed' }
       }
     },
