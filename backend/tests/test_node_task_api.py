@@ -60,6 +60,31 @@ class TestNodeTaskApi:
         assert resp.status_code == 422
         mock_service.create_task.assert_not_awaited()
 
+    def test_create_cmd_exec_task_accepts_cmd_params(self, client, mock_service):
+        """cmd_exec 类型 + cmd 参数应被接受（TaskType 需包含 cmd_exec）."""
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        fake_task = SimpleNamespace(
+            id=43, cluster_id=1, task_type="cmd_exec", status="pending",
+            params={"cmd": "ls -la /tmp"}, total_nodes=1, success_nodes=0,
+            failed_nodes=0, cancelled_nodes=0, created_by=None,
+            created_at=datetime.utcnow(), started_at=None, finished_at=None,
+        )
+        fake_task.get_params = lambda: fake_task.params
+        mock_service.create_task.return_value = fake_task
+
+        resp = client.post("/api/v1/clusters/1/node-tasks", json={
+            "task_type": "cmd_exec",
+            "node_ids": [1],
+            "params": {"cmd": "ls -la /tmp", "security": "blacklist", "timeout": 30},
+        })
+        assert resp.status_code in (200, 201)
+        assert mock_service.create_task.await_count == 1
+        call = mock_service.create_task.await_args
+        assert call.kwargs["task_type"] == "cmd_exec"
+        assert call.kwargs["params"]["cmd"] == "ls -la /tmp"
+
     def test_create_task_rejects_empty_nodes(self, client, mock_service):
         """POST with empty node_ids should return 422."""
         resp = client.post("/api/v1/clusters/1/node-tasks", json={

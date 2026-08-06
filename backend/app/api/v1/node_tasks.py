@@ -36,6 +36,7 @@ TaskType = Literal[
     "statistic",
     "edge_env_deploy",
     "software_check",
+    "cmd_exec",
 ]
 
 

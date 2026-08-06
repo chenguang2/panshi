@@ -254,6 +254,42 @@
                 </span>
               </div>
             </div>
+            <div v-if="createTaskType === 'cmd_exec'" style="margin-bottom:12px;">
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-bottom:6px;">命令</label>
+              <input v-model="cmdCommand" data-test="cmd-command" type="text" placeholder="如: ls -la /etc" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);" />
+              <div style="display:flex;gap:12px;margin-top:10px;">
+                <label v-for="s in cmdSecurityOptions" :key="s.value" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;">
+                  <input type="radio" :value="s.value" v-model="cmdSecurity" style="accent-color:var(--accent,#4096ff);">
+                  <span>{{ s.label }}</span>
+                </label>
+              </div>
+              <div v-if="cmdSecurity === 'whitelist'" style="margin-top:10px;">
+                <div style="font-size:13px;color:var(--muted,#888);margin-bottom:6px;">白名单命令（内置只读命令 + 本次任务添加）</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                  <span
+                    v-for="c in cmdBuiltinWhitelist"
+                    :key="c"
+                    style="font-size:12px;padding:3px 8px;border:1px solid var(--border,#e5e5e5);border-radius:12px;"
+                  >{{ c }}</span>
+                </div>
+                <div v-if="cmdCustomWhitelist.length" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                  <span
+                    v-for="c in cmdCustomWhitelist"
+                    :key="c"
+                    style="font-size:12px;padding:3px 8px;border:1px solid var(--border,#e5e5e5);border-radius:12px;background:var(--bg,#f8f8f8);"
+                  >
+                    {{ c }}
+                    <a style="color:var(--danger,#e5484d);cursor:pointer;" @click="removeCmdWhitelist(c)">×</a>
+                  </span>
+                </div>
+                <div style="display:flex;gap:6px;">
+                  <input v-model="cmdWhitelistInput" data-test="cmd-whitelist-add" type="text" placeholder="输入命令名（如 mytool）" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);" @keydown.enter.prevent="addCmdWhitelist">
+                  <button class="btn btn-secondary btn-sm" @click="addCmdWhitelist">添加</button>
+                </div>
+              </div>
+              <label style="font-size:13px;color:var(--muted,#888);display:block;margin-top:10px;margin-bottom:6px;">超时（秒）</label>
+              <input v-model.number="cmdTimeout" data-test="cmd-timeout" type="number" min="1" max="600" style="width:120px;padding:6px 10px;border-radius:6px;border:1px solid var(--border,#e5e5e5);" />
+            </div>
             <div style="color:var(--muted,#999);font-size:12px;line-height:1.6;">
               任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
             </div>
@@ -262,7 +298,7 @@
             <button class="btn btn-secondary" @click="createVisible = false">取消</button>
             <button
               class="btn btn-primary"
-              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile) || (createTaskType === 'edge_pack_add' && !selectedPackFile) || (createTaskType === 'edge_pack_rebase' && !selectedPackVersion) || (createTaskType === 'software_check' && softwareSelected.length === 0 && customSoftwareList.length === 0)"
+              :disabled="!createClusterId || createNodeIds.length === 0 || !createTaskType || (createTaskType === 'install_openresty' && !createOpenrestyFile) || (createTaskType === 'edge_pack_add' && !selectedPackFile) || (createTaskType === 'edge_pack_rebase' && !selectedPackVersion) || (createTaskType === 'software_check' && softwareSelected.length === 0 && customSoftwareList.length === 0) || (createTaskType === 'cmd_exec' && !cmdCommand.trim())"
               @click="submitCreateTask"
             >创建</button>
           </div>
@@ -350,6 +386,40 @@ function removeCustomSoftware(name: string) {
   softwareSelected.value = softwareSelected.value.filter(s => s !== name)
 }
 
+// ── cmd_exec ──
+const cmdSecurityOptions = [
+  { value: 'blacklist', label: '黑名单' },
+  { value: 'whitelist', label: '白名单' },
+  { value: 'none', label: '不限制' },
+]
+const cmdBuiltinWhitelist = ['ls', 'ps', 'df', 'free', 'top', 'cat', 'head', 'tail', 'grep', 'wc', 'du', 'stat', 'whoami', 'hostname', 'uptime', 'date', 'uname']
+const cmdCommand = ref('')
+const cmdSecurity = ref('blacklist')
+const cmdTimeout = ref(30)
+const cmdWhitelistInput = ref('')
+const cmdCustomWhitelist = ref<string[]>([])
+
+function addCmdWhitelist() {
+  const name = cmdWhitelistInput.value.trim()
+  if (!name) return
+  if (!cmdBuiltinWhitelist.includes(name) && !cmdCustomWhitelist.value.includes(name)) {
+    cmdCustomWhitelist.value.push(name)
+  }
+  cmdWhitelistInput.value = ''
+}
+
+function removeCmdWhitelist(name: string) {
+  cmdCustomWhitelist.value = cmdCustomWhitelist.value.filter(c => c !== name)
+}
+
+function resetCmdExecForm() {
+  cmdCommand.value = ''
+  cmdSecurity.value = 'blacklist'
+  cmdTimeout.value = 30
+  cmdWhitelistInput.value = ''
+  cmdCustomWhitelist.value = []
+}
+
 const taskTypes = [
   { value: 'install_openresty', label: '安装 OpenResty' },
   { value: 'install_edge', label: '安装 Edge' },
@@ -361,6 +431,7 @@ const taskTypes = [
   { value: 'reload', label: 'Reload' },
   { value: 'statistic', label: '状态查询' },
   { value: 'software_check', label: '软件查询' },
+  { value: 'cmd_exec', label: '命令执行' },
 ]
 
 const columns = [
@@ -791,6 +862,7 @@ async function openCreateModal() {
   edgePackVersions.value = []
   selectedPackVersion.value = ''
   createNodes.value = []
+  resetCmdExecForm()
   if (clusters.value.length === 0) {
     const res = await api.get('/clusters', { params: { page_size: 100 } })
     clusters.value = res.data.items || res.data || []
@@ -879,6 +951,14 @@ async function submitCreateTask() {
   }
   if (createTaskType.value === 'software_check') {
     params.software_list = softwareSelected.value
+  }
+  if (createTaskType.value === 'cmd_exec') {
+    params.cmd = cmdCommand.value
+    params.security = cmdSecurity.value
+    params.timeout = cmdTimeout.value
+    if (cmdSecurity.value === 'whitelist' && cmdCustomWhitelist.value.length > 0) {
+      params.whitelist = [...cmdCustomWhitelist.value]
+    }
   }
   try {
     await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params)

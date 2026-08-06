@@ -872,3 +872,166 @@ describe('NodeTaskCenter live log streaming', () => {
     wrapper.unmount()
   })
 })
+
+
+describe('NodeTaskCenter cmd_exec flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  async function openCreateModal(wrapper: any) {
+    const btn = wrapper.findAll('button').find((b: any) => b.text().includes('新建任务'))
+    await btn!.trigger('click')
+    await flushPromises()
+  }
+
+  async function selectClusterAndType(wrapper: any, taskType: string) {
+    let bodySelects = Array.from(document.querySelectorAll('select'))
+    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    const typeSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'task-type')
+    typeSel!.value = taskType
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+  }
+
+  async function checkFirstNode() {
+    const nodeInput = document.querySelector('input[type="checkbox"]') as HTMLInputElement
+    nodeInput!.checked = true
+    nodeInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+  }
+
+  it('shows cmd_exec form with command input, strategy radios and timeout default 30', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await flushPromises()
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('命令执行')
+    expect(text).toContain('命令')
+    expect(text).toContain('黑名单')
+    expect(text).toContain('白名单')
+    expect(text).toContain('不限制')
+
+    const timeoutInput = Array.from(document.querySelectorAll('input')).find((i) => i.getAttribute('data-test') === 'cmd-timeout') as HTMLInputElement
+    expect(timeoutInput).toBeTruthy()
+    expect(timeoutInput.value).toBe('30')
+    wrapper.unmount()
+  })
+
+  it('submits params {cmd, security, timeout} for blacklist without whitelist', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await checkFirstNode()
+
+    const cmdInput = document.querySelector('input[data-test="cmd-command"]') as HTMLInputElement
+    cmdInput.value = 'ls -la /tmp'
+    cmdInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    createBtn!.click()
+    await flushPromises()
+
+    const call = vi.mocked(api.post).mock.calls[0]
+    const body = call[1] as { task_type: string; params: Record<string, unknown> }
+    expect(body.task_type).toBe('cmd_exec')
+    expect(body.params.cmd).toBe('ls -la /tmp')
+    expect(body.params.security).toBe('blacklist')
+    expect(body.params.timeout).toBe(30)
+    expect(body.params.whitelist).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('whitelist mode shows builtin commands and custom add, passes whitelist param', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await checkFirstNode()
+
+    const wlRadio = Array.from(document.querySelectorAll('input[type="radio"]')).find((r) => (r as HTMLInputElement).value === 'whitelist') as HTMLInputElement
+    wlRadio.checked = true
+    wlRadio.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('ls')
+    expect(text).toContain('ps')
+
+    const customInput = document.querySelector('input[data-test="cmd-whitelist-add"]') as HTMLInputElement
+    customInput.value = 'mytool'
+    customInput.dispatchEvent(new Event('input', { bubbles: true }))
+    const addBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('添加'))
+    addBtn!.click()
+    await flushPromises()
+    expect(document.body.textContent || '').toContain('mytool')
+
+    const cmdInput = document.querySelector('input[data-test="cmd-command"]') as HTMLInputElement
+    cmdInput.value = 'mytool --help'
+    cmdInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    createBtn!.click()
+    await flushPromises()
+
+    const call = vi.mocked(api.post).mock.calls[0]
+    const body = call[1] as { task_type: string; params: Record<string, unknown> }
+    expect(body.params.security).toBe('whitelist')
+    expect(body.params.whitelist).toEqual(['mytool'])
+    wrapper.unmount()
+  })
+
+  it('requires cmd before submitting', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await checkFirstNode()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    expect((createBtn as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+})

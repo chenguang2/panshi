@@ -445,6 +445,44 @@ class TestAnsibleRunnerService:
         assert last.endswith("\n\n")
 
 
+
+
+
+    async def test_run_playbook_extracts_shell_stdout_from_progress_events(self, service):
+        """run_playbook with on_progress must still extract shell_stdout from events.
+
+        Regression: when a custom event_handler is passed to ansible_runner.run,
+        result.events is not populated by ansible_runner, so shell_stdout came
+        back empty — breaking cmd_exec/software_check output parsing.
+        """
+        captured = {}
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        def fake_ansible_run(**kwargs):
+            captured["kwargs"] = kwargs
+            # simulate ansible_runner NOT populating events when a custom
+            # event_handler is installed — but the handler still gets called
+            eh = kwargs.get("event_handler")
+            if eh:
+                eh({"event": "runner_on_ok", "event_data": {"res": {"stdout": "ERROR: 命令含危险字符或危险命令\r\n"}}})
+            return fake_runner
+
+        with patch("ansible_runner.run", side_effect=fake_ansible_run):
+            result = await service.run_playbook(
+                ip="10.0.0.1",
+                tag="cmd_exec_run",
+                extravars={},
+                on_progress=lambda e: None,
+            )
+
+        assert "ERROR: 命令含危险字符或危险命令" in (result.get("shell_stdout") or "")
+
 class TestParseNginxStatus:
 
     def test_reload_success_indicates_running(self):
@@ -454,3 +492,4 @@ class TestParseNginxStatus:
         result = AnsibleRunnerService._parse_nginx_status(stdout)
         assert result["nginx_running"] is True
         assert result["nginx_status"] == "running"
+

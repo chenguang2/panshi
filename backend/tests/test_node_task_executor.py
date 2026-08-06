@@ -261,3 +261,130 @@ class TestSoftwareCheck:
         import json
         parsed = json.loads(result["stdout"])
         assert parsed["nc"]["installed"] is True
+
+
+class TestCmdExecParse:
+    """cmd_exec: parse_cmd_exec_output structured result parsing."""
+
+    def test_parse_success_output(self):
+        """Plain command output → {"status": "ok", "stdout": ..., "error": None}."""
+        from app.services.node_task_service import parse_cmd_exec_output
+
+        result = parse_cmd_exec_output("total 8\ndrwxr-xr-x 2 root root 4096 Aug  6 10:00 .\n")
+        assert result["status"] == "ok"
+        assert "drwxr-xr-x" in result["stdout"]
+        assert result["error"] is None
+
+    def test_parse_timeout(self):
+        """超时（评审确认）：脚本输出 '命令超时' → status=timeout."""
+        from app.services.node_task_service import parse_cmd_exec_output
+
+        result = parse_cmd_exec_output("ERROR: 命令超时（>30 秒）")
+        assert result["status"] == "timeout"
+        assert "超时" in result["error"]
+
+    def test_parse_failure(self):
+        """exit 码失败 → status=failed + error 含退出码."""
+        from app.services.node_task_service import parse_cmd_exec_output
+
+        result = parse_cmd_exec_output("ERROR: 命令执行失败 (exit=3)")
+        assert result["status"] == "failed"
+        assert "exit=3" in result["error"]
+
+    def test_parse_blocked(self):
+        """黑名单/白名单拦截 → status=blocked."""
+        from app.services.node_task_service import parse_cmd_exec_output
+
+        result = parse_cmd_exec_output("ERROR: 命令含危险字符或危险命令")
+        assert result["status"] == "blocked"
+
+        result2 = parse_cmd_exec_output("ERROR: 命令 whoami 不在白名单")
+        assert result2["status"] == "blocked"
+
+    def test_parse_empty(self):
+        """空输出 → 空结构."""
+        from app.services.node_task_service import parse_cmd_exec_output
+
+        result = parse_cmd_exec_output("")
+        assert result["status"] == "ok"
+        assert result["stdout"] == ""
+
+
+class TestCmdExecDispatch:
+    """cmd_exec: _execute_node dispatches with base64-encoded extravars."""
+
+    @pytest.mark.asyncio
+    async def test_cmd_exec_encodes_and_calls_run_playbook(self, mock_task_type):
+        """task_type=cmd_exec → run_playbook('cmd_exec_run', base64 cmd/whitelist, job_timeout=timeout+10)."""
+        mock_task_type.return_value = "cmd_exec"
+        ansible = AsyncMock()
+        ansible.run_playbook = AsyncMock(return_value={"rc": 0, "shell_stdout": "total 8"})
+        svc = NodeTaskService(_ansible=ansible, db_factory=lambda: None)
+        svc._executor = svc._execute_node
+
+        item = _make_item()
+        import base64
+        with patch("app.services.node_task_service._resolve_node") as mock_resolve:
+            mock_resolve.return_value = type("N", (), {
+                "ip": "10.0.0.5", "edge_path": "/work/edge",
+                "edge_install_path": None, "openresty_path": None, "management_port": 9180,
+            })()
+            result = await svc._execute_node(
+                5, item,
+                {"cmd": "ls -la /tmp", "security": "blacklist", "timeout": 30, "whitelist": ["ls", "ps"]},
+                None, lambda e: None,
+            )
+
+        call = ansible.run_playbook.await_args
+        assert call.args[1] == "cmd_exec_run"
+        ev = call.args[2]
+        assert base64.b64decode(ev["cmd_exec"]).decode() == "ls -la /tmp"
+        assert base64.b64decode(ev["cmd_whitelist"]).decode() == "ls,ps"
+        assert ev["cmd_security"] == "blacklist"
+        assert ev["cmd_timeout"] == 30
+        assert call.kwargs["job_timeout"] == 40
+        assert result["rc"] == 0
+
+    @pytest.mark.asyncio
+    async def test_cmd_exec_defaults(self, mock_task_type):
+        """缺省 params：security=blacklist, timeout=30, whitelist 空."""
+        mock_task_type.return_value = "cmd_exec"
+        ansible = AsyncMock()
+        ansible.run_playbook = AsyncMock(return_value={"rc": 0, "shell_stdout": ""})
+        svc = NodeTaskService(_ansible=ansible, db_factory=lambda: None)
+        svc._executor = svc._execute_node
+
+        item = _make_item()
+        import base64
+        with patch("app.services.node_task_service._resolve_node") as mock_resolve:
+            mock_resolve.return_value = type("N", (), {
+                "ip": "10.0.0.5", "edge_path": "/work/edge",
+                "edge_install_path": None, "openresty_path": None, "management_port": 9180,
+            })()
+            await svc._execute_node(5, item, {"cmd": "whoami"}, None, lambda e: None)
+
+        ev = ansible.run_playbook.await_args.args[2]
+        assert ev["cmd_security"] == "blacklist"
+        assert ev["cmd_timeout"] == 30
+        assert base64.b64decode(ev["cmd_whitelist"]).decode() == ""
+        assert ansible.run_playbook.await_args.kwargs["job_timeout"] == 40
+
+    @pytest.mark.asyncio
+    async def test_cmd_exec_missing_cmd(self, mock_task_type):
+        """cmd 为空 → 直接失败，不调用 ansible."""
+        mock_task_type.return_value = "cmd_exec"
+        ansible = AsyncMock()
+        svc = NodeTaskService(_ansible=ansible, db_factory=lambda: None)
+        svc._executor = svc._execute_node
+
+        item = _make_item()
+        with patch("app.services.node_task_service._resolve_node") as mock_resolve:
+            mock_resolve.return_value = type("N", (), {
+                "ip": "10.0.0.5", "edge_path": "/work/edge",
+                "edge_install_path": None, "openresty_path": None, "management_port": 9180,
+            })()
+            result = await svc._execute_node(5, item, {}, None, lambda e: None)
+
+        ansible.run_playbook.assert_not_awaited()
+        assert result["rc"] == -1
+        assert result["status"] == "failed"

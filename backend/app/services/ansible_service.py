@@ -253,6 +253,7 @@ ALLOWED_TAGS = frozenset({
     "edge_read_env",
     "edge_pack_list",
     "software_check_run",
+    "cmd_exec_run",
 })
 
 # Mapping from nginx_cmd values to user-facing action names
@@ -430,7 +431,22 @@ class AnsibleRunnerService:
         if _venv_bin not in _current_path:
             _runner_env["PATH"] = f"{_venv_bin}:{_current_path}"
 
-        # Build kwargs for ansible_runner.run, optionally adding event_handler
+        # Build kwargs for ansible_runner.run, optionally adding event_handler.
+        # When a custom handler is installed, ansible_runner no longer populates
+        # result.events, so we wrap the handler to collect res.stdout here and
+        # use it to fill shell_stdout later (cmd_exec/software_check rely on it).
+        collected_stdout: list[str] = []
+
+        def _wrapped_handler(event: dict) -> None:
+            ed = event.get("event_data", {}) if isinstance(event, dict) else {}
+            res = ed.get("res", {}) or {}
+            out = res.get("stdout")
+            if out:
+                collected_stdout.append(out)
+            handler = event_handler if event_handler is not None else on_progress
+            if handler is not None:
+                handler(event)
+
         effective_timeout = job_timeout if job_timeout is not None else self._job_timeout
         runner_kwargs = dict(
             private_data_dir=self._private_data_dir,
@@ -440,10 +456,8 @@ class AnsibleRunnerService:
             envvars=_runner_env,
             settings={"job_timeout": effective_timeout},
         )
-        if event_handler is not None:
-            runner_kwargs["event_handler"] = event_handler
-        elif on_progress is not None:
-            runner_kwargs["event_handler"] = on_progress
+        if event_handler is not None or on_progress is not None:
+            runner_kwargs["event_handler"] = _wrapped_handler
         if cancel_event is not None:
             runner_kwargs["cancel_callback"] = lambda: cancel_event.is_set()
 
@@ -493,6 +507,8 @@ class AnsibleRunnerService:
         # The combined stdout includes ansible headers; use events to get clean output.
         shell_stdout = ""
         slurp_content = ""
+        if collected_stdout:
+            shell_stdout = collected_stdout[-1]
         event_list = getattr(result, "events", []) or []
         for event in event_list:
             ed = event.get("event_data", {}) if isinstance(event, dict) else {}

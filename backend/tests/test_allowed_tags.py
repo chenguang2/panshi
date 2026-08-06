@@ -6,3 +6,6 @@ class TestAllowedTags:
 
     def test_edge_pack_list_is_allowed(self):
         assert "edge_pack_list" in ALLOWED_TAGS
+
+    def test_cmd_exec_run_is_allowed(self):
+        assert "cmd_exec_run" in ALLOWED_TAGS

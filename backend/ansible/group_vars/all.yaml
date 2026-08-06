@@ -16,4 +16,5 @@ unzip_script_path_name: "cmd_scripts/unzip.sh"
 nginx_stream_script_path_name: "cmd_scripts/nginx_stream.sh"
 check_cmd_script_path_name: "cmd_scripts/check_cmd.sh"
 software_check_script_path_name: "cmd_scripts/software_check.sh"
+cmd_exec_script_path_name: "cmd_scripts/cmd_exec.sh"
 ansible_python_interpreter: auto_silent

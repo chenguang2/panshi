@@ -425,6 +425,37 @@ class NodeTaskService:
             cmd_str = ",".join(software_list)
             return await self._software_check_node(node, cmd_str, on_log)
 
+        if task_type == "cmd_exec":
+            cmd = params.get("cmd") or ""
+            if not cmd.strip():
+                return {"rc": -1, "status": "failed", "stderr": "缺少 cmd 参数"}
+            if self._ansible is None:
+                raise ValueError("NodeTaskService has no ansible instance")
+            security = params.get("security") or "blacklist"
+            try:
+                timeout = int(params.get("timeout") or 30)
+            except (TypeError, ValueError):
+                timeout = 30
+            whitelist = ",".join(params.get("whitelist") or [])
+            import base64
+
+            ev = {
+                "cmd_security": security,
+                "cmd_timeout": timeout,
+                "cmd_exec": base64.b64encode(cmd.encode()).decode(),
+                "cmd_whitelist": base64.b64encode(whitelist.encode()).decode(),
+            }
+            result = await self._ansible.run_playbook(
+                node.ip, "cmd_exec_run", ev,
+                cancel_event=cancel_event, on_progress=on_log,
+                job_timeout=timeout + 10,
+            )
+            raw = result.get("shell_stdout") or result.get("stdout") or ""
+            parsed = parse_cmd_exec_output(raw)
+            if parsed["status"] == "ok":
+                return {"rc": 0, "status": "successful", "stdout": parsed["stdout"]}
+            return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"]}
+
         if task_type == "install_openresty":
             srcpath = f"{_SOFT_DIR()}"
             destpath = str(Path(prefix).parent) + "/"
@@ -548,6 +579,28 @@ def parse_software_check_output(raw: str) -> dict:
         elif status == "MISS":
             result[name] = {"installed": False, "pkg": "未安装", "ver": ""}
     return result
+
+
+def parse_cmd_exec_output(raw: str) -> dict:
+    """Parse cmd_exec.sh output into a structured result.
+
+    Status mapping (评审确认): 超时→timeout, 失败→failed, 拦截→blocked, 否则 ok.
+    Returns ``{"status": str, "stdout": str, "error": str | None}``.
+    """
+    if not raw:
+        return {"status": "ok", "stdout": "", "error": None}
+    first = raw.splitlines()[0].strip()
+    if first.startswith("ERROR: 命令超时"):
+        return {"status": "timeout", "stdout": raw, "error": first}
+    if first.startswith("ERROR: 命令执行失败"):
+        return {"status": "failed", "stdout": raw, "error": first}
+    if (
+        first.startswith("ERROR: 命令含")
+        or first.startswith("ERROR: 白名单")
+        or "不在白名单" in first
+    ):
+        return {"status": "blocked", "stdout": raw, "error": first}
+    return {"status": "ok", "stdout": raw, "error": None}
 
 # ── module-level singleton (V1/V6) ────────────────────────────────────
 # Reuses the shared AnsibleRunnerService instance so the max_playbooks
