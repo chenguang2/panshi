@@ -622,3 +622,186 @@ describe('RouteAdvancedMatch Component', () => {
     })
   })
 })
+
+describe('RouteAdvancedMatch ip~ operator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('buildVarsFromRules: ip~ 规则序列化为 3 元组数组', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'builtin',
+      key: 'remote_addr',
+      operator: 'ip~',
+      value: ['10.158.40.51', '10.0.0.0/8']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['remote_addr', 'ip~', ['10.158.40.51', '10.0.0.0/8']]])
+    wrapper.unmount()
+  })
+
+  it('buildVarsFromRules: not_ip~ 规则序列化为 4 元组取反', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'builtin',
+      key: 'remote_addr',
+      operator: 'not_ip~',
+      value: ['192.168.0.3', '127.0.0.1/8']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['remote_addr', '!', 'ip~', ['192.168.0.3', '127.0.0.1/8']]])
+    wrapper.unmount()
+  })
+
+  it('buildVarsFromRules: header 类型 + ip~ 序列化为 http_ 前缀 key', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'header',
+      key: 'x-real-ip',
+      operator: 'ip~',
+      value: ['10.0.0.1']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['http_x_real_ip', 'ip~', ['10.0.0.1']]])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 3 元组 ip~ 解析为 ip~ 规则（value 数组）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['remote_addr', 'ip~', ['10.158.40.51', '10.0.0.0/8']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    expect((wrapper.vm as any).rules[0].operator).toBe('ip~')
+    expect((wrapper.vm as any).rules[0].value).toEqual(['10.158.40.51', '10.0.0.0/8'])
+    expect((wrapper.vm as any).rules[0].key).toBe('remote_addr')
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 4 元组取反解析为 not_ip~ 规则（前置判断不错解）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['remote_addr', '!', 'ip~', ['192.168.0.3', '127.0.0.1/8']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.operator).toBe('not_ip~')
+    expect(rule.value).toEqual(['192.168.0.3', '127.0.0.1/8'])
+    expect(rule.key).toBe('remote_addr')
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 旧数据兼容——3 元组 ip~ value 非数组按逗号拆分', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['remote_addr', 'ip~', '10.158.40.51,10.0.0.0/8']] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.operator).toBe('ip~')
+    expect(rule.value).toEqual(['10.158.40.51', '10.0.0.0/8'])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 旧数据兼容——4 元组 v[3] 非数组拆分为单元素数组', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['remote_addr', '!', 'ip~', '127.0.0.1/8']] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.operator).toBe('not_ip~')
+    expect(rule.value).toEqual(['127.0.0.1/8'])
+    wrapper.unmount()
+  })
+})
+
+
+describe('RouteAdvancedMatch ip~ tag input', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('isIpOperator 识别 ip~ 与 not_ip~，其他操作符返回 false', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    expect((wrapper.vm as any).isIpOperator('ip~')).toBe(true)
+    expect((wrapper.vm as any).isIpOperator('not_ip~')).toBe(true)
+    expect((wrapper.vm as any).isIpOperator('==')).toBe(false)
+    expect((wrapper.vm as any).isIpOperator('IN')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('ip~ 规则的 value 为数组时标签输入显示数组值', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['remote_addr', 'ip~', ['10.158.40.51', '10.0.0.0/8']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(Array.isArray(rule.value)).toBe(true)
+    expect(rule.value).toEqual(['10.158.40.51', '10.0.0.0/8'])
+    wrapper.unmount()
+  })
+
+  it('ip~ 标签输入更新 value 为数组（添加多 IP/CIDR）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'builtin',
+      key: 'remote_addr',
+      operator: 'ip~',
+      value: []
+    }]
+    await nextTick()
+    ;(wrapper.vm as any).rules[0].value = ['10.158.40.51', '10.0.0.0/8']
+    await nextTick()
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['remote_addr', 'ip~', ['10.158.40.51', '10.0.0.0/8']]])
+    wrapper.unmount()
+  })
+})

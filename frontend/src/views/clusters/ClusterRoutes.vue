@@ -180,7 +180,7 @@
                 <RouteAdvancedMatch
                   :enabled="routeForm.advancedMatchEnabled"
                   :model-value="{ vars: routeForm.advancedMatch.vars }"
-                  @update:model-value="(val: { vars?: [string, string, string][] }) => { routeForm.advancedMatch.vars = val.vars || []; }"
+                  @update:model-value="(val: { vars?: (string | string[])[][] }) => { routeForm.advancedMatch.vars = val.vars || []; }"
                 />
               </div>
               <div v-else class="advanced-disabled-hint">

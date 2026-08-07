@@ -131,7 +131,7 @@ export interface Route {
   created_at?: string
   hosts?: string
   remote_addrs?: string
-  vars?: [string, string, string][]
+  vars?: [string, string, string | string[]][]
   advanced_match_enabled?: boolean
   current_version?: number
   published_at?: string
@@ -140,13 +140,13 @@ export interface Route {
 
 export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'
 
-export type MatchOperator = '==' | '!=' | '>' | '<' | '~~' | '~*' | 'IN' | 'NOT IN'
+export type MatchOperator = '==' | '!=' | '>' | '<' | '~~' | '~*' | 'IN' | 'NOT IN' | 'ip~' | 'not_ip~'
 
 export interface MatchRule {
   type: MatchRuleType
   key: string
   operator: MatchOperator
-  value: string
+  value: string | string[]
 }
 
 export interface Plugin {

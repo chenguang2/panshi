@@ -33,9 +33,20 @@
               <a-select-option value="~*">大小写敏感正则</a-select-option>
               <a-select-option value="IN">包含</a-select-option>
               <a-select-option value="NOT IN">不包含</a-select-option>
+              <a-select-option value="ip~">IP 匹配</a-select-option>
+              <a-select-option value="not_ip~">非 IP 匹配</a-select-option>
             </a-select>
 
+            <a-select
+              v-if="isIpOperator(rule.operator)"
+              mode="tags"
+              :value="Array.isArray(rule.value) ? rule.value : (rule.value ? [rule.value] : [])"
+              placeholder="输入 IP 或 CIDR 后回车（如 10.158.40.51 / 10.0.0.0/8）"
+              style="flex: 1"
+              @update:value="(val: any) => { rule.value = Array.isArray(val) ? val : [val]; }"
+            />
             <a-input
+              v-else
               :value="rule.value"
               placeholder="匹配值"
               style="flex: 1"
@@ -52,6 +63,13 @@
 
         <div class="match-hints">
           <div class="hint-title">常用示例：</div>
+          <div class="hint-item">
+            <span class="hint-type">内置参数</span>
+            <span>remote_addr</span>
+            <span class="hint-op">IP 匹配</span>
+            <span>10.158.40.51 / 10.0.0.0/8</span>
+            <span class="hint-desc">按客户端 IP 段匹配</span>
+          </div>
           <div class="hint-item">
             <span class="hint-type">请求头</span>
             <span>Host</span>
@@ -94,12 +112,12 @@ import type { MatchRule, MatchOperator } from '../types'
 const props = defineProps<{
   enabled: boolean
   modelValue: {
-    vars?: [string, string, string][]
+    vars?: (string | string[])[][]
   }
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: { vars?: [string, string, string][] }]
+  'update:modelValue': [value: { vars?: (string | string[])[][] }]
 }>()
 
 const rules = ref<MatchRule[]>([])
@@ -117,11 +135,13 @@ const getKeyPlaceholder = (type: string): string => {
   }
 }
 
-const buildVarsFromRules = (): [string, string, string][] => {
-  const varsList: [string, string, string][] = []
+const isIpOperator = (op: string): boolean => op === 'ip~' || op === 'not_ip~'
+
+const buildVarsFromRules = (): (string | string[])[][] => {
+  const varsList: [string, string, string | string[]][] = []
   for (const rule of rules.value) {
     if (!rule.key) continue
-    if (!rule.value) continue
+    if (Array.isArray(rule.value) ? rule.value.length === 0 : !rule.value) continue
 
     if (rule.type === 'header') {
       varsList.push([`http_${rule.key.toLowerCase().replace(/-/g, '_')}`, rule.operator, rule.value])
@@ -135,10 +155,23 @@ const buildVarsFromRules = (): [string, string, string][] => {
       varsList.push([rule.key, rule.operator, rule.value])
     }
   }
-  return varsList
+
+  // ip~ / not_ip~ 展开为 Edge 原生格式（评审确认）
+  const expanded: (string | string[])[][] = []
+  for (const v of varsList) {
+    const [varName, operator, value] = v
+    if (operator === 'ip~') {
+      expanded.push([varName, 'ip~', Array.isArray(value) ? value : value.split(',')])
+    } else if (operator === 'not_ip~') {
+      expanded.push([varName, '!', 'ip~', Array.isArray(value) ? value : [value]])
+    } else {
+      expanded.push([varName, operator, value])
+    }
+  }
+  return expanded
 }
 
-const parseRulesFromVars = (varsList: [string, string, string][] | undefined) => {
+const parseRulesFromVars = (varsList: (string | string[])[][] | undefined) => {
   rules.value.splice(0, rules.value.length)
 
   if (!varsList) {
@@ -147,7 +180,21 @@ const parseRulesFromVars = (varsList: [string, string, string][] | undefined) =>
   }
 
   for (const v of varsList) {
-    const [varName, operator, value] = v
+    // 4 元组取反格式前置判断（评审确认）：[var, "!", "ip~", [list]]
+    if (v.length >= 4 && v[1] === '!' && v[2] === 'ip~') {
+      const varName = String(v[0])
+      const ipList = Array.isArray(v[3]) ? v[3] as string[] : [String(v[3])]
+      rules.value.push({ type: 'builtin', key: varName, operator: 'not_ip~', value: ipList })
+      continue
+    }
+
+    const [varNameRaw, operatorRaw, valueRaw] = v
+    const varName = String(varNameRaw)
+    const operator = String(operatorRaw)
+    const isIpOp = operator === 'ip~'
+    const value = isIpOp && !Array.isArray(valueRaw)
+      ? String(valueRaw).split(',')
+      : (valueRaw as string | string[])
 
     if (varName.startsWith('http_') || varName === 'http_host') {
       const key = varName === 'http_host' ? 'host' : varName.replace('http_', '').replace(/_/g, '-')

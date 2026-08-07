@@ -122,7 +122,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     description: '',
     advancedMatchEnabled: false,
     advancedMatch: {
-      vars: [] as [string, string, string][],
+      vars: [] as (string | string[])[][],
     },
     plugins: [] as RoutePlugin[],
     plugin_config_ids: [] as string[],
