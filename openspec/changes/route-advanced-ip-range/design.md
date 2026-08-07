@@ -56,14 +56,29 @@ export type MatchOperator =
 - `[var, "ip~", list]`（3 元组）→ `{ operator: 'ip~', value: list }`
 - `[var, "!", "ip~", list]`（4 元组）→ `{ operator: 'not_ip~', value: list }`
 
-解析时 `Array.isArray` 判断 value 类型；`ip~` 的 value 若非数组（旧数据/手写）则按逗号拆分为数组。
+**解析前置判断（评审确认）**：4 元组必须在解构前先判断 `v.length === 4 && v[1] === "!" && v[2] === "ip~"` 走独立分支——现有 `const [varName, operator, value] = v` 固定 3 元组解构会把 4 元组错解为 `operator="!"`、`value="ip~"`、list 丢失。`parseRulesFromVars` 参数类型须一并放宽为 `(string | string[])[][]`。
+
+**value 兼容拆分（评审确认）**：
+- 3 元组 `ip~` 的 value 非数组时按逗号拆分（旧数据/手写兼容）
+- 4 元组取反的 `v[3]` 非数组时拆分为**单元素数组 `[v[3]]`**（CIDR 含 `/` 无逗号，单值场景更常见），不按逗号拆分
+
+### Decision 5: ip~ 不限定变量类型（评审确认）
+
+`ip~`/`not_ip~` 操作符**不限定只能用于 builtin 类型**——header/query/postarg/cookie/builtin 均可搭配（Edge 的 `ip~` 是通用 ipmatcher，对任意变量值做 IP 匹配）。`remote_addr` 只是最常见场景，`http_x_forwarded_for`、自定义 header 等均可。
+
+### Decision 6: 本次范围（评审确认）
+
+- **只做 `ip~`/`not_ip~`**：`IN`/`NOT IN` 保持现状（其 value 数组语义已有 edge 支持，UI 单输入框暂不升级，避免范围蔓延）
+- **不动 `remote_addrs` 死字段**：该顶层字段（APISIX 原生 IP 白名单，前端无 UI、`edge_client.build_route` 不序列化）另开变更处理，本次不涉及
 
 ## Risks / Trade-offs
 
-- [旧数据兼容] 已存在 vars 中无 `ip~` 操作符（DB 实测仅 `==`/`IN`/`~~`）→ 反序列化对 `ip~` 非数组 value 做兼容拆分；回归测试覆盖
+- [旧数据兼容] 已存在 vars 中无 `ip~` 操作符（DB 实测仅 `==`/`IN`/`~~`）→ 反序列化对 `ip~` 非数组 value 做兼容拆分（3 元组逗号拆、4 元组单元素数组）；回归测试覆盖
 - [操作符大小写] 现有 `IN`/`NOT IN` 大写直接进 vars（Edge 实测接受）；`ip~` 统一用小写对齐文档与先例
 - [类型放宽安全] `string | string[]` 放宽后其他操作符的 string 行为不受影响（`Array.isArray` 分支隔离）
 - [UI 复杂度] 标签输入与字符串输入双控件 → `isIpOperator()` 单点判断，模板条件渲染，逻辑集中
+- [4 元组解析] 现有固定 3 元组解构会错解 4 元组 → 解构前前置判断 `v.length === 4 && v[1] === "!" && v[2] === "ip~"`，独立分支处理（评审确认）
+- [remote_addrs 死字段] 顶层字段与 `ip~` 功能部分重叠，但前端无 UI、不序列化 → 本次不涉及，另开变更（评审确认）
 
 ## Migration Plan
 

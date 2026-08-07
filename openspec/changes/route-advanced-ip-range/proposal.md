@@ -10,8 +10,9 @@
 - **序列化格式**（与后端 `dns_wan.py` 先例及 Edge 使用手册一致）：
   - `ip~` → `["remote_addr", "ip~", ["10.158.40.51", "10.0.0.0/8"]]`（3 元组，value 为数组）
   - `not_ip~` → `["remote_addr", "!", "ip~", ["192.168.0.3", "127.0.0.1/8"]]`（4 元组取反）
-- **反序列化**：`parseRulesFromVars` 识别 3 元组 `ip~` 与 4 元组 `!` 取反格式，映射回 `ip~`/`not_ip~` 规则
-- **内置参数自由输入保持不变**：用户仍可手动填写 `remote_addr`/`http_x_forwarded_for` 等任意 Nginx 变量
+- **反序列化**：`parseRulesFromVars` 识别 3 元组 `ip~` 与 4 元组 `!` 取反格式，映射回 `ip~`/`not_ip~` 规则；4 元组前置判断避免现有固定 3 元组解构错解
+- **内置参数自由输入保持不变**：用户仍可手动填写 `remote_addr`/`http_x_forwarded_for` 等任意 Nginx 变量；`ip~` 不限定变量类型（header/query/postarg/cookie/builtin 均可）
+- **范围（评审确认）**：只做 `ip~/not_ip~`，`IN`/`NOT IN` 保持现状；`remote_addrs` 死字段（前端无 UI、不序列化）另开变更
 
 ## Capabilities
 

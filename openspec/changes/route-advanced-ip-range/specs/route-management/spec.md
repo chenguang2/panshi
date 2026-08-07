@@ -45,10 +45,24 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 - **WHEN** 路由 vars 包含 4 元组 `["remote_addr", "!", "ip~", [list]]`
 - **THEN** 编辑器 SHALL 显示为「非 IP 匹配」规则，value 为对应列表
 
+#### Scenario: 4 元组不被固定 3 元组解构错解
+- **WHEN** 路由 vars 包含 4 元组 `["remote_addr", "!", "ip~", [list]]`
+- **THEN** 解析 SHALL 前置判断 `v.length === 4 && v[1] === "!" && v[2] === "ip~"` 走独立分支
+- **THEN** operator SHALL NOT 为 `"!"`、value SHALL NOT 为 `"ip~"`、list SHALL NOT 丢失
+
+#### Scenario: 旧数据 value 兼容拆分
+- **WHEN** 3 元组 `ip~` 的 value 为非数组字符串（旧数据/手写）
+- **THEN** 编辑器 SHALL 按逗号拆分为数组
+- **WHEN** 4 元组取反的 `v[3]` 为非数组字符串
+- **THEN** 编辑器 SHALL 拆分为单元素数组 `[v[3]]`（不按逗号拆分）
+
 #### Scenario: 内置参数自由输入保留
 - **WHEN** 用户添加任意内置参数条件（如 `remote_addr`、`http_x_forwarded_for`）
 - **THEN** key 输入框 SHALL 保持自由文本输入，不限定变量列表
+- **WHEN** 用户为任意变量类型（header/query/postarg/cookie/builtin）选择 `ip~`/`not_ip~` 操作符
+- **THEN** 编辑器 SHALL 允许搭配，不限定只能用于 builtin 类型（评审确认）
 
 #### Scenario: 现有操作符行为不变
 - **WHEN** 用户使用 `==`、`!=`、`>`、`<`、`~~`、`~*`、`IN`、`NOT IN` 任一操作符
 - **THEN** 其序列化与反序列化行为 SHALL 与新增 ip~ 前完全一致
+- **THEN** `IN`/`NOT IN` SHALL 保持现状（不升级为标签输入，评审确认）
