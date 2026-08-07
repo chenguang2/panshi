@@ -13,8 +13,11 @@
   - 3 元组 `[var, "in", [list]]` → IN 规则（小写数组）
   - 旧格式 `[var, "IN", "a,b"]`（大写字符串）→ IN 规则（逗号拆）
   - 旧格式 `[var, "NOT IN", "a,b"]` → NOT IN 规则（逗号拆）
-- **核心抽象**：`isListOperator()` 统一 `ip~`/`not_ip~`/`IN`/`NOT IN` 四个列表操作符的控件判断；`listPlaceholder()` 区分 IP 与通用提示
+- **核心抽象**：`isListOperator()` 统一 `ip~`/`not_ip~`/`IN`/`NOT IN` 四个列表操作符的控件判断（**与 `isIpOperator` 职责分离**：`isListOperator` 控件切换、`isIpOperator` placeholder 区分，现有测试语义不变）；placeholder 用 `isIpOperator` 区分 IP 与通用提示
 - **序列化映射表驱动**：`IN`→`in`、`NOT IN`→`!in` 与 `ip~`/`not_ip~` 对称展开
+- **4 元组 type 推导修复（评审确认）**：提取 `deriveRuleType(varName)` 复用 key 前缀推导，修复现有 ip~ 4 元组硬编码 builtin 导致 header 类型错判的 bug（ip~ 与 in 一并修复）
+- **`in*` 大小写变体本次不做（评审确认）**：只做 `in`（大小写敏感），避免范围蔓延
+- **旧 `NOT IN` 兼容保留（评审确认）**：DB 实测仅 `IN` 21 条、`NOT IN` 0 条，兼容分支保留 + 测试覆盖
 
 ## Capabilities
 

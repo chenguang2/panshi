@@ -49,8 +49,24 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 #### Scenario: 列表操作符统一抽象
 - **WHEN** 用户使用 `ip~`、`not_ip~`、`IN`、`NOT IN` 任一列表操作符
 - **THEN** value 控件 SHALL 统一使用标签输入（`isListOperator` 判断）
-- **THEN** `ip~`/`not_ip~` SHALL 显示 IP/CIDR 提示，`IN`/`NOT IN` SHALL 显示通用值提示
+- **THEN** `ip~`/`not_ip~` SHALL 显示 IP/CIDR 提示，`IN`/`NOT IN` SHALL 显示通用值提示（`isIpOperator` 区分）
+
+#### Scenario: 操作符职责分离
+- **WHEN** 组件判断 value 控件类型
+- **THEN** `isListOperator` SHALL 对 `ip~`/`not_ip~`/`IN`/`NOT IN` 返回 true（控件切换）
+- **THEN** `isIpOperator` SHALL 仅对 `ip~`/`not_ip~` 返回 true（placeholder 区分），`isIpOperator('IN')` SHALL 返回 false
+
+#### Scenario: 4 元组 type 推导（header 类型 NOT IN/not_ip~）
+- **WHEN** 路由 vars 包含 `["http_x_real_ip", "!", "in", [list]]`（header 类型 + NOT IN 4 元组）
+- **THEN** 编辑器 SHALL 显示为「不包含」规则，type SHALL 为 header（非 builtin）
+- **WHEN** 路由 vars 包含 `["http_x_real_ip", "!", "ip~", [list]]`（header 类型 + not_ip~ 4 元组）
+- **THEN** 编辑器 SHALL 显示为「非 IP 匹配」规则，type SHALL 为 header（修复现有硬编码 builtin 的 bug）
+- **THEN** 4 元组分支 SHALL 复用 `deriveRuleType` 推导 type（`arg_`/`http_`/`postarg_`/`cookie_`/无前缀）
 
 #### Scenario: 单值操作符行为不变
 - **WHEN** 用户使用 `==`、`!=`、`>`、`<`、`~~`、`~*` 任一单值操作符
 - **THEN** 其 value 输入与序列化行为 SHALL 与本次改动前完全一致
+
+#### Scenario: in* 大小写变体不引入
+- **WHEN** 用户使用「包含（IN）」操作符
+- **THEN** 序列化 SHALL 使用 `in`（大小写敏感），SHALL NOT 引入 `in*` 变体（评审确认：本次不做）
