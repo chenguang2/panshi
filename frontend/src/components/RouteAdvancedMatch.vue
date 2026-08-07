@@ -38,10 +38,10 @@
             </a-select>
 
             <a-select
-              v-if="isIpOperator(rule.operator)"
+              v-if="isListOperator(rule.operator)"
               mode="tags"
               :value="Array.isArray(rule.value) ? rule.value : (rule.value ? [rule.value] : [])"
-              placeholder="输入 IP 或 CIDR 后回车（如 10.158.40.51 / 10.0.0.0/8）"
+              :placeholder="isIpOperator(rule.operator) ? '输入 IP 或 CIDR 后回车（如 10.158.40.51 / 10.0.0.0/8）' : '输入值后回车，可添加多个'"
               style="flex: 1"
               @update:value="(val: any) => { rule.value = Array.isArray(val) ? val : [val]; }"
             />
@@ -137,6 +137,25 @@ const getKeyPlaceholder = (type: string): string => {
 
 const isIpOperator = (op: string): boolean => op === 'ip~' || op === 'not_ip~'
 
+const LIST_OPERATORS = new Set(['ip~', 'not_ip~', 'IN', 'NOT IN'])
+const isListOperator = (op: string): boolean => LIST_OPERATORS.has(op)
+
+const deriveRuleType = (varName: string): MatchRule['type'] => {
+  if (varName === 'http_host' || varName.startsWith('http_')) return 'header'
+  if (varName.startsWith('arg_')) return 'query'
+  if (varName.startsWith('postarg_')) return 'postarg'
+  if (varName.startsWith('cookie_')) return 'cookie'
+  return 'builtin'
+}
+
+const deriveRuleKey = (varName: string, type: MatchRule['type']): string => {
+  if (type === 'header') return varName === 'http_host' ? 'host' : varName.replace('http_', '').replace(/_/g, '-')
+  if (type === 'query') return varName.replace('arg_', '')
+  if (type === 'postarg') return varName.replace('postarg_', '')
+  if (type === 'cookie') return varName.replace('cookie_', '')
+  return varName
+}
+
 const buildVarsFromRules = (): (string | string[])[][] => {
   const varsList: [string, string, string | string[]][] = []
   for (const rule of rules.value) {
@@ -156,7 +175,7 @@ const buildVarsFromRules = (): (string | string[])[][] => {
     }
   }
 
-  // ip~ / not_ip~ 展开为 Edge 原生格式（评审确认）
+  // ip~ / not_ip~ / IN / NOT IN 展开为 Edge 原生格式（评审确认）
   const expanded: (string | string[])[][] = []
   for (const v of varsList) {
     const [varName, operator, value] = v
@@ -164,6 +183,10 @@ const buildVarsFromRules = (): (string | string[])[][] => {
       expanded.push([varName, 'ip~', Array.isArray(value) ? value : value.split(',')])
     } else if (operator === 'not_ip~') {
       expanded.push([varName, '!', 'ip~', Array.isArray(value) ? value : [value]])
+    } else if (operator === 'IN') {
+      expanded.push([varName, 'in', Array.isArray(value) ? value : value.split(',')])
+    } else if (operator === 'NOT IN') {
+      expanded.push([varName, '!', 'in', Array.isArray(value) ? value : value.split(',')])
     } else {
       expanded.push([varName, operator, value])
     }
@@ -180,11 +203,16 @@ const parseRulesFromVars = (varsList: (string | string[])[][] | undefined) => {
   }
 
   for (const v of varsList) {
-    // 4 元组取反格式前置判断（评审确认）：[var, "!", "ip~", [list]]
-    if (v.length >= 4 && v[1] === '!' && v[2] === 'ip~') {
+    // 4 元组取反格式前置判断（评审确认）：[var, "!", "ip~", [list]] 或 [var, "!", "in", [list]]
+    if (v.length >= 4 && v[1] === '!' && (v[2] === 'ip~' || v[2] === 'in')) {
       const varName = String(v[0])
-      const ipList = Array.isArray(v[3]) ? v[3] as string[] : [String(v[3])]
-      rules.value.push({ type: 'builtin', key: varName, operator: 'not_ip~', value: ipList })
+      const negOperator: MatchOperator = v[2] === 'ip~' ? 'not_ip~' : 'NOT IN'
+      const listRaw = v[3]
+      const listValue = v[2] === 'ip~'
+        ? (Array.isArray(listRaw) ? listRaw as string[] : [String(listRaw)])
+        : (Array.isArray(listRaw) ? listRaw as string[] : String(listRaw).split(','))
+      const type = deriveRuleType(varName)
+      rules.value.push({ type, key: deriveRuleKey(varName, type), operator: negOperator, value: listValue })
       continue
     }
 
@@ -192,47 +220,21 @@ const parseRulesFromVars = (varsList: (string | string[])[][] | undefined) => {
     const varName = String(varNameRaw)
     const operator = String(operatorRaw)
     const isIpOp = operator === 'ip~'
-    const value = isIpOp && !Array.isArray(valueRaw)
+    const isInOp = operator === 'in' || operator === 'IN'
+    const isNotInOp = operator === 'NOT IN'
+    const isListOp = isIpOp || isInOp || isNotInOp
+    const normalizedOp = isInOp ? 'IN' : isNotInOp ? 'NOT IN' : operator
+    const value = isListOp && !Array.isArray(valueRaw)
       ? String(valueRaw).split(',')
       : (valueRaw as string | string[])
 
-    if (varName.startsWith('http_') || varName === 'http_host') {
-      const key = varName === 'http_host' ? 'host' : varName.replace('http_', '').replace(/_/g, '-')
-      rules.value.push({
-        type: 'header',
-        key: key,
-        operator: operator as MatchOperator,
-        value
-      })
-    } else if (varName.startsWith('arg_')) {
-      rules.value.push({
-        type: 'query',
-        key: varName.replace('arg_', ''),
-        operator: operator as MatchOperator,
-        value
-      })
-    } else if (varName.startsWith('postarg_')) {
-      rules.value.push({
-        type: 'postarg',
-        key: varName.replace('postarg_', ''),
-        operator: operator as MatchOperator,
-        value
-      })
-    } else if (varName.startsWith('cookie_')) {
-      rules.value.push({
-        type: 'cookie',
-        key: varName.replace('cookie_', ''),
-        operator: operator as MatchOperator,
-        value
-      })
-    } else {
-      rules.value.push({
-        type: 'builtin',
-        key: varName,
-        operator: operator as MatchOperator,
-        value
-      })
-    }
+    const type = deriveRuleType(varName)
+    rules.value.push({
+      type,
+      key: deriveRuleKey(varName, type),
+      operator: normalizedOp as MatchOperator,
+      value
+    })
   }
   triggerRef(rules)
 }

@@ -587,8 +587,8 @@ describe('RouteAdvancedMatch Component', () => {
       expect(vars).toEqual([])
     })
 
-    it('应该正确处理所有运算符', async () => {
-      const operators = ['==', '!=', '>', '<', '~~', '~*', 'IN', 'NOT IN']
+    it('应该正确处理所有单值运算符', async () => {
+      const operators = ['==', '!=', '>', '<', '~~', '~*']
 
       for (const operator of operators) {
         const wrapper = mount(RouteAdvancedMatch, {
@@ -802,6 +802,391 @@ describe('RouteAdvancedMatch ip~ tag input', () => {
     await nextTick()
     const vars = (wrapper.vm as any).buildVarsFromRules()
     expect(vars).toEqual([['remote_addr', 'ip~', ['10.158.40.51', '10.0.0.0/8']]])
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch IN/NOT IN 序列化', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('buildVarsFromRules: IN 规则（value 数组）序列化为小写 in + 数组', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'IN',
+      value: ['user1', 'user2']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', 'in', ['user1', 'user2']]])
+    wrapper.unmount()
+  })
+
+  it('buildVarsFromRules: NOT IN 规则（value 数组）序列化为 4 元组取反', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'NOT IN',
+      value: ['user1', 'user2']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', '!', 'in', ['user1', 'user2']]])
+    wrapper.unmount()
+  })
+
+  it('buildVarsFromRules: IN value 非数组（旧 string 残留）逗号拆分后序列化', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'IN',
+      value: 'user1,user2'
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', 'in', ['user1', 'user2']]])
+    wrapper.unmount()
+  })
+
+  it('buildVarsFromRules: NOT IN value 非数组（旧 string 残留）逗号拆分后序列化', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'NOT IN',
+      value: 'user1,user2'
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', '!', 'in', ['user1', 'user2']]])
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch IN/NOT IN 反序列化', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('parseRulesFromVars: 3 元组小写 in 数组解析为 IN 规则（type=query）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_user_name', 'in', ['user1', 'user2']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.key).toBe('user_name')
+    expect(rule.operator).toBe('IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 4 元组 !in 解析为 NOT IN 规则（前置判断不错解）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_user_name', '!', 'in', ['user1', 'user2']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.key).toBe('user_name')
+    expect(rule.operator).toBe('NOT IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 旧格式大写 IN 字符串解析为 IN 规则（逗号拆）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_user_name', 'IN', 'user1,user2']] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.key).toBe('user_name')
+    expect(rule.operator).toBe('IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 旧格式大写 NOT IN 字符串解析为 NOT IN 规则（逗号拆）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_user_name', 'NOT IN', 'user1,user2']] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.key).toBe('user_name')
+    expect(rule.operator).toBe('NOT IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch deriveRuleType', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('deriveRuleType 对 arg_/http_/postarg_/cookie_/无前缀返回正确 type', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    expect((wrapper.vm as any).deriveRuleType('arg_version')).toBe('query')
+    expect((wrapper.vm as any).deriveRuleType('http_host')).toBe('header')
+    expect((wrapper.vm as any).deriveRuleType('http_x_real_ip')).toBe('header')
+    expect((wrapper.vm as any).deriveRuleType('postarg_user_id')).toBe('postarg')
+    expect((wrapper.vm as any).deriveRuleType('cookie_session_id')).toBe('cookie')
+    expect((wrapper.vm as any).deriveRuleType('uri')).toBe('builtin')
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 4 元组 !ip~ header 类型修复为 header（非 builtin）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['http_x_real_ip', '!', 'ip~', ['10.0.0.1']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('header')
+    expect(rule.key).toBe('x-real-ip')
+    expect(rule.operator).toBe('not_ip~')
+    expect(rule.value).toEqual(['10.0.0.1'])
+    wrapper.unmount()
+  })
+
+  it('parseRulesFromVars: 4 元组 !in header 类型为 header（NOT IN 规则）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['http_x_real_ip', '!', 'in', ['10.0.0.1', '10.0.0.2']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('header')
+    expect(rule.key).toBe('x-real-ip')
+    expect(rule.operator).toBe('NOT IN')
+    expect(rule.value).toEqual(['10.0.0.1', '10.0.0.2'])
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch isListOperator', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('isListOperator 对 ip~/not_ip~/IN/NOT IN 返回 true，单值操作符返回 false', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    expect((wrapper.vm as any).isListOperator('ip~')).toBe(true)
+    expect((wrapper.vm as any).isListOperator('not_ip~')).toBe(true)
+    expect((wrapper.vm as any).isListOperator('IN')).toBe(true)
+    expect((wrapper.vm as any).isListOperator('NOT IN')).toBe(true)
+    expect((wrapper.vm as any).isListOperator('==')).toBe(false)
+    expect((wrapper.vm as any).isListOperator('!=')).toBe(false)
+    expect((wrapper.vm as any).isListOperator('>')).toBe(false)
+    expect((wrapper.vm as any).isListOperator('<')).toBe(false)
+    expect((wrapper.vm as any).isListOperator('~~')).toBe(false)
+    expect((wrapper.vm as any).isListOperator('~*')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('回归：isIpOperator 仅对 ip~/not_ip~ 返回 true，isIpOperator(IN) 为 false', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    expect((wrapper.vm as any).isIpOperator('ip~')).toBe(true)
+    expect((wrapper.vm as any).isIpOperator('not_ip~')).toBe(true)
+    expect((wrapper.vm as any).isIpOperator('IN')).toBe(false)
+    expect((wrapper.vm as any).isIpOperator('==')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('IN/NOT IN 规则 value 控件应使用标签输入（isListOperator 驱动模板）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_user_name', 'in', ['user1', 'user2']]] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    // 标签输入（a-select mode=tags）渲染为 select 元素；单值输入渲染为 input 元素
+    // IN 规则：type/operator/value 3 个 select + key 1 个 input
+    expect(wrapper.findAll('select').length).toBe(3)
+    expect(wrapper.findAll('input').length).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('单值操作符 == value 控件应使用单行输入（非标签）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: { vars: [['arg_version', '==', 'v2']] } },
+      ...stubGlobals
+    })
+    await nextTick()
+    // == 规则：type/operator 2 个 select + key/value 2 个 input
+    expect(wrapper.findAll('select').length).toBe(2)
+    expect(wrapper.findAll('input').length).toBe(2)
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch IN/NOT IN 往返链路', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('往返：IN 规则 → 序列化为 in 数组 → 反序列化还原为 IN 规则', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'IN',
+      value: ['user1', 'user2']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', 'in', ['user1', 'user2']]])
+
+    ;(wrapper.vm as any).parseRulesFromVars(vars)
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.operator).toBe('IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+
+  it('往返：NOT IN 规则 → 序列化为 !in 4 元组 → 反序列化还原为 NOT IN 规则', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query',
+      key: 'user_name',
+      operator: 'NOT IN',
+      value: ['user1', 'user2']
+    }]
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['arg_user_name', '!', 'in', ['user1', 'user2']]])
+
+    ;(wrapper.vm as any).parseRulesFromVars(vars)
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('query')
+    expect(rule.operator).toBe('NOT IN')
+    expect(rule.value).toEqual(['user1', 'user2'])
+    wrapper.unmount()
+  })
+
+  it('升级：旧大写 IN 字符串数据反序列化后重新序列化为新 in 数组格式', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    // 模拟 DB 旧数据（route 42/71 格式）
+    ;(wrapper.vm as any).parseRulesFromVars([['remote_addr', 'IN', '192.168.1.0/24']])
+    const rule = (wrapper.vm as any).rules[0]
+    expect(rule.type).toBe('builtin')
+    expect(rule.key).toBe('remote_addr')
+    expect(rule.operator).toBe('IN')
+    expect(rule.value).toEqual(['192.168.1.0/24'])
+
+    // 用户保存后自动升级为新格式
+    const vars = (wrapper.vm as any).buildVarsFromRules()
+    expect(vars).toEqual([['remote_addr', 'in', ['192.168.1.0/24']]])
     wrapper.unmount()
   })
 })
