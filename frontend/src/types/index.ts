@@ -140,7 +140,7 @@ export interface Route {
 
 export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'
 
-export type MatchOperator = '==' | '!=' | '>' | '<' | '~~' | '~*' | 'IN' | 'NOT IN' | 'ip~' | 'not_ip~'
+export type MatchOperator = '==' | '==*' | '!=' | '!=*' | '>' | '>=' | '<' | '<=' | 'v>' | 'v>=' | 'v<' | 'v<=' | '~~' | '~~*' | 'ip~' | 'not_ip~' | 'has' | 'has*' | 'in*' | 'rx~' | 'rx~*' | 'IN' | 'NOT IN'
 
 export interface MatchRule {
   type: MatchRuleType

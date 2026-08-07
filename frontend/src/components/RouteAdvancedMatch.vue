@@ -2,7 +2,22 @@
   <div class="route-advanced-match">
     <div v-if="enabled" class="match-content">
       <a-divider>匹配条件</a-divider>
-      <div class="match-rules">
+      <div class="json-mode-toggle">
+        <a-button :type="jsonMode ? 'primary' : 'default'" size="small" @click="toggleJsonMode(!jsonMode)">
+          {{ jsonMode ? '表单编辑' : 'JSON 编辑' }}
+        </a-button>
+      </div>
+      <div v-if="jsonMode" class="json-editor">
+        <textarea
+          :value="jsonText"
+          rows="10"
+          style="width: 100%; font-family: monospace"
+          @input="(e: any) => { jsonText = e.target.value; jsonError = ''; }"
+        />
+        <div v-if="jsonError" class="json-error" style="color: #ff4d4f">{{ jsonError }}</div>
+        <div class="json-hint">编辑后点「表单编辑」切回并校验；JSON 须为 3/4 元组表达式数组</div>
+      </div>
+      <div v-else class="match-rules">
         <div v-for="(rule, index) in rules" :key="index" class="match-rule">
           <div class="rule-header">
             <span class="rule-index">条件 {{ index + 1 }}</span>
@@ -24,17 +39,14 @@
               @update:value="(val: string) => { rule.key = val; }"
             />
 
-            <a-select :value="rule.operator" style="width: 130px" @change="(val: string) => { rule.operator = val as MatchOperator; }">
-              <a-select-option value="==">等于</a-select-option>
-              <a-select-option value="!=">不等于</a-select-option>
-              <a-select-option value=">">大于</a-select-option>
-              <a-select-option value="<">小于</a-select-option>
-              <a-select-option value="~~">正则匹配</a-select-option>
-              <a-select-option value="~*">大小写敏感正则</a-select-option>
-              <a-select-option value="IN">包含</a-select-option>
-              <a-select-option value="NOT IN">不包含</a-select-option>
-              <a-select-option value="ip~">IP 匹配</a-select-option>
-              <a-select-option value="not_ip~">非 IP 匹配</a-select-option>
+            <a-select :value="rule.operator" style="width: 160px" @change="(val: string) => { rule.operator = val as MatchOperator; }">
+              <a-select-option v-for="[op, shortLabel, fullLabel] in ALL_OPERATORS" :key="op" :value="op" :title="fullLabel">{{ shortLabel }} {{ op }}</a-select-option>
+              <template #dropdownRender="{ menuNode }">
+                <div>
+                  <component :is="menuNode" />
+                  <div class="operator-star-hint" style="padding: 4px 12px; border-top: 1px solid #f0f0f0; font-size: 12px; color: #999">* 表示忽略大小写</div>
+                </div>
+              </template>
             </a-select>
 
             <a-select
@@ -52,6 +64,9 @@
               style="flex: 1"
               @update:value="(val: string) => { rule.value = val; }"
             />
+          </div>
+          <div v-if="OPERATOR_DESC.get(rule.operator)" class="rule-hint">
+            {{ OPERATOR_DESC.get(rule.operator) }}
           </div>
         </div>
 
@@ -124,6 +139,46 @@ const rules = ref<MatchRule[]>([])
 let isInitializing = true
 let isUserModifying = false
 
+const jsonMode = ref(false)
+const jsonText = ref('')
+const jsonError = ref('')
+
+const ruleToJson = () => {
+  jsonText.value = JSON.stringify(buildVarsFromRules(), null, 2)
+  jsonError.value = ''
+}
+
+const jsonToRules = (): boolean => {
+  try {
+    const parsed = JSON.parse(jsonText.value)
+    if (!Array.isArray(parsed)) {
+      jsonError.value = 'JSON 必须是数组'
+      return false
+    }
+    for (const item of parsed) {
+      if (!Array.isArray(item) || (item.length !== 3 && item.length !== 4)) {
+        jsonError.value = `非法表达式（须为 3/4 元组数组）: ${JSON.stringify(item)}`
+        return false
+      }
+    }
+    parseRulesFromVars(parsed)
+    jsonError.value = ''
+    return true
+  } catch (e) {
+    jsonError.value = `JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`
+    return false
+  }
+}
+
+const toggleJsonMode = (val: boolean) => {
+  if (val) {
+    ruleToJson()
+    jsonMode.value = true
+  } else if (jsonToRules()) {
+    jsonMode.value = false
+  }
+}
+
 const getKeyPlaceholder = (type: string): string => {
   switch (type) {
     case 'header': return 'header 名称'
@@ -137,13 +192,30 @@ const getKeyPlaceholder = (type: string): string => {
 
 const isIpOperator = (op: string): boolean => op === 'ip~' || op === 'not_ip~'
 
-const LIST_OPERATORS = new Set(['ip~', 'not_ip~', 'IN', 'NOT IN'])
+const OPERATOR_GROUPS: { label: string; operators: [MatchOperator, string, string, string][] }[] = [
+  { label: '等于', operators: [['==', '等于', '等于', '等于匹配：arg_name == user'], ['==*', '等于*', '等于(忽略大小写)', '忽略大小写等于匹配：arg_name ==* USER']] },
+  { label: '不等于', operators: [['!=', '不等于', '不等于', '不等于匹配：arg_name != user'], ['!=*', '不等于*', '不等于(忽略大小写)', '忽略大小写不等于匹配：arg_name !=* USER']] },
+  { label: '数值', operators: [['>', '大于', '大于', '数值大于：arg_rank > 1'], ['>=', '大于等于', '大于等于', '数值大于等于：arg_rank >= 1'], ['<', '小于', '小于', '数值小于：arg_rank < 2'], ['<=', '小于等于', '小于等于', '数值小于等于：arg_rank <= 2']] },
+  { label: '版本号', operators: [['v>', '版本大于', '版本大于', '版本号比较：http_appv v> 1.2.3'], ['v>=', '版本大于等于', '版本大于等于', '版本号比较：http_appv v>= 1.2.3'], ['v<', '版本小于', '版本小于', '版本号比较：http_appv v< 1.2.3'], ['v<=', '版本小于等于', '版本小于等于', '版本号比较：http_appv v<= 1.2.3']] },
+  { label: '正则', operators: [['~~', '正则匹配', '正则匹配', '正则匹配：arg_name ~~ user[12]'], ['~~*', '正则*', '正则匹配(忽略大小写)', '忽略大小写正则：arg_name ~~* USER[12]']] },
+  { label: 'IP', operators: [['ip~', 'IP 匹配', 'IP 匹配', '按 IP 段匹配：remote_addr ip~ [10.158.40.51, 10.0.0.0/8]'], ['not_ip~', '非 IP 匹配', '非 IP 匹配', '按 IP 段反向匹配：remote_addr 不在列表内']] },
+  { label: '包含(列表)', operators: [['has', '包含', '包含', '左值(数组)包含右值：custom_names has user1'], ['has*', '包含*', '包含(忽略大小写)', '忽略大小写左值数组包含：custom_names has* USER1'], ['rx~', '路径存在', '路径存在', '路径匹配优化版 in：req_uri rx~ [/path/to/1]'], ['rx~*', '路径存在*', '路径存在(忽略大小写)', '忽略大小写路径存在：req_uri rx~* [/PATH]'], ['in*', '存在*', '存在(忽略大小写)', '忽略大小写右值数组存在：arg_name in* [USER1, USER2]']] },
+  { label: '组合', operators: [['IN', '包含(组合)', '包含(组合)', '右值(数组)包含左值：arg_name in [user1, user2]'], ['NOT IN', '不包含(组合)', '不包含(组合)', '右值数组不包含左值：arg_name !in [user1, user2]']] }
+]
+
+const OPERATOR_DESC = new Map<string, string>(
+  OPERATOR_GROUPS.flatMap(g => g.operators.map(([op, , , desc]) => [op, desc] as const))
+)
+
+const ALL_OPERATORS: [MatchOperator, string, string][] = OPERATOR_GROUPS.flatMap(g => g.operators.map(([op, shortLabel, fullLabel]) => [op, shortLabel, fullLabel] as [MatchOperator, string, string]))
+
+const LIST_OPERATORS = new Set(['ip~', 'not_ip~', 'IN', 'NOT IN', 'in*', 'rx~', 'rx~*'])
 const isListOperator = (op: string): boolean => LIST_OPERATORS.has(op)
 
 const deriveRuleType = (varName: string): MatchRule['type'] => {
   if (varName === 'http_host' || varName.startsWith('http_')) return 'header'
   if (varName.startsWith('arg_')) return 'query'
-  if (varName.startsWith('postarg_')) return 'postarg'
+  if (varName.startsWith('post_arg_') || varName.startsWith('postarg_')) return 'postarg'
   if (varName.startsWith('cookie_')) return 'cookie'
   return 'builtin'
 }
@@ -151,7 +223,7 @@ const deriveRuleType = (varName: string): MatchRule['type'] => {
 const deriveRuleKey = (varName: string, type: MatchRule['type']): string => {
   if (type === 'header') return varName === 'http_host' ? 'host' : varName.replace('http_', '').replace(/_/g, '-')
   if (type === 'query') return varName.replace('arg_', '')
-  if (type === 'postarg') return varName.replace('postarg_', '')
+  if (type === 'postarg') return varName.replace(/^post_arg_|^postarg_/, '')
   if (type === 'cookie') return varName.replace('cookie_', '')
   return varName
 }
@@ -167,7 +239,7 @@ const buildVarsFromRules = (): (string | string[])[][] => {
     } else if (rule.type === 'query') {
       varsList.push([`arg_${rule.key}`, rule.operator, rule.value])
     } else if (rule.type === 'postarg') {
-      varsList.push([`postarg_${rule.key}`, rule.operator, rule.value])
+      varsList.push([`post_arg_${rule.key}`, rule.operator, rule.value])
     } else if (rule.type === 'cookie') {
       varsList.push([`cookie_${rule.key}`, rule.operator, rule.value])
     } else if (rule.type === 'builtin') {
@@ -175,7 +247,7 @@ const buildVarsFromRules = (): (string | string[])[][] => {
     }
   }
 
-  // ip~ / not_ip~ / IN / NOT IN 展开为 Edge 原生格式（评审确认）
+  // ip~ / not_ip~ / IN / NOT IN / in* / rx~ / rx~* 展开为 Edge 原生格式（评审确认）
   const expanded: (string | string[])[][] = []
   for (const v of varsList) {
     const [varName, operator, value] = v
@@ -187,6 +259,8 @@ const buildVarsFromRules = (): (string | string[])[][] => {
       expanded.push([varName, 'in', Array.isArray(value) ? value : value.split(',')])
     } else if (operator === 'NOT IN') {
       expanded.push([varName, '!', 'in', Array.isArray(value) ? value : value.split(',')])
+    } else if (LIST_OPERATORS.has(operator)) {
+      expanded.push([varName, operator, Array.isArray(value) ? value : value.split(',')])
     } else {
       expanded.push([varName, operator, value])
     }
@@ -218,11 +292,13 @@ const parseRulesFromVars = (varsList: (string | string[])[][] | undefined) => {
 
     const [varNameRaw, operatorRaw, valueRaw] = v
     const varName = String(varNameRaw)
-    const operator = String(operatorRaw)
+    const operatorRaw2 = String(operatorRaw)
+    // 旧数据语义修正与别名归一化（评审确认）：~* → ~~*（手册无 ~*）、ipmatch → ip~（别名）
+    const operator = operatorRaw2 === '~*' ? '~~*' : operatorRaw2 === 'ipmatch' ? 'ip~' : operatorRaw2
     const isIpOp = operator === 'ip~'
     const isInOp = operator === 'in' || operator === 'IN'
     const isNotInOp = operator === 'NOT IN'
-    const isListOp = isIpOp || isInOp || isNotInOp
+    const isListOp = LIST_OPERATORS.has(operator) || isIpOp || isInOp || isNotInOp
     const normalizedOp = isInOp ? 'IN' : isNotInOp ? 'NOT IN' : operator
     const value = isListOp && !Array.isArray(valueRaw)
       ? String(valueRaw).split(',')
