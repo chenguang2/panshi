@@ -436,7 +436,7 @@ class NodeTaskService:
                 timeout = int(params.get("timeout") or 30)
             except (TypeError, ValueError):
                 timeout = 30
-            whitelist = ",".join(params.get("whitelist") or [])
+            whitelist = _build_cmd_exec_whitelist(params.get("whitelist") or [])
             import base64
 
             ev = {
@@ -450,11 +450,7 @@ class NodeTaskService:
                 cancel_event=cancel_event, on_progress=on_log,
                 job_timeout=timeout + 10,
             )
-            raw = result.get("shell_stdout") or result.get("stdout") or ""
-            parsed = parse_cmd_exec_output(raw)
-            if parsed["status"] == "ok":
-                return {"rc": 0, "status": "successful", "stdout": parsed["stdout"]}
-            return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"]}
+            return _cmd_exec_result_from_playbook(result)
 
         if task_type == "install_openresty":
             srcpath = f"{_SOFT_DIR()}"
@@ -582,13 +578,56 @@ def parse_software_check_output(raw: str) -> dict:
     return result
 
 
-def parse_cmd_exec_output(raw: str) -> dict:
+CMD_EXEC_BUILTIN_WHITELIST = [
+    "ls", "ps", "df", "free", "top", "cat", "head", "tail", "grep", "wc",
+    "du", "stat", "whoami", "hostname", "uptime", "date", "uname",
+]
+
+
+def _build_cmd_exec_whitelist(custom: list[str]) -> str:
+    """合并内置只读命令与任务自定义白名单，返回逗号分隔字符串（去重保序）。
+
+    与前端 cmdBuiltinWhitelist 保持一致；服务端强制内置列表，不依赖前端传参。
+    """
+    seen: set[str] = set()
+    merged: list[str] = []
+    for name in list(CMD_EXEC_BUILTIN_WHITELIST) + [c.strip() for c in custom if str(c).strip()]:
+        if name not in seen:
+            seen.add(name)
+            merged.append(name)
+    return ",".join(merged)
+
+
+def _cmd_exec_result_from_playbook(result: dict) -> dict:
+    """将 run_playbook 结果映射为 cmd_exec 节点结果。
+
+    修复 Bug 2：ansible 连接失败（UNREACHABLE，rc!=0）时 shell_stdout 首行是
+    PLAY 头而非 ERROR 前缀，旧逻辑会误判为 ok。现以 rc 为首要判定：
+    - rc != 0 → failed（stdout 保留，stderr 记录错误）
+    - rc == 0 → 依 parse_cmd_exec_output（timeout/blocked/failed/ok）
+    """
+    raw = result.get("shell_stdout") or result.get("stdout") or ""
+    rc = result.get("rc")
+    if rc != 0:
+        stderr = result.get("stderr") or ""
+        if not stderr:
+            stderr = "命令执行失败（ansible rc=%s）" % rc
+        return {"rc": rc, "status": "failed", "stdout": raw, "stderr": stderr}
+    parsed = parse_cmd_exec_output(raw, rc=rc)
+    if parsed["status"] == "ok":
+        return {"rc": 0, "status": "successful", "stdout": parsed["stdout"]}
+    return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"]}
+
+
+def parse_cmd_exec_output(raw: str, rc: int = 0) -> dict:
     """Parse cmd_exec.sh output into a structured result.
 
     Status mapping (评审确认): 超时→timeout, 失败→failed, 拦截→blocked, 否则 ok.
     Returns ``{"status": str, "stdout": str, "error": str | None}``.
     """
     if not raw:
+        if rc != 0:
+            return {"status": "failed", "stdout": "", "error": "命令无输出（ansible rc=%s）" % rc}
         return {"status": "ok", "stdout": "", "error": None}
     first = raw.splitlines()[0].strip()
     if first.startswith("ERROR: 命令超时"):
@@ -601,6 +640,8 @@ def parse_cmd_exec_output(raw: str) -> dict:
         or "不在白名单" in first
     ):
         return {"status": "blocked", "stdout": raw, "error": first}
+    if rc != 0:
+        return {"status": "failed", "stdout": raw, "error": "命令执行失败（ansible rc=%s）" % rc}
     return {"status": "ok", "stdout": raw, "error": None}
 
 # ── module-level singleton (V1/V6) ────────────────────────────────────

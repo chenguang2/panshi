@@ -339,7 +339,10 @@ class TestCmdExecDispatch:
         assert call.args[1] == "cmd_exec_run"
         ev = call.args[2]
         assert base64.b64decode(ev["cmd_exec"]).decode() == "ls -la /tmp"
-        assert base64.b64decode(ev["cmd_whitelist"]).decode() == "ls,ps"
+        wl_decoded = base64.b64decode(ev["cmd_whitelist"]).decode()
+        parts = wl_decoded.split(",")
+        assert "ls" in parts and "ps" in parts
+        assert "hostname" in parts  # 内置只读命令默认合并（Bug 1 修复）
         assert ev["cmd_security"] == "blacklist"
         assert ev["cmd_timeout"] == 30
         assert call.kwargs["job_timeout"] == 40
@@ -366,7 +369,8 @@ class TestCmdExecDispatch:
         ev = ansible.run_playbook.await_args.args[2]
         assert ev["cmd_security"] == "blacklist"
         assert ev["cmd_timeout"] == 30
-        assert base64.b64decode(ev["cmd_whitelist"]).decode() == ""
+        wl_decoded = base64.b64decode(ev["cmd_whitelist"]).decode()
+        assert "hostname" in wl_decoded.split(",")  # 内置只读命令默认存在（Bug 1 修复）
         assert ansible.run_playbook.await_args.kwargs["job_timeout"] == 40
 
     @pytest.mark.asyncio
