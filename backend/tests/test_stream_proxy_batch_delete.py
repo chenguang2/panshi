@@ -122,33 +122,31 @@ class TestBatchDeleteStreamProxiesEndpoint:
             )
         assert exc_info.value.status_code == 400
 
-    async def test_missing_and_dns_proxy_marked_failed_others_succeed(self, test_db):
-        """2.2 混合场景（V2-A/V4/V5）：不存在的 id 与 DNS 类型标记失败，其余 normal 仍删除。"""
+    async def test_missing_marked_failed_dns_also_deleted(self, test_db):
+        """V2 修订：DNS 与普通代理同表，均成功删除；仅不存在的 id 标记失败。"""
         cid = await _setup_cluster_with_proxies(test_db, with_dns=True)
         from app.api.v1.cluster_stream_proxies import delete_stream_proxies_batch
         from sqlalchemy import select
 
         proxy_ids = await _get_proxy_ids(test_db, cid)  # p1, p2, p3, dns1
-        normal_ids = proxy_ids[:3]
         dns_id = proxy_ids[3]
         missing_id = 99999
 
         result = await delete_stream_proxies_batch(
-            BatchDeleteStreamProxiesRequest(proxy_ids=normal_ids + [dns_id, missing_id],
+            BatchDeleteStreamProxiesRequest(proxy_ids=proxy_ids + [missing_id],
                                             delete_db=True), test_db
         )
 
         by_id = {r["proxy_id"]: r for r in result["results"]}
         assert len(result["results"]) == 5
-        assert by_id[dns_id]["status"] == "failed"
-        assert "类型" in by_id[dns_id]["message"]
+        assert by_id[dns_id]["status"] == "success"
+        assert by_id[dns_id]["name"] == "dns1"
         assert by_id[missing_id]["status"] == "failed"
         assert "不存在" in by_id[missing_id]["message"]
 
         remaining = (await test_db.execute(
             select(StreamProxy).where(StreamProxy.cluster_id == cid))).scalars().all()
-        assert len(remaining) == 1
-        assert remaining[0].id == dns_id
+        assert remaining == []
 
     async def test_edge_delete_all_online_nodes_when_node_ids_empty(self, test_db):
         """2.3 Edge 删除（V6）：node_ids 为空时对各集群全部在线节点调用。"""

@@ -155,6 +155,17 @@ describe('DnsUdpProxyList.vue', () => {
     expect(secondCard.text()).toContain('无 DNS 配置')
   })
 
+  it('shows protocol label on cards (TCP/UDP)', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 200))
+    await wrapper.vm.$nextTick()
+    const cards = wrapper.findAll('.sp-card')
+    expect(cards.length).toBe(2)
+    expect(cards[0].text()).toContain('TCP')
+    expect(cards[1].text()).toContain('UDP')
+  })
+
   it('count text shows total number of DNS proxies', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
@@ -188,5 +199,90 @@ describe('DnsUdpProxyList.vue', () => {
     expect(wrapper.findAll('.mock-form-wizard').length).toBe(1)
     // Check the wizard stub has visible=true after clicking (component stays rendered)
     // The stub always exists because it uses :visible not v-if
+  })
+})
+
+describe('DnsUdpProxyList.vue 批量管理', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/stream-proxies') return Promise.resolve({ data: MOCK_DNS_PROXIES })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('页头有「批量管理」按钮（右侧），点击进入批量模式', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    const btn = wrapper.findAll('button').find(b => b.text().includes('批量管理'))
+    expect(btn).toBeDefined()
+    const headerBtns = wrapper.findAll('.page-header button')
+    const newBtnIdx = headerBtns.findIndex(b => b.text().includes('新建 DNS 代理'))
+    const batchBtnIdx = headerBtns.findIndex(b => b.text().includes('批量管理'))
+    expect(batchBtnIdx).toBeGreaterThan(newBtnIdx)
+
+    await btn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-checkbox').length).toBe(2)
+    expect(wrapper.find('.sp-batch-bar').exists()).toBe(true)
+  })
+
+  it('勾选卡片后计数更新、批量删除按钮启用', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
+    expect(wrapper.find('.sp-batch-bar').text()).toContain('1')
+    const delBtn = wrapper.findAll('button').find(b => b.text().includes('批量删除'))
+    expect(delBtn).toBeDefined()
+    expect((delBtn!.element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('批量模式下全选当前筛选结果 toggle', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    const selectAllBtn = wrapper.findAll('button, a').find(b => b.text().includes('全选当前筛选结果'))
+    expect(selectAllBtn).toBeDefined()
+    await selectAllBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(2)
+    await selectAllBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
+  })
+
+  it('退出批量管理清空选择', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
+
+    await wrapper.findAll('button').find(b => b.text().includes('退出批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
   })
 })

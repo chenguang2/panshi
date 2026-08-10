@@ -452,7 +452,7 @@ async def delete_stream_proxies_batch(
 ):
     """批量删除四层代理（跨集群，全局视图）。
 
-    - 仅处理 proxy_type == "normal"（V2-A）：非 normal / 不存在的 id 标记 failed，不阻塞其余
+    - 覆盖 normal 与 dns 两类（V2 修订）：同属 ps_stream_proxy 表，按 id 精确删除，不按 proxy_type 过滤
     - 逐条独立处理（V5）：单条异常标记 failed，不抛 HTTPException 中断整体
     - node_ids 为空时删除各集群全部在线节点（V6）
     - 返回 results 含 name 字段（V4，对齐前端 nameField）
@@ -463,10 +463,7 @@ async def delete_stream_proxies_batch(
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     proxy_result = await db.execute(
-        select(StreamProxy).where(
-            StreamProxy.id.in_(body.proxy_ids),
-            StreamProxy.proxy_type == "normal",
-        )
+        select(StreamProxy).where(StreamProxy.id.in_(body.proxy_ids))
     )
     proxies = {p.id: p for p in proxy_result.scalars().all()}
 
@@ -477,7 +474,7 @@ async def delete_stream_proxies_batch(
             results.append({
                 "proxy_id": pid, "name": None,
                 "status": "failed",
-                "message": "代理不存在或类型不支持",
+                "message": "代理不存在",
             })
             continue
         try:
