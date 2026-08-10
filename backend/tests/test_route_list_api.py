@@ -118,3 +118,20 @@ class TestRouteListAPI:
                 assert "proxy_rewrite" in plugin_names, f"route {item['name']} missing proxy_rewrite"
                 for p in item["plugins"]:
                     assert "config" in p, f"plugin {p['plugin_name']} missing config field"
+
+
+class TestRouteListWebsocket:
+
+    async def test_list_routes_includes_enable_websocket(self):
+        """route_to_response 必须返回 enable_websocket，前端编辑回填依赖它。"""
+        from app.api.v1.cluster_routes import route_to_response
+        from app.models.cluster import Route
+
+        # 用完整字段的 ORM 对象验证转换函数不丢字段
+        route = Route(
+            id=1, edge_uuid="uuid", cluster_id=1, name="ws-list-test",
+            uri="/ws-list/*", priority=0, status=1, methods="GET",
+            enable_websocket=True,
+        )
+        resp = route_to_response(route)
+        assert resp.enable_websocket is True

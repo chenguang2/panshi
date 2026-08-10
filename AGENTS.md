@@ -142,6 +142,7 @@ cd frontend && npm run build
 5. **代码禁用** `as any`、`@ts-ignore`、`@ts-expect-error`。
 6. **EdgeClient 方法统一** — 所有资源方法已合并为 `api(resource, action, ...)` 通用方法，旧方法名保留为兼容代理。
 7. **发布/删除流程统一** — 使用 `useClusterUtils.ts` 中的 `executePublish` 和 `executeDeleteWithProgress` 共享函数，不要在 composable 中重复实现进度弹窗逻辑。
+8. **测试运行时已启动服务** — 开发环境的前后端（`develop/linux/start.sh`，后端 12344 / 前端 12345）**默认已在运行**，不要每次自行启动/停止系统。需要验证浏览器/API 链路时直接连接 `http://localhost:12345`（前端）与 `http://localhost:12344`（后端）。仅当系统确实未运行（curl 健康检查失败）时才用 `develop/linux/start.sh` 启动、`develop/linux/stop.sh` 停止。手动链路测试（Playwright）优先复用已运行实例，完成后不停止系统。
 
 ## 新增功能步骤
 

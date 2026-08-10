@@ -65,8 +65,8 @@
               @update:value="(val: string) => { rule.value = val; }"
             />
           </div>
-          <div v-if="OPERATOR_DESC.get(rule.operator)" class="rule-hint">
-            {{ OPERATOR_DESC.get(rule.operator) }}
+          <div v-if="getRuleHint(rule)" class="rule-hint">
+            {{ getRuleHint(rule) }}
           </div>
         </div>
 
@@ -193,14 +193,14 @@ const getKeyPlaceholder = (type: string): string => {
 const isIpOperator = (op: string): boolean => op === 'ip~' || op === 'not_ip~'
 
 const OPERATOR_GROUPS: { label: string; operators: [MatchOperator, string, string, string][] }[] = [
-  { label: '等于', operators: [['==', '等于', '等于', '等于匹配：arg_name == user'], ['==*', '等于*', '等于(忽略大小写)', '忽略大小写等于匹配：arg_name ==* USER']] },
-  { label: '不等于', operators: [['!=', '不等于', '不等于', '不等于匹配：arg_name != user'], ['!=*', '不等于*', '不等于(忽略大小写)', '忽略大小写不等于匹配：arg_name !=* USER']] },
-  { label: '数值', operators: [['>', '大于', '大于', '数值大于：arg_rank > 1'], ['>=', '大于等于', '大于等于', '数值大于等于：arg_rank >= 1'], ['<', '小于', '小于', '数值小于：arg_rank < 2'], ['<=', '小于等于', '小于等于', '数值小于等于：arg_rank <= 2']] },
-  { label: '版本号', operators: [['v>', '版本大于', '版本大于', '版本号比较：http_appv v> 1.2.3'], ['v>=', '版本大于等于', '版本大于等于', '版本号比较：http_appv v>= 1.2.3'], ['v<', '版本小于', '版本小于', '版本号比较：http_appv v< 1.2.3'], ['v<=', '版本小于等于', '版本小于等于', '版本号比较：http_appv v<= 1.2.3']] },
-  { label: '正则', operators: [['~~', '正则匹配', '正则匹配', '正则匹配：arg_name ~~ user[12]'], ['~~*', '正则*', '正则匹配(忽略大小写)', '忽略大小写正则：arg_name ~~* USER[12]']] },
-  { label: 'IP', operators: [['ip~', 'IP 匹配', 'IP 匹配', '按 IP 段匹配：remote_addr ip~ [10.158.40.51, 10.0.0.0/8]'], ['not_ip~', '非 IP 匹配', '非 IP 匹配', '按 IP 段反向匹配：remote_addr 不在列表内']] },
-  { label: '包含(列表)', operators: [['has', '包含', '包含', '左值(数组)包含右值：custom_names has user1'], ['has*', '包含*', '包含(忽略大小写)', '忽略大小写左值数组包含：custom_names has* USER1'], ['rx~', '路径存在', '路径存在', '路径匹配优化版 in：req_uri rx~ [/path/to/1]'], ['rx~*', '路径存在*', '路径存在(忽略大小写)', '忽略大小写路径存在：req_uri rx~* [/PATH]'], ['in*', '存在*', '存在(忽略大小写)', '忽略大小写右值数组存在：arg_name in* [USER1, USER2]']] },
-  { label: '组合', operators: [['IN', '包含(组合)', '包含(组合)', '右值(数组)包含左值：arg_name in [user1, user2]'], ['NOT IN', '不包含(组合)', '不包含(组合)', '右值数组不包含左值：arg_name !in [user1, user2]']] }
+  { label: '等于', operators: [['==', '等于', '等于', '等于匹配：{var} == {val}'], ['==*', '等于*', '等于(忽略大小写)', '忽略大小写等于匹配：{var} ==* {val}']] },
+  { label: '不等于', operators: [['!=', '不等于', '不等于', '不等于匹配：{var} != {val}'], ['!=*', '不等于*', '不等于(忽略大小写)', '忽略大小写不等于匹配：{var} !=* {val}']] },
+  { label: '数值', operators: [['>', '大于', '大于', '数值大于：{var} > {val}'], ['>=', '大于等于', '大于等于', '数值大于等于：{var} >= {val}'], ['<', '小于', '小于', '数值小于：{var} < {val}'], ['<=', '小于等于', '小于等于', '数值小于等于：{var} <= {val}']] },
+  { label: '版本号', operators: [['v>', '版本大于', '版本大于', '版本号比较：{var} v> {val}'], ['v>=', '版本大于等于', '版本大于等于', '版本号比较：{var} v>= {val}'], ['v<', '版本小于', '版本小于', '版本号比较：{var} v< {val}'], ['v<=', '版本小于等于', '版本小于等于', '版本号比较：{var} v<= {val}']] },
+  { label: '正则', operators: [['~~', '正则匹配', '正则匹配', '正则匹配：{var} ~~ {val}'], ['~~*', '正则*', '正则匹配(忽略大小写)', '忽略大小写正则：{var} ~~* {val}']] },
+  { label: 'IP', operators: [['ip~', 'IP 匹配', 'IP 匹配', '按 IP 段匹配：{var} ip~ {val}'], ['not_ip~', '非 IP 匹配', '非 IP 匹配', '按 IP 段反向匹配：{var} 不在列表内']] },
+  { label: '包含(列表)', operators: [['has', '包含', '包含', '左值(数组)包含右值：{var} has {val}'], ['has*', '包含*', '包含(忽略大小写)', '忽略大小写左值数组包含：{var} has* {val}'], ['rx~', '路径存在', '路径存在', '路径匹配优化版 in：{var} rx~ {val}'], ['rx~*', '路径存在*', '路径存在(忽略大小写)', '忽略大小写路径存在：{var} rx~* {val}'], ['in*', '存在*', '存在(忽略大小写)', '忽略大小写右值数组存在：{var} in* {val}']] },
+  { label: '组合', operators: [['IN', '包含(组合)', '包含(组合)', '右值(数组)包含左值：{var} in {val}'], ['NOT IN', '不包含(组合)', '不包含(组合)', '右值数组不包含左值：{var} !in {val}']] }
 ]
 
 const OPERATOR_DESC = new Map<string, string>(
@@ -211,6 +211,30 @@ const ALL_OPERATORS: [MatchOperator, string, string][] = OPERATOR_GROUPS.flatMap
 
 const LIST_OPERATORS = new Set(['ip~', 'not_ip~', 'IN', 'NOT IN', 'in*', 'rx~', 'rx~*'])
 const isListOperator = (op: string): boolean => LIST_OPERATORS.has(op)
+
+const deriveVarName = (rule: MatchRule): string => {
+  if (!rule.key) return rule.key
+  switch (rule.type) {
+    case 'header': return `http_${rule.key.toLowerCase().replace(/-/g, '_')}`
+    case 'query': return `arg_${rule.key}`
+    case 'postarg': return `post_arg_${rule.key}`
+    case 'cookie': return `cookie_${rule.key}`
+    default: return rule.key
+  }
+}
+
+const formatRuleValue = (value: string | string[]): string => {
+  return Array.isArray(value) ? `[${value.join(', ')}]` : String(value)
+}
+
+const getRuleHint = (rule: MatchRule): string => {
+  const desc = OPERATOR_DESC.get(rule.operator)
+  if (!desc) return ''
+  // 占位符模板：{var} 变量名、{val} 值 —— 由 desc 声明，替换无歧义
+  return desc
+    .replaceAll('{var}', deriveVarName(rule))
+    .replaceAll('{val}', formatRuleValue(rule.value))
+}
 
 const deriveRuleType = (varName: string): MatchRule['type'] => {
   if (varName === 'http_host' || varName.startsWith('http_')) return 'header'

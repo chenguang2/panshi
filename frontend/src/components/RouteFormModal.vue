@@ -334,7 +334,7 @@ async function handleSubmit() {
     }
     if (form.advancedEnabled) data.vars = form.advancedMatch.vars
     data.plugin_config_ids = pluginConfigIds.value
-    if (form.enableWebsocket) data.enable_websocket = true
+    data.enable_websocket = form.enableWebsocket
     const cid = form.cluster_id
     let routeId: number | null = null
     if (props.editingRoute && !props.copyingRoute) {

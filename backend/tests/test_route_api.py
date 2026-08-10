@@ -276,3 +276,67 @@ class TestRouteAPI:
             data = response.json()
             for item in data["items"]:
                 assert "test" in (item.get("name") or "").lower()
+
+class TestRouteWebsocketRoundTrip:
+
+    async def _auth_headers(self, client):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "panshi123"}
+        )
+        token = response.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    async def test_create_route_with_websocket_returns_true(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers = await self._auth_headers(client)
+            response = await client.post(
+                "/api/v1/clusters/1/routes",
+                headers=headers,
+                json={
+                    "name": "ws-roundtrip-test",
+                    "uri": "/ws-roundtrip/*",
+                    "enable_websocket": True
+                }
+            )
+            assert response.status_code == 201
+            data = response.json()
+            assert data["enable_websocket"] is True
+            route_id = data["id"]
+
+            get_response = await client.get(
+                f"/api/v1/clusters/1/routes/{route_id}",
+                headers=headers
+            )
+            assert get_response.status_code == 200
+            assert get_response.json()["enable_websocket"] is True
+
+    async def test_update_route_websocket_false_clears(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers = await self._auth_headers(client)
+            response = await client.post(
+                "/api/v1/clusters/1/routes",
+                headers=headers,
+                json={
+                    "name": "ws-clear-test",
+                    "uri": "/ws-clear/*",
+                    "enable_websocket": True
+                }
+            )
+            route_id = response.json()["id"]
+
+            update_response = await client.put(
+                f"/api/v1/clusters/1/routes/{route_id}",
+                headers=headers,
+                json={"enable_websocket": False}
+            )
+            assert update_response.status_code == 200
+            assert update_response.json()["enable_websocket"] is False
+
+            get_response = await client.get(
+                f"/api/v1/clusters/1/routes/{route_id}",
+                headers=headers
+            )
+            assert get_response.json()["enable_websocket"] is False

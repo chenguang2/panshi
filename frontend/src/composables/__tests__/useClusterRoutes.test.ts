@@ -69,7 +69,7 @@ async function makeComposable(cluster: Cluster) {
   const { useClusterRoutes } = await import('../useClusterRoutes')
   const clusters = ref<Cluster[]>([cluster])
   const currentClusterId = ref<number | null>(null)
-  return useClusterRoutes({
+  const result = useClusterRoutes({
     clusters: computed(() => clusters.value),
     currentClusterId,
     openPublishModal: async () => [],
@@ -84,6 +84,7 @@ async function makeComposable(cluster: Cluster) {
     versionModalResourceName: ref(''),
     versionModalEdgeUuid: ref(''),
   })
+  return { ...result, _currentClusterId: currentClusterId }
 }
 
 describe('useClusterRoutes batch selection', () => {
@@ -255,5 +256,36 @@ describe('useClusterRoutes batch selection', () => {
       handleRouteTableChange(cluster, { current: 1, pageSize: 20 }, { field: 'priority', order: 'ascend' })
       expect(cluster.selectedRouteKeys).toEqual([])
     })
+  })
+})
+
+describe('useClusterRoutes websocket submit', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('handleRouteSubmit 发送 enable_websocket=false（取消勾选清除 DB 值）', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { handleRouteSubmit, routeForm, editingRoute, routeFormRef, _currentClusterId } = await makeComposable(cluster)
+    const mockPut = vi.fn().mockResolvedValue({ data: { id: 1 } })
+    // 覆写 api.put 捕获 payload
+    const { default: api } = await import('@/api')
+    ;(api.put as any) = mockPut
+    // routeFormRef 绑定到 mock 元素，跳过真实 validate
+    routeFormRef.value = { validate: async () => true } as any
+    _currentClusterId.value = cluster.id
+    // 模拟编辑路由，取消 websocket
+    routeForm.value = {
+      name: 'ws-route', uri: '/ws', methods: ['GET'], priority: 0, status: 1,
+      upstream_id: 1, description: '', enableWebsocket: false, advancedMatchEnabled: false,
+      advancedMatch: { vars: [] }, plugins: [], plugin_config_ids: [],
+    }
+    editingRoute.value = { id: 1, edge_uuid: 'e', cluster_id: 1, name: 'ws-route', uri: '/ws', priority: 0, status: 1 } as any
+
+    await handleRouteSubmit()
+    const payload = mockPut.mock.calls[0][1]
+    expect(payload.enable_websocket).toBe(false)
   })
 })

@@ -11,9 +11,8 @@ describe('RouteFormModal enable_websocket logic', () => {
       description: form.description,
       upstream_id: form.upstream_id,
     }
-    if (form.enable_websocket) {
-      data.enable_websocket = true
-    }
+    // 始终发送 enable_websocket（true/false 都传），确保取消勾选能清除 DB 旧值
+    data.enable_websocket = form.enable_websocket
     return data
   }
 
@@ -26,12 +25,12 @@ describe('RouteFormModal enable_websocket logic', () => {
     expect(data.enable_websocket).toBe(true)
   })
 
-  it('excludes enable_websocket when unchecked', () => {
+  it('includes enable_websocket=false when unchecked (clears DB value)', () => {
     const data = buildRouteSubmitData(false, {
       name: 'no-ws', uri: '/no-ws', methods: 'GET',
       priority: 0, status: 1, upstream_id: 1,
       enable_websocket: false,
     })
-    expect(data.enable_websocket).toBeUndefined()
+    expect(data.enable_websocket).toBe(false)
   })
 })

@@ -1212,14 +1212,14 @@ describe('RouteAdvancedMatch 运算符全集元数据', () => {
   }
 
   const OPERATOR_GROUPS = [
-    { label: '等于', operators: [['==', '等于', '等于', '等于匹配：arg_name == user'], ['==*', '等于*', '等于(忽略大小写)', '忽略大小写等于匹配：arg_name ==* USER']] },
-    { label: '不等于', operators: [['!=', '不等于', '不等于', '不等于匹配：arg_name != user'], ['!=*', '不等于*', '不等于(忽略大小写)', '忽略大小写不等于匹配：arg_name !=* USER']] },
-    { label: '数值', operators: [['>', '大于', '大于', '数值大于：arg_rank > 1'], ['>=', '大于等于', '大于等于', '数值大于等于：arg_rank >= 1'], ['<', '小于', '小于', '数值小于：arg_rank < 2'], ['<=', '小于等于', '小于等于', '数值小于等于：arg_rank <= 2']] },
-    { label: '版本号', operators: [['v>', '版本大于', '版本大于', '版本号比较：http_appv v> 1.2.3'], ['v>=', '版本大于等于', '版本大于等于', '版本号比较：http_appv v>= 1.2.3'], ['v<', '版本小于', '版本小于', '版本号比较：http_appv v< 1.2.3'], ['v<=', '版本小于等于', '版本小于等于', '版本号比较：http_appv v<= 1.2.3']] },
-    { label: '正则', operators: [['~~', '正则匹配', '正则匹配', '正则匹配：arg_name ~~ user[12]'], ['~~*', '正则*', '正则匹配(忽略大小写)', '忽略大小写正则：arg_name ~~* USER[12]']] },
-    { label: 'IP', operators: [['ip~', 'IP 匹配', 'IP 匹配', '按 IP 段匹配：remote_addr ip~ [10.158.40.51, 10.0.0.0/8]'], ['not_ip~', '非 IP 匹配', '非 IP 匹配', '按 IP 段反向匹配：remote_addr 不在列表内']] },
-    { label: '包含(列表)', operators: [['has', '包含', '包含', '左值(数组)包含右值：custom_names has user1'], ['has*', '包含*', '包含(忽略大小写)', '忽略大小写左值数组包含：custom_names has* USER1'], ['rx~', '路径存在', '路径存在', '路径匹配优化版 in：req_uri rx~ [/path/to/1]'], ['rx~*', '路径存在*', '路径存在(忽略大小写)', '忽略大小写路径存在：req_uri rx~* [/PATH]'], ['in*', '存在*', '存在(忽略大小写)', '忽略大小写右值数组存在：arg_name in* [USER1, USER2]']] },
-    { label: '组合', operators: [['IN', '包含(组合)', '包含(组合)', '右值(数组)包含左值：arg_name in [user1, user2]'], ['NOT IN', '不包含(组合)', '不包含(组合)', '右值数组不包含左值：arg_name !in [user1, user2]']] }
+    { label: '等于', operators: [['==', '等于', '等于', '等于匹配：{var} == {val}'], ['==*', '等于*', '等于(忽略大小写)', '忽略大小写等于匹配：{var} ==* {val}']] },
+    { label: '不等于', operators: [['!=', '不等于', '不等于', '不等于匹配：{var} != {val}'], ['!=*', '不等于*', '不等于(忽略大小写)', '忽略大小写不等于匹配：{var} !=* {val}']] },
+    { label: '数值', operators: [['>', '大于', '大于', '数值大于：{var} > {val}'], ['>=', '大于等于', '大于等于', '数值大于等于：{var} >= {val}'], ['<', '小于', '小于', '数值小于：{var} < {val}'], ['<=', '小于等于', '小于等于', '数值小于等于：{var} <= {val}']] },
+    { label: '版本号', operators: [['v>', '版本大于', '版本大于', '版本号比较：{var} v> {val}'], ['v>=', '版本大于等于', '版本大于等于', '版本号比较：{var} v>= {val}'], ['v<', '版本小于', '版本小于', '版本号比较：{var} v< {val}'], ['v<=', '版本小于等于', '版本小于等于', '版本号比较：{var} v<= {val}']] },
+    { label: '正则', operators: [['~~', '正则匹配', '正则匹配', '正则匹配：{var} ~~ {val}'], ['~~*', '正则*', '正则匹配(忽略大小写)', '忽略大小写正则：{var} ~~* {val}']] },
+    { label: 'IP', operators: [['ip~', 'IP 匹配', 'IP 匹配', '按 IP 段匹配：{var} ip~ {val}'], ['not_ip~', '非 IP 匹配', '非 IP 匹配', '按 IP 段反向匹配：{var} 不在列表内']] },
+    { label: '包含(列表)', operators: [['has', '包含', '包含', '左值(数组)包含右值：{var} has {val}'], ['has*', '包含*', '包含(忽略大小写)', '忽略大小写左值数组包含：{var} has* {val}'], ['rx~', '路径存在', '路径存在', '路径匹配优化版 in：{var} rx~ {val}'], ['rx~*', '路径存在*', '路径存在(忽略大小写)', '忽略大小写路径存在：{var} rx~* {val}'], ['in*', '存在*', '存在(忽略大小写)', '忽略大小写右值数组存在：{var} in* {val}']] },
+    { label: '组合', operators: [['IN', '包含(组合)', '包含(组合)', '右值(数组)包含左值：{var} in {val}'], ['NOT IN', '不包含(组合)', '不包含(组合)', '右值数组不包含左值：{var} !in {val}']] }
   ]
 
   it('OPERATOR_GROUPS 覆盖手册 1.1.1 全部运算符且分组正确', async () => {
@@ -1733,6 +1733,153 @@ describe('RouteAdvancedMatch JSON 编辑双模式', () => {
     await nextTick()
     expect(wrapper.find('.json-editor').exists()).toBe(true)
     expect(wrapper.find('.json-editor textarea').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch 动态行内提示', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-select-option-group': { props: ['label'], setup(props: any, { slots }: any) { return () => h('optgroup', { label: props.label }, slots.default?.()) } },
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('getRuleHint: query 类型用 arg_ 前缀 + 实际 key 生成提示', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'query', key: 'version', operator: '==', value: 'v2'
+    })
+    expect(hint).toContain('arg_version')
+    expect(hint).toContain('==')
+    expect(hint).not.toContain('arg_name')
+    wrapper.unmount()
+  })
+
+  it('getRuleHint: header 类型用 http_ 前缀 + 短横线转下划线', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'header', key: 'X-Real-IP', operator: '==', value: '1.2.3.4'
+    })
+    expect(hint).toContain('http_x_real_ip')
+    wrapper.unmount()
+  })
+
+  it('getRuleHint: builtin 类型直接用 key，无前缀', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'builtin', key: 'remote_addr', operator: 'ip~', value: ['10.0.0.1']
+    })
+    expect(hint).toContain('remote_addr')
+    wrapper.unmount()
+  })
+
+  it('模板行内提示随 key 变化（query + version → arg_version）', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    ;(wrapper.vm as any).rules = [{
+      type: 'query', key: 'version', operator: '==', value: 'v2'
+    }]
+    await nextTick()
+    const hint = wrapper.find('.rule-hint').text()
+    expect(hint).toContain('arg_version')
+    expect(hint).not.toContain('arg_name')
+    wrapper.unmount()
+  })
+})
+
+describe('RouteAdvancedMatch 动态行内提示（值替换）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  const stubGlobals = {
+    global: {
+      components: {
+        'a-button': AButton,
+        'a-select': ASelect,
+        'a-select-option': ASelectOption,
+        'a-select-option-group': { props: ['label'], setup(props: any, { slots }: any) { return () => h('optgroup', { label: props.label }, slots.default?.()) } },
+        'a-input': AInput,
+        'a-divider': ADivider,
+        'PlusOutlined': PlusOutlined,
+        'DeleteOutlined': DeleteOutlined
+      }
+    }
+  }
+
+  it('getRuleHint: 单值运算符用实际 value 替换示例值', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'query', key: 'name', operator: '==', value: 'alice'
+    })
+    expect(hint).toContain('arg_name == alice')
+    expect(hint).not.toContain('== user')
+    wrapper.unmount()
+  })
+
+  it('getRuleHint: 版本号运算符用实际 value', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'header', key: 'appv', operator: 'v>=', value: '9.9.9'
+    })
+    expect(hint).toContain('http_appv v>= 9.9.9')
+    expect(hint).not.toContain('1.2.3')
+    wrapper.unmount()
+  })
+
+  it('getRuleHint: 数组运算符用实际 value 数组', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'builtin', key: 'req_uri', operator: 'rx~', value: ['/a', '/b']
+    })
+    expect(hint).toContain('req_uri rx~ [/a, /b]')
+    wrapper.unmount()
+  })
+
+  it('getRuleHint: IN 运算符用实际 value 数组', async () => {
+    const wrapper = mount(RouteAdvancedMatch, {
+      props: { enabled: true, modelValue: {} },
+      ...stubGlobals
+    })
+    const hint = (wrapper.vm as any).getRuleHint({
+      type: 'query', key: 'name', operator: 'IN', value: ['u1', 'u2']
+    })
+    expect(hint).toContain('arg_name in [u1, u2]')
     wrapper.unmount()
   })
 })

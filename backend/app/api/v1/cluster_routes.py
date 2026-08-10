@@ -41,6 +41,7 @@ def route_to_response(r: Route, current_version: int | None = None, published_at
         "vars": json.loads(r.vars) if r.vars else None,
         "advanced_match_enabled": bool(r.advanced_match_enabled) if r.advanced_match_enabled else False,
         "plugin_config_ids": json.loads(r.plugin_config_ids) if r.plugin_config_ids else None,
+        "enable_websocket": bool(r.enable_websocket) if r.enable_websocket else False,
         "current_version": current_version or r.current_version,
         "published_at": published_at,
         "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -174,6 +175,7 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
         vars=json.loads(db_route.vars) if db_route.vars else None,
         advanced_match_enabled=bool(db_route.advanced_match_enabled) if db_route.advanced_match_enabled else False,
         plugin_config_ids=json.loads(db_route.plugin_config_ids) if db_route.plugin_config_ids else None,
+        enable_websocket=bool(db_route.enable_websocket) if db_route.enable_websocket else False,
         created_at=db_route.created_at.isoformat() if db_route.created_at else None
     )
 
@@ -202,6 +204,7 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
         vars=json.loads(route.vars) if route.vars else None,
         advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
         plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
+        enable_websocket=bool(route.enable_websocket) if route.enable_websocket else False,
         created_at=route.created_at.isoformat() if route.created_at else None
     )
 
@@ -260,6 +263,7 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
         vars=json.loads(route.vars) if route.vars else None,
         advanced_match_enabled=bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
         plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
+        enable_websocket=bool(route.enable_websocket) if route.enable_websocket else False,
         created_at=route.created_at.isoformat() if route.created_at else None
     )
 
