@@ -3228,3 +3228,115 @@ TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写�
 包括附加输入要查询的命令
 
 你设计一下，如何在节点任务里实现，给出几个方案我看看
+
+node-task-cmd-exec
+
+/brainstorming 请仔细阅读 openspec/changes/node-task-cmd-exec 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/node-task-cmd-exec/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+=====================================================================
+
+调研并讨论：
+
+路由的高级匹配现在要增加对 ip 范围的条件
+
+需要支持下面这样的过滤条件：
+
+["remote_addr", "ip~", ["10.158.40.51","10.0.0.0/8"]],
+["remote_addr", "!", "ip~", ["192.168.0.3","127.0.0.1/8"]]
+
+你设计一下，如何加到路由的高级匹配里，给出几个方案我看看
+
+
+route-advanced-ip-range
+
+/brainstorming 请仔细阅读 openspec/changes/route-advanced-ip-range 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/route-advanced-ip-range/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+=======================================================================
+
+调研并讨论：
+
+路由的高级匹配现在要修改 in 和 not in 的输入数组，改成现在类似于 ip~ 的标签的输入方式
+
+
+route-advanced-in-notin-tags
+
+/brainstorming 请仔细阅读 openspec/changes/route-advanced-in-notin-tags 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/route-advanced-in-notin-tags/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+===================================================================
+
+调研并讨论：
+
+路由的高级匹配现在要支持匹配表达式的所有功能：
+
+阅读：
+/home/qcg/panshi/docs/edge/user-guide/使用手册.md
+
+中的 
+在路由或插件中配置表达式列表 部分，
+
+包括 ##### 1.1.1 比较运算符  和 ##### 1.1.2 逻辑运算符
+
+你设计一下，给出几个方案我看看
+
+
+route-advanced-full-operators
+
+/brainstorming 请仔细阅读 openspec/changes/route-advanced-full-operators 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/route-advanced-full-operators/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+===================================================
+修复 bug
+
+1. 路由管理中，启用 WebSocket 在界面中没有和数据库中同步，例如选中了后，存盘后，再次编辑，改checkbox 框并没有选中
+
+2. 路由的高级匹配界面中，提示标签 
+等于匹配：arg_name == user , 这个提示要根据条件的选择改成和现在的条件对应的提示，现在是固定的，会引起用户困扰
+
+
+===================================================
+
+查询一下代码：
+如果有免密，但是端口不是标准端口 22， 而是 1122 ， 这时候远程安装 openresty, 构造的安装命令是否没有加端口？  
+
+===================================================
+
+使用 /opsx-propose 命令,  仿照路由，给上游加上复制功能
+
+ssh-custom-port
+
+/brainstorming 请仔细阅读 openspec/changes/ssh-custom-port 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/ssh-custom-port/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
+
+
+upstream-copy
+
+/brainstorming 请仔细阅读 openspec/changes/upstream-copy 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+请读取 openspec/changes/upstream-copy/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
