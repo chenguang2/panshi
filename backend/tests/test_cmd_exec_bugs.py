@@ -73,6 +73,64 @@ class TestCmdExecOutputParsing:
         assert parsed["status"] == "blocked"
 
 
+class TestAnsibleFalseSuccessDetection:
+    """Bug 3: ansible rc==0 但实际未执行（no hosts matched / UNREACHABLE）不得误报 success。
+
+    任务 6 排查：节点 IP 不在 ansible inventory 时 playbook 输出
+    "Could not match supplied host pattern / skipping: no hosts matched"，
+    ansible-playbook 仍以 rc=0 退出——旧逻辑会误报 success。
+    """
+
+    def _raw_result(self, stdout: str, rc: int = 0) -> dict:
+        return {"rc": rc, "status": "successful", "stdout": stdout, "shell_stdout": ""}
+
+    def test_no_hosts_matched_detected(self):
+        """no hosts matched（主机不在清单）→ 返回友好错误。"""
+        from app.services.node_task_service import _ansible_false_success_error
+
+        raw = (
+            "\x1b[1;35m[WARNING]: Could not match supplied host pattern, ignoring: 10.99.99.1\x1b[0m\n"
+            "\nPLAY [Run edge] ****************************************************************\n"
+            "\x1b[0;36mskipping: no hosts matched\x1b[0m\n"
+        )
+        err = _ansible_false_success_error(self._raw_result(raw), ip="10.99.99.1")
+        assert err is not None
+        assert "10.99.99.1" in err
+        assert "inventory" in err
+
+    def test_unreachable_detected(self):
+        """UNREACHABLE（连接失败）→ 返回友好错误。"""
+        from app.services.node_task_service import _ansible_false_success_error
+
+        raw = (
+            "\nPLAY [Run edge] ****************************************************************\n"
+            'fatal: [192.168.0.13]: UNREACHABLE! => {"changed": false, "unreachable": true}\n'
+        )
+        err = _ansible_false_success_error(self._raw_result(raw), ip="192.168.0.13")
+        assert err is not None
+        assert "192.168.0.13" in err
+
+    def test_real_success_not_flagged(self):
+        """真实成功（PLAY RECAP ok）→ 不误报。"""
+        from app.services.node_task_service import _ansible_false_success_error
+
+        raw = (
+            "\nPLAY [Run edge] ****************************************************************\n"
+            "TASK [edge : run cmd_exec] *****************************************************\n"
+            "ok: [192.168.0.13] => (item=0)\n"
+            "\nPLAY RECAP *********************************************************************\n"
+            "192.168.0.13               : ok=2   changed=0    unreachable=0    failed=0\n"
+        )
+        assert _ansible_false_success_error(self._raw_result(raw), ip="192.168.0.13") is None
+
+    def test_cmd_stdout_with_warning_but_ok_not_flagged(self):
+        """命令正常输出但 stdout 含普通词（如 unreachable=0）→ 不误报。"""
+        from app.services.node_task_service import _ansible_false_success_error
+
+        raw = "PLAY RECAP ****\n192.168.0.13 : ok=2 changed=0 unreachable=0 failed=0\n"
+        assert _ansible_false_success_error(self._raw_result(raw), ip="192.168.0.13") is None
+
+
 class TestCmdExecResultFromPlaybook:
     """Bug 2: cmd_exec 分支须用 result.rc 判定成败。"""
 

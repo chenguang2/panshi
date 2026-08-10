@@ -32,10 +32,22 @@ WL_LIST=$(printf '%s' "$WL_B64" | base64 -d 2>/dev/null || true)
 # 注入字符 + 危险命令正则（黑名单 + 白名单共用，保证校验=执行一致）
 # 注：换行符单独检测（ERE 中 \n 匹配字面 n，非换行）
 INJECT_RE='\||>|>>|<|&|\$\{|;|`|&&|\$\(|\brm\b|\breboot\b|\bshutdown\b|\bhalt\b|\bmkfs\b|\bfsck\b|\bdd\b|\bformat\b|\bfdisk\b|\bparted\b'
+# 白名单模式变体：放行管道 |（ps -ef|grep -a nginx 属只读管道，任务 6 场景），
+# 其余注入字符与危险命令仍拦截；管道各段命令须分别命中白名单（校验=执行一致）。
+INJECT_RE_WL='>|>>|<|&|\$\{|;|`|&&|\$\(|\brm\b|\breboot\b|\bshutdown\b|\bhalt\b|\bmkfs\b|\bfsck\b|\bdd\b|\bformat\b|\bfdisk\b|\bparted\b'
 
 has_inject() {
     [ -z "$1" ] && return 1
     printf '%s' "$1" | grep -qE "$INJECT_RE" && return 0
+    case "$1" in
+        *$'\n'*) return 0 ;;
+    esac
+    return 1
+}
+
+has_inject_wl() {
+    [ -z "$1" ] && return 1
+    printf '%s' "$1" | grep -qE "$INJECT_RE_WL" && return 0
     case "$1" in
         *$'\n'*) return 0 ;;
     esac
@@ -50,16 +62,21 @@ case "$SECURITY" in
     fi
     ;;
   whitelist)
-    # 叠加注入校验（评审确认：防 ls; whoami 绕过）
-    if has_inject "$CMD"; then
+    # 叠加注入校验（评审确认：防 ls; whoami 绕过）——白名单模式放行管道 |，
+    # 但管道各段命令必须分别命中白名单（校验=执行一致，防 ls|whoami 绕过）。
+    if has_inject_wl "$CMD"; then
         echo "ERROR: 白名单命令含注入字符"
         exit 1
     fi
-    BIN=$(printf '%s' "$CMD" | awk '{print $1}')
-    if ! printf '%s' "$WL_LIST" | grep -qE "(^|,)$BIN(,|$)"; then
-        echo "ERROR: 命令 $BIN 不在白名单"
-        exit 1
-    fi
+    # 按 | 分段逐段校验首词命中白名单（tr 转分行避免 glob 展开；
+    # printf 末尾补换行，否则 read 读到最后一段无换行时返回非零、循环体被跳过）
+    while IFS= read -r seg; do
+        BIN=$(printf '%s' "$seg" | awk '{print $1}')
+        if ! printf '%s' "$WL_LIST" | grep -qE "(^|,)$BIN(,|$)"; then
+            echo "ERROR: 命令 $BIN 不在白名单"
+            exit 1
+        fi
+    done < <(printf '%s\n' "$CMD" | tr '|' '\n')
     ;;
   none) ;;
   *)

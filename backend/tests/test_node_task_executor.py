@@ -392,3 +392,56 @@ class TestCmdExecDispatch:
         ansible.run_playbook.assert_not_awaited()
         assert result["rc"] == -1
         assert result["status"] == "failed"
+
+
+class TestRunItemFalseSuccess:
+    """Bug 3: _run_item 必须把 rc==0 但 ansible 未实际执行（no hosts matched）判为 failed。
+
+    任务 6 排查：节点不在 inventory → playbook "no hosts matched" → rc=0 → 误报 success。
+    """
+
+    class _FakeDB:
+        async def commit(self):
+            return None
+
+    @pytest.mark.asyncio
+    async def test_no_hosts_matched_marks_failed(self):
+        """executor 返回 rc=0 + 'no hosts matched' 输出 → 节点状态 failed 而非 success."""
+        svc = NodeTaskService(_ansible=None, db_factory=lambda: None)
+        svc._executor = AsyncMock(return_value={
+            "rc": 0, "status": "successful",
+            "stdout": (
+                "[WARNING]: Could not match supplied host pattern, ignoring: 10.99.99.1\n"
+                "\nPLAY [Run edge]\nskipping: no hosts matched\n"
+            ),
+            "shell_stdout": "",
+        })
+
+        item = NodeTaskItem(task_id=1, node_id=5, ip="10.99.99.1", node_name="n5", status="pending")
+        with patch("app.services.node_task_service.task_log_store.append_line"), \
+             patch("app.services.node_task_service.task_log_store.tail_bytes", return_value=""):
+            status = await svc._run_item(self._FakeDB(), item, {}, None)
+
+        assert status == "failed"
+        assert item.status == "failed"
+        assert item.rc != 0
+        assert "inventory" in (item.stderr or "")
+
+    @pytest.mark.asyncio
+    async def test_real_success_stays_success(self):
+        """executor 返回 rc=0 + 正常输出 → 节点仍为 success（不误伤）。"""
+        svc = NodeTaskService(_ansible=None, db_factory=lambda: None)
+        svc._executor = AsyncMock(return_value={
+            "rc": 0, "status": "successful",
+            "stdout": "PLAY RECAP\n192.168.0.13 : ok=2 changed=0 unreachable=0 failed=0\n",
+            "shell_stdout": "nginx -v\nnginx version: openresty/1.21.4.1\n",
+        })
+
+        item = NodeTaskItem(task_id=1, node_id=5, ip="192.168.0.13", node_name="n5", status="pending")
+        with patch("app.services.node_task_service.task_log_store.append_line"), \
+             patch("app.services.node_task_service.task_log_store.tail_bytes", return_value=""):
+            status = await svc._run_item(self._FakeDB(), item, {}, None)
+
+        assert status == "success"
+        assert item.status == "success"
+        assert item.rc == 0

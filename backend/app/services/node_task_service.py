@@ -310,6 +310,14 @@ class NodeTaskService:
                 result = await self._executor(item.node_id, item, params, cancel_flag, on_log)
 
                 rc = result.get("rc", -1)
+                # Bug 3（任务 6 排查）：ansible 可能 rc==0 但 playbook 未实际执行
+                # （节点不在 inventory → "no hosts matched"；或 UNREACHABLE/认证失败）。
+                # 这类情况必须判为 failed，不得误报 success。
+                if rc == 0:
+                    false_success_err = _ansible_false_success_error(result, item.ip)
+                    if false_success_err:
+                        rc = -1
+                        result = dict(result, rc=-1, status="failed", stderr=false_success_err)
                 with tail_lock:
                     tail_text = "".join(tail_chunks)
                 item.rc = rc
@@ -617,6 +625,26 @@ def _cmd_exec_result_from_playbook(result: dict) -> dict:
     if parsed["status"] == "ok":
         return {"rc": 0, "status": "successful", "stdout": parsed["stdout"]}
     return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"]}
+
+
+def _ansible_false_success_error(result: dict, ip: str) -> str | None:
+    """ansible rc==0 但 playbook 实际未执行目标主机时，返回友好错误信息。
+
+    修复 Bug 3（任务 6 排查）：节点 IP 不在 ansible inventory 时 playbook 输出
+    "Could not match supplied host pattern / skipping: no hosts matched"，
+    ansible-playbook 仍以 rc=0 退出——旧逻辑会误报 success。本函数在 rc==0
+    时扫描输出标记，命中即返回对应错误文案（镜像 cluster_edge_env.py 的防护）。
+    """
+    raw = "\n".join(
+        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
+    ).lower()
+    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
+        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    if "unreachable!" in raw or '"unreachable": true' in raw:
+        return f"节点 {ip} 无法连接，请检查网络和 SSH 配置"
+    if "permission denied" in raw:
+        return f"节点 {ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
+    return None
 
 
 def parse_cmd_exec_output(raw: str, rc: int = 0) -> dict:

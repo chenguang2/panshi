@@ -76,6 +76,35 @@ class TestWhitelist:
         assert proc.returncode != 0
         assert "ERROR" in proc.stdout
 
+    def test_allows_pipe_between_whitelisted_bins(self):
+        """任务 6 场景（修复）：白名单模式放行管道 |——各段首词均命中白名单即可。
+
+        命令 ps -ef|grep -a ps 中 ps 与 grep 都在白名单，应可执行。
+        grep 目标选 ps 保证管道必命中（grep 退出码为 0）。
+        """
+        proc = _run("whitelist", "5", "ps -ef | grep -a ps", whitelist="ls,ps,grep")
+        assert proc.returncode == 0, proc.stdout
+        assert "ERROR" not in proc.stdout
+        assert "ERROR" not in proc.stderr
+
+    def test_blocks_pipe_with_unwhitelisted_segment(self):
+        """白名单管道中某段命令不在白名单 → 拦截（防 ls | whoami 绕过）。"""
+        proc = _run("whitelist", "5", "ls -la | whoami", whitelist="ls,ps,df")
+        assert proc.returncode != 0
+        assert "不在白名单" in proc.stdout
+
+    def test_blocks_pipe_with_injection_in_segment(self):
+        """白名单管道某段含注入字符（;）→ 拦截。"""
+        proc = _run("whitelist", "5", "ps -ef | grep -a nginx; whoami", whitelist="ls,ps,grep")
+        assert proc.returncode != 0
+        assert "注入字符" in proc.stdout or "不在白名单" in proc.stdout
+
+    def test_blacklist_still_blocks_pipe(self):
+        """黑名单策略仍然禁管道 |（修复不影响黑名单严格性）。"""
+        proc = _run("blacklist", "5", "ps -ef | grep -a nginx", whitelist="")
+        assert proc.returncode != 0
+        assert "ERROR" in proc.stdout
+
     def test_allows_task_added_command(self):
         """任务内添加的命令（仅本次）可通过"""
         proc = _run("whitelist", "5", "echo added-ok", whitelist="ls,echo")
