@@ -8,11 +8,16 @@ const mockDeleteUpstream = vi.fn()
 const mockDeleteUpstreams = vi.fn()
 const mockSelectUpstreams = vi.fn()
 
+// 共享 ref，测试可导入修改以驱动模板标题
+export const mockCopyingUpstream = ref(false)
+export const mockEditingUpstream = ref(null)
+
 vi.mock('@/composables/useClusterUpstreams', () => ({
   useClusterUpstreams: () => ({
     upstreamModalVisible: ref(false),
     upstreamModalActiveTab: ref('basic'),
-    editingUpstream: ref(null),
+    editingUpstream: mockEditingUpstream,
+    copyingUpstream: mockCopyingUpstream,
     upstreamForm: ref({
       name: '',
       load_balance: 'weighted_roundrobin',
@@ -198,5 +203,44 @@ describe('ClusterUpstreams.vue batch delete', () => {
     const buttons = wrapper.findAll('.mock-btn')
     const editBtn = buttons.find((b) => b.text().includes('编辑'))
     expect(editBtn?.attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('ClusterUpstreams.vue 表单标题', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  const openModal = async (wrapper: any) => {
+    wrapper.vm.upstreamModalVisible = true
+    await wrapper.vm.$nextTick()
+  }
+
+  // modal-overlay 在 Teleport to body 中，h2 需从 document 查询
+  const modalTitle = () => document.querySelector('.modal-overlay h2')?.textContent || ''
+
+  it('默认显示「添加上游」', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    await openModal(wrapper)
+    expect(modalTitle()).toContain('添加上游')
+  })
+
+  it('copyingUpstream 时显示「复制上游」', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    mockCopyingUpstream.value = true
+    await openModal(wrapper)
+    expect(modalTitle()).toContain('复制上游')
+  })
+
+  it('editingUpstream 时显示「编辑上游」', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    mockEditingUpstream.value = { id: 1, name: 'svc' }
+    mockCopyingUpstream.value = false
+    await openModal(wrapper)
+    expect(modalTitle()).toContain('编辑上游')
   })
 })

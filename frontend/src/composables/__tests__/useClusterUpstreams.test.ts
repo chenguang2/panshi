@@ -31,7 +31,7 @@ vi.mock('@/composables/useColumnConfig', () => ({
     popoverVisible: ref(false),
     columnsSelected: ref(['name', 'load_balance', 'targets', 'version', 'actions']),
     searchVisible: ref(true),
-    actionsSelected: ref(['edit', 'delete', 'publish', 'version']),
+    actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
   }),
 }))
 
@@ -252,5 +252,111 @@ describe('useClusterUpstreams batch selection', () => {
       handleUpstreamTableChange(cluster, { current: 2, pageSize: 20 }, {})
       expect(cluster.selectedUpstreamKeys).toEqual([1])
     })
+  })
+})
+
+describe('useClusterUpstreams copy', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('allUpstreamActionButtons 含 copy，defaultActions 含 copy', async () => {
+    const cluster = makeCluster()
+    const { allUpstreamActionButtons, upstreamActionsSelected } = await makeComposable(cluster)
+    expect(allUpstreamActionButtons.map((b: any) => b.key)).toContain('copy')
+    expect(allUpstreamActionButtons.find((b: any) => b.key === 'copy')?.title).toBe('复制')
+    expect(upstreamActionsSelected.value).toContain('copy')
+  })
+
+  it('copyUpstreamByRecord 设 copyingUpstream/editingUpstream/name/打开弹窗', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { copyUpstreamByRecord, copyingUpstream, editingUpstream, upstreamForm, upstreamModalVisible } = await makeComposable(cluster)
+    const source = makeUpstream({ id: 3, name: 'svc-a', load_balance: 'chash', description: 'desc-a' }) as any
+    mockApiGet.mockResolvedValue({ data: { total: 1, items: [source] } })
+    await copyUpstreamByRecord(cluster, source)
+    expect(copyingUpstream.value).toBe(true)
+    expect(editingUpstream.value).toBeNull()
+    expect(upstreamForm.name).toBe('复制_svc-a')
+    expect(upstreamModalVisible.value).toBe(true)
+  })
+
+  it('copyUpstreamByRecord 填充 targets 深拷贝新 key', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { copyUpstreamByRecord, upstreamForm } = await makeComposable(cluster)
+    const source = makeUpstream({
+      id: 3, name: 'svc-a', load_balance: 'weighted_roundrobin',
+      targets: [{ target: '10.0.0.1:8080', weight: 100 }],
+    }) as any
+    mockApiGet.mockResolvedValue({ data: { total: 1, items: [source] } })
+    await copyUpstreamByRecord(cluster, source)
+    expect(upstreamForm.targets.length).toBe(1)
+    expect(upstreamForm.targets[0].host).toBe('10.0.0.1')
+    expect(upstreamForm.targets[0].port).toBe(8080)
+    expect(upstreamForm.targets[0].weight).toBe(100)
+    // 深拷贝：修改表单不影响源
+    upstreamForm.targets[0].host = 'changed'
+    expect((source.targets as any)[0].target).toBe('10.0.0.1:8080')
+  })
+
+  it('copyUpstreamByRecord 填充高级配置 + toggle 状态', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { copyUpstreamByRecord, upstreamForm, toggleChecks, toggleTimeout } = await makeComposable(cluster)
+    const source = makeUpstream({
+      id: 3, name: 'svc-a', load_balance: 'weighted_roundrobin',
+      checks: { active: { type: 'http' }, passive: {} },
+      timeout: { connect: 5, send: 5, read: 5 },
+    }) as any
+    mockApiGet.mockResolvedValue({ data: { total: 1, items: [source] } })
+    await copyUpstreamByRecord(cluster, source)
+    expect(toggleChecks.value).toBe(true)
+    expect(toggleTimeout.value).toBe(true)
+    expect(upstreamForm.checks).toEqual({ active: { type: 'http' }, passive: {} })
+    expect(upstreamForm.timeout).toEqual({ connect: 5, send: 5, read: 5 })
+  })
+})
+
+describe('useClusterUpstreams copy 操作入口与复位', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('handleUpstreamAction 的 copy 调用 copyUpstreamByRecord', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { handleUpstreamAction, copyingUpstream, upstreamForm, upstreamModalVisible } = await makeComposable(cluster)
+    const source = makeUpstream({ id: 3, name: 'svc-a' }) as any
+    mockApiGet.mockResolvedValue({ data: { total: 1, items: [source] } })
+    // handleUpstreamAction 同步调用 copyUpstreamByRecord（async），等待其完成
+    const p = handleUpstreamAction(cluster, source, 'copy')
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(copyingUpstream.value).toBe(true)
+    expect(upstreamForm.name).toBe('复制_svc-a')
+    expect(upstreamModalVisible.value).toBe(true)
+  })
+
+  it('showAddUpstreamModal 复位 copyingUpstream', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { showAddUpstreamModal, copyingUpstream, upstreamForm } = await makeComposable(cluster)
+    // 先模拟复制状态
+    copyingUpstream.value = true
+    upstreamForm.name = '复制_残留'
+    await showAddUpstreamModal(cluster)
+    expect(copyingUpstream.value).toBe(false)
+    expect(upstreamForm.name).toBe('')
+  })
+
+  it('editUpstreamByRecord 复位 copyingUpstream', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { editUpstreamByRecord, copyingUpstream, upstreamForm } = await makeComposable(cluster)
+    copyingUpstream.value = true
+    upstreamForm.name = '复制_残留'
+    const u = makeUpstream({ id: 3, name: 'svc-a' })
+    await editUpstreamByRecord(cluster, u)
+    expect(copyingUpstream.value).toBe(false)
+    expect(upstreamForm.name).toBe('svc-a')
   })
 })

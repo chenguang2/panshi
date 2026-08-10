@@ -87,6 +87,7 @@
             <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
             <template #overlay>
               <a-menu>
+                <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
                 <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
                 <a-menu-item @click="handleAction('publish', record)">发布</a-menu-item>
                 <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
@@ -109,6 +110,7 @@
     <UpstreamFormModal
       :visible="formModalVisible"
       :editing-upstream="editingUpstream"
+      :copying-upstream="copyingUpstream"
       :clusters="clusters"
       @close="closeFormModal"
       @saved="onSaved"
@@ -180,6 +182,7 @@ function onGroupChange() {
 const displayedUpstreams = computed(() => upstreams.value)
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
+const copyingUpstream = ref(false)
 const vmModalVisible = ref(false)
 const vmResourceId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
@@ -214,7 +217,8 @@ function formatDate(dateStr: string): string {
 }
 
 function handleAction(action: string, record: any) {
-  if (action === 'edit') { editingUpstream.value = record; formModalVisible.value = true }
+  if (action === 'copy') { editingUpstream.value = record; copyingUpstream.value = true; formModalVisible.value = true }
+  else if (action === 'edit') { editingUpstream.value = record; copyingUpstream.value = false; formModalVisible.value = true }
   else if (action === 'publish') { publishingRecord.value = record; publishClusterId.value = record.cluster_id; publishModalVisible.value = true }
   else if (action === 'version') { vmResourceId.value = record.id; vmClusterId.value = record.cluster_id; vmResourceName.value = record.name; vmModalVisible.value = true }
   else if (action === 'delete') deleteUpstream(record)
@@ -263,6 +267,7 @@ async function loadClusters() {
 
 function openCreateModal() {
   editingUpstream.value = null
+  copyingUpstream.value = false
   formModalVisible.value = true
 }
 

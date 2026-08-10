@@ -419,3 +419,52 @@ describe('UpstreamFormModal.vue', () => {
     })
   })
 })
+
+describe('UpstreamFormModal.vue copy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiPost.mockResolvedValue({ data: { message: 'ok' } })
+    mockApiPut.mockResolvedValue({ data: { message: 'ok' } })
+  })
+
+  it('copyingUpstream 时标题显示「复制上游」', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: MOCK_UPSTREAM, copyingUpstream: true, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    expect(wrapper.text()).toContain('复制上游')
+  })
+
+  it('copyingUpstream 填充源配置且 name=复制_源名', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: MOCK_UPSTREAM, copyingUpstream: true, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    expect(vm.form.name).toBe('复制_test-upstream')
+    expect(vm.form.load_balance).toBe('weighted_roundrobin')
+    expect(vm.form.description).toBe('测试上游')
+  })
+
+  it('copyingUpstream 提交走 POST 新建（非 PUT）', async () => {
+    const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
+    const wrapper = mount(UpstreamFormModal, {
+      props: { visible: true, editingUpstream: MOCK_UPSTREAM, copyingUpstream: true, clusters: MOCK_CLUSTERS },
+      global: { stubs }
+    })
+    const vm = wrapper.vm as any
+    vm.form.cluster_id = 1
+    vm.form.targets = [{ key: 1, host: '10.0.0.1', port: 8080, weight: 100 }]
+    await wrapper.vm.$nextTick()
+    const saveBtn = wrapper.findAll('button').filter((w: any) => w.text().includes('保存'))
+    if (saveBtn.length > 0) {
+      await saveBtn[0].trigger('click')
+    }
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    expect(mockApiPost).toHaveBeenCalled()
+    expect(mockApiPut).not.toHaveBeenCalled()
+  })
+})

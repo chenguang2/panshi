@@ -134,6 +134,7 @@ export function useClusterUpstreams(options: {
   const upstreamModalVisible = ref(false)
   const upstreamModalActiveTab = ref('basic')
   const editingUpstream = ref<Upstream | null>(null)
+  const copyingUpstream = ref(false)
   const currentClusterId = ref<number | null>(null)
 
   const upstreamFormRef = ref()
@@ -185,15 +186,16 @@ const formErrors = reactive<Record<string, string>>({})
   const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
   const allUpstreamColumns = [
-    { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
+    { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, sorter: true },
     {
       title: '负载均衡',
       dataIndex: 'load_balance',
       key: 'load_balance',
+      width: 110,
       sorter: true,
       customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text),
     },
-    { title: '描述', dataIndex: 'description', key: 'description', sorter: true },
+    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true, sorter: true },
     {
       title: '发布状态',
       key: 'publish_status',
@@ -204,14 +206,14 @@ const formErrors = reactive<Record<string, string>>({})
           (record.published_at as string) ?? null,
         ),
     },
-    { title: '操作', key: 'actions', width: 280 },
+    { title: '操作', key: 'actions', width: 340 },
   ]
 
   const upstreamCfg = useColumnConfig({
     key: 'upstream',
     defaultColumns: ['name', 'load_balance', 'publish_status', 'description', 'actions'],
     defaultSearchVisible: true,
-    defaultActions: ['edit', 'delete', 'publish', 'version'],
+    defaultActions: ['copy', 'edit', 'delete', 'publish', 'version'],
   })
   const upstreamColumnPopoverVisible = upstreamCfg.popoverVisible
   const upstreamColumnsSelected = upstreamCfg.columnsSelected
@@ -219,6 +221,7 @@ const formErrors = reactive<Record<string, string>>({})
   const upstreamActionsSelected = upstreamCfg.actionsSelected
 
   const allUpstreamActionButtons = [
+    { key: 'copy', title: '复制' },
     { key: 'edit', title: '编辑' },
     { key: 'delete', title: '删除' },
     { key: 'publish', title: '发布' },
@@ -348,6 +351,9 @@ const formErrors = reactive<Record<string, string>>({})
     action: string,
   ) => {
     switch (action) {
+      case 'copy':
+        copyUpstreamByRecord(cluster, record)
+        break
       case 'publish':
         publishUpstreamByRecord(cluster, record)
         break
@@ -482,6 +488,7 @@ const formErrors = reactive<Record<string, string>>({})
   const showAddUpstreamModal = async (cluster: Cluster) => {
     await loadUpstreams(cluster)
     editingUpstream.value = null
+    copyingUpstream.value = false
     currentClusterId.value = cluster.id
     upstreamForm.name = ''
     upstreamForm.load_balance = 'weighted_roundrobin'
@@ -521,14 +528,11 @@ const formErrors = reactive<Record<string, string>>({})
     editUpstreamByRecord(cluster, cluster.selectedUpstream)
   }
 
-  const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
-    editingUpstream.value = upstream
-    currentClusterId.value = cluster.id
+  const fillUpstreamForm = (upstream: Upstream) => {
+    const u = upstream as UpstreamFull
     upstreamForm.name = upstream.name
     upstreamForm.load_balance = upstream.load_balance
     upstreamForm.description = upstream.description || ''
-
-    const u = upstream as UpstreamFull
     upstreamForm.hash_on = u.hash_on || 'vars'
     upstreamForm.key = u.key || ''
 
@@ -616,6 +620,26 @@ const formErrors = reactive<Record<string, string>>({})
     }
     targetValidation.value = {}
     Object.keys(formErrors).forEach(k => formErrors[k] = '')
+  }
+
+  const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
+    editingUpstream.value = upstream
+    copyingUpstream.value = false
+    currentClusterId.value = cluster.id
+    fillUpstreamForm(upstream)
+    upstreamModalVisible.value = true
+    upstreamModalActiveTab.value = 'basic'
+  }
+
+  const copyUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
+    await loadUpstreams(cluster)
+    const list = cluster.upstreams || []
+    const source = list.find((u) => u.id === upstream.id) || upstream
+    editingUpstream.value = null
+    copyingUpstream.value = true
+    currentClusterId.value = cluster.id
+    fillUpstreamForm(source)
+    upstreamForm.name = `复制_${source.name}`
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
   }
@@ -917,6 +941,8 @@ const formErrors = reactive<Record<string, string>>({})
     showAddUpstreamModal,
     editUpstream,
     editUpstreamByRecord,
+    copyUpstreamByRecord,
+    copyingUpstream,
     handleUpstreamSubmit,
 
     // Delete

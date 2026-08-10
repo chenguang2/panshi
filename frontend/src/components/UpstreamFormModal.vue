@@ -2,7 +2,7 @@
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
     <div class="modal modal-wide" style="max-width:800px;">
       <div class="modal-header">
-        <h2>{{ editingUpstream ? '编辑上游' : '添加上游' }}</h2>
+        <h2>{{ copyingUpstream ? '复制上游' : editingUpstream ? '编辑上游' : '添加上游' }}</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
       </div>
 
@@ -262,6 +262,7 @@ import HealthCheckForm from '@/components/HealthCheckForm.vue'
 const props = defineProps<{
   visible: boolean
   editingUpstream: any | null
+  copyingUpstream?: boolean
   clusters: { id: number; name: string; display_name?: string }[]
 }>()
 
@@ -407,7 +408,7 @@ function populateForm() {
   if (props.editingUpstream) {
     const u = props.editingUpstream
     form.cluster_id = u.cluster_id
-    form.name = u.name
+    form.name = props.copyingUpstream ? `复制_${u.name}` : u.name
     form.load_balance = u.load_balance || 'weighted_roundrobin'
     form.hash_on = u.hash_on || 'vars'
     form.key = u.key || ''
@@ -616,7 +617,7 @@ async function handleSubmit() {
     submitData.scheme = toggleScheme.value ? form.scheme : null
 
     const clusterId = form.cluster_id
-    if (props.editingUpstream) {
+    if (props.editingUpstream && !props.copyingUpstream) {
       await api.put(`/clusters/${clusterId}/upstreams/${props.editingUpstream.id}`, submitData)
       message.success('上游已更新')
     } else {

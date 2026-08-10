@@ -97,7 +97,7 @@
     <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
       <div class="modal" style="max-width:750px;">
         <div class="modal-header">
-          <h2>{{ editingUpstream ? '编辑上游' : '添加上游' }}</h2>
+          <h2>{{ copyingUpstream ? '复制上游' : editingUpstream ? '编辑上游' : '添加上游' }}</h2>
           <button class="modal-close" @click="upstreamModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
@@ -316,6 +316,7 @@ const {
   upstreamModalVisible,
   upstreamModalActiveTab,
   editingUpstream,
+  copyingUpstream,
   upstreamForm,
   upstreamFormRef,
   targetValidation,

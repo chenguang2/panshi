@@ -149,3 +149,45 @@ describe('UpstreamList.vue', () => {
     }
   })
 })
+
+describe('UpstreamList.vue copy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('操作菜单含「复制」项', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    // 表格行操作菜单渲染复制项
+    const menuItems = wrapper.findAll('.mock-menuitem')
+    expect(menuItems.some(m => m.text().includes('复制'))).toBe(true)
+  })
+})
+
+describe('UpstreamList.vue handleAction copy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('handleAction copy 设 editingUpstream + copyingUpstream + 打开弹窗', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    const record = { id: 5, name: 'svc-a', cluster_id: 1 }
+    ;(wrapper.vm as any).handleAction('copy', record)
+    await wrapper.vm.$nextTick()
+    expect((wrapper.vm as any).editingUpstream).toEqual(record)
+    expect((wrapper.vm as any).copyingUpstream).toBe(true)
+    expect((wrapper.vm as any).formModalVisible).toBe(true)
+  })
+
+  it('handleAction edit 复位 copyingUpstream', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 100))
+    ;(wrapper.vm as any).copyingUpstream = true
+    ;(wrapper.vm as any).handleAction('edit', { id: 5, name: 'svc-a', cluster_id: 1 })
+    expect((wrapper.vm as any).copyingUpstream).toBe(false)
+  })
+})
