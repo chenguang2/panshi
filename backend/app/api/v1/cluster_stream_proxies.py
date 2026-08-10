@@ -14,7 +14,10 @@ from app.schemas.stream_proxy import (
     StreamProxyCreate, StreamProxyUpdate, StreamProxyResponse,
     DetectPortsRequest, DetectPortsResponse, PortItem,
 )
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
+from app.schemas.cluster import (
+    ConfigVersionResponse, ConfigVersionListResponse, PublishRequest, DeleteClusterRequest,
+    BatchDeleteStreamProxiesRequest,
+)
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
 from app.services.edge_logger import get_edge_logger
@@ -407,6 +410,91 @@ async def delete_stream_proxy(
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     return {"message": "四层代理已删除", "results": results}
+
+
+async def _delete_stream_proxy_inner(
+    proxy: StreamProxy,
+    delete_db: bool,
+    delete_edge: bool,
+    node_ids: Optional[list[int]],
+    db: AsyncSession,
+) -> list[dict]:
+    """执行单个四层代理的删除（Edge + 数据库），返回单删 results 列表。
+
+    与单删端点 delete_stream_proxy 的删除语义一致：
+    - delete_edge: 对各集群在线节点（node_ids 为空则全部在线节点）调用 Edge stream_route delete
+    - delete_db: 删除版本历史与数据库记录
+    """
+    results: list[dict] = []
+
+    if delete_edge:
+        active_nodes = await edge_sync.get_active_nodes(
+            proxy.cluster_id, db, node_ids if node_ids else None)
+        edge_results = await edge_sync.delete_on_nodes(
+            proxy.cluster_id, active_nodes, proxy.edge_uuid,
+            lambda client, uuid: client.api("stream_route", "delete", uuid),
+        )
+        results.extend(edge_results)
+
+    if delete_db:
+        await _delete_proxy_versions(db, proxy.id, "stream_proxy")
+        await db.delete(proxy)
+        await db.commit()
+        results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
+
+    return results
+
+
+@global_router.delete("", response_model=dict)
+async def delete_stream_proxies_batch(
+    body: BatchDeleteStreamProxiesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """批量删除四层代理（跨集群，全局视图）。
+
+    - 仅处理 proxy_type == "normal"（V2-A）：非 normal / 不存在的 id 标记 failed，不阻塞其余
+    - 逐条独立处理（V5）：单条异常标记 failed，不抛 HTTPException 中断整体
+    - node_ids 为空时删除各集群全部在线节点（V6）
+    - 返回 results 含 name 字段（V4，对齐前端 nameField）
+    """
+    if not body.proxy_ids:
+        raise HTTPException(status_code=400, detail="请至少选择一个四层代理")
+    if not body.delete_db and not body.delete_edge:
+        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
+    proxy_result = await db.execute(
+        select(StreamProxy).where(
+            StreamProxy.id.in_(body.proxy_ids),
+            StreamProxy.proxy_type == "normal",
+        )
+    )
+    proxies = {p.id: p for p in proxy_result.scalars().all()}
+
+    results: list[dict] = []
+    for pid in body.proxy_ids:
+        proxy = proxies.get(pid)
+        if proxy is None:
+            results.append({
+                "proxy_id": pid, "name": None,
+                "status": "failed",
+                "message": "代理不存在或类型不支持",
+            })
+            continue
+        try:
+            proxy_results = await _delete_stream_proxy_inner(
+                proxy, body.delete_db, body.delete_edge, body.node_ids, db)
+            results.append({
+                "proxy_id": pid, "name": proxy.name,
+                "status": "success", "results": proxy_results,
+            })
+        except Exception as e:  # V5: 单条失败不阻塞其余
+            await db.rollback()
+            results.append({
+                "proxy_id": pid, "name": proxy.name,
+                "status": "failed", "message": str(e),
+            })
+
+    return {"message": "四层代理批量删除完成", "results": results}
 
 
 def _edge_protocol(scheme: str | None) -> str | None:

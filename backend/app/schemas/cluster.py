@@ -235,6 +235,15 @@ class BatchDeleteUpstreamsRequest(DeleteClusterRequest):
     upstream_ids: List[int] = Field(...)
 
 
+class BatchDeleteStreamProxiesRequest(DeleteClusterRequest):
+    """批量删除四层代理请求：继承单删字段，额外指定 proxy_ids。
+
+    注意：proxy_ids 不做 min_length=1 约束——空列表由端点显式返回 400，
+    与 spec 语义一致（Pydantic 校验失败会返回 422）。
+    """
+    proxy_ids: List[int] = Field(...)
+
+
 class NodeCreate(NodeBase):
     cluster_id: Optional[int] = None
 
