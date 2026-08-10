@@ -40,3 +40,11 @@
 - [x] 6.2 `cd frontend && npx vitest run`（新增 composable/组件测试通过）
 - [x] 6.3 `cd frontend && npm run build`（TypeScript 编译通过，无 `as any`/`@ts-ignore`）
 - [x] 6.4 手动链路：连接 `http://localhost:12345`，四层代理页批量管理模式勾选多个 → 批量删除 → 进度弹窗逐条反馈 → 列表刷新；验证「全选当前筛选结果」toggle、分组全选在 `__all__` 时隐藏（V9）、删除 Edge 勾选时弹窗文案提示"全部在线节点"（V1-A）
+
+## 7. DNS 代理扩展（V2 修订）
+
+- [x] 7.1 后端：批量端点移除 `proxy_type == "normal"` 过滤，覆盖 normal 与 dns（同表 `ps_stream_proxy`）；不存在 id 标记 failed（message 改为「代理不存在」）
+- [x] 7.2 后端测试：`test_missing_marked_failed_dns_also_deleted`（DNS 成功删除 + 不存在 id 失败）
+- [x] 7.3 前端：`DnsUdpProxyList.vue` 批量管理 UI（页头按钮/勾选框/全选 toggle/底部操作栏/batchDelete 走全局 `/stream-proxies`）
+- [x] 7.4 前端测试：`DnsUdpProxyList.test.ts` 新增 4 个批量管理测试
+- [x] 7.5 验证：pytest（新增 7 通过）+ vitest（16/16）+ build + E2E（52 卡片批量链路）

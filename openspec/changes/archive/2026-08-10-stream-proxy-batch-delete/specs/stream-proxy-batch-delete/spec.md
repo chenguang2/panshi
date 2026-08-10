@@ -75,7 +75,8 @@
 - **WHEN** `delete_db` 与 `delete_edge` 均未选择
 - **THEN** 系统 SHALL 返回 400（与单删一致：请至少选择一项）
 
-#### Scenario: 仅处理普通四层代理
-- **WHEN** 用户批量删除的 `proxy_ids` 中包含 DNS 代理（`proxy_type != "normal"`）或不存在/类型不符的 id
-- **THEN** 系统 SHALL 仅删除 `proxy_type == "normal"` 的记录（V2-A）
-- **THEN** 非 normal/不存在的 id SHALL 标记为失败条目（`status: "failed"`），不删除，且 SHALL NOT 阻塞其余 normal 代理的删除
+#### Scenario: 覆盖普通与 DNS 代理
+- **WHEN** 用户批量删除的 `proxy_ids` 中包含 TCP/UDP/TLS 普通代理与 DNS 代理（两者同属 `ps_stream_proxy` 表，`proxy_type` 区分）
+- **THEN** 系统 SHALL 对两类代理均按相同批量流程删除（V2 修订：不按 proxy_type 过滤，按 id 精确删除）
+- **THEN** 不存在的 id SHALL 标记为失败条目（`status: "failed"`），不删除，且 SHALL NOT 阻塞其余代理的删除
+- **THEN** 四层代理页（normal）与 DNS 代理页（dns）SHALL 均可调用同一批量端点

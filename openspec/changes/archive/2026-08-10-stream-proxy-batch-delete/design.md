@@ -19,7 +19,6 @@
 - 不改动发布/版本管理
 - 本次不做集群卡片页（`ClusterList` / `CentralList`）批量删除——四层代理先行，模式可后续复用
 - 不做跨页跨分页的"全选所有页"（仅当前筛选结果/当前分组）
-- **不做 DNS 代理页（`DnsUdpProxyList.vue`）批量删除**（讨论确认 V2-A）：DNS 有独立页面与独立端点体系（`/dns-proxies`），本次范围仅 `StreamProxyList.vue`（normal TCP/UDP/TLS）；后端批量端点只处理 `proxy_type == "normal"`
 
 ## Decisions
 
@@ -54,11 +53,11 @@
 
 **跨集群 Edge 节点选择（讨论确认 V1-A）**：`showDeleteConfirm` 的节点选择 UI 是单集群语义，跨集群批量无法逐节点表达。批量确认弹窗**不展示逐节点 checkbox**，勾选「删除 Edge 节点」即删除各集群全部在线节点上的配置（`get_active_nodes(cluster_id, db, None)` 语义）。弹窗文案写明"将删除所有在线节点上的配置"。若未来需要逐节点粒度，再升级为按集群分组选节点（方案 C）。
 
-### D6: 后端批量端点——全局批量，仅 normal 类型（修正 V2）
+### D6: 后端批量端点——全局批量，覆盖 normal 与 dns（V2 修订）
 全局列表 `GET /stream-proxies` 返回跨集群数据。采用**全局批量端点**：
 - `DELETE /stream-proxies`（`global_router`，前缀 `/stream-proxies`）
 - body: `BatchDeleteStreamProxiesRequest{ proxy_ids: List[int], delete_db, delete_edge, node_ids? }`（继承 `DeleteClusterRequest`）
-- **仅处理 `proxy_type == "normal"`**（V2-A 确认）：查询时 `WHERE id IN proxy_ids AND proxy_type == "normal"`；传入的 id 中若含非 normal（如 DNS）记录，按"不存在/类型不符"标记失败，不删除
+- **覆盖 normal 与 dns 两类代理（修订 V2）**：DNS 与普通代理同属 `ps_stream_proxy` 表（`proxy_type` 字段区分），列表端点 `GET /stream-proxies?proxy_type=` 已支持两类。批量端点**不按 proxy_type 过滤**——按 id 精确删除，天然同时服务四层代理页（normal）与 DNS 代理页（dns）；不存在的 id 标记失败。前端两个页面均调用同一批量端点
 - 处理逻辑：按 `proxy.cluster_id` 分组，每组复用现有单删逻辑（`delete_stream_proxy` 内部流程），逐条独立处理，单条失败不阻塞其余
 - **node_ids 语义（V6）**：批量场景 node_ids 传空 = 删除各集群全部在线节点（不传 node_ids 字段）；传值则按 id 过滤。确认弹窗文案明确"全部在线节点"
 - 返回结构（**修正 V4**，对齐 `logBatchDeleteResults`）：

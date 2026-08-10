@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Stream Proxy Management
+
+## Purpose
+
+管理集群级四层代理（TCP/UDP/TLS 与 DNS）的创建、列表、查看、编辑、删除、发布与版本管理，并支持跨集群批量删除。
+
+## Requirements
 
 ### Requirement: User can create a stream proxy
 The system SHALL allow authorized users to create a Layer 4 (TCP/UDP) stream proxy configuration using a two-step wizard.
@@ -81,7 +87,7 @@ The system SHALL allow editing an existing stream proxy's configuration.
 - **THEN** the listen port field is read-only (port change requires delete and recreate)
 
 ### Requirement: User can delete a stream proxy
-The system SHALL support deleting a stream proxy from the database and/or Edge nodes.
+The system SHALL support deleting a stream proxy from the database and/or Edge nodes, both individually and in batch.
 
 #### Scenario: Delete from database only
 - **WHEN** user deletes a proxy with "仅删除数据库" option
@@ -90,6 +96,12 @@ The system SHALL support deleting a stream proxy from the database and/or Edge n
 #### Scenario: Delete from database and Edge nodes
 - **WHEN** user deletes a proxy with "同时删除 Edge 节点" option and selects target nodes
 - **THEN** the system removes the proxy from DB and calls Edge stream route DELETE API on selected nodes
+
+#### Scenario: 批量删除四层代理
+- **WHEN** 用户通过批量管理模式选择多个四层代理并确认删除
+- **THEN** 系统 SHALL 通过批量端点 `DELETE /stream-proxies` 一次性删除所选代理（按集群分组逐条独立处理）
+- **THEN** 每个代理的删除行为 SHALL 与单删一致（数据库/Edge 选项、版本历史清理）
+- **AND** 单条失败 SHALL NOT 阻塞其余代理的删除
 
 ### Requirement: User can publish a stream proxy
 The system SHALL allow publishing a stream proxy to selected Edge nodes as a stream route.
