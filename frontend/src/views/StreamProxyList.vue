@@ -3,6 +3,7 @@
     <PageHeader title="四层代理" description="管理 TCP/UDP/TLS 四层转发规则">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
+        <button class="btn btn-secondary" @click="toggleBatchMode">{{ batchMode ? '退出批量管理' : '批量管理' }}</button>
       </template>
     </PageHeader>
 
@@ -21,6 +22,10 @@
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
       <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
+      <template v-if="batchMode">
+        <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">{{ allGroupSelected ? '取消全选分组' : '全选当前分组' }}</button>
+        <button class="link-btn" @click="toggleSelectAllFiltered">{{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}</button>
+      </template>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -28,13 +33,14 @@
       <div class="sp-empty-icon">&#9635;</div>
       <div class="sp-empty-text">暂无四层代理</div>
     </div>
-    <div v-else class="sp-grid">
-      <div v-for="p in displayedProxies" :key="p.id" class="sp-card" :style="getCardBorderStyle(p.cluster_group_name)">
+    <div v-else class="sp-grid" :class="{ 'batch-mode': batchMode }">
+      <div v-for="p in displayedProxies" :key="p.id" class="sp-card" :class="{ selected: selectedProxyIds.includes(p.id) }" :style="getCardBorderStyle(p.cluster_group_name)" @click="batchMode && toggleProxy(p.id)">
         <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
           <span>{{ p.cluster_name || '-' }}</span>
           <span v-if="p.proxy_type === 'dns'" class="dns-badge">DNS</span>
           <span v-if="p.proxy_type === 'dns' && isWanEnabled(p)" class="wan-badge">内外网分离</span>
           <span v-if="p.cluster_group_name" class="group-badge">{{ p.cluster_group_name }}</span>
+          <span v-if="batchMode" class="sp-checkbox" @click.stop="toggleProxy(p.id)"></span>
         </div>
         <div class="sp-card-header">
           <div class="sp-card-info">
@@ -94,7 +100,7 @@
             <span class="sp-no-targets">无 DNS 配置</span>
           </div>
         </template>
-        <div class="sp-card-actions">
+        <div class="sp-card-actions" @click.stop>
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="viewProxy(p)">查看</button>
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="editProxy(p)">编辑</button>
           <button class="btn btn-ghost btn-sm sp-action-btn" style="color:var(--danger);" @click="deleteProxy(p)">删除</button>
@@ -103,6 +109,15 @@
           <button class="btn btn-secondary btn-sm" @click="openVersionManagement(p)">版本管理</button>
         </div>
       </div>
+    </div>
+
+    <!-- Bottom batch action bar -->
+    <div v-show="batchMode" class="sp-batch-bar">
+      <span class="bb-selected">已选择 <b>{{ selectedProxies.length }}</b> 个四层代理</span>
+      <button class="btn btn-ghost btn-sm link-btn" @click="clearSelection">取消选择</button>
+      <span class="bb-spacer"></span>
+      <button class="btn btn-danger btn-sm" :disabled="selectedProxies.length === 0" @click="batchDelete">批量删除</button>
+      <button class="btn btn-secondary btn-sm" @click="toggleBatchMode">退出批量管理</button>
     </div>
 
     <!-- Create/Edit Form Wizard (component) -->
@@ -152,6 +167,10 @@ const {
   proxies, clusters, totalCount, loading,
   searchText, clusterFilter, groupFilter,
   groupOptions, filteredClusters, displayedProxies,
+  batchMode, selectedProxyIds, selectedProxies,
+  allGroupSelected, allFilteredSelected, showGroupSelectAll,
+  toggleBatchMode, toggleProxy,
+  toggleSelectAllGroup, toggleSelectAllFiltered, clearSelection,
   loadProxies, loadClusters,
 } = useStreamProxyList(proxyType)
 
@@ -286,6 +305,35 @@ function publishProxyAction(p: StreamProxy) {
   publishVisible.value = true
 }
 
+function batchDelete() {
+  const proxies = selectedProxies.value
+  if (proxies.length === 0) return
+  const names = proxies.map((p: any) => p.name)
+  const title = names.length > 3
+    ? `确定要删除选中的 ${names.length} 个四层代理吗？${names.slice(0, 3).join('、')} 等 ${names.length} 个`
+    : `确定要删除选中的 ${names.length} 个四层代理吗？${names.join('、')}`
+  showDeleteConfirm({
+    title,
+    apiEndpoint: '/stream-proxies',
+    noNodeSelection: true,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      await executeDeleteWithProgress({
+        title: `批量删除四层代理: ${names.join('、')}`,
+        apiEndpoint: '/stream-proxies',
+        deleteDb,
+        deleteEdge,
+        nodeIds,
+        resourceKey: { field: 'proxy_ids', label: '四层代理', nameField: 'name', keys: selectedProxyIds.value },
+        refreshFn: loadProxies,
+        clearSelectedFn: () => {
+          clearSelection()
+          if (batchMode.value) toggleBatchMode()
+        },
+      })
+    },
+  })
+}
+
 async function onPublishConfirm(nodeIds: number[]) {
   publishVisible.value = false
   const p = publishingProxy.value
@@ -363,7 +411,10 @@ onUnmounted(() => {
 
 <style scoped>
 .sp-page { padding: 20px 24px; }
+.sp-page:has(.sp-batch-bar) { padding-bottom: 80px; }
 .sp-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
+.link-btn { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; flex-shrink: 0; }
+.link-btn:hover { background: oklch(56% 0.16 210 / 8%); }
 .loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
 .sp-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
 .sp-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
@@ -371,9 +422,19 @@ onUnmounted(() => {
 
 /* ── Card Grid (aligns with PluginConfigList .pc-grid) ── */
 .sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.sp-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
+.sp-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; cursor: default; }
 .sp-card:hover { box-shadow: var(--shadow-md); }
+.sp-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 35%); }
+.batch-mode .sp-card { cursor: pointer; }
 .sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
+.sp-checkbox { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; margin-left: auto; flex-shrink: 0; }
+.sp-card:not(.selected) .sp-checkbox:hover { border-color: var(--accent); }
+.sp-card.selected .sp-checkbox { border-color: var(--accent); background: var(--accent); }
+.sp-card.selected .sp-checkbox::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+.sp-batch-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 16px oklch(0% 0 0 / 8%); padding: 12px 24px; display: flex; align-items: center; gap: 12px; z-index: 100; }
+.bb-selected { font-size: 13px; }
+.bb-selected b { color: var(--accent); }
+.bb-spacer { flex: 1; }
 .group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
 .dns-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(55% 0.18 280 / 18%); color: oklch(40% 0.18 280); border: 1px solid oklch(55% 0.18 280 / 30%); line-height: 1.4; flex-shrink: 0; }
 .wan-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(65% 0.18 45 / 18%); color: oklch(50% 0.18 45); border: 1px solid oklch(65% 0.18 45 / 30%); line-height: 1.4; flex-shrink: 0; }

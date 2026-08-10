@@ -164,3 +164,92 @@ describe('StreamProxyList.vue', () => {
     expect(countSpan!.text()).toContain('2')
   })
 })
+
+describe('StreamProxyList.vue 批量管理', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/stream-proxies')) return Promise.resolve({ data: MOCK_PROXIES })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('点击「批量管理」进入批量模式，卡片浮现勾选框', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+
+    const batchBtn = wrapper.findAll('button').find(b => b.text().includes('批量管理'))
+    expect(batchBtn).toBeDefined()
+    await batchBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sp-checkbox').length).toBe(2)
+    expect(wrapper.find('.sp-batch-bar').exists()).toBe(true)
+  })
+
+  it('勾选卡片后计数更新、批量删除按钮启用', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const checkboxes = wrapper.findAll('.sp-checkbox')
+    await checkboxes[0].trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
+    expect(wrapper.find('.sp-batch-bar').text()).toContain('1')
+
+    const delBtn = wrapper.findAll('button').find(b => b.text().includes('批量删除'))
+    expect(delBtn).toBeDefined()
+    expect((delBtn!.element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('批量模式下全选当前筛选结果 toggle', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const selectAllBtn = wrapper.findAll('button, a').find(b => b.text().includes('全选当前筛选结果'))
+    expect(selectAllBtn).toBeDefined()
+    await selectAllBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(2)
+
+    await selectAllBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
+  })
+
+  it('退出批量管理清空选择', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await new Promise(r => setTimeout(r, 150))
+    await wrapper.vm.$nextTick()
+
+    await wrapper.findAll('button').find(b => b.text().includes('批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
+
+    await wrapper.findAll('button').find(b => b.text().includes('退出批量管理'))!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+    expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
+  })
+})

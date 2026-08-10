@@ -38,6 +38,77 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     })
   })
 
+  // ── 批量管理模式 ──
+  const batchMode = ref(false)
+  const selectedProxyIds = ref<number[]>([])
+
+  const groupProxies = computed(() => {
+    if (groupFilter.value === '__all__' || groupFilter.value === '__ung__') return []
+    return proxies.value
+      .filter((p: any) => (p.cluster_group_name || '') === groupFilter.value)
+      .map((p: any) => p.id as number)
+  })
+
+  const filteredProxies = computed(() => displayedProxies.value.map((p: any) => p.id as number))
+
+  const selectedProxies = computed(() => {
+    const idSet = new Set(selectedProxyIds.value)
+    return proxies.value.filter((p: any) => idSet.has(p.id as number))
+  })
+
+  const allGroupSelected = computed(() => {
+    const g = groupProxies.value
+    if (g.length === 0) return false
+    return g.every((id) => selectedProxyIds.value.includes(id))
+  })
+
+  const allFilteredSelected = computed(() => {
+    const f = filteredProxies.value
+    if (f.length === 0) return false
+    return f.every((id) => selectedProxyIds.value.includes(id))
+  })
+
+  const showGroupSelectAll = computed(() => groupFilter.value !== '__all__' && groupFilter.value !== '__ung__')
+
+  function toggleBatchMode() {
+    if (batchMode.value) {
+      selectedProxyIds.value = []
+    }
+    batchMode.value = !batchMode.value
+  }
+
+  function toggleProxy(id: number) {
+    if (selectedProxyIds.value.includes(id)) {
+      selectedProxyIds.value = selectedProxyIds.value.filter((x) => x !== id)
+    } else {
+      selectedProxyIds.value = [...selectedProxyIds.value, id]
+    }
+  }
+
+  function toggleSelectAllGroup() {
+    if (allGroupSelected.value) {
+      const g = new Set(groupProxies.value)
+      selectedProxyIds.value = selectedProxyIds.value.filter((id) => !g.has(id))
+    } else {
+      const merged = new Set([...selectedProxyIds.value, ...groupProxies.value])
+      selectedProxyIds.value = Array.from(merged)
+    }
+  }
+
+  function toggleSelectAllFiltered() {
+    if (allFilteredSelected.value) {
+      const f = new Set(filteredProxies.value)
+      selectedProxyIds.value = selectedProxyIds.value.filter((id) => !f.has(id))
+    } else {
+      const merged = new Set([...selectedProxyIds.value, ...filteredProxies.value])
+      selectedProxyIds.value = Array.from(merged)
+    }
+  }
+
+  function clearSelection() {
+    selectedProxyIds.value = []
+  }
+
   async function loadProxies() {
     loading.value = true
     try {
@@ -71,6 +142,11 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     searchText, clusterFilter, groupFilter,
     pageTitle, pageDesc, itemLabel, createButtonText,
     groupOptions, filteredClusters, displayedProxies,
+    batchMode, selectedProxyIds, selectedProxies,
+    groupProxies, filteredProxies,
+    allGroupSelected, allFilteredSelected, showGroupSelectAll,
+    toggleBatchMode, toggleProxy,
+    toggleSelectAllGroup, toggleSelectAllFiltered, clearSelection,
     loadProxies, loadClusters,
     proxyType,
   }

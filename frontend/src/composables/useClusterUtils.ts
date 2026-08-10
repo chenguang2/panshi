@@ -21,6 +21,8 @@ export function showDeleteConfirm(opts: {
   showResourceStats?: boolean
   stats?: Record<string, number>
   nodes?: { id: number; ip: string; management_port: number }[]
+  /** 批量删除专用（V1-A）：不展示逐节点选择，勾选 Edge 即删除全部在线节点 */
+  noNodeSelection?: boolean
 }) {
   let deleteDb = false
   let deleteEdge = false
@@ -33,7 +35,7 @@ export function showDeleteConfirm(opts: {
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
 
   const updateOkDisabled = () => {
-    okDisabled = !(deleteDb || (deleteEdge && selectedNodeIds.size > 0))
+    okDisabled = !(deleteDb || (deleteEdge && (opts.noNodeSelection || selectedNodeIds.size > 0)))
   }
 
   const close = () => {
@@ -58,7 +60,7 @@ export function showDeleteConfirm(opts: {
       ]),
     ]) : null
 
-    const nodeSection = (opts.nodes && opts.nodes.length > 0) ? h('div', {
+    const nodeSection = (opts.nodes && opts.nodes.length > 0 && !opts.noNodeSelection) ? h('div', {
       style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};`,
     }, [
       h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:4px;' }, '选择要删除的 Edge 节点：'),
@@ -110,7 +112,7 @@ export function showDeleteConfirm(opts: {
                 style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
               }),
               h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
-              h('span', { style: 'color:var(--muted);font-size:12px;' }, '从 Edge 节点中删除'),
+              h('span', { style: 'color:var(--muted);font-size:12px;' }, opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除'),
             ]),
             nodeSection,
           ]),
@@ -443,7 +445,8 @@ export interface ResourceKey {
 export interface DeleteProgressOptions {
   title: string
   apiEndpoint: string
-  cluster: any
+  /** 兼容保留：批量删除（resourceKey 模式）无需 cluster */
+  cluster?: any
   deleteDb: boolean
   deleteEdge: boolean
   nodeIds: number[]
