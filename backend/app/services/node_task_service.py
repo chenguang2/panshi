@@ -525,7 +525,7 @@ class NodeTaskService:
 
     async def _software_check_node(self, node, cmd_str: str, on_log) -> dict:
         """Run software_check via ansible, falling back to direct SSH on failure."""
-        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, PRIVATE_DATA_DIR
+        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, PRIVATE_DATA_DIR
 
         if self._ansible is not None:
             result = await self._ansible.run_playbook(
@@ -542,11 +542,12 @@ class NodeTaskService:
             on_log({"stdout": "ansible 软件查询失败，降级为 SSH 直连执行"})
 
         ssh_user = get_ssh_user(node.ip)
+        ssh_port = resolve_ssh_port(node)
         script_path = Path(PRIVATE_DATA_DIR) / "cmd_scripts" / "software_check.sh"
         script_content = script_path.read_text(encoding="utf-8")
         rc, stdout, stderr = await _run_ssh_with_fallback(
             node.ip, ssh_user, f"bash -s {cmd_str} <<'SOFT_CHECK_EOF'\n{script_content}\nSOFT_CHECK_EOF",
-            on_line=on_log,
+            on_line=on_log, port=ssh_port,
         )
         return {
             "rc": rc, "status": "successful" if rc == 0 else "failed",
@@ -669,13 +670,14 @@ async def _resolve_node(task_id: int, node_id: int):
 
 async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], None]) -> dict:
     """Phase 2 of install_openresty: SSH build of install-edge.sh on the node."""
-    from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback
+    from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port
 
     ssh_user = get_ssh_user(node.ip)
+    ssh_port = resolve_ssh_port(node)
     destpath = str(Path(prefix).parent) + "/"
     build_cmd = f"cd {destpath}soft/install-edge && ./install-edge.sh {prefix}"
     on_log({"stdout": f"$ {build_cmd}"})
     rc, stdout, stderr = await _run_ssh_with_fallback(
-        node.ip, ssh_user, build_cmd, on_line=on_log,
+        node.ip, ssh_user, build_cmd, on_line=on_log, port=ssh_port,
     )
     return {"rc": rc, "status": "success" if rc == 0 else "failed", "stdout": stdout, "stderr": stderr, "command": build_cmd}

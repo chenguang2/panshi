@@ -555,3 +555,48 @@ describe('useClusterNodes batch import', () => {
     })
   })
 })
+
+describe('useClusterNodes ssh_port', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('nodeForm 默认 ssh_port 为 22', async () => {
+    const cluster = makeCluster()
+    const { nodeForm } = await makeComposable(cluster)
+    expect(nodeForm.ssh_port).toBe(22)
+  })
+
+  it('copyNode 回填 ssh_port', async () => {
+    const cluster = makeCluster()
+    const { copyNode, nodeForm } = await makeComposable(cluster)
+    const source = makeNode({ id: 5, ip: '10.0.0.5', ssh_port: 1122 } as any)
+    copyNode(cluster, source)
+    expect(nodeForm.ssh_port).toBe(1122)
+  })
+
+  it('编辑节点回填 ssh_port', async () => {
+    const cluster = makeCluster()
+    const { editNode, nodeForm } = await makeComposable(cluster)
+    const node = makeNode({ id: 5, ip: '10.0.0.5', ssh_port: 2022 } as any)
+    editNode(cluster, node)
+    expect(nodeForm.ssh_port).toBe(2022)
+  })
+
+  it('handleNodeSubmit 提交含 ssh_port', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { handleNodeSubmit, nodeForm, editingNode, nodeFormRef, editNode } = await makeComposable(cluster)
+    const mockPut = vi.fn().mockResolvedValue({ data: { id: 9 } })
+    const { default: api } = await import('@/api')
+    ;(api.put as any) = mockPut
+    nodeFormRef.value = { validate: async () => true } as any
+    // editNode 设置 currentClusterId + editingNode（走 PUT 分支）
+    const node = makeNode({ id: 5, ip: '10.0.0.5', ssh_port: 22 } as any)
+    editNode(cluster, node)
+    nodeForm.ssh_port = 1122
+    await handleNodeSubmit()
+    const payload = mockPut.mock.calls[0][1]
+    expect(payload.ssh_port).toBe(1122)
+  })
+})

@@ -264,3 +264,63 @@ class TestAssociateNewOpenrestyRouter:
         """POST associate-new-openresty without body should return 422."""
         resp = client.post("/api/v1/clusters/1/nodes/1/associate-new-openresty")
         assert resp.status_code in (404, 422)
+
+
+class TestInstallOpenrestyStreamSshPort:
+
+    @pytest.mark.asyncio
+    async def test_ssh_cmd_injects_port_from_node(self, monkeypatch):
+        """_install_openresty_stream 两轮 SSH 命令应含 -p <node.ssh_port>。"""
+        from app.api.v1.cluster_install import _install_openresty_stream
+
+        captured_cmds = []
+
+        async def mock_gen(*args, **kwargs):
+            yield "data: {\"rc\": 0, \"status\": \"successful\"}\n\n"
+
+        async def mock_stream_ssh(cmd_parts):
+            captured_cmds.append(cmd_parts)
+            yield "data: {\"rc\": 0}\n\n"
+
+        monkeypatch.setattr("app.api.v1.cluster_install._run_ansible_stream", mock_gen)
+        # _install_openresty_stream 内部定义 _stream_ssh 闭包，绕过真实 subprocess
+        monkeypatch.setattr("app.api.v1.cluster_install.get_ssh_user", lambda ip: "jboss")
+        monkeypatch.setattr("app.api.v1.cluster_install.get_ssh_password", lambda ip: None)
+        monkeypatch.setattr("app.api.v1.cluster_install.resolve_ssh_port", lambda node: 1122)
+
+        class FakeNode:
+            id = 1
+            ip = "192.168.1.1"
+            ssh_port = 1122
+
+        # 直接替换模块内闭包定义不易，改用 patch 子进程创建
+        import asyncio
+        real_create_subprocess = asyncio.create_subprocess_exec
+
+        class _EmptyStream:
+            async def readline(self):
+                return b""
+            def close(self):
+                pass
+
+        class FakeProc:
+            returncode = 0
+            stdout = _EmptyStream()
+            stderr = _EmptyStream()
+            async def wait(self): return 0
+            async def communicate(self): return (b"", b"")
+
+        async def fake_create(*args, **kwargs):
+            captured_cmds.append(list(args))
+            return FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create)
+
+        gen = _install_openresty_stream(None, FakeNode(), "/data/test", "/path/to/soft", "/data/")
+        async for _ in gen:
+            pass
+
+        assert len(captured_cmds) >= 1
+        first = captured_cmds[0]
+        assert "-p" in first
+        assert first[first.index("-p") + 1] == "1122"

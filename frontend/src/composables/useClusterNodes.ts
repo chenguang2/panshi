@@ -142,6 +142,7 @@ export function useClusterNodes(options: {
     ip: '',
     service_port: 80,
     management_port: 9180,
+    ssh_port: 22,
     edge_path: '',
     openresty_path: '',
     status: 1
@@ -325,6 +326,7 @@ export function useClusterNodes(options: {
     nodeForm.ip = target.ip
     nodeForm.service_port = target.service_port
     nodeForm.management_port = target.management_port
+    nodeForm.ssh_port = (target as any).ssh_port ?? 22
     nodeForm.edge_path = target.edge_path || ''
     nodeForm.openresty_path = target.openresty_path || ''
     nodeForm.status = target.status
@@ -339,6 +341,7 @@ export function useClusterNodes(options: {
       ip: '',
       service_port: node.service_port,
       management_port: node.management_port,
+      ssh_port: (node as any).ssh_port ?? 22,
       edge_path: node.edge_path || '',
       openresty_path: node.openresty_path || '',
       status: node.status,

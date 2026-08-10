@@ -115,6 +115,7 @@ class Node(Base):
     ip = Column(String(50), nullable=False)
     service_port = Column(Integer, nullable=False, default=80)
     management_port = Column(Integer, nullable=False, default=9180)
+    ssh_port = Column(Integer, nullable=True)
     edge_path = Column(String(255), nullable=False)
     openresty_path = Column(String(255), nullable=True)
     status = Column(Integer, nullable=False, default=1)

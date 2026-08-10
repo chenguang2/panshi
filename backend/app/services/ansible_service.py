@@ -33,13 +33,15 @@ _INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
 SSH_KEY_PATH = os.path.expanduser("~/.ssh/id_rsa")
 
 
-def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None) -> list[str]:
+def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None, port: int | None = None) -> list[str]:
     """Build SSH command list, optionally wrapping with sshpass."""
     base_opts = [
         "-o", "ConnectTimeout=30",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
     ]
+    if port and port != 22:
+        base_opts += ["-p", str(port)]
     if password:
         return [
             "sshpass", "-p", password, "ssh",
@@ -112,6 +114,7 @@ async def _run_ssh_with_fallback(
     ssh_user: str,
     cmd: str,
     password: str | None = None,
+    port: int | None = None,
     status_callback=None,
     on_line: Callable[[dict], None] | None = None,
 ) -> tuple[int, str, str]:
@@ -122,7 +125,7 @@ async def _run_ssh_with_fallback(
     failure, merges both error outputs.
     """
     # Round 1: key-based
-    key_cmd = _build_ssh_cmd(ip, ssh_user, cmd)
+    key_cmd = _build_ssh_cmd(ip, ssh_user, cmd, port=port)
     if on_line is not None:
         rc, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line)
     else:
@@ -147,7 +150,7 @@ async def _run_ssh_with_fallback(
     # Round 2: password-based
     if status_callback:
         await status_callback("免密登录失败，正在尝试密码认证...")
-    pass_cmd = _build_ssh_cmd(ip, ssh_user, cmd, password=password)
+    pass_cmd = _build_ssh_cmd(ip, ssh_user, cmd, password=password, port=port)
     if on_line is not None:
         rc2, stdout2, stderr2 = await _run_subprocess_stream(pass_cmd, on_line)
     else:
@@ -240,6 +243,121 @@ def get_ssh_user(ip: str) -> str:
 
     return "jboss"
 
+
+def get_ssh_port(ip: str) -> int | None:
+    """Resolve SSH port for *ip* from ansible inventory.
+
+    Priority: host-level ``ansible_port`` → group vars → ``None`` (default 22).
+    """
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except (FileNotFoundError, yaml.YAMLError):
+        return None
+
+    try:
+        hosts = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("hosts", {})
+        )
+        host_entry = hosts.get(ip, {})
+        if isinstance(host_entry, dict):
+            port = host_entry.get("ansible_port")
+            if port:
+                return int(port)
+
+        group_vars = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("vars", {})
+        )
+        if isinstance(group_vars, dict):
+            port = group_vars.get("ansible_port")
+            if port:
+                return int(port)
+    except (AttributeError, TypeError, ValueError):
+        pass
+
+    return None
+
+
+def resolve_ssh_port(node) -> int:
+    """Resolve the SSH port for a Node.
+
+    Priority: ``node.ssh_port`` → inventory ``ansible_port`` → 22.
+    """
+    if getattr(node, "ssh_port", None):
+        return int(node.ssh_port)
+    inv_port = get_ssh_port(node.ip)
+    return inv_port if inv_port else 22
+
+
+# Serialize access to the inventory file for temporary ansible_port injection
+_inventory_lock = threading.Lock()
+
+
+def _inventory_inject_port(ip: str, port: int) -> None:
+    """Temporarily set ``ansible_port`` for *ip* in the inventory file.
+
+    Injects the port before an ansible run and restores the original value
+    afterwards, so the ops-owned inventory file is never left modified.
+    No-op when the port matches what is already configured.
+    """
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip, {})
+            if not isinstance(host_entry, dict):
+                return
+            current = host_entry.get("ansible_port")
+            if current is not None and int(current) == port:
+                return
+            host_entry["ansible_port"] = port
+            with open(_INVENTORY_PATH, "w") as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            logger.info("Injected ansible_port=%s for %s into inventory", port, ip)
+        except (FileNotFoundError, OSError, yaml.YAMLError, ValueError) as e:
+            logger.warning("Failed to inject ansible_port for %s: %s", ip, e)
+
+
+def _inventory_restore_port(ip: str, port: int) -> None:
+    """Remove the injected ``ansible_port`` from *ip* in the inventory file.
+
+    Only removes when the current value equals the injected *port* (i.e. we
+    injected it); a port the ops team configured themselves is preserved.
+    """
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip, {})
+            if not isinstance(host_entry, dict):
+                return
+            if host_entry.get("ansible_port") is not None and int(host_entry["ansible_port"]) == port:
+                del host_entry["ansible_port"]
+                with open(_INVENTORY_PATH, "w") as f:
+                    yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+                logger.info("Restored inventory (removed injected ansible_port for %s)", ip)
+        except (FileNotFoundError, OSError, yaml.YAMLError, ValueError) as e:
+            logger.warning("Failed to restore ansible_port for %s: %s", ip, e)
+
+
 # Allowed tags for the generic /ansible-run endpoint
 ALLOWED_TAGS = frozenset({
     "nginx_cmd_run",
@@ -279,6 +397,7 @@ async def _run_ansible_stream(
     tag: str,
     extravars: dict[str, Any] | None = None,
     job_timeout: int = 600,
+    ssh_port: int | None = None,
 ) -> AsyncGenerator[str, None]:
     """Run ansible playbook and yield SSE-formatted events with real-time stdout lines.
 
@@ -288,6 +407,7 @@ async def _run_ansible_stream(
         ip: Target node IP.
         tag: Ansible tag to execute (e.g. ``install_openresty``).
         extravars: Extra variables for the playbook.
+        ssh_port: Optional SSH port forwarded to run_playbook for inventory injection.
 
     Yields:
         SSE event strings: ``data: {"line": "...", "percent": N}\\n\\n``
@@ -320,6 +440,7 @@ async def _run_ansible_stream(
                 ip=ip, tag=tag, extravars=extravars,
                 event_handler=event_handler,
                 job_timeout=job_timeout,
+                ssh_port=ssh_port,
             )
         finally:
             q.put(_SENTINEL)
@@ -388,6 +509,7 @@ class AnsibleRunnerService:
         job_timeout: int | None = None,
         cancel_event: asyncio.Event | None = None,
         on_progress: Any = None,
+        ssh_port: int | None = None,
     ) -> dict[str, Any]:
         """Execute an ansible playbook tag against a single target host.
 
@@ -404,11 +526,20 @@ class AnsibleRunnerService:
                       playbook -- wait_for/to_thread cannot kill it).
         on_progress: Optional callback receiving each ansible event dict
                      (used by the task engine to collect per-line logs).
+        ssh_port: Optional SSH port; when non-22, temporarily injects
+                  ``ansible_port`` into the inventory for this run and
+                  restores it afterwards.
 
         Returns:
             Dict with keys ``rc``, ``status``, ``stdout``, ``stderr``.
         """
         import ansible_runner
+
+        # Temporarily inject a non-standard SSH port into the inventory so the
+        # ansible connection uses it; restored in finally.
+        inject_port = ssh_port if (ssh_port and ssh_port != 22) else None
+        if inject_port:
+            _inventory_inject_port(ip, inject_port)
 
         ev = dict(extravars or {})
         ev["ips"] = ip  # playbook reads this to scope to a specific host
@@ -475,6 +606,9 @@ class AnsibleRunnerService:
                     f"Playbook timed out after {self._job_timeout}s",
                     rc=-1, detail="timeout",
                 )
+            finally:
+                if inject_port:
+                    _inventory_restore_port(ip, inject_port)
 
         _raw_stdout = getattr(result, "stdout", "")
         _raw_stderr = getattr(result, "stderr", "")

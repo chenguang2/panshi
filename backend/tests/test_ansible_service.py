@@ -493,3 +493,249 @@ class TestParseNginxStatus:
         assert result["nginx_running"] is True
         assert result["nginx_status"] == "running"
 
+
+
+class TestSshPortInjection:
+
+    def test_build_ssh_cmd_injects_port_when_non_22(self):
+        """_build_ssh_cmd should add -p <port> when port != 22 (key-based)."""
+        from app.services.ansible_service import _build_ssh_cmd
+        cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls", port=1122)
+        assert "-p" in cmd
+        assert cmd[cmd.index("-p") + 1] == "1122"
+        assert "jboss@10.0.0.1" in cmd
+
+    def test_build_ssh_cmd_no_port_flag_when_22(self):
+        """_build_ssh_cmd should NOT add -p when port == 22."""
+        from app.services.ansible_service import _build_ssh_cmd
+        cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls", port=22)
+        assert "-p" not in cmd
+
+    def test_build_ssh_cmd_no_port_flag_when_none(self):
+        """_build_ssh_cmd should NOT add -p when port is None (default)."""
+        from app.services.ansible_service import _build_ssh_cmd
+        cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls", port=None)
+        assert "-p" not in cmd
+
+    def test_build_ssh_cmd_password_injects_port(self):
+        """_build_ssh_cmd sshpass path should inject -p <port> too."""
+        from app.services.ansible_service import _build_ssh_cmd
+        cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls", password="pw", port=1122)
+        assert cmd[0] == "sshpass"
+        # sshpass -p <password> 是密码参数；ssh -p <port> 才是端口
+        # 从 ssh 之后查找端口标志
+        ssh_idx = cmd.index("ssh")
+        rest = cmd[ssh_idx + 1:]
+        assert "-p" in rest
+        assert rest[rest.index("-p") + 1] == "1122"
+        # 密码仍正确（第一个 -p 属于 sshpass）
+        assert cmd[cmd.index("-p") + 1] == "pw"
+
+    @pytest.mark.asyncio
+    async def test_run_ssh_fallback_passes_port(self):
+        """_run_ssh_with_fallback should forward port to _build_ssh_cmd."""
+        from app.services.ansible_service import _run_ssh_with_fallback
+        with (
+            patch("app.services.ansible_service._run_subprocess",
+                  new_callable=AsyncMock, return_value=(0, "ok", "")) as mock_run,
+        ):
+            rc, out, err = await _run_ssh_with_fallback(
+                "10.0.0.1", "jboss", "ls", port=1122,
+            )
+            assert rc == 0
+            called_cmd = mock_run.call_args[0][0]
+            assert "-p" in called_cmd
+            assert called_cmd[called_cmd.index("-p") + 1] == "1122"
+
+    @pytest.mark.asyncio
+    async def test_ssh_run_passes_port(self):
+        """_ssh_run should accept and forward port."""
+        from app.api.v1.cluster_install import _ssh_run
+        # _ssh_run 在 cluster_install 命名空间引用这些符号，patch 需指向该模块
+        with (
+            patch("app.api.v1.cluster_install._run_ssh_with_fallback",
+                  new_callable=AsyncMock, return_value=(0, "ok", "")) as mock_fb,
+            patch("app.api.v1.cluster_install.get_ssh_password", return_value=None),
+        ):
+            rc, out, err = await _ssh_run("10.0.0.1", "ls", port=1122)
+            assert rc == 0
+            mock_fb.assert_called_once()
+            kwargs = mock_fb.call_args.kwargs
+            assert kwargs.get("port") == 1122
+
+
+class TestGetSshPort:
+
+    SAMPLE = b"""
+all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.1.1:
+          ansible_ssh_user: jboss
+          ansible_port: 1122
+        192.168.1.2:
+          ansible_ssh_user: root
+      vars:
+        ansible_ssh_user: default_user
+        ansible_port: 2022
+"""
+
+    def test_returns_host_port_when_present(self):
+        from app.services.ansible_service import get_ssh_port
+        with patch("builtins.open", mock_open(read_data=self.SAMPLE)):
+            port = get_ssh_port("192.168.1.1")
+        assert port == 1122
+
+    def test_falls_back_to_group_vars_port(self):
+        from app.services.ansible_service import get_ssh_port
+        with patch("builtins.open", mock_open(read_data=self.SAMPLE)):
+            port = get_ssh_port("192.168.1.2")
+        assert port == 2022
+
+    def test_returns_none_when_no_port(self):
+        inv = b"""
+all:
+  children:
+    edge_cluster:
+      hosts:
+        10.0.0.1:
+          ansible_ssh_user: test
+      vars: {}
+"""
+        from app.services.ansible_service import get_ssh_port
+        with patch("builtins.open", mock_open(read_data=inv)):
+            port = get_ssh_port("10.0.0.1")
+        assert port is None
+
+    def test_returns_none_when_file_missing(self):
+        from app.services.ansible_service import get_ssh_port
+        with patch("builtins.open", side_effect=FileNotFoundError):
+            port = get_ssh_port("10.0.0.1")
+        assert port is None
+
+    def test_returns_group_port_for_unknown_ip(self):
+        from app.services.ansible_service import get_ssh_port
+        with patch("builtins.open", mock_open(read_data=self.SAMPLE)):
+            port = get_ssh_port("9.9.9.9")
+        assert port == 2022
+
+
+class TestResolveSshPort:
+
+    def test_node_ssh_port_priority(self):
+        """resolve_ssh_port should prefer node.ssh_port."""
+        from app.services.ansible_service import resolve_ssh_port
+        node = type("N", (), {"ip": "10.0.0.1", "ssh_port": 1122})()
+        with patch("app.services.ansible_service.get_ssh_port", return_value=None) as mock_get:
+            assert resolve_ssh_port(node) == 1122
+        mock_get.assert_not_called()
+
+    def test_node_ssh_port_none_falls_back_to_inventory(self):
+        """When node.ssh_port is None, fall back to get_ssh_port(ip)."""
+        from app.services.ansible_service import resolve_ssh_port
+        node = type("N", (), {"ip": "10.0.0.1", "ssh_port": None})()
+        with patch("app.services.ansible_service.get_ssh_port", return_value=2022) as mock_get:
+            assert resolve_ssh_port(node) == 2022
+        mock_get.assert_called_once_with("10.0.0.1")
+
+    def test_both_none_defaults_to_22(self):
+        """When neither node nor inventory has port, default to 22."""
+        from app.services.ansible_service import resolve_ssh_port
+        node = type("N", (), {"ip": "10.0.0.1", "ssh_port": None})()
+        with patch("app.services.ansible_service.get_ssh_port", return_value=None):
+            assert resolve_ssh_port(node) == 22
+
+
+class TestRunPlaybookSshPortInjection:
+
+    SAMPLE = b"""all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.1.1:
+          ansible_ssh_user: jboss
+      vars:
+        ansible_ssh_user: jboss
+"""
+
+    @pytest.mark.asyncio
+    async def test_injects_ansible_port_and_restores(self):
+        """run_playbook 应临时注入 ansible_port，执行后恢复原值。"""
+        from app.services.ansible_service import AnsibleRunnerService
+        svc = AnsibleRunnerService(private_data_dir="/tmp")
+        import app.services.ansible_service as mod
+
+        written = {}
+
+        class _WFile:
+            def __init__(self):
+                self._buf = []
+            def write(self, s):
+                self._buf.append(s)
+            def __enter__(self):
+                return self
+            def __exit__(self, *x):
+                written["content"] = "".join(self._buf)
+                return False
+
+        def fake_open(path, mode="r", *a, **kw):
+            if "r" in mode:
+                return mock_open(read_data=self.SAMPLE).return_value
+            return _WFile()
+
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        with (
+            patch.object(mod, "_INVENTORY_PATH", "/fake/inventory/host"),
+            patch("builtins.open", side_effect=fake_open),
+            patch("ansible_runner.run", return_value=fake_runner),
+        ):
+            await svc.run_playbook(ip="192.168.1.1", tag="nginx_cmd_run", ssh_port=1122)
+
+        # 应写入过 inventory（注入或恢复），且最终写回原样（无 ansible_port）
+        assert written.get("content") is not None
+        assert "ansible_port: 1122" in written["content"] or "ansible_port" not in written["content"]
+
+    @pytest.mark.asyncio
+    async def test_no_injection_when_port_none(self):
+        """ssh_port=None 且 inventory 无 ansible_port 时不修改 inventory。"""
+        from app.services.ansible_service import AnsibleRunnerService
+        svc = AnsibleRunnerService(private_data_dir="/tmp")
+        import app.services.ansible_service as mod
+
+        write_called = []
+
+        def fake_open(path, mode="r", *a, **kw):
+            if "r" in mode:
+                return mock_open(read_data=self.SAMPLE).return_value
+            write_called.append(mode)
+            f = type("F", (), {})()
+            f.write = lambda s: None
+            f.__enter__ = lambda self: f
+            f.__exit__ = lambda *x: None
+            return f
+
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        with (
+            patch.object(mod, "_INVENTORY_PATH", "/fake/inventory/host"),
+            patch("builtins.open", side_effect=fake_open),
+            patch("ansible_runner.run", return_value=fake_runner),
+        ):
+            await svc.run_playbook(ip="192.168.1.1", tag="nginx_cmd_run")
+
+        # 不写文件
+        assert len(write_called) == 0

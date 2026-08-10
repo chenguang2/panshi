@@ -127,6 +127,7 @@ def _fix_postgresql_table(engine: Engine, table: str, bad_col: str, compound_col
 COLUMN_MIGRATIONS = [
     ("ps_node", "status_detail", "TEXT"),
     ("ps_node", "openresty_path", "VARCHAR(255)"),
+    ("ps_node", "ssh_port", "INTEGER"),
     ("ps_cluster", "current_version", "INTEGER"),
     ("ps_import_log", "stream_proxy_count", "INTEGER DEFAULT 0"),
     ("ps_stream_proxy", "ref_node_id", "INTEGER"),

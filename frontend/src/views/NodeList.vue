@@ -142,6 +142,10 @@
               <input v-model.number="formData.management_port" type="number" class="form-input" :class="{ 'has-error': formErrors.management_port }" min="1" max="65535">
               <span class="form-error" v-if="formErrors.management_port">{{ formErrors.management_port }}</span>
             </div>
+            <div class="form-group">
+              <label class="form-label">SSH端口</label>
+              <input v-model.number="formData.ssh_port" type="number" class="form-input" min="1" max="65535" placeholder="默认 22">
+            </div>
           </div>
           <div class="form-group">
             <label class="form-label">OpenResty安装路径 <span class="required">*</span></label>
@@ -334,6 +338,7 @@ const formData = reactive({
   ip: '',
   service_port: 80,
   management_port: 9180,
+  ssh_port: 22,
   edge_path: '',
   openresty_path: '',
   statusCheck: true,
@@ -456,6 +461,7 @@ function openAddModal() {
   formData.ip = ''
   formData.service_port = 80
   formData.management_port = 9180
+  formData.ssh_port = 22
   formData.edge_path = ''
   formData.openresty_path = ''
   formData.statusCheck = true
@@ -474,6 +480,7 @@ function handleEdit(record: any) {
   formData.ip = record.ip
   formData.service_port = record.service_port
   formData.management_port = record.management_port
+  formData.ssh_port = record.ssh_port ?? 22
   formData.edge_path = record.edge_path || ''
   formData.openresty_path = record.openresty_path || ''
   formData.statusCheck = record.status === 1
@@ -545,6 +552,7 @@ async function handleFormSubmit() {
       ip: formData.ip,
       service_port: formData.service_port,
       management_port: formData.management_port,
+      ssh_port: formData.ssh_port,
       edge_path: formData.edge_path,
       openresty_path: formData.openresty_path || undefined,
       status: formData.statusCheck ? 1 : 0,

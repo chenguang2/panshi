@@ -13,6 +13,7 @@ export interface NodeCreatePayload {
   ip: string
   service_port: number
   management_port: number
+  ssh_port?: number
   edge_path: string
   openresty_path?: string
   status: number
@@ -23,6 +24,7 @@ export interface NodeUpdatePayload {
   ip?: string
   service_port?: number
   management_port?: number
+  ssh_port?: number
   edge_path?: string
   openresty_path?: string
   status?: number

@@ -31,6 +31,7 @@ from app.services.ansible_service import (
     _run_ssh_with_fallback,
     get_ssh_user,
     get_ssh_password,
+    resolve_ssh_port,
 )
 
 
@@ -173,7 +174,8 @@ async def _install_openresty_stream(
     try:
         yield f"data: {json.dumps({'line': '阶段 1/2: 传输文件并解压...', 'percent': 0})}\n\n"
         ansible_rc = -1
-        async for event in _run_ansible_stream(ansible_svc, ip=node.ip, tag="install_openresty_copy", extravars=extravars):
+        ansible_port = resolve_ssh_port(node)
+        async for event in _run_ansible_stream(ansible_svc, ip=node.ip, tag="install_openresty_copy", extravars=extravars, ssh_port=ansible_port):
             import json as _json
             try:
                 ev_data = _json.loads(event.removeprefix("data: ").removesuffix("\n\n"))
@@ -203,6 +205,7 @@ async def _install_openresty_stream(
         )
         ssh_user = get_ssh_user(node.ip)
         ssh_password = get_ssh_password(node.ip)
+        ssh_port = resolve_ssh_port(node)
 
         _ssh_result: list[int] = []
 
@@ -245,7 +248,7 @@ async def _install_openresty_stream(
 
         try:
             # Round 1: key-based SSH
-            cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd)
+            cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd, port=ssh_port)
             yield f"data: {json.dumps({'line': f'$ {shlex.join(cmd_parts)}', 'percent': 40})}\n\n"
             yield f"data: {json.dumps({'line': '阶段 2/2: 执行 install-edge.sh（实时编译输出）...', 'percent': 40})}\n\n"
             rc = -1
@@ -264,7 +267,7 @@ async def _install_openresty_stream(
             )
             if needs_fallback:
                 yield f"data: {json.dumps({'line': '免密登录失败，正在尝试密码认证...', 'percent': 40})}\n\n"
-                cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd, password=ssh_password)
+                cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd, password=ssh_password, port=ssh_port)
                 yield f"data: {json.dumps({'line': f'$ {shlex.join(cmd_parts)}', 'percent': 40})}\n\n"
                 _ssh_result.clear()
                 async for event in _stream_ssh(cmd_parts):
@@ -291,10 +294,10 @@ async def _install_openresty_stream(
                     pass
         raise
 
-async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss") -> tuple[int, str, str]:
+async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss", port: int | None = None) -> tuple[int, str, str]:
     """Run a command on remote node via SSH with password fallback, return (rc, stdout, stderr)."""
     password = get_ssh_password(ip)
-    return await _run_ssh_with_fallback(ip, ssh_user, cmd, password=password)
+    return await _run_ssh_with_fallback(ip, ssh_user, cmd, password=password, port=port)
 
 
 # ── Router A: install-openresty + cancel-install ─────────────────────
@@ -339,6 +342,7 @@ async def cancel_install(
     node = await _verify_node(cluster_id, node_id, db)
     steps: list[dict] = []
     ssh_user = get_ssh_user(node.ip)
+    ssh_port = resolve_ssh_port(node)
 
     proc = _install_proc_registry.get(node_id)
 
@@ -380,7 +384,7 @@ async def cancel_install(
 
     _install_proc_registry.pop(node_id, None)
 
-    rc, ps_stdout, ps_stderr = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user)
+    rc, ps_stdout, ps_stderr = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user, port=ssh_port)
     ps_lines = [l for l in ps_stdout.split("\n") if "grep" not in l and l.strip()]
     ps_output = "\n".join(ps_lines)
 
@@ -392,14 +396,14 @@ async def cancel_install(
     })
 
     if any("install-edge.sh" in l for l in ps_lines):
-        rc2, pkill_stdout, pkill_stderr = await _ssh_run(node.ip, "pkill -f install-edge.sh", ssh_user=ssh_user)
+        rc2, pkill_stdout, pkill_stderr = await _ssh_run(node.ip, "pkill -f install-edge.sh", ssh_user=ssh_user, port=ssh_port)
         steps.append({
             "command": f"ssh {ssh_user}@{node.ip} \"pkill -f install-edge.sh\"",
             "status": "success" if rc2 == 0 else "failed",
             "stdout": pkill_stdout or "（无输出）",
             "stderr": pkill_stderr,
         })
-        _, ps2_stdout, _ = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user)
+        _, ps2_stdout, _ = await _ssh_run(node.ip, "ps aux | grep install-edge.sh", ssh_user=ssh_user, port=ssh_port)
         ps2_lines = [l for l in ps2_stdout.split("\n") if "grep" not in l and l.strip()]
         steps.append({
             "command": f"ssh {ssh_user}@{node.ip} \"ps aux | grep install-edge.sh\"（验证）",
@@ -439,7 +443,7 @@ async def associate_new_openresty_stream(
         raise HTTPException(status_code=422, detail="节点 Nginx安装路径为空，请先编辑节点")
     extravars = {"prefix": prefix, "edge_target": node.edge_path}
     return StreamingResponse(
-        _run_ansible_stream(_ansible_service, ip=node.ip, tag="upgrade_openresty", extravars=extravars),
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="upgrade_openresty", extravars=extravars, ssh_port=resolve_ssh_port(node)),
         media_type="text/event-stream",
     )
 
@@ -502,7 +506,7 @@ async def edge_pack_add_stream(
         "pack_file": body.pack_file, "prefix": prefix,
     }
     return StreamingResponse(
-        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_add", extravars=extravars),
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_add", extravars=extravars, ssh_port=resolve_ssh_port(node)),
         media_type="text/event-stream",
     )
 
@@ -517,7 +521,7 @@ async def edge_pack_rebase_stream(
     node = await _verify_node(cluster_id, node_id, db)
     extravars = {"edge_target": node.edge_path, "version": body.version}
     return StreamingResponse(
-        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_rebase", extravars=extravars),
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_rebase", extravars=extravars, ssh_port=resolve_ssh_port(node)),
         media_type="text/event-stream",
     )
 
@@ -533,6 +537,6 @@ async def install_edge_stream(
     prefix = node.openresty_path or body.prefix
     extravars = {"prefix": prefix, "edge_target": node.edge_path}
     return StreamingResponse(
-        _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_edge", extravars=extravars),
+        _run_ansible_stream(_ansible_service, ip=node.ip, tag="install_edge", extravars=extravars, ssh_port=resolve_ssh_port(node)),
         media_type="text/event-stream",
     )

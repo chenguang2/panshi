@@ -156,6 +156,9 @@
             <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
               <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
             </a-form-item>
+            <a-form-item label="SSH端口" name="ssh_port" :rules="[{ type: 'number', message: '请输入SSH端口' }]">
+              <a-input-number v-model:value="nodeForm.ssh_port" :min="1" :max="65535" style="width: 100%" placeholder="默认 22" />
+            </a-form-item>
             <a-form-item label="OpenResty安装路径" name="openresty_path" :rules="[{ required: true, message: '请输入OpenResty安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
               <a-input v-model:value="nodeForm.openresty_path" placeholder="/usr/local/nginx" />
             </a-form-item>
