@@ -184,6 +184,20 @@
 - **WHEN** 自定义软件名为 shell 内建命令（如 `cd`，`command -v` 为空）
 - **THEN** 脚本 SHALL 优雅处理（跳过 rpm/dpkg 查询，不报错）
 
+#### Scenario: 命令执行操作任务化
+- **WHEN** 用户创建 task_type 为 `cmd_exec` 的任务，params 含 `cmd`（要执行的命令）、`security`（安全策略）、`timeout`（超时秒数）、可选 `whitelist`（白名单附加命令）
+- **THEN** 每个节点子任务 SHALL 调用 `cmd_exec_run` ansible tag，在节点上执行指定命令
+- **AND** 安全策略 SHALL 三选一：`blacklist`（黑名单）/ `whitelist`（白名单）/ `none`（不限制）
+- **AND** 黑名单策略 SHALL 拦截注入类字符（管道/重定向/后台/命令替换/分号/&&/换行/`$(` 等）**且** 拦截危险命令（rm/reboot/shutdown/halt/mkfs/fsck/dd/format/fdisk/parted），但 SHALL NOT 拦截 `*` 通配符（讨论确认：黑名单防注入 + 防危险命令，不仅靠用户自觉）
+- **AND** 白名单策略 SHALL 仅允许内置只读命令（ls/ps/df/free/top/cat/head/tail/grep/wc/du/stat/whoami/hostname/uptime/date/uname）+ 任务内添加的命令（仅本次任务生效，不持久化），**且**叠加注入字符校验——命令含 `;`/`&&`/`|` 等时即使 BIN 在白名单也 SHALL 被拦截（讨论确认：保证校验=执行一致，防 `ls; whoami` 绕过）
+- **AND** 不限制策略 SHALL 不校验命令内容（由运维自行负责，超时仍兜底）
+- **AND** 命令与白名单列表 SHALL 通过 base64 编码传参（讨论确认：防空格/引号/特殊字符在 ansible script 模块/SSH 传输中损坏），脚本内解码
+- **AND** 命令执行 SHALL 受超时限制（默认 30s，可配置；脚本 `timeout` + ansible `job_timeout` 双保险）
+- **AND** 命令超时（exit 124）SHALL 单独提示"命令超时"，非超时失败 SHALL 显示退出码（讨论确认）
+- **AND** 命令 stdout SHALL 经 on_log 写入任务详情日志
+- **WHEN** 命令含被安全策略拦截的字符/命令，或超时，或执行失败
+- **THEN** 脚本 SHALL 输出对应错误并标记节点失败（不执行命令/超时终止）
+
 #### Scenario: 环境类操作任务化
 - **WHEN** 用户创建 task_type 为 `edge_env_deploy` 的任务
 - **THEN** 每个节点子任务 SHALL 调用 `edge_init_env` 部署 edge.env（params 含 env_content）
