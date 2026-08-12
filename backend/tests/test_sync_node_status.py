@@ -166,8 +166,8 @@ class TestRunAndUpdateNodeStatus:
 
     # ── edge_statistic: nginx unknown (fallback) ──
 
-    async def test_statistic_unknown_does_not_change_status(self, mock_ansible, test_db, test_node):
-        """edge_statistic with nginx_status=unknown should NOT change node.status."""
+    async def test_statistic_unknown_sets_status_to_0(self, mock_ansible, test_db, test_node):
+        """edge_statistic with nginx_status=unknown (fallback) should set node.status = 0."""
         mock_ansible.run_playbook.return_value = {"rc": 0, "stdout": "", "stderr": ""}
         mock_ansible.build_status_detail.return_value = {
             "last_rc": 0, "last_tag": "edge_statistic",
@@ -183,7 +183,7 @@ class TestRunAndUpdateNodeStatus:
         )
 
         assert result["rc"] == 0
-        assert test_node.status == 1  # 不应被修改
+        assert test_node.status == 0
 
     # ── operation failure: exception path ──
 

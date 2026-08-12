@@ -118,12 +118,11 @@ async def _run_and_update(
         elif tag == "edge_statistic":
             nginx_info = detail.get("nginx", {})
             nginx_running = nginx_info.get("nginx_running")
-            nginx_status = nginx_info.get("nginx_status")
             if nginx_running is True:
                 node.status = 1
-            elif nginx_running is False and nginx_status != "unknown":
+            elif nginx_running is False:
                 node.status = 0
-            # nginx_running is None, or nginx_status == "unknown" → skip
+            # nginx_running is None (no nginx info) → skip
 
         await _update_status_detail(db, node, detail)
         return result
