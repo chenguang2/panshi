@@ -9,7 +9,7 @@ import json
 from typing import Any, Optional, Callable
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, inspect as sa_inspect
+from sqlalchemy import select, func, case, inspect as sa_inspect
 
 from app.models.cluster import Node, ConfigVersion, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata
 from app.models.static_resource import StaticResource
@@ -257,7 +257,7 @@ async def batch_load_cluster_stats(
         select(
             Node.cluster_id,
             func.count(),
-            func.sum(Node.status == 1),
+            func.sum(case((Node.status == 1, 1), else_=0)),
         ).where(Node.cluster_id.in_(cluster_ids)).group_by(Node.cluster_id)
     )
     node_counts = {}
