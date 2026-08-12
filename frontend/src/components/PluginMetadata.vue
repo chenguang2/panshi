@@ -131,7 +131,7 @@ import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
-import { formatDate, showDeleteConfirm, buildDeleteProgressContent } from '@/composables/useClusterUtils'
+import { formatDate, showDeleteConfirm, buildDeleteProgressContent, executePublish } from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string
@@ -417,59 +417,12 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
   const nodeIds = await openPublishModal(`发布插件元数据: ${item.plugin_name}`)
   if (!nodeIds.length) return
 
-  const logs: string[] = []
-  const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
-
-  const modal = Modal.info({
+  await executePublish({
     title: `发布插件元数据: ${item.plugin_name}`,
-    width: 600,
-    content: buildDeleteProgressContent(progress, logs),
-    okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
+    apiEndpoint: `/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`,
+    nodeIds,
+    refreshFn: loadConfiguredPlugins,
   })
-
-  const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-  addLog(`开始发布: ${item.plugin_name}`)
-  progress.percent = 10; update()
-  await new Promise(r => setTimeout(r, 400))
-
-  try {
-    addLog('正在构建发布配置...')
-    progress.percent = 30; update()
-    const response = await api.post(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}/publish`, { node_ids: nodeIds })
-    const data = response.data
-    progress.percent = 70
-    addLog(`状态: ${data.status}`)
-    addLog(`消息: ${data.message}`)
-    addLog(`版本: v${data.version}`)
-
-    if (data.results && data.results.length > 0) {
-      addLog('')
-      addLog('节点同步结果:')
-      for (const r of data.results) {
-        addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
-      }
-    }
-
-    progress.percent = 100
-    addLog('')
-    if (data.status === 'ok') { progress.status = 'success'; addLog('✅ 发布成功!') }
-    else if (data.status === 'partial') { progress.status = 'exception'; addLog('⚠️ 部分成功') }
-    else { progress.status = 'exception'; addLog('❌ 发布失败') }
-    update()
-    modal.update({ okButtonProps: { disabled: false } })
-
-    await loadConfiguredPlugins()
-  } catch (error: any) {
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
-    progress.percent = 100; progress.status = 'exception'
-    addLog(''); addLog(`❌ 发布失败: ${errMsg}`)
-    update()
-    modal.update({ okButtonProps: { disabled: false } })
-  }
 }
 
 const openVersionManagement = (item: ConfiguredPlugin) => {
