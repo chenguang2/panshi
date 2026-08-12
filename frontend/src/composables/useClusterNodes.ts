@@ -599,6 +599,7 @@ export function useClusterNodes(options: {
     batchProgressVisible.value = false
     showBatchStatusModal('批量状态查询', rows)
     await loadNodes(cluster)
+    await onRefresh?.()
   }
 
   /** Extract key lines from nginx_cmd.sh stdout for user-facing highlights. */
@@ -911,6 +912,7 @@ export function useClusterNodes(options: {
 
       // Refresh node list
       await loadNodes(cluster)
+      await onRefresh?.()
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'

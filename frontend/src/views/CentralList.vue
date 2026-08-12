@@ -886,9 +886,9 @@ async function runTest() {
   if (!testingCluster) return
   testRunning.value = true
   testLogs.value = []
-  const nodeIds = testNodes.value.filter(n => n.status === 1).map(n => n.id)
+  const nodeIds = testNodes.value.map(n => n.id)
   if (nodeIds.length === 0) {
-    testLogs.value.push({ status: 'error', msg: '没有在线节点可测试' })
+    testLogs.value.push({ status: 'error', msg: '没有节点可测试' })
     testRunning.value = false
     return
   }
@@ -920,6 +920,7 @@ async function runTest() {
     testLogs.value.push({ status: 'error', msg: `测试异常终止` })
   }
   testRunning.value = false
+  await loadClusters()
 }
 
 const deleteCluster = async (cluster: Cluster) => {
