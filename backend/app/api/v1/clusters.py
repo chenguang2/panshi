@@ -1,4 +1,6 @@
+import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Header
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -384,19 +386,31 @@ async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...
 
         port = node.management_port
         import asyncio
+        ok = False
+        msg = ""
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(node.ip, port), timeout=5.0)
             writer.close()
             await writer.wait_closed()
-            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": True, "msg": "管理端口可达", "version": ""})
+            ok, msg = True, "管理端口可达"
         except asyncio.TimeoutError:
-            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": "连接超时", "version": ""})
+            msg = "连接超时"
         except ConnectionRefusedError:
-            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": "连接被拒绝", "version": ""})
+            msg = "连接被拒绝"
         except OSError as e:
-            results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": False, "msg": str(e)[:50], "version": ""})
+            msg = str(e)[:50]
 
+        node.status = 1 if ok else 0
+        node.status_detail = json.dumps({
+            "last_execution": datetime.now(timezone.utc).isoformat(),
+            "last_tag": "tcp_test",
+            "last_status": "ok" if ok else "failed",
+            "last_error": None if ok else msg,
+        }, ensure_ascii=False)
+        results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": ok, "msg": msg, "version": ""})
+
+    await db.commit()
     return {"results": results}
 
 
