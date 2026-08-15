@@ -309,7 +309,7 @@ def _build_workbook(data):
         "ID", "插件名称", "配置数据", "创建时间",
     ], pmr)
 
-    # 8. 四层代理
+    # 8. 四层代理（含 DNS 代理：DNS 行导出 dns_config，普通行为空）
     spr = []
     for s in data["stream_proxies"]:
         spr.append([
@@ -317,10 +317,12 @@ def _build_workbook(data):
             _fmt_json(s.targets), s.proxy_type,
             "启用" if s.status == 1 else "禁用",
             s.description or "", _fmt_dt(s.created_at),
+            _fmt_json(s.dns_config) if s.proxy_type == "dns" else "",
         ])
     write_sheet("四层代理", [
         "ID", "名称", "监听端口", "协议", "负载均衡",
         "目标节点", "代理类型", "状态", "描述", "创建时间",
+        "DNS 配置",
     ], spr)
 
     # 9. 静态资源 — FK column: 关联路由(ID)=col 5 (0-based)

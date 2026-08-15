@@ -129,6 +129,12 @@ async def seed_db(test_sessionmaker):
                                 targets='[{"target":"10.0.0.20:3306","weight":100}]',
                                 proxy_type="normal", status=1))
 
+        # DNS StreamProxy (proxy_type=dns with dns_config)
+        session.add(StreamProxy(cluster_id=cid, name="dns-proxy", listen_port=9053,
+                                scheme="tcp", load_balance="weighted_roundrobin",
+                                proxy_type="dns", status=1,
+                                dns_config='{"hosts": {"example.com": {"type": "roundrobin", "ttl_valid": 10, "nodes": {"10.0.0.30": ["53"]}}}, "wan_enabled": true}'))
+
         # StaticResource (linked to route)
         session.add(StaticResource(cluster_id=cid, route_id=rt1.id, name="static-assets",
                                    url_path="/static/*", file_size=1024))
@@ -349,5 +355,54 @@ async def test_export_any_authenticated_user_can_export(
             resp = await ac.get(f"/api/v1/clusters/{cid}/export",
                                 headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_export_dns_proxy_includes_dns_config(seed_db, test_sessionmaker):
+    """四层代理 sheet 的 DNS 行 SHALL 导出 dns_config，普通行为空（excel-export-dns）。"""
+    cluster = seed_db
+    cid = cluster.id
+
+    async def override_get_db():
+        async with test_sessionmaker() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            login_resp = await ac.post("/api/v1/auth/login",
+                                       json={"username": "admin", "password": "panshi123"})
+            token = login_resp.json()["access_token"]
+
+            resp = await ac.get(f"/api/v1/clusters/{cid}/export",
+                                headers={"Authorization": f"Bearer {token}"})
+            assert resp.status_code == 200
+            wb = load_workbook(BytesIO(resp.content))
+            ws = wb["四层代理"]
+
+            headers = [str(c.value or "") for c in ws[1]]
+            assert "DNS 配置" in headers, "四层代理 sheet 应包含 DNS 配置 列"
+            dns_col_idx = headers.index("DNS 配置")
+
+            # 收集代理名 → DNS 配置列值
+            proxy_col = headers.index("名称")
+            rows = {}
+            for row in ws.iter_rows(min_row=2):
+                name = row[proxy_col].value
+                if name:
+                    rows[name] = row[dns_col_idx].value
+
+            assert "dns-proxy" in rows, "seed DNS 代理应存在"
+            dns_val = rows["dns-proxy"]
+            assert dns_val and "example.com" in str(dns_val), \
+                f"DNS 行 DNS 配置应含域名，实际: {dns_val}"
+            assert "10.0.0.30" in str(dns_val), \
+                f"DNS 行 DNS 配置应含节点 IP，实际: {dns_val}"
+
+            assert rows.get("tcp-proxy") in (None, ""), \
+                f"普通四层代理行 DNS 配置应为空，实际: {rows.get('tcp-proxy')}"
     finally:
         app.dependency_overrides.clear()
