@@ -22,7 +22,7 @@ The system SHALL provide an API endpoint that exports all configuration data of 
   - `插件组` — rows for each plugin config group (ID, name, plugins description, created_at)
   - `全局规则` — rows for each global rule (ID, name, plugins description, created_at)
   - `插件元数据` — rows for each plugin metadata (ID, plugin_name, config_data, created_at)
-  - `四层代理` — rows for each stream proxy (ID, name, listen_port, scheme, load_balance, targets summary, proxy_type, status, description, created_at)
+  - `四层代理` — rows for each stream proxy (ID, name, listen_port, scheme, load_balance, targets summary, proxy_type, status, description, created_at, DNS 配置). The `DNS 配置` column SHALL contain the `dns_config` JSON (pretty-printed) for `proxy_type == "dns"` rows, and SHALL be empty for non-DNS rows.
   - `静态资源` — rows for each static resource (ID, name, url_path, file_size, route_name, route_id, description, created_at)
   - `SSL 证书` — rows for each SSL certificate, containing metadata only: ID, name, sni, cert_type, algorithm, organization, is_ca, create_method, status, created_at
 
@@ -78,6 +78,14 @@ The system SHALL provide an API endpoint that exports all configuration data of 
 - **WHEN** a cluster has no records of a certain type (e.g., no stream proxies)
 - **THEN** the corresponding sheet SHALL still be present in the Excel file
 - **AND** the sheet SHALL contain only the header row with column names
+
+#### Scenario: DNS 代理导出 dns_config
+
+- **WHEN** 集群中存在 `proxy_type == "dns"` 的四层代理（DNS 代理）
+- **THEN** 导出的 `四层代理` sheet 行 SHALL 包含其 `dns_config` 配置（域名 → hosts/负载均衡/TTL/节点 映射，JSON pretty-printed）
+- **AND** `四层代理` sheet SHALL 包含 `DNS 配置` 列
+- **WHEN** 行为普通四层代理（`proxy_type != "dns"`）
+- **THEN** 该行 `DNS 配置` 列 SHALL 为空
 
 #### Scenario: All-or-nothing export on failure
 
