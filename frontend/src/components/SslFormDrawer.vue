@@ -22,7 +22,29 @@
             <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
           </div>
         </div>
-        <div class="form-group">
+        <!-- 编辑模式：SNI 只读展示（DNS/IP 分组），不允许修改，避免匹配名单与证书 SAN 脱节 -->
+        <div v-if="editingCert" class="form-group">
+          <label class="form-label">SNI 匹配名单</label>
+          <div class="sni-readonly">
+            <div class="sni-readonly-row">
+              <span class="sni-readonly-label">DNS 域名</span>
+              <div class="sni-readonly-tags">
+                <span v-for="tag in dnsTags" :key="tag" class="sni-tag">{{ tag }}</span>
+                <span v-if="dnsTags.length === 0" class="sni-readonly-empty">无</span>
+              </div>
+            </div>
+            <div class="sni-readonly-row">
+              <span class="sni-readonly-label">IP 地址</span>
+              <div class="sni-readonly-tags">
+                <span v-for="tag in ipTags" :key="tag" class="sni-tag">{{ tag }}</span>
+                <span v-if="ipTags.length === 0" class="sni-readonly-empty">无</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-hint">匹配名单不可编辑。如需新增域名/IP，请重新生成证书（生成时填写 SAN），或在其他证书中调整。</div>
+        </div>
+        <!-- 创建/导入模式：可编辑 SNI 输入 -->
+        <div v-else class="form-group">
           <label class="form-label">SNI 域名 <span class="required">*</span></label>
           <div class="sni-tag-input" :class="{ 'has-error': formErrors.sni }" @click="sniInputRef?.focus()">
             <span v-for="(tag, i) in sniTags" :key="i" class="sni-tag">
@@ -40,7 +62,7 @@
               @keydown.backspace="onSniBackspace"
             >
           </div>
-          <div class="form-hint">每个域名独立添加，支持通配符如 *.example.com</div>
+          <div class="form-hint">每个域名独立添加，支持通配符如 *.example.com；IP 地址也会被 nginx 按字面匹配</div>
           <div v-if="formErrors.sni" class="form-error">{{ formErrors.sni }}</div>
         </div>
         <div class="form-row">
@@ -223,6 +245,22 @@ const sniTags = ref<string[]>([])
 const sniInputValue = ref('')
 const sniInputRef = ref<HTMLInputElement | null>(null)
 
+// 编辑模式只读展示：DNS/IP 分组
+const dnsTags = ref<string[]>([])
+const ipTags = ref<string[]>([])
+
+const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
+const IPV6_RE = /^[0-9a-fA-F:]+$/
+
+function isIpAddress(s: string): boolean {
+  return IPV4_RE.test(s) || (IPV6_RE.test(s) && s.includes(':'))
+}
+
+function splitSniByType(tags: string[]) {
+  dnsTags.value = tags.filter(t => !isIpAddress(t))
+  ipTags.value = tags.filter(t => isIpAddress(t))
+}
+
 const mtlsEnabled = ref(false)
 const mtlsExpanded = ref(false)
 const mtlsSkipTags = ref<string[]>([])
@@ -330,6 +368,7 @@ watch(() => props.visible, (v) => {
     form.cluster_id = c.cluster_id
     form.cert_type = c.cert_type
     sniTags.value = c.sni ? c.sni.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+    splitSniByType(sniTags.value)
     form.cert = c.cert
     form.key = c.key || c.private_key || ''
     form.ssl_protocols = c.ssl_protocols ? (() => { try { return JSON.parse(c.ssl_protocols) } catch { return ['TLSv1.2', 'TLSv1.3'] } })() : ['TLSv1.2', 'TLSv1.3']
@@ -355,6 +394,7 @@ watch(() => props.visible, (v) => {
     form.cluster_id = ''
     form.cert_type = 'server'
     sniTags.value = []
+    splitSniByType([])
     form.cert = ''
     form.key = ''
     form.ssl_protocols = ['TLSv1.2', 'TLSv1.3']
@@ -412,13 +452,16 @@ async function handleSubmit() {
       name: form.name,
       cluster_id: form.cluster_id,
       cert_type: form.cert_type,
-      sni: sniTags.value.join(','),
       cert: form.cert,
       private_key: form.key,
       description: form.description || undefined,
       gm: form.gm || undefined,
       organization: form.organization.trim() || undefined,
       organizational_unit: form.organizational_unit.trim() || undefined,
+    }
+    // 创建/导入时提交 sni；编辑时 SNI 只读，不提交（后端 exclude_unset 不会改动它）
+    if (!props.editingCert) {
+      data.sni = sniTags.value.join(',')
     }
     if (form.gm) {
       data.sign_cert = form.sign_cert
@@ -551,6 +594,41 @@ function handleClose() {
   color: var(--muted);
   font-size: 12px;
   font-family: var(--font-body);
+}
+
+/* ── SNI Readonly (edit mode) ── */
+.sni-readonly {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sni-readonly-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sni-readonly-label {
+  flex-shrink: 0;
+  width: 76px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 22px;
+  padding-top: 2px;
+}
+.sni-readonly-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+.sni-readonly-empty {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 24px;
 }
 
 /* ── Collapse Section ── */

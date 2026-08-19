@@ -16,7 +16,7 @@
               <a-descriptions-item label="组织 (O)">{{ cert.organization || '-' }}</a-descriptions-item>
               <a-descriptions-item label="组织单位 (OU)">{{ cert.organizational_unit || '-' }}</a-descriptions-item>
               <a-descriptions-item label="算法">
-                <a-tag color="purple">SM2 国密</a-tag>
+                <a-tag :color="algorithmTagColor">{{ algorithmLabel }}</a-tag>
               </a-descriptions-item>
               <a-descriptions-item label="创建方式">{{ cert.create_method === 'local_generate' ? '本地生成' : cert.create_method }}</a-descriptions-item>
               <a-descriptions-item label="描述">{{ cert.description || '-' }}</a-descriptions-item>
@@ -162,10 +162,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { downloadPem, buildCertZip, downloadBlob } from '@/utils/download'
 import api from '@/api'
+
+const ALGO_META: Record<string, { label: string; color: string }> = {
+  sm2: { label: 'SM2 国密', color: 'purple' },
+  rsa: { label: 'RSA', color: 'green' },
+  ecc: { label: 'ECC', color: 'blue' },
+}
 
 const props = defineProps<{
   visible: boolean
@@ -175,6 +181,16 @@ const props = defineProps<{
 defineEmits<{
   'update:visible': [value: boolean]
 }>()
+
+const algorithmLabel = computed(() => {
+  const algo = props.cert?.algorithm
+  return (algo && ALGO_META[algo]?.label) || algo || '-'
+})
+
+const algorithmTagColor = computed(() => {
+  const algo = props.cert?.algorithm
+  return (algo && ALGO_META[algo]?.color) || 'default'
+})
 
 const viewExpanded = ref<Record<string, boolean>>({})
 const mtlsViewExpanded = ref(false)
