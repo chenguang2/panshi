@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from sqlalchemy import select
 from app.config.plugin_definitions import BUILTIN_PLUGINS
 from app.models.cluster import PluginEnabled
@@ -31,7 +32,8 @@ class TestGetBuiltinPlugins:
 
     async def test_all_returns_display_name_and_category(self):
         """all=1 时返回 display_name 和 category 字段"""
-        result = await get_builtin_plugins(all=True, db=None)
+        with patch("app.api.v1.plugins.get_enabled_plugins", return_value=[]):
+            result = await get_builtin_plugins(all=True, db=None)
         plugins = result["plugins"]
         assert len(plugins) == len(BUILTIN_PLUGINS)
         for p in plugins:
@@ -40,7 +42,8 @@ class TestGetBuiltinPlugins:
 
     async def test_no_switches_returns_all_plugins(self, test_db):
         """无 PluginEnabled 记录时返回全部插件"""
-        result = await get_builtin_plugins(all=False, db=test_db)
+        with patch("app.api.v1.plugins.get_enabled_plugins", return_value=[]):
+            result = await get_builtin_plugins(all=False, db=test_db)
         assert len(result["plugins"]) == len(BUILTIN_PLUGINS)
 
     async def test_disabled_plugin_is_filtered(self, test_db):
@@ -59,12 +62,13 @@ class TestGetBuiltinPlugins:
         test_db.add(PluginEnabled(plugin_name="proxy_rewrite", enabled=1))
         await test_db.commit()
 
-        result = await get_builtin_plugins(all=False, db=test_db)
+        with patch("app.api.v1.plugins.get_enabled_plugins", return_value=[]):
+            result = await get_builtin_plugins(all=False, db=test_db)
         names = [p["name"] for p in result["plugins"]]
 
         assert "cors" not in names
         assert "proxy_rewrite" in names
-        assert len(names) == 24
+        assert len(names) == len(BUILTIN_PLUGINS) - 1  # only cors disabled
 
 
 class TestPluginSwitchSchema:

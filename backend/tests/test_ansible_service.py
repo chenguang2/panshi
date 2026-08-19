@@ -406,7 +406,7 @@ class TestAnsibleRunnerService:
         mock_service = AsyncMock()
         real_handler = []
 
-        async def fake_run_playbook(ip, tag, extravars=None, event_handler=None):
+        async def fake_run_playbook(ip, tag, extravars=None, event_handler=None, job_timeout=None, ssh_port=None):
             real_handler.append(event_handler)
             event_handler({"stdout": "line1\n"})
             event_handler({"stdout": "line2\n"})
@@ -418,10 +418,10 @@ class TestAnsibleRunnerService:
         async for event in _run_ansible_stream(mock_service, ip="1.1.1.1", tag="install_openresty"):
             events.append(event)
 
-        assert len(events) >= 2
+        assert len(events) >= 4
         assert events[0].startswith("data: ")
-        assert '"line": "line1"' in events[0]
-        assert '"line": "line2"' in events[1]
+        assert '"line": "line1"' in events[1]
+        assert '"line": "line2"' in events[2]
 
     async def test_run_ansible_stream_ends_with_final_event(self):
         """Last event should contain rc and status."""
@@ -429,7 +429,7 @@ class TestAnsibleRunnerService:
 
         mock_service = AsyncMock()
 
-        async def fake_run_playbook(ip, tag, extravars=None, event_handler=None):
+        async def fake_run_playbook(ip, tag, extravars=None, event_handler=None, job_timeout=None, ssh_port=None):
             return {"rc": 0, "status": "successful", "stdout": "", "stderr": ""}
 
         mock_service.run_playbook = fake_run_playbook

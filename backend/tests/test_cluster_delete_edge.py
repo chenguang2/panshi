@@ -6,8 +6,9 @@ from unittest.mock import patch as _patch
 from app.models.cluster import Cluster, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata, Node
 from app.schemas.cluster import DeleteClusterRequest
 
-# EdgeClient 是函数内导入的，patch 它的原始定义位置
-EC_PATH = "app.services.edge_client.EdgeClient"
+# EdgeClient 在 clusters.py 模块顶层 import（from app.services.edge_client import EdgeClient），
+# 因此必须 patch 生产代码绑定的位置 app.api.v1.clusters.EdgeClient，patch 源模块不生效。
+EC_PATH = "app.api.v1.clusters.EdgeClient"
 def patch_ec(**kwargs):
     return _patch(EC_PATH, **kwargs)
 

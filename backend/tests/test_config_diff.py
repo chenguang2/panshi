@@ -755,7 +755,7 @@ class TestEquivalenceRules:
 
     def test_compare_plugins_empty_vs_defaults(self):
         db = '{"cors": {}}'
-        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false}}'
+        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false, "max_age": 5, "expose_headers": "*"}}'
         defaults = self.rules.get_plugin_defaults("plugin_config")
         result = self.rules.compare_plugins(db, edge, defaults)
         assert len(result) == 1
@@ -800,7 +800,7 @@ class TestPluginPerRow:
 
     def test_equal_plugin_has_equal_status(self):
         db = '{"cors": {}}'
-        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false}}'
+        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false, "max_age": 5, "expose_headers": "*"}}'
         result = self.rules.compare_plugins(db, edge, self.defaults)
         cors = next(r for r in result if r["name"] == "cors")
         assert cors["status"] == "equal"
@@ -814,7 +814,7 @@ class TestPluginPerRow:
 
     def test_mixed_plugins_equal_and_diff(self):
         db = '{"cors": {}, "limit-req": {"rate": 99}}'
-        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false}, "limit-req": {"rate": 10, "burst": 0}}'
+        edge = '{"cors": {"allow_origins": "*", "allow_methods": "*", "allow_headers": "*", "allow_credential": false, "max_age": 5, "expose_headers": "*"}, "limit-req": {"rate": 10, "burst": 0}}'
         result = self.rules.compare_plugins(db, edge, self.defaults)
         cors = next(r for r in result if r["name"] == "cors")
         lr = next(r for r in result if r["name"] == "limit-req")
