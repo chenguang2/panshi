@@ -3,8 +3,16 @@ import asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base
+from app.models.cluster import Cluster, Upstream
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# Minimal parent rows inserted into every test DB so child records referencing
+# these ids pass the FK checks enabled by PRAGMA foreign_keys=ON below.
+# Many model-level tests create e.g. SslCertificate/Route/Upstream/StreamProxy
+# with a hardcoded cluster_id/upstream_id but never create the parent rows.
+SEED_CLUSTER_IDS = (1, 2, 3)
+SEED_UPSTREAM_IDS = (1, 2, 3, 100)
 
 def _enable_sqlite_fk(dbapi_conn, record):
     cursor = dbapi_conn.cursor()
@@ -24,13 +32,22 @@ async def test_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    
+
     async with async_session() as session:
+        for cid in SEED_CLUSTER_IDS:
+            existing = await session.get(Cluster, cid)
+            if existing is None:
+                session.add(Cluster(id=cid, name=f"seed-cluster-{cid}"))
+        for uid in SEED_UPSTREAM_IDS:
+            existing = await session.get(Upstream, uid)
+            if existing is None:
+                session.add(Upstream(id=uid, cluster_id=1, name=f"seed-upstream-{uid}"))
+        await session.commit()
         yield session
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     await engine.dispose()
