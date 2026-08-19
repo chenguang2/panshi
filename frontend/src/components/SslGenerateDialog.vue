@@ -143,14 +143,15 @@
         <div class="form-group">
           <label class="form-label">域名 SAN <span class="required">*</span></label>
           <div class="sni-tag-input" :class="{ 'has-error': errors.dns_sans }" @click="dnsInputRef?.focus()">
-            <span v-for="(tag, i) in dnsTags" :key="i" class="sni-tag">
+            <span v-for="(tag, i) in dnsTags" :key="i" class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(tag) }">
               <span class="sni-tag-text">{{ tag }}</span>
-              <span class="sni-tag-remove" @click.stop="removeDnsTag(i)">&times;</span>
+              <span v-if="isReservedSni(tag)" class="sni-tag-reserved">系统保留</span>
+              <span v-else class="sni-tag-remove" @click.stop="removeDnsTag(i)">&times;</span>
             </span>
             <input ref="dnsInputRef" v-model="dnsInput" type="text" class="sni-input-inline" placeholder="输入域名后按 Enter" :disabled="generating" @keydown.enter.prevent="addDnsTag" @keydown.="addDnsTagOnComma">
           </div>
           <div v-if="errors.dns_sans" class="form-error" style="margin-top:4px;">{{ errors.dns_sans }}</div>
-          <div v-else class="form-hint">至少添加一个域名 SAN 或 IP SAN</div>
+          <div v-else class="form-hint">系统保留域名 {{ RESERVED_SNIS.join(', ') }} 已预置，可继续添加其他域名/IP</div>
         </div>
 
         <!-- IP SAN -->
@@ -232,7 +233,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
-import { splitSniTags } from '@/utils/sniTags'
+import { splitSniTags, isReservedSni, mergeReservedDnsTags, RESERVED_SNIS } from '@/utils/sniTags'
 
 const props = defineProps<{
   visible: boolean
@@ -264,7 +265,7 @@ const form = reactive({
 
 const dnsInput = ref('')
 const ipInput = ref('')
-const dnsTags = ref<string[]>([])
+const dnsTags = ref<string[]>([...RESERVED_SNIS])
 const ipTags = ref<string[]>([])
 const mtlsEnabled = ref(false)
 const mtlsSkipTags = ref<string[]>([])
@@ -374,7 +375,7 @@ async function handleGenerate() {
     const result = await generateSslCertificate(Number(form.cluster_id), {
       name: form.name.trim(),
       common_name: form.common_name.trim(),
-      dns_sans: dnsTags.value.length > 0 ? dnsTags.value : undefined,
+      dns_sans: mergeReservedDnsTags(dnsTags.value),
       ip_sans: ipTags.value.length > 0 ? ipTags.value : undefined,
       validity_days: form.validity_days,
       algorithm: form.algorithm,
@@ -410,7 +411,8 @@ function handleClose() {
 
 function addDnsTag() {
   for (const t of splitSniTags(dnsInput.value)) {
-    if (!dnsTags.value.includes(t)) dnsTags.value.push(t)
+    const v = t.toLowerCase()
+    if (!dnsTags.value.some(x => x.toLowerCase() === v)) dnsTags.value.push(v)
   }
   dnsInput.value = ''
 }
@@ -434,7 +436,10 @@ function addIpTagOnComma(e: KeyboardEvent) {
   if (e.key === ',' || e.key === '，') { e.preventDefault(); addIpTag() }
 }
 
-function removeDnsTag(i: number) { dnsTags.value.splice(i, 1) }
+function removeDnsTag(i: number) {
+  if (isReservedSni(dnsTags.value[i])) return
+  dnsTags.value.splice(i, 1)
+}
 function removeIpTag(i: number) { ipTags.value.splice(i, 1) }
 
 function addMtlsSkipTag() {
@@ -462,7 +467,7 @@ watch(() => props.visible, (v) => {
     form.client_depth = 1
     form.organization = ''
     form.organizational_unit = ''
-    dnsTags.value = []
+    dnsTags.value = [...RESERVED_SNIS]
     ipTags.value = []
     mtlsSkipTags.value = []
     mtlsExpanded.value = false
@@ -486,6 +491,9 @@ watch(() => props.visible, (v) => {
 .sni-tag-input { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: text; min-height: 40px; transition: border-color 0.15s; }
 .sni-tag-input:focus-within { border-color: var(--accent); }
 .sni-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 10px; border-radius: 12px; font-size: 12px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 10%); border: 1px solid oklch(56% 0.16 210 / 20%); color: var(--accent); white-space: nowrap; }
+.sni-tag-locked { background: var(--surface); border-color: var(--border); color: var(--muted); }
+.sni-tag-locked::before { content: '🔒'; margin-right: 2px; font-size: 11px; }
+.sni-tag-reserved { font-size: 10px; color: var(--muted); background: oklch(0% 0 0 / 6%); padding: 0 4px; border-radius: 8px; }
 .sni-tag-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sni-tag-remove { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; font-size: 14px; line-height: 1; cursor: pointer; color: var(--muted); transition: all 0.1s; }
 .sni-tag-remove:hover { background: var(--danger); color: #fff; }
