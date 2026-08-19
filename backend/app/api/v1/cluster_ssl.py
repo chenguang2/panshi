@@ -25,6 +25,32 @@ from app.services.edge_logger import get_edge_logger
 router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"])
 global_router = APIRouter(prefix="/ssl", tags=["ssl"])
 
+# 系统保留域名：Edge 网关内部管理/健康检查的默认访问域名。
+# 生成/更新/回滚 server 证书时强制合并进 DNS SAN 与 sni 字段，不可被用户移除。
+RESERVED_SNIS = ("edge.local",)
+
+
+def merge_reserved_dns(dns_sans: list[str] | None) -> list[str]:
+    """Merge reserved SNIs (edge.local first) into a DNS SAN list.
+
+    Normalizes each DNS entry (strip + lowercase, DNS is case-insensitive),
+    dedups case-insensitively, and places edge.local first.
+    """
+    normalized = [d.strip().lower() for d in (dns_sans or []) if d.strip()]
+    return list(dict.fromkeys([*RESERVED_SNIS, *normalized]))
+
+
+def merge_reserved_into_sni_str(sni_str: str | None) -> str:
+    """Ensure reserved SNIs are present in a comma-separated sni field value.
+
+    Case-insensitive dedup; reserved SNI canonicalized to lowercase and placed
+    first. Non-reserved entries are stripped but otherwise left as-is (IPs keep
+    their original case).
+    """
+    entries = [e.strip() for e in (sni_str or "").split(",") if e.strip()]
+    kept = [e for e in entries if e.lower() not in RESERVED_SNIS]
+    return ",".join([*RESERVED_SNIS, *kept])
+
 
 @router.post("/ca", status_code=status.HTTP_201_CREATED)
 async def create_ca_certificate(
@@ -224,6 +250,8 @@ async def update_ssl_certificate(
         cert.client_ca = None
         cert.client_depth = None
         cert.skip_mtls_uri_regex = None
+    if "sni" in update_data and cert.cert_type == "server" and not cert.is_ca:
+        cert.sni = merge_reserved_into_sni_str(cert.sni)
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -400,6 +428,8 @@ async def rollback_ssl_certificate(
     if "ssl_protocols" in config_data:
         cert.ssl_protocols = json.dumps(config_data["ssl_protocols"]) if isinstance(config_data["ssl_protocols"], list) else config_data["ssl_protocols"]
     cert.current_version = version
+    if cert.cert_type == "server" and not cert.is_ca:
+        cert.sni = merge_reserved_into_sni_str(cert.sni)
     await db.commit()
 
     return {"status": "ok", "message": f"SSL 证书已切换到版本 v{version}", "version": version}
@@ -514,13 +544,23 @@ async def _generate_local(
 
     org = req.organization or "EMBRACE"
     ou = req.organizational_unit or "EDGE"
+
+    raw_dns = list(req.dns_sans or [])
+    raw_ip = list(req.ip_sans or [])
+    if req.cert_type == "client":
+        cert_dns = raw_dns
+        cert_ip = raw_ip
+    else:
+        cert_dns = merge_reserved_dns(raw_dns)
+        cert_ip = [ip.strip() for ip in raw_ip if ip.strip()]
+
     try:
         if is_sm2:
             cert_result, gen_logs = generate_dual_certificates(
                 openssl_path=provider.openssl_path,
                 common_name=req.common_name,
-                dns_sans=req.dns_sans or [],
-                ip_sans=req.ip_sans or [],
+                dns_sans=cert_dns,
+                ip_sans=cert_ip,
                 validity_days=req.validity_days,
                 flavor=provider.flavor,
                 ca_cert_pem=ca_cert_pem,
@@ -531,8 +571,8 @@ async def _generate_local(
             cert_result, gen_logs = provider.generate_certificate(
                 algorithm=req.algorithm,
                 common_name=req.common_name,
-                dns_sans=req.dns_sans or [],
-                ip_sans=req.ip_sans or [],
+                dns_sans=cert_dns,
+                ip_sans=cert_ip,
                 validity_days=req.validity_days,
                 dual_cert=req.dual_cert,
                 ca_cert_pem=ca_cert_pem,
@@ -569,7 +609,7 @@ async def _generate_local(
     cluster_name = cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id)
     log_cert_commands(cluster_id, cluster_name, req.name, all_steps)
 
-    sni_str = ",".join((req.dns_sans or []) + (req.ip_sans or []))
+    sni_str = ",".join(cert_dns + cert_ip)
     server_cert = SslCertificate(
         cluster_id=cluster_id,
         name=req.name,
@@ -600,14 +640,15 @@ async def _generate_local(
     if is_sm2 and req.generate_client_certs:
         cn_client = f"{req.common_name}-client"
         client_result, client_logs = _generate_client_dual_certs(
-            provider, cn_client, req.dns_sans, req.ip_sans,
+            provider, cn_client, raw_dns, raw_ip,
             req.validity_days, ca_cert_pem, ca_key_pem,
             org=org, ou=ou,
         )
+        client_sni_str = ",".join(raw_dns + raw_ip)
         client_cert_record = SslCertificate(
             cluster_id=cluster_id,
             name=f"{req.name}-client",
-            sni=sni_str or cn_client,
+            sni=client_sni_str or cn_client,
             cert=client_result["cert"],
             private_key=client_result["key"],
             cert_type="client",
