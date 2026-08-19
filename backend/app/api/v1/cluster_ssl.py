@@ -308,14 +308,6 @@ async def publish_ssl_certificate(
         if cert.ca_cert_id:
             ca_record = await db.get(SslCertificate, cert.ca_cert_id)
             if ca_record:
-                from app.services.cert_generator import get_cert_expiry, detect_openssl
-                try:
-                    openssl_info = detect_openssl()
-                    if openssl_info["path"] and ca_record.cert:
-                        if get_cert_expiry(openssl_info["path"], ca_record.cert) < date.today():
-                            raise HTTPException(status_code=400, detail="签发该证书的 CA 已过期，无法发布")
-                except Exception:
-                    pass
                 sign_pem = (cert.sign_cert or "").strip()
                 ca_pem = (ca_record.cert or "").strip()
                 if sign_pem and ca_pem:
@@ -331,6 +323,25 @@ async def publish_ssl_certificate(
             config_data["client"] = client
 
     new_version = await edge_sync.create_config_version(db, "ssl", cert_id, cluster_id, config_data, cert)
+
+    # 证书链：由 CA 签发的证书（国密/非国密）应把 CA 证书拼接到 cert 字段一起发布，
+    # 否则 nginx 只下发 server 证书，浏览器无法构建信任链（域名/IP 访问均报警）。
+    # 拼接仅用于发布（publish_to_nodes），不写入版本历史，避免回滚污染数据库 cert 字段。
+    if cert.ca_cert_id:
+        ca_record = await db.get(SslCertificate, cert.ca_cert_id)
+        if ca_record and ca_record.cert:
+            from app.services.cert_generator import get_cert_expiry, detect_openssl
+            try:
+                openssl_info = detect_openssl()
+                if openssl_info["path"] and ca_record.cert:
+                    if get_cert_expiry(openssl_info["path"], ca_record.cert) < date.today():
+                        raise HTTPException(status_code=400, detail="签发该证书的 CA 已过期，无法发布")
+            except Exception:
+                pass
+            server_pem = (cert.cert or "").strip()
+            ca_pem = (ca_record.cert or "").strip()
+            if server_pem and ca_pem and server_pem != ca_pem:
+                config_data["cert"] = server_pem + "\n" + ca_pem
 
     cluster = await db.get(Cluster, cluster_id)
     active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
@@ -558,7 +569,7 @@ async def _generate_local(
     cluster_name = cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id)
     log_cert_commands(cluster_id, cluster_name, req.name, all_steps)
 
-    sni_str = ",".join(req.dns_sans or [])
+    sni_str = ",".join((req.dns_sans or []) + (req.ip_sans or []))
     server_cert = SslCertificate(
         cluster_id=cluster_id,
         name=req.name,
