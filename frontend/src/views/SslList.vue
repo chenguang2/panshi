@@ -67,7 +67,12 @@
           </div>
         </div>
         <div class="ssl-card-body">
-          <div class="ssl-card-row"><label>SNI</label><span>{{ cert.sni }}</span></div>
+          <div class="ssl-card-row"><label>SNI</label><span class="ssl-sni-tags">
+            <template v-for="s in splitSniString(cert.sni)" :key="s">
+              <span class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(s) }">{{ s }}<span v-if="isReservedSni(s)" class="sni-tag-reserved">系统保留</span></span>
+            </template>
+            <span v-if="!cert.sni" class="text-muted">-</span>
+          </span></div>
           <div class="ssl-card-row"><label>类型</label><span>{{ cert.cert_type }}<span v-if="cert.is_ca && cert.algorithm === 'sm2'" class="badge algo-sm" style="margin-left:6px;font-size:10px;">CA 根证书 SM2</span><span v-if="cert.is_ca && cert.algorithm === 'rsa'" class="badge algo-international" style="margin-left:6px;font-size:10px;">CA 根证书 RSA</span><span v-if="cert.is_ca && cert.algorithm === 'ecc'" class="badge algo-international" style="margin-left:6px;font-size:10px;">CA 根证书 ECC</span><span v-else-if="cert.algorithm === 'sm2' && cert.sign_cert" class="badge algo-sm" style="margin-left:6px;font-size:10px;">🇨🇳 国密 SM2 双证书</span><span v-else-if="cert.algorithm === 'sm2'" class="badge algo-sm" style="margin-left:6px;font-size:10px;">🇨🇳 国密 SM2 单证书</span><span v-else-if="cert.algorithm === 'rsa'" class="badge algo-international" style="margin-left:6px;font-size:10px;">🌐 国际 RSA 2048</span><span v-else-if="cert.algorithm === 'ecc'" class="badge algo-international" style="margin-left:6px;font-size:10px;">🌐 国际 ECC P-256</span><span v-if="cert.create_method === 'local_generate'" class="badge badge-secondary" style="margin-left:4px;font-size:10px;">本地生成</span></span></div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols"><label>协议</label><span>{{ cert.ssl_protocols }}</span></div>
         </div>
@@ -114,6 +119,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import { isReservedSni, splitSniString } from '@/utils/sniTags'
 
 const certs = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -315,6 +321,11 @@ onMounted(() => { loadClusters().then(() => loadCerts()) })
 .ssl-card-body { padding: 4px 20px 8px; }
 .ssl-card-row { display: flex; gap: 8px; font-size: 12px; margin-bottom: 2px; }
 .ssl-card-row label { color: var(--muted); min-width: 40px; }
+.ssl-sni-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sni-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 10%); border: 1px solid oklch(56% 0.16 210 / 20%); color: var(--accent); white-space: nowrap; }
+.sni-tag-locked { background: var(--surface); border-color: var(--border); color: var(--muted); }
+.sni-tag-locked::before { content: '🔒'; margin-right: 2px; font-size: 10px; }
+.sni-tag-reserved { font-size: 10px; color: var(--muted); background: oklch(0% 0 0 / 6%); padding: 0 4px; border-radius: 8px; margin-left: 2px; }
 .ssl-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
 .ssl-action-btn { background: none !important; background-color: transparent !important; }
 .ssl-action-btn:hover { background: var(--bg) !important; }

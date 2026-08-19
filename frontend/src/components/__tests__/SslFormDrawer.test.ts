@@ -1,4 +1,22 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+const mockCreate = vi.fn()
+const mockUpdate = vi.fn()
+
+vi.mock('@/api/ssl', () => ({
+  createSslCertificate: (...args: any[]) => mockCreate(...args),
+  updateSslCertificate: (...args: any[]) => mockUpdate(...args),
+}))
+
+vi.mock('ant-design-vue', () => ({
+  message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() }
+}))
+
+const stubs = {
+  ASelect: { template: '<div><slot /></div>' },
+  ASelectOption: { template: '<div><slot /></div>' },
+}
 
 describe('SslFormDrawer mTLS logic', () => {
   function buildSubmitData(editingCert: boolean, form: any, mtlsEnabled = false) {
@@ -147,5 +165,59 @@ describe('SslFormDrawer mTLS logic', () => {
       expect(state.client_depth).toBe('')
       expect(state.skip_mtls_uri_regex).toBe('')
     })
+  })
+})
+
+describe('SslFormDrawer reserved SNI (edge.local)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function mountDrawer(editingCert: any = null) {
+    const SslFormDrawer = (await import('../SslFormDrawer.vue')).default
+    const wrapper = mount(SslFormDrawer, {
+      props: { visible: false, clusters: [], editingCert },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('edit mode marks edge.local as system-reserved (case-insensitive)', async () => {
+    const cert = {
+      id: 1, name: 'srv', cluster_id: 1, cert_type: 'server',
+      sni: 'EDGE.LOCAL,api.example.com', cert: 'crt', key: 'key',
+    }
+    const wrapper = await mountDrawer(cert)
+    const tags = wrapper.findAll('.sni-tag')
+    const edgeTag = tags.find(t => t.text().includes('EDGE.LOCAL'))!
+    expect(edgeTag.text()).toContain('系统保留')
+    const apiTag = tags.find(t => t.text().includes('api.example.com'))!
+    expect(apiTag.text()).not.toContain('系统保留')
+  })
+
+  it('edit mode marks lowercase edge.local as system-reserved', async () => {
+    const cert = {
+      id: 1, name: 'srv', cluster_id: 1, cert_type: 'server',
+      sni: 'edge.local,api.example.com', cert: 'crt', key: 'key',
+    }
+    const wrapper = await mountDrawer(cert)
+    const edgeTag = wrapper.findAll('.sni-tag').find(t => t.text().includes('edge.local'))!
+    expect(edgeTag.text()).toContain('系统保留')
+  })
+
+  it('import mode shows hint for server certs', async () => {
+    const wrapper = await mountDrawer(null)
+    expect(wrapper.text()).toContain('edge.local')
+    expect(wrapper.text()).toContain('管理链路')
+  })
+
+  it('import mode hides hint for client certs', async () => {
+    const wrapper = await mountDrawer(null)
+    wrapper.vm.form.cert_type = 'client'
+    await wrapper.vm.$nextTick()
+    const hint = wrapper.findAll('.form-hint').find(h => h.text().includes('管理链路'))
+    expect(hint).toBeUndefined()
   })
 })

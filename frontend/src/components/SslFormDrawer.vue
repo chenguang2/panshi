@@ -29,7 +29,9 @@
             <div class="sni-readonly-row">
               <span class="sni-readonly-label">DNS 域名</span>
               <div class="sni-readonly-tags">
-                <span v-for="tag in dnsTags" :key="tag" class="sni-tag">{{ tag }}</span>
+                <span v-for="tag in dnsTags" :key="tag" class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(tag) }">
+                  {{ tag }}<span v-if="isReservedSni(tag)" class="sni-tag-reserved">系统保留</span>
+                </span>
                 <span v-if="dnsTags.length === 0" class="sni-readonly-empty">无</span>
               </div>
             </div>
@@ -64,6 +66,7 @@
           </div>
           <div class="form-hint">每个域名独立添加，支持通配符如 *.example.com；IP 地址也会被 nginx 按字面匹配</div>
           <div v-if="formErrors.sni" class="form-error">{{ formErrors.sni }}</div>
+          <div v-if="!editingCert && form.cert_type === 'server'" class="form-hint">建议 SNI 包含系统保留域名 edge.local，否则管理链路/健康检查可能握手失败</div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -223,6 +226,7 @@
 import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { createSslCertificate, updateSslCertificate } from '@/api/ssl'
+import { isReservedSni } from '@/utils/sniTags'
 import type { SslCertificate } from '@/types/ssl'
 
 const props = defineProps<{
@@ -562,6 +566,9 @@ function handleClose() {
   color: var(--accent);
   white-space: nowrap;
 }
+.sni-tag-locked { background: var(--surface); border-color: var(--border); color: var(--muted); }
+.sni-tag-locked::before { content: '🔒'; margin-right: 2px; font-size: 11px; }
+.sni-tag-reserved { font-size: 10px; color: var(--muted); background: oklch(0% 0 0 / 6%); padding: 0 4px; border-radius: 8px; margin-left: 2px; }
 .sni-tag-remove {
   display: inline-flex;
   align-items: center;
