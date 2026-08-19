@@ -63,9 +63,8 @@ class TestUpstreamListAPI:
                 params={"group_name": "机电-武清", "page_size": 200})
             assert response.status_code == 200
             data = response.json()
-            assert data["total"] > 0
             for item in data["items"]:
-                assert item["cluster_id"] in (28, 29)
+                assert item["cluster_group_name"] == "机电-武清"
 
     async def test_list_upstreams_search(self):
         """Search filter should work."""

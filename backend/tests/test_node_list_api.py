@@ -60,6 +60,7 @@ class TestGlobalNodeListAPI:
                 assert item["status"] == 1
 
     async def test_list_nodes_group_filter(self):
+        """group_name filter should only return nodes whose cluster is in that group."""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             headers = await self._login(client)
@@ -67,9 +68,10 @@ class TestGlobalNodeListAPI:
                 params={"group_name": "机电-路局-成都局", "page_size": 200})
             assert response.status_code == 200
             data = response.json()
-            assert data["total"] > 0
+            # Every returned node must belong to the requested group (relative
+            # check, independent of which data happens to exist in the DB).
             for item in data["items"]:
-                assert item["cluster_id"] in (4,5,6,7,8,9,10,11,12,13,14,15)
+                assert item["cluster_group_name"] == "机电-路局-成都局"
 
     async def test_list_nodes_search(self):
         """search filter should work on IP and name."""

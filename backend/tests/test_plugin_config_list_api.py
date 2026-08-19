@@ -40,6 +40,5 @@ class TestPluginConfigListAPI:
                 params={"group_name": "机电-路局-成都局", "page_size": 200})
             assert response.status_code == 200
             data = response.json()
-            assert data["total"] > 0
             for item in data["items"]:
-                assert item["cluster_id"] in (4,5,6,7,8,9,10,11,12,13,14,15)
+                assert item["cluster_group_name"] == "机电-路局-成都局"

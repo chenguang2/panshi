@@ -2,6 +2,8 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from app.core.database import Base, get_db
 
 
 class TestPluginWhitelist:
@@ -23,8 +25,32 @@ class TestPluginWhitelist:
         import importlib
         importlib.reload(app.main)
         from app.main import app
-        with TestClient(app) as c:
-            yield c
+        from app.models.cluster import PluginEnabled
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+        import asyncio
+
+        TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async def _setup():
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            async with TestSession() as s:
+                s.add(PluginEnabled(plugin_name="cors", enabled=0))
+                await s.commit()
+        asyncio.run(_setup())
+
+        async def override_get_db():
+            async with TestSession() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            with TestClient(app) as c:
+                yield c
+        finally:
+            app.dependency_overrides.clear()
+            asyncio.run(engine.dispose())
 
     def test_whitelist_with_all_returns_only_whitelisted(self, client):
         """all=1 should respect whitelist even without DB filter."""
