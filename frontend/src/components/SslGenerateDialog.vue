@@ -232,6 +232,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
+import { splitSniTags } from '@/utils/sniTags'
 
 const props = defineProps<{
   visible: boolean
@@ -361,6 +362,7 @@ watch([mtlsEnabled, () => form.ca_cert_id], ([enabled, caId]) => {
 })
 
 async function handleGenerate() {
+  flushPendingTags()
   if (!validate()) return
   generating.value = true
   errorMsg.value = ''
@@ -407,22 +409,29 @@ function handleClose() {
 }
 
 function addDnsTag() {
-  const v = dnsInput.value.trim()
-  if (v && !dnsTags.value.includes(v)) dnsTags.value.push(v)
+  for (const t of splitSniTags(dnsInput.value)) {
+    if (!dnsTags.value.includes(t)) dnsTags.value.push(t)
+  }
   dnsInput.value = ''
 }
 
 function addIpTag() {
-  const v = ipInput.value.trim()
-  if (v && !ipTags.value.includes(v)) ipTags.value.push(v)
+  for (const t of splitSniTags(ipInput.value)) {
+    if (!ipTags.value.includes(t)) ipTags.value.push(t)
+  }
   ipInput.value = ''
 }
 
+function flushPendingTags() {
+  if (dnsInput.value.trim()) addDnsTag()
+  if (ipInput.value.trim()) addIpTag()
+}
+
 function addDnsTagOnComma(e: KeyboardEvent) {
-  if (e.key === ',') { e.preventDefault(); addDnsTag() }
+  if (e.key === ',' || e.key === '，') { e.preventDefault(); addDnsTag() }
 }
 function addIpTagOnComma(e: KeyboardEvent) {
-  if (e.key === ',') { e.preventDefault(); addIpTag() }
+  if (e.key === ',' || e.key === '，') { e.preventDefault(); addIpTag() }
 }
 
 function removeDnsTag(i: number) { dnsTags.value.splice(i, 1) }
