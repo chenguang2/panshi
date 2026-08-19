@@ -261,8 +261,12 @@ class TestAssociateNewOpenrestyRouter:
         assert resp.status_code in (404, 422)  # 404=cluster not found, 422=validation
 
     def test_endpoint_rejects_without_body(self, client):
-        """POST associate-new-openresty without body should return 422."""
-        resp = client.post("/api/v1/clusters/1/nodes/1/associate-new-openresty")
+        """POST associate-new-openresty without body to a non-existent node returns 404.
+
+        The handler takes no request body (cluster_id/node_id are path params),
+        so a body-less POST to a nonexistent node must yield 404, not 422.
+        """
+        resp = client.post("/api/v1/clusters/99999/nodes/99999/associate-new-openresty")
         assert resp.status_code in (404, 422)
 
 

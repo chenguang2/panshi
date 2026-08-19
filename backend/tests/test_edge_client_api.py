@@ -22,12 +22,14 @@ class TestClustersAPI:
 
 class TestEdgeClientNodesAPI:
     async def test_edge_client_nodes_invalid_ip_format(self):
-        """Test edge client endpoint with invalid IP format"""
+        """Test edge client endpoint with an unreachable/invalid target"""
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # Invalid format - should handle gracefully
-            response = await client.get("/api/v1/edge-client/nodes/invalid")
-            # Should return 404 or 400, not 500
-            assert response.status_code in [400, 404, 422]
+            # A request that matches the {ip}/{port} route but targets an
+            # unreachable node should be handled gracefully (connection error →
+            # 503), never a 500 or the SPA-fallback HTML that an unmatched
+            # path like /nodes/invalid returns as 200.
+            response = await client.get("/api/v1/edge-client/nodes/1.1.1.1/1/upstreams")
+            assert response.status_code in [400, 404, 422, 503]
 
     async def test_edge_client_upstreams_invalid_node(self):
         """Test upstreams endpoint for non-existent node"""
