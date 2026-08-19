@@ -1,5 +1,5 @@
 import pytest
-from app.models.cluster import Route, RoutePlugin, ConfigVersion
+from app.models.cluster import Route, RoutePlugin, ConfigVersion, Upstream
 from sqlalchemy import select
 
 
@@ -183,6 +183,9 @@ async def test_create_route(test_db):
     assert route.status == 1
 
 async def test_route_with_upstream_reference(test_db):
+    upstream = Upstream(id=1, cluster_id=1, name="seed-upstream-1")
+    test_db.add(upstream)
+    await test_db.commit()
     route = Route(
         cluster_id=1,
         upstream_id=1,

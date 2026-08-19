@@ -1106,6 +1106,11 @@ class TestEdgeImportConflictDetection:
         mock_client.list_upstreams.return_value = SAMPLE_EDGE_UPSTREAMS
         mock_client._parse_node_list.return_value = SAMPLE_EDGE_UPSTREAMS
         mock_client.list_routes.return_value = SAMPLE_EDGE_ROUTES
+        mock_client.list_plugin_configs.return_value = SAMPLE_EDGE_PLUGIN_CONFIGS
+        mock_client.list_global_rules.return_value = SAMPLE_EDGE_GLOBAL_RULES
+        mock_client.list_plugin_metadata.return_value = [
+            {"key": "/panshi/plugin_metadata/test-pm", "value": {"id": "test-pm"}},
+        ]
         _mock_client_with_requests(
             mock_client, SAMPLE_EDGE_PLUGIN_CONFIGS, SAMPLE_EDGE_GLOBAL_RULES,
             [{"key": "/panshi/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
@@ -1186,6 +1191,7 @@ class TestEdgeImportConflictDetection:
                 global_rules = False
                 plugin_metadata = False
                 stream_proxy = True
+                ssl_certificates = False
 
             result = await service.execute_import(
                 selections=MockSelectionsPartial(),
@@ -1258,12 +1264,15 @@ class TestEdgeImportConflictDetection:
     async def test_execute_import_rollback_on_failure(self, test_db):
         """Test that on failure, no data is committed."""
         mock_client = MagicMock()
-        mock_client.list_upstreams.side_effect = Exception("Connection refused")
+        mock_client.list_upstreams.return_value = SAMPLE_EDGE_UPSTREAMS[:1]
+        mock_client._parse_node_list.return_value = SAMPLE_EDGE_UPSTREAMS[:1]
+        mock_client.list_routes.return_value = []
         mock_client.api_key = "test-key"
 
         from app.services.edge_import_service import EdgeImportService
 
-        with patch.object(EdgeImportService, "client", mock_client, create=True):
+        with patch.object(EdgeImportService, "client", mock_client, create=True), \
+             patch.object(EdgeImportService, "convert_upstream", side_effect=Exception("Connection refused")):
             service = object.__new__(EdgeImportService)
             service.cluster_id = 1
             service.node_id = 4
@@ -1351,6 +1360,7 @@ async def test_execute_import_route_plugin_group_mapping(test_db):
     mock_client.list_upstreams.return_value = []
     mock_client._parse_node_list.return_value = []
     mock_client.list_routes.return_value = SAMPLE_ROUTE
+    mock_client.list_plugin_configs.return_value = SAMPLE_PC
     _mock_client_with_requests(mock_client, SAMPLE_PC, [], [])
     mock_client.api_key = "test-key"
 
@@ -1404,6 +1414,8 @@ async def test_preview_import_with_mocked_client(test_db):
     mock_client.list_upstreams.return_value = SAMPLE_EDGE_UPSTREAMS
     mock_client._parse_node_list.return_value = SAMPLE_EDGE_UPSTREAMS
     mock_client.list_routes.return_value = SAMPLE_EDGE_ROUTES
+    mock_client.list_plugin_configs.return_value = SAMPLE_EDGE_PLUGIN_CONFIGS
+    mock_client.list_global_rules.return_value = SAMPLE_EDGE_GLOBAL_RULES
     _mock_client_with_requests(
         mock_client, SAMPLE_EDGE_PLUGIN_CONFIGS, SAMPLE_EDGE_GLOBAL_RULES,
         [{"key": "/panshi/plugin_metadata/test-pm", "value": {"id": "test-pm"}}],
