@@ -364,10 +364,25 @@ function onFilterChange() {
 
 // ── Columns 辅助数据 ──────────────────────────────────────────────────────
 const permissionKeyToLabel: Record<string, string> = {
+  clusters: '集群管理',
+  nodes: '节点管理',
+  upstreams: '上游管理',
+  routes: '路由管理',
   plugin_groups: '插件组管理',
   global_rules: '全局规则管理',
   plugin_metadata: '插件元数据',
+  static_resources: '静态资源',
+  ssl_cert: 'SSL 证书',
+  edge_env: 'edge.env 配置',
+  stream_proxy: '四层代理',
+  dns_proxy_udp: 'DNS代理[UDP]',
+  dns_proxy_http: 'DNS代理[HTTP]',
+  central_management: '统一管理',
+  metrics: '指标查询/总览',
   edge_nodes: 'Edge直连',
+  edge_import: '数据导入',
+  tools: '工具箱',
+  task_center: '节点任务',
 }
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
@@ -413,14 +428,38 @@ const deleteConfirm = reactive({
 
 const permissionFeatureMap: Record<string, string> = {
   edge_nodes: 'edge_client',
+  edge_import: 'edge_import',
+  tools: 'tools',
+  stream_proxy: 'stream_proxy',
+  dns_proxy_udp: 'dns_proxy_udp',
+  ssl_cert: 'ssl_cert',
+  dns_proxy_http: 'dns_proxy_http',
+  edge_env: 'edge_env',
+  metrics: 'metrics',
+  task_center: 'task_center',
 }
 
 const allPermissions = computed(() => {
   const base: { key: string; label: string }[] = [
+    { key: 'clusters', label: '集群管理' },
+    { key: 'nodes', label: '节点管理' },
+    { key: 'upstreams', label: '上游管理' },
+    { key: 'routes', label: '路由管理' },
     { key: 'plugin_groups', label: '插件组管理' },
     { key: 'global_rules', label: '全局规则管理' },
     { key: 'plugin_metadata', label: '插件元数据' },
+    { key: 'static_resources', label: '静态资源' },
+    { key: 'ssl_cert', label: 'SSL 证书' },
+    { key: 'edge_env', label: 'edge.env 配置' },
+    { key: 'stream_proxy', label: '四层代理' },
+    { key: 'dns_proxy_udp', label: 'DNS代理[UDP]' },
+    { key: 'dns_proxy_http', label: 'DNS代理[HTTP]' },
+    { key: 'central_management', label: '统一管理' },
+    { key: 'metrics', label: '指标查询/总览' },
     { key: 'edge_nodes', label: 'Edge直连' },
+    { key: 'edge_import', label: '数据导入' },
+    { key: 'tools', label: '工具箱' },
+    { key: 'task_center', label: '节点任务' },
   ]
   const featuresStore = useFeaturesStore()
   return base.filter((p) => {
