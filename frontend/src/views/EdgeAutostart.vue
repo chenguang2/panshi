@@ -48,12 +48,12 @@
       </a-table>
     </div>
 
-    <!-- 高级参数 / root 凭据弹窗（启用/禁用） -->
-    <a-modal
+    <!-- 高级参数 / root 凭据抽屉（启用/禁用，与执行结果抽屉同风格） -->
+    <a-drawer
       v-model:open="actionModalVisible"
       :title="action === 'enable' ? '启用自启动' : '禁用自启动'"
-      :confirm-loading="actionSubmitting"
-      @ok="confirmAction"
+      width="420"
+      @close="actionModalVisible = false"
     >
       <p class="hint">节点：{{ selectedNode?.ip }}（{{ selectedNode?.edge_path }}）</p>
 
@@ -78,7 +78,16 @@
           <a-input-password v-model:value="actionForm.root_password" placeholder="必填，仅本次使用" />
         </div>
       </template>
-    </a-modal>
+
+      <template #footer>
+        <div style="text-align:right;">
+          <a-button style="margin-right:8px" @click="actionModalVisible = false">取消</a-button>
+          <a-button type="primary" :loading="actionSubmitting" @click="confirmAction">
+            {{ action === 'enable' ? '确认启用' : '确认禁用' }}
+          </a-button>
+        </div>
+      </template>
+    </a-drawer>
 
     <!-- 执行结果抽屉（与节点状态查询风格一致） -->
     <NodeExecutionResultDrawer
@@ -169,7 +178,7 @@ function openAction(node: any, act: 'enable' | 'disable') {
   action.value = act
   selectedNode.value = node
   actionForm.edge_path = node.edge_path || ''
-  actionForm.run_user = ''
+  actionForm.run_user = defaultRunUser.value
   actionForm.root_user = 'root'
   actionForm.root_password = ''
   actionModalVisible.value = true
@@ -296,6 +305,10 @@ function resetExec() {
 }
 
 onMounted(async () => {
+  try {
+    const res = await api.get('/nodes/autostart/defaults')
+    defaultRunUser.value = res.data?.default_run_user || ''
+  } catch { /* ignore */ }
   await loadClusters()
   await loadNodes()
 })

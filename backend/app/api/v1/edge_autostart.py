@@ -49,6 +49,12 @@ async def _get_node(node_id: int, db: AsyncSession) -> Node:
     return node
 
 
+@router.get("/autostart/defaults")
+async def autostart_defaults():
+    """Return autostart default values (e.g. default run user)."""
+    return {"default_run_user": getpass.getuser()}
+
+
 @router.post("/{node_id}/autostart")
 async def node_autostart(
     node_id: int,
