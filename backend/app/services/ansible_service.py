@@ -928,7 +928,9 @@ class AnsibleRunnerService:
                 "systemctl is-enabled edge"
             )
         elif action == "disable":
-            cmd = "systemctl disable edge && systemctl is-enabled edge"
+            # systemctl disable 成功 rc=0；is-enabled 在 disabled 状态返回 rc=1。
+            # 用 || true 保证整个命令 rc=0（否则前端误判失败），状态由 stdout 输出。
+            cmd = "systemctl disable edge || true; systemctl is-enabled edge || true"
         else:
             cmd = "systemctl is-enabled edge"
 
