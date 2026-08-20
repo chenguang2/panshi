@@ -48,44 +48,65 @@
       </a-table>
     </div>
 
-    <!-- 高级参数 / root 凭据抽屉（启用/禁用，与执行结果抽屉同风格） -->
+    <!-- 高级参数 / root 凭据抽屉（启用/禁用，参考路由插件编辑抽屉风格） -->
     <a-drawer
       v-model:open="actionModalVisible"
       :title="action === 'enable' ? '启用自启动' : '禁用自启动'"
-      width="420"
+      width="560"
+      :closable="true"
       @close="actionModalVisible = false"
     >
-      <p class="hint">节点：{{ selectedNode?.ip }}（{{ selectedNode?.edge_path }}）</p>
-
-      <div class="form-item">
-        <label>Edge 目录</label>
-        <a-input v-model:value="actionForm.edge_path" placeholder="默认取节点 Edge 目录" />
-      </div>
-
-      <div class="form-item">
-        <label>运行用户（edge.service 的 User=）</label>
-        <a-input v-model:value="actionForm.run_user" placeholder="默认取节点 inventory 用户" />
-        <div class="form-hint">默认已填节点配置用户，edge.service 将以该用户执行；请确认是否为节点 Edge 实际运行用户</div>
-      </div>
-
-      <template v-if="action === 'enable' || action === 'disable'">
-        <div class="form-item">
-          <label>root 账号</label>
-          <a-input v-model:value="actionForm.root_user" placeholder="root" />
+      <a-form layout="vertical">
+        <div class="field-block">
+          <div class="field-block-header">
+            <span class="field-block-title">节点</span>
+            <span class="field-block-desc">目标 Edge 节点</span>
+          </div>
+          <div class="field-value">{{ selectedNode?.ip }}（{{ selectedNode?.edge_path }}）</div>
         </div>
-        <div class="form-item">
-          <label>root 密码</label>
-          <a-input-password v-model:value="actionForm.root_password" placeholder="必填，仅本次使用" />
+
+        <div class="field-block">
+          <div class="field-block-header">
+            <span class="field-block-title">Edge 目录</span>
+            <span class="field-block-desc">edge.service 的 WorkingDirectory 与 ExecStart 路径</span>
+          </div>
+          <a-input v-model:value="actionForm.edge_path" placeholder="默认取节点 Edge 目录" class="field-input" />
         </div>
-      </template>
+
+        <div class="field-block">
+          <div class="field-block-header">
+            <span class="field-block-title">运行用户（edge.service 的 User=）</span>
+            <span class="field-block-desc">edge.service 将以该用户执行；默认已填节点配置用户，请确认是否为节点 Edge 实际运行用户</span>
+          </div>
+          <a-input v-model:value="actionForm.run_user" placeholder="默认取节点 inventory 用户" class="field-input" />
+        </div>
+
+        <template v-if="action === 'enable' || action === 'disable'">
+          <div class="field-block">
+            <div class="field-block-header">
+              <span class="field-block-title">root 账号</span>
+              <span class="field-block-desc">启用/禁用自启动需 root 权限</span>
+            </div>
+            <a-input v-model:value="actionForm.root_user" placeholder="root" class="field-input" />
+          </div>
+
+          <div class="field-block">
+            <div class="field-block-header">
+              <span class="field-block-title">root 密码</span>
+              <span class="field-block-desc">必填，仅本次操作使用，不保存</span>
+            </div>
+            <a-input-password v-model:value="actionForm.root_password" placeholder="必填，仅本次使用" class="field-input" />
+          </div>
+        </template>
+      </a-form>
 
       <template #footer>
-        <div style="text-align:right;">
-          <a-button style="margin-right:8px" @click="actionModalVisible = false">取消</a-button>
+        <a-space>
+          <a-button @click="actionModalVisible = false">取消</a-button>
           <a-button type="primary" :loading="actionSubmitting" @click="confirmAction">
             {{ action === 'enable' ? '确认启用' : '确认禁用' }}
           </a-button>
-        </div>
+        </a-space>
       </template>
     </a-drawer>
 
@@ -323,8 +344,32 @@ onMounted(async () => {
 .autostart-page { padding: 20px 24px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; }
 .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
-.form-item { margin-bottom: 14px; }
-.form-item label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
-.form-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.hint { margin-bottom: 12px; color: var(--muted); }
+
+/* 参考路由插件编辑抽屉（PluginEditorDrawer）的 field-block 风格 */
+.field-block {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.field-block-header { margin-bottom: 8px; }
+.field-block-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 2px;
+}
+.field-block-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+.field-input { margin-bottom: 6px; }
+.field-value {
+  font-size: 13px;
+  color: var(--fg);
+  word-break: break-all;
+}
 </style>
