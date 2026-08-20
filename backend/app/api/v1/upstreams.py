@@ -72,7 +72,7 @@ async def list_all_upstreams(
 
     # Pagination
     offset_val = (page - 1) * page_size
-    query = query.offset(offset_val).limit(page_size).order_by(Upstream.created_at.desc())
+    query = query.offset(offset_val).limit(page_size).order_by(Upstream.name)
 
     result = await db.execute(query)
     upstreams = result.scalars().all()

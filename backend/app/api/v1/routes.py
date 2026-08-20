@@ -106,7 +106,7 @@ async def list_all_routes(
             col = col.desc()
         query = query.order_by(col)
     else:
-        query = query.order_by(Route.created_at.desc())
+        query = query.order_by(Route.name)
 
     # Count
     count_query = select(func.count()).select_from(query.subquery())

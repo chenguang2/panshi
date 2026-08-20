@@ -110,7 +110,7 @@ async def list_or_find_nodes(
 
     # Pagination
     offset_val = (page - 1) * page_size
-    query = query.offset(offset_val).limit(page_size).order_by(Node.created_at.desc())
+    query = query.offset(offset_val).limit(page_size).order_by(Node.ip)
 
     result = await db.execute(query)
     nodes = result.scalars().all()
