@@ -275,25 +275,26 @@ async function queryStatus(node: any) {
   await start(autostartUrl(node.id), { action: 'status' }, {
     onLine: (line) => addLog(line),
     onComplete: (rc) => {
-      execProgress.percent = 100
-      execProgress.status = rc === 0 ? 'success' : 'exception'
-      // 在全部日志行中搜索 edge_autostart_state（debug 输出可能位于日志中部而非末尾）
+      // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。
+      // 查询是否成功取决于能否解析出状态，而非 rc。
       const state = parseAutostartState(execLogs.value)
       node.autostart_status = state
+      const queryOk = state !== 'unknown'
+      execProgress.percent = 100
+      execProgress.status = queryOk ? 'success' : 'exception'
       const labels: Record<AutostartStatus, string> = {
         enabled: '已启用', disabled: '已禁用', not_configured: '未配置', permission_denied: '无权限查询', unknown: '未知',
       }
       if (state === 'permission_denied') {
-        // 从日志中提取 rc 等具体信息贴给用户
         const rcInfo = extractAutostartRc(execLogs.value)
         execStatistics.value = { '自启动状态': labels[state], '原因': rcInfo }
         execHighlights.value = [`无权限执行 systemctl（${rcInfo}），请确认节点普通用户能否读取 systemctl`]
       } else {
         execStatistics.value = { '自启动状态': labels[state] }
-        execHighlights.value = rc === 0 ? [`自启动状态: ${labels[state]}`] : []
+        execHighlights.value = queryOk ? [`自启动状态: ${labels[state]}`] : []
       }
-      addLog(rc === 0 ? `✅ 查询成功（${labels[state]}）` : `❌ 查询失败（${labels[state]}）`)
-      if (rc === 0 && state === 'not_configured') message.info('该节点未配置自启动服务')
+      addLog(queryOk ? `✅ 查询成功（${labels[state]}）` : `❌ 查询失败（${labels[state]}）`)
+      if (queryOk && state === 'not_configured') message.info('该节点未配置自启动服务')
       if (state === 'permission_denied') message.warning('该节点普通用户无权限查询自启动状态')
     },
     onError: (e) => {
@@ -307,14 +308,12 @@ async function queryStatus(node: any) {
 }
 
 function parseAutostartState(logs: string[]): AutostartStatus {
+  // SSH 版 status 的 stdout 直接输出 is-enabled 结果（enabled/disabled/
+  // No such file...），从日志行中识别状态
   for (const line of logs) {
-    const m = line.match(/edge_autostart_state\s*[:=]\s*['\"]?(\w+)['\"]?/)
-    if (m) {
-      const v = m[1] as AutostartStatus
-      if (v === 'enabled' || v === 'disabled' || v === 'not_configured' || v === 'permission_denied' || v === 'unknown') {
-        return v
-      }
-    }
+    if (/No such file or directory/.test(line)) return 'not_configured'
+    if (/enabled/.test(line)) return 'enabled'
+    if (/disabled/.test(line)) return 'disabled'
   }
   return 'unknown'
 }
