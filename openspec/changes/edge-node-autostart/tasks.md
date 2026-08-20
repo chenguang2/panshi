@@ -41,4 +41,4 @@
 - [x] 5.5 真机验证：对 192.168.0.24 执行 enable/disable/status 全流程
 - [x] 5.6 运行后端完整测试套件确认无回归
 - [x] 5.7 前端类型检查与相关单测
-- [ ] 5.8 文档更新：`docs/help/edge-auto-start.md` 提及平台功能
+- [x] 5.8 文档更新：`docs/help/edge-auto-start.md` 提及平台功能
