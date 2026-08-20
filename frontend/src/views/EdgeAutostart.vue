@@ -34,6 +34,7 @@
             <a-tag v-if="record.autostart_status === 'enabled'" color="green">已启用</a-tag>
             <a-tag v-else-if="record.autostart_status === 'disabled'" color="orange">已禁用</a-tag>
             <a-tag v-else-if="record.autostart_status === 'not_configured'" color="red">未配置</a-tag>
+            <a-tag v-else-if="record.autostart_status === 'permission_denied'" color="red">无权限</a-tag>
             <a-tag v-else color="default">未知</a-tag>
           </template>
         </a-table-column>
@@ -236,12 +237,20 @@ async function queryStatus(node: any) {
       const state = parseAutostartState(execLogs.value)
       node.autostart_status = state
       const labels: Record<AutostartStatus, string> = {
-        enabled: '已启用', disabled: '已禁用', not_configured: '未配置', unknown: '未知',
+        enabled: '已启用', disabled: '已禁用', not_configured: '未配置', permission_denied: '无权限查询', unknown: '未知',
       }
-      execStatistics.value = { '自启动状态': labels[state] }
-      execHighlights.value = rc === 0 ? [`自启动状态: ${labels[state]}`] : []
-      addLog(rc === 0 ? `✅ 查询成功（${labels[state]}）` : '❌ 查询失败')
+      if (state === 'permission_denied') {
+        // 从日志中提取 rc 等具体信息贴给用户
+        const rcInfo = extractAutostartRc(execLogs.value)
+        execStatistics.value = { '自启动状态': labels[state], '原因': rcInfo }
+        execHighlights.value = [`无权限执行 systemctl（${rcInfo}），请确认节点普通用户能否读取 systemctl`]
+      } else {
+        execStatistics.value = { '自启动状态': labels[state] }
+        execHighlights.value = rc === 0 ? [`自启动状态: ${labels[state]}`] : []
+      }
+      addLog(rc === 0 ? `✅ 查询成功（${labels[state]}）` : `❌ 查询失败（${labels[state]}）`)
       if (rc === 0 && state === 'not_configured') message.info('该节点未配置自启动服务')
+      if (state === 'permission_denied') message.warning('该节点普通用户无权限查询自启动状态')
     },
     onError: (e) => {
       execProgress.percent = 100
@@ -258,12 +267,20 @@ function parseAutostartState(logs: string[]): AutostartStatus {
     const m = line.match(/edge_autostart_state\s*[:=]\s*['\"]?(\w+)['\"]?/)
     if (m) {
       const v = m[1] as AutostartStatus
-      if (v === 'enabled' || v === 'disabled' || v === 'not_configured' || v === 'unknown') {
+      if (v === 'enabled' || v === 'disabled' || v === 'not_configured' || v === 'permission_denied' || v === 'unknown') {
         return v
       }
     }
   }
   return 'unknown'
+}
+
+function extractAutostartRc(logs: string[]): string {
+  for (const line of logs) {
+    const m = line.match(/rc=(\d+)/)
+    if (m) return `systemctl 退出码 ${m[1]}（权限不足）`
+  }
+  return 'systemctl 无权限执行'
 }
 
 function resetExec() {

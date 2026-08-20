@@ -15,7 +15,7 @@ export interface AutostartRequest {
   root_password?: string
 }
 
-export type AutostartStatus = 'enabled' | 'disabled' | 'not_configured' | 'unknown'
+export type AutostartStatus = 'enabled' | 'disabled' | 'not_configured' | 'permission_denied' | 'unknown'
 
 /** 生成 autostart SSE 流式端点 URL。 */
 export function autostartUrl(nodeId: number): string {

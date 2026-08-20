@@ -13,18 +13,21 @@
 - name: status - normalize result
   set_fact:
     edge_autostart_state: >-
+      {%- if status_result.rc in [126, 13] -%}permission_denied
+      {%- else -%}
       {%- set raw = status_result.stdout + ' ' + status_result.stderr -%}
       {%- if 'No such file or directory' in raw -%}not_configured
       {%- elif 'enabled' in raw -%}enabled
       {%- elif 'disabled' in raw -%}disabled
       {%- else -%}unknown{%- endif -%}
+      {%- endif -%}
   when: autostart_action == 'status'
   tags:
     - edge_autostart
 
 - name: status - report result
   debug:
-    msg: "edge_autostart_state={{ edge_autostart_state }} raw={{ status_result.stdout }}"
+    msg: "edge_autostart_state={{ edge_autostart_state }} rc={{ status_result.rc }} err={{ status_result.stderr }} out={{ status_result.stdout }}"
   when: autostart_action == 'status'
   tags:
     - edge_autostart
