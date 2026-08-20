@@ -240,12 +240,11 @@ async function confirmAction() {
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: `autostart ${action.value} ${selectedNode.value.ip}`, rc }
       const appliedState: AutostartStatus = action.value === 'enable' ? 'enabled' : 'disabled'
       if (rc === 0) {
-        // 同步更新表格状态列，并重新查询刷新，确保与真实状态一致
+        // 同步更新表格状态列（不调用 loadNodes，避免其重置 autostart_status 为 null）
         selectedNode.value.autostart_status = appliedState
         execHighlights.value = [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`]
         addLog(`✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功`)
         message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
-        loadNodes()
       } else {
         execHighlights.value = []
         addLog(`❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
