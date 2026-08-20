@@ -1,4 +1,5 @@
 import asyncio
+import getpass
 import io
 import json
 import logging
@@ -265,6 +266,40 @@ def get_ssh_user(ip: str) -> str:
         pass
 
     return "jboss"
+
+
+def get_default_run_user(ip: str) -> str:
+    """Resolve the default run user for edge.service (决策 7).
+
+    Uses the host-level ``ansible_ssh_user`` from the inventory ONLY when it is
+    explicitly configured for that host; otherwise falls back to the user
+    running this backend process (``getpass.getuser()``).
+
+    Note: unlike ``get_ssh_user`` (which is about SSH connection and falls back
+    to group vars / "jboss"), the run user is about which user edge.service
+    should run as. A host without an explicit ansible_ssh_user has no per-host
+    run user, so we default to the backend process user.
+    """
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except (FileNotFoundError, yaml.YAMLError):
+        return getpass.getuser()
+    try:
+        hosts = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("hosts", {})
+        )
+        host_entry = hosts.get(ip, {})
+        if isinstance(host_entry, dict):
+            user = host_entry.get("ansible_ssh_user")
+            if user:
+                return user
+    except (AttributeError, TypeError):
+        pass
+    return getpass.getuser()
 
 
 def get_ssh_port(ip: str) -> int | None:

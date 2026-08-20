@@ -982,3 +982,39 @@ class TestParseAutostartStatusStderr:
         from app.services.ansible_service import parse_autostart_status
         combined = "Failed to get unit file state for edge.service: No such file or directory"
         assert parse_autostart_status(combined) == "not_configured"
+
+
+class TestGetDefaultRunUser:
+    """决策 7：运行用户默认值 = 后台程序用户；host 显式配置时用配置值。"""
+
+    def test_returns_getpass_user_when_host_has_no_ssh_user(self, tmp_path, monkeypatch):
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.100.114:\n"
+            "      vars:\n"
+            "        ansible_ssh_user: jboss\n"
+        )
+        monkeypatch.setattr(mod, "getpass", type("G", (), {"getuser": staticmethod(lambda: "qcg")})())
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.get_default_run_user("192.168.100.114") == "qcg"
+
+    def test_returns_host_user_when_explicitly_configured(self, tmp_path):
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "          ansible_ssh_user: rocksware\n"
+            "      vars:\n"
+            "        ansible_ssh_user: jboss\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.get_default_run_user("192.168.0.24") == "rocksware"

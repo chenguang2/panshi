@@ -22,7 +22,7 @@ from app.services.ansible_service import (
     _inventory_restore_ssh,
     _run_ansible_stream,
     build_edge_service_content,
-    get_ssh_user,
+    get_default_run_user,
     is_node_in_inventory,
     resolve_ssh_port,
 )
@@ -64,7 +64,7 @@ async def node_autostart_defaults(node_id: int, db: AsyncSession = Depends(get_d
     （通常即 Edge 实际运行用户），而非后端进程用户。
     """
     node = await _get_node(node_id, db)
-    return {"run_user": get_ssh_user(node.ip)}
+    return {"run_user": get_default_run_user(node.ip)}
 
 
 @router.post("/{node_id}/autostart")
