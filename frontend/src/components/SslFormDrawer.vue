@@ -227,6 +227,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { createSslCertificate, updateSslCertificate } from '@/api/ssl'
 import { isReservedSni } from '@/utils/sniTags'
+import { isIpAddress } from '@/utils/ip'
 import type { SslCertificate } from '@/types/ssl'
 
 const props = defineProps<{
@@ -252,13 +253,6 @@ const sniInputRef = ref<HTMLInputElement | null>(null)
 // 编辑模式只读展示：DNS/IP 分组
 const dnsTags = ref<string[]>([])
 const ipTags = ref<string[]>([])
-
-const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/
-const IPV6_RE = /^[0-9a-fA-F:]+$/
-
-function isIpAddress(s: string): boolean {
-  return IPV4_RE.test(s) || (IPV6_RE.test(s) && s.includes(':'))
-}
 
 function splitSniByType(tags: string[]) {
   dnsTags.value = tags.filter(t => !isIpAddress(t))

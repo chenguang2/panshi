@@ -343,6 +343,37 @@ class TestSslGenerateRequest:
             )
             assert req.algorithm == alg
 
+    def test_ip_sans_accepts_valid_ipv4_and_ipv6(self):
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        req = SslCertificateGenerateRequest(
+            name="test", common_name="test.com",
+            ip_sans=["10.0.0.1", "2001:db8::1"],
+        )
+        assert req.ip_sans == ["10.0.0.1", "2001:db8::1"]
+
+    def test_ip_sans_rejects_invalid_ip(self):
+        from pydantic import ValidationError
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        with pytest.raises(ValidationError) as exc_info:
+            SslCertificateGenerateRequest(
+                name="test", common_name="test.com",
+                ip_sans=["abc"],
+            )
+        assert "无效的 IP 地址" in str(exc_info.value)
+
+    def test_ip_sans_rejects_multiple_invalid_ips(self):
+        from pydantic import ValidationError
+        from app.schemas.ssl import SslCertificateGenerateRequest
+
+        with pytest.raises(ValidationError) as exc_info:
+            SslCertificateGenerateRequest(
+                name="test", common_name="test.com",
+                ip_sans=["999", "1.2.3"],
+            )
+        assert "无效的 IP 地址" in str(exc_info.value)
+
 
 class TestCaCertificateGenerateRequest:
     """Tests for CaCertificateGenerateRequest schema."""

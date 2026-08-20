@@ -1,6 +1,7 @@
 """SSL certificate Pydantic schemas."""
 
 import json
+import ipaddress
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
@@ -159,6 +160,19 @@ class SslCertificateGenerateRequest(BaseModel):
     client_ca: Optional[str] = Field(default=None, description="双向认证 CA 证书 PEM")
     client_depth: Optional[int] = Field(default=None, description="双向认证证书链深度")
     skip_mtls_uri_regex: Optional[str] = Field(default=None, description="跳过双向认证的 URI 正则")
+
+    @field_validator("ip_sans")
+    @classmethod
+    def validate_ip_sans(cls, v):
+        cleaned = []
+        for ip in v or []:
+            stripped = ip.strip()
+            try:
+                ipaddress.ip_address(stripped)
+            except ValueError:
+                raise ValueError(f"无效的 IP 地址: {ip}")
+            cleaned.append(stripped)
+        return cleaned
 
 
 class SslCertificateGenerateResponse(BaseModel):

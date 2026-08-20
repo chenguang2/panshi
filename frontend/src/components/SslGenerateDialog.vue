@@ -234,6 +234,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
 import { splitSniTags, isReservedSni, mergeReservedDnsTags, RESERVED_SNIS } from '@/utils/sniTags'
+import { isIpAddress } from '@/utils/ip'
 
 const props = defineProps<{
   visible: boolean
@@ -419,6 +420,10 @@ function addDnsTag() {
 
 function addIpTag() {
   for (const t of splitSniTags(ipInput.value)) {
+    if (!isIpAddress(t)) {
+      message.warning(`无效的 IP 地址: ${t}`)
+      continue
+    }
     if (!ipTags.value.includes(t)) ipTags.value.push(t)
   }
   ipInput.value = ''
