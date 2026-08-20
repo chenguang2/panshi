@@ -100,3 +100,39 @@ reboot                      # 重启后应自动拉起 Edge
 ## 多节点批量配置提示
 
 若需在多台节点统一配置，可借助磐石 Admin 的 ansible 能力或自行脚本化。每台节点只需按上述"按实际节点修改"调整 `User`/`Group`/路径即可复用同一份服务文件模板。
+
+## 附：正常启动后的状态说明
+
+配置完成后执行 `systemctl status edge`，会看到类似以下输出：
+
+```
+Active: active (exited) since Thu 2026-08-20 09:57:36 CST; 19s ago
+Process: 854 ExecStart=/data/rocks/rockses/3.1/uapm/uap-edge/bin/edge start (code=exited, status=0/SUCCESS)
+```
+
+各字段含义如下：
+
+| 字段 | 含义 | 是否正常 |
+|---|---|---|
+| `Active: active (exited)` | 服务处于活跃状态，但启动命令已返回 | ✅ 正常 |
+| `since ... 19s ago` | 服务启动于该时间，已运行 19 秒 | ✅ 正常 |
+| `Process: 854 ExecStart=... (code=exited, status=0/SUCCESS)` | 启动命令 `bin/edge start` 以退出码 0（成功）结束 | ✅ 正常 |
+
+**重点理解：`active (exited)` 不代表服务挂了。**
+
+- 本配置采用 `Type=oneshot` + `RemainAfterExit=yes`。
+- `bin/edge start` 会 **daemon 化**启动 nginx 后**立即返回**（不阻塞），所以 systemd 记录到的主进程（`bin/edge start` 命令本身）执行完就退出了。
+- `RemainAfterExit=yes` 让 systemd 在命令退出后**仍将服务标记为 active**（而非 failed/inactive），便于 `systemctl status` 查看。
+
+**真正的 nginx 进程是独立运行的，不归 systemd 直接管理。** 因此判断服务是否正常，应确认 nginx 进程存在：
+
+```bash
+# 确认 nginx 进程存在且以正确用户运行
+ps aux | grep bin/openresty | grep -v grep
+
+# 或确认监听端口（换成该节点实际端口）
+ss -tlnp | grep -E '16620|:80 '
+```
+
+只要 nginx 进程存在，服务即为正常运行。若看到 `active (failed)` 或 `status=1`（非 0），才是启动失败，可执行 `journalctl -u edge -n 100` 查看日志排查。
+
