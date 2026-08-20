@@ -937,8 +937,10 @@ class AnsibleRunnerService:
         rc, stdout, stderr = await _run_ssh_with_fallback(
             ip, user, cmd, password=password, on_line=on_line,
         )
+        # 构造完整可手工执行的 SSH 命令（含 sshpass/ssh），供前端命令 tab 展示
+        full_cmd = " ".join(_build_ssh_cmd(ip, user, cmd, password=password))
         return {"rc": rc, "status": "successful" if rc == 0 else "failed",
-                "stdout": stdout, "stderr": stderr}
+                "stdout": stdout, "stderr": stderr, "command": full_cmd}
 
     async def generic_run(
         self,

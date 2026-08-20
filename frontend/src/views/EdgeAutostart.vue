@@ -233,7 +233,10 @@ async function confirmAction() {
     root_user: actionForm.root_user || undefined,
     root_password: actionForm.root_password,
   }, {
-    onLine: (line) => addLog(line),
+    onLine: (line) => {
+      captureCommandLine(line)
+      addLog(line)
+    },
     onComplete: (rc, status) => {
       execProgress.percent = 100
       execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -272,7 +275,10 @@ async function queryStatus(node: any) {
   }
 
   await start(autostartUrl(node.id), { action: 'status' }, {
-    onLine: (line) => addLog(line),
+    onLine: (line) => {
+      captureCommandLine(line)
+      addLog(line)
+    },
     onComplete: (rc) => {
       // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。
       // 查询是否成功取决于能否解析出状态，而非 rc。
@@ -315,6 +321,17 @@ function parseAutostartState(logs: string[]): AutostartStatus {
     if (/disabled/.test(line)) return 'disabled'
   }
   return 'unknown'
+}
+
+function captureCommandLine(line: string) {
+  // 从 SSE 流中捕获"手工执行命令: xxx"，设置到 execResult.command 供命令 tab 展示
+  const m = line.match(/手工执行命令:\s*(.+)/)
+  if (m) {
+    if (!execResult.value) execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+    execResult.value.command = m[1].trim()
+    return true
+  }
+  return false
 }
 
 function extractAutostartRc(logs: string[]): string {

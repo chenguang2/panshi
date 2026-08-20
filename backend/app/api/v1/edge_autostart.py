@@ -117,6 +117,10 @@ async def node_autostart(
 
         rc = result.get("rc", -1)
         status = result.get("status", "failed")
+        command = result.get("command", "")
+        # 输出命令到 SSE，供前端命令 tab 展示（手工执行）
+        if command:
+            q.put(f"手工执行命令: {command}")
         for line in (result.get("stdout") or "").splitlines():
             if line.strip():
                 q.put(line)
@@ -133,6 +137,6 @@ async def node_autostart(
             percent = min(percent + 1, 99)
             yield f"data: {json.dumps({'line': item, 'percent': percent})}\n\n"
 
-        yield f"data: {json.dumps({'rc': rc, 'status': status, 'percent': 100})}\n\n"
+        yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
