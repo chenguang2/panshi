@@ -79,17 +79,20 @@
       </template>
     </a-modal>
 
-    <!-- 执行进度弹窗 -->
-    <a-modal
-      v-model:open="execVisible"
+    <!-- 执行结果抽屉（与节点状态查询风格一致） -->
+    <NodeExecutionResultDrawer
+      v-model:visible="execVisible"
       :title="execTitle"
-      :footer="null"
-      :mask-closable="false"
-    >
-      <div class="exec-log">
-        <div v-for="(line, i) in execLogs" :key="i" class="exec-line">{{ line }}</div>
-      </div>
-    </a-modal>
+      :progress="execProgress"
+      :logs="execLogs"
+      :elapsed="execElapsed"
+      :result="execResult"
+      :highlights="execHighlights"
+      :statistics="execStatistics"
+      :installing="installing"
+      :stream-status="streamStatus"
+      :stream-error="streamError"
+    />
   </div>
 </template>
 
@@ -97,6 +100,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import api from '@/api'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { autostartUrl, AutostartStatus } from '@/api/edgeAutostart'
@@ -120,8 +124,15 @@ const actionForm = reactive({
 
 const execVisible = ref(false)
 const execTitle = ref('')
+const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
 const execLogs = ref<string[]>([])
-const { start, installing, error } = useInstallStream()
+const execElapsed = ref<number | null>(null)
+const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
+const execHighlights = ref<string[]>([])
+const execStatistics = ref<Record<string, string> | null>(null)
+const streamStatus = ref<string>('')
+const streamError = ref<string | null>(null)
+const { start, installing } = useInstallStream()
 
 async function loadClusters() {
   try {
@@ -172,8 +183,12 @@ async function confirmAction() {
   actionSubmitting.value = true
   actionModalVisible.value = false
   execTitle.value = action.value === 'enable' ? `启用自启动: ${selectedNode.value.ip}` : `禁用自启动: ${selectedNode.value.ip}`
-  execLogs.value = []
+  resetExec()
   execVisible.value = true
+
+  const addLog = (text: string) => {
+    execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
 
   await start(autostartUrl(selectedNode.value.id), {
     action: action.value,
@@ -182,36 +197,73 @@ async function confirmAction() {
     root_user: actionForm.root_user || undefined,
     root_password: actionForm.root_password,
   }, {
-    onLine: (line) => execLogs.value.push(line),
+    onLine: (line) => addLog(line),
     onComplete: (rc, status) => {
-      if (rc === 0) {
-        message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
-      } else {
-        message.error(`操作失败: ${status}`)
-      }
+      execProgress.percent = 100
+      execProgress.status = rc === 0 ? 'success' : 'exception'
+      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: `autostart ${action.value} ${selectedNode.value.ip}`, rc }
+      execHighlights.value = rc === 0 ? [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`] : []
+      addLog(rc === 0 ? `✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功` : `❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
+      if (rc === 0) message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
+      else message.error(`操作失败: ${status}`)
     },
-    onError: (e) => message.error(e),
+    onError: (e) => {
+      execProgress.percent = 100
+      execProgress.status = 'exception'
+      streamError.value = e
+      addLog(`❌ 操作失败: ${e}`)
+      message.error(e)
+    },
   })
   actionSubmitting.value = false
 }
 
 async function queryStatus(node: any) {
   execTitle.value = `查询自启动状态: ${node.ip}`
-  execLogs.value = []
+  resetExec()
   execVisible.value = true
+
+  const addLog = (text: string) => {
+    execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  }
+
   await start(autostartUrl(node.id), { action: 'status' }, {
-    onLine: (line) => execLogs.value.push(line),
+    onLine: (line) => addLog(line),
     onComplete: (rc) => {
-      if (rc !== 0) { message.error('查询失败'); return }
-      // 解析 last line 中的状态（由 ansible set_fact 输出）
+      execProgress.percent = 100
+      execProgress.status = rc === 0 ? 'success' : 'exception'
       const last = execLogs.value[execLogs.value.length - 1] || ''
       const m = last.match(/edge_autostart_state\s*[:=]\s*['\"]?(\w+)['\"]?/)
       const state: AutostartStatus = m ? (m[1] as AutostartStatus) : 'unknown'
       node.autostart_status = state
-      if (state === 'not_configured') message.info('该节点未配置自启动服务')
+      const labels: Record<AutostartStatus, string> = {
+        enabled: '已启用', disabled: '已禁用', not_configured: '未配置', unknown: '未知',
+      }
+      execStatistics.value = { '自启动状态': labels[state] }
+      execHighlights.value = rc === 0 ? [`自启动状态: ${labels[state]}`] : []
+      addLog(rc === 0 ? `✅ 查询成功（${labels[state]}）` : '❌ 查询失败')
+      if (rc === 0 && state === 'not_configured') message.info('该节点未配置自启动服务')
     },
-    onError: (e) => message.error(e),
+    onError: (e) => {
+      execProgress.percent = 100
+      execProgress.status = 'exception'
+      streamError.value = e
+      addLog(`❌ 查询失败: ${e}`)
+      message.error(e)
+    },
   })
+}
+
+function resetExec() {
+  execProgress.percent = 0
+  execProgress.status = 'active'
+  execLogs.value = []
+  execElapsed.value = null
+  execResult.value = null
+  execHighlights.value = []
+  execStatistics.value = null
+  streamStatus.value = ''
+  streamError.value = null
 }
 
 onMounted(async () => {
@@ -228,6 +280,4 @@ onMounted(async () => {
 .form-item label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
 .form-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .hint { margin-bottom: 12px; color: var(--muted); }
-.exec-log { max-height: 320px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; font-family: var(--font-mono); font-size: 12px; }
-.exec-line { white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
 </style>
