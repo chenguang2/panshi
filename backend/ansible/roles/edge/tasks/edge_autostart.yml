@@ -6,7 +6,7 @@
   register: status_result
   failed_when: false
   changed_when: false
-  when: action == 'status'
+  when: autostart_action == 'status'
   tags:
     - edge_autostart
 
@@ -17,7 +17,7 @@
       {%- elif 'No such file or directory' in status_result.stdout -%}not_configured
       {%- elif 'disabled' in status_result.stdout -%}disabled
       {%- else -%}unknown{%- endif -%}
-  when: action == 'status'
+  when: autostart_action == 'status'
   tags:
     - edge_autostart
 
@@ -30,20 +30,20 @@
     owner: root
     group: root
     mode: '0644'
-  when: action == 'enable'
+  when: autostart_action == 'enable'
   tags:
     - edge_autostart
 
 - name: enable - daemon-reload
   command: systemctl daemon-reload
   changed_when: false
-  when: action == 'enable'
+  when: autostart_action == 'enable'
   tags:
     - edge_autostart
 
 - name: enable - systemctl enable edge
   command: systemctl enable edge
-  when: action == 'enable'
+  when: autostart_action == 'enable'
   tags:
     - edge_autostart
 
@@ -53,6 +53,6 @@
   command: systemctl disable edge
   failed_when: false
   changed_when: false
-  when: action == 'disable'
+  when: autostart_action == 'disable'
   tags:
     - edge_autostart

@@ -27,6 +27,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/Tools.vue'),
     meta: { permission: 'tools' },
   },
+  edge_autostart: {
+    path: 'edge-autostart',
+    name: 'EdgeAutostart',
+    component: () => import('@/views/EdgeAutostart.vue'),
+    meta: { permission: 'tools' },
+  },
   plugin_switches: {
     path: 'plugin-switches',
     name: 'PluginSwitches',

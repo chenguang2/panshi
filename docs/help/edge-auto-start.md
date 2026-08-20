@@ -136,3 +136,13 @@ ss -tlnp | grep -E '16620|:80 '
 
 只要 nginx 进程存在，服务即为正常运行。若看到 `active (failed)` 或 `status=1`（非 0），才是启动失败，可执行 `journalctl -u edge -n 100` 查看日志排查。
 
+
+## 平台功能：自启动管理
+
+磐石 Admin 已提供"自启动管理"页面（侧边栏"边缘网络"菜单），可在平台上统一对多个 Edge 节点启用/禁用/查询开机自启动，无需逐台 SSH 手动配置。
+
+- **启用/禁用**：下发上述 `edge.service` 并执行 `systemctl enable/disable`。需提供节点的 **root 账号密码**（仅本次操作使用，不保存）。
+- **查询状态**：显示 enabled / disabled / not_configured（未配置）三态，复用节点现有连接，无需 root。
+- **高级参数**：可覆盖 Edge 目录、运行用户（默认取运行后台程序的用户，请确认为节点 Edge 实际运行用户）。
+
+> 本页的手动 systemd 配置步骤，适用于不通过平台、自行配置节点的场景；平台功能与手动配置效果一致，最终都会在节点生成 `/etc/systemd/system/edge.service` 并 enable。

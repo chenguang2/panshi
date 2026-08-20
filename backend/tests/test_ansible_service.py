@@ -821,13 +821,39 @@ class TestInventoryInjectRestoreSsh:
     def test_restore_returns_original(self, tmp_path):
         from app.services import ansible_service as mod
         inv = self._write_inventory(tmp_path, user="rocksware", pwd="origpass")
+        original = inv.read_text()
         with patch.object(mod, "_INVENTORY_PATH", inv):
             mod._inventory_inject_ssh("192.168.0.24", "root", "secret123")
             mod._inventory_restore_ssh("192.168.0.24")
         text = inv.read_text()
         assert "ansible_ssh_user: rocksware" in text
-        assert "ansible_ssh_pass: origpass" in text
+        assert "origpass" in text
+        assert "secret123" not in text
         assert "root" not in text
+
+    def test_restore_preserves_format_and_comments(self, tmp_path):
+        """restore 后文件应逐字保持原始内容（含注释/单引号/格式），不被 yaml 重写破坏。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        original = (
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "          ansible_ssh_user: rocksware\n"
+            "          ansible_ssh_pass: 'linux123!@#'\n"
+            "        192.168.100.114:\n"
+            "#          ansible_ssh_user: root\n"
+            "#          ansible_ssh_pass: 'yu2022'\n"
+            "      vars:\n"
+            "        ansible_ssh_user: jboss\n"
+        )
+        inv.write_text(original)
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            mod._inventory_inject_ssh("192.168.0.24", "root", "secret123")
+            mod._inventory_restore_ssh("192.168.0.24")
+        assert inv.read_text() == original
 
 
 class TestSanitizeForLog:
@@ -869,7 +895,7 @@ class TestEdgeAutostart:
             mock_restore.assert_called_once_with("192.168.1.1")
             mock_run.assert_called_once_with(
                 "192.168.1.1", "edge_autostart",
-                {"action": "enable", "edge_service_content": "[Unit]..."},
+                {"autostart_action": "enable", "edge_service_content": "[Unit]..."},
             )
             assert result == {"rc": 0}
 
@@ -886,7 +912,7 @@ class TestEdgeAutostart:
             )
             mock_inject.assert_called_once_with("192.168.1.1", "root", "secret123")
             mock_restore.assert_called_once_with("192.168.1.1")
-            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"action": "disable"})
+            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"autostart_action": "disable"})
             assert result == {"rc": 0}
 
     async def test_status_does_not_inject_root(self, service):
@@ -902,7 +928,7 @@ class TestEdgeAutostart:
             )
             mock_inject.assert_not_called()
             mock_restore.assert_not_called()
-            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"action": "status"})
+            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"autostart_action": "status"})
             assert result == {"rc": 0}
 
     async def test_unknown_action_raises(self, service):

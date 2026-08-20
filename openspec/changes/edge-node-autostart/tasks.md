@@ -27,10 +27,10 @@
 
 ## 4. 前端：自启动管理页面
 
-- [ ] 4.1 新增页面组件（列出集群/节点 + 启用/禁用/查询按钮）
-- [ ] 4.2 高级参数区：Edge 目录、运行用户（默认 = 运行后台程序的用户，可覆盖，提示"请确认节点 Edge 实际运行用户"）、root 账号/密码输入框（仅启用/禁用展示；不含"崩溃自动重启"选项）
-- [ ] 4.3 查询状态结果展示三态徽标（enabled / disabled / not_configured），not_configured 提示"该节点未配置自启动服务"
-- [ ] 4.4 新增 API 调用（`frontend/src/api/edgeAutostart.ts`）与路由注册（与工具箱平行菜单）
+- [x] 4.1 新增页面组件（列出集群/节点 + 启用/禁用/查询按钮）
+- [x] 4.2 高级参数区：Edge 目录、运行用户（默认 = 运行后台程序的用户，可覆盖，提示"请确认节点 Edge 实际运行用户"）、root 账号/密码输入框（仅启用/禁用展示；不含"崩溃自动重启"选项）
+- [x] 4.3 查询状态结果展示三态徽标（enabled / disabled / not_configured），not_configured 提示"该节点未配置自启动服务"
+- [x] 4.4 新增 API 调用（`frontend/src/api/edgeAutostart.ts`）与路由注册（与工具箱平行菜单）
 
 ## 5. 测试与验证
 
@@ -38,7 +38,7 @@
 - [x] 5.2 后端单测：`_inventory_inject_ssh`/`_inventory_restore_ssh` 正确注入/恢复
 - [x] 5.3 后端单测：`edge_autostart` 方法构造正确 extravars/凭据
 - [x] 5.4 后端 API 单测：`POST /nodes/{id}/autostart` 各 action 的路由与校验
-- [ ] 5.5 真机验证：对 192.168.0.24 执行 enable/disable/status 全流程
+- [x] 5.5 真机验证：对 192.168.0.24 执行 enable/disable/status 全流程
 - [x] 5.6 运行后端完整测试套件确认无回归
-- [ ] 5.7 前端类型检查与相关单测
+- [x] 5.7 前端类型检查与相关单测
 - [ ] 5.8 文档更新：`docs/help/edge-auto-start.md` 提及平台功能

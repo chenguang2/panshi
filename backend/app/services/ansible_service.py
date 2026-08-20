@@ -387,71 +387,114 @@ def _inventory_restore_port(ip: str, port: int) -> None:
 def _inventory_inject_ssh(ip: str, user: str, password: str) -> None:
     """Temporarily set ``ansible_ssh_user``/``ansible_ssh_pass`` for *ip* in the inventory.
 
-    Backs up the original credentials to an in-memory dict so
-    ``_inventory_restore_ssh`` can restore them afterwards. Used by the
-    autostart enable/disable flow to connect as root for the run.
+    Edits the inventory file at the line level, preserving comments/format of
+    every other line (a yaml round-trip would drop comments and rewrite the
+    whole file). Original credential lines are backed up in ``_ssh_backup`` so
+    ``_inventory_restore_ssh`` can restore them verbatim.
     No-op if *ip* is not present in the inventory.
     """
     with _inventory_lock:
         try:
             with open(_INVENTORY_PATH) as f:
-                data = yaml.safe_load(f) or {}
-            hosts = (
-                data.get("all", {})
-                .get("children", {})
-                .get("edge_cluster", {})
-                .get("hosts", {})
-            )
-            host_entry = hosts.get(ip)
-            if not isinstance(host_entry, dict):
+                lines = f.readlines()
+            start = _find_host_line(lines, ip)
+            if start is None:
                 return
-            _ssh_backup[ip] = {
-                "ansible_ssh_user": host_entry.get("ansible_ssh_user"),
-                "ansible_ssh_pass": host_entry.get("ansible_ssh_pass"),
+            backup = {
+                "user": _get_cred_line(lines, start, "ansible_ssh_user"),
+                "pass": _get_cred_line(lines, start, "ansible_ssh_pass"),
             }
-            host_entry["ansible_ssh_user"] = user
-            host_entry["ansible_ssh_pass"] = password
+            _ssh_backup[ip] = backup
+            _set_cred_line(lines, start, "ansible_ssh_user", user)
+            _set_cred_line(lines, start, "ansible_ssh_pass", password)
             with open(_INVENTORY_PATH, "w") as f:
-                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+                f.writelines(lines)
             logger.info("Injected root ssh creds for %s into inventory", ip)
-        except (FileNotFoundError, OSError, yaml.YAMLError, TypeError) as e:
+        except (FileNotFoundError, OSError, TypeError) as e:
             logger.warning("Failed to inject ssh creds for %s: %s", ip, e)
 
 
 def _inventory_restore_ssh(ip: str) -> None:
     """Restore the inventory entry for *ip* to its pre-injection state.
 
-    Restores the original ``ansible_ssh_user``/``ansible_ssh_pass`` saved by
-    ``_inventory_inject_ssh``; removes them if the entry had no credentials.
+    Reverts the ``ansible_ssh_user``/``ansible_ssh_pass`` lines to the exact
+    original text saved by ``_inventory_inject_ssh`` (preserving quotes and
+    format). Removes the lines if the original had no credentials.
     """
     with _inventory_lock:
         try:
             with open(_INVENTORY_PATH) as f:
-                data = yaml.safe_load(f) or {}
-            hosts = (
-                data.get("all", {})
-                .get("children", {})
-                .get("edge_cluster", {})
-                .get("hosts", {})
-            )
-            host_entry = hosts.get(ip)
-            if not isinstance(host_entry, dict):
+                lines = f.readlines()
+            start = _find_host_line(lines, ip)
+            if start is None:
                 return
             backup = _ssh_backup.pop(ip, None)
-            if backup is not None:
-                if backup.get("ansible_ssh_user") is not None:
-                    host_entry["ansible_ssh_user"] = backup["ansible_ssh_user"]
-                else:
-                    host_entry.pop("ansible_ssh_user", None)
-                if backup.get("ansible_ssh_pass") is not None:
-                    host_entry["ansible_ssh_pass"] = backup["ansible_ssh_pass"]
-                else:
-                    host_entry.pop("ansible_ssh_pass", None)
-                with open(_INVENTORY_PATH, "w") as f:
-                    yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
-                logger.info("Restored inventory ssh creds for %s", ip)
-        except (FileNotFoundError, OSError, yaml.YAMLError, TypeError) as e:
+            if backup is None:
+                return
+            _restore_cred_line(lines, start, "ansible_ssh_user", backup.get("user"))
+            _restore_cred_line(lines, start, "ansible_ssh_pass", backup.get("pass"))
+            with open(_INVENTORY_PATH, "w") as f:
+                f.writelines(lines)
+            logger.info("Restored inventory ssh creds for %s", ip)
+        except (FileNotFoundError, OSError, TypeError) as e:
             logger.warning("Failed to restore ssh creds for %s: %s", ip, e)
+
+
+def _find_host_line(lines: list[str], ip: str) -> int | None:
+    """Return the index of the host line for *ip* under ``hosts:``, else None."""
+    host_prefix = f"        {ip}:"
+    for i, line in enumerate(lines):
+        stripped = line.rstrip("\n")
+        if stripped.startswith(host_prefix) or stripped == host_prefix:
+            return i
+    return None
+
+
+def _get_cred_line(lines: list[str], start: int, key: str) -> str | None:
+    """Return the raw credential line text for *key* inside the host block."""
+    for i in range(start + 1, len(lines)):
+        line = lines[i]
+        if not line.startswith("          "):
+            break
+        if line.lstrip().startswith(f"{key}:"):
+            return line
+    return None
+
+
+def _set_cred_line(lines: list[str], start: int, key: str, value: str) -> None:
+    """Replace the *key* line in the host block, or append it under the host."""
+    idx = None
+    for i in range(start + 1, len(lines)):
+        line = lines[i]
+        if not line.startswith("          "):
+            break
+        if line.lstrip().startswith(f"{key}:"):
+            idx = i
+            break
+    indent = "          "
+    new_line = f"{indent}{key}: {value}\n"
+    if idx is not None:
+        lines[idx] = new_line
+    else:
+        lines.insert(start + 1, new_line)
+
+
+def _restore_cred_line(lines: list[str], start: int, key: str, original: str | None) -> None:
+    """Restore the *key* line in the host block to *original* (or remove it)."""
+    idx = None
+    for i in range(start + 1, len(lines)):
+        line = lines[i]
+        if not line.startswith("          "):
+            break
+        if line.lstrip().startswith(f"{key}:"):
+            idx = i
+            break
+    if idx is None:
+        return
+    if original is not None:
+        lines[idx] = original
+    else:
+        del lines[idx]
 
 
 # Allowed tags for the generic /ansible-run endpoint
@@ -830,7 +873,7 @@ class AnsibleRunnerService:
         """
         if action not in ("enable", "disable", "status"):
             raise ValueError(f"Unknown autostart action: {action}")
-        ev: dict[str, Any] = {"action": action}
+        ev: dict[str, Any] = {"autostart_action": action}
         if action == "enable":
             ev["edge_service_content"] = edge_service_content or ""
         inject_root = action in ("enable", "disable")

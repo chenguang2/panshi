@@ -25,3 +25,4 @@
 - import_tasks: edge_pack_list.yml
 - import_tasks: edge_pack_add.yml
 - import_tasks: edge_pack_rebase.yml
+- import_tasks: edge_autostart.yml

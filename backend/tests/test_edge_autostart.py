@@ -101,4 +101,4 @@ def test_autostart_status_does_not_inject_root_and_streams(db_env):
             mock_stream.assert_called_once()
             # status 不注入 root → extravars 只有 action
             kwargs = mock_stream.call_args.kwargs
-            assert kwargs["extravars"] == {"action": "status"}
+            assert kwargs["extravars"] == {"autostart_action": "status"}
