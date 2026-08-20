@@ -56,6 +56,9 @@ async def list_upstreams(
         if sort_order == "desc":
             sort_column = sort_column.desc()
         query = query.order_by(sort_column)
+    else:
+        # 默认按名称升序
+        query = query.order_by(Upstream.name)
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

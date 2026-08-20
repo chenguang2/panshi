@@ -24,6 +24,7 @@ from app.services.ansible_service import (
     AnsibleExecutionError,
     ALLOWED_TAGS,
     NGINX_CMD_MAP,
+    ip_sort_key,
 )
 from app.services.ansible_service import MAX_LOG_LINES
 from app.api.v1.clusters import get_current_user
@@ -177,21 +178,26 @@ async def list_nodes(
             ]
             query = query.where(or_(*conditions))
 
-    if sort_by and sort_by in NODE_ALLOWED_SORT_FIELDS:
-        sort_column = getattr(Node, sort_by)
-        if sort_order == "desc":
-            sort_column = sort_column.desc()
-        query = query.order_by(sort_column)
-
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size)
-
-    result = await db.execute(query)
-    nodes = result.scalars().all()
+    if sort_by and sort_by in NODE_ALLOWED_SORT_FIELDS:
+        # 用户主动排序：SQL 排序 + 分页
+        sort_column = getattr(Node, sort_by)
+        if sort_order == "desc":
+            sort_column = sort_column.desc()
+        query = query.order_by(sort_column)
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+        result = await db.execute(query)
+        nodes = result.scalars().all()
+    else:
+        # 默认按 IP 数值升序（Python 层，跨 DB 一致，避免字符串排序 114 在 42 前）
+        result = await db.execute(query)
+        nodes = list(result.scalars().all())
+        nodes.sort(key=lambda n: ip_sort_key(n.ip))
+        nodes = nodes[(page - 1) * page_size : page * page_size]
     return {"total": total, "page": page, "page_size": page_size, "items": [NodeResponse.model_validate(n) for n in nodes]}
 
 

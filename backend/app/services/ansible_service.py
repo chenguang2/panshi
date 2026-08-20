@@ -229,6 +229,18 @@ def is_node_in_inventory(ip: str) -> bool:
         return False
 
 
+def ip_sort_key(ip: str):
+    """Return a sort key for numeric IPv4 ordering.
+
+    String comparison would put 192.168.100.114 before 192.168.100.42;
+    this splits into integer octets so 42 sorts before 114.
+    """
+    try:
+        return [int(part) for part in ip.split(".")]
+    except (ValueError, AttributeError):
+        return [0, 0, 0, 0]
+
+
 def get_ssh_user(ip: str) -> str:
     """Resolve SSH user for *ip* from ansible inventory, falling back to ``"jboss"``.
 

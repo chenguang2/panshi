@@ -86,6 +86,9 @@ async def list_routes(
         if sort_order == "desc":
             sort_column = sort_column.desc()
         query = query.order_by(sort_column)
+    else:
+        # 默认按名称升序
+        query = query.order_by(Route.name)
 
     # Get total count before pagination
     count_query = select(func.count()).select_from(query.subquery())

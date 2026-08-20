@@ -10,6 +10,7 @@ from app.models.user import User, UserCluster
 from app.schemas.cluster import NodeResponse
 from app.api.v1.clusters import get_current_user
 from app.services import edge_sync
+from app.services.ansible_service import ip_sort_key
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
@@ -108,12 +109,12 @@ async def list_or_find_nodes(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Pagination
-    offset_val = (page - 1) * page_size
-    query = query.offset(offset_val).limit(page_size).order_by(Node.ip)
-
+    # Pagination — numeric IP sort in Python (cross-DB consistent:
+    # SQL string sort would put 192.168.100.114 before 192.168.100.42)
     result = await db.execute(query)
-    nodes = result.scalars().all()
+    nodes = list(result.scalars().all())
+    nodes.sort(key=lambda n: ip_sort_key(n.ip))
+    page_nodes = nodes[(page - 1) * page_size : page * page_size]
 
     # Batch load cluster names
     cluster_ids = {n.cluster_id for n in nodes}
@@ -128,7 +129,7 @@ async def list_or_find_nodes(
             cluster_group_map[r[0]] = r[3] or ""
 
     items = []
-    for n in nodes:
+    for n in page_nodes:
         item = NodeResponse.model_validate(n)
         item_dict = item.model_dump()
         item_dict["cluster_name"] = cluster_name_map.get(n.cluster_id, "")
