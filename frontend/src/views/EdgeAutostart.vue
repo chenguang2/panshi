@@ -133,7 +133,12 @@ async function loadClusters() {
 async function loadNodes() {
   loading.value = true
   try {
-    const res = await api.get('/nodes', { params: { page_size: 500 } })
+    const res = await api.get('/nodes', {
+      params: {
+        page_size: 500,
+        ...(clusterFilter.value ? { cluster_id: clusterFilter.value } : {}),
+      },
+    })
     const items = res.data?.items || []
     const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))
     nodes.value = items.map((n: any) => ({
