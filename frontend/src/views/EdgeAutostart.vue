@@ -172,6 +172,20 @@ async function loadClusters() {
   } catch { /* ignore */ }
 }
 
+async function loadAutostartRecords() {
+  try {
+    const res = await api.get('/nodes/autostart/records')
+    const records = res.data?.items || []
+    const map = new Map<number, AutostartStatus>()
+    for (const r of records) {
+      if (r.status) map.set(r.node_id, r.status as AutostartStatus)
+    }
+    for (const n of nodes.value) {
+      if (map.has(n.id)) n.autostart_status = map.get(n.id)!
+    }
+  } catch { /* ignore */ }
+}
+
 async function loadNodes() {
   loading.value = true
   try {
@@ -188,6 +202,7 @@ async function loadNodes() {
       cluster_name: clusterMap.get(n.cluster_id)?.display_name || clusterMap.get(n.cluster_id)?.name || String(n.cluster_id),
       autostart_status: null as AutostartStatus | null,
     }))
+    await loadAutostartRecords()
   } catch (e: any) {
     message.error(e.response?.data?.detail || '加载节点失败')
   } finally {

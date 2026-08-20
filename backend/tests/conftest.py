@@ -4,6 +4,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base
 from app.models.cluster import Cluster
+from app.models.autostart import NodeAutostart
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 

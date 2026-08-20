@@ -1009,3 +1009,61 @@ class TestGetDefaultRunUser:
         )
         with patch.object(mod, "_INVENTORY_PATH", inv):
             assert mod.get_default_run_user("192.168.0.24") == "rocksware"
+
+
+class TestNodeAutostartModel:
+    """NodeAutostart 模型（ps_node_autostart 表）。"""
+
+    async def _seed_node(self, test_db, node_id=1):
+        from app.models.cluster import Node
+        test_db.add(Node(id=node_id, cluster_id=1, ip="192.168.1.1",
+                         edge_path="/edge", service_port=80, management_port=16620))
+        await test_db.commit()
+
+    async def test_create_and_read(self, test_db):
+        await self._seed_node(test_db)
+        from app.models.autostart import NodeAutostart
+        rec = NodeAutostart(node_id=1, cluster_id=1, status="enabled", action="enable",
+                            command="sshpass -p ***** ssh ...", rc=0)
+        test_db.add(rec)
+        await test_db.commit()
+        await test_db.refresh(rec)
+        assert rec.id is not None
+        assert rec.status == "enabled"
+        assert rec.action == "enable"
+        assert rec.rc == 0
+        assert rec.updated_at is not None
+
+    async def test_node_id_unique(self, test_db):
+        await self._seed_node(test_db)
+        from sqlalchemy.exc import IntegrityError
+        from app.models.autostart import NodeAutostart
+        test_db.add(NodeAutostart(node_id=1, cluster_id=1, status="enabled", action="enable", command="", rc=0))
+        await test_db.commit()
+        test_db.add(NodeAutostart(node_id=1, cluster_id=1, status="disabled", action="disable", command="", rc=0))
+        import pytest
+        with pytest.raises(IntegrityError):
+            await test_db.commit()
+
+
+class TestSanitizeCommandForStore:
+    """命令脱敏：sshpass -p <密码> → *****，绝不存明文。"""
+
+    def test_masks_sshpass_password(self):
+        from app.services.ansible_service import sanitize_command_for_store
+        cmd = "sshpass -p secret123 ssh root@1.1.1.1 systemctl is-enabled edge"
+        out = sanitize_command_for_store(cmd)
+        assert "secret123" not in out
+        assert "sshpass -p *****" in out
+
+    def test_unchanged_without_password(self):
+        from app.services.ansible_service import sanitize_command_for_store
+        cmd = "systemctl is-enabled edge"
+        assert sanitize_command_for_store(cmd) == cmd
+
+    def test_masks_special_char_password(self):
+        from app.services.ansible_service import sanitize_command_for_store
+        cmd = "sshpass -p 'linux123!@#' ssh root@1.1.1.1 systemctl disable edge"
+        out = sanitize_command_for_store(cmd)
+        assert "linux123" not in out
+        assert "*****" in out

@@ -1073,6 +1073,16 @@ def _sanitize_for_log(extravars: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
+def sanitize_command_for_store(command: str) -> str:
+    """Mask sshpass passwords before persisting a command for audit.
+
+    The executed SSH command contains ``sshpass -p <password>``; storing it
+    verbatim would leak the root password. Replace the password with *****.
+    Commands without an sshpass password are returned unchanged.
+    """
+    return re.sub(r"sshpass -p (\S+)", "sshpass -p *****", command)
+
+
 def build_edge_service_content(run_user: str, edge_path: str) -> str:
     """Build the /etc/systemd/system/edge.service content (决策 1a).
 

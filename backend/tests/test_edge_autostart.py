@@ -99,3 +99,57 @@ def test_autostart_status_uses_ssh_and_streams(db_env):
             assert kwargs.kwargs.get("ssh_pass") is None
             assert kwargs.kwargs.get("ssh_user") is None
             assert kwargs.kwargs["action"] == "status"
+
+
+def test_autostart_writes_record(db_env):
+    """操作成功后应写入 ps_node_autostart 记录（脱敏命令）。"""
+    import asyncio
+    from app.api.v1 import edge_autostart as mod
+    from app.models.autostart import NodeAutostart
+
+    app, S = db_env
+
+    async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
+        return {"rc": 0, "status": "successful", "stdout": "disabled",
+                "stderr": "", "command": f"sshpass -p secret123 ssh root@{ip} systemctl disable edge"}
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart),
+    ):
+        with TestClient(app) as c:
+            resp = c.post("/api/v1/nodes/1/autostart", json={"action": "disable", "root_password": "secret123"})
+            assert resp.status_code == 200
+
+    async def _check():
+        async with S() as s:
+            from sqlalchemy import select
+            rows = (await s.execute(select(NodeAutostart))).scalars().all()
+            assert len(rows) == 1
+            assert rows[0].status == "disabled"
+            assert "secret123" not in (rows[0].command or "")
+            assert "*****" in (rows[0].command or "")
+    asyncio.run(_check())
+
+
+def test_autostart_records_read(db_env):
+    """GET /nodes/autostart/records 应返回记录（读库）。"""
+    import asyncio
+    from app.api.v1 import edge_autostart as mod
+    from app.models.autostart import NodeAutostart
+
+    app, S = db_env
+
+    async def _seed():
+        async with S() as s:
+            s.add(NodeAutostart(node_id=1, cluster_id=1, status="enabled", action="enable",
+                                command="sshpass -p ***** ssh ...", rc=0))
+            await s.commit()
+    asyncio.run(_seed())
+
+    with patch.object(mod, "is_node_in_inventory", return_value=True):
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/nodes/autostart/records")
+            assert resp.status_code == 200
+            items = resp.json() if isinstance(resp.json(), list) else resp.json().get("items", [])
+            assert any(it["node_id"] == 1 and it["status"] == "enabled" for it in items)

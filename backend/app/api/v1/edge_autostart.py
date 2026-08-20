@@ -16,11 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.cluster import Node
+from app.models.autostart import NodeAutostart
 from app.services.ansible_service import (
     AnsibleRunnerService,
     build_edge_service_content,
     get_default_run_user,
     is_node_in_inventory,
+    sanitize_command_for_store,
 )
 
 router = APIRouter(prefix="/nodes", tags=["nodes-autostart"])
@@ -46,6 +48,18 @@ async def _get_node(node_id: int, db: AsyncSession) -> Node:
     return node
 
 
+def _infer_status(rc: int, stdout: str) -> str:
+    """Infer autostart status from a status action's rc/stdout."""
+    out = stdout or ""
+    if "No such file or directory" in out:
+        return "not_configured"
+    if "enabled" in out:
+        return "enabled"
+    if "disabled" in out:
+        return "disabled"
+    return "unknown"
+
+
 @router.get("/autostart/defaults")
 async def autostart_defaults():
     """Return global autostart default values (fallback run user)."""
@@ -61,6 +75,25 @@ async def node_autostart_defaults(node_id: int, db: AsyncSession = Depends(get_d
     """
     node = await _get_node(node_id, db)
     return {"run_user": get_default_run_user(node.ip)}
+
+
+@router.get("/autostart/records")
+async def autostart_records(db: AsyncSession = Depends(get_db)):
+    """Return all nodes' persisted autostart records (read from DB)."""
+    result = await db.execute(select(NodeAutostart))
+    rows = result.scalars().all()
+    return {"items": [
+        {
+            "node_id": r.node_id,
+            "cluster_id": r.cluster_id,
+            "status": r.status,
+            "action": r.action,
+            "command": r.command,
+            "rc": r.rc,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]}
 
 
 @router.post("/{node_id}/autostart")
@@ -138,5 +171,34 @@ async def node_autostart(
             yield f"data: {json.dumps({'line': item, 'percent': percent})}\n\n"
 
         yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
+
+        # 操作完成后写库（状态 + 脱敏命令审计，绝不存密码明文）
+        try:
+            from sqlalchemy import select
+            if body.action == "status":
+                stored_status = _infer_status(rc, result.get("stdout", ""))
+            elif rc == 0:
+                stored_status = "enabled" if body.action == "enable" else "disabled"
+            else:
+                stored_status = "unknown"
+            existing = (await db.execute(
+                select(NodeAutostart).where(NodeAutostart.node_id == node.id)
+            )).scalar_one_or_none()
+            if existing is None:
+                db.add(NodeAutostart(
+                    node_id=node.id, cluster_id=node.cluster_id,
+                    status=stored_status, action=body.action,
+                    command=sanitize_command_for_store(command) if command else None,
+                    rc=rc,
+                ))
+            else:
+                existing.status = stored_status
+                existing.action = body.action
+                existing.command = sanitize_command_for_store(command) if command else None
+                existing.rc = rc
+            await db.commit()
+        except Exception:
+            # 写库失败不影响操作结果返回
+            pass
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
