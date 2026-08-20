@@ -50,6 +50,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.core.maintenance import maintenance_middleware
+app.middleware("http")(maintenance_middleware)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

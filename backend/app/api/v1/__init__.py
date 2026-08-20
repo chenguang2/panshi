@@ -14,6 +14,7 @@ from app.api.v1 import (
     metrics,
     node_tasks,
     edge_autostart,
+    database,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -41,6 +42,7 @@ api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
 api_router.include_router(cluster_export.router)
 api_router.include_router(plugin_metadata.router)
+api_router.include_router(database.router)
 api_router.include_router(cluster_stream_proxies.global_router)
 api_router.include_router(edge_autostart.router)
 
