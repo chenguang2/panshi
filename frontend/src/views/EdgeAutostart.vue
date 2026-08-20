@@ -232,9 +232,8 @@ async function queryStatus(node: any) {
     onComplete: (rc) => {
       execProgress.percent = 100
       execProgress.status = rc === 0 ? 'success' : 'exception'
-      const last = execLogs.value[execLogs.value.length - 1] || ''
-      const m = last.match(/edge_autostart_state\s*[:=]\s*['\"]?(\w+)['\"]?/)
-      const state: AutostartStatus = m ? (m[1] as AutostartStatus) : 'unknown'
+      // 在全部日志行中搜索 edge_autostart_state（debug 输出可能位于日志中部而非末尾）
+      const state = parseAutostartState(execLogs.value)
       node.autostart_status = state
       const labels: Record<AutostartStatus, string> = {
         enabled: '已启用', disabled: '已禁用', not_configured: '未配置', unknown: '未知',
@@ -252,6 +251,19 @@ async function queryStatus(node: any) {
       message.error(e)
     },
   })
+}
+
+function parseAutostartState(logs: string[]): AutostartStatus {
+  for (const line of logs) {
+    const m = line.match(/edge_autostart_state\s*[:=]\s*['\"]?(\w+)['\"]?/)
+    if (m) {
+      const v = m[1] as AutostartStatus
+      if (v === 'enabled' || v === 'disabled' || v === 'not_configured' || v === 'unknown') {
+        return v
+      }
+    }
+  }
+  return 'unknown'
 }
 
 function resetExec() {

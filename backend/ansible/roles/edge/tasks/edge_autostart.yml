@@ -21,6 +21,13 @@
   tags:
     - edge_autostart
 
+- name: status - report result
+  debug:
+    msg: "edge_autostart_state={{ edge_autostart_state }} raw={{ status_result.stdout }}"
+  when: autostart_action == 'status'
+  tags:
+    - edge_autostart
+
 ###################### enable: write service + enable ########################
 
 - name: enable - write edge.service
