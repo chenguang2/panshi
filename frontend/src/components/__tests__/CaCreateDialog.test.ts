@@ -19,14 +19,14 @@ describe('CaCreateDialog.vue', () => {
     vi.clearAllMocks()
   })
 
-  it('has algorithm select with sm2 default', async () => {
+  it('has algorithm select defaulting to first option (rsa)', async () => {
     const CaCreateDialog = (await import('../CaCreateDialog.vue')).default
     const wrapper = mount(CaCreateDialog, {
       props: { visible: true, clusters: [{ id: 1, display_name: 'Test' }] },
       global: { stubs },
     })
     expect(wrapper.text()).toContain('证书算法')
-    expect(wrapper.vm.form.algorithm).toBe('sm2')
+    expect(wrapper.vm.form.algorithm).toBe('rsa')
   })
 
   it('includes algorithm in API payload', async () => {

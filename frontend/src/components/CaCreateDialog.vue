@@ -101,7 +101,7 @@ const form = reactive({
   organization: '',
   organizational_unit: '',
   validity_days: 3650,
-  algorithm: 'sm2' as 'sm2' | 'rsa' | 'ecc',
+  algorithm: 'rsa' as 'sm2' | 'rsa' | 'ecc',
 })
 
 const creating = ref(false)
@@ -145,7 +145,7 @@ watch(() => props.visible, (v) => {
     form.organization = ''
     form.organizational_unit = ''
     form.validity_days = 3650
-    form.algorithm = 'sm2'
+    form.algorithm = 'rsa'
     errorMsg.value = ''
   }
 })

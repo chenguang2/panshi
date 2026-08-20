@@ -251,7 +251,7 @@ const dnsInputRef = ref<HTMLInputElement | null>(null)
 const ipInputRef = ref<HTMLInputElement | null>(null)
 
 const form = reactive({
-  algorithm: 'sm2' as 'sm2' | 'rsa' | 'ecc',
+  algorithm: 'rsa' as 'sm2' | 'rsa' | 'ecc',
   cluster_id: '',
   name: '',
   common_name: '',
@@ -461,7 +461,7 @@ function downloadClientBundle(clientCert: any) {
 // Reset form when opened
 watch(() => props.visible, (v) => {
   if (v) {
-    form.algorithm = 'sm2'
+    form.algorithm = 'rsa'
     form.cluster_id = ''
     form.name = ''
     form.common_name = ''
