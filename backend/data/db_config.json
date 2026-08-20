@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "active": "local_sqlite",
+  "connections": [
+    {
+      "id": "local_sqlite",
+      "type": "sqlite",
+      "name": "本地 SQLite",
+      "path": "./data/panshi.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
+    }
+  ]
+}
