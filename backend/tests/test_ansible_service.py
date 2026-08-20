@@ -973,3 +973,12 @@ class TestIsNodeInInventory:
         )
         with patch.object(mod, "_INVENTORY_PATH", inv):
             assert mod.is_node_in_inventory("10.9.9.9") is False
+
+
+class TestParseAutostartStatusStderr:
+    """systemctl is-enabled 错误输出到 stderr 时也应识别为 not_configured。"""
+
+    def test_not_configured_when_error_on_stderr(self):
+        from app.services.ansible_service import parse_autostart_status
+        combined = "Failed to get unit file state for edge.service: No such file or directory"
+        assert parse_autostart_status(combined) == "not_configured"

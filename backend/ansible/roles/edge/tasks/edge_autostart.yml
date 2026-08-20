@@ -13,9 +13,10 @@
 - name: status - normalize result
   set_fact:
     edge_autostart_state: >-
-      {%- if 'enabled' in status_result.stdout -%}enabled
-      {%- elif 'No such file or directory' in status_result.stdout -%}not_configured
-      {%- elif 'disabled' in status_result.stdout -%}disabled
+      {%- set raw = status_result.stdout + ' ' + status_result.stderr -%}
+      {%- if 'No such file or directory' in raw -%}not_configured
+      {%- elif 'enabled' in raw -%}enabled
+      {%- elif 'disabled' in raw -%}disabled
       {%- else -%}unknown{%- endif -%}
   when: autostart_action == 'status'
   tags:
