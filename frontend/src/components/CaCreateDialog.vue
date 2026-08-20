@@ -11,10 +11,6 @@
           <div class="form-group">
             <label class="form-label">证书算法 <span class="required">*</span></label>
             <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="creating">
-              <a-select-option value="sm2">
-                <div style="font-weight:600;font-size:13px;">SM2 国密</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
-              </a-select-option>
               <a-select-option value="rsa">
                 <div style="font-weight:600;font-size:13px;">RSA 2048</div>
                 <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容</div>
@@ -22,6 +18,10 @@
               <a-select-option value="ecc">
                 <div style="font-weight:600;font-size:13px;">ECC P-256</div>
                 <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容，密钥更小</div>
+              </a-select-option>
+              <a-select-option value="sm2">
+                <div style="font-weight:600;font-size:13px;">SM2 国密</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
               </a-select-option>
             </a-select>
           </div>
