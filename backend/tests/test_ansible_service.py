@@ -739,3 +739,211 @@ class TestRunPlaybookSshPortInjection:
 
         # 不写文件
         assert len(write_called) == 0
+
+
+class TestAllowedTags:
+    """ALLOWED_TAGS 应包含 edge_autostart 供自启动操作使用。"""
+
+    def test_edge_autostart_in_allowed_tags(self):
+        from app.services.ansible_service import ALLOWED_TAGS
+        assert "edge_autostart" in ALLOWED_TAGS
+
+
+class TestBuildEdgeServiceContent:
+    """edge.service 内容模板生成（决策 1a，不含 Restart）。"""
+
+    def test_generates_service_with_user_and_edge_path(self):
+        from app.services.ansible_service import build_edge_service_content
+        content = build_edge_service_content(run_user="rocksware", edge_path="/data/rocks/uap-edge")
+        assert "User=rocksware" in content
+        assert "Group=rocksware" in content
+        assert "WorkingDirectory=/data/rocks/uap-edge" in content
+        assert "ExecStart=/data/rocks/uap-edge/bin/edge start" in content
+        assert "Type=oneshot" in content
+        assert "RemainAfterExit=yes" in content
+        assert "[Install]" in content
+        assert "WantedBy=multi-user.target" in content
+
+    def test_service_content_has_no_restart(self):
+        from app.services.ansible_service import build_edge_service_content
+        content = build_edge_service_content(run_user="qcg", edge_path="/opt/uap-edge")
+        assert "Restart=" not in content
+
+
+class TestParseAutostartStatus:
+    """systemctl is-enabled 输出归一化三态（决策 3）。"""
+
+    def test_enabled(self):
+        from app.services.ansible_service import parse_autostart_status
+        assert parse_autostart_status("enabled") == "enabled"
+
+    def test_disabled(self):
+        from app.services.ansible_service import parse_autostart_status
+        assert parse_autostart_status("disabled") == "disabled"
+
+    def test_not_configured_when_file_missing(self):
+        from app.services.ansible_service import parse_autostart_status
+        out = "Failed to get unit file state for edge.service: No such file or directory"
+        assert parse_autostart_status(out) == "not_configured"
+
+    def test_unknown_for_other_output(self):
+        from app.services.ansible_service import parse_autostart_status
+        assert parse_autostart_status("some other error") == "unknown"
+
+
+class TestInventoryInjectRestoreSsh:
+    """_inventory_inject_ssh / _inventory_restore_ssh（决策 2）。"""
+
+    def _write_inventory(self, tmp_path, user="rocksware", pwd="orig"):
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            f"          ansible_ssh_user: {user}\n"
+            f"          ansible_ssh_pass: '{pwd}'\n"
+            "      vars:\n"
+            "        ansible_ssh_user: jboss\n"
+        )
+        return inv
+
+    def test_inject_sets_user_and_password(self, tmp_path):
+        from app.services import ansible_service as mod
+        inv = self._write_inventory(tmp_path)
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            mod._inventory_inject_ssh("192.168.0.24", "root", "secret123")
+        text = inv.read_text()
+        assert "ansible_ssh_user: root" in text
+        assert "ansible_ssh_pass: secret123" in text
+
+    def test_restore_returns_original(self, tmp_path):
+        from app.services import ansible_service as mod
+        inv = self._write_inventory(tmp_path, user="rocksware", pwd="origpass")
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            mod._inventory_inject_ssh("192.168.0.24", "root", "secret123")
+            mod._inventory_restore_ssh("192.168.0.24")
+        text = inv.read_text()
+        assert "ansible_ssh_user: rocksware" in text
+        assert "ansible_ssh_pass: origpass" in text
+        assert "root" not in text
+
+
+class TestSanitizeForLog:
+    """_sanitize_for_log 应移除敏感字段，日志不输出密码明文（决策 2）。"""
+
+    def test_removes_ansible_ssh_pass(self):
+        from app.services.ansible_service import _sanitize_for_log
+        safe = _sanitize_for_log({
+            "ips": "1.1.1.1",
+            "ansible_ssh_user": "root",
+            "ansible_ssh_pass": "secret123",
+            "action": "enable",
+        })
+        assert "secret123" not in str(safe)
+        assert "ansible_ssh_pass" not in safe
+        assert safe.get("ips") == "1.1.1.1"
+        assert safe.get("action") == "enable"
+
+
+class TestEdgeAutostart:
+    """AnsibleRunnerService.edge_autostart 方法（决策 3.1）。"""
+
+    @pytest.fixture
+    def service(self):
+        return AnsibleRunnerService(private_data_dir="/tmp")
+
+    async def test_enable_injects_root_and_calls_run_playbook(self, service):
+        from app.services import ansible_service as mod
+        with (
+            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
+            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
+            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
+        ):
+            result = await service.edge_autostart(
+                ip="192.168.1.1", action="enable",
+                edge_service_content="[Unit]...", ssh_user="root", ssh_pass="secret123",
+            )
+            mock_inject.assert_called_once_with("192.168.1.1", "root", "secret123")
+            mock_restore.assert_called_once_with("192.168.1.1")
+            mock_run.assert_called_once_with(
+                "192.168.1.1", "edge_autostart",
+                {"action": "enable", "edge_service_content": "[Unit]..."},
+            )
+            assert result == {"rc": 0}
+
+    async def test_disable_injects_root_and_calls_run_playbook(self, service):
+        from app.services import ansible_service as mod
+        with (
+            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
+            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
+            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
+        ):
+            result = await service.edge_autostart(
+                ip="192.168.1.1", action="disable",
+                edge_service_content=None, ssh_user="root", ssh_pass="secret123",
+            )
+            mock_inject.assert_called_once_with("192.168.1.1", "root", "secret123")
+            mock_restore.assert_called_once_with("192.168.1.1")
+            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"action": "disable"})
+            assert result == {"rc": 0}
+
+    async def test_status_does_not_inject_root(self, service):
+        from app.services import ansible_service as mod
+        with (
+            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
+            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
+            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
+        ):
+            result = await service.edge_autostart(
+                ip="192.168.1.1", action="status",
+                edge_service_content=None, ssh_user="root", ssh_pass="secret123",
+            )
+            mock_inject.assert_not_called()
+            mock_restore.assert_not_called()
+            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"action": "status"})
+            assert result == {"rc": 0}
+
+    async def test_unknown_action_raises(self, service):
+        from app.services import ansible_service as mod
+        with patch.object(service, 'run_playbook', new_callable=AsyncMock) as mock_run:
+            import pytest
+            with pytest.raises(ValueError):
+                await service.edge_autostart(
+                    ip="192.168.1.1", action="bogus",
+                    edge_service_content=None, ssh_user="root", ssh_pass="secret123",
+                )
+            mock_run.assert_not_called()
+
+
+class TestIsNodeInInventory:
+    """节点是否在 ansible inventory 的 edge_cluster 下（决策 4a 前置校验）。"""
+
+    def test_returns_true_when_ip_present(self, tmp_path):
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "          ansible_ssh_user: rocksware\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory("192.168.0.24") is True
+
+    def test_returns_false_when_ip_absent(self, tmp_path):
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "          ansible_ssh_user: rocksware\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory("10.9.9.9") is False

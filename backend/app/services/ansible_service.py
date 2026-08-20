@@ -204,6 +204,29 @@ def get_ssh_password(ip: str) -> str | None:
     return None
 
 
+def is_node_in_inventory(ip: str) -> bool:
+    """Return True if *ip* exists under ``edge_cluster.hosts`` in the inventory.
+
+    Used as a pre-check before autostart enable/disable: root-credential
+    injection relies on the host already being present in the inventory.
+    """
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except (FileNotFoundError, yaml.YAMLError):
+        return False
+    try:
+        hosts = (
+            data.get("all", {})
+            .get("children", {})
+            .get("edge_cluster", {})
+            .get("hosts", {})
+        )
+        return isinstance(hosts.get(ip), dict)
+    except (AttributeError, TypeError):
+        return False
+
+
 def get_ssh_user(ip: str) -> str:
     """Resolve SSH user for *ip* from ansible inventory, falling back to ``"jboss"``.
 
@@ -297,6 +320,9 @@ def resolve_ssh_port(node) -> int:
 
 # Serialize access to the inventory file for temporary ansible_port injection
 _inventory_lock = threading.Lock()
+# In-memory backup of original SSH creds per-IP, set by _inventory_inject_ssh
+# and consumed by _inventory_restore_ssh to restore the ops-owned inventory.
+_ssh_backup: dict[str, dict[str, str | None]] = {}
 
 
 def _inventory_inject_port(ip: str, port: int) -> None:
@@ -358,6 +384,76 @@ def _inventory_restore_port(ip: str, port: int) -> None:
             logger.warning("Failed to restore ansible_port for %s: %s", ip, e)
 
 
+def _inventory_inject_ssh(ip: str, user: str, password: str) -> None:
+    """Temporarily set ``ansible_ssh_user``/``ansible_ssh_pass`` for *ip* in the inventory.
+
+    Backs up the original credentials to an in-memory dict so
+    ``_inventory_restore_ssh`` can restore them afterwards. Used by the
+    autostart enable/disable flow to connect as root for the run.
+    No-op if *ip* is not present in the inventory.
+    """
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip)
+            if not isinstance(host_entry, dict):
+                return
+            _ssh_backup[ip] = {
+                "ansible_ssh_user": host_entry.get("ansible_ssh_user"),
+                "ansible_ssh_pass": host_entry.get("ansible_ssh_pass"),
+            }
+            host_entry["ansible_ssh_user"] = user
+            host_entry["ansible_ssh_pass"] = password
+            with open(_INVENTORY_PATH, "w") as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            logger.info("Injected root ssh creds for %s into inventory", ip)
+        except (FileNotFoundError, OSError, yaml.YAMLError, TypeError) as e:
+            logger.warning("Failed to inject ssh creds for %s: %s", ip, e)
+
+
+def _inventory_restore_ssh(ip: str) -> None:
+    """Restore the inventory entry for *ip* to its pre-injection state.
+
+    Restores the original ``ansible_ssh_user``/``ansible_ssh_pass`` saved by
+    ``_inventory_inject_ssh``; removes them if the entry had no credentials.
+    """
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip)
+            if not isinstance(host_entry, dict):
+                return
+            backup = _ssh_backup.pop(ip, None)
+            if backup is not None:
+                if backup.get("ansible_ssh_user") is not None:
+                    host_entry["ansible_ssh_user"] = backup["ansible_ssh_user"]
+                else:
+                    host_entry.pop("ansible_ssh_user", None)
+                if backup.get("ansible_ssh_pass") is not None:
+                    host_entry["ansible_ssh_pass"] = backup["ansible_ssh_pass"]
+                else:
+                    host_entry.pop("ansible_ssh_pass", None)
+                with open(_INVENTORY_PATH, "w") as f:
+                    yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+                logger.info("Restored inventory ssh creds for %s", ip)
+        except (FileNotFoundError, OSError, yaml.YAMLError, TypeError) as e:
+            logger.warning("Failed to restore ssh creds for %s: %s", ip, e)
+
+
 # Allowed tags for the generic /ansible-run endpoint
 ALLOWED_TAGS = frozenset({
     "nginx_cmd_run",
@@ -372,6 +468,7 @@ ALLOWED_TAGS = frozenset({
     "edge_pack_list",
     "software_check_run",
     "cmd_exec_run",
+    "edge_autostart",
 })
 
 # Mapping from nginx_cmd values to user-facing action names
@@ -717,6 +814,34 @@ class AnsibleRunnerService:
         ev = {"prefix": prefix}
         return await self.run_playbook(ip, "install_edge", ev)
 
+    async def edge_autostart(
+        self,
+        ip: str,
+        action: str,
+        edge_service_content: str | None,
+        ssh_user: str | None = None,
+        ssh_pass: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute edge_autostart tag (enable/disable/status).
+
+        enable/disable connect as root (credentials injected into the inventory
+        for the run and restored afterwards). status uses the normal connection
+        and requires no root credentials.
+        """
+        if action not in ("enable", "disable", "status"):
+            raise ValueError(f"Unknown autostart action: {action}")
+        ev: dict[str, Any] = {"action": action}
+        if action == "enable":
+            ev["edge_service_content"] = edge_service_content or ""
+        inject_root = action in ("enable", "disable")
+        if inject_root:
+            _inventory_inject_ssh(ip, ssh_user or "root", ssh_pass or "")
+        try:
+            return await self.run_playbook(ip, "edge_autostart", ev)
+        finally:
+            if inject_root:
+                _inventory_restore_ssh(ip)
+
     async def generic_run(
         self,
         ip: str,
@@ -846,3 +971,50 @@ def _sanitize_for_log(extravars: dict[str, Any]) -> dict[str, Any]:
     for key in ("ansible_ssh_pass", "ansible_ssh_private_key_file", "ssh_password"):
         safe.pop(key, None)
     return safe
+
+
+def build_edge_service_content(run_user: str, edge_path: str) -> str:
+    """Build the /etc/systemd/system/edge.service content (决策 1a).
+
+    Type=oneshot + RemainAfterExit=yes because ``bin/edge start`` daemonizes
+    and returns immediately. No Restart (决策 6a): with oneshot, systemd's
+    Restart tracks the start command, not the nginx process, so it would not
+    actually guard nginx crashes.
+    """
+    return (
+        "[Unit]\n"
+        "Description=Edge Gateway\n"
+        "After=network.target\n"
+        "\n"
+        "[Service]\n"
+        "Type=oneshot\n"
+        f"User={run_user}\n"
+        f"Group={run_user}\n"
+        f"WorkingDirectory={edge_path}\n"
+        f"ExecStart={edge_path}/bin/edge start\n"
+        "RemainAfterExit=yes\n"
+        "\n"
+        "[Install]\n"
+        "WantedBy=multi-user.target\n"
+    )
+
+
+def parse_autostart_status(stdout: str) -> str:
+    """Normalize ``systemctl is-enabled`` output to a four-state status.
+
+    - contains "enabled" → "enabled"
+    - contains "disabled" → "disabled"
+    - contains "No such file or directory" → "not_configured" (no service file)
+    - otherwise → "unknown"
+
+    Note: disabled and "no file" both exit with rc=1, so they are told apart
+    by output content (实测 192.168.0.24, 决策 3).
+    """
+    if "No such file or directory" in stdout:
+        return "not_configured"
+    if "enabled" in stdout:
+        return "enabled"
+    if "disabled" in stdout:
+        return "disabled"
+    return "unknown"
+

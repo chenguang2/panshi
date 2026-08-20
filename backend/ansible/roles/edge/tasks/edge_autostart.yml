@@ -1,0 +1,58 @@
+---
+###################### status: check is-enabled ########################
+
+- name: status - check is-enabled
+  command: systemctl is-enabled edge
+  register: status_result
+  failed_when: false
+  changed_when: false
+  when: action == 'status'
+  tags:
+    - edge_autostart
+
+- name: status - normalize result
+  set_fact:
+    edge_autostart_state: >-
+      {%- if 'enabled' in status_result.stdout -%}enabled
+      {%- elif 'No such file or directory' in status_result.stdout -%}not_configured
+      {%- elif 'disabled' in status_result.stdout -%}disabled
+      {%- else -%}unknown{%- endif -%}
+  when: action == 'status'
+  tags:
+    - edge_autostart
+
+###################### enable: write service + enable ########################
+
+- name: enable - write edge.service
+  copy:
+    content: "{{ edge_service_content }}"
+    dest: /etc/systemd/system/edge.service
+    owner: root
+    group: root
+    mode: '0644'
+  when: action == 'enable'
+  tags:
+    - edge_autostart
+
+- name: enable - daemon-reload
+  command: systemctl daemon-reload
+  changed_when: false
+  when: action == 'enable'
+  tags:
+    - edge_autostart
+
+- name: enable - systemctl enable edge
+  command: systemctl enable edge
+  when: action == 'enable'
+  tags:
+    - edge_autostart
+
+###################### disable: unlink only (keep service file) ########################
+
+- name: disable - systemctl disable edge
+  command: systemctl disable edge
+  failed_when: false
+  changed_when: false
+  when: action == 'disable'
+  tags:
+    - edge_autostart

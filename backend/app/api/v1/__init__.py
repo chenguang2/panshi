@@ -13,6 +13,7 @@ from app.api.v1 import (
     cluster_install,
     metrics,
     node_tasks,
+    edge_autostart,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -41,6 +42,7 @@ api_router.include_router(static_resources.router)
 api_router.include_router(cluster_export.router)
 api_router.include_router(plugin_metadata.router)
 api_router.include_router(cluster_stream_proxies.global_router)
+api_router.include_router(edge_autostart.router)
 
 # ── Combined router for SSL (router + global_router share the same feature gate) ──
 ssl_router = APIRouter()
