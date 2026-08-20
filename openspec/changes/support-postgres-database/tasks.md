@@ -1,29 +1,29 @@
 ## 1. 依赖与配置基础设施
 
-- [ ] 1.1 在 `backend/pyproject.toml` 添加 `asyncpg`（异步 PG 驱动）与 `psycopg[binary]`（同步 PG 驱动）依赖，`uv sync` 更新 `uv.lock`
-- [ ] 1.2 新增 `app/core/db_config.py`：定义连接数据模型（SQLite/PG）、读写 `data/db_config.json`（含 chmod 600）、密码 Fernet 加解密（密钥由 JWT_SECRET_KEY 派生）、环境变量兼容初始化（无配置但有 DATABASE_URL 时生成初始配置）、配置损坏降级（解析失败回退 `.bak` → 默认 SQLite）
-- [ ] 1.3 重构 `app/core/database.py`：引擎创建改为读取 `db_config.json` 的激活连接；保留 `is_sqlite()` 等公共接口签名；提供 `build_engine(connection)` 供迁移服务复用
-- [ ] 1.4 新增 `app/core/db_migration.py`：定义 22 张业务表的依赖顺序常量表（排除 `ps_db_migration_log`）、迁移任务状态机（pending/running/success/failed）、单任务锁
-- [ ] 1.5 新增 `app/models/db_migration.py`：`ps_db_migration_log` 表（时间、方向、源/目标连接、模式、结果、备份归档路径）
+- [x] 1.1 在 `backend/pyproject.toml` 添加 `asyncpg`（异步 PG 驱动）与 `psycopg[binary]`（同步 PG 驱动）依赖，`uv sync` 更新 `uv.lock`
+- [x] 1.2 新增 `app/core/db_config.py`：定义连接数据模型（SQLite/PG）、读写 `data/db_config.json`（含 chmod 600）、密码 Fernet 加解密（密钥由 JWT_SECRET_KEY 派生）、环境变量兼容初始化（无配置但有 DATABASE_URL 时生成初始配置）、配置损坏降级（解析失败回退 `.bak` → 默认 SQLite）
+- [x] 1.3 重构 `app/core/database.py`：引擎创建改为读取 `db_config.json` 的激活连接；保留 `is_sqlite()` 等公共接口签名；提供 `build_engine(connection)` 供迁移服务复用
+- [x] 1.4 新增 `app/core/db_migration.py`：定义 22 张业务表的依赖顺序常量表（排除 `ps_db_migration_log`）、迁移任务状态机（pending/running/success/failed）、单任务锁
+- [x] 1.5 新增 `app/models/db_migration.py`：`ps_db_migration_log` 表（时间、方向、源/目标连接、模式、结果、备份归档路径）
 
 ## 2. 数据库管理 API
 
-- [ ] 2.1 新增 `app/api/v1/database.py`：连接 CRUD（GET/POST/PUT/DELETE + 密码脱敏返回）、连接测试（3s 超时）、当前状态查询
-- [ ] 2.2 实现切换端点 `POST /api/v1/database/switch`：检查源库 running 任务（存在则拒绝）→ 校验目标可达 → 备份旧配置（`db_config.json.bak`）→ 更新 active + 写入 `.restart.flag` 切换标记 → 兜底标记竞态 running 任务为 interrupted → 返回提示"请手动重启服务"；`init_db()` 实现启动失败自动回滚（激活连接失败且存在切换标记时回滚到备份配置）
-- [ ] 2.3 在 `app/api/v1/__init__.py` 注册 database 路由，`app/core/features.py` 增加 `database_management` 已知功能名并默认启用
-- [ ] 2.4 迁移/导出/导入端点（后台任务）：`POST /api/v1/database/migrate`、`export`、`import`、任务进度查询、迁移历史查询；接入任务中心进度交互
-- [ ] 2.5 权限控制：所有接口要求 admin 角色 + `database_management` 权限，无权限返回 403
+- [x] 2.1 新增 `app/api/v1/database.py`：连接 CRUD（GET/POST/PUT/DELETE + 密码脱敏返回）、连接测试（3s 超时）、当前状态查询
+- [x] 2.2 实现切换端点 `POST /api/v1/database/switch`：检查源库 running 任务（存在则拒绝）→ 校验目标可达 → 备份旧配置（`db_config.json.bak`）→ 更新 active + 写入 `.restart.flag` 切换标记 → 兜底标记竞态 running 任务为 interrupted → 返回提示"请手动重启服务"；`init_db()` 实现启动失败自动回滚（激活连接失败且存在切换标记时回滚到备份配置）
+- [x] 2.3 在 `app/api/v1/__init__.py` 注册 database 路由，`app/core/features.py` 增加 `database_management` 已知功能名并默认启用
+- [x] 2.4 迁移/导出/导入端点（后台任务）：`POST /api/v1/database/migrate`、`export`、`import`、任务进度查询、迁移历史查询；接入任务中心进度交互
+- [x] 2.5 权限控制：所有接口要求 admin 角色 + `database_management` 权限，无权限返回 403
 
 ## 3. 迁移服务实现
 
-- [ ] 3.1 实现直连流式迁移（B1）：按依赖顺序逐表 SELECT 源行 → 显式 ID INSERT 目标（每批 500 行 commit）→ 进度回调 → 完成重置序列（PG `setval` / SQLite 自动 max+1）
-- [ ] 3.2 实现替换模式：迁移前检查目标库行数（空库直接执行；非空库要求勾选「我了解将清空目标库，先备份再替换」确认）→ 自动导出目标库为归档备份 → 按子→父顺序清空目标表 → 导入 → 失败时提示从备份恢复
-- [ ] 3.8 日志数据可选迁移：UI 提供「包含日志数据」复选框（默认勾选），取消勾选则跳过日志类表（sys_audit_log/ps_import_log/install_task/install_task_node）
-- [ ] 3.3 实现归档导出（B2）：`meta.json` + `schema.json`（inspector 导出列定义）+ `data/*.jsonl` 打包为 zip，提供下载
-- [ ] 3.4 实现归档导入（B2）：校验 meta 兼容性（版本不高于当前应用、结构可迁移）→ 归档内嵌 DDL 建表（还原归档时刻结构）→ JSONL 流式导入 → 重置序列 → 运行 migrate.py 结构升级到当前模型
-- [ ] 3.5 迁移事务安全：源库只读不修改；目标库操作失败回滚当批数据；迁移记录写入 `ps_db_migration_log`
-- [ ] 3.6 实现迁移期间写操作锁定：迁移启动时设置全局只读标志，中间件拦截写请求返回 503，迁移完成/失败时解除锁定
-- [ ] 3.7 迁移方向校验：禁止 target==active（当前激活库），允许任意 source≠target 类型组合
+- [x] 3.1 实现直连流式迁移（B1）：按依赖顺序逐表 SELECT 源行 → 显式 ID INSERT 目标（每批 500 行 commit）→ 进度回调 → 完成重置序列（PG `setval` / SQLite 自动 max+1）
+- [x] 3.2 实现替换模式：迁移前检查目标库行数（空库直接执行；非空库要求勾选「我了解将清空目标库，先备份再替换」确认）→ 自动导出目标库为归档备份 → 按子→父顺序清空目标表 → 导入 → 失败时提示从备份恢复
+- [x] 3.8 日志数据可选迁移：UI 提供「包含日志数据」复选框（默认勾选），取消勾选则跳过日志类表（sys_audit_log/ps_import_log/install_task/install_task_node）
+- [x] 3.3 实现归档导出（B2）：`meta.json` + `schema.json`（inspector 导出列定义）+ `data/*.jsonl` 打包为 zip，提供下载
+- [x] 3.4 实现归档导入（B2）：校验 meta 兼容性（版本不高于当前应用、结构可迁移）→ 归档内嵌 DDL 建表（还原归档时刻结构）→ JSONL 流式导入 → 重置序列 → 运行 migrate.py 结构升级到当前模型
+- [x] 3.5 迁移事务安全：源库只读不修改；目标库操作失败回滚当批数据；迁移记录写入 `ps_db_migration_log`
+- [x] 3.6 实现迁移期间写操作锁定：迁移启动时设置全局只读标志，中间件拦截写请求返回 503，迁移完成/失败时解除锁定
+- [x] 3.7 迁移方向校验：禁止 target==active（当前激活库），允许任意 source≠target 类型组合
 
 ## 4. 前端实现
 
