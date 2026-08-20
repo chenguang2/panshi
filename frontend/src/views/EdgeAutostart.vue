@@ -63,9 +63,9 @@
       </div>
 
       <div class="form-item">
-        <label>运行用户</label>
-        <a-input v-model:value="actionForm.run_user" :placeholder="`默认 ${defaultRunUser}`" />
-        <div class="form-hint">请确认节点 Edge 的实际运行用户</div>
+        <label>运行用户（edge.service 的 User=）</label>
+        <a-input v-model:value="actionForm.run_user" placeholder="默认取节点 inventory 用户" />
+        <div class="form-hint">默认已填节点配置用户，edge.service 将以该用户执行；请确认是否为节点 Edge 实际运行用户</div>
       </div>
 
       <template v-if="action === 'enable' || action === 'disable'">
@@ -174,11 +174,16 @@ async function loadNodes() {
   }
 }
 
-function openAction(node: any, act: 'enable' | 'disable') {
+async function openAction(node: any, act: 'enable' | 'disable') {
   action.value = act
   selectedNode.value = node
   actionForm.edge_path = node.edge_path || ''
-  actionForm.run_user = defaultRunUser.value
+  // 运行用户默认取节点 inventory 的 ansible_ssh_user（通常即 Edge 实际运行用户）
+  actionForm.run_user = ''
+  try {
+    const res = await api.get(`/nodes/${node.id}/autostart/defaults`)
+    actionForm.run_user = res.data?.run_user || defaultRunUser.value || ''
+  } catch { actionForm.run_user = defaultRunUser.value || '' }
   actionForm.root_user = 'root'
   actionForm.root_password = ''
   actionModalVisible.value = true

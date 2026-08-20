@@ -22,6 +22,7 @@ from app.services.ansible_service import (
     _inventory_restore_ssh,
     _run_ansible_stream,
     build_edge_service_content,
+    get_ssh_user,
     is_node_in_inventory,
     resolve_ssh_port,
 )
@@ -51,8 +52,19 @@ async def _get_node(node_id: int, db: AsyncSession) -> Node:
 
 @router.get("/autostart/defaults")
 async def autostart_defaults():
-    """Return autostart default values (e.g. default run user)."""
+    """Return global autostart default values (fallback run user)."""
     return {"default_run_user": getpass.getuser()}
+
+
+@router.get("/{node_id}/autostart/defaults")
+async def node_autostart_defaults(node_id: int, db: AsyncSession = Depends(get_db)):
+    """Return the node's default run user = inventory ansible_ssh_user.
+
+    edge.service 的 User= 应使用节点 inventory 中配置的 ansible_ssh_user
+    （通常即 Edge 实际运行用户），而非后端进程用户。
+    """
+    node = await _get_node(node_id, db)
+    return {"run_user": get_ssh_user(node.ip)}
 
 
 @router.post("/{node_id}/autostart")
