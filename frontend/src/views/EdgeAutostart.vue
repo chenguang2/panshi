@@ -238,10 +238,19 @@ async function confirmAction() {
       execProgress.percent = 100
       execProgress.status = rc === 0 ? 'success' : 'exception'
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: `autostart ${action.value} ${selectedNode.value.ip}`, rc }
-      execHighlights.value = rc === 0 ? [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`] : []
-      addLog(rc === 0 ? `✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功` : `❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
-      if (rc === 0) message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
-      else message.error(`操作失败: ${status}`)
+      const appliedState: AutostartStatus = action.value === 'enable' ? 'enabled' : 'disabled'
+      if (rc === 0) {
+        // 同步更新表格状态列，并重新查询刷新，确保与真实状态一致
+        selectedNode.value.autostart_status = appliedState
+        execHighlights.value = [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`]
+        addLog(`✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功`)
+        message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
+        loadNodes()
+      } else {
+        execHighlights.value = []
+        addLog(`❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
+        message.error(`操作失败: ${status}`)
+      }
     },
     onError: (e) => {
       execProgress.percent = 100
