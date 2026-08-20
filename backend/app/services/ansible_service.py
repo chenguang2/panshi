@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import getpass
 import io
 import json
@@ -899,26 +900,43 @@ class AnsibleRunnerService:
         edge_service_content: str | None,
         ssh_user: str | None = None,
         ssh_pass: str | None = None,
+        on_line: Callable[[dict], None] | None = None,
     ) -> dict[str, Any]:
-        """Execute edge_autostart tag (enable/disable/status).
+        """Enable/disable/query Edge systemd self-start over SSH.
 
-        enable/disable connect as root (credentials injected into the inventory
-        for the run and restored afterwards). status uses the normal connection
-        and requires no root credentials.
+        enable/disable connect as root (ssh_user/ssh_pass, passed per-request
+        and not persisted) to write edge.service and run systemctl.
+        status uses the inventory SSH user (no root needed) to read is-enabled.
+
+        Returns dict with keys rc/status/stdout/stderr.
         """
         if action not in ("enable", "disable", "status"):
             raise ValueError(f"Unknown autostart action: {action}")
-        ev: dict[str, Any] = {"autostart_action": action}
+
+        if action in ("enable", "disable"):
+            user = ssh_user or "root"
+            password = ssh_pass or ""
+        else:
+            user = get_ssh_user(ip)
+            password = get_ssh_password(ip) or ""
+
         if action == "enable":
-            ev["edge_service_content"] = edge_service_content or ""
-        inject_root = action in ("enable", "disable")
-        if inject_root:
-            _inventory_inject_ssh(ip, ssh_user or "root", ssh_pass or "")
-        try:
-            return await self.run_playbook(ip, "edge_autostart", ev)
-        finally:
-            if inject_root:
-                _inventory_restore_ssh(ip)
+            b64 = base64.b64encode((edge_service_content or "").encode()).decode()
+            cmd = (
+                f"echo {b64} | base64 -d > /etc/systemd/system/edge.service && "
+                "systemctl daemon-reload && systemctl enable edge && "
+                "systemctl is-enabled edge"
+            )
+        elif action == "disable":
+            cmd = "systemctl disable edge && systemctl is-enabled edge"
+        else:
+            cmd = "systemctl is-enabled edge"
+
+        rc, stdout, stderr = await _run_ssh_with_fallback(
+            ip, user, cmd, password=password, on_line=on_line,
+        )
+        return {"rc": rc, "status": "successful" if rc == 0 else "failed",
+                "stdout": stdout, "stderr": stderr}
 
     async def generic_run(
         self,

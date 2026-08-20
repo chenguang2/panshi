@@ -874,73 +874,64 @@ class TestSanitizeForLog:
 
 
 class TestEdgeAutostart:
-    """AnsibleRunnerService.edge_autostart 方法（决策 3.1）。"""
+    """AnsibleRunnerService.edge_autostart 方法（SSH 版，决策 3.1）。"""
 
     @pytest.fixture
     def service(self):
         return AnsibleRunnerService(private_data_dir="/tmp")
 
-    async def test_enable_injects_root_and_calls_run_playbook(self, service):
+    async def test_enable_calls_ssh_with_service_write(self, service):
         from app.services import ansible_service as mod
-        with (
-            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
-            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
-            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
-        ):
+        with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock, return_value=(0, "enabled", "")) as mock_ssh:
             result = await service.edge_autostart(
                 ip="192.168.1.1", action="enable",
                 edge_service_content="[Unit]...", ssh_user="root", ssh_pass="secret123",
             )
-            mock_inject.assert_called_once_with("192.168.1.1", "root", "secret123")
-            mock_restore.assert_called_once_with("192.168.1.1")
-            mock_run.assert_called_once_with(
-                "192.168.1.1", "edge_autostart",
-                {"autostart_action": "enable", "edge_service_content": "[Unit]..."},
-            )
-            assert result == {"rc": 0}
+            mock_ssh.assert_called_once()
+            args, kwargs = mock_ssh.call_args
+            assert args[0] == "192.168.1.1"
+            assert args[1] == "root"
+            assert "edge.service" in args[2]
+            assert "systemctl enable" in args[2]
+            assert kwargs["password"] == "secret123"
+            assert result["rc"] == 0
 
-    async def test_disable_injects_root_and_calls_run_playbook(self, service):
+    async def test_disable_calls_ssh_disable(self, service):
         from app.services import ansible_service as mod
-        with (
-            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
-            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
-            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
-        ):
+        with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock, return_value=(0, "disabled", "")) as mock_ssh:
             result = await service.edge_autostart(
                 ip="192.168.1.1", action="disable",
                 edge_service_content=None, ssh_user="root", ssh_pass="secret123",
             )
-            mock_inject.assert_called_once_with("192.168.1.1", "root", "secret123")
-            mock_restore.assert_called_once_with("192.168.1.1")
-            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"autostart_action": "disable"})
-            assert result == {"rc": 0}
+            args, kwargs = mock_ssh.call_args
+            assert args[0] == "192.168.1.1"
+            assert "systemctl disable edge" in args[2]
+            assert "edge.service" not in args[2]
+            assert result["rc"] == 0
 
-    async def test_status_does_not_inject_root(self, service):
+    async def test_status_calls_ssh_is_enabled_with_inventory_user(self, service):
         from app.services import ansible_service as mod
-        with (
-            patch.object(service, 'run_playbook', new_callable=AsyncMock, return_value={"rc": 0}) as mock_run,
-            patch.object(mod, "_inventory_inject_ssh") as mock_inject,
-            patch.object(mod, "_inventory_restore_ssh") as mock_restore,
-        ):
+        with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock, return_value=(0, "disabled", "")) as mock_ssh:
             result = await service.edge_autostart(
                 ip="192.168.1.1", action="status",
                 edge_service_content=None, ssh_user="root", ssh_pass="secret123",
             )
-            mock_inject.assert_not_called()
-            mock_restore.assert_not_called()
-            mock_run.assert_called_once_with("192.168.1.1", "edge_autostart", {"autostart_action": "status"})
-            assert result == {"rc": 0}
+            args, kwargs = mock_ssh.call_args
+            # status 用 inventory 用户（get_ssh_user），非 root
+            assert args[1] == mod.get_ssh_user("192.168.1.1")
+            assert "systemctl is-enabled edge" in args[2]
+            assert result["rc"] == 0
 
     async def test_unknown_action_raises(self, service):
         from app.services import ansible_service as mod
-        with patch.object(service, 'run_playbook', new_callable=AsyncMock) as mock_run:
+        with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock) as mock_ssh:
             import pytest
             with pytest.raises(ValueError):
                 await service.edge_autostart(
                     ip="192.168.1.1", action="bogus",
                     edge_service_content=None, ssh_user="root", ssh_pass="secret123",
                 )
-            mock_run.assert_not_called()
+            mock_ssh.assert_not_called()
 
 
 class TestIsNodeInInventory:

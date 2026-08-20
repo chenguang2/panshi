@@ -1,12 +1,12 @@
 """Edge node autostart (systemd) management API.
 
-Allows enabling/disabling/querying the Edge node's systemd self-start via a
-dedicated ansible tag ``edge_autostart``. enable/disable connect as root
-(credentials passed per-request, not persisted); status uses the normal
-non-root connection.
+Enables/disables/queries the Edge node's systemd self-start over SSH.
+enable/disable connect as root (credentials passed per-request, not persisted);
+status uses the inventory non-root connection.
 """
 
 import getpass
+import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,13 +18,9 @@ from app.core.database import get_db
 from app.models.cluster import Node
 from app.services.ansible_service import (
     AnsibleRunnerService,
-    _inventory_inject_ssh,
-    _inventory_restore_ssh,
-    _run_ansible_stream,
     build_edge_service_content,
     get_default_run_user,
     is_node_in_inventory,
-    resolve_ssh_port,
 )
 
 router = APIRouter(prefix="/nodes", tags=["nodes-autostart"])
@@ -73,7 +69,7 @@ async def node_autostart(
     body: NodeAutostartRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Enable/disable/query the Edge node's systemd self-start (SSE stream)."""
+    """Enable/disable/query the Edge node's systemd self-start (SSE stream, via SSH)."""
     if body.action not in ("enable", "disable", "status"):
         raise HTTPException(status_code=422, detail="action 必须为 enable/disable/status")
 
@@ -96,22 +92,47 @@ async def node_autostart(
     run_user = body.run_user or getpass.getuser()
     edge_service_content = build_edge_service_content(run_user, edge_path) if body.action == "enable" else ""
 
-    if inject_root:
-        _inventory_inject_ssh(node.ip, body.root_user or "root", body.root_password or "")
-    try:
-        extravars = {"autostart_action": body.action}
-        if body.action == "enable":
-            extravars["edge_service_content"] = edge_service_content
-        return StreamingResponse(
-            _run_ansible_stream(
-                _ansible_service,
-                ip=node.ip,
-                tag="edge_autostart",
-                extravars=extravars,
-                ssh_port=resolve_ssh_port(node),
-            ),
-            media_type="text/event-stream",
+    async def event_stream():
+        # 与 useInstallStream 的 SSE 格式兼容
+        yield f"data: {json.dumps({'line': '正在连接远程主机并执行 systemctl...', 'percent': 0})}\n\n"
+        import asyncio
+        import queue as _queue
+
+        q: "_queue.Queue" = _queue.Queue()
+        sentinel = object()
+
+        def _on_line(ev: dict) -> None:
+            line = ev.get("stdout") or ev.get("stderr") or ""
+            if line:
+                q.put(line)
+
+        result = await _ansible_service.edge_autostart(
+            ip=node.ip,
+            action=body.action,
+            edge_service_content=edge_service_content if body.action == "enable" else None,
+            ssh_user=(body.root_user or "root") if inject_root else None,
+            ssh_pass=body.root_password if inject_root else None,
+            on_line=_on_line,
         )
-    finally:
-        if inject_root:
-            _inventory_restore_ssh(node.ip)
+
+        rc = result.get("rc", -1)
+        status = result.get("status", "failed")
+        for line in (result.get("stdout") or "").splitlines():
+            if line.strip():
+                q.put(line)
+        q.put(sentinel)
+
+        percent = 0
+        while True:
+            try:
+                item = q.get(timeout=30)
+            except Exception:
+                break
+            if item is sentinel:
+                break
+            percent = min(percent + 1, 99)
+            yield f"data: {json.dumps({'line': item, 'percent': percent})}\n\n"
+
+        yield f"data: {json.dumps({'rc': rc, 'status': status, 'percent': 100})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

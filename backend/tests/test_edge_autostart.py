@@ -76,19 +76,16 @@ def test_autostart_node_not_in_inventory(db_env):
             assert "inventory" in resp.json()["detail"]
 
 
-def test_autostart_status_does_not_inject_root_and_streams(db_env):
+def test_autostart_status_uses_ssh_and_streams(db_env):
     app, _ = db_env
     import app.api.v1.edge_autostart as mod
 
-    async def fake_stream(runner, ip, tag, extravars, ssh_port):
-        yield 'data: {"line": "checking", "percent": 0}\n\n'
-        yield 'data: {"rc": 0, "status": "successful", "percent": 100}\n\n'
+    async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
+        return {"rc": 0, "status": "successful", "stdout": "enabled", "stderr": ""}
 
     with (
         patch.object(mod, "is_node_in_inventory", return_value=True),
-        patch.object(mod, "_run_ansible_stream", side_effect=fake_stream) as mock_stream,
-        patch.object(mod, "_inventory_inject_ssh") as mock_inject,
-        patch.object(mod, "_inventory_restore_ssh") as mock_restore,
+        patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart) as mock_ssh,
     ):
         with TestClient(app) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "status"})
@@ -96,9 +93,9 @@ def test_autostart_status_does_not_inject_root_and_streams(db_env):
             assert "text/event-stream" in resp.headers["content-type"]
             body = resp.text
             assert '"rc": 0' in body
-            mock_inject.assert_not_called()
-            mock_restore.assert_not_called()
-            mock_stream.assert_called_once()
-            # status 不注入 root → extravars 只有 action
-            kwargs = mock_stream.call_args.kwargs
-            assert kwargs["extravars"] == {"autostart_action": "status"}
+            mock_ssh.assert_called_once()
+            kwargs = mock_ssh.call_args
+            # status 不需要 root 凭据
+            assert kwargs.kwargs.get("ssh_pass") is None
+            assert kwargs.kwargs.get("ssh_user") is None
+            assert kwargs.kwargs["action"] == "status"
