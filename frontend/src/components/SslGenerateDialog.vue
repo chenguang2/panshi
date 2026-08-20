@@ -157,13 +157,14 @@
         <!-- IP SAN -->
         <div class="form-group">
           <label class="form-label">IP SAN</label>
-          <div class="sni-tag-input" @click="ipInputRef?.focus()">
+          <div class="sni-tag-input" :class="{ 'has-error': errors.ip_sans }" @click="ipInputRef?.focus()">
             <span v-for="(tag, i) in ipTags" :key="i" class="sni-tag">
               <span class="sni-tag-text">{{ tag }}</span>
               <span class="sni-tag-remove" @click.stop="removeIpTag(i)">&times;</span>
             </span>
             <input ref="ipInputRef" v-model="ipInput" type="text" class="sni-input-inline" placeholder="输入 IP 后按 Enter" :disabled="generating" @keydown.enter.prevent="addIpTag" @keydown.="addIpTagOnComma">
           </div>
+          <div v-if="errors.ip_sans" class="form-error" style="margin-top:4px;">{{ errors.ip_sans }}</div>
         </div>
 
         <!-- 其他参数 -->
@@ -297,6 +298,7 @@ const errors = reactive({
   name: '',
   common_name: '',
   dns_sans: '',
+  ip_sans: '',
 })
 
 const canGenerate = computed(() => {
@@ -419,12 +421,19 @@ function addDnsTag() {
 }
 
 function addIpTag() {
-  for (const t of splitSniTags(ipInput.value)) {
+  const tokens = splitSniTags(ipInput.value)
+  const invalid: string[] = []
+  for (const t of tokens) {
     if (!isIpAddress(t)) {
-      message.warning(`无效的 IP 地址: ${t}`)
+      invalid.push(t)
       continue
     }
     if (!ipTags.value.includes(t)) ipTags.value.push(t)
+  }
+  if (invalid.length > 0) {
+    errors.ip_sans = `无效的 IP 地址: ${invalid.join(', ')}`
+  } else if (tokens.length > 0) {
+    errors.ip_sans = ''
   }
   ipInput.value = ''
 }
@@ -495,6 +504,7 @@ watch(() => props.visible, (v) => {
 .tooltip-icon:hover { color: var(--accent); }
 .sni-tag-input { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: text; min-height: 40px; transition: border-color 0.15s; }
 .sni-tag-input:focus-within { border-color: var(--accent); }
+.sni-tag-input.has-error { border-color: #ff4d4f; }
 .sni-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 10px; border-radius: 12px; font-size: 12px; font-family: var(--font-mono); background: oklch(56% 0.16 210 / 10%); border: 1px solid oklch(56% 0.16 210 / 20%); color: var(--accent); white-space: nowrap; }
 .sni-tag-locked { background: var(--surface); border-color: var(--border); color: var(--muted); }
 .sni-tag-locked::before { content: '🔒'; margin-right: 2px; font-size: 11px; }
