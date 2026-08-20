@@ -255,7 +255,9 @@ async function confirmAction() {
     onComplete: (rc, status) => {
       execProgress.percent = 100
       execProgress.status = rc === 0 ? 'success' : 'exception'
-      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: `autostart ${action.value} ${selectedNode.value.ip}`, rc }
+      // 保留 captureCommandLine 捕获的真实 SSH 命令，避免被覆盖为描述字符串
+      const realCommand = execResult.value?.command || `autostart ${action.value} ${selectedNode.value.ip}`
+      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: realCommand, rc }
       const appliedState: AutostartStatus = action.value === 'enable' ? 'enabled' : 'disabled'
       if (rc === 0) {
         // 同步更新表格状态列（不调用 loadNodes，避免其重置 autostart_status 为 null）
