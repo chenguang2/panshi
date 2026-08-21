@@ -184,3 +184,30 @@ async def list_all_routes(
         items.append(item_dict)
 
     return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.post("/by-edge-uuids", response_model=RouteListResponse)
+async def get_routes_by_edge_uuids(
+    edge_uuids: list[str],
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """批量查询路由信息（用于指标关联路由名）"""
+    if not edge_uuids:
+        return RouteListResponse(total=0, page=1, page_size=0, items=[])
+    
+    query = select(Route).where(Route.edge_uuid.in_(edge_uuids))
+    result = await db.execute(query)
+    routes = result.scalars().all()
+
+    items = []
+    for r in routes:
+        item = route_to_response(r)
+        item_dict = item.model_dump()
+        item_dict["cluster_name"] = ""
+        item_dict["cluster_group_name"] = ""
+        item_dict["upstream_name"] = None
+        items.append(item_dict)
+
+    return RouteListResponse(total=len(routes), page=1, page_size=len(routes), items=items)
+

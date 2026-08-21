@@ -48,6 +48,18 @@
       />
     </div>
 
+    <!-- ── Extended Analytics Grid ── -->
+    <div class="chart-grid" style="grid-template-columns: 1fr;">
+      <RouteStatsCard :since="store.timeRange" />
+    </div>
+    <div class="chart-grid">
+      <StatusAnalysisChart :since="store.timeRange" />
+      <TimeComparisonCard :comparison-type="'day_over_day'" />
+    </div>
+    <div class="chart-grid">
+      <NodeHealthCard />
+    </div>
+
     <!-- ── Infra Collapsible ── -->
     <div class="infra-section">
       <div class="infra-toggle" @click="toggleInfra">
@@ -74,6 +86,10 @@ import { ref } from 'vue'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
 import { useMetricsDashboardStore, BUSINESS_CHARTS, INFRA_CHARTS } from '@/stores/metricsDashboard'
 import MetricChartCard from '@/components/MetricChartCard.vue'
+import RouteStatsCard from '@/components/RouteStatsCard.vue'
+import StatusAnalysisChart from '@/components/StatusAnalysisChart.vue'
+import TimeComparisonCard from '@/components/TimeComparisonCard.vue'
+import NodeHealthCard from '@/components/NodeHealthCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 
 const store = useMetricsDashboardStore()
