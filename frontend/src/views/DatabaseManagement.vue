@@ -107,6 +107,12 @@
             <label>包含日志数据</label>
             <input type="checkbox" v-model="migrateForm.includeLogs" />
           </div>
+          <div class="form-row form-row-checkbox">
+            <label>
+              <input type="checkbox" v-model="migrateForm.confirmed_clear" />
+              我了解将清空目标库
+            </label>
+          </div>
           <a-button type="primary" class="migrate-btn" :loading="migrating" @click="handleMigrate">开始迁移</a-button>
         </div>
 
@@ -219,6 +225,7 @@ const migrateForm = reactive({
   targetId: '',
   mode: 'replace',
   includeLogs: true,
+  confirmed_clear: false,
 })
 
 interface ConnForm {
@@ -379,6 +386,7 @@ async function handleMigrate() {
     const res = await migrateDatabase(migrateForm.sourceId, migrateForm.targetId, {
       mode: migrateForm.mode,
       include_logs: migrateForm.includeLogs,
+      confirmed_clear: migrateForm.confirmed_clear,
     })
     migrateResult.value = res.data.message
     message.success(res.data.message)
