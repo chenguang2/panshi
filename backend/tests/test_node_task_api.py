@@ -3,15 +3,44 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
+from app.core.database import get_db
+from app.models.cluster import Node
+
+
+async def _seed_nodes(session: AsyncSession):
+    """Ensure nodes 1 and 2 exist in cluster 1 for task creation tests."""
+    for nid, ip in [(1, "127.0.0.1"), (2, "127.0.0.2")]:
+        existing = await session.get(Node, nid)
+        if existing is None:
+            session.add(Node(
+                id=nid,
+                cluster_id=1,
+                ip=ip,
+                service_port=80,
+                management_port=9180,
+                edge_path="/data/openresty",
+                status=1,
+            ))
+    await session.commit()
 
 
 class TestNodeTaskApi:
     @pytest.fixture
-    def client(self):
+    def client(self, test_db):
+        """Override get_db to use test_db session and seed required nodes."""
+        async def override_get_db():
+            yield test_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        # Seed nodes before tests run
+        import asyncio
+        asyncio.run(_seed_nodes(test_db))
         with TestClient(app) as c:
             yield c
+        app.dependency_overrides.clear()
 
     @pytest.fixture
     def mock_service(self):

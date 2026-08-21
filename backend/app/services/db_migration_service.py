@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base, build_sync_engine_for, is_sqlite
+from app.core.db_config import ConnectionConfig
 from app.core.db_migration import CLEAR_ORDER, DEPENDENCY_ORDER, tables_for_migration
 from app.models.db_migration import DbMigrationLog
 
@@ -66,11 +67,33 @@ def migrate_direct(
     src_engine = build_sync_engine_for(source_conn)
     dst_engine = build_sync_engine_for(target_conn)
     try:
-        if mode == "replace" and not target_is_empty(target_conn):
-            if not confirmed_clear:
-                raise ValueError("目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
-            _clear_target(dst_engine)
-        Base.metadata.create_all(dst_engine)
+        if mode == "replace":
+            # 关键修复：replace + confirmed_clear 时连到 postgres 库把目标库删了重建，最彻底
+            # 跳过 target_is_empty 检查（其内部 create_all 会重建残缺表）
+            if confirmed_clear:
+                # 不删库（可能无权限），改为在现有库彻底清表
+                from sqlalchemy import inspect
+                from sqlalchemy.exc import OperationalError
+                try:
+                    insp = inspect(dst_engine)
+                    with dst_engine.connect() as conn:
+                        conn.execute(text("SET session_replication_role = replica"))
+                        tables = insp.get_table_names()
+                        for table in tables:
+                            conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
+                        conn.execute(text("SET session_replication_role = origin"))
+                        conn.commit()
+                except OperationalError as e:
+                    if "database" in str(e).lower() and "does not exist" in str(e).lower():
+                        raise ValueError(f"目标数据库 {target_conn.database} 不存在，请先在 PostgreSQL 中手动创建该数据库") from e
+                    raise
+                Base.metadata.create_all(dst_engine)
+            else:
+                # 非 confirmed_clear：检查目标库是否为空，非空则报错
+                if not target_is_empty(target_conn):
+                    raise ValueError("目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
+                # 空目标：正常 create_all
+                Base.metadata.create_all(dst_engine)
         tables = set(tables_for_migration(include_logs))
         total = len(tables)
         done = 0

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from typing import List, Optional
 import json
+import uuid
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
@@ -25,9 +26,11 @@ ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None,
                        plugins: list | None = None) -> RouteResponse:
     """Convert Route model to RouteResponse"""
+    # edge_uuid may be None for legacy rows; generate fallback to satisfy schema
+    edge_uuid = r.edge_uuid or str(uuid.uuid4())
     route_dict = {
         "id": r.id,
-        "edge_uuid": r.edge_uuid,
+        "edge_uuid": edge_uuid,
         "cluster_id": r.cluster_id,
         "name": r.name,
         "uri": r.uri,

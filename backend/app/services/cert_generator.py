@@ -109,10 +109,11 @@ def _detect_flavor(openssl_path: str, logs: list[CommandResult]) -> tuple[str, s
 
 
 def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
-    """Detect the bundled Tongsuo openssl binary.
+    """Detect openssl binary (bundled Tongsuo preferred, system PATH as fallback).
 
-    Only uses backend/bin/openssl (bundled Tongsuo). Does NOT fall back to
-    system PATH openssl — see _BUNDLED_OPENSSL_FIX for setup instructions.
+    Priority:
+    1. backend/bin/openssl (bundled Tongsuo) - for SM2 support
+    2. System PATH openssl - common locations
 
     Args:
         detect_logs: optional list to append detection command results to.
@@ -123,10 +124,11 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
         - version: str      (version string, empty if not found)
         - sm2_supported: bool
         - flavor: str       ("tongsuo" | "standard" | "unknown")
-        - available: bool   (True if bundled openssl was found)
+        - available: bool   (True if any openssl was found)
     """
     logs = detect_logs if detect_logs is not None else []
 
+    # 1. Try bundled Tongsuo first (preferred for SM2)
     if _BUNDLED_OPENSSL.exists() and os.access(str(_BUNDLED_OPENSSL), os.X_OK):
         candidate = str(_BUNDLED_OPENSSL)
         sm2 = _check_sm2_support(candidate, logs)
@@ -138,6 +140,39 @@ def detect_openssl(detect_logs: list[CommandResult] | None = None) -> dict:
             "flavor": flavor,
             "available": True,
         }
+
+    # 2. Fallback: search system PATH for openssl
+    import shutil
+    system_openssl = shutil.which("openssl")
+    if system_openssl:
+        candidate = system_openssl
+        sm2 = _check_sm2_support(candidate, logs)
+        flavor, version = _detect_flavor(candidate, logs)
+        return {
+            "path": candidate,
+            "version": version,
+            "sm2_supported": sm2,
+            "flavor": flavor,
+            "available": True,
+        }
+
+    # 3. Common explicit paths (in case PATH is restricted)
+    common_paths = [
+        "/opt/homebrew/bin/openssl",  # macOS Homebrew
+        "/usr/local/bin/openssl",     # macOS MacPorts / Linux
+        "/usr/bin/openssl",           # Standard Linux
+    ]
+    for candidate in common_paths:
+        if Path(candidate).exists() and os.access(candidate, os.X_OK):
+            sm2 = _check_sm2_support(candidate, logs)
+            flavor, version = _detect_flavor(candidate, logs)
+            return {
+                "path": candidate,
+                "version": version,
+                "sm2_supported": sm2,
+                "flavor": flavor,
+                "available": True,
+            }
 
     return {
         "path": None,

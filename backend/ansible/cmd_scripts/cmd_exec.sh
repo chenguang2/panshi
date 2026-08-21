@@ -14,6 +14,31 @@
 
 set -u
 
+# portable timeout: prefer GNU timeout; fallback to bash built-in (matching GNU timeout's exit code 124 on timeout)
+if command -v timeout >/dev/null 2>&1; then
+    RUN_TIMEOUT="timeout"
+else
+    # bash fallback: run command in background, sleep timeout, kill if still running
+    # returns 124 on timeout to match GNU timeout behavior
+    run_timeout_bash() {
+        local t="$1"; shift
+        "$@" &
+        local pid=$!
+        (sleep "$t" && kill -TERM "$pid" 2>/dev/null) &
+        local killer=$!
+        wait "$pid" 2>/dev/null
+        local rc=$?
+        kill "$killer" 2>/dev/null
+        wait "$killer" 2>/dev/null
+        # if killed by SIGTERM (128+15=143) and killer ran, it's a timeout → return 124
+        if [ $rc -eq 143 ]; then
+            return 124
+        fi
+        return $rc
+    }
+    RUN_TIMEOUT="run_timeout_bash"
+fi
+
 SECURITY="${1:-}"
 TIMEOUT="${2:-30}"
 CMD_B64="${3:-}"
@@ -85,7 +110,7 @@ case "$SECURITY" in
     ;;
 esac
 
-OUT=$(timeout "$TIMEOUT" bash -c "$CMD" 2>&1)
+OUT=$($RUN_TIMEOUT "$TIMEOUT" bash -c "$CMD" 2>&1)
 RC=$?
 if [ "$RC" -eq 124 ]; then
     echo "ERROR: 命令超时（>$TIMEOUT 秒）"

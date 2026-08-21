@@ -208,7 +208,8 @@ async def migrate_database(
         db_migration_service.validate_migration_direction(body.source_id, body.target_id, cfg.active)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    if not db_migration_service.target_is_empty(target) and not body.confirmed_clear:
+    # confirmed_clear=True 时跳过 target_is_empty（其内部 create_all 会创建残缺表）
+    if not body.confirmed_clear and not db_migration_service.target_is_empty(target):
         raise HTTPException(status_code=400, detail="目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
 
     maintenance.set_migration_in_progress(True)

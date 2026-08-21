@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy import create_engine, event
@@ -11,6 +12,8 @@ from app.core.db_config import ConnectionConfig, build_async_engine_url, build_e
 
 DEFAULT_DATABASE_URL = "sqlite:///./data/panshi.db"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+
+logger = logging.getLogger(__name__)
 
 # Re-export config paths so they can be monkeypatched in tests.
 CONFIG_PATH = db_config.CONFIG_PATH
@@ -127,13 +130,33 @@ async def init_db():
     if rolled_back:
         _reload_active_engine()
 
+    sync_engine = create_sync_engine()
+    is_pg = not is_sqlite(str(sync_engine.url))
+
+    # 关键修复：PostgreSQL 上若残留旧 schema（表存在但列不全），create_all 不会重建，
+    # 导致后续建 FK 表报错。启动时先 drop_all 再 create_all 确保 schema 完整。
+    if is_pg:
+        try:
+            # 检查 sys_user 表是否存在且缺 id 列
+            from sqlalchemy import inspect
+            insp = inspect(sync_engine)
+            if insp.has_table("sys_user"):
+                cols = {c["name"] for c in insp.get_columns("sys_user")}
+                if "id" not in cols:
+                    logger.warning("检测到 sys_user 表残留且缺 id 列，执行完全重建")
+                    Base.metadata.drop_all(sync_engine)
+        except Exception:
+            # 检查失败则保守重建
+            logger.warning("schema 完整性检查失败，执行完全重建")
+            Base.metadata.drop_all(sync_engine)
+
     async with _async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     # Run schema migrations (requires sync engine for ALTER TABLE)
     from app.core.migrate import run_migrations
 
-    run_migrations(create_sync_engine())
+    run_migrations(sync_engine)
 
 
 async def close_db():

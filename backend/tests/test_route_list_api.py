@@ -82,8 +82,9 @@ class TestRouteListAPI:
             assert response.status_code == 200
             data = response.json()
             for item in data["items"]:
-                assert item["cluster_id"] == 30, \
-                    f"route {item['id']} cluster_id={item['cluster_id']} not in ungrouped cluster"
+                # ungrouped means cluster has no group_name (null or empty)
+                assert not item.get("cluster_group_name"), \
+                    f"route {item['id']} cluster_group_name={item.get('cluster_group_name')} not empty for ungrouped"
 
     async def test_list_routes_group_filter_all(self):
         """group_name=__all__ should return all routes (no filter)."""

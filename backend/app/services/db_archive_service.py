@@ -85,6 +85,8 @@ def import_archive(archive_path: str, target_conn, confirmed_clear: bool = False
                 if not confirmed_clear:
                     raise ValueError("目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
                 _clear_target(engine)
+                # 防御：残留旧 schema 表（列不全）会导致后续 create_all 不重建、FK 建表失败
+                Base.metadata.drop_all(engine)
             Base.metadata.create_all(engine)
             tables = tables_for_migration(True)
             for table in tables:

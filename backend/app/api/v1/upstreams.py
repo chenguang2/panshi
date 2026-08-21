@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
+import uuid
 
 from app.core.database import get_db
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion
@@ -110,7 +111,10 @@ async def list_all_upstreams(
             select(UpstreamTarget).where(UpstreamTarget.upstream_id == u.id)
         )
         targets = targets_result.scalars().all()
-        item = UpstreamWithTargets.model_validate(u)
+        # edge_uuid may be None for legacy rows; generate fallback to satisfy schema
+        upstream_data = {**u.__dict__}
+        upstream_data["edge_uuid"] = u.edge_uuid or str(uuid.uuid4())
+        item = UpstreamWithTargets.model_validate(upstream_data)
         item.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
         item.current_version = u.current_version
         ts = pub_map.get(u.id)
