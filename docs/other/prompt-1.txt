@@ -3434,6 +3434,7 @@ http://192.168.0.13:9999/  不返回正确的结果
 
 请设计几个方案我看看，包括界面设计
 
+openspec/changes/support-postgres-database
 
 
 给出几个方案我看看
@@ -3444,11 +3445,10 @@ stream-proxy-batch-delete
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
 
 
-请读取 openspec/changes/stream-proxy-batch-delete/tasks.md , 严格按照 Superpowers 的
+请读取 openspec/changes/support-postgres-database/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
-
-
+继续完成没有完成没有打对勾的任务
 ============================================
 
 现在 edge节点要支持自启动的功能

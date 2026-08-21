@@ -93,4 +93,19 @@ class MigrationTask:
 
 
 # ── Single-task lock (G8: migration tasks run one at a time) ──────────────
-migration_lock = threading.Lock()
+
+
+class SingleTaskLock:
+    """非阻塞单任务锁：acquire() 默认立即返回，传 timeout 可有限等待。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def acquire(self, timeout: float = 0.0) -> bool:
+        return self._lock.acquire(timeout=timeout)
+
+    def release(self) -> None:
+        self._lock.release()
+
+
+migration_lock = SingleTaskLock()

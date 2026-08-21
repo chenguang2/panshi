@@ -8,8 +8,12 @@ Design (see openspec/changes/support-postgres-database/design.md D3):
 """
 
 import logging
+from collections.abc import Callable
+from inspect import signature
+from typing import Any
 
-from sqlalchemy import MetaData, Table, inspect, text
+from sqlalchemy import ColumnDefault, MetaData, Table, inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base, build_sync_engine_for, is_sqlite
@@ -79,6 +83,9 @@ def migrate_direct(
                 if progress_cb:
                     progress_cb(done, total)
         _reset_sequences(dst_engine, tables)
+        synced = _sync_schema_with_models(dst_engine)
+        if synced:
+            logger.info("Schema sync: 补齐目标库缺失模型列 %d 个", synced)
         return done
     finally:
         src_engine.dispose()
@@ -97,19 +104,162 @@ def _clear_target(dst_engine) -> None:
 def _copy_table(src_engine, dst_engine, table: str) -> None:
     src_meta = MetaData()
     src_table = Table(table, src_meta, autoload_with=src_engine)
-    dst_meta = MetaData()
-    dst_table = Table(table, dst_meta, autoload_with=dst_engine)
-    cols = src_table.columns.keys()
+    # 目标侧以物理反射为准：目标库可能是旧 schema（如 legacy SQLite 缺新列），
+    # 按模型元数据拼 INSERT 会引用物理不存在的列导致 OperationalError；
+    # 共有列过滤同时挡掉源库残留历史列
+    dst_model = Base.metadata.tables.get(table)
+    if inspect(dst_engine).has_table(table):
+        dst_meta = MetaData()
+        dst_table = Table(table, dst_meta, autoload_with=dst_engine)
+    elif dst_model is not None:
+        dst_table = dst_model  # 表尚未物化（create_all 将按模型建表），模型即物理
+    else:
+        logger.warning("迁移跳过 %s：目标库无此表且无模型定义", table)
+        return
+    phys_cols = set(dst_table.columns.keys())
+    cols = [c for c in src_table.columns.keys() if c in phys_cols]
+    # 反射插入不触发模型自动默认值，需对「源缺列但物理目标有列」显式注入 Python 默认值
+    defaults, default_fns = _model_python_defaults(dst_model, phys_cols, cols)
 
     with src_engine.connect() as src_conn:
         rows = src_conn.execute(src_table.select()).mappings().all()
 
-    with dst_engine.begin() as dst_conn:
-        for i in range(0, len(rows), BATCH_SIZE):
-            chunk = rows[i : i + BATCH_SIZE]
-            for row in chunk:
-                dst_conn.execute(dst_table.insert().values({c: row[c] for c in cols}))
-    logger.info("Migrated table %s (%d rows)", table, len(rows))
+    copied = skipped = 0
+    for i in range(0, len(rows), BATCH_SIZE):
+        ok, bad = _insert_chunk(
+            dst_engine,
+            dst_table,
+            cols,
+            rows[i : i + BATCH_SIZE],
+            table,
+            defaults,
+            default_fns,
+        )
+        copied += ok
+        skipped += bad
+    logger.info("Migrated table %s (%d rows, %d skipped)", table, copied, skipped)
+
+
+def _model_python_defaults(
+    dst_model: Table | None, phys_cols: set[str], cols: list[str]
+) -> tuple[dict[str, Any], dict[str, Callable[[], Any]]]:
+    """收集模型列的 Python 端默认值（仅限源库缺失、物理目标存在的列）。
+
+    返回 (标量默认值, 零参可调用默认值)；可调用项由调用方逐行求值，
+    保证 uuid4/timestamp 类默认值每行独立（与模型元数据插入语义一致）。
+    """
+    scalars: dict[str, Any] = {}
+    callables: dict[str, Callable[[], Any]] = {}
+    if dst_model is None:
+        return scalars, callables
+    for col in dst_model.columns:
+        d = col.default
+        if d is None or col.name not in phys_cols or col.name in cols:
+            continue
+        if not isinstance(d, ColumnDefault):
+            continue
+        if d.is_scalar:
+            scalars[col.name] = d.arg
+        elif d.is_callable:
+            fn = d.arg
+            try:
+                requires_ctx = bool(signature(fn).parameters)
+            except (TypeError, ValueError):
+                requires_ctx = False
+            callables[col.name] = (lambda ctx_fn=fn: ctx_fn(None)) if requires_ctx else fn
+    return scalars, callables
+
+
+def _row_values(
+    cols: list[str],
+    row,
+    defaults: dict[str, Any],
+    default_fns: dict[str, Callable[[], Any]],
+) -> dict[str, Any]:
+    base = {c: row[c] for c in cols}
+    base.update(defaults)
+    base.update({k: fn() for k, fn in default_fns.items()})
+    return base
+
+
+def _insert_chunk(
+    dst_engine,
+    dst_table,
+    cols,
+    chunk,
+    table,
+    defaults=None,
+    default_fns=None,
+) -> tuple[int, int]:
+    """整批原子插入；遇约束冲突改为逐行插入并跳过脏行（源库可能有历史孤儿数据）。"""
+    defaults = defaults or {}
+    default_fns = default_fns or {}
+    values = [_row_values(cols, row, defaults, default_fns) for row in chunk]
+    try:
+        with dst_engine.begin() as conn:
+            conn.execute(dst_table.insert(), values)
+        return len(values), 0
+    except IntegrityError:
+        pass
+    copied = skipped = 0
+    for row in chunk:
+        try:
+            with dst_engine.begin() as conn:
+                conn.execute(
+                    dst_table.insert().values(_row_values(cols, row, defaults, default_fns))
+                )
+            copied += 1
+        except IntegrityError:
+            skipped += 1
+            logger.warning("迁移跳过 %s.id=%s：目标库约束冲突（源库脏数据）", table, row.get("id"))
+    return copied, skipped
+
+
+def _sql_literal(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return "NULL"
+
+
+def _sync_schema_with_models(dst_engine) -> int:
+    """按模型元数据补齐目标库缺失的列，返回新增列数。
+
+    背景：Base.metadata.create_all 只创建缺失的表、不会给已存在的表加列；
+    反向回迁到旧 schema 库（如 legacy SQLite）时物理列集落后于当前模型，
+    迁移虽成功但应用启动后 ORM 查询会因「no such column」崩溃。
+    此处在数据复制完成后对目标库逐表比对模型，ALTER TABLE ADD COLUMN 补齐。
+    """
+    insp = inspect(dst_engine)
+    added = 0
+    for table in tables_for_migration(True):
+        model = Base.metadata.tables.get(table)
+        if model is None or not insp.has_table(table):
+            continue
+        phys = {c["name"] for c in insp.get_columns(table)}
+        for col in model.columns:
+            if col.name in phys:
+                continue
+            ddl_type = col.type.compile(dst_engine.dialect)
+            clause = f'ALTER TABLE "{table}" ADD COLUMN "{col.name}" {ddl_type}'
+            d = col.default
+            if isinstance(d, ColumnDefault) and d.is_scalar and d.arg is not None:
+                clause += f" DEFAULT {_sql_literal(d.arg)} NOT NULL"
+            elif not col.nullable:
+                logger.warning(
+                    "Schema sync: %s.%s 无默认值且 NOT NULL，按可空补齐", table, col.name
+                )
+            try:
+                with dst_engine.begin() as conn:
+                    conn.execute(text(clause))
+                added += 1
+                logger.info("Schema sync: %s.%s 已补齐 (%s)", table, col.name, ddl_type)
+            except Exception as e:
+                logger.warning("Schema sync: 无法补齐 %s.%s: %s", table, col.name, e)
+    return added
 
 
 async def record_migration_log(

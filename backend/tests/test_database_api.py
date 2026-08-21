@@ -232,6 +232,8 @@ class TestMigrationEndpoints:
         from app.models.cluster import Cluster
         from sqlalchemy.orm import Session
         path = os.path.join(tempfile.gettempdir(), "export_src.db")
+        if os.path.exists(path):
+            os.remove(path)  # 固定路径残留会使重复运行时 id=1 插入撞唯一约束
         engine = create_engine(f"sqlite:///{path}")
         Base.metadata.create_all(engine)
         with Session(engine) as s:

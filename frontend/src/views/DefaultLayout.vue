@@ -21,6 +21,18 @@
           </div>
         </div>
         <div class="header-right">
+          <a-tooltip v-if="dbStatus?.active" placement="bottom">
+            <template #title>
+              <div>类型：{{ dbStatus?.active?.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</div>
+              <div>地址：{{ dbStatus?.active?.display_address || '-' }}</div>
+              <div>连接数：{{ dbStatus?.connections_count }}</div>
+              <div>配置版本：v{{ dbStatus?.version }}</div>
+            </template>
+            <div class="db-status-badge" @click="router.push('/database-management')">
+              <span class="db-status-dot"></span>
+              <span class="db-status-text">{{ dbStatusLabel }}</span>
+            </div>
+          </a-tooltip>
           <a-dropdown>
             <a-space class="user-info">
               <UserOutlined />
@@ -42,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { MenuUnfoldOutlined, MenuFoldOutlined, UserOutlined } from '@ant-design/icons-vue'
@@ -50,6 +62,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import AppSidebar from '@/components/AppSidebar.vue'
 import { useSidebarResponsive } from '@/composables/useSidebarResponsive'
+import { getDatabaseStatus } from '@/api/database'
+import type { DbStatus } from '@/types/database'
 
 const router = useRouter()
 
@@ -57,6 +71,24 @@ useSidebarResponsive()
 const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
+
+// ── 顶栏数据库状态徽标 ──────────────────────────────────────────────
+const dbStatus = ref<DbStatus | null>(null)
+
+const dbStatusLabel = computed(() => {
+  const active = dbStatus.value?.active
+  if (!active) return ''
+  return `${active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'} · ${active.display_address ?? ''}`
+})
+
+onMounted(async () => {
+  try {
+    const res = await getDatabaseStatus()
+    dbStatus.value = res.data
+  } catch {
+    // 非管理员或接口不可用时隐藏徽标
+  }
+})
 
 const sectionMap: Record<string, string> = {
   Dashboard: '核心功能',
@@ -77,6 +109,7 @@ const sectionMap: Record<string, string> = {
   MetricsDashboard: '综合',
   PluginSwitches: '系统管理',
   Users: '系统管理',
+  DatabaseManagement: '系统管理',
   EdgeClient: '运维管理',
   EdgeImport: '运维管理',
   Tools: '运维管理',
@@ -105,6 +138,7 @@ const pageNameMap: Record<string, string> = {
   Metrics: '指标查询',
   MetricsDashboard: '指标总览',
   PluginSwitches: '插件开关',
+  DatabaseManagement: '数据库管理',
   SslList: 'SSL 证书',
   NodeTaskCenter: '节点任务',
 }
@@ -190,6 +224,38 @@ const handleLogout = async () => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+.db-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  cursor: pointer;
+  font-size: 12px;
+  color: #389e0d;
+  white-space: nowrap;
+}
+
+.db-status-badge:hover {
+  background: #d9f7be;
+}
+
+.db-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #52c41a;
+  flex-shrink: 0;
+}
+
+.db-status-text {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-info {

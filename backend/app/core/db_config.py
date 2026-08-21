@@ -82,7 +82,7 @@ class ConnectionConfig:
         return decrypt_password(self.password_enc) if self.password_enc else ""
 
     def display_address(self) -> str:
-        if self.type == "postgres":
+        if self.type in ("postgres", "postgresql"):
             return f"{self.host}:{self.port}/{self.database}"
         return self.path or ""
 
@@ -287,7 +287,7 @@ def ensure_config(path: Optional[str] = None) -> DbConfig:
 
 def build_engine_url(conn: ConnectionConfig) -> str:
     """Build a SQLAlchemy sync engine URL for a connection."""
-    if conn.type == "postgres":
+    if conn.type in ("postgres", "postgresql"):
         pw = conn.get_password()
         cred = f"{conn.username}:{pw}@" if conn.username else ""
         return f"postgresql://{cred}{conn.host}:{conn.port or 5432}/{conn.database}"
@@ -296,6 +296,6 @@ def build_engine_url(conn: ConnectionConfig) -> str:
 
 def build_async_engine_url(conn: ConnectionConfig) -> str:
     """Build a SQLAlchemy async engine URL for a connection."""
-    if conn.type == "postgres":
+    if conn.type in ("postgres", "postgresql"):
         return build_engine_url(conn).replace("postgresql://", "postgresql+asyncpg://", 1)
     return build_engine_url(conn).replace("sqlite:///", "sqlite+aiosqlite:///", 1)

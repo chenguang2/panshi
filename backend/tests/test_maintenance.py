@@ -33,6 +33,10 @@ def _app():
     async def delete():
         return {"ok": True}
 
+    @app.patch("/write")
+    async def patch():
+        return {"ok": True}
+
     app.middleware("http")(maintenance.maintenance_middleware)
     return app
 
@@ -53,6 +57,7 @@ class TestMaintenanceMiddleware:
         assert client.post("/write").status_code == 503
         assert client.put("/write").status_code == 503
         assert client.delete("/write").status_code == 503
+        assert client.patch("/write").status_code == 503
 
     def test_read_allowed_during_migration(self):
         maintenance.set_migration_in_progress(True)
@@ -62,3 +67,15 @@ class TestMaintenanceMiddleware:
     def test_write_allowed_when_not_migrating(self):
         client = TestClient(_app())
         assert client.post("/write").status_code == 200
+
+    def test_registered_on_main_app_blocks_writes(self):
+        """main.py 注册链路端到端验证：迁移中任意路径的写请求先被拦成 503，
+        读请求放行（/health 正常返回），证明中间件真实挂载而非仅单测桩生效。
+        注：frontend/dist 存在时未匹配路径会被 SPA 静态回退接住返回 200，
+        故读放行断言使用常驻的 /health 路由作确定性依据。"""
+        from app.main import app as main_app
+
+        maintenance.set_migration_in_progress(True)
+        client = TestClient(main_app)
+        assert client.post("/api/v1/__no_such_route__").status_code == 503
+        assert client.get("/health").status_code == 200

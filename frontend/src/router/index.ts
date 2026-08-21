@@ -89,6 +89,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/NodeTaskCenter.vue'),
     meta: { permission: 'task_center' },
   },
+  database_management: {
+    path: 'database-management',
+    name: 'DatabaseManagement',
+    component: () => import('@/views/DatabaseManagement.vue'),
+    meta: { permission: 'database_management' },
+  },
 }
 
 // ── Static routes (always registered) ─────────────────────────────────

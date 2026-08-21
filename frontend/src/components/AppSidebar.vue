@@ -133,6 +133,7 @@ const navSections = computed<NavSection[]>(() => {
       visible: authStore.user?.role === 'admin',
       items: [
         { label: '插件开关', route: '/plugin-switches', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>', feature: 'plugin_switches' },
+        { label: '数据库管理', route: '/database-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>', feature: 'database_management' },
         { label: '用户管理', route: '/users', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>' },
       ].filter(item => !item.feature || featuresStore.has(item.feature))
     },
@@ -154,6 +155,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/edge-import') return name === 'EdgeImport'
   if (item.route === '/tools') return name === 'Tools'
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
+  if (item.route === '/database-management') return name === 'DatabaseManagement'
   if (item.route === '/stream-proxies') return name === 'StreamProxyList'
   if (item.route === '/dns-proxies') return name === 'DnsUdpProxyList'
   if (item.route === '/edge-env') return name === 'EdgeEnv'
