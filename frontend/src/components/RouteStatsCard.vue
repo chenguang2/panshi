@@ -34,6 +34,31 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { getRouteStats, getRouteNameMap } from '@/api/metrics'
+import type { RouteStatsItem } from '@/api/metrics'
+
+interface RouteStatRow {
+  key: string
+  route_id: string
+  uri: string
+  route_name: string
+  avg_latency?: number
+  max_latency?: number
+  direction?: string
+  bytes_per_sec?: number
+  total_bytes?: number
+  requests_per_sec?: number
+  total_requests?: number
+  error_rate?: number
+}
+
+interface StatColumn {
+  title: string
+  dataIndex: string
+  key: string
+  width: number
+  ellipsis?: boolean
+  className?: string
+}
 
 const props = withDefaults(
   defineProps<{
@@ -62,13 +87,21 @@ onMounted(() => loadRouteMap([]))
 
 const loading = ref(false)
 const error = ref<string | null>(null)
-const raw = ref<{ route_id: string; value: number; max_latency?: number }[]>([])
+const raw = ref<RouteStatsItem[]>([])
 
 const tableData = computed(() => {
   const type = currentType.value
-  return raw.value.map((r) => {
-    const routeInfo = routeMap.value[r.route_id] || { name: '', uri: r.uri }
-    const item: Record<string, any> = { key: r.route_id, route_id: r.route_id, uri: routeInfo.uri, route_name: routeInfo.name }
+  return raw.value.map((r): RouteStatRow => {
+    // 路由名解析不到说明该路由未在平台纳管（如 Edge 上直接创建的路由），
+    // 用「未纳管」占位，uri 退回指标自带的 matched_uri。
+    const known = routeMap.value[r.route_id]
+    const routeInfo = known || { name: '', uri: r.uri || '' }
+    const item: RouteStatRow = {
+      key: r.route_id,
+      route_id: r.route_id,
+      uri: routeInfo.uri,
+      route_name: known ? routeInfo.name : '未纳管',
+    }
     if (type === 'latency') {
       item.avg_latency = r.avg_latency_ms
       item.max_latency = r.max_latency_ms
@@ -80,7 +113,8 @@ const tableData = computed(() => {
       item.requests_per_sec = r.requests_per_sec
       item.total_requests = r.total_requests
     } else if (type === 'error_rate') {
-      item.error_rate = r.error_rate
+      // 后端返回字段为 error_rate_pct（见 metrics_service._query_route_error_rate）
+      item.error_rate = r.error_rate_pct
       item.total_requests = r.total_requests
     }
     return item
@@ -89,7 +123,7 @@ const tableData = computed(() => {
 
 const columns = computed(() => {
   const type = currentType.value
-  const base = [
+  const base: StatColumn[] = [
     { title: '路由名', dataIndex: 'route_name', key: 'route_name', width: 180, ellipsis: true },
     { title: '路由', dataIndex: 'uri', key: 'uri', width: 180, ellipsis: true },
     { title: '路由ID', dataIndex: 'route_id', key: 'route_id', width: 220, ellipsis: true, className: 'text-muted' },

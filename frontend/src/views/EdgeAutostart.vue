@@ -134,7 +134,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import api from '@/api'
 import { useInstallStream } from '@/composables/useInstallStream'
-import { autostartUrl, AutostartStatus } from '@/api/edgeAutostart'
+import { autostartUrl, type AutostartStatus } from '@/api/edgeAutostart'
 
 const clusters = ref<any[]>([])
 const nodes = ref<any[]>([])
@@ -296,7 +296,7 @@ async function queryStatus(node: any) {
       captureCommandLine(line)
       addLog(line)
     },
-    onComplete: (rc) => {
+    onComplete: () => {
       // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。
       // 查询是否成功取决于能否解析出状态，而非 rc。
       const state = parseAutostartState(execLogs.value)

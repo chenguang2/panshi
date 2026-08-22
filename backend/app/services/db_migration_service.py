@@ -76,12 +76,19 @@ def migrate_direct(
                 from sqlalchemy.exc import OperationalError
                 try:
                     insp = inspect(dst_engine)
+                    # 注意：不要用 SET session_replication_role = replica 禁用外键检查——
+                    # 该参数仅 superuser 可设置，普通业务账号会报 InsufficientPrivilege；
+                    # 且 DROP TABLE ... CASCADE 是 DDL 级联，本就不触发行级外键校验。
+                    # SQLite 方言不支持 CASCADE 关键字（其 DDL 亦不受外键拦截），需按方言区分；
+                    # SQLite 引擎全局开启 foreign_keys=ON，删表前需临时关闭（连接级、无需特权）
+                    sqlite_target = is_sqlite(str(dst_engine.url))
+                    cascade = "" if sqlite_target else " CASCADE"
                     with dst_engine.connect() as conn:
-                        conn.execute(text("SET session_replication_role = replica"))
+                        if sqlite_target:
+                            conn.exec_driver_sql("PRAGMA foreign_keys = OFF")
                         tables = insp.get_table_names()
                         for table in tables:
-                            conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
-                        conn.execute(text("SET session_replication_role = origin"))
+                            conn.execute(text(f'DROP TABLE IF EXISTS "{table}"{cascade}'))
                         conn.commit()
                 except OperationalError as e:
                     if "database" in str(e).lower() and "does not exist" in str(e).lower():

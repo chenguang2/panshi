@@ -16,7 +16,11 @@ const stubs = {
   'a-select': { template: '<div class="a-select"><slot /></div>', props: ['value'] },
   'a-select-option': { template: '<div class="a-select-option"><slot /></div>', props: ['value'] },
   'a-spin': { template: '<div class="a-spin">loading</div>' },
-  'a-table': { template: '<div class="a-table"><div class="ant-table-row" v-for="r in dataSource" :key="r.key" /></div>', props: ['dataSource', 'columns', 'pagination', 'size', 'scroll'] },
+  'a-table': {
+    template:
+      '<div class="a-table"><div class="ant-table-row" v-for="r in dataSource" :key="r.key"><span class="row-route-name">{{ r.route_name }}</span></div></div>',
+    props: ['dataSource', 'columns', 'pagination', 'size', 'scroll'],
+  },
 }
 
 describe('RouteStatsCard.vue', () => {
@@ -60,6 +64,16 @@ describe('RouteStatsCard.vue', () => {
     expect(wrapper.find('.a-table').exists()).toBe(true)
     const rows = wrapper.findAll('.ant-table-row')
     expect(rows.length).toBe(2)
+  })
+
+  it('shows 未纳管 for route ids missing from the route name map', async () => {
+    mockGetRouteStats.mockResolvedValue([
+      { route_id: 'unknown-route-id', uri: '/*', requests_per_sec: 1, total_requests: 10 },
+    ])
+    const wrapper = mount(RouteStatsCard, { global: { stubs } })
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.find('.row-route-name').text()).toBe('未纳管')
   })
 
   it('shows error state on API failure', async () => {

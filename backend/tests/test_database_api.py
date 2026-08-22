@@ -217,6 +217,19 @@ class TestMigrationEndpoints:
             })
             assert resp.status_code == 400
 
+    async def test_migrate_unsupported_mode_400(self):
+        # 主规格：仅支持替换模式；merge 等其他模式必须显式拒绝
+        import tempfile, os
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers = await self._login(client)
+            conn_id = await self._add_sqlite(client, headers, "T", os.path.join(tempfile.gettempdir(), "mode_t.db"))
+            resp = await client.post("/api/v1/database/migrate", headers=headers, json={
+                "source_id": "local_sqlite", "target_id": conn_id, "mode": "merge",
+            })
+            assert resp.status_code == 400
+            assert "仅支持替换模式" in resp.json()["detail"]
+
     async def test_history_returns_200(self):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

@@ -1,82 +1,81 @@
 <template>
   <div class="database-management">
-    <div class="page-header">
-      <h2 class="page-title">数据库管理</h2>
-      <span class="page-desc">管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。</span>
-    </div>
+    <PageHeader title="数据库管理" description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。">
+      <template #actions>
+        <button class="btn btn-primary" @click="openCreateModal">+ 添加连接</button>
+      </template>
+    </PageHeader>
 
     <!-- 当前数据库状态卡片 -->
-    <a-card class="status-card" :bordered="false">
-      <template #title>
-        <span class="card-title">当前数据库</span>
-      </template>
-      <div class="status-body">
-        <template v-if="status?.active">
-          <span class="status-dot" :class="{ green: true }"></span>
-          <div class="active-info">
-            <div class="active-name">
-              <a-tag :color="status.active.type === 'postgres' ? 'blue' : 'orange'">{{ status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
-              <span class="name">{{ status.active.name }}</span>
+    <div class="card">
+      <div class="card-header"><h3>当前数据库</h3></div>
+      <div class="card-body">
+        <div class="status-body">
+          <template v-if="status?.active">
+            <span class="status-dot online"></span>
+            <div class="active-info">
+              <div class="active-name">
+                <a-tag :color="status.active.type === 'postgres' ? 'blue' : 'orange'">{{ status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
+                <span class="name">{{ status.active.name }}</span>
+              </div>
+              <div class="active-address">{{ status.active.display_address || status.active.host }}</div>
             </div>
-            <div class="active-address">{{ status.active.display_address || status.active.host }}</div>
-          </div>
-        </template>
-        <a-empty v-else description="未配置活动数据库" />
+          </template>
+          <a-empty v-else description="未配置活动数据库" />
+        </div>
       </div>
-    </a-card>
+    </div>
 
     <!-- 连接列表 -->
-    <a-card class="connections-card" :bordered="false">
-      <template #title>
-        <span class="card-title">连接列表</span>
-      </template>
-      <template #extra>
-        <a-button type="primary" class="add-conn-btn" @click="openCreateModal">添加连接</a-button>
-      </template>
-      <a-table
-        :data-source="connections"
-        :columns="connectionColumns"
-        row-key="id"
-        :pagination="false"
-      >
-        <template #bodyCell="{ record, column }">
-          <template v-if="column.key === 'type'">
-            <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{ record.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
+    <div class="card">
+      <div class="card-header">
+        <h3>连接列表</h3>
+        <button class="btn btn-primary btn-sm" @click="openCreateModal">+ 添加连接</button>
+      </div>
+      <div class="card-body table-body">
+        <a-table
+          :data-source="connections"
+          :columns="connectionColumns"
+          row-key="id"
+          :pagination="false"
+          class="connection-table"
+        >
+          <template #bodyCell="{ record, column }">
+            <template v-if="column.key === 'type'">
+              <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{ record.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
+            </template>
+            <template v-else-if="column.key === 'address'">
+              <span>{{ record.display_address || '-' }}</span>
+            </template>
+            <template v-else-if="column.key === 'username'">
+              <span>{{ record.username || '-' }}</span>
+            </template>
+            <template v-else-if="column.key === 'current'">
+              <span v-if="isActive(record)" class="badge badge-success">当前</span>
+              <span v-else class="text-muted">-</span>
+            </template>
+            <template v-else-if="column.key === 'actions'">
+              <div class="table-actions">
+                <button class="btn btn-secondary btn-sm test-conn-btn" @click="handleTest(record)">测试</button>
+                <button
+                  class="btn btn-sm set-current"
+                  :class="isActive(record) ? 'btn-secondary' : 'btn-primary'"
+                  :disabled="isActive(record)"
+                  @click="openSwitchModal(record)"
+                >设为当前</button>
+                <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
+                <button class="btn btn-danger btn-sm delete-conn-btn" @click="handleDelete(record)">删除</button>
+              </div>
+            </template>
           </template>
-          <template v-else-if="column.key === 'address'">
-            <span>{{ record.display_address || '-' }}</span>
-          </template>
-          <template v-else-if="column.key === 'username'">
-            <span>{{ record.username || '-' }}</span>
-          </template>
-          <template v-else-if="column.key === 'current'">
-            <a-tag v-if="isActive(record)" color="green">当前</a-tag>
-            <span v-else>-</span>
-          </template>
-          <template v-else-if="column.key === 'actions'">
-            <a-space>
-              <a-button size="small" class="test-conn-btn" @click="handleTest(record)">测试</a-button>
-              <a-button
-                size="small"
-                class="set-current"
-                :disabled="isActive(record)"
-                :type="isActive(record) ? 'default' : 'primary'"
-                @click="openSwitchModal(record)"
-              >设为当前</a-button>
-              <a-button size="small" @click="openEditModal(record)">编辑</a-button>
-              <a-button size="small" danger class="delete-conn-btn" @click="handleDelete(record)">删除</a-button>
-            </a-space>
-          </template>
-        </template>
-      </a-table>
-    </a-card>
+        </a-table>
+      </div>
+    </div>
 
     <!-- 数据迁移 -->
-    <a-card class="migration-card" :bordered="false">
-      <template #title>
-        <span class="card-title">数据迁移</span>
-      </template>
-      <div class="migration-body">
+    <div class="card">
+      <div class="card-header"><h3>数据迁移</h3></div>
+      <div class="card-body">
         <a-alert
           class="static-notice"
           type="info"
@@ -84,115 +83,154 @@
           message="静态资源文件存储于服务器磁盘，仅部署该文件的本机可访问；迁移/切换数据库不影响静态资源文件。"
         />
         <div class="migrate-form">
-          <div class="form-row">
-            <label>源数据库</label>
-            <a-select v-model:value="migrateForm.sourceId" class="migrate-select" placeholder="选择源数据库">
-              <a-select-option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
-            </a-select>
+          <div class="form-group">
+            <label class="form-label">源数据库</label>
+            <select v-model="migrateForm.sourceId" class="form-input">
+              <option value="" disabled>选择源数据库</option>
+              <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
           </div>
-          <div class="form-row">
-            <label>目标数据库</label>
-            <a-select v-model:value="migrateForm.targetId" class="migrate-select" placeholder="选择目标数据库">
-              <a-select-option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</a-select-option>
-            </a-select>
+          <div class="form-group">
+            <label class="form-label">目标数据库</label>
+            <select v-model="migrateForm.targetId" class="form-input">
+              <option value="" disabled>选择目标数据库</option>
+              <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
           </div>
-          <div class="form-row">
-            <label>模式</label>
-            <a-select v-model:value="migrateForm.mode" class="migrate-select">
-              <a-select-option value="replace">替换（清空目标库）</a-select-option>
-              <a-select-option value="merge">合并</a-select-option>
-            </a-select>
+          <div class="form-group">
+            <label class="form-label">模式</label>
+            <select v-model="migrateForm.mode" class="form-input">
+              <option value="replace">替换（清空目标库）</option>
+            </select>
           </div>
-          <div class="form-row form-row-checkbox">
-            <label>包含日志数据</label>
-            <input type="checkbox" v-model="migrateForm.includeLogs" />
-          </div>
-          <div class="form-row form-row-checkbox">
-            <label>
-              <input type="checkbox" v-model="migrateForm.confirmed_clear" />
-              我了解将清空目标库
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="migrateForm.includeLogs" />
+              <span>包含日志数据</span>
             </label>
           </div>
-          <a-button type="primary" class="migrate-btn" :loading="migrating" @click="handleMigrate">开始迁移</a-button>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="migrateForm.confirmed_clear" />
+              <span>我了解将清空目标库</span>
+            </label>
+          </div>
+          <button class="btn btn-primary migrate-btn" :disabled="migrating" @click="handleMigrate">{{ migrating ? '迁移中…' : '开始迁移' }}</button>
         </div>
 
         <div v-if="migrating" class="migrate-progress">
           <a-progress :percent="95" status="active" />
           <span class="progress-text">正在迁移数据，请稍候…</span>
         </div>
-        <a-alert v-if="migrateResult" class="migrate-result" type="success" :message="migrateResult" />
-      </div>
-    </a-card>
-
-    <!-- 连接编辑 Modal（新增/编辑 4.3） -->
-    <a-modal
-      v-model:open="connModal.open"
-      :title="connModal.editing ? '编辑连接' : '添加连接'"
-    >
-      <a-form layout="vertical">
-        <a-form-item label="类型">
-          <a-select v-model:value="connModal.form.type">
-            <a-select-option value="sqlite">SQLite</a-select-option>
-            <a-select-option value="postgres">PostgreSQL</a-select-option>
-          </a-select>
-        </a-form-item>
-        <a-form-item label="名称" required>
-          <a-input v-model:value="connModal.form.name" placeholder="连接名称" />
-        </a-form-item>
-        <template v-if="connModal.form.type === 'sqlite'">
-          <a-form-item label="数据库文件路径">
-            <a-input v-model:value="connModal.form.path" placeholder="/path/to/panshi.db" />
-          </a-form-item>
-        </template>
-        <template v-else>
-          <a-form-item label="主机">
-            <a-input v-model:value="connModal.form.host" placeholder="localhost" />
-          </a-form-item>
-          <a-form-item label="端口">
-            <a-input-number v-model:value="connModal.form.port" placeholder="5432" />
-          </a-form-item>
-          <a-form-item label="数据库名">
-            <a-input v-model:value="connModal.form.database" placeholder="panshi" />
-          </a-form-item>
-          <a-form-item label="用户名">
-            <a-input v-model:value="connModal.form.username" placeholder="postgres" />
-          </a-form-item>
-          <a-form-item label="密码">
-            <a-input-password v-model:value="connModal.form.password" placeholder="如需修改请输入" />
-          </a-form-item>
-        </template>
-      </a-form>
-      <template #footer>
-        <a-button @click="connModal.open = false">取消</a-button>
-        <a-button @click="handleTestDraft">测试连接</a-button>
-        <a-button type="primary" class="save-conn-btn" @click="handleSaveConnection">保存</a-button>
-      </template>
-    </a-modal>
-
-    <!-- 切换确认 Modal（4.4） -->
-    <a-modal
-      v-model:open="switchModal.open"
-      title="切换数据库"
-    >
-      <div class="switch-body">
-        <a-alert type="warning" show-icon message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。" />
-        <div class="switch-target">
-          <span>切换至：</span>
-          <strong>{{ switchModal.connection?.name }}</strong>
-          <span class="muted">{{ switchModal.connection?.display_address }}</span>
+        <div v-if="migrateResult" class="migrate-result">
+          <a-alert type="success" show-icon :message="migrateResult" />
+          <div class="next-steps">
+            <div class="next-steps-title">迁移成功，按以下步骤启用新数据库：</div>
+            <ol class="next-steps-list">
+              <li>在上方「连接列表」中找到 <strong>{{ migrateTargetName }}</strong>，点击「设为当前」</li>
+              <li>在确认弹窗中点击「确认切换」，然后手动重启后端服务生效</li>
+              <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
+            </ol>
+          </div>
         </div>
       </div>
-      <template #footer>
-        <a-button @click="switchModal.open = false">取消</a-button>
-        <a-button type="primary" class="switch-confirm-btn" @click="handleSwitch">确认切换</a-button>
-      </template>
-    </a-modal>
+    </div>
+
+    <!-- 连接编辑 Modal（新增/编辑 4.3） -->
+    <div class="modal-overlay" :style="{ display: connModal.open ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ connModal.editing ? '编辑连接' : '添加连接' }}</h2>
+          <button class="modal-close" @click="connModal.open = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">类型 <span class="required">*</span></label>
+              <select v-model="connModal.form.type" class="form-input">
+                <option value="sqlite">SQLite</option>
+                <option value="postgres">PostgreSQL</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">名称 <span class="required">*</span></label>
+              <input v-model="connModal.form.name" type="text" class="form-input" placeholder="连接名称">
+            </div>
+          </div>
+          <template v-if="connModal.form.type === 'sqlite'">
+            <div class="form-group">
+              <label class="form-label">数据库文件路径</label>
+              <input v-model="connModal.form.path" type="text" class="form-input" placeholder="/path/to/panshi.db">
+            </div>
+          </template>
+          <template v-else>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">主机 <span class="required">*</span></label>
+                <input v-model="connModal.form.host" type="text" class="form-input" placeholder="localhost">
+              </div>
+              <div class="form-group">
+                <label class="form-label">端口</label>
+                <input v-model.number="connModal.form.port" type="number" class="form-input" placeholder="5432" min="1" max="65535">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">数据库名 <span class="required">*</span></label>
+                <input v-model="connModal.form.database" type="text" class="form-input" placeholder="panshi">
+              </div>
+              <div class="form-group">
+                <label class="form-label">用户名</label>
+                <input v-model="connModal.form.username" type="text" class="form-input" placeholder="postgres">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input v-model="connModal.form.password" type="password" class="form-input" placeholder="如需修改请输入" autocomplete="new-password">
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="connModal.open = false">取消</button>
+          <button class="btn btn-secondary" @click="handleTestDraft">测试连接</button>
+          <button class="btn btn-primary save-conn-btn" @click="handleSaveConnection">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 切换确认 Modal（4.4） -->
+    <div class="modal-overlay" :style="{ display: switchModal.open ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 480px;">
+        <div class="modal-header">
+          <h2>切换数据库</h2>
+          <button class="modal-close" @click="switchModal.open = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="switch-body">
+            <a-alert type="warning" show-icon message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。" />
+            <div class="switch-restart-hint">
+              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行 <code>systemctl restart panshi-backend</code>。
+            </div>
+            <div class="switch-target">
+              <span>切换至：</span>
+              <strong>{{ switchModal.connection?.name }}</strong>
+              <span class="muted">{{ switchModal.connection?.display_address }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="switchModal.open = false">取消</button>
+          <button class="btn btn-primary switch-confirm-btn" @click="handleSwitch">确认切换</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import {
   getDatabaseStatus,
   listConnections,
@@ -228,6 +266,10 @@ const migrateForm = reactive({
   confirmed_clear: false,
 })
 
+const migrateTargetName = computed(
+  () => connections.value.find((c) => c.id === migrateForm.targetId)?.name || '目标数据库',
+)
+
 interface ConnForm {
   type: 'sqlite' | 'postgres'
   name: string
@@ -262,6 +304,13 @@ function emptyForm(): ConnForm {
     type: 'sqlite', name: '', path: '', host: '', port: 5432,
     database: '', username: '', password: '', ssl: false,
   }
+}
+
+// 原生 number 输入清空时得到 ''，统一归一化为 null（后端 Optional[int]）
+function normalizePort(v: number | string | null | undefined): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 function isActive(record: DbConnection): boolean {
@@ -318,7 +367,7 @@ async function handleSaveConnection() {
       name: connModal.form.name,
       path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
       host: connModal.form.type === 'postgres' ? connModal.form.host : null,
-      port: connModal.form.type === 'postgres' ? connModal.form.port : null,
+      port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
       database: connModal.form.type === 'postgres' ? connModal.form.database : null,
       username: connModal.form.type === 'postgres' ? connModal.form.username : null,
       password: connModal.form.password || null,
@@ -331,7 +380,7 @@ async function handleSaveConnection() {
       name: connModal.form.name,
       path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
       host: connModal.form.type === 'postgres' ? connModal.form.host : null,
-      port: connModal.form.type === 'postgres' ? connModal.form.port : null,
+      port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
       database: connModal.form.type === 'postgres' ? connModal.form.database : null,
       username: connModal.form.type === 'postgres' ? connModal.form.username : null,
       password: connModal.form.password || null,
@@ -424,14 +473,9 @@ defineExpose({
   flex-direction: column;
   gap: 20px;
 }
-.page-header .page-title {
-  margin: 0 0 4px;
-}
-.page-desc {
-  color: var(--muted);
-  font-size: 13px;
-}
-.status-card .status-body {
+
+/* ── 当前数据库 ── */
+.status-body {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -441,9 +485,6 @@ defineExpose({
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-}
-.status-dot.green {
-  background: var(--success, #52c41a);
 }
 .active-name {
   display: flex;
@@ -459,27 +500,64 @@ defineExpose({
   font-size: 13px;
   margin-top: 2px;
 }
+
+/* ── 连接列表表格（与列表页 table-container 口径一致） ── */
+.table-body {
+  padding: 0;
+}
+.connection-table :deep(.ant-table) {
+  background: transparent;
+}
+.connection-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 8px 14px;
+}
+.connection-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.connection-table :deep(.ant-table-tbody > tr > td) {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+.connection-table :deep(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none;
+}
+.connection-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--bg);
+}
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── 数据迁移 ── */
 .migrate-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   max-width: 480px;
 }
-.form-row {
-  display: flex;
+.migrate-form .form-group {
+  margin-bottom: 12px;
+}
+.checkbox-label {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
 }
-.form-row label {
-  width: 100px;
-  flex-shrink: 0;
-  color: var(--muted);
-}
-.form-row-checkbox {
-  gap: 4px;
-}
-.migrate-select {
-  flex: 1;
+.checkbox-label input[type='checkbox'] {
+  accent-color: var(--accent);
 }
 .migrate-progress {
   margin-top: 16px;
@@ -491,5 +569,53 @@ defineExpose({
 }
 .static-notice {
   margin-bottom: 16px;
+}
+.migrate-result {
+  margin-top: 16px;
+  max-width: 480px;
+}
+.next-steps {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--card-bg, #fff);
+}
+.next-steps-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.next-steps-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── 切换确认弹窗内容 ── */
+.switch-restart-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.switch-restart-hint code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+}
+.switch-target {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.switch-target .muted {
+  color: var(--muted);
 }
 </style>

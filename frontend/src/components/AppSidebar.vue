@@ -26,6 +26,22 @@
 
     <!-- Bottom User Info -->
     <div class="sidebar-bottom" v-show="authStore.user">
+      <a-tooltip v-if="dbStatus?.active" placement="right">
+        <template #title>
+          <div>类型：{{ dbStatus?.active?.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</div>
+          <div>地址：{{ dbStatus?.active?.display_address || '-' }}</div>
+          <div>连接数：{{ dbStatus?.connections_count }}</div>
+          <div v-if="dbFeatureOn" style="margin-top:2px;opacity:.7;">点击进入数据库管理</div>
+        </template>
+        <div
+          class="sidebar-db-row"
+          :class="{ collapsed, linkable: dbFeatureOn }"
+          @click="goDatabaseManagement"
+        >
+          <span class="sidebar-db-dot"></span>
+          <span v-show="!collapsed" class="sidebar-db-text">{{ dbStatusLabel }}</span>
+        </div>
+      </a-tooltip>
       <div class="sidebar-user-row" :class="{ collapsed }">
         <div class="sidebar-user-avatar">{{ userInitial }}</div>
         <div v-show="!collapsed" class="sidebar-user-info">
@@ -38,19 +54,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import { useFeaturesStore } from '@/stores/features'
+import { getDatabaseStatus } from '@/api/database'
+import type { DbStatus } from '@/types/database'
 import logoIcon from '@/assets/icon.png'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
 const featuresStore = useFeaturesStore()
 
 const collapsed = computed(() => themeStore.sidebarCollapsed)
+
+// ── 侧边栏底部当前数据库状态 ────────────────────────────────────────
+// 仅管理员可见（接口 403 时静默忽略）；database_management 关闭时纯展示、不可点击。
+const dbStatus = ref<DbStatus | null>(null)
+const dbFeatureOn = computed(() => featuresStore.has('database_management'))
+
+const dbStatusLabel = computed(() => {
+  const active = dbStatus.value?.active
+  if (!active) return ''
+  const typeLabel = active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
+  return `${typeLabel} · ${active.name || active.display_address || ''}`
+})
+
+function goDatabaseManagement() {
+  if (dbFeatureOn.value) router.push('/database-management')
+}
+
+onMounted(async () => {
+  // database_management 关闭时不请求，避免无意义的接口调用
+  if (!featuresStore.has('database_management')) return
+  try {
+    const res = await getDatabaseStatus()
+    dbStatus.value = res.data
+  } catch {
+    // 非管理员或接口不可用时隐藏状态行
+  }
+})
 
 const userInitial = computed(() => {
   return authStore.user?.username?.charAt(0) || '?'
@@ -293,6 +339,47 @@ function isActive(item: NavItem): boolean {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding: 12px;
   flex-shrink: 0;
+}
+
+.sidebar-db-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--sidebar-fg);
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-db-row.linkable {
+  cursor: pointer;
+}
+
+.sidebar-db-row.linkable:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+
+.sidebar-db-row.collapsed {
+  justify-content: center;
+  padding: 5px 0;
+}
+
+.sidebar-db-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #52c41a;
+  flex-shrink: 0;
+}
+
+.sidebar-db-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-user-row {

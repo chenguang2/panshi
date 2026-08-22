@@ -1,8 +1,9 @@
 """Database connection configuration management.
 
 Stores the list of known connections (SQLite local + PostgreSQL remote) and the
-currently active connection in a file OUTSIDE the database (`data/db_config.json`)
-so it can be read before any database engine is available.
+currently active connection in a file OUTSIDE the database (`db_config.json`,
+next to features.yaml in the backend root) so it can be read before any
+database engine is available.
 
 Design (see openspec/changes/support-postgres-database/design.md):
 - D1: config file lives outside the DB; passwords Fernet-encrypted (key derived
@@ -10,6 +11,8 @@ Design (see openspec/changes/support-postgres-database/design.md):
 - G9: on parse failure, fall back to `.bak`, then to default SQLite.
 - Env-var compat: if no config file but DATABASE_URL is set (docker-compose
   legacy), generate the initial config from it on first run.
+- Legacy layout: configs written before this file lived at `data/db_config.json`
+  are auto-migrated to the new location on startup (ensure_config).
 """
 
 import json
@@ -21,8 +24,10 @@ from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 
 # ── Paths (overridable in tests) ───────────────────────────────────────────
-CONFIG_PATH = "./data/db_config.json"
-CONFIG_BAK_PATH = "./data/db_config.json.bak"
+CONFIG_PATH = "./db_config.json"
+CONFIG_BAK_PATH = "./db_config.json.bak"
+# Pre-relocation location; auto-migrated to CONFIG_PATH on first startup.
+LEGACY_CONFIG_PATH = "./data/db_config.json"
 DEFAULT_SQLITE_PATH = "./data/panshi.db"
 
 CONFIG_VERSION = 1
@@ -268,9 +273,28 @@ def backup_current_config(path: Optional[str] = None) -> Optional[str]:
     return str(bak)
 
 
+def _migrate_legacy_config(target: Path) -> None:
+    """One-time migration: copy legacy `data/db_config.json` to *target*.
+
+    Runs only when the new-location file does not exist yet. The legacy file is
+    kept in place (harmless leftover) so a rollback of the code keeps working.
+    """
+    legacy = Path(LEGACY_CONFIG_PATH)
+    if target.exists() or not legacy.exists():
+        return
+    try:
+        data = json.loads(legacy.read_text(encoding="utf-8"))
+        save_config(DbConfig.from_dict(data), path=str(target))
+    except Exception:
+        # Corrupt legacy file → ignore, default init takes over below.
+        pass
+
+
 def ensure_config(path: Optional[str] = None) -> DbConfig:
     """Ensure a config file exists; init from DATABASE_URL env if missing. Returns active config."""
     target = Path(path or CONFIG_PATH)
+    if not target.exists():
+        _migrate_legacy_config(target)
     if target.exists():
         return load_config(path=path)
     env_url = os.getenv("DATABASE_URL")

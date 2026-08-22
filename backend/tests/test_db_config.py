@@ -3,6 +3,7 @@
 import json
 import os
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,7 @@ def _reset_module(tmp_path, monkeypatch):
     """Point config paths at a temp dir and reset module cache between tests."""
     monkeypatch.setattr(db_config, "CONFIG_PATH", str(tmp_path / "db_config.json"))
     monkeypatch.setattr(db_config, "CONFIG_BAK_PATH", str(tmp_path / "db_config.json.bak"))
+    monkeypatch.setattr(db_config, "LEGACY_CONFIG_PATH", str(tmp_path / "legacy" / "db_config.json"))
     yield
 
 
@@ -150,6 +152,40 @@ class TestEnvVarCompatInit:
         loaded = db_config.ensure_config(path=path)
         assert loaded.active == "local"
         assert loaded.connections[0].id == "local"
+
+
+class TestLegacyPathMigration:
+    def test_legacy_config_migrated_to_new_location(self, tmp_path):
+        """ensure_config copies legacy data/db_config.json to the backend root."""
+        legacy = Path(db_config.LEGACY_CONFIG_PATH)
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        cfg = DbConfig(version=1, active="pg", connections=[
+            ConnectionConfig(id="pg", type="postgres", name="PG", host="h", database="d", username="u"),
+        ])
+        save_config(cfg, path=str(legacy))
+
+        loaded = db_config.ensure_config()
+        assert loaded.active == "pg"
+        assert os.path.exists(db_config.CONFIG_PATH)
+        # legacy file kept in place (rollback safety)
+        assert legacy.exists()
+
+    def test_no_legacy_file_falls_back_to_default(self, tmp_path):
+        loaded = db_config.ensure_config()
+        assert loaded.active == "local_sqlite"
+        assert os.path.exists(db_config.CONFIG_PATH)
+
+    def test_existing_new_location_wins_over_legacy(self, tmp_path):
+        new_cfg = DbConfig(version=1, active="local", connections=[
+            ConnectionConfig(id="local", type="sqlite", name="L", path="./x.db"),
+        ])
+        save_config(new_cfg)
+        legacy = Path(db_config.LEGACY_CONFIG_PATH)
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        _write(legacy, json.dumps({"version": 1, "active": "pg", "connections": []}))
+
+        loaded = db_config.ensure_config()
+        assert loaded.active == "local"
 
 
 class TestBuildEngineUrl:

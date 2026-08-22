@@ -204,6 +204,9 @@ async def migrate_database(
     target = cfg.get_connection(body.target_id)
     if not source or not target:
         raise HTTPException(status_code=404, detail="源或目标连接不存在")
+    # 主规格（database-management）：迁移为单向快照语义，仅支持替换模式
+    if body.mode != "replace":
+        raise HTTPException(status_code=400, detail="不支持该迁移模式，仅支持替换模式")
     try:
         db_migration_service.validate_migration_direction(body.source_id, body.target_id, cfg.active)
     except ValueError as e:

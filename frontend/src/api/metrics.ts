@@ -24,10 +24,27 @@ export async function getMetricSummary(): Promise<MetricSummary> {
 }
 
 // ── Route Stats ──
+// 后端按 stats_type 返回不同字段组合（qps/bandwidth/error_rate/latency），
+// 统一为扁平可选字段结构，与 app/services/metrics_service.py 的返回保持一致
 export interface RouteStatsItem {
   route_id: string
-  value: number
-  unit?: string
+  uri?: string
+  // qps
+  requests_per_sec?: number
+  total_requests?: number
+  sample_count?: number
+  // bandwidth
+  direction?: string
+  bytes_per_sec?: number
+  total_bytes?: number
+  // error_rate
+  client_errors?: number
+  server_errors?: number
+  error_rate_pct?: number
+  // latency
+  latency_type?: string
+  avg_latency_ms?: number
+  max_latency_ms?: number
 }
 
 export async function getRouteStats(

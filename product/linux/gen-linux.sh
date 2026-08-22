@@ -211,6 +211,17 @@ echo "拷贝 features.yaml..."
 cp "$PROJECT_ROOT/backend/features.yaml" "$TARGET_DIR/backend/"
 echo "  features.yaml 已拷贝到: $TARGET_DIR/backend/"
 
+# 拷贝 db_config.json（数据库连接配置，与 features.yaml 同级）
+# 缺失时后端首次启动会按 DATABASE_URL/默认 SQLite 自动生成
+if [ -f "$PROJECT_ROOT/backend/db_config.json" ]; then
+    echo "拷贝 db_config.json..."
+    cp "$PROJECT_ROOT/backend/db_config.json" "$TARGET_DIR/backend/"
+    chmod 600 "$TARGET_DIR/backend/db_config.json"
+    echo "  db_config.json 已拷贝到: $TARGET_DIR/backend/"
+else
+    echo "警告: 未找到 $PROJECT_ROOT/backend/db_config.json，跳过（目标机首次启动将生成默认配置）"
+fi
+
 # 创建 data/.gitkeep（空目录占位）
 touch "$TARGET_DIR/backend/data/.gitkeep"
 

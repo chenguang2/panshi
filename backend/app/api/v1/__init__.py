@@ -42,7 +42,6 @@ api_router.include_router(nodes.router)
 api_router.include_router(static_resources.router)
 api_router.include_router(cluster_export.router)
 api_router.include_router(plugin_metadata.router)
-api_router.include_router(database.router)
 api_router.include_router(cluster_stream_proxies.global_router)
 api_router.include_router(edge_autostart.router)
 
@@ -70,4 +69,5 @@ feature_routers: dict[str, APIRouter] = {
     "dns_proxy_udp": cluster_dns_proxies.router,
     "ssl_cert": ssl_router,
     "task_center": node_task_router,
+    "database_management": database.router,
 }
