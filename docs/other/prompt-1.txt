@@ -3634,3 +3634,10 @@ Nginx 活跃连接数
 reading / writing / waiting  各阶段连接 ，这个数据也要展示，放哪里比较好？ 
 是这个需求
 
+
+
+继续补充 openspec/changes/add-user-operation-manual ，需要加入新的需求，需要加入左侧菜单中剩下的项， 你先补充文档
+
+
+/brainstorming 请仔细阅读 openspec/changesadd-user-operation-manual 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中

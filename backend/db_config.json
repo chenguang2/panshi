@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "active": "conn_16fcf5a4",
+  "connections": [
+    {
+      "id": "local_sqlite",
+      "type": "sqlite",
+      "name": "本地 SQLite",
+      "path": "./data/panshi.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
+    },
+    {
+      "id": "conn_15cbb267",
+      "type": "postgres",
+      "name": "192.168.100.90",
+      "path": null,
+      "host": "192.168.100.90",
+      "port": 5432,
+      "database": "uapm_new",
+      "username": "uapm_user",
+      "password_enc": "gAAAAABqh85i2u5C8HjEg_3dEyHTAFvsBv9XB5Iyy9VCPN9vW-yG7fDNVKNjTD-FEwe4tJhR4o8Cqac2X_qtVmjyAkabgXgmzw==",
+      "ssl": false
+    },
+    {
+      "id": "conn_16fcf5a4",
+      "type": "sqlite",
+      "name": "手册演示库",
+      "path": "./data/manual-demo.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
+    }
+  ]
+}
