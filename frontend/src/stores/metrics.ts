@@ -23,7 +23,9 @@ export const useMetricsStore = defineStore('metrics', () => {
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-  async function loadMetricNames(): Promise<void> {
+  async function loadMetricNames(force = false): Promise<void> {
+    // 指标名列表来自远端 ClickHouse 且变化很少：已有缓存时跳过（避免每次进页都打 2s+ 慢查询）
+    if (!force && metricNames.value.length > 0) return
     loadingNames.value = true
     try {
       metricNames.value = await getMetricNames()
@@ -37,8 +39,11 @@ export const useMetricsStore = defineStore('metrics', () => {
     }
   }
 
+  let chartInFlight = false
+
   async function loadChartData(): Promise<void> {
-    if (!selectedMetric.value) return
+    if (!selectedMetric.value || chartInFlight) return
+    chartInFlight = true
     loading.value = true
     error.value = null
     try {
@@ -51,11 +56,16 @@ export const useMetricsStore = defineStore('metrics', () => {
       error.value = '数据加载失败'
       chartData.value = []
     } finally {
+      chartInFlight = false
       loading.value = false
     }
   }
 
+  let summaryInFlight = false
+
   async function loadSummary(): Promise<void> {
+    if (summaryInFlight) return
+    summaryInFlight = true
     try {
       const { summary, connectionStates: states } = await getMetricSummary()
       summaryData.value = summary
@@ -63,6 +73,8 @@ export const useMetricsStore = defineStore('metrics', () => {
     } catch {
       summaryData.value = {}
       connectionStates.value = {}
+    } finally {
+      summaryInFlight = false
     }
   }
 

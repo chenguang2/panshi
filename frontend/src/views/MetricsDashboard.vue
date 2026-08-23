@@ -147,12 +147,17 @@ function refreshAll(): void {
   }
 }
 
+// 卸载竞态防护：初始加载耗时数秒，若等待期间用户离开页面，
+// 卸载时 stopAutoRefresh 尚无定时器可停；加载完成后不得再启动（否则成为无人停止的孤儿定时器）
+let disposed = false
+
 onMounted(async () => {
   await store.loadAllCharts()
-  store.startAutoRefresh()
+  if (!disposed) store.startAutoRefresh()
 })
 
 onUnmounted(() => {
+  disposed = true
   store.stopAutoRefresh()
 })
 </script>

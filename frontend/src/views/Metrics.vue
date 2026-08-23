@@ -320,13 +320,17 @@ function onTimeRangeChange(e: any): void {
   store.setTimeRange(e.target.value)
 }
 
+// 卸载竞态防护：同 MetricsDashboard——离开页面后不得再启动自动刷新定时器
+let disposed = false
+
 onMounted(async () => {
   await store.loadMetricNames()
   await store.loadAll()
-  store.startAutoRefresh()
+  if (!disposed) store.startAutoRefresh()
 })
 
 onUnmounted(() => {
+  disposed = true
   store.stopAutoRefresh()
 })
 </script>

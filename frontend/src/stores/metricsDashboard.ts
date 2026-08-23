@@ -96,30 +96,47 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     ]
   }
 
+  let chartsInFlight = false
+
   async function loadAllCharts(): Promise<void> {
+    // 单飞守卫：加载中不重复发起，避免快速切换页面时慢查询无限堆叠
+    if (chartsInFlight) return
+    chartsInFlight = true
     loading.value = true
-    const targets = businessLoadTargets()
-    const results = await Promise.allSettled(
-      targets.map((cd) => loadSingleChart(cd)),
-    )
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'rejected' && !errorMap.value[targets[i].key]) {
-        errorMap.value[targets[i].key] = '数据加载失败'
+    try {
+      const targets = businessLoadTargets()
+      const results = await Promise.allSettled(
+        targets.map((cd) => loadSingleChart(cd)),
+      )
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected' && !errorMap.value[targets[i].key]) {
+          errorMap.value[targets[i].key] = '数据加载失败'
+        }
       }
+    } finally {
+      chartsInFlight = false
+      loading.value = false
     }
-    loading.value = false
   }
 
+  let infraInFlight = false
+
   async function loadInfraCharts(): Promise<void> {
-    const results = await Promise.allSettled(
-      INFRA_CHARTS.map((cd) => loadSingleChart(cd)),
-    )
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'rejected' && !errorMap.value[INFRA_CHARTS[i].key]) {
-        errorMap.value[INFRA_CHARTS[i].key] = '数据加载失败'
+    if (infraInFlight) return
+    infraInFlight = true
+    try {
+      const results = await Promise.allSettled(
+        INFRA_CHARTS.map((cd) => loadSingleChart(cd)),
+      )
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === 'rejected' && !errorMap.value[INFRA_CHARTS[i].key]) {
+          errorMap.value[INFRA_CHARTS[i].key] = '数据加载失败'
+        }
       }
+    } finally {
+      infraInFlight = false
+      infraLoaded.value = true
     }
-    infraLoaded.value = true
   }
 
   function setTimeRange(range: string): void {
