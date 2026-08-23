@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
 // Mock the database api module.
@@ -158,6 +159,8 @@ describe('DatabaseManagement', () => {
     const vm = wrapper.vm as any
     vm.migrateForm.sourceId = 'conn_1'
     vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     await flushPromises()
     expect(mocks.migrateDatabase).toHaveBeenCalledWith('conn_1', 'conn_2', expect.objectContaining({ mode: 'replace' }))
@@ -171,6 +174,8 @@ describe('DatabaseManagement', () => {
     const vm = wrapper.vm as any
     vm.migrateForm.sourceId = 'conn_1'
     vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('迁移完成，共迁移 22 张表')

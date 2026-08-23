@@ -115,7 +115,7 @@
               <span>我了解将清空目标库</span>
             </label>
           </div>
-          <button class="btn btn-primary migrate-btn" :disabled="migrating" @click="handleMigrate">{{ migrating ? '迁移中…' : '开始迁移' }}</button>
+            <button class="btn btn-primary migrate-btn" :disabled="migrating || !migrateForm.confirmed_clear" :title="migrateForm.confirmed_clear ? '' : '请先勾选「我了解将清空目标库」'" @click="handleMigrate">{{ migrating ? '迁移中…' : '开始迁移' }}</button>
         </div>
 
         <div v-if="migrating" class="migrate-progress">
@@ -427,6 +427,10 @@ async function handleMigrate() {
   }
   if (migrateForm.sourceId === migrateForm.targetId) {
     message.error('源数据库与目标数据库不能相同')
+    return
+  }
+  if (!migrateForm.confirmed_clear) {
+    message.error('请先勾选「我了解将清空目标库」')
     return
   }
   migrating.value = true
