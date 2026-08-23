@@ -5,6 +5,8 @@ the esapm OpenTelemetry pipeline.
 
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.metrics_service import (
@@ -24,14 +26,14 @@ VALID_ROUTE_STATS_TYPES = {"qps", "bandwidth", "error_rate", "latency"}
 
 @router.get("/metrics/names")
 async def get_metric_names():
-    names = query_metric_names()
+    names = await asyncio.to_thread(query_metric_names)
     return {"data": names}
 
 
 @router.get("/metrics/summary")
 async def get_metrics_summary():
-    data = query_summary()
-    connection_states = query_connection_states()
+    data = await asyncio.to_thread(query_summary)
+    connection_states = await asyncio.to_thread(query_connection_states)
     return {"data": data, "connection_states": connection_states}
 
 
@@ -47,7 +49,8 @@ async def get_route_stats(
             status_code=400,
             detail=f"Invalid type. Valid: {', '.join(sorted(VALID_ROUTE_STATS_TYPES))}"
         )
-    data = query_route_stats(
+    data = await asyncio.to_thread(
+        query_route_stats,
         stats_type=stats_type,
         since=since,
         limit=limit,
@@ -60,7 +63,7 @@ async def get_route_stats(
 async def get_status_analysis(
     since: str = Query("24h", pattern=r"^\d+[smhd]$"),
 ):
-    data = query_status_analysis(since=since)
+    data = await asyncio.to_thread(query_status_analysis, since=since)
     return {"data": data}
 
 
@@ -77,7 +80,8 @@ async def get_time_comparison(
             status_code=400,
             detail=f"Invalid type. Valid: {', '.join(sorted(VALID_COMPARISON_TYPES))}"
         )
-    data = query_time_comparison(
+    data = await asyncio.to_thread(
+        query_time_comparison,
         comparison_type=comparison_type,
         days=days,
     )
@@ -97,7 +101,8 @@ async def get_node_health(
             status_code=400,
             detail=f"Invalid type. Valid: {', '.join(sorted(VALID_HEALTH_TYPES))}"
         )
-    data = query_node_health(
+    data = await asyncio.to_thread(
+        query_node_health,
         health_type=health_type,
         status_filter=status,
     )
@@ -111,7 +116,8 @@ async def get_metric_time_series(
     interval: str = Query("5m", pattern=r"^\d+[sm]$"),
     label: str | None = Query(None),
 ):
-    data = query_time_series(
+    data = await asyncio.to_thread(
+        query_time_series,
         metric_name=metric_name,
         since=since,
         interval=interval,
