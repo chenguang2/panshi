@@ -145,6 +145,22 @@ class TestMetricsService:
         assert "endsWith(MetricName, '_total')" in third_sql
 
     @patch("app.services.metrics_service.execute_query")
+    def test_summary_connections_only_active_state(self, mock_exec):
+        """Nginx 连接数按总览同口径：仅统计 state=active 序列，多序列求和。"""
+        mock_exec.side_effect = [
+            [("edge_nginx_http_current_connections", 1.0)],
+            [],
+            [],
+        ]
+        from app.services.metrics_service import query_summary
+        result = query_summary()
+        assert result["edge_nginx_http_current_connections"] == 1.0
+        first_sql = mock_exec.call_args_list[0][0][0]
+        assert "Attributes['state'] = 'active'" in first_sql
+        # 多节点/多序列：逐序列取最新后求和，而非全局 argMax
+        assert "GROUP BY MetricName, Attributes" in first_sql
+
+    @patch("app.services.metrics_service.execute_query")
     def test_summary_empty(self, mock_exec):
         mock_exec.side_effect = [[], [], []]
         from app.services.metrics_service import query_summary

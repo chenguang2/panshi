@@ -150,21 +150,41 @@ def query_time_series(
     ]
 
 
+# 业务口径：与指标总览图表保持一致的序列过滤（指标名 → (label键, label值)）
+_GAUGE_LATEST_FILTERS: dict[str, tuple[str, str]] = {
+    # 「Nginx 活跃连接数」仅统计 state=active，忽略 accepted/handled 等其他状态序列
+    "edge_nginx_http_current_connections": ("state", "active"),
+}
+
+
 def query_summary(window_sec: int = 300) -> dict[str, float]:
     """汇总卡片：gauge 取最新值，计数器取窗口内增量。
 
     - otel_metrics_sum 全部为累计计数器 → 窗口内增量 max(Value) - min(Value)
       （按指标聚合时，Σ(max_i - min_i) ≡ Σmax - Σmin，无需逐序列分组）
-    - otel_metrics_gauge 为瞬时值 → 最新值；但 _total 后缀实为计数器，
-      同样按增量计算（与 _is_counter 的 Prometheus 后缀启发式一致）
+    - otel_metrics_gauge 为瞬时值 → 逐序列取最新后求和（多节点/多序列确定性汇总，
+      单序列时等价于最新值）；但 _total 后缀实为计数器，同样按增量计算
+      （与 _is_counter 的 Prometheus 后缀启发式一致）
+    - _GAUGE_LATEST_FILTERS 中的指标按业务口径过滤序列
     """
     result: dict[str, float] = {}
 
+    filter_clauses = " OR ".join(
+        f"(MetricName != '{name}' OR Attributes['{key}'] = '{val}')"
+        for name, (key, val) in _GAUGE_LATEST_FILTERS.items()
+    )
+    gauge_extra = f" AND ({filter_clauses})" if filter_clauses else ""
+
     gauge_rows = execute_query(f"""
-        SELECT MetricName, argMax(Value, TimeUnix) AS latest_value
-        FROM otel_metrics_gauge
-        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
-          AND NOT endsWith(MetricName, '_total')
+        SELECT MetricName, sum(latest) AS latest_value
+        FROM (
+            SELECT MetricName, Attributes, argMax(Value, TimeUnix) AS latest
+            FROM otel_metrics_gauge
+            WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+              AND NOT endsWith(MetricName, '_total')
+              {gauge_extra}
+            GROUP BY MetricName, Attributes
+        )
         GROUP BY MetricName
     """)
     if gauge_rows:
