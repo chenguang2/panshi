@@ -81,6 +81,10 @@ pdf_extract.txt
 
 # AI tool internal tracking
 .omo/
+.cortexkit/
+
+# 数据库备份归档（运行时产物）
+backend/data/archives/
 
 
 backend/ansible/soft/
