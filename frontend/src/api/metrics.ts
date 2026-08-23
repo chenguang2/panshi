@@ -1,5 +1,5 @@
 import api from '@/api'
-import type { MetricDataPoint, MetricSummary } from '@/types/metrics'
+import type { ConnectionStates, MetricDataPoint, MetricSummary } from '@/types/metrics'
 
 export async function getMetricNames(): Promise<string[]> {
   const res = await api.get('/metrics/names')
@@ -18,9 +18,17 @@ export async function getMetricTimeSeries(
   return res.data.data as MetricDataPoint[]
 }
 
-export async function getMetricSummary(): Promise<MetricSummary> {
+export interface MetricSummaryResult {
+  summary: MetricSummary
+  connectionStates: ConnectionStates
+}
+
+export async function getMetricSummary(): Promise<MetricSummaryResult> {
   const res = await api.get('/metrics/summary')
-  return res.data.data as MetricSummary
+  return {
+    summary: res.data.data as MetricSummary,
+    connectionStates: (res.data.connection_states ?? {}) as ConnectionStates,
+  }
 }
 
 // ── Route Stats ──

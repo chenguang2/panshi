@@ -212,6 +212,48 @@ def query_summary(window_sec: int = 300) -> dict[str, float]:
     return result
 
 
+def query_connection_states(window_sec: int = 300) -> dict[str, float]:
+    """Nginx 连接状态细分。
+
+    - active/reading/writing/waiting 为瞬时状态：逐序列取最新值后按状态求和
+      （与 query_summary 的 gauge 口径一致）
+    - accepted/handled 是自启动以来的累计计数器，不作为瞬时状态返回；
+      仅返回 accepted 的窗口增量（近 window_sec 秒新建连接数），键为 accepted_delta
+      （增量口径同 query_summary 计数器：max - min）
+    - 无数据时返回空 dict
+    """
+    result: dict[str, float] = {}
+
+    rows = execute_query(f"""
+        SELECT Attributes['state'] AS state, sum(latest) AS latest_value
+        FROM (
+            SELECT Attributes, argMax(Value, TimeUnix) AS latest
+            FROM otel_metrics_gauge
+            WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+              AND MetricName = 'edge_nginx_http_current_connections'
+              AND Attributes['state'] NOT IN ('accepted', 'handled')
+            GROUP BY Attributes
+        )
+        GROUP BY state
+    """)
+    if rows:
+        result.update({r[0]: float(r[1]) for r in rows if r[0]})
+
+    delta_rows = execute_query(f"""
+        SELECT greatest(max(Value) - min(Value), 0) AS window_inc
+        FROM otel_metrics_gauge
+        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+          AND MetricName = 'edge_nginx_http_current_connections'
+          AND Attributes['state'] = 'accepted'
+    """)
+    if delta_rows:
+        first = delta_rows[0]
+        if first and first[0] is not None:
+            result["accepted_delta"] = float(first[0])
+
+    return result
+
+
 def query_route_stats(
     stats_type: str = "qps",
     since: str = "24h",

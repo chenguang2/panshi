@@ -57,19 +57,26 @@ class TestMetricsAPI:
 
     # ── GET /api/v1/metrics/summary ───────────────────────
 
+    @patch("app.api.v1.metrics.query_connection_states")
     @patch("app.api.v1.metrics.query_summary")
-    def test_get_summary(self, mock_query, client):
+    def test_get_summary(self, mock_query, mock_states, client):
         mock_query.return_value = {"cpu": 85.0, "mem": 1024.0}
+        mock_states.return_value = {"active": 5.0, "waiting": 3.0}
         resp = client.get("/api/v1/metrics/summary")
         assert resp.status_code == 200
-        assert resp.json() == {"data": {"cpu": 85.0, "mem": 1024.0}}
+        assert resp.json() == {
+            "data": {"cpu": 85.0, "mem": 1024.0},
+            "connection_states": {"active": 5.0, "waiting": 3.0},
+        }
 
+    @patch("app.api.v1.metrics.query_connection_states")
     @patch("app.api.v1.metrics.query_summary")
-    def test_get_summary_empty(self, mock_query, client):
+    def test_get_summary_empty(self, mock_query, mock_states, client):
         mock_query.return_value = {}
+        mock_states.return_value = {}
         resp = client.get("/api/v1/metrics/summary")
         assert resp.status_code == 200
-        assert resp.json() == {"data": {}}
+        assert resp.json() == {"data": {}, "connection_states": {}}
 
     # ── Feature gating ────────────────────────────────────
 

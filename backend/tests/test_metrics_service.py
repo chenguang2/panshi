@@ -171,3 +171,61 @@ class TestMetricsService:
         mock_exec.side_effect = [None, None, None]
         from app.services.metrics_service import query_summary
         assert query_summary() == {}
+
+    # ── query_connection_states ────────────────────────────
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_multi_state(self, mock_exec):
+        """按 state 标签分组返回各瞬时状态连接数，accepted 窗口增量单独返回。"""
+        mock_exec.side_effect = [
+            [("active", 479.0), ("reading", 0.0), ("writing", 1.0), ("waiting", 478.0)],
+            [(2.0,)],  # accepted 窗口增量
+        ]
+        from app.services.metrics_service import query_connection_states
+        result = query_connection_states()
+        assert result == {
+            "active": 479.0, "reading": 0.0, "writing": 1.0, "waiting": 478.0,
+            "accepted_delta": 2.0,
+        }
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_excludes_cumulative(self, mock_exec):
+        """accepted/handled 是自启动累计计数器，不得混入瞬时状态。"""
+        mock_exec.side_effect = [[("active", 5.0)], [None]]
+        from app.services.metrics_service import query_connection_states
+        result = query_connection_states()
+        assert result == {"active": 5.0}
+        first_sql = mock_exec.call_args_list[0][0][0]
+        assert "NOT IN ('accepted', 'handled')" in first_sql
+        second_sql = mock_exec.call_args_list[1][0][0]
+        assert "Attributes['state'] = 'accepted'" in second_sql
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_empty(self, mock_exec):
+        mock_exec.side_effect = [[], []]
+        from app.services.metrics_service import query_connection_states
+        assert query_connection_states() == {}
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_none(self, mock_exec):
+        mock_exec.side_effect = [None, None]
+        from app.services.metrics_service import query_connection_states
+        assert query_connection_states() == {}
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_skips_blank_state(self, mock_exec):
+        """无 state 标签的序列（空字符串）不计入结果。"""
+        mock_exec.side_effect = [[("active", 10.0), ("", 3.0)], []]
+        from app.services.metrics_service import query_connection_states
+        assert query_connection_states() == {"active": 10.0}
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_connection_states_groups_by_series_latest(self, mock_exec):
+        """SQL 必须先按序列（Attributes）取 argMax 最新值，再按 state 求和。"""
+        mock_exec.side_effect = [[("active", 5.0)], []]
+        from app.services.metrics_service import query_connection_states
+        query_connection_states()
+        sql = mock_exec.call_args_list[0][0][0]
+        assert "GROUP BY Attributes" in sql
+        assert "argMax(Value, TimeUnix)" in sql
+        assert "edge_nginx_http_current_connections" in sql

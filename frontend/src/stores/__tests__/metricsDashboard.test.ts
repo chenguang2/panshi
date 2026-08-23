@@ -26,10 +26,11 @@ describe('metricsDashboard store', () => {
     vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
     const store = useMetricsDashboardStore()
     await store.loadAllCharts()
-    // 3 business metrics should be loaded
-    expect(getMetricTimeSeries).toHaveBeenCalledTimes(3)
+    // qps + errors + 连接状态 4 序列（active/reading/writing/waiting）= 6
+    expect(getMetricTimeSeries).toHaveBeenCalledTimes(6)
     expect(store.chartDataMap['qps']).toHaveLength(1)
-    expect(store.chartDataMap['connections']).toHaveLength(1)
+    expect(store.chartDataMap['connections_active']).toHaveLength(1)
+    expect(store.chartDataMap['connections_waiting']).toHaveLength(1)
     expect(store.chartDataMap['errors']).toHaveLength(1)
     expect(store.loading).toBe(false)
   })
@@ -69,13 +70,17 @@ describe('metricsDashboard store', () => {
   it('handles partial failures gracefully', async () => {
     vi.mocked(getMetricTimeSeries)
       .mockResolvedValueOnce([mockDataPoint(1000, 50)]) // qps succeeds
-      .mockRejectedValueOnce(new Error('fail')) // connections fails
       .mockResolvedValueOnce([mockDataPoint(1000, 0)]) // errors succeeds
+      .mockRejectedValueOnce(new Error('fail')) // connections_active fails
+      .mockResolvedValueOnce([mockDataPoint(1000, 1)]) // connections_reading succeeds
+      .mockResolvedValueOnce([mockDataPoint(1000, 2)]) // connections_writing succeeds
+      .mockResolvedValueOnce([mockDataPoint(1000, 3)]) // connections_waiting succeeds
     const store = useMetricsDashboardStore()
     await store.loadAllCharts()
     expect(store.chartDataMap['qps']).toHaveLength(1)
-    expect(store.chartDataMap['connections']).toHaveLength(0)
-    expect(store.errorMap['connections']).toBeTruthy()
+    expect(store.chartDataMap['connections_active']).toHaveLength(0)
+    expect(store.errorMap['connections_active']).toBeTruthy()
+    expect(store.chartDataMap['connections_waiting']).toHaveLength(1)
     expect(store.loading).toBe(false)
   })
 })

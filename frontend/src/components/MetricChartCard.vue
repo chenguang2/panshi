@@ -14,24 +14,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, shallowRef, watchEffect } from 'vue'
+import { computed } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import type { MetricDataPoint } from '@/types/metrics'
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
+
+export interface ChartSeriesInput {
+  name: string
+  color: string
+  data: MetricDataPoint[]
+}
 
 const props = defineProps<{
   title: string
   data: MetricDataPoint[]
   error?: string | null
   unit?: string
+  /** 多序列模式：提供时按 series 渲染多条线 + 图例，data 仅用于头部最新值 */
+  series?: ChartSeriesInput[]
 }>()
 
-const hasData = computed(() => props.data.length > 0)
+const hasData = computed(() =>
+  props.series ? props.series.length > 0 : props.data.length > 0,
+)
 
 const latestValue = computed<number | null>(() => {
   if (!hasData.value) return null
@@ -46,25 +56,55 @@ const formattedValue = computed(() => {
   return latestValue.value.toFixed(3)
 })
 
-const chartOption = computed(() => ({
-  tooltip: {
-    trigger: 'axis' as const,
-    valueFormatter: (v: number) => `${v.toFixed(3)}${props.unit || ''}`,
-  },
-  grid: { left: 4, right: 4, top: 4, bottom: 4 },
-  xAxis: { show: false, type: 'time' as const },
-  yAxis: { show: false, min: 0 },
-  series: [
-    {
-      type: 'line' as const,
-      data: props.data.map((d) => [d.timestamp * 1000, d.avg]),
-      smooth: true,
-      showSymbol: false,
-      lineStyle: { width: 2, color: '#1677ff' },
-      areaStyle: { color: 'rgba(22,119,255,0.08)' },
+const chartOption = computed(() => {
+  if (props.series) {
+    // 多序列模式：连接状态等细分场景，图例置底、细线无符号
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        valueFormatter: (v: number) => `${Math.round(v)}${props.unit || ''}`,
+      },
+      grid: { left: 4, right: 4, top: 4, bottom: 20 },
+      legend: {
+        bottom: 0,
+        icon: 'roundRect',
+        itemWidth: 10,
+        itemHeight: 3,
+        itemGap: 10,
+        textStyle: { fontSize: 10, color: '#8c8c8c' },
+      },
+      xAxis: { show: false, type: 'time' as const },
+      yAxis: { show: false, min: 0 },
+      series: props.series.map((s) => ({
+        name: s.name,
+        type: 'line' as const,
+        data: s.data.map((d) => [d.timestamp * 1000, d.avg]),
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: s.color },
+      })),
+    }
+  }
+  return {
+    tooltip: {
+      trigger: 'axis' as const,
+      valueFormatter: (v: number) => `${v.toFixed(3)}${props.unit || ''}`,
     },
-  ],
-}))
+    grid: { left: 4, right: 4, top: 4, bottom: 4 },
+    xAxis: { show: false, type: 'time' as const },
+    yAxis: { show: false, min: 0 },
+    series: [
+      {
+        type: 'line' as const,
+        data: props.data.map((d) => [d.timestamp * 1000, d.avg]),
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 2, color: '#1677ff' },
+        areaStyle: { color: 'rgba(22,119,255,0.08)' },
+      },
+    ],
+  }
+})
 </script>
 
 <style scoped>

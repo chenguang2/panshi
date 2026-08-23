@@ -47,6 +47,12 @@
       <div class="summary-card" v-for="card in summaryCards" :key="card.key">
         <div class="summary-label">{{ card.label }}</div>
         <div class="summary-value">{{ formatValue(card.key) }}</div>
+        <div
+          v-if="card.key === 'edge_nginx_http_current_connections' && hasConnectionBreakdown"
+          class="summary-breakdown"
+        >
+          读 {{ fmtInt(store.connectionStates.reading) }} · 写 {{ fmtInt(store.connectionStates.writing) }} · 等待 {{ fmtInt(store.connectionStates.waiting) }}<template v-if="store.connectionStates.accepted_delta !== undefined"> · 新建 +{{ Math.round(store.connectionStates.accepted_delta) }}</template>
+        </div>
       </div>
     </div>
   </div>
@@ -294,6 +300,22 @@ function formatValue(key: string): string {
   return v.toFixed(2)
 }
 
+// 连接状态细分：reading/writing/waiting/accepted_delta 任一有数据即展示
+const hasConnectionBreakdown = computed(() => {
+  const s = store.connectionStates
+  return (
+    s.reading !== undefined ||
+    s.writing !== undefined ||
+    s.waiting !== undefined ||
+    s.accepted_delta !== undefined
+  )
+})
+
+function fmtInt(v: number | undefined): string {
+  if (v === undefined || v === null) return '--'
+  return String(Math.round(v))
+}
+
 function onTimeRangeChange(e: any): void {
   store.setTimeRange(e.target.value)
 }
@@ -400,6 +422,13 @@ onUnmounted(() => {
   font-size: 28px;
   font-weight: 700;
   color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.summary-breakdown {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
   font-family: var(--font-mono);
 }
 </style>

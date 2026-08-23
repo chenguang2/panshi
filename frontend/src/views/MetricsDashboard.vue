@@ -38,14 +38,22 @@
 
     <!-- ── Business Metrics Grid ── -->
     <div class="chart-grid">
-      <MetricChartCard
-        v-for="chart in businessCharts"
-        :key="chart.key"
-        :title="chart.label"
-        :data="store.chartDataMap[chart.key] || []"
-        :error="store.errorMap[chart.key]"
-        :unit="chart.unit"
-      />
+      <template v-for="chart in businessCharts" :key="chart.key">
+        <MetricChartCard
+          v-if="chart.key === 'connections'"
+          :title="chart.label"
+          :data="store.chartDataMap['connections_active'] || []"
+          :error="connectionSeriesError"
+          :series="connectionSeries"
+        />
+        <MetricChartCard
+          v-else
+          :title="chart.label"
+          :data="store.chartDataMap[chart.key] || []"
+          :error="store.errorMap[chart.key]"
+          :unit="chart.unit"
+        />
+      </template>
     </div>
 
     <!-- ── Extended Analytics Grid ── -->
@@ -81,10 +89,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { ref } from 'vue'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
-import { useMetricsDashboardStore, BUSINESS_CHARTS, INFRA_CHARTS } from '@/stores/metricsDashboard'
+import {
+  useMetricsDashboardStore,
+  BUSINESS_CHARTS,
+  INFRA_CHARTS,
+  CONNECTION_SERIES,
+} from '@/stores/metricsDashboard'
 import MetricChartCard from '@/components/MetricChartCard.vue'
 import RouteStatsCard from '@/components/RouteStatsCard.vue'
 import StatusAnalysisChart from '@/components/StatusAnalysisChart.vue'
@@ -96,6 +109,21 @@ const store = useMetricsDashboardStore()
 const infraOpen = ref(false)
 
 const businessCharts = BUSINESS_CHARTS
+
+// 连接状态多序列：过滤无数据序列，避免渲染空线
+const connectionSeries = computed(() =>
+  CONNECTION_SERIES.map((s) => ({
+    name: s.label,
+    color: s.color,
+    data: store.chartDataMap[s.key] || [],
+  })).filter((s) => s.data.length > 0),
+)
+
+// 任一状态序列加载失败即提示
+const connectionSeriesError = computed(() => {
+  const failed = CONNECTION_SERIES.some((s) => store.errorMap[s.key])
+  return failed ? '数据加载失败' : null
+})
 
 function onTimeRangeChange(e: any): void {
   store.setTimeRange(e.target.value)

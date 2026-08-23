@@ -18,9 +18,32 @@ export interface ChartDefinition {
   unit?: string
 }
 
+// 「Nginx 连接状态」图的 4 条序列（active/reading/writing/waiting）
+export interface ConnectionSeriesDef {
+  key: string
+  state: string
+  label: string
+  color: string
+}
+
+export const CONNECTION_SERIES: ConnectionSeriesDef[] = [
+  { key: 'connections_active', state: 'active', label: '活跃', color: '#1677ff' },
+  { key: 'connections_reading', state: 'reading', label: '读取中', color: '#722ed1' },
+  { key: 'connections_writing', state: 'writing', label: '写入中', color: '#13c2c2' },
+  { key: 'connections_waiting', state: 'waiting', label: '等待中', color: '#8c8c8c' },
+]
+
+const CONNECTION_CHART_DEFS: ChartDefinition[] = CONNECTION_SERIES.map((s) => ({
+  key: s.key,
+  label: s.label,
+  metricName: 'edge_nginx_http_current_connections',
+  labelFilter: `state:${s.state}`,
+}))
+
 export const BUSINESS_CHARTS: ChartDefinition[] = [
   { key: 'qps', label: 'QPS', metricName: 'edge_http_requests_total', unit: '/s' },
-  { key: 'connections', label: '活跃连接数', metricName: 'edge_nginx_http_current_connections', labelFilter: 'state:active' },
+  // connections 卡片由 CONNECTION_CHART_DEFS 加载（4 状态序列），此处仅保留占位定义供视图渲染
+  { key: 'connections', label: 'Nginx 连接状态', metricName: 'edge_nginx_http_current_connections' },
   { key: 'errors', label: '采集错误率', metricName: 'edge_metric_errors_total', unit: '/s' },
 ]
 
@@ -65,14 +88,23 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     }
   }
 
+  // 业务图加载目标：普通业务图 + 连接状态 4 序列（跳过 connections 占位定义）
+  function businessLoadTargets(): ChartDefinition[] {
+    return [
+      ...BUSINESS_CHARTS.filter((cd) => cd.key !== 'connections'),
+      ...CONNECTION_CHART_DEFS,
+    ]
+  }
+
   async function loadAllCharts(): Promise<void> {
     loading.value = true
+    const targets = businessLoadTargets()
     const results = await Promise.allSettled(
-      BUSINESS_CHARTS.map((cd) => loadSingleChart(cd)),
+      targets.map((cd) => loadSingleChart(cd)),
     )
     for (let i = 0; i < results.length; i++) {
-      if (results[i].status === 'rejected' && !errorMap.value[BUSINESS_CHARTS[i].key]) {
-        errorMap.value[BUSINESS_CHARTS[i].key] = '数据加载失败'
+      if (results[i].status === 'rejected' && !errorMap.value[targets[i].key]) {
+        errorMap.value[targets[i].key] = '数据加载失败'
       }
     }
     loading.value = false

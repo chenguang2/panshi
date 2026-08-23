@@ -11,6 +11,7 @@ from app.services.metrics_service import (
     query_metric_names,
     query_time_series,
     query_summary,
+    query_connection_states,
     query_route_stats,
     query_status_analysis,
     query_time_comparison,
@@ -30,7 +31,8 @@ async def get_metric_names():
 @router.get("/metrics/summary")
 async def get_metrics_summary():
     data = query_summary()
-    return {"data": data}
+    connection_states = query_connection_states()
+    return {"data": data, "connection_states": connection_states}
 
 
 @router.get("/metrics/route-stats")

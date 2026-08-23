@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getMetricNames, getMetricTimeSeries, getMetricSummary } from '@/api/metrics'
-import type { MetricDataPoint, MetricSummary } from '@/types/metrics'
+import type { ConnectionStates, MetricDataPoint, MetricSummary } from '@/types/metrics'
 
 const intervalMap: Record<string, string> = {
   '1h': '1m',
@@ -16,6 +16,7 @@ export const useMetricsStore = defineStore('metrics', () => {
   const timeRange = ref<string>('1h')
   const chartData = ref<MetricDataPoint[]>([])
   const summaryData = ref<MetricSummary>({})
+  const connectionStates = ref<ConnectionStates>({})
   const loading = ref(false)
   const loadingNames = ref(false)
   const error = ref<string | null>(null)
@@ -56,9 +57,12 @@ export const useMetricsStore = defineStore('metrics', () => {
 
   async function loadSummary(): Promise<void> {
     try {
-      summaryData.value = await getMetricSummary()
+      const { summary, connectionStates: states } = await getMetricSummary()
+      summaryData.value = summary
+      connectionStates.value = states
     } catch {
       summaryData.value = {}
+      connectionStates.value = {}
     }
   }
 
@@ -98,6 +102,7 @@ export const useMetricsStore = defineStore('metrics', () => {
     timeRange,
     chartData,
     summaryData,
+    connectionStates,
     loading,
     loadingNames,
     error,
