@@ -189,16 +189,26 @@ def query_route_stats(
 
 
 def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
+    # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由汇总
     rows = execute_query("""
         SELECT
-            Attributes['route'] AS route_id,
-            Attributes['matched_uri'] AS uri,
-            greatest(max(Value) / %(since)s, 0) AS requests_per_sec,
-            max(Value) AS total_requests,
-            count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            route_id,
+            uri,
+            greatest(total_inc / %(since)s, 0) AS requests_per_sec,
+            greatest(total_inc, 0) AS total_requests,
+            sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['matched_uri'] AS uri,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS total_inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            GROUP BY route_id, uri, code
+        )
         GROUP BY route_id, uri
         ORDER BY requests_per_sec DESC
         LIMIT %(limit)s
@@ -219,17 +229,25 @@ def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
 
 
 def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
+    # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由/方向汇总
     rows = execute_query("""
         SELECT
-            Attributes['route'] AS route_id,
-            Attributes['matched_uri'] AS uri,
-            Attributes['type'] AS direction,
-            greatest(max(Value) / %(since)s, 0) AS bytes_per_sec,
-            max(Value) AS total_bytes
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_bandwidth'
-          AND TimeUnix > now() - INTERVAL %(since)s SECOND
-        GROUP BY route_id, uri, direction
+            route_id,
+            uri,
+            direction,
+            greatest(total_inc / %(since)s, 0) AS bytes_per_sec,
+            greatest(total_inc, 0) AS total_bytes
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['matched_uri'] AS uri,
+                Attributes['type'] AS direction,
+                max(Value) - min(Value) AS total_inc
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_bandwidth'
+              AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            GROUP BY route_id, uri, direction
+        )
         ORDER BY total_bytes DESC
         LIMIT %(limit)s
     """, {"since": since_sec, "limit": limit})
@@ -248,17 +266,27 @@ def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
 
 
 def _query_route_error_rate(since_sec: int, limit: int) -> list[dict[str, Any]]:
+    # 累计计数器：窗口内增量 = 每条 (路由, code) 序列的 max - min
     rows = execute_query("""
         SELECT
-            Attributes['route'] AS route_id,
-            Attributes['matched_uri'] AS uri,
-            sumIf(max(Value), Attributes['code'] LIKE '4%%') AS client_errors,
-            sumIf(max(Value), Attributes['code'] LIKE '5%%') AS server_errors,
-            sum(max(Value)) AS total_requests,
-            count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            route_id,
+            uri,
+            sumIf(inc, code LIKE '4%%') AS client_errors,
+            sumIf(inc, code LIKE '5%%') AS server_errors,
+            sum(inc) AS total_requests,
+            sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['matched_uri'] AS uri,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            GROUP BY route_id, uri, code
+        )
         GROUP BY route_id, uri
         HAVING total_requests > 0
         ORDER BY client_errors + server_errors DESC
@@ -316,19 +344,27 @@ def _query_route_latency(since_sec: int, limit: int, latency_type: str) -> list[
 
 def query_status_analysis(since: str = "24h") -> list[dict[str, Any]]:
     since_sec = _parse_since_seconds(since)
+    # 累计计数器：窗口内增量 = 每条 code 序列的 max - min，再按状态类汇总
     rows = execute_query("""
         SELECT
-            CASE
-                WHEN Attributes['code'] LIKE '2%%' THEN '2xx'
-                WHEN Attributes['code'] LIKE '3%%' THEN '3xx'
-                WHEN Attributes['code'] LIKE '4%%' THEN '4xx'
-                WHEN Attributes['code'] LIKE '5%%' THEN '5xx'
-                ELSE '其他'
-            END AS status_class,
-            max(Value) AS request_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            status_class,
+            sum(inc) AS request_count
+        FROM (
+            SELECT
+                CASE
+                    WHEN Attributes['code'] LIKE '2%%' THEN '2xx'
+                    WHEN Attributes['code'] LIKE '3%%' THEN '3xx'
+                    WHEN Attributes['code'] LIKE '4%%' THEN '4xx'
+                    WHEN Attributes['code'] LIKE '5%%' THEN '5xx'
+                    ELSE '其他'
+                END AS status_class,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > now() - INTERVAL %(since)s SECOND
+            GROUP BY status_class, code
+        )
         GROUP BY status_class
         HAVING request_count > 0
         ORDER BY request_count DESC
@@ -362,18 +398,35 @@ def query_time_comparison(
 
 
 def _query_day_over_day() -> dict[str, Any]:
+    # 累计计数器：窗口内增量 = 每条序列的 max - min
     today_rows = execute_query("""
-        SELECT max(Value) AS request_count, count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > toStartOfDay(now())
+        SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > toStartOfDay(now())
+            GROUP BY route_id, code
+        )
     """)
     yesterday_rows = execute_query("""
-        SELECT max(Value) AS request_count, count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > toStartOfDay(now()) - INTERVAL 1 DAY
-          AND TimeUnix <= toStartOfDay(now())
+        SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > toStartOfDay(now()) - INTERVAL 1 DAY
+              AND TimeUnix <= toStartOfDay(now())
+            GROUP BY route_id, code
+        )
     """)
 
     today_count = int(today_rows[0][0]) if today_rows and today_rows[0][0] else 0
@@ -424,18 +477,35 @@ def _query_hourly_distribution(days: int) -> list[dict[str, Any]]:
 
 
 def _query_week_over_week() -> dict[str, Any]:
+    # 累计计数器：窗口内增量 = 每条序列的 max - min
     this_week_rows = execute_query("""
-        SELECT max(Value) AS request_count, count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > toStartOfWeek(now())
+        SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > toStartOfWeek(now())
+            GROUP BY route_id, code
+        )
     """)
     last_week_rows = execute_query("""
-        SELECT max(Value) AS request_count, count(*) AS sample_count
-        FROM otel_metrics_sum
-        WHERE MetricName = 'edge_http_status'
-          AND TimeUnix > toStartOfWeek(now()) - INTERVAL 7 DAY
-          AND TimeUnix <= toStartOfWeek(now())
+        SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
+        FROM (
+            SELECT
+                Attributes['route'] AS route_id,
+                Attributes['code'] AS code,
+                max(Value) - min(Value) AS inc,
+                count(*) AS sample_count
+            FROM otel_metrics_sum
+            WHERE MetricName = 'edge_http_status'
+              AND TimeUnix > toStartOfWeek(now()) - INTERVAL 7 DAY
+              AND TimeUnix <= toStartOfWeek(now())
+            GROUP BY route_id, code
+        )
     """)
 
     this_week_count = int(this_week_rows[0][0]) if this_week_rows and this_week_rows[0][0] else 0
