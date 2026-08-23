@@ -22,11 +22,15 @@
 | 管理平台地址 | http://localhost:12345/ |
 | 管理员账号 | admin / panshi123 |
 | 数据库 | 本地 SQLite 空库（第 0 章准备） |
-| 网关节点 ×3 | 192.168.0.13 / 14 / 15（已预装 OpenResty 与 Edge） |
+| 网关节点 ×3 | 192.168.0.13 / 14 / 15（机器上已预装 OpenResty 与 Edge 软件；空库中平台无记录，需按第 2 章重新录入） |
 | OpenResty 路径 | /work/jboss/uapm/openresty |
 | Edge 路径 | /work/jboss/uapm/uap-edge |
 
 # 目录
+
+手册分两篇：**从零搭建篇**按依赖顺序从空系统到全链路可用；**进阶与运维篇**覆盖左侧菜单其余功能，可按需查阅。
+
+## 第一篇 · 从零搭建（第 0-12 章）
 
 | 章 | 内容 | 文件 |
 |---|---|---|
@@ -43,6 +47,21 @@
 | 10 | 四层代理 | [10-stream-proxy.md](10-stream-proxy.md) |
 | 11 | DNS 代理 | [11-dns-proxy.md](11-dns-proxy.md) |
 | 12 | 绑定域名并验证 | [12-domain-verify.md](12-domain-verify.md) |
+
+## 第二篇 · 进阶与运维（第 13-22 章，覆盖左侧菜单剩余项）
+
+| 章 | 内容（菜单项） | 文件 |
+|---|---|---|
+| 13 | 概览 | [13-overview.md](13-overview.md) |
+| 14 | 静态资源 | [14-static-resources.md](14-static-resources.md) |
+| 15 | DNS代理[HTTP] | [15-dns-http.md](15-dns-http.md) |
+| 16 | 指标总览与指标查询 | [16-metrics.md](16-metrics.md) |
+| 17 | 统一管理 | [17-central-management.md](17-central-management.md) |
+| 18 | 插件开关 | [18-plugin-switches.md](18-plugin-switches.md) |
+| 19 | 用户管理 | [19-users.md](19-users.md) |
+| 20 | 数据库管理 | [20-database-management.md](20-database-management.md) |
+| 21 | Edge直连 / 数据导入 | [21-edge-client-import.md](21-edge-client-import.md) |
+| 22 | 工具箱 / 自启动管理 / 节点任务 | [22-tools-autostart-tasks.md](22-tools-autostart-tasks.md) |
 
 # 阅读约定
 
