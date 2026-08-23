@@ -8,6 +8,7 @@ raising.
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,10 @@ from clickhouse_driver import Client
 
 logger = logging.getLogger(__name__)
 
-_client: Client | None = None
+# clickhouse_driver 的 Client 非线程安全：必须每线程独立连接。
+# metrics API 经 asyncio.to_thread 并发调用 execute_query，若共享同一条
+# TCP 连接，协议状态会被竞争破坏（表现为查询静默返回空结果）。
+_local = threading.local()
 _config: dict | None = None
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "clickhouse.yaml"
@@ -48,12 +52,12 @@ def _load_config(path: str | Path | None = None) -> dict:
 
 
 def get_client() -> Client | None:
-    global _client
-    if _client is not None:
-        return _client
+    client = getattr(_local, "client", None)
+    if client is not None:
+        return client
     cfg = _load_config()
     try:
-        _client = Client(
+        client = Client(
             host=cfg["host"],
             port=cfg["port"],
             database=cfg["database"],
@@ -65,8 +69,9 @@ def get_client() -> Client | None:
         logger.info("clickhouse connected to %s:%s/%s", cfg["host"], cfg["port"], cfg["database"])
     except Exception as exc:
         logger.warning("clickhouse connection failed: %s", exc)
-        _client = None
-    return _client
+        client = None
+    _local.client = client
+    return client
 
 
 def execute_query(sql: str, params: dict | None = None) -> list[tuple] | None:
@@ -81,10 +86,11 @@ def execute_query(sql: str, params: dict | None = None) -> list[tuple] | None:
 
 
 def close_client() -> None:
-    global _client
-    if _client is not None:
+    # 仅断开当前线程的连接；工作线程的连接随线程结束/进程退出释放
+    client = getattr(_local, "client", None)
+    if client is not None:
         try:
-            _client.disconnect()
+            client.disconnect()
         except Exception:
             pass
-        _client = None
+    _local.client = None

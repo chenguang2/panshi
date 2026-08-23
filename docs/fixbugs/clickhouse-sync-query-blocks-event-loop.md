@@ -98,3 +98,38 @@ data = await asyncio.to_thread(query_summary)
 | 切换后点击其它页面恢复 | 长时间"加载中" | ~74ms 网络空闲 |
 
 剩余 12 并发是单次仪表盘加载的固有宽度；若需进一步压缩，可合并指标端点或减少图表数量。
+
+## 后续：共享单例 Client 线程竞争导致查询静默返回空（第三根因）
+
+事件循环修复上线后，用户反馈「指标查询」下拉为空。取证：
+
+- `/metrics/names` 瞬间返回 `{"data":[]}`，日志零告警；
+- 直连探测 CH 正常（48 万行、最新数据即当前时刻）——数据在、连接通、无异常；
+- 重启后端后立即恢复 16 条指标。
+
+### 根因
+
+`clickhouse_driver.Client` **非线程安全**，而 `clickhouse_client.py` 用全局单例
+`_client` 持有唯一连接。to_thread 修复后多个工作线程并发调用同一实例，
+TCP 协议状态被竞争破坏——后续查询不抛异常、静默返回空结果，直到进程重启重建连接。
+时间线吻合：劣化仅出现在 to_thread 上线并发生并发调用之后。
+
+### 解决方案
+
+`clickhouse_client.py` 改为 **threading.local 线程本地连接**：每个工作线程
+独立持有 Client（首次使用时创建、之后复用），彻底消除跨线程共享。
+
+### 回归防护
+
+`test_clickhouse_client.py::TestClickHouseClientThreadLocal::
+test_each_thread_gets_own_connection`：双线程经屏障并发调用 get_client，
+断言各自拿到不同实例、同线程内复用同一实例。
+
+> ⚠️ 测试桩陷阱：`patch(...Client)` 默认所有调用返回同一个 MagicMock 实例，
+> 无法区分"各线程各自创建"；需设 `MockClient.side_effect = MagicMock`
+> 让每次调用产生新实例。
+
+### 验证
+
+全量 1282 passed；线上并发负载（9 个 CH 查询）前后 `/metrics/names`
+连续三次均稳定返回 16 条指标。

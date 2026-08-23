@@ -7,8 +7,10 @@ class TestClickHouseClient:
     """Unit tests for app.services.clickhouse_client."""
 
     def reset_module(self):
+        import threading
+
         import app.services.clickhouse_client as mod
-        mod._client = None
+        mod._local = threading.local()
         mod._config = None
 
     @pytest.fixture(autouse=True)
@@ -52,8 +54,8 @@ class TestClickHouseClient:
     # ── get_client ─────────────────────────────────────────
 
     @patch("app.services.clickhouse_client.Client")
-    def test_get_client_creates_once(self, MockClient):
-        from app.services.clickhouse_client import get_client, _load_config, _client
+    def test_get_client_reuses_connection_within_thread(self, MockClient):
+        from app.services.clickhouse_client import get_client, _load_config
         _load_config()  # load defaults
         c1 = get_client()
         c2 = get_client()
@@ -114,7 +116,56 @@ class TestClickHouseClient:
         from pathlib import Path
         monkeypatch.setattr("app.services.clickhouse_client._CONFIG_PATH", Path("/tmp/nonexistent/clickhouse.yaml"))
         monkeypatch.setattr("app.services.clickhouse_client._config", None)
-        monkeypatch.setattr("app.services.clickhouse_client._client", None)
+        import threading
+
+        monkeypatch.setattr("app.services.clickhouse_client._local", threading.local())
         from app.services.clickhouse_client import execute_query
         result = execute_query("SELECT 1")
         assert result is None
+
+
+class TestClickHouseClientThreadLocal:
+    """线程本地连接：clickhouse_driver 的 Client 非线程安全。
+
+    回归背景：metrics API 改为 asyncio.to_thread 后，多工作线程并发共用
+    全局单例 Client（同一条 TCP 连接），协议状态被竞争破坏后查询静默返回空
+    （指标下拉变空、无任何报错），直到进程重启才恢复。
+    """
+
+    def reset(self):
+        import threading
+        import app.services.clickhouse_client as mod
+        mod._local = threading.local()
+        mod._config = None
+
+    @patch("app.services.clickhouse_client.Client")
+    def test_each_thread_gets_own_connection(self, MockClient):
+        import threading
+
+        # 每次 Client(...) 调用生成独立实例，才能区分"各线程各自创建"
+        MockClient.side_effect = MagicMock
+        self.reset()
+        from app.services.clickhouse_client import get_client, _load_config
+        _load_config()
+
+        results = {}
+        barrier = threading.Barrier(2)
+
+        def worker():
+            barrier.wait(timeout=5)
+            c1 = get_client()
+            c2 = get_client()
+            assert c1 is c2, "同一线程内必须复用同一连接"
+            results[threading.get_ident()] = c1
+
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        assert len(results) == 2
+        a, b = list(results.values())
+        assert a is not b, "不同线程必须持有各自独立的连接（不能共享 TCP 连接）"
+        assert MockClient.call_count == 2
