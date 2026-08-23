@@ -93,9 +93,9 @@ const summaryCards = computed(() =>
 
 const METRIC_LABELS: Record<string, string> = {
   // Edge OTel 业务指标
-  edge_http_requests_total: '总请求数 (QPS)',
+  edge_http_requests_total: '总请求数（近5分钟）',
   edge_nginx_http_current_connections: 'Nginx 活跃连接数',
-  edge_metric_errors_total: '指标采集错误数',
+  edge_metric_errors_total: '指标采集错误数（近5分钟）',
   edge_cpu_usage: 'CPU 使用率',
   edge_memory_usage: '内存使用率',
   edge_latency_avg: '平均延迟 (ms)',
@@ -289,6 +289,8 @@ function formatValue(key: string): string {
   const v = store.summaryData[key]
   if (v === undefined || v === null) return '--'
   if (key === 'edge_nginx_http_current_connections') return String(Math.round(v))
+  // 计数器指标为窗口内增量计数，取整显示
+  if (key.endsWith('_total')) return Math.round(v).toLocaleString()
   return v.toFixed(2)
 }
 

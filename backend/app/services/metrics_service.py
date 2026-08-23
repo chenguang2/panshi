@@ -150,23 +150,46 @@ def query_time_series(
     ]
 
 
-def query_summary() -> dict[str, float]:
-    rows = execute_query("""
-        SELECT
-            MetricName,
-            argMax(Value, TimeUnix) AS latest_value
-        FROM (
-            SELECT MetricName, Value, TimeUnix FROM otel_metrics_gauge
-            UNION ALL
-            SELECT MetricName, Value, TimeUnix FROM otel_metrics_sum
-        )
-        WHERE TimeUnix > now() - INTERVAL 300 SECOND
+def query_summary(window_sec: int = 300) -> dict[str, float]:
+    """汇总卡片：gauge 取最新值，计数器取窗口内增量。
+
+    - otel_metrics_sum 全部为累计计数器 → 窗口内增量 max(Value) - min(Value)
+      （按指标聚合时，Σ(max_i - min_i) ≡ Σmax - Σmin，无需逐序列分组）
+    - otel_metrics_gauge 为瞬时值 → 最新值；但 _total 后缀实为计数器，
+      同样按增量计算（与 _is_counter 的 Prometheus 后缀启发式一致）
+    """
+    result: dict[str, float] = {}
+
+    gauge_rows = execute_query(f"""
+        SELECT MetricName, argMax(Value, TimeUnix) AS latest_value
+        FROM otel_metrics_gauge
+        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+          AND NOT endsWith(MetricName, '_total')
         GROUP BY MetricName
-        ORDER BY MetricName
     """)
-    if rows is None:
-        return {}
-    return {r[0]: float(r[1]) for r in rows}
+    if gauge_rows:
+        result.update({r[0]: float(r[1]) for r in gauge_rows})
+
+    sum_rows = execute_query(f"""
+        SELECT MetricName, greatest(max(Value) - min(Value), 0) AS window_inc
+        FROM otel_metrics_sum
+        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+        GROUP BY MetricName
+    """)
+    if sum_rows:
+        result.update({r[0]: float(r[1]) for r in sum_rows})
+
+    gauge_counter_rows = execute_query(f"""
+        SELECT MetricName, greatest(max(Value) - min(Value), 0) AS window_inc
+        FROM otel_metrics_gauge
+        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+          AND endsWith(MetricName, '_total')
+        GROUP BY MetricName
+    """)
+    if gauge_counter_rows:
+        result.update({r[0]: float(r[1]) for r in gauge_counter_rows})
+
+    return result
 
 
 def query_route_stats(

@@ -120,24 +120,38 @@ class TestMetricsService:
     # ── query_summary ──────────────────────────────────────
 
     @patch("app.services.metrics_service.execute_query")
-    def test_summary_returns_latest(self, mock_exec):
-        mock_exec.return_value = [
-            ("cpu_usage", 85.0),
-            ("memory_usage", 1024.0),
+    def test_summary_gauge_latest_and_counter_increment(self, mock_exec):
+        """Gauge 返回最新值；计数器（sum 表 + gauge 表 _total 后缀）返回窗口内增量。"""
+        mock_exec.side_effect = [
+            [("cpu_usage", 85.0)],                    # gauge 最新值（排除 _total）
+            [("edge_http_requests_total", 1234.0)],   # sum 表计数器增量
+            [("edge_plugin_errors_total", 5.0)],      # gauge 表 _total 计数器增量
         ]
         from app.services.metrics_service import query_summary
         result = query_summary()
         assert result["cpu_usage"] == 85.0
-        assert result["memory_usage"] == 1024.0
+        assert result["edge_http_requests_total"] == 1234.0
+        assert result["edge_plugin_errors_total"] == 5.0
+
+    @patch("app.services.metrics_service.execute_query")
+    def test_summary_gauge_query_excludes_total_suffix(self, mock_exec):
+        """gauge 最新值查询必须排除 _total 后缀（它们是计数器，不能取原始值）。"""
+        mock_exec.side_effect = [[], [], []]
+        from app.services.metrics_service import query_summary
+        query_summary()
+        first_sql = mock_exec.call_args_list[0][0][0]
+        assert "NOT endsWith(MetricName, '_total')" in first_sql
+        third_sql = mock_exec.call_args_list[2][0][0]
+        assert "endsWith(MetricName, '_total')" in third_sql
 
     @patch("app.services.metrics_service.execute_query")
     def test_summary_empty(self, mock_exec):
-        mock_exec.return_value = []
+        mock_exec.side_effect = [[], [], []]
         from app.services.metrics_service import query_summary
         assert query_summary() == {}
 
     @patch("app.services.metrics_service.execute_query")
     def test_summary_none(self, mock_exec):
-        mock_exec.return_value = None
+        mock_exec.side_effect = [None, None, None]
         from app.services.metrics_service import query_summary
         assert query_summary() == {}
