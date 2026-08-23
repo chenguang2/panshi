@@ -20,7 +20,7 @@
 | 搜索框 | 按插件名称过滤 |
 | 插件行 | 名称 + 启用开关（toggle）；点击 **⚙ schema** 展开该插件的配置结构定义 |
 
-📷 截图待补充：（展开某插件的 schema 框）
+![schema 展开](images/18-02-schema-expanded.png)
 
 # 启用 / 禁用
 
