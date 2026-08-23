@@ -3481,3 +3481,140 @@ add-metrics-queries
 请读取 openspec/changes/add-metrics-queries/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+
+--------------------------------------------------
+
+(psycopg2.errors.InsufficientPrivilege) permission denied to set parameter "session_replication_role" [SQL: SET session_replication_role = replica] (Background on this error at: https://sqlalche.me/e/20/f405)
+
+
+现在数据库管理中， 从 本地 sqlite 导出到 pg 数据库， 选择替换， 我了解将清空目标库 ， 点开始迁移后， 报错 
+
+(psycopg2.errors.InsufficientPrivilege) permission denied to set parameter "session_replication_role" [SQL: SET session_replication_role = replica] (Background on this error at: https://sqlalche.me/e/20/f405)
+
+请排查这个问题，让这个任务完成
+
+1. 系统目前没有切换数据库的界面设置，现在切到 pg 没有入口和执行步骤
+2. 还要测试从 pg 迁移到 sqlite 是否可以执行成功
+3. 数据库迁移中还有一个选项 合并，这个是否有必要？ 是否有实现？ 如果有必要，请实现
+
+
+继续解决：注意：不要使用子代理，子代理不可用
+
+1. database_management 加入到 feature 的设置中，可用开启和关闭
+
+现在 右上角的，当前的数据库的提示，图标太大，太明显，是否有更好的方案，给我几个我看看，
+同时在关闭 database_management 的情况下，图标不要有链接了，因为无法跳到数据库管理界面了
+
+2. 数据库管理的页面风格要和其它页面统一，包括其中的添加连接的弹出窗口，保证风格的统一
+
+2. 数据库的配置 db_config.json  不要放到 data 目录下，放到和 features.yaml  同级的目录， 在 product/linux/gen-linux.sh 中也要copy 这个文件到目的目录
+
+3. 检查现在代码，指标总览中，路由统计中，路由名为啥又不显示了？ 之前已经修复了
+
+
+继续编写手册：
+现在需要编写 05 插件元数据部分， 注意：
+
+一般只设置 日志插件的元数据，而且 日志插件的元数据是固定的，一般为：
+
+{
+    "logs": {
+        "logs/process.log": {
+            "formats": [
+                "${req_start_time#time_format,%Y%m%d%H%M%S}",
+                "${http_x-edge-traceid}",
+                "${username}",
+                "${username_isvalid#fixdefault,,0}",
+                "${http_cdn-src-ip}",
+                "${deviceid}",
+                "${deviceid_flag_suspicion}",
+                "${deviceid_dfp.incode_info}",
+                "${cookie_JSESSIONID}",
+                "${method}",
+                "${uri}",
+                "${req_args_string#vtrim#ntrim#remove_password1}",
+                "${http_headers}",
+                "${http_X-Rip}",
+                "${http_referer}",
+                "${http_cookie}",
+                "${log_headers}",
+                "${http_X-Via}",
+                "${http_X-Cdn-Src-Port}",
+                "${http_X-Client-Ip-City}",
+                "${upstream_response_time#fixdefault,0,0}",
+                "${request_time}",
+                "${status}",
+                "${upstream_addr}",
+                "${route_id}",
+                "${plugin_riskinfos}",
+                "${plugin_riskid#fixdefault,,0}"
+            ]
+        }
+    }
+}
+
+设置到插件的对应的 json 输入框中。 其中各个字段可以根据需要增减。 
+
+
+继续编写手册：
+现在需要编写 07 添加上游部分， 注意： 后端服务要使用本地的测试服务为 127.0.0.1:8111
+
+继续编写手册：
+现在需要编写 08 添加路由部分， 注意： 后端服务要选择之前建立的上游服务，插件要选择数据处理中的自定义预处理，选择之前建立的插件组 
+
+继续编写手册：09 证书管理 
+1. 需要先生成 rsa 的 根证书， 根证书不用发布
+2. 在生成证书，证书选 rsa 算法， 选择上一步生成的根证书， 域名 输入 test.com , 最后发布
+
+继续编写手册：10 四层代理
+
+1. 目的节点选择： 本地 127.0.0.1 8111 和  8112 端口 并发布
+
+
+修改 03-edge.evn.md ， 要补充
+
+插件部分的设置：
+
+ex_plugins:
+  plugin_demo: false
+  gmssl: true
+
+
+ex_stream_plugins:
+  plugin_demo: false
+  dns_upstream: true
+  dns_upstream-ww: true  
+
+使用国密证书: 需要开启
+gmssl: true
+
+
+dns 功能：
+dns_upstream: true
+dns_upstream-ww: true 
+来开启插件，才能使用 dns 功能
+
+继续编写手册：11 dns代理
+1. 第一个界面 不选择 内外网分离
+1. 域名输入为 test.com  , 选择 一致性哈希
+2. 节点输入 当前的 3个节点的 16610 端口
+4. 如果第一个界面选择了内外网分离，那 节点这里还要输入外网地址
+3. 选择需要健康检查， 将健康检查的 json 输入框中的协议 改成 https 
+4. 发布
+
+
+
+
+
+
+==========================================================
+解决下面两个问题：
+
+1. 指标查询和指标详情两个页面，都查一下是否按照时间做条件了
+我发现好像没有卡时间段，都是从开始到现在的
+
+2. 数据库迁移中：
+如果不选
+【我了解将清空目标库】 就不允许点击开始迁移，点击开始迁移要验证这个checkbox 框必须被选中
+

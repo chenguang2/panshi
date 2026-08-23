@@ -1,6 +1,6 @@
-# 3. 修改 edge.env（新增监听端口）
+# 3. 修改 edge.env（监听端口与插件开关）
 
-> 本章场景：业务要求网关提供三种新能力——HTTPS 七层代理（端口 5000）、TCP 四层转发（端口 8880）、DNS 代理（UDP 53）。这些「网关监听哪些端口」的信息不在各功能页面里逐项配置，而是集中记录在每个节点上的 `edge.env` 文件中。本章通过平台远程读取 → 修改 → 发布这个文件，为后续章节打开端口。
+> 本章场景：业务要求网关提供三种新能力——HTTPS 七层代理（端口 5000）、TCP 四层转发（端口 8880）、DNS 代理（UDP 53）；同时为后续章节预开启国密证书与 DNS 所需的插件开关。这些「网关监听哪些端口、启用哪些插件」的信息不在各功能页面里逐项配置，而是集中记录在每个节点上的 `edge.env` 文件中。本章通过平台远程读取 → 修改 → 发布这个文件，为后续章节打开端口和插件。
 
 # edge.env 是什么
 
@@ -23,6 +23,13 @@ deploy:
         - addr: 0.0.0.0:53
           udp: true              # UDP 53：DNS 代理用（第 11 章）
         - addr: 0.0.0.0:8880     # ← 本章新增 TCP 8880（第 10 章）
+ex_plugins:               # 七层（HTTP）插件开关
+  plugin_demo: false
+  gmssl: true             # ← 国密算法支持：使用国密证书必须开启（第 9 章）
+ex_stream_plugins:        # 四层（Stream）插件开关
+  plugin_demo: false
+  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
+  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
 ```
 
 关键规则：
@@ -34,6 +41,8 @@ deploy:
 | 模块名加 `NO` 前缀 = 禁用 | 如 `NOstream` 表示四层模块关闭；去掉 `NO` 即启用该模块 |
 | `listen[].udp: true` | 该条监听走 UDP 而非 TCP |
 | `deploy.http.admin.listen` | 管理 API 端口，对应第 2 章节点的「管理端口」 |
+| `ex_plugins.<插件名>` | 七层（HTTP）插件开关。`gmssl: true` 启用国密算法——**使用国密证书必须开启**；不需要的插件保持 `false` 即可 |
+| `ex_stream_plugins.<插件名>` | 四层（Stream）插件开关。`dns_upstream: true` 与 `dns_upstream-ww: true` 开启 DNS 功能——**不开启则无法使用 DNS 代理**（第 11 章） |
 
 # 页面入口
 
@@ -68,7 +77,7 @@ deploy:
 
 > ⚠️ 若读取失败：多为 SSH 不通（密钥未配置 / 端口不对）。可先手动把节点上的 edge.env 内容粘贴进编辑器继续本章操作。
 
-## 3.2 修改三处
+## 3.2 修改四处
 
 在编辑器中定位并修改（保持 YAML 缩进，两级空格）：
 
@@ -91,6 +100,32 @@ deploy:
 ```
 
 **③ 确认 UDP 53 存在**（演示环境已有；如无，按上面格式补一条 `- addr: 0.0.0.0:53` + `udp: true`）。
+
+**④ 开启国密与 DNS 相关插件开关：**
+
+在文件末尾（`deploy:` 同级）确认或补充以下内容：
+
+```yaml
+ex_plugins:               # 七层（HTTP）插件开关
+  plugin_demo: false
+  gmssl: true             # ← 启用国密算法：使用国密证书必须开启（第 9 章）
+
+ex_stream_plugins:        # 四层（Stream）插件开关
+  plugin_demo: false
+  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
+  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
+```
+
+说明：
+
+| 配置项 | 何时需要开启 |
+|---|---|
+| `ex_plugins.gmssl: true` | **使用国密证书时必须开启**。第 9 章如需生成/使用 SM2 国密证书，节点必须加载 gmssl 插件 |
+| `ex_stream_plugins.dns_upstream: true` | **使用 DNS 功能前必须开启**。第 11 章的 DNS 代理依赖该插件进行域名解析 |
+| `ex_stream_plugins.dns_upstream-ww: true` | **使用 DNS 功能前必须开启**，与 `dns_upstream` 配套 |
+| `plugin_demo` | 示例插件，保持 `false` 即可 |
+
+> ⚠️ 插件开关与端口监听一样属于 edge.env 内容：修改后同样要走「发布 → 选节点」流程才会生效。若读取到的配置中已有这些段落，只需把对应值改为 `true`，不要重复添加键。
 
 修改完成后的编辑器：
 
@@ -122,7 +157,7 @@ deploy:
 
 # 验证
 
-1. 再次点击【获取配置模板】，确认读回的内容包含 5000 和 8880；
+1. 再次点击【获取配置模板】，确认读回的内容包含 5000、8880，以及 `gmssl: true` 和 `dns_upstream: true`；
 2. 在能连通节点的机器上执行：
 
 ```bash
@@ -139,8 +174,9 @@ timeout 3 bash -c 'cat < /dev/null > /dev/tcp/192.168.0.13/8880' && echo "TCP 88
 
 # 本章小结
 
-- edge.env 决定网关「听什么端口、开什么模块」，改动流程固定为：**读取 → 编辑 → 发布（选节点）→ 验证**
+- edge.env 决定网关「听什么端口、开什么模块、启用哪些插件」，改动流程固定为：**读取 → 编辑 → 发布（选节点）→ 验证**
 - 每次发布自动生成版本，可在【版本管理】中回滚
+- 插件开关：`ex_plugins.gmssl: true` 支撑国密证书；`ex_stream_plugins` 的 `dns_upstream` / `dns_upstream-ww: true` 支撑 DNS 功能——对应能力使用前必须先开启并发布
 - 本章打开的 5000(HTTPS) / 8880(TCP) / 53(UDP) 将分别在第 8、10、11 章被业务配置使用
 
 下一步：[第 4 章 建立全局规则](04-global-rules.md)

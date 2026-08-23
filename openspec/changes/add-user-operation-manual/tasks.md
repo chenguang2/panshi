@@ -17,13 +17,13 @@
 - [x] 3.2 第 2 章建立节点 ×3（02-nodes.md）
 - [x] 3.3 第 3 章 edge.env 修改（03-edge-env.md）：HTTP 5000+HTTPS、TCP 8880、UDP 53
 - [x] 3.4 第 4 章全局规则（04-global-rules.md）
-- [ ] 3.5 第 5 章插件元数据（05-plugin-metadata.md）
-- [ ] 3.6 第 6 章插件组含日志插件（06-plugin-configs.md）
-- [ ] 3.7 第 7 章上游（07-upstreams.md）
-- [ ] 3.8 第 8 章路由含高级匹配绑定端口（08-routes.md）
-- [ ] 3.9 第 9 章根证书/证书生成发布（09-certificates.md）
-- [ ] 3.10 第 10 章 TCP 四层代理 8880（10-stream-proxy.md）
-- [ ] 3.11 第 11 章 DNS 代理 UDP 53（11-dns-proxy.md）
+- [x] 3.5 第 5 章插件元数据（05-plugin-metadata.md）
+- [x] 3.6 第 6 章插件组含日志插件（06-plugin-configs.md）
+- [x] 3.7 第 7 章上游（07-upstreams.md）
+- [x] 3.8 第 8 章路由含高级匹配绑定端口（08-routes.md）
+- [x] 3.9 第 9 章根证书/证书生成发布（09-certificates.md）
+- [x] 3.10 第 10 章 TCP 四层代理 8880（10-stream-proxy.md）
+- [x] 3.11 第 11 章 DNS 代理 UDP 53（11-dns-proxy.md）
 - [ ] 3.12 第 12 章域名绑定与全链路验证（12-domain-verify.md）
 
 ## 4. 收尾
