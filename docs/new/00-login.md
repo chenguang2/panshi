@@ -50,9 +50,9 @@
 
 开启方法：编辑后端配置文件 `backend/features.yaml`，把对应开关改为 `true` 并保存。
 
-> 开发环境下保存后服务会自动重载；生产环境需重启 `panshi-backend` 服务后刷新页面。
+> 开发环境下保存后服务会自动重载；生产环境需重启服务后刷新页面。
 
-📷 截图待补充：（features.yaml 中开关字段特写）
+![features.yaml 中开关字段](images/00-03-feature.png)
 
 # 准备干净的演示数据库
 
@@ -73,7 +73,9 @@
 | 名称 | 手册演示库 | 连接的显示名称 |
 | 数据库文件路径 | ./data/manual-demo.db | 文件不存在没关系，重启后自动创建 |
 
-📷 截图待补充：（添加连接弹窗，SQLite 类型，路径填 ./data/manual-demo.db）
+添加连接弹窗，SQLite 类型，路径填 ./data/manual-demo.db）
+
+![添加连接弹窗](images/00-04-db-test.png)
 
 填写完成后可先点【测试连接】，再点【保存】。
 
@@ -82,8 +84,7 @@
 在【连接列表】中找到「手册演示库」一行，点击【设为当前】，弹窗中点击【确认切换】。
 
 > ⚠️ 切换只修改配置文件，必须手动重启后端服务才生效：
-> - 开发环境：重新执行 `develop/linux/start.sh`
-> - 生产环境：`systemctl restart panshi-backend`
+> - 生产环境：`cd panshi; sh stop.sh; sh start.sh`
 
 ## 3. 验证
 
@@ -92,7 +93,9 @@
 - 「当前数据库」卡片显示：SQLite · ./data/manual-demo.db
 - 回到【概览】页，所有资源计数为 0（用户除外）
 
-📷 截图待补充：（当前数据库卡片显示手册演示库）
+当前数据库卡片显示手册演示库
+
+![显示手册演示库](images/00-05-sqlite-tips.png)
 
 # 本章小结
 

@@ -57,25 +57,13 @@
 
 3. 点击【确认发布】，系统开始向各节点同步配置。
 
-![发布结果](images/06-08-pc-publish-result.png)
+![发布结果](images/06-08-plugin-group-publish-result.png)
 
-> ⚠️ 「部分成功」属正常现象：某台节点管理端口不通时，其余节点不受影响。修复该节点后可重新发布。
+> ⚠️ 如果出现「部分成功」，说明某台节点管理端口可能不通，需要修复该节点后重新发布。其余节点不受影响。
 
 # 验证
 
 1. 发布完成后，卡片显示【已发布】徽标及版本号（v1）。
-2. 通过 API 确认插件组内容：
-
-```bash
-curl -s http://localhost:12344/api/v1/plugin_configs?cluster_id=<集群ID> \
-  -H "Authorization: Bearer <token>"
-```
-
-预期结果：
-
-- 返回列表中包含名称为"日志插件组"的记录；
-- 其 `plugins` 字段包含 `log_process`；
-- 卡片状态为"已发布 v1"。
 
 # 本章小结
 
