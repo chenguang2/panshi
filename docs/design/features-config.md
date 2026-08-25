@@ -29,7 +29,8 @@ features:
   install_openresty: true  # 在网关上安装 OpenResty
   install_edge: true       # 在网关上安装 Edge 运行时
   plugin_switches: true    # 插件启用/禁用管理页面
-  task_center: true        # 节点任务中心（/node-tasks）
+   task_center: true        # 节点任务中心（/node-tasks）
+   edge_autostart: true     # Edge 节点自启动管理（systemd）
 
 enabled_plugins: []        # 插件白名单（空 = 不限制）
 

@@ -32,6 +32,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "dns_proxy_http",
     "task_center",
     "database_management",
+    "edge_autostart",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.

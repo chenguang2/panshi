@@ -3641,3 +3641,12 @@ reading / writing / waiting  各阶段连接 ，这个数据也要展示，放�
 
 /brainstorming 请仔细阅读 openspec/changesadd-user-operation-manual 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+==========================================================================
+
+1. features.yaml 中需要加入对 自启动管理的支持
+
+我现在需要一个 websocket 的 helloworld 的演示程序，你使用 python 给我编写一个，并演示如何使用
+
+要能够通过 ws:// 协议能访问的

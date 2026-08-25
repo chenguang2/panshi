@@ -13,6 +13,7 @@ features:
   dns_proxy_http: true
   task_center: true
   database_management: true
+  edge_autostart: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

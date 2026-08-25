@@ -45,7 +45,8 @@
 | 数据库管理 | 系统管理 | `database_management` |
 | Edge直连 | 运维管理 | `edge_client` |
 | 数据导入 | 运维管理 | `edge_import` |
-| 工具箱 / 自启动管理 | 运维管理 | `tools` |
+| 工具箱 | 运维管理 | `tools` |
+| 自启动管理 | 运维管理 | `edge_autostart` |
 | 节点任务 | 运维管理 | `task_center` |
 
 开启方法：编辑后端配置文件 `backend/features.yaml`，把对应开关改为 `true` 并保存。
