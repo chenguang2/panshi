@@ -58,7 +58,7 @@ async def list_routes(
     cluster_id: int,
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE, description="Items per page"),
     sort_by: Optional[str] = Query(None, description=f"Sort field. Allowed: {', '.join(ALLOWED_SORT_FIELDS)}"),
     sort_order: Optional[str] = Query("asc", pattern="^(asc|desc)$", description="Sort order: asc or desc"),
     search: Optional[str] = Query(None, description="Search keyword"),
