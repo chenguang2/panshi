@@ -63,6 +63,14 @@
 | 21 | Edge直连 / 数据导入 | [21-edge-client-import.md](21-edge-client-import.md) |
 | 22 | 工具箱 / 自启动管理 / 节点任务 | [22-tools-autostart-tasks.md](22-tools-autostart-tasks.md) |
 
+## 附录（客户端环境配置）
+
+| 附录 | 内容 | 文件 |
+|---|---|---|
+| A | 修改 hosts 文件（域名指向网关） | [附录A-修改hosts.md](附录A-修改hosts.md) |
+| B | 修改 DNS（内网 DNS 解析） | [附录B-修改DNS.md](附录B-修改DNS.md) |
+| C | 下载根证书并安装到 Chrome | [附录C-安装根证书到Chrome.md](附录C-安装根证书到Chrome.md) |
+
 # 阅读约定
 
 - 【】内为界面上可见的按钮/菜单/字段名称。
