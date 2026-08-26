@@ -1067,3 +1067,30 @@ class TestSanitizeCommandForStore:
         out = sanitize_command_for_store(cmd)
         assert "linux123" not in out
         assert "*****" in out
+
+
+class TestControlPathDirSelfHeal:
+    """fix-ansible-cp-dir-recreate: /tmp 清理后下一次运行自愈。"""
+
+    async def test_run_playbook_recreates_deleted_control_path_dir(
+        self, tmp_path, monkeypatch):
+        import os
+        import shutil
+        from unittest.mock import MagicMock
+
+        import ansible_runner
+
+        from app.services.ansible_service import AnsibleRunnerService
+
+        svc = AnsibleRunnerService(private_data_dir=str(tmp_path))
+        shutil.rmtree("/tmp/panshi-cp", ignore_errors=True)
+        assert not os.path.exists("/tmp/panshi-cp")
+
+        fake_result = MagicMock(rc=0, status="successful",
+                                stdout="", stderr="")
+        monkeypatch.setattr(ansible_runner, "run",
+                            lambda **kw: fake_result)
+
+        await svc.run_playbook(ip="192.0.2.1", tag="nginx_cmd_run")
+
+        assert os.path.isdir("/tmp/panshi-cp")

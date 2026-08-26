@@ -30,6 +30,17 @@ MAX_CONCURRENT_PLAYBOOKS = 5
 
 _INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
 
+_SSH_CONTROL_PATH_DIR = "/tmp/panshi-cp"
+
+
+def _ensure_control_path_dir() -> None:
+    """Ensure the SSH ControlMaster socket dir exists (self-healing).
+
+    /tmp is volatile (reboot, systemd-tmpfiles-clean); recreate on every
+    run so a cleaned dir never breaks ansible operations.
+    """
+    os.makedirs(_SSH_CONTROL_PATH_DIR, exist_ok=True)
+
 # ── SSH helper functions ──────────────────────────────────────────────
 
 SSH_KEY_PATH = os.path.expanduser("~/.ssh/id_rsa")
@@ -684,7 +695,7 @@ class AnsibleRunnerService:
         # this equivalent to a single read at startup.
         self._semaphore = asyncio.Semaphore(get_concurrency("max_playbooks", MAX_CONCURRENT_PLAYBOOKS))
         # Ensure SSH ControlPath directory exists for ControlMaster sockets
-        os.makedirs("/tmp/panshi-cp", exist_ok=True)
+        _ensure_control_path_dir()
 
     # ── public API ──────────────────────────────────────────────
 
@@ -722,6 +733,10 @@ class AnsibleRunnerService:
             Dict with keys ``rc``, ``status``, ``stdout``, ``stderr``.
         """
         import ansible_runner
+
+        # Self-heal: /tmp cleanup may have removed the ControlMaster socket
+        # dir since process start; recreate before connecting.
+        _ensure_control_path_dir()
 
         # Temporarily inject a non-standard SSH port into the inventory so the
         # ansible connection uses it; restored in finally.
