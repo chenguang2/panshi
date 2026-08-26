@@ -2,9 +2,17 @@
   <div class="cl-page">
     <PageHeader title="统一管理" description="以集群为单位，统一管理该集群下的资源，实现统一监控与运维">
       <template #actions>
+        <button class="btn btn-secondary" @click="openBackupImport">从备份恢复</button>
         <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
       </template>
     </PageHeader>
+
+    <ClusterBackupDialog
+      :visible="backupDialogVisible"
+      :mode="backupDialogMode"
+      :cluster="backupTargetCluster"
+      @close="backupDialogVisible = false"
+    />
 
     <div class="cl-header-actions">
       <div class="search-input-wrap">
@@ -204,6 +212,7 @@
             <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
             <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
             <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(cluster)">导出 Excel</button>
+            <button class="btn btn-ghost btn-sm" @click.stop="openBackupDownload(cluster)">备份下载</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);" @click.stop="deleteCluster(cluster)">删除</button>
           </div>
         </div>
@@ -387,6 +396,7 @@ import { useAuthStore } from '@/stores/auth'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
@@ -968,6 +978,23 @@ const deleteCluster = async (cluster: Cluster) => {
       })
     },
   })
+}
+
+// ── Cluster JSON backup / restore ──
+const backupDialogVisible = ref(false)
+const backupDialogMode = ref<'download' | 'import'>('download')
+const backupTargetCluster = ref<Cluster | null>(null)
+
+function openBackupDownload(cluster: Cluster) {
+  backupTargetCluster.value = cluster
+  backupDialogMode.value = 'download'
+  backupDialogVisible.value = true
+}
+
+function openBackupImport() {
+  backupTargetCluster.value = null
+  backupDialogMode.value = 'import'
+  backupDialogVisible.value = true
 }
 
 // ── Export cluster data to Excel ──
