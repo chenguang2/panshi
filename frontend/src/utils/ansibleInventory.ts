@@ -156,3 +156,93 @@ export function apiDetail(err: unknown, fallback: string): string {
   if (typeof detail === 'string' && detail.trim()) return detail
   return fallback
 }
+
+// ── 批量粘贴导入（纯函数，供批量导入弹窗使用） ────────────────────────
+
+/** 单条解析错误：line 为文本中的物理行号（1 起）。 */
+export interface BulkParseError {
+  line: number
+  reason: string
+}
+
+/** 解析出的主机条目：仅携带粘贴中提供的字段（未提及的键不存在）。 */
+export interface BulkHostEntry {
+  ip: string
+  ansible_ssh_user?: string
+  ansible_ssh_pass?: string
+}
+
+export interface BulkParseResult {
+  entries: BulkHostEntry[]
+  /** 文本内部重复 IP 的合并次数（后者覆盖前者）。 */
+  duplicatesInText: number
+  errors: BulkParseError[]
+}
+
+/** 主机键口径：与后端 inventory_service._HOST_KEY_RE 完全一致（宽松的 IPv4/主机名形态校验）。 */
+const HOST_KEY_RE = /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/
+
+export function parseBulkHosts(text: string): BulkParseResult {
+  const errors: BulkParseError[] = []
+  const byIp = new Map<string, BulkHostEntry>()
+  let duplicatesInText = 0
+  const lines = text.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const all = trimmed.split(/\s+/)
+    // 行尾注释：token 以 # 开头即丢弃其后内容（密码首字符为 # 的场景走源码视图）
+    const hashIdx = all.findIndex((t) => t.startsWith('#'))
+    const tokens = hashIdx === -1 ? all : all.slice(0, hashIdx)
+    if (tokens.length > 3) {
+      errors.push({ line: i + 1, reason: `最多 3 段（IP 用户 密码），该行有 ${tokens.length} 段` })
+      continue
+    }
+    if (!HOST_KEY_RE.test(tokens[0])) {
+      errors.push({ line: i + 1, reason: `IP 不符合主机键口径（IPv4 或主机名）: ${tokens[0]}` })
+      continue
+    }
+    const entry: BulkHostEntry = { ip: tokens[0] }
+    if (tokens[1] !== undefined) entry.ansible_ssh_user = tokens[1]
+    if (tokens[2] !== undefined) entry.ansible_ssh_pass = tokens[2]
+    if (byIp.has(tokens[0])) duplicatesInText += 1
+    byIp.set(tokens[0], entry)
+  }
+  return { entries: [...byIp.values()], duplicatesInText, errors }
+}
+
+/* ── 批量导入合并 ─────────────────────────────────────── */
+
+export interface BulkMergeResult {
+  rows: InventoryHostEntry[]
+  overwrittenCount: number
+}
+
+/** 将批量解析条目合并入主机表格行；新 IP 追加、同 IP 仅覆盖提供的字段。 */
+export function mergeBulkEntries(
+  rows: InventoryHostEntry[],
+  entries: BulkHostEntry[],
+): BulkMergeResult {
+  const indexByIp = new Map<string, number>()
+  rows.forEach((r, i) => indexByIp.set(r.ip, i))
+  const next = rows.map((r) => ({ ...r }))
+  let overwrittenCount = 0
+
+  for (const e of entries) {
+    const idx = indexByIp.get(e.ip)
+    if (idx !== undefined) {
+      // 仅覆盖粘贴中提供的字段；未提及的保持原值
+      const row = next[idx]
+      if (e.ansible_ssh_user !== undefined) row.ansible_ssh_user = e.ansible_ssh_user
+      if (e.ansible_ssh_pass !== undefined) row.ansible_ssh_pass = e.ansible_ssh_pass
+      overwrittenCount += 1
+    } else {
+      const row: InventoryHostEntry = { ip: e.ip }
+      if (e.ansible_ssh_user !== undefined) row.ansible_ssh_user = e.ansible_ssh_user
+      if (e.ansible_ssh_pass !== undefined) row.ansible_ssh_pass = e.ansible_ssh_pass
+      indexByIp.set(e.ip, next.length)
+      next.push(row)
+    }
+  }
+  return { rows: next, overwrittenCount }
+}

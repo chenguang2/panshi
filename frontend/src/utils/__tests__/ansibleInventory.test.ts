@@ -5,6 +5,8 @@ import {
   assembleHosts,
   credString,
   extraVarKeys,
+  mergeBulkEntries,
+  parseBulkHosts,
   toBool,
   validateAdvancedField,
   unknownKeysOf,
@@ -168,5 +170,106 @@ describe('validateAdvancedField', () => {
 
   it('其余已知键自由文本不校验', () => {
     expect(validateAdvancedField('ansible_ssh_common_args', '-o X=1')).toBeNull()
+  })
+})
+
+describe('parseBulkHosts（批量导入解析）', () => {
+  it('解析「IP 用户 密码」行，仅提供的字段存在', () => {
+    const res = parseBulkHosts('10.0.0.1 root pass1\n10.0.0.2')
+    expect(res.errors).toEqual([])
+    expect(res.duplicatesInText).toBe(0)
+    expect(res.entries).toEqual([
+      { ip: '10.0.0.1', ansible_ssh_user: 'root', ansible_ssh_pass: 'pass1' },
+      { ip: '10.0.0.2' },
+    ])
+  })
+
+  it('跳过空行与 # 整行注释（含缩进）', () => {
+    const res = parseBulkHosts('\n10.0.0.1 root\n   # 这是注释\n#全角顶格注释\n   \n10.0.0.2\n')
+    expect(res.errors).toEqual([])
+    expect(res.entries).toEqual([
+      { ip: '10.0.0.1', ansible_ssh_user: 'root' },
+      { ip: '10.0.0.2' },
+    ])
+  })
+
+  it('行尾 # 注释：丢弃其后内容', () => {
+    const res = parseBulkHosts('10.0.0.1 root pass1 # web服务器\n10.0.0.2 # 纯IP加注释')
+    expect(res.errors).toEqual([])
+    expect(res.entries).toEqual([
+      { ip: '10.0.0.1', ansible_ssh_user: 'root', ansible_ssh_pass: 'pass1' },
+      { ip: '10.0.0.2' },
+    ])
+  })
+
+  it('Tab 与连续空白分隔（兼容 Excel 粘贴）', () => {
+    const res = parseBulkHosts('10.0.0.1\troot\tpass1\n10.0.0.2    user2     pass2')
+    expect(res.errors).toEqual([])
+    expect(res.entries).toEqual([
+      { ip: '10.0.0.1', ansible_ssh_user: 'root', ansible_ssh_pass: 'pass1' },
+      { ip: '10.0.0.2', ansible_ssh_user: 'user2', ansible_ssh_pass: 'pass2' },
+    ])
+  })
+
+  it('数据段超过 3 段的行报错并带物理行号，且不进入条目', () => {
+    const res = parseBulkHosts('10.0.0.1 root pass1 extra\n\n10.0.0.2 ok')
+    expect(res.errors).toEqual([{ line: 1, reason: expect.stringContaining('段') }])
+    expect(res.entries).toEqual([{ ip: '10.0.0.2', ansible_ssh_user: 'ok' }])
+  })
+
+  it('IP 不符合主机键口径的行报错（与后端一致的宽松形态校验）', () => {
+    const res = parseBulkHosts('10.0.0.1 root\n-bad ip! x\n999.999.999.999')
+    expect(res.errors).toEqual([{ line: 2, reason: expect.stringContaining('IP') }])
+    expect(res.entries).toEqual([
+      { ip: '10.0.0.1', ansible_ssh_user: 'root' },
+      { ip: '999.999.999.999' },
+    ])
+  })
+
+  it('文本内部重复 IP：后者整体覆盖前者并计数', () => {
+    const res = parseBulkHosts('10.0.0.1 old oldpass\n10.0.0.1 root pass1\n10.0.0.1 admin')
+    expect(res.duplicatesInText).toBe(2)
+    expect(res.entries).toEqual([{ ip: '10.0.0.1', ansible_ssh_user: 'admin' }])
+  })
+})
+
+describe('mergeBulkEntries（批量导入合并）', () => {
+  it('新 IP 追加到末尾，保持条目出现顺序', () => {
+    const rows: InventoryHostEntry[] = [{ ip: '10.0.0.1' }]
+    const res = mergeBulkEntries(rows, [
+      { ip: '10.0.0.2', ansible_ssh_user: 'root' },
+      { ip: '10.0.0.3' },
+    ])
+    expect(res.overwrittenCount).toBe(0)
+    expect(res.rows).toEqual([
+      { ip: '10.0.0.1' },
+      { ip: '10.0.0.2', ansible_ssh_user: 'root' },
+      { ip: '10.0.0.3' },
+    ])
+  })
+
+  it('同 IP 仅覆盖粘贴中提供的字段，保留未提及凭据与高级/未知键', () => {
+    const rows: InventoryHostEntry[] = [
+      { ip: '10.0.0.1', ansible_ssh_user: 'old', ansible_ssh_pass: 'oldpass', become: true, custom_key: 'val' },
+    ]
+    // 仅提供 user，不提供 pass → pass 应保留
+    const res = mergeBulkEntries(rows, [
+      { ip: '10.0.0.1', ansible_ssh_user: 'new' },
+    ])
+    expect(res.overwrittenCount).toBe(1)
+    expect(res.rows[0]).toEqual({
+      ip: '10.0.0.1',
+      ansible_ssh_user: 'new',
+      ansible_ssh_pass: 'oldpass',
+      become: true,
+      custom_key: 'val',
+    })
+  })
+
+  it('不修改入参 rows 数组', () => {
+    const rows: InventoryHostEntry[] = [{ ip: '10.0.0.1' }]
+    const original = [...rows]
+    mergeBulkEntries(rows, [{ ip: '10.0.0.1', ansible_ssh_user: 'x' }])
+    expect(rows).toEqual(original)
   })
 })

@@ -78,11 +78,12 @@
           <div class="card">
             <div class="card-title-row table-toolbar">
               <span class="card-title">主机列表<span class="count-pill">{{ rows.length }}</span></span>
-              <a-button size="small" @click="addRow">＋ 添加主机</a-button>
+              <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
             </div>
             <a-table
               :data-source="rows"
               :row-key="rowKeyOf"
+              :row-class-name="rowClassName"
               :pagination="false"
               size="middle"
               :expanded-row-keys="expandedKeys"
@@ -136,8 +137,13 @@
                 </div>
               </template>
               <a-table-column title="IP" key="ip" width="230">
-                <template #default="{ record }">
-                  <a-input v-model:value="record.ip" placeholder="例如 192.168.1.10" @change="markDirty" />
+                <template #default="{ record, index }">
+                  <a-input
+                    v-model:value="record.ip"
+                    placeholder="例如 192.168.1.10"
+                    @change="markDirty"
+                    @keydown.enter="index === rows.length - 1 ? onLastRowEnter($event) : undefined"
+                  />
                 </template>
               </a-table-column>
               <a-table-column title="SSH 用户" key="user" width="200">
@@ -152,18 +158,12 @@
               </a-table-column>
               <a-table-column title="高级" key="adv" width="80">
                 <template #default="{ record }">
-                  <a-tooltip v-if="rowHasAdvanced(record)" title="已配置高级连接变量">
-                    <a-button type="text" size="small" @click="toggleExpand(record)">高级</a-button>
+                  <a-tooltip :title="rowHasAdvanced(record) ? '已配置高级连接变量' : (rowUnknownKeys(record).length ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、') : '')">
+                    <a-button type="text" size="small" @click="toggleExpand(record)">
+                      高级
+                      <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
+                    </a-button>
                   </a-tooltip>
-                  <a-button v-else type="text" size="small" class="muted" @click="toggleExpand(record)">高级</a-button>
-                </template>
-              </a-table-column>
-              <a-table-column title="自定义字段" key="custom">
-                <template #default="{ record }">
-                  <a-tooltip v-if="rowUnknownKeys(record).length" :title="'仅源码模式可维护：' + rowUnknownKeys(record).join('、')">
-                    <a-tag color="orange" class="custom-tag">含自定义字段</a-tag>
-                  </a-tooltip>
-                  <span v-else class="muted">—</span>
                 </template>
               </a-table-column>
               <a-table-column title="操作" key="action" width="90" align="right">
@@ -172,6 +172,7 @@
                 </template>
               </a-table-column>
             </a-table>
+            <button class="add-row-dashed" @click="appendAndLocate">＋ 添加主机</button>
           </div>
         </template>
 
@@ -190,11 +191,40 @@
         </template>
       </div>
     </a-spin>
+
+    <!-- 批量导入弹窗 -->
+    <a-modal
+      v-model:open="bulkImportVisible"
+      title="批量导入主机"
+      :ok-button-props="{ disabled: bulkImportResult.errors.length > 0 }"
+      ok-text="确认导入"
+      cancel-text="取消"
+      @ok="confirmBulkImport"
+    >
+      <a-textarea
+        v-model:value="bulkImportText"
+        :rows="10"
+        placeholder="每行一条：IP [SSH用户] [SSH密码]（空白分隔，支持 # 注释）"
+      />
+      <div v-if="bulkImportText" class="bulk-preview">
+        <div v-if="bulkImportResult.duplicatesInText" class="bulk-hint">
+          文本内 {{ bulkImportResult.duplicatesInText }} 条重复已合并
+        </div>
+        <div v-if="bulkImportResult.errors.length === 0 && bulkImportResult.entries.length">
+          <span v-if="bulkImportResult.entries.some(e => rows.some(r => r.ip === e.ip))" class="bulk-hint">
+            将覆盖 {{ bulkImportResult.entries.filter(e => rows.some(r => r.ip === e.ip)).length }} 条现有主机凭据
+          </span>
+        </div>
+        <div v-for="err in bulkImportResult.errors" :key="err.line" class="bulk-error">
+          第 {{ err.line }} 行：{{ err.reason }}
+        </div>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
@@ -215,6 +245,8 @@ import {
   assembleHosts,
   credString,
   extraVarKeys,
+  mergeBulkEntries,
+  parseBulkHosts,
   toBool,
   unknownKeysOf,
   validateAdvancedField,
@@ -457,9 +489,68 @@ async function save(): Promise<void> {
 
 // ── 表格行操作 ───────────────────────────────────────────────────────
 
-function addRow(): void {
-  rows.value.push({ ip: '', ansible_ssh_user: '', ansible_ssh_pass: '' })
+/** 待定位行的行键 — nextTick 后滚动 + 高亮 + 聚焦 IP 输入框 */
+const pendingLocateKey = ref<number | null>(null)
+const highlightKeys = ref<number[]>([])
+
+/** 追加空白行并定位（底部按钮与 Enter 续录共用） */
+function appendAndLocate(): void {
+  const row: InventoryHostEntry = { ip: '', ansible_ssh_user: '', ansible_ssh_pass: '' }
+  rows.value.push(row)
   markDirty()
+  const key = rowKeyOf(row)
+  void nextTick(() => {
+    // 滚动定位
+    const el = document.querySelector(`tr[data-row-key="${key}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // 高亮 2s
+    highlightKeys.value = [...highlightKeys.value, key]
+    setTimeout(() => {
+      highlightKeys.value = highlightKeys.value.filter((k) => k !== key)
+    }, 2000)
+    // 聚焦新行 IP 输入框
+    const ipInput = el?.querySelector<HTMLInputElement>('input')
+    ipInput?.focus()
+  })
+}
+
+/** 行高亮 class 名 */
+function rowClassName(record: InventoryHostEntry): string {
+  return highlightKeys.value.includes(rowKeyOf(record)) ? 'ai-row-highlight' : ''
+}
+
+/** Enter 续录：仅最后一行且 IP 已填写时触发 */
+function onLastRowEnter(e: KeyboardEvent): void {
+  if (e.isComposing) return
+  if (rows.value.length === 0) return
+  const last = rows.value[rows.value.length - 1]
+  if (!last.ip) return
+  appendAndLocate()
+}
+
+// ── 批量导入 ───────────────────────────────────────────────────────
+
+const bulkImportVisible = ref(false)
+const bulkImportText = ref('')
+
+const bulkImportResult = computed(() => parseBulkHosts(bulkImportText.value))
+
+function openBulkImport(): void {
+  bulkImportVisible.value = true
+  bulkImportText.value = ''
+}
+
+function confirmBulkImport(): void {
+  const { entries } = bulkImportResult.value
+  if (bulkImportResult.value.errors.length) return
+  const { rows: merged, overwrittenCount } = mergeBulkEntries(rows.value, entries)
+  rows.value = merged
+  if (overwrittenCount > 0) {
+    message.info(`已覆盖 ${overwrittenCount} 条现有主机的凭据`)
+  }
+  markDirty()
+  bulkImportVisible.value = false
+  bulkImportText.value = ''
 }
 
 function removeRow(row: InventoryHostEntry): void {
@@ -602,6 +693,32 @@ onUnmounted(() => {
 
 .custom-tag { cursor: help; }
 
+.orange-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fa8c16;
+  margin-left: 4px;
+  vertical-align: super;
+}
+
+.add-row-dashed {
+  width: 100%;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 0;
+  text-align: center;
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s, color 0.2s;
+}
+.add-row-dashed:hover {
+  border-color: #1677ff;
+  color: #1677ff;
+}
+
 .advanced-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -645,5 +762,29 @@ onUnmounted(() => {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.7;
+}
+
+/* 高亮闪烁动画 */
+:deep(.ai-row-highlight) {
+  animation: row-highlight-flash 2s ease-out;
+}
+@keyframes row-highlight-flash {
+  0% { background-color: #fff7e6; }
+  100% { background-color: transparent; }
+}
+
+/* 批量导入预览 */
+.bulk-preview {
+  margin-top: 12px;
+  font-size: 13px;
+}
+.bulk-hint {
+  color: #fa8c16;
+  margin-bottom: 4px;
+}
+.bulk-error {
+  color: #ff4d4f;
+  font-size: 12px;
+  line-height: 1.8;
 }
 </style>
