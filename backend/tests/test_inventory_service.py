@@ -255,7 +255,8 @@ class TestRealFileSample:
         assert list(h141.keys()) == ["ip"]
 
         # 注入残留的端口属于未知键（表格视图不可编辑，仅源码模式维护）
-        assert result["unknown_keys"] == ["ansible_port"]
+        # 评审后 ansible_port 升级为已知键，不再计入 unknown_keys
+        assert result["unknown_keys"] == []
 
     def test_roundtrip_real_like_preserves_all_data(self):
         from app.services.inventory_service import parse_inventory, render_inventory
@@ -323,3 +324,131 @@ class TestRealFileSample:
 
         assert len(result["errors"]) == 1
         assert "edge_cluster.hosts" in result["errors"][0]
+
+
+class TestKnownHostKeys:
+    """ansible-inventory-advanced-fields: 常用连接变量升级为已知键。"""
+
+    def test_known_host_keys_constant(self):
+        from app.services.inventory_service import KNOWN_HOST_KEYS
+
+        for key in ("ip", "ansible_ssh_user", "ansible_ssh_pass",
+                    "ansible_port", "ansible_host", "ansible_connection",
+                    "ansible_python_interpreter", "ansible_become",
+                    "ansible_become_user", "ansible_become_pass",
+                    "ansible_ssh_private_key_file", "ansible_ssh_common_args"):
+            assert key in KNOWN_HOST_KEYS, f"missing {key}"
+        assert len(KNOWN_HOST_KEYS) == 12
+
+    def test_common_connection_vars_not_unknown(self):
+        from app.services.inventory_service import parse_inventory
+
+        raw = """all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.0.13:
+          ansible_ssh_user: jboss
+          ansible_port: 11022
+          ansible_host: 192.168.0.13
+          ansible_connection: ssh
+          ansible_become: true
+          ansible_python_interpreter: /usr/bin/python3
+"""
+        result = parse_inventory(raw)
+        assert result["errors"] == []
+        assert result["unknown_keys"] == []
+        assert result["hosts"][0]["ansible_port"] == 11022
+
+    def test_truly_unknown_key_still_reported(self):
+        from app.services.inventory_service import parse_inventory
+
+        raw = """all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.0.13:
+          deploy_tier: gold
+"""
+        result = parse_inventory(raw)
+        assert result["unknown_keys"] == ["deploy_tier"]
+
+
+class TestNormalizeHosts:
+    """ansible-inventory-advanced-fields Task 1.3: 类型规范化与校验。"""
+
+    def test_port_numeric_string_normalized_to_int(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts(
+            [{"ip": "192.168.0.13", "ansible_port": "11022"}])
+        assert errors == []
+        assert hosts[0]["ansible_port"] == 11022
+        assert isinstance(hosts[0]["ansible_port"], int)
+
+    def test_become_yes_no_normalized_to_bool(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts([
+            {"ip": "192.168.0.13", "ansible_become": "yes"},
+            {"ip": "192.168.0.14", "ansible_become": "NO"},
+        ])
+        assert errors == []
+        assert hosts[0]["ansible_become"] is True
+        assert hosts[1]["ansible_become"] is False
+
+    def test_port_out_of_range_rejected(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts(
+            [{"ip": "192.168.0.13", "ansible_port": 99999}])
+        assert hosts == []
+        assert any("ansible_port" in e and "192.168.0.13" in e for e in errors)
+
+    def test_port_non_numeric_rejected(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts(
+            [{"ip": "192.168.0.13", "ansible_port": "ssh"}])
+        assert hosts == []
+        assert any("ansible_port" in e for e in errors)
+
+    def test_invalid_become_value_rejected(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts(
+            [{"ip": "192.168.0.13", "ansible_become": "maybe"}])
+        assert hosts == []
+        assert any("ansible_become" in e for e in errors)
+
+    def test_empty_string_known_key_dropped(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts([{
+            "ip": "192.168.0.13",
+            "ansible_ssh_user": "jboss",
+            "ansible_port": "",
+            "ansible_ssh_private_key_file": "",
+        }])
+        assert errors == []
+        assert "ansible_port" not in hosts[0]
+        assert "ansible_ssh_private_key_file" not in hosts[0]
+        assert hosts[0]["ansible_ssh_user"] == "jboss"
+
+    def test_connection_free_text_passthrough(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts(
+            [{"ip": "10.0.0.1", "ansible_connection": "lxc"}])
+        assert errors == []
+        assert hosts[0]["ansible_connection"] == "lxc"
+
+    def test_errors_aggregate_across_hosts(self):
+        from app.services.inventory_service import normalize_hosts
+
+        hosts, errors = normalize_hosts([
+            {"ip": "10.0.0.1", "ansible_port": 99999},
+            {"ip": "10.0.0.2", "ansible_become": "maybe"},
+        ])
+        assert hosts == []
+        assert len(errors) == 2

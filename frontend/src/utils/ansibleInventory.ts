@@ -9,11 +9,78 @@ import type { InventoryHostEntry } from '@/api/ansibleInventory'
 
 const CRED_KEYS = ['ansible_ssh_user', 'ansible_ssh_pass'] as const
 
+/**
+ * 表格视图可维护的已知键（ip 为 API 层字段，非文件键）。
+ * 与后端 inventory_service.KNOWN_HOST_KEYS 保持一致；清单外的键走
+ * unknown_keys 保真提示，只能在源码模式维护。
+ */
+export const KNOWN_HOST_KEYS = [
+  'ip',
+  ...CRED_KEYS,
+  'ansible_port',
+  'ansible_host',
+  'ansible_connection',
+  'ansible_python_interpreter',
+  'ansible_become',
+  'ansible_become_user',
+  'ansible_become_pass',
+  'ansible_ssh_private_key_file',
+  'ansible_ssh_common_args',
+] as const
+
+/** 高级设置字段定义（行展开表单渲染依据）。 */
+export interface AdvancedFieldDef {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select' | 'switch' | 'password'
+  options?: string[]
+  hint?: string
+}
+
+export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
+  { key: 'ansible_port', label: 'SSH 端口', type: 'number' },
+  {
+    key: 'ansible_host',
+    label: '连接目标 (ansible_host)',
+    type: 'text',
+    hint: '覆盖实际连接目标，不影响清单中的主机键',
+  },
+  {
+    key: 'ansible_connection',
+    label: '连接方式',
+    type: 'select',
+    options: ['smart', 'ssh', 'paramiko_ssh', 'local', 'docker', 'podman'],
+  },
+  { key: 'ansible_python_interpreter', label: 'Python 解释器路径', type: 'text' },
+  { key: 'ansible_become', label: '提权 (become)', type: 'switch' },
+  { key: 'ansible_become_user', label: '提权用户', type: 'text' },
+  { key: 'ansible_become_pass', label: '提权密码', type: 'password' },
+  { key: 'ansible_ssh_private_key_file', label: '私钥路径', type: 'text' },
+  { key: 'ansible_ssh_common_args', label: 'SSH 额外参数', type: 'text' },
+]
+
+/** become 类字段的字符串规范化（yes/no/true/false，大小写不敏感）。 */
+export function toBool(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'yes' || value.trim().toLowerCase() === 'true'
+  return false
+}
+
+/** 高级字段保存前校验：返回错误信息，null 表示通过。 */
+export function validateAdvancedField(key: string, value: unknown): string | null {
+  if (key === 'ansible_port') {
+    if (value === '' || value === undefined || value === null) return null
+    const n = typeof value === 'number' ? value : Number(String(value).trim())
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      return 'SSH 端口必须为 1-65535 的整数'
+    }
+  }
+  return null
+}
+
 /** 该行的自定义字段（除 ip 与两个凭据字段外的所有键）。 */
 export function unknownKeysOf(entry: InventoryHostEntry): string[] {
-  return Object.keys(entry).filter(
-    (k) => k !== 'ip' && !(CRED_KEYS as readonly string[]).includes(k),
-  )
+  return Object.keys(entry).filter((k) => !(KNOWN_HOST_KEYS as readonly string[]).includes(k))
 }
 
 /** vars 中除组级默认凭据外的其他键（仅源码模式可维护）。 */
@@ -52,9 +119,9 @@ export function assembleHosts(rows: InventoryHostEntry[]): AssembleResult {
     }
     seen.add(ip)
     const entry: Record<string, unknown> = { ...row }
-    for (const key of CRED_KEYS) {
+    for (const key of KNOWN_HOST_KEYS) {
       // 仅空字符串视为未设置；非字符串值（YAML 数字等罕见场景）原样保留
-      if (typeof entry[key] === 'string' && (entry[key] as string).length === 0) {
+      if (key !== 'ip' && typeof entry[key] === 'string' && (entry[key] as string).length === 0) {
         delete entry[key]
       }
     }

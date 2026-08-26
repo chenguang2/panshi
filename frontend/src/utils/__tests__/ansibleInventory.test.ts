@@ -5,6 +5,8 @@ import {
   assembleHosts,
   credString,
   extraVarKeys,
+  toBool,
+  validateAdvancedField,
   unknownKeysOf,
 } from '../ansibleInventory'
 import type { InventoryHostEntry } from '@/api/ansibleInventory'
@@ -103,5 +105,68 @@ describe('apiDetail', () => {
     expect(apiDetail(new Error('boom'), '保存失败')).toBe('保存失败')
     expect(apiDetail({ response: { data: {} } }, '加载失败')).toBe('加载失败')
     expect(apiDetail(null, '加载失败')).toBe('加载失败')
+  })
+})
+
+
+describe('KNOWN_HOST_KEYS / unknownKeysOf（高级字段升级）', () => {
+  it('常用连接变量不再视为未知键', () => {
+    const entry = {
+      ip: '10.0.0.1',
+      ansible_port: 2222,
+      ansible_host: '10.0.0.9',
+      ansible_connection: 'ssh',
+      ansible_python_interpreter: '/usr/bin/python3',
+      ansible_become: true,
+      ansible_become_user: 'root',
+      ansible_become_pass: 'p',
+      ansible_ssh_private_key_file: '~/.ssh/id_rsa',
+      ansible_ssh_common_args: '-o Foo=bar',
+    }
+    expect(unknownKeysOf(entry)).toEqual([])
+  })
+
+  it('真正冷门键仍报告', () => {
+    expect(unknownKeysOf({ ip: '10.0.0.1', deploy_tier: 'gold' })).toEqual(['deploy_tier'])
+  })
+})
+
+describe('assembleHosts 空串高级字段剔除', () => {
+  it('空字符串高级键不写入载荷', () => {
+    const res = assembleHosts([
+      { ip: '10.0.0.7', ansible_port: '', ansible_ssh_private_key_file: '', ansible_ssh_user: 'jboss' },
+    ])
+    expect(res.error).toBeNull()
+    expect(res.hosts[0]).toEqual({ ip: '10.0.0.7', ansible_ssh_user: 'jboss' })
+  })
+})
+
+describe('toBool（become 字符串规范化）', () => {
+  it('yes/true 不分大小写为真', () => {
+    expect(toBool('yes')).toBe(true)
+    expect(toBool('TRUE')).toBe(true)
+    expect(toBool(true)).toBe(true)
+  })
+  it('no/false 为假', () => {
+    expect(toBool('no')).toBe(false)
+    expect(toBool(false)).toBe(false)
+  })
+  it('其他值安全回退为假', () => {
+    expect(toBool('maybe')).toBe(false)
+    expect(toBool(undefined)).toBe(false)
+  })
+})
+
+describe('validateAdvancedField', () => {
+  it('端口：空值合法、非数字与越界报错', () => {
+    expect(validateAdvancedField('ansible_port', '')).toBeNull()
+    expect(validateAdvancedField('ansible_port', 22)).toBeNull()
+    expect(validateAdvancedField('ansible_port', '11022')).toBeNull()
+    expect(validateAdvancedField('ansible_port', 99999)).toContain('1-65535')
+    expect(validateAdvancedField('ansible_port', 'ssh')).toContain('1-65535')
+  })
+
+  it('其余已知键自由文本不校验', () => {
+    expect(validateAdvancedField('ansible_ssh_common_args', '-o X=1')).toBeNull()
   })
 })

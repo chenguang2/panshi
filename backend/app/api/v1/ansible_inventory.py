@@ -135,7 +135,10 @@ async def put_inventory(
         if parsed["errors"]:
             raise HTTPException(status_code=400, detail=parsed["errors"][0])
     else:
-        new_text = inventory_service.render_inventory(payload.hosts or [], payload.vars or {})
+        hosts, norm_errors = inventory_service.normalize_hosts(payload.hosts or [])
+        if norm_errors:
+            raise HTTPException(status_code=400, detail="\n".join(norm_errors))
+        new_text = inventory_service.render_inventory(hosts, payload.vars or {})
         doc = yaml.safe_load(new_text) or {}
         platform_ips = await _platform_node_ips(db)
         errors = inventory_service.validate_structure(doc, platform_node_ips=platform_ips)

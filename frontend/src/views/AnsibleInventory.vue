@@ -80,7 +80,61 @@
               <span class="card-title">主机列表<span class="count-pill">{{ rows.length }}</span></span>
               <a-button size="small" @click="addRow">＋ 添加主机</a-button>
             </div>
-            <a-table :data-source="rows" :row-key="rowKeyOf" :pagination="false" size="middle">
+            <a-table
+              :data-source="rows"
+              :row-key="rowKeyOf"
+              :pagination="false"
+              size="middle"
+              :expanded-row-keys="expandedKeys"
+              @expanded-rows-change="onExpandedChange"
+            >
+              <template #expandedRowRender="{ record }">
+                <div class="advanced-grid">
+                  <div v-for="def in ADVANCED_FIELDS" :key="def.key" class="advanced-field">
+                    <label class="advanced-label">
+                      {{ def.label }}
+                      <a-tooltip v-if="def.hint" :title="def.hint"><span class="hint-mark">?</span></a-tooltip>
+                    </label>
+                    <a-input-number
+                      v-if="def.type === 'number'"
+                      v-model:value="record[def.key]"
+                      style="width:100%"
+                      :min="1" :max="65535"
+                      placeholder="未设置"
+                      @change="markDirty"
+                    />
+                    <a-switch
+                      v-else-if="def.type === 'switch'"
+                      v-model:checked="record[def.key]"
+                      @change="markDirty"
+                    />
+                    <a-auto-complete
+                      v-else-if="def.type === 'select'"
+                      :value="asString(record[def.key])"
+                      :options="def.options?.map((o) => ({ value: o }))"
+                      style="width:100%"
+                      placeholder="留空继承默认"
+                      allow-clear
+                      @change="(v) => setAdvanced(record, def.key, v)"
+                    />
+                    <a-input-password
+                      v-else-if="def.type === 'password'"
+                      :value="asString(record[def.key])"
+                      placeholder="未设置"
+                      allow-clear
+                      autocomplete="new-password"
+                      @change="(e) => setAdvanced(record, def.key, e.target.value)"
+                    />
+                    <a-input
+                      v-else
+                      :value="asString(record[def.key])"
+                      placeholder="未设置"
+                      allow-clear
+                      @change="(e) => setAdvanced(record, def.key, e.target.value)"
+                    />
+                  </div>
+                </div>
+              </template>
               <a-table-column title="IP" key="ip" width="230">
                 <template #default="{ record }">
                   <a-input v-model:value="record.ip" placeholder="例如 192.168.1.10" @change="markDirty" />
@@ -94,6 +148,14 @@
               <a-table-column title="SSH 密码（明文）" key="pass" width="220">
                 <template #default="{ record }">
                   <a-input v-model:value="record.ansible_ssh_pass" placeholder="留空继承组级默认" allow-clear @change="markDirty" />
+                </template>
+              </a-table-column>
+              <a-table-column title="高级" key="adv" width="80">
+                <template #default="{ record }">
+                  <a-tooltip v-if="rowHasAdvanced(record)" title="已配置高级连接变量">
+                    <a-button type="text" size="small" @click="toggleExpand(record)">高级</a-button>
+                  </a-tooltip>
+                  <a-button v-else type="text" size="small" class="muted" @click="toggleExpand(record)">高级</a-button>
                 </template>
               </a-table-column>
               <a-table-column title="自定义字段" key="custom">
@@ -147,12 +209,15 @@ import {
 } from '@/api/ansibleInventory'
 import type { InventoryHostEntry, InventorySavePayload } from '@/api/ansibleInventory'
 import {
+  ADVANCED_FIELDS,
   apiDetail,
   applyGroupCreds,
   assembleHosts,
   credString,
   extraVarKeys,
+  toBool,
   unknownKeysOf,
+  validateAdvancedField,
 } from '@/utils/ansibleInventory'
 
 type ViewMode = 'table' | 'source'
@@ -187,6 +252,49 @@ function rowUnknownKeys(record: InventoryHostEntry): string[] {
   return unknownKeysOf(record)
 }
 
+// ── 高级设置（常用连接变量）──────────────────────────────────────────
+const expandedKeys = ref<number[]>([])
+
+function rowHasAdvanced(record: InventoryHostEntry): boolean {
+  return ADVANCED_FIELDS.some((f) => {
+    const v = record[f.key]
+    return v !== undefined && v !== null && v !== ''
+  })
+}
+
+function toggleExpand(record: object): void {
+  const k = rowKeyOf(record)
+  expandedKeys.value = expandedKeys.value.includes(k)
+    ? expandedKeys.value.filter((x) => x !== k)
+    : [...expandedKeys.value, k]
+}
+
+function onExpandedChange(keys: (number | string)[]): void {
+  expandedKeys.value = keys.map(Number)
+}
+
+function asString(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  return typeof value === 'string' ? value : String(value)
+}
+
+function setAdvanced(record: InventoryHostEntry, key: string, value: unknown): void {
+  record[key] = value
+  markDirty()
+}
+
+/** 保存前逐行校验高级字段，返回错误信息列表（空数组=通过）。 */
+function validateRowsAdvanced(): string[] {
+  const errors: string[] = []
+  rows.value.forEach((row, idx) => {
+    for (const def of ADVANCED_FIELDS) {
+      const err = validateAdvancedField(def.key, row[def.key])
+      if (err) errors.push(`第 ${idx + 1} 行（${row.ip || '未填 IP'}）：${err}`)
+    }
+  })
+  return errors
+}
+
 // 行键：WeakMap 身份键，避免用 ip 作键（新增行 IP 可能为空或临时重复）
 const rowKeyMap = new WeakMap<object, number>()
 let rowKeySeq = 0
@@ -208,7 +316,20 @@ function syncGroupCreds(): void {
 }
 
 function applyServerStructure(hosts: InventoryHostEntry[], vars: Record<string, unknown>): void {
-  rows.value = hosts.map((h) => ({ ...h }))
+  rows.value = hosts.map((h) => {
+    const row: InventoryHostEntry = { ...h }
+    // 源码模式可能写出的字符串形态规范化，供表格控件直接绑定
+    if ('ansible_port' in row) {
+      const n = Number(row['ansible_port'])
+      if (Number.isFinite(n) && String(n) === String(row['ansible_port']).trim()) {
+        row['ansible_port'] = n
+      }
+    }
+    if ('ansible_become' in row) {
+      row['ansible_become'] = toBool(row['ansible_become'])
+    }
+    return row
+  })
   baseVars.value = { ...vars }
   syncGroupCreds()
 }
@@ -306,6 +427,11 @@ async function save(): Promise<void> {
   if (saving.value || !dirty.value) return
   let payload: InventorySavePayload
   if (viewMode.value === 'table') {
+    const advancedErrors = validateRowsAdvanced()
+    if (advancedErrors.length) {
+      message.warning(advancedErrors.join('；'))
+      return
+    }
     const assembled = assembleHosts(rows.value)
     if (assembled.error) {
       message.warning(assembled.error)
@@ -475,6 +601,34 @@ onUnmounted(() => {
 .muted { color: var(--muted); }
 
 .custom-tag { cursor: help; }
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px 16px;
+  padding: 4px 8px;
+}
+.advanced-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.advanced-label {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+.hint-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 10px;
+  cursor: help;
+}
 
 .source-hint {
   font-size: 12px;

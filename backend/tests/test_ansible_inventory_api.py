@@ -36,6 +36,18 @@ def inv_env(tmp_path, monkeypatch):
     return inv_path
 
 
+async def _platform_ips() -> list[str]:
+    """当前开发库中已录入的全部节点 IP（删除保护基线）。"""
+    from sqlalchemy import select
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.cluster import Node
+
+    async with AsyncSessionLocal() as session:
+        rows = await session.execute(select(Node.ip))
+        return [r[0] for r in rows.all()]
+
+
 async def _create_node(ip: str):
     """在真实开发库插入临时节点行，返回清理协程。"""
     from app.core.database import AsyncSessionLocal
@@ -184,6 +196,7 @@ class TestAnsibleInventoryAPI:
                 "/api/v1/ansible/inventory", headers=headers,
                 json={
                     "hosts": [
+                        *[{"ip": ip} for ip in await _platform_ips()],
                         {"ip": "192.168.100.42", "ansible_ssh_user": "jboss"},
                         {"ip": "10.0.0.2", "ansible_ssh_user": "root", "ansible_ssh_pass": "p"},
                     ],
@@ -195,7 +208,8 @@ class TestAnsibleInventoryAPI:
         text = inv_env.read_text(encoding="utf-8")
         import re
         ip_order = re.findall(r"^        ([\d.]+):", text, flags=re.M)
-        assert ip_order == ["10.0.0.2", "192.168.100.42"]  # 数值序渲染
+        # 数值序渲染：10.0.0.2 必须排在 192.168.100.42 之前（平台节点一并保留）
+        assert ip_order.index("10.0.0.2") < ip_order.index("192.168.100.42")
         assert "group_user" in text
 
     async def test_put_deletion_protection_returns_400(self, inv_env):
@@ -278,3 +292,61 @@ class TestAnsibleInventoryAPI:
         assert ok.json()["errors"] == []
         assert bad.status_code == 200
         assert "第 2 行" in bad.json()["errors"][0]
+
+
+class TestPutNormalization(TestAnsibleInventoryAPI):
+    """ansible-inventory-advanced-fields Task 1.3: PUT 规范化与校验。"""
+
+    async def test_put_normalizes_port_and_become(self, inv_env):
+        inv_env.parent.mkdir(parents=True)
+        async with await self._client() as client:
+            headers = await self._login(client)
+            resp = await client.put(
+                "/api/v1/ansible/inventory", headers=headers,
+                json={"hosts": [
+                    *[{"ip": ip} for ip in await _platform_ips()],
+                    {"ip": "10.1.1.13", "ansible_ssh_user": "jboss",
+                     "ansible_port": "11022", "ansible_become": "yes"},
+                ], "vars": {}},
+            )
+
+        assert resp.status_code == 200, resp.text
+        text = inv_env.read_text(encoding="utf-8")
+        assert "ansible_port: 11022" in text  # int，无引号
+        assert "ansible_become: true" in text
+
+    async def test_put_out_of_range_port_returns_400_and_no_write(self, inv_env):
+        inv_env.parent.mkdir(parents=True)
+        inv_env.write_text(VALID_INVENTORY, encoding="utf-8")
+        async with await self._client() as client:
+            headers = await self._login(client)
+            resp = await client.put(
+                "/api/v1/ansible/inventory", headers=headers,
+                json={"hosts": [
+                    *[{"ip": ip} for ip in await _platform_ips()],
+                    {"ip": "10.1.1.13", "ansible_port": 99999},
+                ], "vars": {}},
+            )
+
+        assert resp.status_code == 400
+        assert "ansible_port" in resp.json()["detail"]
+        assert inv_env.read_text(encoding="utf-8") == VALID_INVENTORY
+
+    async def test_put_empty_string_advanced_key_dropped(self, inv_env):
+        inv_env.parent.mkdir(parents=True)
+        async with await self._client() as client:
+            headers = await self._login(client)
+            resp = await client.put(
+                "/api/v1/ansible/inventory", headers=headers,
+                json={"hosts": [
+                    *[{"ip": ip} for ip in await _platform_ips()],
+                    {"ip": "10.1.1.13", "ansible_ssh_user": "jboss",
+                     "ansible_port": "", "ansible_ssh_private_key_file": ""},
+                ], "vars": {}},
+            )
+
+        assert resp.status_code == 200
+        text = inv_env.read_text(encoding="utf-8")
+        assert "ansible_port" not in text
+        assert "ansible_ssh_private_key_file" not in text
+        assert "jboss" in text

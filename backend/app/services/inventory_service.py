@@ -18,6 +18,15 @@ import yaml
 from app.services import ansible_service
 from app.services.ansible_service import ip_sort_key
 
+# 表格视图可维护的已知键（ip 为 parse 输出的 API 层字段，非文件键）。
+# 清单外的键走 unknown_keys 保真提示，只能在源码模式维护。
+KNOWN_HOST_KEYS = (
+    "ip", "ansible_ssh_user", "ansible_ssh_pass", "ansible_port",
+    "ansible_host", "ansible_connection", "ansible_python_interpreter",
+    "ansible_become", "ansible_become_user", "ansible_become_pass",
+    "ansible_ssh_private_key_file", "ansible_ssh_common_args",
+)
+
 _CRED_KEYS = ("ansible_ssh_user", "ansible_ssh_pass")
 
 _EDGE_PATH = ["all", "children", "edge_cluster"]
@@ -123,7 +132,7 @@ def parse_inventory(raw_text: str) -> dict[str, Any]:
 
     for entry in host_list:
         for key in entry:
-            if key != "ip" and key not in _CRED_KEYS and key not in unknown_keys:
+            if key != "ip" and key not in KNOWN_HOST_KEYS and key not in unknown_keys:
                 unknown_keys.append(key)
 
     return {
@@ -132,6 +141,56 @@ def parse_inventory(raw_text: str) -> dict[str, Any]:
         "unknown_keys": unknown_keys,
         "errors": [],
     }
+
+
+_ADVANCED_KEYS = KNOWN_HOST_KEYS[3:]  # 除 ip/凭据外的高级字段
+_BOOL_STRINGS = {"yes": True, "no": False, "true": True, "false": False}
+
+
+def normalize_hosts(hosts: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Normalize advanced connection fields for structured saves (design D2).
+
+    - ``ansible_port``: int or numeric string -> int; range 1-65535;
+    - ``ansible_become``: bool or yes/no/true/false -> bool;
+    - empty-string values on known keys are dropped (key not written);
+    - other keys pass through untouched; errors aggregate across hosts.
+    """
+    normalized: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    for item in hosts:
+        ip = str(item.get("ip", ""))
+        out: dict[str, Any] = {}
+        bad = False
+        for key, value in item.items():
+            if key in _ADVANCED_KEYS and isinstance(value, str) and value.strip() == "":
+                continue  # 空串 = 删除该键
+            if key == "ansible_port":
+                try:
+                    port = int(value)
+                except (TypeError, ValueError):
+                    errors.append(f"主机 {ip}: ansible_port 必须为 1-65535 的整数，当前为 {value!r}")
+                    bad = True
+                    continue
+                if not 1 <= port <= 65535:
+                    errors.append(f"主机 {ip}: ansible_port 必须为 1-65535 的整数，当前为 {value!r}")
+                    bad = True
+                    continue
+                out[key] = port
+            elif key == "ansible_become":
+                if isinstance(value, bool):
+                    out[key] = value
+                elif isinstance(value, str) and value.strip().lower() in _BOOL_STRINGS:
+                    out[key] = _BOOL_STRINGS[value.strip().lower()]
+                else:
+                    errors.append(
+                        f"主机 {ip}: ansible_become 必须为布尔或 yes/no/true/false，当前为 {value!r}")
+                    bad = True
+            else:
+                out[key] = value
+        if not bad:
+            normalized.append(out)
+    return normalized, errors
 
 
 def render_inventory(hosts: list[dict[str, Any]], vars_: dict[str, Any] | None) -> str:
