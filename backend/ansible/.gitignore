@@ -1,3 +1,4 @@
 .vscode/
 artifacts/
 soft/*.tar.gz
+inventory/host.bak.*
