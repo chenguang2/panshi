@@ -33,6 +33,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "task_center",
     "database_management",
     "edge_autostart",
+    "ansible_inventory",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.

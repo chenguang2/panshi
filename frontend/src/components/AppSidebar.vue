@@ -130,6 +130,7 @@ const navSections = computed<NavSection[]>(() => {
     { label: '数据导入', route: '/edge-import', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>', permission: 'edge_import', feature: 'edge_import' },
     { label: '工具箱', route: '/tools', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>', permission: 'tools', feature: 'tools' },
     { label: '自启动管理', route: '/edge-autostart', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>', permission: 'tools', feature: 'edge_autostart' },
+    { label: 'Ansible 主机清单', route: '/ansible-inventory', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg>', permission: 'tools', feature: 'ansible_inventory' },
     { label: '节点任务', route: '/node-tasks', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>', permission: 'task_center', feature: 'task_center' },
   ].filter(item => {
     const passFeature = !item.feature || featuresStore.has(item.feature)
@@ -200,6 +201,8 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/edge-client') return name === 'EdgeClient'
   if (item.route === '/edge-import') return name === 'EdgeImport'
   if (item.route === '/tools') return name === 'Tools'
+  if (item.route === '/edge-autostart') return name === 'EdgeAutostart'
+  if (item.route === '/ansible-inventory') return name === 'AnsibleInventory'
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
   if (item.route === '/database-management') return name === 'DatabaseManagement'
   if (item.route === '/stream-proxies') return name === 'StreamProxyList'

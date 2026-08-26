@@ -14,6 +14,7 @@ features:
   task_center: true
   database_management: true
   edge_autostart: true
+  ansible_inventory: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

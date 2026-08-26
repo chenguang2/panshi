@@ -33,6 +33,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/EdgeAutostart.vue'),
     meta: { permission: 'tools' },
   },
+  ansible_inventory: {
+    path: 'ansible-inventory',
+    name: 'AnsibleInventory',
+    component: () => import('@/views/AnsibleInventory.vue'),
+    meta: { permission: 'tools' },
+  },
   plugin_switches: {
     path: 'plugin-switches',
     name: 'PluginSwitches',

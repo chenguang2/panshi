@@ -16,6 +16,7 @@ from app.api.v1 import (
     node_tasks,
     edge_autostart,
     database,
+    ansible_inventory,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -72,4 +73,5 @@ feature_routers: dict[str, APIRouter] = {
     "task_center": node_task_router,
     "database_management": database.router,
     "edge_autostart": edge_autostart.router,
+    "ansible_inventory": ansible_inventory.router,
 }
