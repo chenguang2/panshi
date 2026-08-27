@@ -193,12 +193,12 @@ def fix_lists(content, num_xml, template_num_xml):
     # 情况 A：numPr 后有任意 pStyle（Compact/BlockText 等）
     content = re.sub(
         r'(<w:numPr>.*?</w:numPr>)<w:pStyle w:val="[^"]+" />',
-        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" w:firstLine="0" />',
+        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" />',
         content, flags=re.S)
     # 情况 B：无 pStyle 的裸列表段落，补 a7 样式 + 缩进覆盖
     content = re.sub(
         r'(<w:numPr>.*?</w:numPr>)</w:pPr>',
-        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" w:firstLine="0" /></w:pPr>',
+        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" /></w:pPr>',
         content, flags=re.S)
 
     # 2. 提取模板 abstractNum 3（子弹）和 5（有序）的完整定义
@@ -245,6 +245,20 @@ def fix_lists(content, num_xml, template_num_xml):
                 f'<w:abstractNum w:abstractNumId="{aid}">{decimal_body}</w:abstractNum>')
 
     return content, num_xml_str.encode('utf-8')
+
+
+def fix_body_text(content):
+    """正文段落：直接 firstLine=420（2字符首行缩进，模板做法）。
+
+    模板正文用 <w:ind w:firstLine="420"/> 直接格式；pandoc 的 FirstParagraph/
+    BodyText 样式基于 Normal（firstLineChars=200），部分渲染器只显示 1 字符。
+    """
+    for style in ('FirstParagraph', 'BodyText'):
+        content = re.sub(
+            r'(<w:pPr><w:pStyle w:val="' + style + r'" />)',
+            r'\1<w:ind w:firstLine="420" />',
+            content)
+    return content
 
 
 def fix_figures(content, chapter_num):
@@ -396,6 +410,9 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
     # 6e. 图形/图注：居中无缩进 + 图注宋体五号加粗 + 自动编号
     chapter_num = str(int(os.path.basename(md_file).split('-')[0]))
     content = fix_figures(content, chapter_num)
+
+    # 6f. 正文段落：直接 firstLine=420（2字符首行缩进，模板做法）
+    content = fix_body_text(content)
 
     # 6f. 表格表注：真表格上方插入表注（自动编号）
     content = fix_table_captions(content, chapter_num)
