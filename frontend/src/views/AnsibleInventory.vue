@@ -137,6 +137,7 @@
                       v-else-if="def.type === 'password'"
                       :value="asString(record[def.key])"
                       :placeholder="def.placeholder || '未设置'"
+                      :disabled="def.key === 'ansible_become_pass' && !record.ansible_become"
                       allow-clear
                       autocomplete="new-password"
                       @change="(e) => setAdvanced(record, def.key, e.target.value)"
@@ -145,6 +146,7 @@
                       v-else
                       :value="asString(record[def.key])"
                       :placeholder="def.placeholder || '未设置'"
+                      :disabled="def.key === 'ansible_become_user' && !record.ansible_become"
                       allow-clear
                       @change="(e) => setAdvanced(record, def.key, e.target.value)"
                     />
