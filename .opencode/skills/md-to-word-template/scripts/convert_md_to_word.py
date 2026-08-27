@@ -273,7 +273,7 @@ def fix_figures(content, chapter_num):
         return (
             f'<w:r>{rpr}<w:t xml:space="preserve">图 {chapter_num}-</w:t></w:r>'
             f'<w:r>{rpr}<w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'
-            f'<w:r>{rpr}<w:instrText xml:space="preserve"> SEQ 图 \\\\* ARABIC </w:instrText></w:r>'
+            f'<w:r>{rpr}<w:instrText xml:space="preserve"> SEQ 图 \\* ARABIC </w:instrText></w:r>'
             f'<w:r>{rpr}<w:fldChar w:fldCharType="separate"/></w:r>'
             f'<w:r>{rpr}<w:t>1</w:t></w:r>'
             f'<w:r>{rpr}<w:fldChar w:fldCharType="end"/></w:r>'
