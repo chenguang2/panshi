@@ -1,8 +1,8 @@
-# 3. 修改 edge.env（监听端口与插件开关）
+# 4. 修改 edge.env（监听端口与插件开关）
 
 > 本章场景：业务要求网关提供三种新能力——HTTPS 七层代理（端口 50000）、TCP 四层转发（端口 8880）、DNS 代理（UDP 53）；同时为后续章节预开启国密证书与 DNS 所需的插件开关。这些「网关监听哪些端口、启用哪些插件」的信息不在各功能页面里逐项配置，而是集中记录在每个节点上的 `edge.env` 文件中。本章通过平台远程读取 → 修改 → 发布这个文件，为后续章节打开端口和插件。
 
-## 3.1 edge.env 是什么
+## 4.1 edge.env 是什么
 
 `edge.env` 是 Edge 网关的核心配置文件，位于每个节点的 Edge 安装目录下，决定网关**监听哪些端口、启用哪些模块**。与本章相关的结构如下：
 
@@ -18,22 +18,22 @@ deploy:
     admin:
       listen:
 
-        - addr: 0.0.0.0:16620     # 管理 API（即第 2 章节点的「管理端口」）
+        - addr: 0.0.0.0:16620     # 管理 API（即第 3 章节点的「管理端口」）
   stream:              # 四层 TCP/UDP 模块
     edge:
       listen:
 
         - addr: 0.0.0.0:53
-          udp: true              # UDP 53：DNS 代理用（第 11 章）
+          udp: true              # UDP 53：DNS 代理用（第 12 章）
 
-        - addr: 0.0.0.0:8880     # ← 本章新增 TCP 8880（第 10 章）
+        - addr: 0.0.0.0:8880     # ← 本章新增 TCP 8880（第 11 章）
 ex_plugins:               # 七层（HTTP）插件开关
   plugin_demo: false
-  gmssl: true             # ← 国密算法支持：使用国密证书必须开启（第 9 章）
+  gmssl: true             # ← 国密算法支持：使用国密证书必须开启（第 10 章）
 ex_stream_plugins:        # 四层（Stream）插件开关
   plugin_demo: false
-  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
-  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
+  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 12 章）
+  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 12 章）
 ```
 
 关键规则：
@@ -41,14 +41,14 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 | 配置点 | 说明 |
 | --- | --- |
 | `deploy.http.edge.listen[].addr` | HTTP 对外监听地址端口，可配多条 |
-| `ssl: true` | 该端口启用 HTTPS；证书在第 9 章发布到节点后生效 |
+| `ssl: true` | 该端口启用 HTTPS；证书在第 10 章发布到节点后生效 |
 | 模块名加 `NO` 前缀 = 禁用 | 如 `NOstream` 表示四层模块关闭；去掉 `NO` 即启用该模块 |
 | `listen[].udp: true` | 该条监听走 UDP 而非 TCP |
-| `deploy.http.admin.listen` | 管理 API 端口，对应第 2 章节点的「管理端口」 |
+| `deploy.http.admin.listen` | 管理 API 端口，对应第 3 章节点的「管理端口」 |
 | `ex_plugins.<插件名>` | 七层（HTTP）插件开关。`gmssl: true` 启用国密算法——**使用国密证书必须开启**；不需要的插件保持 `false` 即可 |
-| `ex_stream_plugins.<插件名>` | 四层（Stream）插件开关。`dns_upstream: true` 与 `dns_upstream-ww: true` 开启 DNS 功能——**不开启则无法使用 DNS 代理**（第 11 章） |
+| `ex_stream_plugins.<插件名>` | 四层（Stream）插件开关。`dns_upstream: true` 与 `dns_upstream-ww: true` 开启 DNS 功能——**不开启则无法使用 DNS 代理**（第 12 章） |
 
-## 3.2 页面入口
+## 4.2 页面入口
 
 点击左侧侧边栏：【边缘网络】-> 【edge.env 配置】：
 
@@ -66,9 +66,9 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 
 ![选择集群与节点](images/03-02-edgeenv-selected.png)
 
-## 3.3 操作步骤
+## 4.3 操作步骤
 
-### 3.3.1 读取当前配置
+### 4.3.1 读取当前配置
 
 1. 选择集群「演示集群」，节点 `192.168.0.13:16620`；
 2. 点击【获取配置模板】，平台通过 SSH 连接节点读取文件，弹窗实时显示执行日志：
@@ -81,7 +81,7 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 
    > ⚠️ 若读取失败：多为 SSH 不通（用户名密码不对 / 端口不对），需要先配置正确后再进行本章操作。
 
-### 3.3.2 修改四处
+### 4.3.2 修改四处
 
 在编辑器中定位并修改（保持 YAML 缩进，两级空格）：
 
@@ -115,20 +115,20 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 ```yaml
 ex_plugins:               # 七层（HTTP）插件开关
   plugin_demo: false
-  gmssl: true             # ← 启用国密算法：使用国密证书必须开启（第 9 章）
+  gmssl: true             # ← 启用国密算法：使用国密证书必须开启（第 10 章）
 
 ex_stream_plugins:        # 四层（Stream）插件开关
   plugin_demo: false
-  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
-  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
+  dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 12 章）
+  dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 12 章）
 ```
 
 说明：
 
 | 配置项 | 何时需要开启 |
 | --- | --- |
-| `ex_plugins.gmssl: true` | \**使用国密证书时必须开启**。第 9 章如需生成/使用 SM2 国密证书，节点必须加载 gmssl 插件 |
-| `ex_stream_plugins.dns_upstream: true` | \**使用 DNS 功能前必须开启**。第 11 章的 DNS 代理依赖该插件进行域名解析 |
+| `ex_plugins.gmssl: true` | \**使用国密证书时必须开启**。第 10 章如需生成/使用 SM2 国密证书，节点必须加载 gmssl 插件 |
+| `ex_stream_plugins.dns_upstream: true` | \**使用 DNS 功能前必须开启**。第 12 章的 DNS 代理依赖该插件进行域名解析 |
 | `ex_stream_plugins.dns_upstream-ww: true` | \**使用 DNS 功能前必须开启**，与 `dns_upstream` 配套 |
 | `plugin_demo` | 示例插件，保持 `false` 即可 |
 
@@ -140,7 +140,7 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 
 > 💡 编辑器支持 YAML 语法高亮；需要注意输入的内容不要破坏缩进。
 
-### 3.3.3 发布
+### 4.3.3 发布
 
 1. 点击右上角【发布】，弹出【确认变更】框，绿色行为将写入的新增内容：
 
@@ -162,19 +162,19 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 
    > ⚠️ 其余两台节点（.14 / .15）：重复 3.1~3.3，或在 3.3 第 2 步同时勾选三台一次发布。生产环境建议先发一台灰度验证，再全量发布。
 
-### 3.3.4 发布失败排查
+### 4.3.4 发布失败排查
 
 > 本章是全书第一次执行「发布」。如果失败，按下面三类原因逐项排查；**后续任何章节遇到发布失败，都回到本节处理**，不再重复展开。
 
 | 失败现象 | 可能原因 | 处理方法 |
 | --- | --- | --- |
 | 连接拒绝 / 超时 | 平台到节点管理端口（本章示例 16620）网络不通 | 在平台所在机器执行 `curl -s <http://192.168.0.13:16620/edge/server_info`> 验证；不通则检查防火墙、路由、节点是否开机 |
-| 认证失败 / 401 | 集群的 Admin Key 与节点安装时设置的不一致 | 核对第 1 章集群表单中的 Admin Key 与节点 edge.env 中密钥是否相同，改后重新发布 |
-| 任务一直排队 / 无日志 | Edge 服务未启动或管理端口配置错误 | 登录节点检查服务，确认存活并核对 `deploy.http.admin.listen` 端口与第 2 章表单一致 |
+| 认证失败 / 401 | 集群的 Admin Key 与节点安装时设置的不一致 | 核对第 2 章集群表单中的 Admin Key 与节点 edge.env 中密钥是否相同，改后重新发布 |
+| 任务一直排队 / 无日志 | Edge 服务未启动或管理端口配置错误 | 登录节点检查服务，确认存活并核对 `deploy.http.admin.listen` 端口与第 3 章表单一致 |
 
 通用步骤：修复问题后，直接重新点击【发布】即可——发布是幂等的，重复推送同一份配置不会产生副作用。
 
-## 3.4 验证
+## 4.4 验证
 
 1. 再次点击【获取配置模板】，确认读回的内容包含 50000、8880，以及 `gmssl: true` 和 `dns_upstream: true`；
 2. 在能连通节点的机器上执行：
@@ -195,11 +195,11 @@ timeout 3 bash -c 'cat < /dev/null > /dev/tcp/192.168.0.13/8880' && echo "TCP 88
 
 ![版本记录](images/03-11-version-show.png)
 
-## 3.5 本章小结
+## 4.5 本章小结
 
 - edge.env 决定网关「听什么端口、开什么模块、启用哪些插件」，改动流程固定为：**读取 → 编辑 → 发布（选节点）→ 验证**
 - 每次发布自动生成版本，可在【版本管理】中回滚
 - 插件开关：`ex_plugins.gmssl: true` 支撑国密证书；`ex_stream_plugins` 的 `dns_upstream` / `dns_upstream-ww: true` 支撑 DNS 功能——对应能力使用前必须先开启并发布
-- 本章打开的 16610(HTTP) / 50000(HTTPS) / 8880(TCP) / 53(UDP) 将分别在第 8、10、11 章被业务配置使用
+- 本章打开的 16610(HTTP) / 50000(HTTPS) / 8880(TCP) / 53(UDP) 将分别在第 9、11、12 章被业务配置使用
 
-下一步：[第 4 章 建立全局规则](04-global-rules.md)
+下一步：[第 5 章 建立全局规则](05-global-rules.md)

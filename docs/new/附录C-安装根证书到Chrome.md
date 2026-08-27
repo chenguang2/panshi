@@ -64,4 +64,4 @@
 
 ---
 
-**相关文档**：[附录 A：修改 hosts](附录A-修改hosts.md) · [附录 B：修改 DNS](附录B-修改DNS.md) · [第 9 章：证书管理](09-certificates.md)
+**相关文档**：[附录 A：修改 hosts](附录A-修改hosts.md) · [附录 B：修改 DNS](附录B-修改DNS.md) · [第 10 章：证书管理](10-certificates.md)
