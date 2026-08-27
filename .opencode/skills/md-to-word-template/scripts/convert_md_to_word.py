@@ -329,32 +329,49 @@ def fix_figures(content, chapter_num):
         '<w:pPr><w:pStyle w:val="BlockText" /></w:pPr>',
         content, flags=re.S)
 
-    # 3. 图注文字替换为题注字段（自动编号），仅处理 ImageCaption 段落
+    # 3. 图注文字替换为题注字段（自动编号），按章节编号（从 H1 提取）
     CAP_RPR = ('<w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体" />'
                '<w:b /><w:sz w:val="21" /></w:rPr>')
 
-    def caption_field(m):
-        rpr = m.group(1) or CAP_RPR  # 保留原有 run 格式，无则用默认
-        text = m.group(2)
-        return (
-            f'<w:r>{rpr}<w:t xml:space="preserve">图 {chapter_num}-</w:t></w:r>'
-            f'<w:r>{rpr}<w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'
-            f'<w:r>{rpr}<w:instrText xml:space="preserve"> SEQ 图 \\* ARABIC </w:instrText></w:r>'
-            f'<w:r>{rpr}<w:fldChar w:fldCharType="separate"/></w:r>'
-            f'<w:r>{rpr}<w:t>1</w:t></w:r>'
-            f'<w:r>{rpr}<w:fldChar w:fldCharType="end"/></w:r>'
-            f'<w:r>{rpr}<w:t xml:space="preserve"> {text}</w:t></w:r>'
-        )
+    def caption_field(chap):
+        def _f(m):
+            rpr = m.group(1) or CAP_RPR  # 保留原有 run 格式，无则用默认
+            text = m.group(2)
+            return (
+                f'<w:r>{rpr}<w:t xml:space="preserve">图 {chap}-</w:t></w:r>'
+                f'<w:r>{rpr}<w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'
+                f'<w:r>{rpr}<w:instrText xml:space="preserve"> SEQ 图 \\* ARABIC </w:instrText></w:r>'
+                f'<w:r>{rpr}<w:fldChar w:fldCharType="separate"/></w:r>'
+                f'<w:r>{rpr}<w:t>1</w:t></w:r>'
+                f'<w:r>{rpr}<w:fldChar w:fldCharType="end"/></w:r>'
+                f'<w:r>{rpr}<w:t xml:space="preserve"> {text}</w:t></w:r>'
+            )
+        return _f
 
-    def fix_caption_para(m):
-        para = m.group(0)
-        return re.sub(
-            r'<w:r>(<w:rPr>.*?</w:rPr>)?<w:t xml:space="preserve">([^<]*)</w:t></w:r>',
-            caption_field, para, flags=re.S)
+    def fix_caption_para(chap):
+        def _f(m):
+            para = m.group(0)
+            return re.sub(
+                r'<w:r>(<w:rPr>.*?</w:rPr>)?<w:t xml:space="preserve">([^<]*)</w:t></w:r>',
+                caption_field(chap), para, flags=re.S)
+        return _f
+
+    def fix_section(m):
+        h1 = m.group(1)  # H1 段落
+        body = m.group(2)  # 该章节正文
+        # 从 H1 文本提取章节号：章节 "0." 或 附录 "附录 A"
+        num = re.search(r'<w:t[^>]*>(\d+)\.', h1)
+        if not num:
+            num = re.search(r'<w:t[^>]*>附录\s*([A-Z])', h1)
+        chap = num.group(1) if num else chapter_num
+        body = re.sub(
+            r'<w:p><w:pPr><w:pStyle w:val="ImageCaption" />.*?</w:p>',
+            fix_caption_para(chap), body, flags=re.S)
+        return h1 + body
 
     content = re.sub(
-        r'<w:p><w:pPr><w:pStyle w:val="ImageCaption" />.*?</w:p>',
-        fix_caption_para, content, flags=re.S)
+        r'(<w:p><w:pPr><w:pStyle w:val="1" />.*?</w:p>)(.*?)(?=<w:p><w:pPr><w:pStyle w:val="1" />|$)',
+        fix_section, content, flags=re.S)
     return content
 
 
@@ -454,7 +471,10 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
     content, pnum = fix_lists(content, pnum, template_num_xml)
 
     # 6e. 图形/图注：居中无缩进 + 图注宋体五号加粗 + 自动编号
-    chapter_num = str(int(os.path.basename(md_file).split('-')[0]))
+    try:
+        chapter_num = str(int(os.path.basename(md_file).split('-')[0]))
+    except ValueError:
+        chapter_num = '0'  # 合并文档等非数字文件名
     content = fix_figures(content, chapter_num)
 
     # 6f. 正文段落：直接 firstLine=420（2字符首行缩进，模板做法）
