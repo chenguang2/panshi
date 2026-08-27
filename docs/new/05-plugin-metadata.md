@@ -42,11 +42,7 @@
 
 ```json
 {
-
-```bash
-"logs": {
-```
-
+    "logs": {
         "logs/process.log": {
             "formats": [
                 "${req_start_time#time_format,%Y%m%d%H%M%S}",
@@ -78,25 +74,20 @@
                 "${plugin_riskid#fixdefault,,0}"
             ]
         }
-
-```bash
+    }
 }
 ```
 
-}
-
-```bash
-
 ![粘贴日志格式 JSON](images/05-04-metadata-json.png)
 
-4. 点击【保存】，提示"保存成功"。
+1. 点击【保存】，提示"保存成功"。
 
    ![保存成功](images/05-05-metadata-saved.png)
 
    > 💡 常用字段说明：
    >
    > | 字段 | 含义 |
-   > |---|---|
+   > | --- | --- |
    > | `${http_x-edge-traceid}` | 请求头中的 TraceID（配合第 4 章全局规则的 traceid 插件实现全链路检索） |
    > | `${username}` / `${username_isvalid}` | 认证用户名及其有效性 |
    > | `${method}` / `${uri}` / `${status}` | 请求方法、URI、响应状态码 |

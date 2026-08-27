@@ -51,8 +51,7 @@
 
 ```bash
 curl -sk "https://test.com:5000/dns-query?name=test.com&type=A"
-
-```bash
+```
 
 预期返回 JSON 格式的解析结果（DoH 的 JSON API 形态），其中包含 `test.com` 的 A 记录——即第 11 章配置的负载均衡目标节点 IP。
 

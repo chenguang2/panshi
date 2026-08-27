@@ -70,8 +70,7 @@ ZIP 上传后还只是"存在"，要分发到节点才能被访问：
 
 ```bash
 curl -k https://test.com:5000/static/<zip内文件路径>
-
-```bash
+```
 
 预期返回文件内容（而非 404）。
 

@@ -11,7 +11,7 @@ mkdir -p /tmp/upstream8111 && echo '<h1>Hello from 192.168.0.13:8111</h1>' > /tm
 
 cd /tmp/upstream8111 && nohup python3 -m http.server 8111 --bind 0.0.0.0 &
 
-```bash
+```
 
 验证服务可访问：
 

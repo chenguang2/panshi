@@ -12,8 +12,7 @@
 
 ```text
 notepad C:\Windows\System32\drivers\etc\hosts
-
-```bash
+```
 
 在文件末尾追加一行后保存：
 
@@ -27,7 +26,7 @@ notepad C:\Windows\System32\drivers\etc\hosts
 ```bash
 sudo sh -c 'echo "192.168.0.13 test.com" >> /etc/hosts'
 
-```bash
+```
 
 验证解析是否生效：
 
@@ -69,8 +68,7 @@ ping -c 1 test.com        # Windows 用: ping -n 1 test.com
 
 ```bash
 curl -vk https://test.com:50000/index.html
-
-```bash
+```
 
 检查输出中的三个关键点：
 
@@ -101,7 +99,7 @@ curl http://192.168.0.13:8880/index.html
 ```bash
 dig @192.168.0.13 -p 53 test.com +short
 
-```bash
+```
 
 预期返回节点 IP（第 11 章 DNS 代理的一致性哈希结果，同一客户端多次查询稳定）。
 

@@ -9,11 +9,7 @@
 ```yaml
 deploy:
   http:                # 七层 HTTP 模块（默认启用）
-
-```bash
-edge:              # 对外服务子模块
-```
-
+    edge:              # 对外服务子模块
       listen:          # ← 对外服务端口列表
 
         - addr: 0.0.0.0:16610     # 现有 HTTP 端口
@@ -21,21 +17,13 @@ edge:              # 对外服务子模块
         - addr: 0.0.0.0:50000     # ← 本章新增
 
           ssl: true               # ← 该端口启用 HTTPS
-
-```bash
-admin:
-```
-
+    admin:
       listen:
 
         - addr: 0.0.0.0:16620     # 管理 API（即第 2 章节点的「管理端口」）
 
   stream:              # 四层 TCP/UDP 模块
-
-```bash
-edge:
-```
-
+    edge:
       listen:
 
         - addr: 0.0.0.0:53
@@ -51,8 +39,7 @@ ex_stream_plugins:        # 四层（Stream）插件开关
   plugin_demo: false
   dns_upstream: true      # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
   dns_upstream-ww: true   # ← DNS 功能：开启后才能使用 DNS 代理（第 11 章）
-
-```bash
+```
 
 关键规则：
 
@@ -129,7 +116,7 @@ ex_stream_plugins:        # 四层（Stream）插件开关
 
         - addr: 0.0.0.0:8880     # ← 新增（不带 udp 即为 TCP）
 
-```bash
+```
 
 **③ 确认 UDP 53 存在**（dsn 协议使用该端口）。
 
@@ -215,7 +202,7 @@ curl -sk -I https://192.168.0.13:50000/
 
 timeout 3 bash -c 'cat < /dev/null > /dev/tcp/192.168.0.13/8880' && echo "TCP 8880 通"
 
-```bash
+```
 
 预期结果：
 

@@ -78,15 +78,10 @@
 ```json
 {
   "rewrite": [
-
-```bash
-"return function(conf, ctx) ngx.log(ngx.ERR, 'hello'); end"
-```
-
+    "return function(conf, ctx) ngx.log(ngx.ERR, 'hello'); end"
   ]
 }
-
-```bash
+```
 
 ![自定义预处理代码示例](images/08-07-route-pre-functions-detail.png)
 

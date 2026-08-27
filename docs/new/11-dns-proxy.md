@@ -69,14 +69,13 @@
 
 3. 勾选【健康检查】，并把 JSON 中的协议从 `http` 改为 `https`：
 
-```json
-{"type":"https","active":{},"passive":{}}
+   ```json
+   {"type":"https","active":{},"passive":{}}
+   ```
 
-```bash
+   ![第二步填写完成](images/11-04-dns-step2-filled.png)
 
-![第二步填写完成](images/11-04-dns-step2-filled.png)
-
-> 💡 健康检查的 `type` 决定探测方式：`http` / `https` / `tcp` 等。本例节点 50000 是 HTTPS 端口，所以用 `https`；`active`（主动探测）与 `passive`（被动统计）参数保持默认即可。
+   > 💡 健康检查的 `type` 决定探测方式：`http` / `https` / `tcp` 等。本例节点 50000 是 HTTPS 端口，所以用 `https`；`active`（主动探测）与 `passive`（被动统计）参数保持默认即可。
 
 4. 点击【创建】。列表出现"test.com 解析"卡片，状态为"未发布"。
 
