@@ -250,14 +250,14 @@ def fix_figures(content, chapter_num):
     """
     # 1. 图形段落（CaptionedFigure）：居中 + 无缩进（去掉可能的列表编号）
     content = re.sub(
-        r'<w:pPr>(?:<w:numPr>.*?</w:numPr>)?<w:pStyle w:val="CaptionedFigure" /></w:pPr>',
+        r'<w:pPr>(?:<w:numPr>(?:<w:[^>]*/>)*</w:numPr>)?<w:pStyle w:val="CaptionedFigure" /></w:pPr>',
         '<w:pPr><w:pStyle w:val="CaptionedFigure" />'
         '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" /></w:pPr>',
         content, flags=re.S)
 
     # 2. 图注段落（ImageCaption）：居中 + 无缩进 + 1.5倍行距 + 宋体五号加粗
     content = re.sub(
-        r'<w:pPr>(?:<w:numPr>.*?</w:numPr>)?<w:pStyle w:val="ImageCaption" /></w:pPr>',
+        r'<w:pPr>(?:<w:numPr>(?:<w:[^>]*/>)*</w:numPr>)?<w:pStyle w:val="ImageCaption" /></w:pPr>',
         '<w:pPr><w:pStyle w:val="ImageCaption" />'
         '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" />'
         '<w:spacing w:line="360" w:lineRule="auto" /></w:pPr>',
@@ -290,6 +290,36 @@ def fix_figures(content, chapter_num):
         r'<w:p><w:pPr><w:pStyle w:val="ImageCaption" />.*?</w:p>',
         fix_caption_para, content, flags=re.S)
     return content
+
+
+def fix_table_captions(content, chapter_num):
+    """表格表注：在真表格（Table 样式，非代码框）上方插入表注。
+
+    表注: 居中显示，无缩进，1.5倍行距，宋体五号，加粗
+    自动编号: 表 {章节}-{SEQ 表}
+    """
+    CAP_RPR = ('<w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体" />'
+               '<w:b /><w:sz w:val="21" /></w:rPr>')
+    caption = (
+        '<w:p><w:pPr><w:pStyle w:val="TableCaption" />'
+        '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" />'
+        '<w:spacing w:line="360" w:lineRule="auto" /></w:pPr>'
+        f'<w:r>{CAP_RPR}<w:t xml:space="preserve">表 {chapter_num}-</w:t></w:r>'
+        f'<w:r>{CAP_RPR}<w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r>'
+        f'<w:r>{CAP_RPR}<w:instrText xml:space="preserve"> SEQ 表 \\* ARABIC </w:instrText></w:r>'
+        f'<w:r>{CAP_RPR}<w:fldChar w:fldCharType="separate"/></w:r>'
+        f'<w:r>{CAP_RPR}<w:t>1</w:t></w:r>'
+        f'<w:r>{CAP_RPR}<w:fldChar w:fldCharType="end"/></w:r>'
+        '</w:p>'
+    )
+
+    def fix_tbl(m):
+        tbl = m.group(0)
+        # 只给真表格（Table 样式）加表注，代码框（af4）不加
+        if '<w:tblStyle w:val="Table"' in tbl:
+            return caption + tbl
+        return tbl
+    return re.sub(r'<w:tbl[ >].*?</w:tbl>', fix_tbl, content, flags=re.S)
 
 
 def convert_md(md_file):
@@ -360,6 +390,9 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
     # 6e. 图形/图注：居中无缩进 + 图注宋体五号加粗 + 自动编号
     chapter_num = str(int(os.path.basename(md_file).split('-')[0]))
     content = fix_figures(content, chapter_num)
+
+    # 6f. 表格表注：真表格上方插入表注（自动编号）
+    content = fix_table_captions(content, chapter_num)
 
     # 7. 重映射 pandoc 内容用到的 rId（图片/超链接）到 rId100+
     used = set(re.findall(r'r:(?:embed|id)="(rId\d+)"', content))
