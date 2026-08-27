@@ -189,10 +189,16 @@ def fix_lists(content, num_xml, template_num_xml):
        - 子弹列表 -> 模板 abstractNum 3（//，缩进 840/1260/1680）
        - 有序列表 -> 模板 abstractNum 5（%1)/%2)/%3.）
     """
-    # 1. 列表段落样式 Compact -> a7
+    # 1. 列表段落样式 -> a7（List Paragraph），并去掉首行缩进（模板做法）
+    # 情况 A：numPr 后有任意 pStyle（Compact/BlockText 等）
     content = re.sub(
-        r'(<w:numPr>.*?</w:numPr>)<w:pStyle w:val="Compact" />',
-        r'\1<w:pStyle w:val="a7" />',
+        r'(<w:numPr>.*?</w:numPr>)<w:pStyle w:val="[^"]+" />',
+        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" w:firstLine="0" />',
+        content, flags=re.S)
+    # 情况 B：无 pStyle 的裸列表段落，补 a7 样式 + 缩进覆盖
+    content = re.sub(
+        r'(<w:numPr>.*?</w:numPr>)</w:pPr>',
+        r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" w:firstLine="0" /></w:pPr>',
         content, flags=re.S)
 
     # 2. 提取模板 abstractNum 3（子弹）和 5（有序）的完整定义
