@@ -18,14 +18,12 @@ notepad C:\Windows\System32\drivers\etc\hosts
 
 ```text
 192.168.0.13 test.com
-
 ```
 
 **Linux / macOS**：
 
 ```bash
 sudo sh -c 'echo "192.168.0.13 test.com" >> /etc/hosts'
-
 ```
 
 验证解析是否生效：
@@ -74,7 +72,6 @@ curl -vk https://test.com:50000/index.html
 
 | 检查点 | 预期 |
 | --- | --- |
-
 | TLS 握手 | `SSL connection using ...` 表示握手成功 |
 | 证书主体 | `subject: CN=test.com`（第 9 章签发的服务器证书，经 SNI 自动选择） |
 | 业务响应 | HTTP 状态码 + 来自「本地测试服务」的响应内容 |
@@ -89,7 +86,6 @@ curl -vk https://test.com:50000/index.html
 
 ```bash
 curl http://192.168.0.13:8880/index.html
-
 ```
 
 ![tcp 8880 端口访问](images/12-05-test-2.png)
@@ -98,7 +94,6 @@ curl http://192.168.0.13:8880/index.html
 
 ```bash
 dig @192.168.0.13 -p 53 test.com +short
-
 ```
 
 预期返回节点 IP（第 11 章 DNS 代理的一致性哈希结果，同一客户端多次查询稳定）。
@@ -109,7 +104,6 @@ dig @192.168.0.13 -p 53 test.com +short
 
 | 链路 | 命令关键点 | 依赖章节 |
 | --- | --- | --- |
-
 | HTTPS :50000 | 证书 CN=test.com + `/*` 业务响应 | 3（监听）+ 8（路由）+ 9（证书） |
 | TCP :8880 | 端口连通返回后端响应 | 3 + 10 |
 | UDP :53 | dig 返回解析结果 | 3 + 11 |
@@ -118,7 +112,6 @@ dig @192.168.0.13 -p 53 test.com +short
 
 | 现象 | 处理 |
 | --- | --- |
-
 | ping test.com 不通 | hosts 未生效：检查是否以管理员/root 保存、有无拼写错误；浏览器需清 DNS 缓存（`ipconfig /flushdns`） |
 | HTTPS 报 `Connection refused` | 第 3 章的 50000 监听未发布到所有节点：回第 3 章重新发布 edge.env |
 | HTTPS 握手失败但端口通 | 确认证书已发布（第 9 章卡片为「已发布」状态）且集群一致 |
@@ -128,11 +121,8 @@ dig @192.168.0.13 -p 53 test.com +short
 ## 12.5 本章小结
 
 - hosts 模拟了演示环境的域名解析；生产环境需要设置首选 DNS 来承担同样的职责
-
 - 「编辑资源 → 重新发布 → 版本递增」是通用的变更流程（本章路由 v1 → v2）
-
 - 三条链路验证命令：`curl -vk <https://test.com:50000/index.html`>、`<http://192.168.0.13:8880/index.html`>、`dig @192.168.0.13 -p 53 test.com`
-
 - 至此，一套可用网关搭建完成：HTTP(S) 七层、TCP 四层、UDP/DNS 全部就绪
 
 🎉 主线搭建完成。接下来可进入[进阶与运维篇](README.md)，了解左侧菜单其余功能（概览、静态资源、指标监控、统一管理、系统管理与运维工具等）。

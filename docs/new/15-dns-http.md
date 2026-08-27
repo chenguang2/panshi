@@ -13,7 +13,6 @@
 
 | | DNS代理[UDP]（第 11 章） | DNS代理[HTTP]（本页） |
 | --- | --- | --- |
-
 | 协议 | 明文 UDP，独立监听 53 端口 | HTTPS 请求，走七层路由 |
 | 配置载体 | 四层代理规则 | 挂载 `dns_upstream` 插件的路由 |
 | 加密 | 无 | TLS 加密 |
@@ -35,7 +34,6 @@
 
 | 字段 | 本例填写 | 说明 |
 | --- | --- | --- |
-
 | 名称 | `test.com 解析-DoH` | 规则的唯一标识 |
 | URI | 以 `/` 开头的路径（如 `/dns-query`） | DoH 请求的访问路径，客户端将向该路径发起 DNS 查询 |
 | 所属集群 | 【演示集群】 | 规则归属 |
@@ -66,9 +64,7 @@ curl -vk --doh-url https://test.com:5000/dns-query https://test.com:5000/api/pin
 ## 15.6 本章小结
 
 - DNS代理[HTTP] = 挂载 `dns_upstream` 插件的路由规则，走 HTTPS 七层链路
-
 - 与 UDP 版互补：加密场景用本页，传统内网解析用第 11 章
-
 - 验证方式：向 `<URI>?name=<域名>&type=A` 发起请求，或用 `curl --doh-url` 端到端测试
 
 下一步：[第 16 章 指标总览与指标查询](16-metrics.md)
