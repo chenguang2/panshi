@@ -41,7 +41,17 @@ export interface AdvancedFieldDef {
 }
 
 export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
-  { key: 'ansible_port', label: 'SSH 端口', type: 'number' },
+  {
+    key: 'ansible_port',
+    label: 'SSH 端口',
+    type: 'number',
+    hint: '远程主机的 SSH 端口号，默认 22。留空则使用 Ansible 默认值',
+    helpRef: [
+      { param: '22', desc: 'SSH 标准端口（默认）' },
+      { param: '2222', desc: '非标准端口（常见于安全加固后的服务器）' },
+      { param: '11022', desc: '自定义端口（如端口转发场景）' },
+    ],
+  },
   {
     key: 'ansible_host',
     label: '连接目标 (ansible_host)',
@@ -59,11 +69,54 @@ export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
     label: '连接方式',
     type: 'select',
     options: ['smart', 'ssh', 'paramiko_ssh', 'local', 'docker', 'podman'],
+    hint: 'Ansible 如何连接到远程主机。smart 自动选择，ssh 最常用',
+    helpRef: [
+      { param: 'smart', desc: '自动选择：优先 ssh，不可用时降级 paramiko' },
+      { param: 'ssh', desc: '通过系统 SSH 客户端连接（推荐，支持 ControlMaster）' },
+      { param: 'paramiko_ssh', desc: '通过 Python paramiko 库连接（无需本地 SSH 客户端）' },
+      { param: 'local', desc: '本地执行（不 SSH，适用于本机任务）' },
+      { param: 'docker', desc: '通过 Docker exec 在容器内执行' },
+      { param: 'podman', desc: '通过 Podman exec 在容器内执行' },
+    ],
   },
-  { key: 'ansible_python_interpreter', label: 'Python 解释器路径', type: 'text' },
-  { key: 'ansible_become', label: '提权 (become)', type: 'switch' },
-  { key: 'ansible_become_user', label: '提权用户', type: 'text' },
-  { key: 'ansible_become_pass', label: '提权密码', type: 'password' },
+  {
+    key: 'ansible_python_interpreter',
+    label: 'Python 解释器路径',
+    type: 'text',
+    hint: '远程主机上的 Python 解释器路径。留空则 Ansible 自动检测',
+    placeholder: '/usr/bin/python3',
+    helpRef: [
+      { param: '/usr/bin/python3', desc: 'Python 3 标准路径（推荐）' },
+      { param: '/usr/bin/python2', desc: 'Python 2 路径（旧系统）' },
+      { param: '/usr/local/bin/python3', desc: '自行编译安装的 Python 3' },
+      { param: '/opt/python3/bin/python3', desc: '虚拟环境或自定义安装路径' },
+      { param: '/usr/bin/python3.11', desc: '指定具体版本号' },
+    ],
+  },
+  {
+    key: 'ansible_become',
+    label: '提权 (become)',
+    type: 'switch',
+    hint: '是否使用 sudo 提权执行命令。关闭时下方提权用户/密码字段自动禁用',
+  },
+  {
+    key: 'ansible_become_user',
+    label: '提权用户',
+    type: 'text',
+    hint: '提权后以哪个用户身份执行。留空则默认 root',
+    placeholder: 'root',
+    helpRef: [
+      { param: 'root', desc: '默认提权到 root 用户' },
+      { param: 'deploy', desc: '提权到专用部署用户' },
+      { param: 'app', desc: '提权到应用用户' },
+    ],
+  },
+  {
+    key: 'ansible_become_pass',
+    label: '提权密码',
+    type: 'password',
+    hint: 'sudo 密码。留空则 Ansible 使用 sudoers NOPASSWD 配置或提示输入',
+  },
   {
     key: 'ansible_ssh_private_key_file',
     label: '私钥路径',
