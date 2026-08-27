@@ -181,6 +181,66 @@ def build_reference_doc():
             z.writestr(n, files[n])
 
 
+def fix_lists(content, num_xml, template_num_xml):
+    """列表后处理：List Paragraph 样式 + 模板编号格式。
+
+    1. 列表段落样式 Compact -> a7（List Paragraph，基于正文）
+    2. pandoc 的 abstractNum 格式替换为模板格式：
+       - 子弹列表 -> 模板 abstractNum 3（//，缩进 840/1260/1680）
+       - 有序列表 -> 模板 abstractNum 5（%1)/%2)/%3.）
+    """
+    # 1. 列表段落样式 Compact -> a7
+    content = re.sub(
+        r'(<w:numPr>.*?</w:numPr>)<w:pStyle w:val="Compact" />',
+        r'\1<w:pStyle w:val="a7" />',
+        content, flags=re.S)
+
+    # 2. 提取模板 abstractNum 3（子弹）和 5（有序）的完整定义
+    template_num_xml = template_num_xml.decode('utf-8')
+
+    def get_abs(aid):
+        m = re.search(
+            r'<w:abstractNum w:abstractNumId="' + aid + r'"[^>]*>(.*?)</w:abstractNum>',
+            template_num_xml, re.S)
+        return m.group(1) if m else None
+
+    bullet_body = get_abs('3')
+    decimal_body = get_abs('5')
+
+    # 3. 对 pandoc 的 abstractNum（模板没有的），按格式替换
+    num_xml_str = num_xml.decode('utf-8')
+    # 找出列表用到的 numId -> abstractNumId
+    used_numids = set(re.findall(r'<w:numId w:val="(\d+)"', content))
+    num_map = dict(re.findall(
+        r'<w:num w:numId="(\d+)"[^>]*>.*?<w:abstractNumId w:val="(\d+)"',
+        num_xml_str, re.S))
+    # 模板自带的 abstractNum（0-13），不处理
+    template_abs = set(re.findall(
+        r'<w:abstractNum w:abstractNumId="(\d+)"', template_num_xml))
+
+    for nid in used_numids:
+        aid = num_map.get(nid)
+        if not aid or aid in template_abs:
+            continue  # 模板自带的编号不动
+        m = re.search(
+            r'<w:abstractNum w:abstractNumId="' + aid + r'"[^>]*>(.*?)</w:abstractNum>',
+            num_xml_str, re.S)
+        if not m:
+            continue
+        body = m.group(1)
+        fmt = re.search(r'<w:numFmt w:val="([^"]+)"', body)
+        if not fmt:
+            continue
+        if fmt.group(1) == 'bullet' and bullet_body:
+            num_xml_str = num_xml_str.replace(m.group(0),
+                f'<w:abstractNum w:abstractNumId="{aid}">{bullet_body}</w:abstractNum>')
+        elif fmt.group(1) == 'decimal' and decimal_body:
+            num_xml_str = num_xml_str.replace(m.group(0),
+                f'<w:abstractNum w:abstractNumId="{aid}">{decimal_body}</w:abstractNum>')
+
+    return content, num_xml_str.encode('utf-8')
+
+
 def convert_md(md_file):
     md_dir = os.path.dirname(os.path.abspath(md_file))
     subprocess.run(['pandoc', os.path.basename(md_file), '-o', TMP,
@@ -206,6 +266,7 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
     with zipfile.ZipFile(TEMPLATE) as z:
         names = z.namelist()
         files = {n: z.read(n) for n in names}
+        template_num_xml = z.read('word/numbering.xml')
     tdoc = files['word/document.xml'].decode('utf-8')
 
     # 4. 修改模板 styles.xml（加 pandoc 样式映射 + 重命名代码段/文档表格）
@@ -241,6 +302,9 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
 
     # 6c. 代码段包进代码框（单行单列表格）
     content = fix_code_boxes(content)
+
+    # 6d. 列表：List Paragraph 样式 + 模板编号格式
+    content, pnum = fix_lists(content, pnum, template_num_xml)
 
     # 7. 重映射 pandoc 内容用到的 rId（图片/超链接）到 rId100+
     used = set(re.findall(r'r:(?:embed|id)="(rId\d+)"', content))
