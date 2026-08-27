@@ -587,4 +587,8 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    md_file = sys.argv[1]
+    # 默认输出到 /mnt/z/{同名}.docx（本机 Windows 查看约定），可指定任意路径
+    out_docx = sys.argv[2] if len(sys.argv) > 2 else (
+        f"/mnt/z/{os.path.basename(md_file).rsplit('.', 1)[0]}.docx")
+    main(md_file, out_docx)

@@ -16,11 +16,15 @@ description: Use when converting markdown documentation (docs/new/*.md) to Word 
 ## 转换命令
 
 ```bash
+# 默认输出到 /mnt/z/{同名}.docx（本机 Windows 查看约定）
+python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py docs/new/00-login.md
+
+# 指定输出路径（其他机器可用任意路径，目录自动创建）
 python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py \
-  docs/new/00-login.md /mnt/z/00-login.docx
+  docs/new/00-login.md ./output/00-login.docx
 ```
 
-可选参数：`<md文件> <输出docx> [封面标题] [封面副标题]`（默认"磐石 Admin" / "操作手册"）。
+可选参数：`<md文件> [输出docx] [封面标题] [封面副标题]`（输出缺省为 `/mnt/z/{同名}.docx`，封面默认"磐石 Admin" / "操作手册"）。
 
 批量转换全部章节：
 
