@@ -36,6 +36,8 @@ export interface AdvancedFieldDef {
   options?: string[]
   hint?: string
   placeholder?: string
+  /** 常用参数速查表，渲染为 popover 参考面板。 */
+  helpRef?: { param: string; desc: string }[]
 }
 
 export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
@@ -62,6 +64,12 @@ export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
     type: 'text',
     placeholder: '~/.ssh/id_rsa',
     hint: '支持 ~ 表示用户主目录，如 ~/.ssh/my_key',
+    helpRef: [
+      { param: '~/.ssh/id_rsa', desc: 'RSA 默认密钥' },
+      { param: '~/.ssh/id_ed25519', desc: 'Ed25519 密钥（推荐）' },
+      { param: '~/.ssh/id_ecdsa', desc: 'ECDSA 密钥' },
+      { param: '~/.ssh/my_custom_key', desc: '自定义命名密钥' },
+    ],
   },
   {
     key: 'ansible_ssh_common_args',
@@ -69,6 +77,20 @@ export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
     type: 'text',
     placeholder: '-o StrictHostKeyChecking=no -o ProxyJump=jump_host',
     hint: '多个参数空格分隔，如 -o ProxyCommand="ssh -W %h:%p gateway"',
+    helpRef: [
+      { param: '-o StrictHostKeyChecking=no', desc: '跳过主机指纹验证（开发环境常用）' },
+      { param: '-o UserKnownHostsFile=/dev/null', desc: '禁用 known_hosts 写入（配合上面使用）' },
+      { param: '-o ProxyJump=gateway', desc: '通过跳板机连接（较新的 -J 语法）' },
+      { param: '-o ProxyCommand="ssh -W %h:%p gateway"', desc: '通过跳板机连接（旧语法，兼容性更好）' },
+      { param: '-o ConnectTimeout=30', desc: '连接超时（秒），默认无超时' },
+      { param: '-o ServerAliveInterval=60', desc: '每 60 秒发送心跳保活' },
+      { param: '-o ServerAliveCountMax=3', desc: '3 次心跳无响应则断开' },
+      { param: '-o Compression=yes', desc: '开启压缩（低带宽场景）' },
+      { param: '-o LogLevel=VERBOSE', desc: '详细 SSH 日志（调试用）' },
+      { param: '-o ForwardAgent=yes', desc: '转发本地 SSH Agent' },
+      { param: '-o ForwardX11=yes', desc: '转发 X11 图形（远程 GUI）' },
+      { param: '-o IdentityFile=~/.ssh/my_key', desc: '等同私钥路径字段（也可在此指定）' },
+    ],
   },
 ]
 

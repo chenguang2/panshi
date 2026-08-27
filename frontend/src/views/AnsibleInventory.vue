@@ -95,6 +95,21 @@
                     <label class="advanced-label">
                       {{ def.label }}
                       <a-tooltip v-if="def.hint" :title="def.hint"><span class="hint-mark">?</span></a-tooltip>
+                      <a-popover v-if="def.helpRef" trigger="click" placement="bottom" overlay-class="ssh-help-popover">
+                        <template #content>
+                          <div style="max-height:360px;overflow:auto;min-width:360px">
+                            <div style="font-weight:600;margin-bottom:8px">常用参数速查</div>
+                            <table style="width:100%;font-size:12px;border-collapse:collapse">
+                              <tr style="background:#fafafa"><td style="padding:4px 8px;font-weight:600">参数</td><td style="padding:4px 8px">含义</td></tr>
+                              <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom:1px solid #f0f0f0">
+                                <td style="padding:4px 8px;font-family:monospace;white-space:nowrap;cursor:pointer" :title="'点击复制：' + r.param" @click="copyText(r.param)">{{ r.param }}</td>
+                                <td style="padding:4px 8px">{{ r.desc }}</td>
+                              </tr>
+                            </table>
+                          </div>
+                        </template>
+                        <span class="hint-mark" style="cursor:pointer">📋</span>
+                      </a-popover>
                     </label>
                     <a-input-number
                       v-if="def.type === 'number'"
@@ -313,6 +328,11 @@ function asString(value: unknown): string {
 function setAdvanced(record: InventoryHostEntry, key: string, value: unknown): void {
   record[key] = value
   markDirty()
+}
+
+/** 复制参数到剪贴板（浏览器 API）。 */
+function copyText(text: string): void {
+  navigator.clipboard?.writeText(text).then(() => message.success('已复制'))
 }
 
 /** 保存前逐行校验高级字段，返回错误信息列表（空数组=通过）。 */
