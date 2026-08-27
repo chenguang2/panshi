@@ -92,3 +92,8 @@ backend/ansible/collections/ansible_collections/
 backend/bin/
 docs/other/
 *.db.bak-*
+
+# =============================================
+# 运行时数据（不入库）
+backend/ansible/inventory/host
+data/
