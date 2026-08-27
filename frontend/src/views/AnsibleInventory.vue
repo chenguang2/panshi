@@ -131,7 +131,7 @@
                       style="width:100%"
                       placeholder="留空继承默认"
                       allow-clear
-                      @change="(v) => setAdvanced(record, def.key, v)"
+                      @change="(v: string) => setAdvanced(record, def.key, v)"
                     />
                     <a-input-password
                       v-else-if="def.type === 'password'"
@@ -140,7 +140,7 @@
                       :disabled="def.key === 'ansible_become_pass' && !record.ansible_become"
                       allow-clear
                       autocomplete="new-password"
-                      @change="(e) => setAdvanced(record, def.key, e.target.value)"
+                      @change="(e: Event) => setAdvanced(record, def.key, (e.target as HTMLInputElement).value)"
                     />
                     <a-input
                       v-else
@@ -148,7 +148,7 @@
                       :placeholder="def.placeholder || '未设置'"
                       :disabled="def.key === 'ansible_become_user' && !record.ansible_become"
                       allow-clear
-                      @change="(e) => setAdvanced(record, def.key, e.target.value)"
+                      @change="(e: Event) => setAdvanced(record, def.key, (e.target as HTMLInputElement).value)"
                     />
                   </div>
                 </div>
