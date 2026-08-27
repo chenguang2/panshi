@@ -3705,3 +3705,30 @@ ansible-inventory-advanced-fields
 请读取 openspec/changes/ansible-inventory-advanced-fields/tasks.md , 严格按照 Superpowers 的
 TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
 完成后在 tasks.md 中将对应项打勾。
+
+==============================================================
+
+http://localhost:12345/ansible-inventory
+
+继续修改Ansible 主机清单 列表页：
+
+这个页面的显示和操作方式需要优化：
+
+1. 自定义字段 是否可以取消了？ 没用输入框，只是展示一个 - ， 作用是什么？ 
+2. SSH 用户 和 	SSH 密码（明文） 这两项其实和其它项也是一样的，也不是必填项，只是比其它项更常用
+3.  +添加主机的按钮在最上面，如果ip较多，点击后，再最下面填了一行，用户并不知道
+
+你看看界面如何优化一下，可以参考市面上实现类似功能的页面一般是如何实现的，给出几个方案，
+
+我能想到的是，是否也和 host 文件的结构一样，来提供输入方式呢？ 
+
+
+ansible-inventory-table-ux
+
+/brainstorming 请仔细阅读 openspec/changes/ansible-inventory-table-ux 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+请读取 openspec/changes/ansible-inventory-table-ux/tasks.md , 严格按照 Superpowers 的
+TDD 技能，逐个完成新的任务。 要求：每个任务都执行 "先写失败测试 -> 验证失败 -> 写最小实现 -> 验证通过 -> 重构" 的循环，
+完成后在 tasks.md 中将对应项打勾。
