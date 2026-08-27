@@ -91,6 +91,7 @@ def fix_tables(content):
             return tbl
 
         # 0. 表格宽度：列宽缩放到占满整行（8296 twips），tblW 改 auto（模板做法）
+        scaled = None
         grid = re.search(r'<w:tblGrid>.*?</w:tblGrid>', tbl, re.S)
         if grid:
             cols = re.findall(r'<w:gridCol w:w="(\d+)"', grid.group(0))
@@ -150,6 +151,27 @@ def fix_tables(content):
                 '<w:r><w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体" /><w:sz w:val="18" /></w:rPr><w:t ',
                 body)
             new_tbl = new_tbl.replace(r, body)
+
+        # 4. 单元格宽度：tcW 匹配网格列宽（模板做法，强制表格占满整行）
+        if scaled:
+            def add_cell_widths(row):
+                cells = re.findall(r'<w:tc>.*?</w:tc>', row, re.S)
+                for j, cell in enumerate(cells):
+                    if j >= len(scaled):
+                        break
+                    w = scaled[j]
+                    if '<w:tcPr />' in cell:
+                        new_cell = cell.replace(
+                            '<w:tcPr />',
+                            f'<w:tcPr><w:tcW w:w="{w}" w:type="dxa"/></w:tcPr>', 1)
+                    else:
+                        new_cell = re.sub(
+                            r'<w:tcPr>',
+                            f'<w:tcPr><w:tcW w:w="{w}" w:type="dxa"/>',
+                            cell, count=1)
+                    row = row.replace(cell, new_cell)
+                return row
+            new_tbl = add_cell_widths(new_tbl)
         return new_tbl
     return re.sub(r'<w:tbl[ >].*?</w:tbl>', fix_tbl, content, flags=re.S)
 
