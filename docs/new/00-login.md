@@ -48,6 +48,7 @@
 | 工具箱 | 运维管理 | `tools` |
 | 自启动管理 | 运维管理 | `edge_autostart` |
 | 节点任务 | 运维管理 | `task_center` |
+| Ansible 主机清单 | 工具箱 | `ansible_inventory` |
 
 开启方法：编辑后端配置文件 `backend/features.yaml`，把对应开关改为 `true` 并保存。
 
