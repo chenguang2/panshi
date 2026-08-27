@@ -10,7 +10,12 @@ import subprocess
 import sys
 import zipfile
 
-TEMPLATE = os.environ.get('EMBRACE_TEMPLATE', "/mnt/z/Embrace文档模板-2024.docx")
+# 模板路径：优先仓库副本（版本控制，不会被 /mnt/z 清理），后备 /mnt/z
+_REPO_TEMPLATE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    '..', '..', '..', '..', 'docs', 'templates', 'Embrace文档模板-2024.docx')
+TEMPLATE = os.environ.get('EMBRACE_TEMPLATE') or (
+    _REPO_TEMPLATE if os.path.exists(_REPO_TEMPLATE) else "/mnt/z/Embrace文档模板-2024.docx")
 TMP = "/tmp/opencode/_content.docx"
 REF_DOC = "/tmp/opencode/_ref.docx"  # pandoc 参考文档（运行时从模板构建）
 
