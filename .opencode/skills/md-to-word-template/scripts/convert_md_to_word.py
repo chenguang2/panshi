@@ -241,6 +241,34 @@ def fix_lists(content, num_xml, template_num_xml):
     return content, num_xml_str.encode('utf-8')
 
 
+def fix_figures(content):
+    """图形/图注后处理：套用模板格式（直接格式，保证渲染）。
+
+    图形: 居中显示，无缩进
+    图注: 居中显示，无缩进，1.5倍行距，宋体五号，加粗
+    """
+    # 1. 图形段落（CaptionedFigure）：居中 + 无缩进（去掉可能的列表编号）
+    content = re.sub(
+        r'<w:pPr>(?:<w:numPr>.*?</w:numPr>)?<w:pStyle w:val="CaptionedFigure" /></w:pPr>',
+        '<w:pPr><w:pStyle w:val="CaptionedFigure" />'
+        '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" /></w:pPr>',
+        content, flags=re.S)
+
+    # 2. 图注段落（ImageCaption）：居中 + 无缩进 + 1.5倍行距 + 宋体五号加粗
+    content = re.sub(
+        r'<w:pPr>(?:<w:numPr>.*?</w:numPr>)?<w:pStyle w:val="ImageCaption" /></w:pPr>',
+        '<w:pPr><w:pStyle w:val="ImageCaption" />'
+        '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" />'
+        '<w:spacing w:line="360" w:lineRule="auto" /></w:pPr>',
+        content, flags=re.S)
+    content = re.sub(
+        r'(<w:pPr><w:pStyle w:val="ImageCaption" />.*?</w:pPr>)<w:r><w:t ',
+        r'\1<w:r><w:rPr><w:rFonts w:ascii="宋体" w:eastAsia="宋体" w:hAnsi="宋体" />'
+        r'<w:b /><w:sz w:val="21" /></w:rPr><w:t ',
+        content, flags=re.S)
+    return content
+
+
 def convert_md(md_file):
     md_dir = os.path.dirname(os.path.abspath(md_file))
     subprocess.run(['pandoc', os.path.basename(md_file), '-o', TMP,
@@ -305,6 +333,9 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
 
     # 6d. 列表：List Paragraph 样式 + 模板编号格式
     content, pnum = fix_lists(content, pnum, template_num_xml)
+
+    # 6e. 图形/图注：居中无缩进 + 图注宋体五号加粗
+    content = fix_figures(content)
 
     # 7. 重映射 pandoc 内容用到的 rId（图片/超链接）到 rId100+
     used = set(re.findall(r'r:(?:embed|id)="(rId\d+)"', content))
