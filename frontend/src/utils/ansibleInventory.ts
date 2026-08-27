@@ -35,6 +35,7 @@ export interface AdvancedFieldDef {
   type: 'text' | 'number' | 'select' | 'switch' | 'password'
   options?: string[]
   hint?: string
+  placeholder?: string
 }
 
 export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
@@ -55,8 +56,20 @@ export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
   { key: 'ansible_become', label: '提权 (become)', type: 'switch' },
   { key: 'ansible_become_user', label: '提权用户', type: 'text' },
   { key: 'ansible_become_pass', label: '提权密码', type: 'password' },
-  { key: 'ansible_ssh_private_key_file', label: '私钥路径', type: 'text' },
-  { key: 'ansible_ssh_common_args', label: 'SSH 额外参数', type: 'text' },
+  {
+    key: 'ansible_ssh_private_key_file',
+    label: '私钥路径',
+    type: 'text',
+    placeholder: '~/.ssh/id_rsa',
+    hint: '支持 ~ 表示用户主目录，如 ~/.ssh/my_key',
+  },
+  {
+    key: 'ansible_ssh_common_args',
+    label: 'SSH 额外参数',
+    type: 'text',
+    placeholder: '-o StrictHostKeyChecking=no -o ProxyJump=jump_host',
+    hint: '多个参数空格分隔，如 -o ProxyCommand="ssh -W %h:%p gateway"',
+  },
 ]
 
 /** become 类字段的字符串规范化（yes/no/true/false，大小写不敏感）。 */

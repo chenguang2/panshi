@@ -121,7 +121,7 @@
                     <a-input-password
                       v-else-if="def.type === 'password'"
                       :value="asString(record[def.key])"
-                      placeholder="未设置"
+                      :placeholder="def.placeholder || '未设置'"
                       allow-clear
                       autocomplete="new-password"
                       @change="(e) => setAdvanced(record, def.key, e.target.value)"
@@ -129,7 +129,7 @@
                     <a-input
                       v-else
                       :value="asString(record[def.key])"
-                      placeholder="未设置"
+                      :placeholder="def.placeholder || '未设置'"
                       allow-clear
                       @change="(e) => setAdvanced(record, def.key, e.target.value)"
                     />
