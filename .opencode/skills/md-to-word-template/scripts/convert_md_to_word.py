@@ -188,7 +188,8 @@ def fix_code_boxes(content):
             '<w:tbl><w:tblPr><w:tblStyle w:val="af4" /><w:tblW w:type="auto" w:w="0" />'
             '<w:tblLook w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="0" w:val="0000" />'
             '</w:tblPr><w:tblGrid><w:gridCol w:w="8296" /></w:tblGrid>'
-            '<w:tr><w:tc><w:tcPr />' + paras + '</w:tc></w:tr></w:tbl>'
+            '<w:tr><w:tc><w:tcPr><w:tcW w:w="8296" w:type="dxa"/></w:tcPr>'
+            + paras + '</w:tc></w:tr></w:tbl>'
         )
     # 匹配一个或多个连续的 ad 段落（中间无其他内容）
     pattern = re.compile(
@@ -227,10 +228,11 @@ def fix_lists(content, num_xml, template_num_xml):
        - 子弹列表 -> 模板 abstractNum 3（//，缩进 840/1260/1680）
        - 有序列表 -> 模板 abstractNum 5（%1)/%2)/%3.）
     """
-    # 1. 列表段落样式 -> a7（List Paragraph），并去掉首行缩进（模板做法）
-    # 情况 A：numPr 后有任意 pStyle（Compact/BlockText 等）
+# 1. 列表段落样式 -> a7（List Paragraph），并去掉首行缩进（模板做法）
+    # 情况 A：numPr 后有任意 pStyle（Compact/BlockText 等），跳过图形/图注/引用块
     content = re.sub(
-        r'(<w:numPr>.*?</w:numPr>)<w:pStyle w:val="[^"]+" />',
+        r'(<w:numPr>(?:<w:[^>]*/>)*</w:numPr>)'
+        r'<w:pStyle w:val="(?!CaptionedFigure|ImageCaption|BlockText)[^"]+" />',
         r'\1<w:pStyle w:val="a7" /><w:ind w:firstLineChars="0" />',
         content, flags=re.S)
     # 情况 B：无 pStyle 的裸列表段落，补 a7 样式 + 缩进覆盖
@@ -319,6 +321,12 @@ def fix_figures(content, chapter_num):
         '<w:pPr><w:pStyle w:val="ImageCaption" />'
         '<w:ind w:firstLineChars="0" w:firstLine="0" /><w:jc w:val="center" />'
         '<w:spacing w:line="360" w:lineRule="auto" /></w:pPr>',
+        content, flags=re.S)
+
+    # 2.5 引用块段落（BlockText）：去掉列表编号（列表项内的引用块不应有子弹）
+    content = re.sub(
+        r'<w:pPr>(?:<w:numPr>(?:<w:[^>]*/>)*</w:numPr>)?<w:pStyle w:val="BlockText" /></w:pPr>',
+        '<w:pPr><w:pStyle w:val="BlockText" /></w:pPr>',
         content, flags=re.S)
 
     # 3. 图注文字替换为题注字段（自动编号），仅处理 ImageCaption 段落
