@@ -46,7 +46,13 @@ export const ADVANCED_FIELDS: AdvancedFieldDef[] = [
     key: 'ansible_host',
     label: '连接目标 (ansible_host)',
     type: 'text',
-    hint: '覆盖实际连接目标，不影响清单中的主机键',
+    hint: '清单中主机键是标识符（如 192.168.0.13），此字段可覆盖实际连接地址——常用于 NAT/端口转发场景，清单写内网 IP，连接走公网 IP',
+    placeholder: '192.168.1.100',
+    helpRef: [
+      { param: '192.168.1.100', desc: '填写 IP 地址，Ansible 会连接此 IP 而非清单中的主机键' },
+      { param: 'my-server.local', desc: '填写域名，通过 DNS 解析连接' },
+      { param: 'jump.example.com', desc: '跳板机地址（配合 ProxyJump 使用）' },
+    ],
   },
   {
     key: 'ansible_connection',
