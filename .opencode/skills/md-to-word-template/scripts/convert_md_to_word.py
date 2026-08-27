@@ -90,6 +90,22 @@ def fix_tables(content):
         if not rows:
             return tbl
 
+        # 0. 表格宽度：列宽缩放到占满整行（8296 twips），tblW 改 auto（模板做法）
+        grid = re.search(r'<w:tblGrid>.*?</w:tblGrid>', tbl, re.S)
+        if grid:
+            cols = re.findall(r'<w:gridCol w:w="(\d+)"', grid.group(0))
+            if cols:
+                total = sum(int(c) for c in cols)
+                if total > 0:
+                    target = 8296
+                    scaled = [round(int(c) * target / total) for c in cols]
+                    # 修正舍入误差：调整最后一列使合计精确等于 target
+                    scaled[-1] += target - sum(scaled)
+                    new_grid = '<w:tblGrid>' + ''.join(
+                        f'<w:gridCol w:w="{w}" />' for w in scaled) + '</w:tblGrid>'
+                    tbl = tbl.replace(grid.group(0), new_grid)
+        tbl = re.sub(r'<w:tblW [^/]*/>', '<w:tblW w:type="auto" w:w="0" />', tbl, count=1)
+
         # 1. 表格边框（蓝色单线）
         borders = (
             '<w:tblBorders>'
