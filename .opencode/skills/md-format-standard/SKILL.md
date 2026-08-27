@@ -72,4 +72,4 @@ cd docs/new && npx --yes markdownlint-cli <file>.md
 
 - **不破坏原文件**：修正版存为 `原文件名-1.md`（如 `00-login-1.md`），原文件保留
 - **内容不变**：只改格式（标题层级、空格、URL 包裹），不改文字内容
-- **Embrace 模板联动**：修正后的 md 用 `md-to-word-template` skill 转 Word，标题层级直接映射为 Word 标题 1/2/3
+- **只处理 md**：本 skill 只做 md 规范化，不转 Word。Word 转换是独立的 `md-to-word-template` skill，仅在用户明确要求时才执行
