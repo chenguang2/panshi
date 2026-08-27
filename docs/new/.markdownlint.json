@@ -1,0 +1,12 @@
+{
+  "MD013": { "line_length": 200 },
+  "MD029": { "style": "one_or_ordered" },
+  "MD031": false,
+  "MD032": false,
+  "MD033": false,
+  "MD036": false,
+  "MD037": false,
+  "MD040": false,
+  "MD046": false,
+  "MD028": false
+}
