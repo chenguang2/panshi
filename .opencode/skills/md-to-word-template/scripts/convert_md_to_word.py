@@ -577,7 +577,9 @@ def main(md_file, out_docx, title='磐石 Admin', subtitle='操作手册'):
         files['word/settings.xml'] = settings.encode('utf-8')
         print('settings: 打开时自动更新字段')
 
-    # 11. 写回
+    # 11. 写回（自动创建输出目录，兼容无 /mnt/z 的机器）
+    out_dir = os.path.dirname(os.path.abspath(out_docx))
+    os.makedirs(out_dir, exist_ok=True)
     with zipfile.ZipFile(out_docx, 'w', zipfile.ZIP_DEFLATED) as z:
         for n in names:
             z.writestr(n, files[n])

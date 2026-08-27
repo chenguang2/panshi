@@ -11,7 +11,7 @@ description: Use when converting markdown documentation (docs/new/*.md) to Word 
 
 - `pandoc` 已安装（`sudo apt-get install -y pandoc`）
 - 模板文件在 `docs/templates/Embrace文档模板-2024.docx`（**仓库副本，版本控制**；脚本优先用仓库副本，`/mnt/z` 仅作后备，可用环境变量 `EMBRACE_TEMPLATE` 覆盖）
-- 输出到 `/mnt/z/` 供 Windows 查看
+- 输出路径**可配置**（第二个参数），脚本自动创建输出目录；`/mnt/z/` 只是本机 Windows 查看约定，其他机器可输出到任意路径
 
 ## 转换命令
 
