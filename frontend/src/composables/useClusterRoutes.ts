@@ -415,7 +415,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       routeData.advanced_match_enabled ||
       (routeForm.advancedMatch.vars.length > 0)
     )
-    routeForm.enableWebsocket = !!(routeData as any).enable_websocket
+    routeForm.enableWebsocket = !!routeData.enable_websocket
     routeForm.plugins = []
     routeForm.plugin_config_ids = (routeData as unknown as Record<string, unknown>).plugin_config_ids
       ? [...((routeData as unknown as Record<string, unknown>).plugin_config_ids as string[])]

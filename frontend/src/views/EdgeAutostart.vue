@@ -158,7 +158,7 @@ const execTitle = ref('')
 const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
 const execLogs = ref<string[]>([])
 const execElapsed = ref<number | null>(null)
-const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
+const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
 const execHighlights = ref<string[]>([])
 const execStatistics = ref<Record<string, string> | null>(null)
 const streamStatus = ref<string>('')
@@ -344,7 +344,7 @@ function captureCommandLine(line: string) {
   // 从 SSE 流中捕获"手工执行命令: xxx"，设置到 execResult.command 供命令 tab 展示
   const m = line.match(/手工执行命令:\s*(.+)/)
   if (m) {
-    if (!execResult.value) execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+    if (!execResult.value) execResult.value = { stdout: '', stderr: '', command: '', rc: null }
     execResult.value.command = m[1].trim()
     return true
   }

@@ -9,7 +9,7 @@ const CONFIG = {
   displayName: '全局规则',
   clusterProp: 'global_rules',
   versionType: 'global_rule',
-}
+} as const
 
 export function useClusterGlobalRules(deps: GlobalRuleDeps) {
   const entity = useClusterPluginEntity(CONFIG, deps)

@@ -203,7 +203,7 @@ const form = reactive({
   description: '', advancedEnabled: false,
   enableWebsocket: false,
   advancedMatch: { vars: [] as [string, string, string][] },
-  plugins: [] as any[],
+  plugins: [] as { plugin_name: string; config: string }[],
 })
 
 const allMethodsSelected = computed(() => form.methods.length === ALL_METHODS.length)

@@ -111,7 +111,7 @@ function initForm(cluster: Cluster | null) {
     form.group_name = cluster.group_name || ''
     form.description = cluster.description || ''
     form.status = String(cluster.status)
-    form.admin_key = (cluster as any).admin_key || ''
+    form.admin_key = cluster.admin_key || ''
   } else {
     form.name = ''
     form.display_name = ''

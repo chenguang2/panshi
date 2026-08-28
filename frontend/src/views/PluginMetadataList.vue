@@ -339,7 +339,7 @@ async function deleteItem(item: any) {
       await executeDeleteWithProgress({
         title: `删除插件元数据: ${item.plugin_name}`,
         apiEndpoint: `/clusters/${item.cluster_id}/plugin-metadata/${item.plugin_name}`,
-        cluster: { id: item.cluster_id, nodes } as any,
+        cluster: { id: item.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

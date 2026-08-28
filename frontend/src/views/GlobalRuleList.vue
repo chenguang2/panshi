@@ -191,7 +191,7 @@ async function deleteRule(pc: any) {
       await executeDeleteWithProgress({
         title: `删除全局规则: ${pc.name}`,
         apiEndpoint: `/clusters/${pc.cluster_id}/global_rules/${pc.id}`,
-        cluster: { id: pc.cluster_id, nodes } as any,
+        cluster: { id: pc.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

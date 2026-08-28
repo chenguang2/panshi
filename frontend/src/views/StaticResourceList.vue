@@ -417,7 +417,7 @@ async function deleteResource(sr: any) {
       await executeDeleteWithProgress({
         title: `删除静态资源: ${sr.name}`,
         apiEndpoint: `/clusters/${sr.cluster_id}/static-resources/${sr.id}`,
-        cluster: { id: sr.cluster_id, nodes } as any,
+        cluster: { id: sr.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

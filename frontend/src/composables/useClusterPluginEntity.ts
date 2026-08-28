@@ -19,9 +19,9 @@ export interface PluginEntityConfig {
   /** Display name in Chinese, e.g. '插件组' or '全局规则' */
   displayName: string
   /** Cluster property name, e.g. 'plugin_configs' or 'global_rules' */
-  clusterProp: string
-  /** Version modal resource type string */
-  versionType: string
+  clusterProp: 'plugin_configs' | 'global_rules'
+  /** Version modal resource type */
+  versionType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'
 }
 
 export interface PluginEntityDeps {
@@ -51,7 +51,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   const formData = reactive({
     name: '',
     description: '',
-    selectedPlugins: [] as any[],
+    selectedPlugins: [] as { plugin_name: string; config: string }[],
   })
 
   const viewDrawerVisible = ref(false)
@@ -60,9 +60,9 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   const loadItems = async (cluster: Cluster) => {
     try {
       const res = await api.get(`/clusters/${cluster.id}/${apiEndpoint}`)
-      ;(cluster as any)[clusterProp] = res.data.items || res.data || []
+      cluster[clusterProp] = res.data.items || res.data || []
     } catch {
-      ;(cluster as any)[clusterProp] = []
+      cluster[clusterProp] = []
     }
   }
 
@@ -147,14 +147,14 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
           deleteEdge,
           nodeIds,
           refreshFn: () => loadItems(cluster),
-          clearSelectedFn: () => { (cluster as any).selectedPluginConfig = null },
+          clearSelectedFn: () => { cluster.selectedPluginConfig = null },
         })
       },
     })
   }
 
   const publishItem = async (cluster: Cluster, item?: any) => {
-    const target = item || (cluster as any).selectedPluginConfig
+    const target = item || cluster.selectedPluginConfig
     if (!target) {
       message.warning(`请先选择一个${displayName}`)
       return
@@ -171,12 +171,12 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   }
 
   const openVersionManagement = (cluster: Cluster, item?: any) => {
-    const target = item || (cluster as any).selectedPluginConfig
+    const target = item || cluster.selectedPluginConfig
     if (!target) {
       message.warning(`请先选择一个${displayName}`)
       return
     }
-    versionModal.type.value = versionType as any
+    versionModal.type.value = versionType
     versionModal.resourceId.value = target.id
     versionModal.clusterId.value = cluster.id
     versionModal.resourceName.value = target.name

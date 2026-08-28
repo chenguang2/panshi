@@ -314,7 +314,7 @@ async function deleteRoute(r: any) {
       await executeDeleteWithProgress({
         title: `删除路由: ${r.name}`,
         apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}`,
-        cluster: { id: r.cluster_id, nodes } as any,
+        cluster: { id: r.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

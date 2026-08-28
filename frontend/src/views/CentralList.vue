@@ -756,19 +756,19 @@ let _showDeleteConfirmRoute: ((opts: {
 const {
   loadRoutes,
 } = useClusterRoutes({
-  clusters: clusters as any,
-  currentClusterId: currentClusterId as any,
-  openPublishModal: openPublishModal as any,
-  showDeleteConfirm: _showDeleteConfirmRoute as any,
-  loadPluginConfigs: loadPluginConfigs as any,
-  availablePlugins: availablePlugins as any,
-  loadAvailablePlugins: loadAvailablePlugins as any,
-  versionModalVisible: versionModalVisible as any,
-  versionModalType: versionModalType as any,
-  versionModalResourceId: versionModalResourceId as any,
-  versionModalClusterId: versionModalClusterId as any,
-  versionModalResourceName: versionModalResourceName as any,
-  versionModalEdgeUuid: versionModalEdgeUuid as any,
+  clusters,
+  currentClusterId,
+  openPublishModal,
+  showDeleteConfirm: _showDeleteConfirmRoute,
+  loadPluginConfigs,
+  availablePlugins,
+  loadAvailablePlugins,
+  versionModalVisible,
+  versionModalType,
+  versionModalResourceId,
+  versionModalClusterId,
+  versionModalResourceName,
+  versionModalEdgeUuid,
 })
 
 const {

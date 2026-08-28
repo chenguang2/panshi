@@ -980,8 +980,8 @@ const showUpstreamModal = (mode: 'create' | 'edit', record?: any) => {
   if (mode === 'edit' && record?.value) {
     upstreamForm.name = record.value.name || ''
     upstreamForm.type = record.value.type || 'roundrobin'
-    upstreamForm.hash_on = (record.value as any).hash_on || 'vars'
-    upstreamForm.key = (record.value as any).key || ''
+    upstreamForm.hash_on = record.value.hash_on || 'vars'
+    upstreamForm.key = record.value.key || ''
     upstreamForm.nodes = []
     if (record.value.nodes) {
       if (Array.isArray(record.value.nodes)) {

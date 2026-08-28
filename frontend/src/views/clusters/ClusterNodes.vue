@@ -590,7 +590,7 @@ function handleNodeStart() {
     '确认启动节点',
     `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
     '确认启动',
-    () => executeNodeAction(node as any, 'start', '启动'),
+    () => executeNodeAction(node, 'start', '启动'),
   )
 }
 
@@ -611,7 +611,7 @@ function handleNodeStop() {
     '确认停止节点',
     `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
-    () => executeNodeAction(node as any, 'stop', '停止'),
+    () => executeNodeAction(node, 'stop', '停止'),
   )
 }
 
@@ -632,7 +632,7 @@ function handleNodeReload() {
     '确认重新加载节点',
     `即将对节点 ${node.ip} 执行"reload"操作，重新加载配置，确认继续？`,
     '确认reload',
-    () => executeNodeAction(node as any, 'reload', 'reload'),
+    () => executeNodeAction(node, 'reload', 'reload'),
   )
 }
 
@@ -657,14 +657,14 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
       '确认启动节点',
       `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
       '确认启动',
-      () => executeNodeAction(record as any, 'start', '启动'),
+      () => executeNodeAction(record, 'start', '启动'),
     )
   } else if (btnKey === 'stop') {
     showConfirm(
       '确认停止节点',
       `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
       '确认停止',
-      () => executeNodeAction(record as any, 'stop', '停止'),
+      () => executeNodeAction(record, 'stop', '停止'),
     )
   } else {
     handleNodeAction(cluster, record, btnKey)
@@ -728,7 +728,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => {
@@ -774,7 +774,7 @@ function handleInstallEdge() {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
-      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
       execElapsed.value = 0
       clearInstallTimer()
       _installTimer = setInterval(() => {
@@ -894,7 +894,7 @@ function handleAssociateNewOpenresty() {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
-      execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+      execResult.value = { stdout: '', stderr: '', command: '', rc: null }
       execElapsed.value = 0
       clearInstallTimer()
       _installTimer = setInterval(() => {
@@ -939,7 +939,7 @@ function streamEdgeAction(node: any, title: string, url: string, body: Record<st
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => {

@@ -360,7 +360,7 @@ const execDrawerTitle = ref('')
 const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
 const execLogs = ref<string[]>([])
 const execElapsed = ref<number | null>(null)
-const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
+const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
 const execHighlights = ref<string[]>([])
 const execStatistics = ref<Record<string, string> | null>(null)
 const execTargetNode = ref<any | null>(null)
@@ -625,7 +625,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   }
 
   // Set command immediately so command tab shows it from the start
-  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+  execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
   addLog(`开始对节点 ${record.ip} 执行 ${actionLabel} 操作...`)
   execProgress.percent = 10
   startElapsedTimer()
@@ -757,7 +757,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   execProgress.status = 'active'
 
   const prefix = record.openresty_path
-  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   startElapsedTimer()
 
   installStream.start(
@@ -794,7 +794,7 @@ function handleInstallEdge(record: any) {
       execProgress.status = 'active'
       const prefix = record.openresty_path || record.edge_path
       const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
-      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
       startElapsedTimer()
 
       installStream.start(
@@ -833,7 +833,7 @@ function handleAssociateNewOpenresty(record: any) {
       execProgress.percent = 0
       execProgress.status = 'active'
       const pendingCommand = `manager upgrade ${record.edge_path}`
-      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null as any }
+      execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
       startElapsedTimer()
 
       installStream.start(
@@ -1019,7 +1019,7 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
-  execResult.value = { stdout: '', stderr: '', command: '', rc: null as any }
+  execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   startElapsedTimer()
 
   installStream.start(url, body, {

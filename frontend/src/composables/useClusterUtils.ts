@@ -446,7 +446,7 @@ export interface DeleteProgressOptions {
   title: string
   apiEndpoint: string
   /** 兼容保留：批量删除（resourceKey 模式）无需 cluster */
-  cluster?: any
+  cluster?: { id: number; nodes?: { id: number; ip: string; management_port: number }[] }
   deleteDb: boolean
   deleteEdge: boolean
   nodeIds: number[]
@@ -599,7 +599,7 @@ function logSingleDeleteResults(
       let detail = ''
       if (r.details) {
         const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据' }
-        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${(r.details as any)[k] ?? 0}`)
+        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${r.details[k] ?? 0}`)
         detail = ` (${parts.join(' ')})`
       }
       addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)

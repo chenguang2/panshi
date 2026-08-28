@@ -288,7 +288,7 @@ async function deleteProxy(p: StreamProxy) {
       await executeDeleteWithProgress({
         title: `删除四层代理: ${p.name}`,
         apiEndpoint: `/clusters/${p.cluster_id}/stream-proxies/${p.id}`,
-        cluster: { id: p.cluster_id, nodes } as any,
+        cluster: { id: p.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

@@ -986,7 +986,7 @@ watch(() => props.visible, async (v) => {
     form.cluster_id = p.cluster_id
     form.listen_port = p.listen_port
     form.name = p.name
-    form.proxy_type = (p as any).proxy_type === 'dns' ? 'dns' : 'normal'
+    form.proxy_type = p.proxy_type === 'dns' ? 'dns' : 'normal'
     form.description = p.description || ''
     form.scheme = (p.scheme === 'tcp' || p.scheme === 'udp' || p.scheme === 'tls') ? p.scheme : 'tcp'
     form.load_balance = p.load_balance || 'weighted_roundrobin'
@@ -995,7 +995,7 @@ watch(() => props.visible, async (v) => {
 
     if (form.proxy_type === 'dns') {
       // Load DNS config
-      const dc = (p as any).dns_config
+      const dc = typeof p.dns_config === 'object' ? p.dns_config : undefined
       const exportNodesMap: Record<string, string> = {}
       if (dc && dc.wan_enabled && dc.hosts) {
         for (const [domain, cfg] of Object.entries(dc.hosts) as [string, any][]) {

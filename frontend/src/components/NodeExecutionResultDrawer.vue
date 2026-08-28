@@ -157,7 +157,7 @@ const props = defineProps<{
   progress: { percent: number; status: 'active' | 'success' | 'exception' }
   logs: string[]
   elapsed: number | null
-  result: { stdout: string; stderr: string; command: string; rc: number } | null
+  result: { stdout: string; stderr: string; command: string; rc: number | null } | null
   highlights: string[]
   statistics: Record<string, string> | null
   installing?: boolean

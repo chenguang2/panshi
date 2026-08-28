@@ -43,7 +43,13 @@ async function bootstrap() {
   }
 }
 
-if (!(window as any).__PANSHI_BOOTSTRAPPED__) {
-  ;(window as any).__PANSHI_BOOTSTRAPPED__ = true
+if (!window.__PANSHI_BOOTSTRAPPED__) {
+  window.__PANSHI_BOOTSTRAPPED__ = true
   bootstrap()
+}
+
+declare global {
+  interface Window {
+    __PANSHI_BOOTSTRAPPED__?: boolean
+  }
 }

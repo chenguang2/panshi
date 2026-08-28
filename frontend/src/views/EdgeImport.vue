@@ -603,7 +603,7 @@ const connectionTested = ref(false)
 const previewData = ref<PreviewResponse | null>(null)
 const loadingPreview = ref(false)
 
-const selections = reactive({
+const selections = reactive<Record<string, boolean>>({
   upstreams: true,
   routes: true,
   plugin_configs: true,
@@ -636,11 +636,11 @@ const configTypes = [
 ]
 
 function toggleConfigType(key: string) {
-  (selections as any)[key] = !(selections as any)[key]
+  selections[key] = !selections[key]
 }
 
 const hasSelection = computed(() => {
-  return configTypes.some(ct => (selections as any)[ct.key])
+  return configTypes.some(ct => selections[ct.key])
 })
 
 const importing = ref(false)

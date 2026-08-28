@@ -12,7 +12,7 @@ const CONFIG = {
   displayName: '插件组',
   clusterProp: 'plugin_configs',
   versionType: 'plugin_config',
-}
+} as const
 
 export function useClusterPluginConfigs(deps: PluginConfigDeps) {
   const entity = useClusterPluginEntity(CONFIG, deps)

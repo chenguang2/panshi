@@ -296,7 +296,7 @@ async function deleteUpstream(record: any) {
       await executeDeleteWithProgress({
         title: `删除上游: ${record.name}`,
         apiEndpoint: `/clusters/${record.cluster_id}/upstreams/${record.id}`,
-        cluster: { id: record.cluster_id, nodes } as any,
+        cluster: { id: record.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

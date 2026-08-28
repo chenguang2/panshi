@@ -874,8 +874,8 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
     if (key === 'headers') continue
 
     const configValue = config[key]
-    const fieldType = getFieldType(fieldSchema as any)
-    const fieldDefault = (fieldSchema as any).default
+    const fieldType = getFieldType(fieldSchema)
+    const fieldDefault = fieldSchema.default
 
     switch (fieldType) {
       case 'string':
@@ -907,7 +907,7 @@ const buildFormDataFromConfig = (schema: Record<string, any>, config: Record<str
         break
       case 'object':
         if (typeof configValue === 'object' && configValue !== null) {
-          const props = (fieldSchema as any).properties
+          const props = fieldSchema.properties
           if (props && Object.keys(props).length > 0) {
             data[key] = buildFormDataFromConfig(props, configValue)
           } else {
@@ -936,7 +936,7 @@ const buildConfigFromForm = (): string => {
     if (key === 'headers') continue // headers 单独处理
 
     const value = formData.value[key]
-    const fieldType = getFieldType(fieldSchema as any)
+    const fieldType = getFieldType(fieldSchema)
 
     if (value === undefined || value === null || value === '') continue
     // 跳过空对象 {}
@@ -944,7 +944,7 @@ const buildConfigFromForm = (): string => {
     if (fieldType === 'array' && value === '[]') continue
 
     // 跳过等于默认值的字段
-    const fieldDefault = (fieldSchema as any).default
+    const fieldDefault = fieldSchema.default
     if (fieldDefault !== undefined) {
       let compareValue = value
       if (fieldType === 'array' && typeof value === 'string') {

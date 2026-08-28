@@ -258,7 +258,7 @@ async function deleteProxy(p: StreamProxy) {
       await executeDeleteWithProgress({
         title: `删除 DNS 代理: ${p.name}`,
         apiEndpoint: dnsApiPath(p.cluster_id, p.id),
-        cluster: { id: p.cluster_id, nodes } as any,
+        cluster: { id: p.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

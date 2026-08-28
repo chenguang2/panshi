@@ -191,7 +191,7 @@ async function deleteConfig(pc: any) {
       await executeDeleteWithProgress({
         title: `删除插件组: ${pc.name}`,
         apiEndpoint: `/clusters/${pc.cluster_id}/plugin_configs/${pc.id}`,
-        cluster: { id: pc.cluster_id, nodes } as any,
+        cluster: { id: pc.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

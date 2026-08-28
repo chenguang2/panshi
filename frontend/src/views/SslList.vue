@@ -262,7 +262,7 @@ async function deleteCert(cert: any) {
       await executeDeleteWithProgress({
         title: `删除 SSL 证书: ${cert.name}`,
         apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
-        cluster: { id: cert.cluster_id, nodes } as any,
+        cluster: { id: cert.cluster_id, nodes },
         deleteDb,
         deleteEdge,
         nodeIds,

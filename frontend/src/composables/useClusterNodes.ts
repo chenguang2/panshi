@@ -79,7 +79,7 @@ export function useClusterNodes(options: {
     percent: 0, status: 'active',
   })
   const execLogs = ref<string[]>([])
-  const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number } | null>(null)
+  const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
   const execHighlights = ref<string[]>([])
   const execStatistics = ref<Record<string, string> | null>(null)
   const execElapsed = ref<number | null>(null)
@@ -326,7 +326,7 @@ export function useClusterNodes(options: {
     nodeForm.ip = target.ip
     nodeForm.service_port = target.service_port
     nodeForm.management_port = target.management_port
-    nodeForm.ssh_port = (target as any).ssh_port ?? 22
+    nodeForm.ssh_port = target.ssh_port ?? 22
     nodeForm.edge_path = target.edge_path || ''
     nodeForm.openresty_path = target.openresty_path || ''
     nodeForm.status = target.status
@@ -341,7 +341,7 @@ export function useClusterNodes(options: {
       ip: '',
       service_port: node.service_port,
       management_port: node.management_port,
-      ssh_port: (node as any).ssh_port ?? 22,
+      ssh_port: node.ssh_port ?? 22,
       edge_path: node.edge_path || '',
       openresty_path: node.openresty_path || '',
       status: node.status,
@@ -768,7 +768,7 @@ export function useClusterNodes(options: {
       title: '确认启动节点',
       content: `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
       okText: '确认启动',
-      okType: 'primary' as any,
+      okType: 'primary',
       cancelText: '取消',
       onOk: () => executeNodeAction(node, 'start', '启动'),
     })
@@ -779,7 +779,7 @@ export function useClusterNodes(options: {
       title: '确认停止节点',
       content: `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
       okText: '确认停止',
-      okType: 'danger' as any,
+      okType: 'danger',
       cancelText: '取消',
       onOk: () => executeNodeAction(node, 'stop', '停止'),
     })

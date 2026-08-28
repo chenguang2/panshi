@@ -72,7 +72,7 @@ const form = reactive({
   name: '',
   cluster_id: '' as number | string,
   description: '',
-  selectedPlugins: [] as any[],
+  selectedPlugins: [] as { plugin_name: string; config: string }[],
 })
 
 watch(() => props.visible, async (v) => {
