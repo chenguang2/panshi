@@ -91,6 +91,7 @@ export interface Node {
   ip: string
   service_port: number
   management_port: number
+  ssh_port?: number
   edge_path?: string
   openresty_path?: string
   status: number
@@ -133,6 +134,7 @@ export interface Route {
   remote_addrs?: string
   vars?: [string, string, string | string[]][]
   advanced_match_enabled?: boolean
+  enable_websocket?: boolean
   current_version?: number
   published_at?: string
   plugins?: RoutePlugin[]
@@ -199,7 +201,7 @@ export interface StreamProxy {
   retries?: number
   retry_timeout?: number
   proxy_type?: string
-  dns_config?: Record<string, unknown> | string
+  dns_config?: Record<string, any> | string
   remote_addr?: string
   sni?: string
   status: number
