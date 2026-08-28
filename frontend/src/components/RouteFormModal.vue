@@ -176,6 +176,7 @@ import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
+import type { RouteVarRule } from '@/types'
 
 const props = defineProps<{
   visible: boolean
@@ -202,7 +203,7 @@ const form = reactive({
   upstream_id: '' as number | string | null,
   description: '', advancedEnabled: false,
   enableWebsocket: false,
-  advancedMatch: { vars: [] as [string, string, string][] },
+  advancedMatch: { vars: [] as RouteVarRule[] },
   plugins: [] as { plugin_name: string; config: string }[],
 })
 
@@ -276,7 +277,7 @@ watch(() => props.visible, async (v) => {
     form.cluster_id = r.cluster_id; form.description = r.description || ''; form.upstream_id = r.upstream_id
     form.methods = (r.methods || '').split(',').filter(Boolean)
     form.advancedEnabled = !!(r.advanced_match_enabled || (r.vars && r.vars.length > 0))
-    form.advancedMatch = { vars: (r.vars || []) as any }
+    form.advancedMatch = { vars: r.vars || [] }
     form.enableWebsocket = !!(r.enable_websocket)
     pluginConfigIds.value = r.plugin_config_ids || []
     // Load plugins from API

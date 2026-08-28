@@ -491,7 +491,7 @@ interface UpstreamOption {
 const props = defineProps<{
   open: boolean
   plugin: RoutePlugin | null
-  pluginInfo: Plugin | null
+  pluginInfo: Partial<Plugin> | null
   upstreams?: UpstreamOption[]
 }>()
 

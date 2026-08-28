@@ -223,7 +223,7 @@ const viewingPlugin = ref<ConfiguredPlugin | null>(null)
 
 const editorDrawerVisible = ref(false)
 const editingPlugin = ref<any>(null)
-const editingPluginInfo = ref<Plugin | null>(null)
+const editingPluginInfo = ref<Partial<Plugin> | null>(null)
 
 const versionModalVisible = ref(false)
 const versionModalPluginName = ref('')
@@ -285,7 +285,7 @@ const editPlugin = (item: ConfiguredPlugin) => {
   editingPluginInfo.value = {
     ...(pluginInfo || {}),
     schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
-  } as any
+  }
   editorDrawerVisible.value = true
 }
 
@@ -312,7 +312,7 @@ const handleVersionManagementEdit = (data: { plugin_name: string; config: string
   editingPluginInfo.value = {
     ...(pluginInfo || {}),
     schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
-  } as any
+  }
   editorDrawerVisible.value = true
 }
 

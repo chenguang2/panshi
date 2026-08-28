@@ -119,7 +119,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 2. **后端入口为 `app.main:app`** — 不是根目录的 `main:app`。
 3. **数据访问直连模式** — 简单 CRUD 直接在 route handler 中用 SQLAlchemy 执行（`select()` / `execute()`），不建 Repository 层；仅复杂业务逻辑（Ansible、备份、指标等）放 `services/`。`backend/app/repositories/` 已不存在，不要重建。
 4. **插件编辑器支持双模式** — 表单编辑和 JSON 编辑都支持（`PluginEditorDrawer.vue`），不可移除任一模式。
-5. **新代码禁止 `as any`、`@ts-ignore`、`@ts-expect-error`** — 存量代码仍有约 100+ 处未清理，属于历史欠账：**不要顺手批量修复**，只保证自己新增的代码干净。
+5. **代码禁止 `as any`、`@ts-ignore`、`@ts-expect-error`** — 生产代码已清零（存量 74 处已于 2026-08 清理）；测试文件（`__tests__/`、`*.test.ts`、`*.spec.ts`）豁免，mock 场景允许。
 6. **前端 API 按资源拆分模块** — 新资源在 `frontend/src/api/` 建对应 `.ts` 模块，不要往单文件里堆。
 7. **发布/删除流程统一** — 使用 `useClusterUtils.ts` 中的 `executePublish` 和 `executeDeleteWithProgress` 共享函数，不要在 composable 中重复实现进度弹窗逻辑。
 8. **测试运行时服务已启动** — 开发环境前后端（后端 12344 / 前端 12345）默认已在运行，不要自行启动/停止。验证链路直接连 `http://localhost:12345`（前端）与 `http://localhost:12344`（后端）。仅当 curl 健康检查失败时才用 `develop/linux/start.sh` 启动、`develop/linux/stop.sh` 停止。手动链路测试（Playwright）优先复用已运行实例，完成后不停止系统。
@@ -155,7 +155,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 - [ ] 验证链路直接连 localhost:12344/12345，勿自行启停服务（服务常驻）
 - [ ] 登录表单包含 `id="username"` 和 `id="password"`
-- [ ] 新代码无 `as any` / `@ts-ignore` / `@ts-expect-error`（存量不批量修）
+- [ ] 代码无 `as any` / `@ts-ignore` / `@ts-expect-error`（测试文件豁免）
 - [ ] 依赖写入正确的 manifest（pyproject.toml / package.json）
 - [ ] 提交前 `git status` 确认，不 force-add 忽略文件（尤其 `backend/data/`）
 - [ ] 本文件与代码冲突时，已按代码修正本文件

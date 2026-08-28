@@ -118,6 +118,9 @@ export interface Upstream {
   targets?: UpstreamTarget[]
 }
 
+/** APISIX vars 高级匹配规则：3 元组 [var, op, value] 或 4 元组 [var, '!', op, value]，value 可为数组（IN/ip~） */
+export type RouteVarRule = (string | string[])[]
+
 export interface Route {
   id: number
   edge_uuid: string
@@ -132,7 +135,7 @@ export interface Route {
   created_at?: string
   hosts?: string
   remote_addrs?: string
-  vars?: [string, string, string | string[]][]
+  vars?: RouteVarRule[]
   advanced_match_enabled?: boolean
   enable_websocket?: boolean
   current_version?: number
