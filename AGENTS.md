@@ -1,47 +1,37 @@
-# 磐石 Admin — AI 代理指南
+# 磐石 Gateway — AI 代理指南
 
-## 产品标识
+> **元规则**：本文件与代码冲突时，以代码为准，并同步修正本文档相应条目。
 
-- **产品名**：磐石Admin（不是"盘石"）
-- **项目**：多集群网关统一管理平台（Edge 网关配置管理）
-- **界面语言**：中文内联文本，不使用 i18n 库
+## 领域模型
+
+磐石 Gateway 是多集群 Edge 网关（OpenResty）统一管理平台。新功能先定位到对应域，再按命名约定落位：
+
+- **集群配置域**：集群 / 路由 / 上游 / 插件 / SSL 证书 / 节点 / DNS 代理 / 流代理 / 全局规则，配置发布推送到 Edge 节点
+- **自动化域**：Ansible 主机清单与自动化部署（OpenResty 安装、节点任务执行）
+- **观测域**：指标采集（ClickHouse）、仪表盘、健康统计
+- **运维域**：Edge 节点直连与数据导入、集群备份/恢复/导出（JSON/Excel）、数据库管理、用户与认证
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 后端框架 | FastAPI + async SQLAlchemy 2.0 |
-| 数据校验 | Pydantic v2 |
-| 认证 | JWT + bcrypt |
-| 前端框架 | Vue 3（Composition API）+ TypeScript |
-| UI 组件库 | Ant Design Vue |
-| 状态管理 | Pinia |
-| 路由 | Vue Router |
-| 构建工具 | Vite（前端）/ uv（后端 Python） |
-| 前端测试 | Playwright（E2E）+ Vitest（单元） |
-| 后端测试 | pytest + pytest-asyncio |
-| 数据库 | SQLite（开发）/ PostgreSQL（Docker 生产） |
-
-## 端口
-
-| 服务 | 开发端口（start.sh） | Docker 端口 |
-|---|---|---|
-| 后端 | 12344 | 8000 |
-| 前端 | 12345 | 9100（代理转发） |
-
-Vite 代理将 `/api` 请求转发到 `localhost:12344`（读取 `backend/.port` 文件，缺省 12344）。
-Docker 部署前端通过 nginx 运行在 3000 端口（`docker-compose.yml`）。
+| 后端 | FastAPI + async SQLAlchemy 2.0 + Pydantic v2 |
+| 认证 | JWT（python-jose）+ bcrypt |
+| 自动化 | ansible-runner / ansible-core |
+| 指标 | clickhouse-driver |
+| Excel 导出 | openpyxl |
+| 前端 | Vue 3（Composition API）+ TypeScript + Ant Design Vue 4 + Pinia + Vue Router |
+| 前端可视化/编辑器 | ECharts、Monaco Editor、json-editor-vue |
+| 构建 | Vite（前端）/ uv（后端 Python） |
+| 测试 | pytest + pytest-asyncio（后端）；Vitest（单元）+ Playwright（E2E）（前端） |
+| 数据库 | SQLite（开发，`backend/data/`） |
 
 ## 常用命令
 
 ```bash
-# 📌 开发启动（推荐——一键启动前后端）
+# 📌 开发启动（一键启动前后端）
 develop/linux/start.sh                # 后端 → 12344，前端 → 12345
 develop/linux/stop.sh                 # 停止
-
-# 替代——分别启动（不推荐，端口可能与 start.sh 不同）
-cd backend && mkdir -p data && uv sync && uv run uvicorn app.main:app --reload --port 9000
-cd frontend && npm install && npm run dev
 
 # 后端测试
 cd backend && uv run pytest
@@ -59,6 +49,15 @@ cd frontend && npm run build
 # admin / panshi123 访问 http://localhost:12345
 ```
 
+## 端口
+
+| 服务 | 端口 | 说明 |
+|---|---|---|
+| 后端 | 12344 | `develop/linux/start.sh` 指定 |
+| 前端 | 12345 | start.sh 指定 |
+
+Vite 代理将 `/api` 请求转发到 `localhost:12344`（读取 `backend/.port` 文件，缺省 12344）。
+
 ## 国内网络环境（重要约定）
 
 **本机位于中国网络环境，下载任何国外软件包/依赖/二进制文件必须优先使用国内镜像源，否则极慢或超时。** 每次安装/下载前先检查是否可换用国内源：
@@ -69,7 +68,6 @@ cd frontend && npm run build
 | pip / uv 包安装 | `uv pip install --index-url https://pypi.tuna.tsinghua.edu.cn/simple` 或 `pip config set global.index-url` |
 | **Playwright 浏览器下载** | `PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright npx playwright install chromium`（或 `PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright`） |
 | apt 系统包 | 使用清华/阿里源（如 `mirrors.tuna.tsinghua.edu.cn`、`mirrors.aliyun.com`） |
-| Docker 镜像拉取 | 配置国内 registry mirror（`https://docker.mirrors.ustc.edu.cn` 等），或拉取后 `docker tag` 重命名 |
 | GitHub 下载（releases/源码） | 使用 `https://ghproxy.com/` 或 `https://mirror.ghproxy.com/` 前缀代理，或 `https://hub.fastgit.org` |
 | Maven / Go / Rust 等 | 分别用阿里云 Maven、`GOPROXY=https://goproxy.cn`、`https://rsproxy.cn`（crates.io 镜像） |
 
@@ -80,102 +78,84 @@ cd frontend && npm run build
 
 ## 项目结构
 
+目录树只列稳定骨架；具体文件用 glob 查看，不要依赖枚举。
+
 ```
-├── backend/                      # Python FastAPI 服务端
-│   ├── app/
-│   │   ├── api/v1/               # REST API 路由
-│   │   │   ├── auth.py           —   登录、令牌刷新
-│   │   │   ├── users.py          —   用户管理
-│   │   │   ├── clusters.py       —   集群/上游/插件组/全局规则 CRUD
-│   │   │   ├── routes.py         —   路由 CRUD + 发布
-│   │   │   ├── plugins.py        —   内置插件列表
-│   │   │   ├── plugin_metadata.py—   插件元数据 CRUD
-│   │   │   ├── static_resources.py—  静态资源 CRUD
-│   │   │   ├── edge_client.py    —   Edge 节点直连 API
-│   │   │   ├── edge_import.py    —   Edge 数据导入 API
-│   │   │   └── dashboard.py      —   仪表盘统计
-│   │   ├── core/                 —   数据库引擎、安全配置
-│   │   ├── models/               —   SQLAlchemy ORM 模型
-│   │   ├── schemas/              —   Pydantic 请求/响应结构
-│   │   ├── services/             —   业务逻辑层（EdgeClient、EdgeImport等）
-│   │   └── config/               —   YAML 配置（字段等价规则等）
-│   ├── tests/                    —   pytest 测试
-│   ├── data/                     —   SQLite 数据库文件
-│   └── pyproject.toml
-│
-├── frontend/                     # Vue 3 前端应用
-│   ├── src/
-│   │   ├── api/                  —   Axios HTTP 客户端
-│   │   ├── components/           —   通用 Vue 组件（PluginEditor、VersionManagementModal 等）
-│   │   ├── views/                —   页面级组件
-│   │   │   ├── clusters/         —   集群子页面 Tab 组件
-│   │   ├── views/__tests__/      —   前端单元测试
-│   │   ├── composables/          —   可复用状态逻辑（CRUD 操作、工具函数）
-│   │   ├── router/               —   Vue Router 配置
-│   │   ├── stores/               —   Pinia 状态管理
-│   │   ├── types/                —   TypeScript 类型定义
-│   │   └── e2e/                  —   Playwright E2E 测试
-│   ├── playwright.config.ts
-│   └── package.json
-│
-├── deployment/                   —   部署配置（systemd 服务文件）
-├── linux/                        —   Linux 开发启动/停止脚本
-├── windows/                      —   Windows 开发启动/停止脚本（PowerShell）
-├── develop/                      —   开发启动脚本（同 linux/ windows/，从 develop/ 子目录启动）
-│   ├── linux/                    —   Linux 开发启动/停止
-│   └── windows/                  —   Windows 开发启动/停止
-├── prepare/                      —   离线部署脚本
-│   ├── linux/                    —   Linux 部署（prepare + 启动/停止）
-│   └── windows/                  —   Windows 部署（prepare + 启动/停止）
-├── docs/                         —   设计文档、Edge API 参考
-├── openspec/                     —   变更工件和技术规格
-│   └── specs/                    —   main specs（功能规格）
-└── docker-compose.yml
+backend/
+  app/
+    api/v1/      # REST 路由。命名约定：cluster_*.py = 集群域资源（路由/上游/节点/SSL/插件等，
+                 #   按资源一文件）；无 cluster_ 前缀 = 全局/平台级（auth、users、ansible_inventory、
+                 #   metrics、database、nodes、edge_client、edge_import、system 等）
+    core/        # 数据库引擎、安全配置、seed（默认账号）
+    models/      # SQLAlchemy ORM 模型
+    schemas/     # Pydantic 请求/响应结构
+    services/    # 复杂业务逻辑（ansible_service、inventory_service、metrics_service、
+                 #   clickhouse_client、cluster_backup、db_archive/migration/switch 等）
+    config/      # YAML 配置（equivalence_rules.yaml 字段等价规则、clickhouse.yaml）
+    utils/
+  tests/         # pytest 测试
+  data/          # SQLite 数据库与运行时数据（全部不入库）
+frontend/
+  src/
+    api/         # Axios 客户端，按资源拆分模块（ansibleInventory.ts、ssl.ts、streamProxy.ts 等）
+    components/  # 通用组件（PluginEditorDrawer.vue 插件双模式编辑器、VersionManagementModal.vue 等）
+    views/       # 页面级组件；views/clusters/ = 集群子页 Tab
+    composables/ # useCluster*.ts 可复用 CRUD 逻辑；useClusterUtils.ts = 共享发布/删除工具
+    router/      # Vue Router
+    stores/      # Pinia
+    types/  assets/  styles/  utils/
+  e2e/           # Playwright spec（在 frontend/e2e/，不在 src 下）
+deployment/      # systemd 服务文件
+develop/linux/   # 开发启动/停止脚本
+develop/windows/ # Windows 版（PowerShell）
+docs/            # 设计文档、Edge API 参考（docs/edge/*.log 为 API 示例）
+openspec/        # 变更工件；openspec/specs/ = main specs
+.opencode/skills/  .opencode/command/   # AI 工具配置
 ```
 
 ## 关键约定
 
-1. **登录输入框必须保留 `id` 属性** — Playwright 测试依赖 `#username` 和 `#password` 选择器，切勿删除或改名。
+1. **登录输入框必须保留 `id` 属性** — Playwright 测试依赖 `#username` 和 `#password` 选择器（`frontend/src/views/Login.vue`），切勿删除或改名。
 2. **后端入口为 `app.main:app`** — 不是根目录的 `main:app`。
-3. **数据访问直连模式** — 不使用 Repository 模式，DB 操作直接在 route handler 中通过 SQLAlchemy 执行（`select()` / `execute()`）。`backend/app/repositories/` 目录已废弃。
-4. **插件编辑器支持双模式** — 表单编辑和 JSON 编辑都支持，不可移除任一模式。
-5. **代码禁用** `as any`、`@ts-ignore`、`@ts-expect-error`。
-6. **EdgeClient 方法统一** — 所有资源方法已合并为 `api(resource, action, ...)` 通用方法，旧方法名保留为兼容代理。
+3. **数据访问直连模式** — 简单 CRUD 直接在 route handler 中用 SQLAlchemy 执行（`select()` / `execute()`），不建 Repository 层；仅复杂业务逻辑（Ansible、备份、指标等）放 `services/`。`backend/app/repositories/` 已不存在，不要重建。
+4. **插件编辑器支持双模式** — 表单编辑和 JSON 编辑都支持（`PluginEditorDrawer.vue`），不可移除任一模式。
+5. **新代码禁止 `as any`、`@ts-ignore`、`@ts-expect-error`** — 存量代码仍有约 100+ 处未清理，属于历史欠账：**不要顺手批量修复**，只保证自己新增的代码干净。
+6. **前端 API 按资源拆分模块** — 新资源在 `frontend/src/api/` 建对应 `.ts` 模块，不要往单文件里堆。
 7. **发布/删除流程统一** — 使用 `useClusterUtils.ts` 中的 `executePublish` 和 `executeDeleteWithProgress` 共享函数，不要在 composable 中重复实现进度弹窗逻辑。
-8. **测试运行时已启动服务** — 开发环境的前后端（`develop/linux/start.sh`，后端 12344 / 前端 12345）**默认已在运行**，不要每次自行启动/停止系统。需要验证浏览器/API 链路时直接连接 `http://localhost:12345`（前端）与 `http://localhost:12344`（后端）。仅当系统确实未运行（curl 健康检查失败）时才用 `develop/linux/start.sh` 启动、`develop/linux/stop.sh` 停止。手动链路测试（Playwright）优先复用已运行实例，完成后不停止系统。
+8. **测试运行时服务已启动** — 开发环境前后端（后端 12344 / 前端 12345）默认已在运行，不要自行启动/停止。验证链路直接连 `http://localhost:12345`（前端）与 `http://localhost:12344`（后端）。仅当 curl 健康检查失败时才用 `develop/linux/start.sh` 启动、`develop/linux/stop.sh` 停止。手动链路测试（Playwright）优先复用已运行实例，完成后不停止系统。
+9. **界面语言为中文内联文本** — 所有 UI 文案直接写中文，不引入 i18n 库。
 
 ## 新增功能步骤
 
-1. 在 `schemas/` 定义 Pydantic 模型
-2. 在 `models/` 定义 SQLAlchemy 模型
-3. 在 `api/v1/` 添加路由（无 Repository/Service 层）
-4. 前端添加对应 API 调用、Composable、页面
+1. 在 `backend/app/schemas/` 定义 Pydantic 模型
+2. 在 `backend/app/models/` 定义 SQLAlchemy 模型
+3. 在 `backend/app/api/v1/` 添加路由（集群域资源用 `cluster_` 前缀；仅复杂逻辑才加 `services/`）
+4. 在 `frontend/src/api/` 添加资源模块，再按需加 composable 和页面
 
 ## Git 规则
 
-**提交：**
-- `uv.lock`（可重现构建所需）
-- `openspec/`（全部变更工件，不包括 `.openspec/`）
-- `docs/edge/*.log`（API 示例文件）
-- `.opencode/skills/` 和 `.opencode/command/`（AI 工具配置）
-- `backend/data/sample.db`（演示样例库，已 force-add）
+以 `.gitignore` 为唯一事实源，提交前先 `git status` 确认。要点：
 
-**忽略：**
-- `.venv/`、`node_modules/`（含 `.opencode/node_modules/`）
-- `*.db`（`sample.db` 除外）、`*.sqlite`、`*.sqlite3`
-- `.env*`（`.env.example` 除外）
-- `.openspec/`（OpenSpec 内部缓存）
-- `.playwright-mcp/`（浏览器录制缓存）
-- `.history/`（prompt 历史记录）
-- `*.log`（`docs/**/*.log` 除外）
-- `backend/uvicorn.err`（运行时错误输出）
-- `session-*.md`（会话记录）
-- `.codegraph/`（代码分析缓存）
+**不入库**（已由 .gitignore 覆盖，不要 force-add）：
+- `backend/data/` 全部内容（数据库、静态资源、归档）— 没有任何 .db 文件被跟踪
+- `uv.lock`（`backend/uv.lock` 为历史遗留的已跟踪文件；新 lock 文件不提交）
+- `logs/`、`*.png`、`product/`、`docs/other/`、`test-results/`
+- `backend/ansible/soft/`、`backend/ansible/collections/`、`backend/bin/`
+- AI 工具缓存：`.playwright-mcp/`、`.history/`、`.omo/`、`.sisyphus/`、`.cortexkit/`
+- 运行时输出：`backend/uvicorn.err|out`、`session-*.md`、`backend/data/static/`、`backend/data/archives/`
+
+**继续正常提交**：
+- `openspec/`（全部变更工件）
+- `docs/edge/*.log`（既有 API 示例文件）
+- `.opencode/skills/` 和 `.opencode/command/`（AI 工具配置）
+
+**依赖声明**：新增后端依赖 → `backend/pyproject.toml`（不是 requirements.txt）；新增前端依赖 → `frontend/package.json`。
 
 ## 快速检查清单
 
-- [ ] 产品名拼写为"磐石"（不是"盘石"）
+- [ ] 验证链路直接连 localhost:12344/12345，勿自行启停服务（服务常驻）
 - [ ] 登录表单包含 `id="username"` 和 `id="password"`
-- [ ] 新增后端依赖 → 写入 `pyproject.toml`（不是 `requirements.txt`）
-- [ ] 新增前端依赖 → 写入 `frontend/package.json`
-- [ ] 无 `as any` / `@ts-ignore` / `@ts-expect-error` 类型逃逸
+- [ ] 新代码无 `as any` / `@ts-ignore` / `@ts-expect-error`（存量不批量修）
+- [ ] 依赖写入正确的 manifest（pyproject.toml / package.json）
+- [ ] 提交前 `git status` 确认，不 force-add 忽略文件（尤其 `backend/data/`）
+- [ ] 本文件与代码冲突时，已按代码修正本文件
