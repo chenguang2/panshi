@@ -110,8 +110,27 @@ class TestAnsibleInventoryAPI:
         data = resp.json()
         assert data == {
             "raw_text": "", "hosts": [], "vars": {},
-            "unknown_keys": [], "unmanaged_ips": [],
+            "unknown_keys": [], "unmanaged_ips": [], "errors": [],
         }
+
+    async def test_get_returns_errors_when_parse_fails(self, inv_env):
+        """解析失败时 GET 必须返回 errors，前端才能展示真实原因而非静默空白。"""
+        inv_env.parent.mkdir(parents=True)
+        # hosts 是列表而非映射 → 结构错误（制表符已被 parse_inventory 容忍，不能再用它触发）
+        inv_env.write_text(
+            "all:\n  children:\n    edge_cluster:\n      hosts:\n        - 1.2.3.4\n",
+            encoding="utf-8",
+        )
+
+        async with await self._client() as client:
+            headers = await self._login(client)
+            resp = await client.get("/api/v1/ansible/inventory", headers=headers)
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["hosts"] == []
+        assert data["errors"], "解析失败时 errors 必须非空"
+        assert "结构错误" in data["errors"][0]
 
     async def test_get_lists_unmanaged_ips(self, inv_env):
         content = VALID_INVENTORY.replace(

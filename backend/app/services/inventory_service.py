@@ -87,6 +87,10 @@ def parse_inventory(raw_text: str) -> dict[str, Any]:
     key; on any error ``errors`` holds one message with line number and the
     other fields are empty.
     """
+    # 运维编辑器常留下行尾制表符，PyYAML 会拒绝（"found character '\\t' that
+    # cannot start any token"）导致整个文件解析失败。行尾空白对 YAML 无语义，
+    # 剥离后再解析；不影响引号内内容，也不改变行号（不增删行）。
+    raw_text = "\n".join(line.rstrip() for line in raw_text.split("\n"))
     try:
         data = yaml.safe_load(raw_text)
     except yaml.YAMLError as exc:

@@ -22,6 +22,8 @@ export interface InventoryData {
   vars: Record<string, unknown>
   unknown_keys: string[]
   unmanaged_ips: string[]
+  /** 文件存在但解析失败时的错误信息（空数组 = 正常）。 */
+  errors: string[]
 }
 
 /** 保存载荷二选一：源码模式传 raw_text；表格模式传 hosts + vars。 */

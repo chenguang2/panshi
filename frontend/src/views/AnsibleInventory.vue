@@ -21,6 +21,17 @@
 
     <a-spin :spinning="loading || switching" tip="正在与服务器同步...">
       <div class="ai-body">
+        <!-- 清单文件解析失败提示（文件存在但无法解析时展示真实原因） -->
+        <a-alert v-if="loadErrors.length" type="error" show-icon class="stack-alert">
+          <template #message>清单文件解析失败，主机列表无法加载</template>
+          <template #description>
+            <pre class="error-pre">{{ loadErrors.join('\n') }}</pre>
+            <div class="alert-desc-row">
+              <span>可在源码视图中修正后保存，或直接修复服务器上的 inventory 文件。</span>
+            </div>
+          </template>
+        </a-alert>
+
         <!-- 未录入平台的 IP 联动提醒条 -->
         <a-alert v-if="unmanagedIps.length" type="warning" show-icon class="stack-alert">
           <template #message>
@@ -283,6 +294,7 @@ const sourceDraft = ref('')
 const sourceSynced = ref('') // 最近一次程序化写入编辑器的文本，用于区分用户输入
 const unknownKeys = ref<string[]>([])
 const unmanagedIps = ref<string[]>([])
+const loadErrors = ref<string[]>([])
 
 const dirty = ref(false)
 const loading = ref(false)
@@ -397,7 +409,11 @@ async function load(): Promise<void> {
     sourceSynced.value = sourceDraft.value
     unknownKeys.value = res.data.unknown_keys || []
     unmanagedIps.value = res.data.unmanaged_ips || []
+    loadErrors.value = res.data.errors || []
     sourceErrors.value = []
+    // 文件解析失败时表格为空，强制进入源码视图展示真实文件内容供修复
+    // （避免切到源码时被空表格渲染出的骨架覆盖掉原文）
+    if (loadErrors.value.length) viewMode.value = 'source'
     showUnknownHint.value = true
     dirty.value = false
   } catch (err: unknown) {

@@ -56,12 +56,13 @@ async def require_admin(
         raise HTTPException(status_code=401, detail="未认证")
 
 
-def _read_raw_text() -> str:
-    """Read the inventory file; missing file → empty string (D3)."""
+def _read_raw_text() -> tuple[str, bool]:
+    """Read the inventory file; missing file → ("", False)."""
+    path = inventory_service._inventory_path()
     try:
-        return inventory_service._inventory_path().read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8"), True
     except FileNotFoundError:
-        return ""
+        return "", False
 
 
 async def _platform_node_ips(db: AsyncSession) -> list[str]:
@@ -101,8 +102,11 @@ async def get_inventory(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     with _inventory_lock:
-        raw = _read_raw_text()
+        raw, file_exists = _read_raw_text()
     parsed = inventory_service.parse_inventory(raw)
+    # 文件不存在（全新部署）→ 空结构且无错误；文件存在但解析失败 → errors 透出
+    if not file_exists:
+        parsed["errors"] = []
 
     inv_ips = [h["ip"] for h in parsed["hosts"]]
     node_ips = set(await _platform_node_ips(db))
@@ -114,6 +118,7 @@ async def get_inventory(
         "vars": parsed["vars"],
         "unknown_keys": parsed["unknown_keys"],
         "unmanaged_ips": unmanaged,
+        "errors": parsed["errors"],
     }
 
 

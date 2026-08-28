@@ -49,6 +49,20 @@ class TestParseInventory:
         # 未知键 = hosts 条目上除两个凭据字段外的自定义键名集合
         assert result["unknown_keys"] == ["deploy_tier"]
 
+    def test_trailing_tabs_on_value_line_are_tolerated(self):
+        """行尾制表符（运维编辑器常见残留）不应导致整个文件解析失败。"""
+        from app.services.inventory_service import parse_inventory
+
+        raw = SAMPLE_INVENTORY.replace(
+            "ansible_ssh_pass: 'jboss@12306'",
+            "ansible_ssh_pass: 'jboss@12306'\t\t",
+        )
+        result = parse_inventory(raw)
+
+        assert result["errors"] == []
+        assert result["hosts"][0]["ip"] == "192.168.1.1"
+        assert result["hosts"][0]["ansible_ssh_pass"] == "jboss@12306"
+
 
 class TestRenderInventory:
     def test_renders_hosts_and_vars_with_numeric_ip_order(self):
