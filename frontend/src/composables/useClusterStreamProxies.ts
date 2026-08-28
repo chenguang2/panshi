@@ -26,13 +26,8 @@ export function useClusterStreamProxies() {
             const merged = all.flatMap(r => r.items)
             return { data: { total: merged.length, items: merged, page: 1, page_size: merged.length } }
           })
-      if (clusterFilter.value) {
-        proxies.value = (res as any).data.items || []
-        totalCount.value = (res as any).data.total || 0
-      } else {
-        proxies.value = (res as any).items || []
-        totalCount.value = (res as any).total || 0
-      }
+      proxies.value = res.data.items || []
+      totalCount.value = res.data.total || 0
     } catch {
       message.error('加载四层代理列表失败')
     } finally {
