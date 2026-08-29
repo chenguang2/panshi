@@ -1,117 +1,74 @@
 import { test, expect } from '@playwright/test';
+import { login, gotoResourcePage } from './helpers/navigation';
 
 test.describe('Node and Upstream Validation', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#username', 'admin');
-    await page.fill('#password', 'panshi123');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/');
-    await page.click('text=集群管理');
-    await page.waitForTimeout(1000);
-
-    const clusterCard = page.locator('.cluster-card').first();
-    if (!await clusterCard.isVisible().catch(() => false)) {
-      test.skip();
-      return;
-    }
+    await login(page);
   });
 
   test('should show node modal validation', async ({ page }) => {
-    const clusterCard = page.locator('.cluster-card').first();
+    await gotoResourcePage(page, '节点');
+    await expect(page.locator('button:has-text("添加节点")')).toBeVisible({ timeout: 15000 });
+    await page.locator('button:has-text("添加节点")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '添加节点' });
+    await expect(modal).toBeVisible();
 
-    const nodesTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '集群节点' });
-    await nodesTab.click();
+    await modal.locator('.btn-primary').filter({ hasText: '保存' }).click();
     await page.waitForTimeout(500);
 
-    const addNodeBtn = clusterCard.locator('button').filter({ hasText: '添加节点' });
-    if (!await addNodeBtn.isVisible().catch(() => false)) {
-      test.skip();
-      return;
-    }
-    await addNodeBtn.click();
-
-    await expect(page.locator('.ant-modal')).toBeVisible();
-    await expect(page.locator('.ant-modal-title').filter({ hasText: '添加节点' })).toBeVisible();
-
-    await page.locator('.ant-modal .ant-btn-primary').click();
-    await page.waitForTimeout(500);
-
-    const errorMsgs = page.locator('.ant-form-item-explain-error');
+    const errorMsgs = modal.locator('.form-error');
     expect(await errorMsgs.count()).toBeGreaterThan(0);
+
+    await modal.locator('.modal-close').first().click();
   });
 
   test('should validate node IP format', async ({ page }) => {
-    const clusterCard = page.locator('.cluster-card').first();
+    await gotoResourcePage(page, '节点');
+    await expect(page.locator('button:has-text("添加节点")')).toBeVisible({ timeout: 15000 });
+    await page.locator('button:has-text("添加节点")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '添加节点' });
+    await expect(modal).toBeVisible();
 
-    const nodesTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '集群节点' });
-    await nodesTab.click();
-    await page.waitForTimeout(500);
-
-    const addNodeBtn = clusterCard.locator('button').filter({ hasText: '添加节点' });
-    if (!await addNodeBtn.isVisible().catch(() => false)) {
-      test.skip();
-      return;
-    }
-    await addNodeBtn.click();
-
-    await expect(page.locator('.ant-modal')).toBeVisible();
-
-    const ipInput = page.locator('.ant-modal input').filter({ hasText: '' }).first();
+    const ipInput = modal.locator('input.form-input').first();
     await ipInput.fill('999.999.999.999');
-    await ipInput.blur();
+    await modal.locator('.btn-primary').filter({ hasText: '保存' }).click();
     await page.waitForTimeout(500);
 
-    const errorMsg = page.locator('.ant-form-item-explain-error').filter({ hasText: '合法' });
+    const errorMsg = modal.locator('.form-error').filter({ hasText: 'IP 地址格式不正确' });
     await expect(errorMsg.first()).toBeVisible();
+
+    await modal.locator('.modal-close').first().click();
   });
 
   test('should show upstream modal validation', async ({ page }) => {
-    const clusterCard = page.locator('.cluster-card').first();
+    await gotoResourcePage(page, '上游');
+    await expect(page.locator('button:has-text("新建上游")')).toBeVisible({ timeout: 15000 });
+    await page.locator('button:has-text("新建上游")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '添加上游' });
+    await expect(modal).toBeVisible();
 
-    const nodesTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '集群节点' });
-    await nodesTab.click();
+    await modal.locator('.btn-primary').filter({ hasText: '保存' }).click();
     await page.waitForTimeout(500);
 
-    const addUpstreamBtn = clusterCard.locator('button').filter({ hasText: '添加上游' });
-    if (!await addUpstreamBtn.isVisible().catch(() => false)) {
-      test.skip();
-      return;
-    }
-    await addUpstreamBtn.click();
-
-    await expect(page.locator('.ant-modal')).toBeVisible();
-    await expect(page.locator('.ant-modal-title').filter({ hasText: '添加上游' })).toBeVisible();
-
-    await page.locator('.ant-modal .ant-btn-primary').click();
-    await page.waitForTimeout(500);
-
-    const errorMsgs = page.locator('.ant-form-item-explain-error');
+    const errorMsgs = modal.locator('.form-error');
     expect(await errorMsgs.count()).toBeGreaterThan(0);
+
+    await modal.locator('.modal-close').first().click();
   });
 
   test('should show upstream load balance Chinese label', async ({ page }) => {
-    const clusterCard = page.locator('.cluster-card').first();
+    await gotoResourcePage(page, '上游');
+    const table = page.locator('.ant-table');
+    await expect(table).toBeVisible({ timeout: 15000 });
 
-    const upstreamTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '上游' });
-    const isDisabled = await upstreamTab.getAttribute('aria-disabled');
-    if (isDisabled === 'true') {
-      test.skip();
-      return;
+    // 等首行渲染后再查中文标签
+    const firstRow = page.locator('.ant-table-tbody tr').first();
+    const hasRow = await firstRow.isVisible({ timeout: 5000 }).catch(() => false);
+    if (!hasRow) {
+      test.skip('无上游数据')
+      return
     }
-
-    await upstreamTab.click();
-    await page.waitForTimeout(1000);
-
-    const table = clusterCard.locator('.ant-table');
-    if (!await table.isVisible().catch(() => false)) {
-      test.skip();
-      return;
-    }
-
-    const chineseText = clusterCard.locator('text=加权轮询').or(clusterCard.locator('text=一致性哈希'));
-    await expect(chineseText.first()).toBeVisible({ timeout: 3000 }).catch(() => {
-      test.skip();
-    });
+    const lbCell = page.locator('.ant-table-tbody').locator('td', { hasText: '加权轮询' }).first()
+    await expect(lbCell).toBeVisible({ timeout: 5000 });
   });
 });
