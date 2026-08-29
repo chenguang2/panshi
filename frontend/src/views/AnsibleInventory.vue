@@ -105,6 +105,7 @@
               size="middle"
               :expanded-row-keys="expandedKeys"
               @expanded-rows-change="onExpandedChange"
+              :expand-icon="renderExpandIcon"
             >
               <template #expandedRowRender="{ record }">
                 <div class="advanced-grid">
@@ -206,27 +207,25 @@
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="高级" key="adv" width="80">
+              <a-table-column title="操作" key="action" width="130" align="right">
                 <template #default="{ record }">
-                  <a-tooltip
-                    :title="
-                      rowHasAdvanced(record)
-                        ? '已配置高级连接变量'
-                        : rowUnknownKeys(record).length
-                          ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、')
-                          : ''
-                    "
-                  >
-                    <a-button type="text" size="small" @click="toggleExpand(record)">
-                      高级
-                      <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
-                    </a-button>
-                  </a-tooltip>
-                </template>
-              </a-table-column>
-              <a-table-column title="操作" key="action" width="90" align="right">
-                <template #default="{ record }">
-                  <a-button type="text" danger size="small" @click="removeRow(record)">删除</a-button>
+                  <a-space :size="2">
+                    <a-tooltip
+                      :title="
+                        rowHasAdvanced(record)
+                          ? '已配置高级连接变量'
+                          : rowUnknownKeys(record).length
+                            ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、')
+                            : '高级连接变量'
+                      "
+                    >
+                      <a-button type="text" size="small" @click="toggleExpand(record)">
+                        高级
+                        <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
+                      </a-button>
+                    </a-tooltip>
+                    <a-button type="text" danger size="small" @click="removeRow(record)">删除</a-button>
+                  </a-space>
                 </template>
               </a-table-column>
             </a-table>
@@ -287,11 +286,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, h, type VNode } from 'vue'
+import { message, Tooltip } from 'ant-design-vue'
+import { SettingOutlined } from '@ant-design/icons-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
-import { message } from 'ant-design-vue'
 import type { RadioChangeEvent } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -359,6 +359,43 @@ function toggleExpand(record: object): void {
   expandedKeys.value = expandedKeys.value.includes(k)
     ? expandedKeys.value.filter((x) => x !== k)
     : [...expandedKeys.value, k]
+}
+
+/**
+ * 展开列自定义图标：设置图标 ⚙（替代易误读为"新增 IP"的默认 + 号）。
+ * 常显品牌色 + Tooltip 提示 + hover 高亮；展开时旋转。
+ */
+function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
+  const hasAdvanced = rowHasAdvanced(props.record as InventoryHostEntry)
+  return h(
+    Tooltip,
+    {
+      title: hasAdvanced ? '已配置高级连接变量（点击展开/收起）' : '高级连接变量（点击展开/收起）',
+    },
+    {
+      default: () =>
+        h(
+          'span',
+          {
+            class: 'adv-expand-icon' + (props.expanded ? ' expanded' : ''),
+            role: 'button',
+            tabindex: 0,
+            'aria-label': '高级连接变量',
+            onClick: (e: Event) => {
+              e.stopPropagation()
+              toggleExpand(props.record)
+            },
+            onKeydown: (e: KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                toggleExpand(props.record)
+              }
+            },
+          },
+          [h(SettingOutlined, { style: 'font-size: 15px;' })],
+        ),
+    },
+  )
 }
 
 function onExpandedChange(keys: (number | string)[]): void {

@@ -387,6 +387,36 @@ select.form-input {
 }
 
 /* ===========================
+   清单表格展开列设置图标（全局：由表格组件内部 h() 渲染，scoped 样式不生效）
+   =========================== */
+.adv-expand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    transform 0.25s;
+  user-select: none;
+}
+.adv-expand-icon:hover {
+  background: oklch(56% 0.16 210 / 12%);
+  border-color: oklch(56% 0.16 210 / 30%);
+}
+.adv-expand-icon.expanded {
+  background: oklch(56% 0.16 210 / 12%);
+  border-color: oklch(56% 0.16 210 / 30%);
+  transform: rotate(90deg);
+}
+
+/* ===========================
    Status Dot
    =========================== */
 .status-dot {
