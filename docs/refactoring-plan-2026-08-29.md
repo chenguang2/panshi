@@ -28,6 +28,10 @@
 > - Phase 4 已提交（db7f475）——双 CRUD 工厂合并：提取 useClusterResourceCore 共享骨架
 >   （删除/发布/版本/选择，selection 访问器参数化），useClusterResource 与
 >   useClusterPluginEntity 变薄适配层，消除约 150 行逐字重复；VersionModalState 收敛单定义。
+> - Phase 2-U1 已提交（2f9663f）——手写 modal → AntD AppModal（保真路径：.app-modal 样式
+>   复刻头部品牌色染/顶部对齐/大圆角，白拿 ESC/焦点/层级机制）；5 个共享弹窗移植，内容
+>   VNode 逐字节保留；并修复 Phase 5 prettier 重排引入的 CentralList 模板编译回归
+>   （多语句属性缺分号→switchTab 单表达式封装）。至此重构路线图 8 方向全部完成。
 
 ## 0. 执行摘要
 
