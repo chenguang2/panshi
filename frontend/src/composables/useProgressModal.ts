@@ -1,6 +1,6 @@
-import { Modal } from 'ant-design-vue'
 import { h } from 'vue'
 import { Progress } from 'ant-design-vue'
+import { showOverlayModal } from './useOverlayModal'
 
 export interface ProgressState {
   percent: number
@@ -31,20 +31,23 @@ export function useProgressModal(title: string, progress: ProgressState) {
         showInfo: false,
         style: 'margin-bottom: 12px;',
       }),
-      h('div', {
-        style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;',
-      }, logs.map(log => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log))),
+      h(
+        'div',
+        {
+          style: 'max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px;',
+        },
+        logs.map((log) => h('div', { style: 'margin-bottom: 4px; white-space: pre-wrap;' }, log)),
+      ),
     ])
   }
 
-  const progressModal = Modal.info({
+  const progressModal = showOverlayModal({
     title,
     width: 600,
     content: buildContent(),
     okText: '确定',
-    okButtonProps: { disabled: true },
-    cancelText: '',
-    closable: true,
+    okDisabled: true,
+    showCancel: false,
   })
 
   const updateContent = () => {
@@ -53,7 +56,7 @@ export function useProgressModal(title: string, progress: ProgressState) {
 
   /** Call when the operation completes (success or failure) to enable the OK button. */
   const done = () => {
-    progressModal.update({ okButtonProps: { disabled: false } })
+    progressModal.update({ okDisabled: false })
   }
 
   return { addLog, updateContent, done }

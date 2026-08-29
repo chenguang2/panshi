@@ -128,8 +128,9 @@
 </template>
 
 <script setup lang="ts">
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { ref, reactive, computed, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { EyeOutlined, EditOutlined, DeleteOutlined, CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
@@ -360,14 +361,13 @@ const deletePlugin = (item: ConfiguredPlugin) => {
       const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
       const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
 
-      const modal = Modal.info({
+      const modal = showOverlayModal({
         title: `删除插件元数据: ${item.plugin_name}`,
         width: 600,
         content: buildDeleteProgressContent(progress, logs),
         okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
+        okDisabled: true,
+        showCancel: false,
       })
 
       const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
@@ -419,7 +419,7 @@ const deletePlugin = (item: ConfiguredPlugin) => {
           addLog('✅ 删除完成!')
         }
         update()
-        modal.update({ okButtonProps: { disabled: false } })
+        modal.update({ okDisabled: false })
 
         if (viewingPlugin.value?.plugin_name === item.plugin_name) {
           viewingPlugin.value = null
@@ -431,7 +431,7 @@ const deletePlugin = (item: ConfiguredPlugin) => {
         addLog('')
         addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
         update()
-        modal.update({ okButtonProps: { disabled: false } })
+        modal.update({ okDisabled: false })
       }
     },
   })

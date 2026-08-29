@@ -288,9 +288,10 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import type { RadioChangeEvent } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -458,11 +459,11 @@ function reloadClicked(): void {
     void load()
     return
   }
-  Modal.confirm({
+  showOverlayModal({
     title: '放弃未保存的修改？',
     content: '刷新将从服务器重新加载清单，本地未保存的修改会丢失。',
     okText: '放弃修改并刷新',
-    okType: 'danger',
+    okDanger: true,
     cancelText: '取消',
     onOk: () => {
       void load()
@@ -636,11 +637,11 @@ function goNodes(): void {
 onBeforeRouteLeave(() => {
   if (!dirty.value) return true
   return new Promise<boolean>((resolve) => {
-    Modal.confirm({
+    showOverlayModal({
       title: '有未保存的修改',
       content: '离开页面将丢失未保存的主机清单修改，确定离开吗？',
       okText: '放弃修改并离开',
-      okType: 'danger',
+      okDanger: true,
       cancelText: '留在本页',
       onOk: () => resolve(true),
       onCancel: () => resolve(false),

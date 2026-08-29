@@ -96,4 +96,5 @@ docs/other/
 # =============================================
 # 运行时数据（不入库）
 backend/ansible/inventory/host
+backend/ansible/inventory/backups/
 data/

@@ -1,11 +1,12 @@
 import { ref, reactive, computed, watch, h, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useColumnConfig } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { publishStatusRender } from './useClusterUtils'
+import { showOverlayModal } from './useOverlayModal'
 import { getApiErrorMessage } from '@/utils/error'
 
 // ── helpers ────────────────────────────────────────────────────────────
@@ -23,8 +24,6 @@ function getFieldName(name: string): string {
   }
   return nameMap[name] || name
 }
-
-
 
 // ── column / action definitions ────────────────────────────────────────
 
@@ -80,7 +79,6 @@ export interface RouteComposableDeps {
   versionModalClusterId: Ref<number | null>
   versionModalResourceName: Ref<string>
   versionModalEdgeUuid: Ref<string>
-
 }
 
 // ── composable ─────────────────────────────────────────────────────────
@@ -104,51 +102,53 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   // ── 通用骨架：load/select/delete/publish/version 十件套 ─────────────
 
-  const core = useClusterResource<Route>({
-    noun: '路由',
-    endpoint: 'routes',
-    versionType: 'route',
-    keys: {
-      items: 'routes',
-      pagination: 'routesPagination',
-      loading: 'routesLoading',
-      search: 'routesSearch',
-      searchField: 'routesSearchField',
-      sortBy: 'routesSortBy',
-      sortOrder: 'routesSortOrder',
-      selected: 'selectedRoute',
-      selectedKeys: 'selectedRouteKeys',
+  const core = useClusterResource<Route>(
+    {
+      noun: '路由',
+      endpoint: 'routes',
+      versionType: 'route',
+      keys: {
+        items: 'routes',
+        pagination: 'routesPagination',
+        loading: 'routesLoading',
+        search: 'routesSearch',
+        searchField: 'routesSearchField',
+        sortBy: 'routesSortBy',
+        sortOrder: 'routesSortOrder',
+        selected: 'selectedRoute',
+        selectedKeys: 'selectedRouteKeys',
+      },
+      sortFieldMap: {
+        name: 'name',
+        uri: 'uri',
+        priority: 'priority',
+        status: 'status',
+        created_at: 'created_at',
+      },
+      deleteGuard: (_cluster, route) => (isDnsRoute(route) ? '这是一条 DNS 查询路由，请在 DNS 查询页面管理' : null),
+      batchFilter: (_cluster, routes) => {
+        const dnsRoute = hasDnsRouteIn(routes)
+        if (dnsRoute) {
+          message.warning(`路由 "${dnsRoute.name}" 是 DNS 查询路由，请在 DNS 查询页面管理`)
+          return null
+        }
+        return routes
+      },
+      batchResourceKey: { field: 'route_ids', label: '路由', nameField: 'route_name' },
     },
-    sortFieldMap: {
-      name: 'name',
-      uri: 'uri',
-      priority: 'priority',
-      status: 'status',
-      created_at: 'created_at',
+    {
+      openPublishModal,
+      showDeleteConfirm,
+      versionModal: {
+        type: versionModalType,
+        visible: versionModalVisible,
+        resourceId: versionModalResourceId,
+        clusterId: versionModalClusterId,
+        resourceName: versionModalResourceName,
+        edgeUuid: versionModalEdgeUuid,
+      },
     },
-    deleteGuard: (_cluster, route) =>
-      isDnsRoute(route) ? '这是一条 DNS 查询路由，请在 DNS 查询页面管理' : null,
-    batchFilter: (_cluster, routes) => {
-      const dnsRoute = hasDnsRouteIn(routes)
-      if (dnsRoute) {
-        message.warning(`路由 "${dnsRoute.name}" 是 DNS 查询路由，请在 DNS 查询页面管理`)
-        return null
-      }
-      return routes
-    },
-    batchResourceKey: { field: 'route_ids', label: '路由', nameField: 'route_name' },
-  }, {
-    openPublishModal,
-    showDeleteConfirm,
-    versionModal: {
-      type: versionModalType,
-      visible: versionModalVisible,
-      resourceId: versionModalResourceId,
-      clusterId: versionModalClusterId,
-      resourceName: versionModalResourceName,
-      edgeUuid: versionModalEdgeUuid,
-    },
-  })
+  )
 
   const loadRoutes = core.load
   const handleRouteTableChange = core.handleTableChange
@@ -221,9 +221,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     }
   }
 
-  const currentCluster = computed(() =>
-    clusters.value.find((c) => c.id === currentClusterId.value),
-  )
+  const currentCluster = computed(() => clusters.value.find((c) => c.id === currentClusterId.value))
 
   const clusterPluginGroups = computed(() => {
     const c = currentCluster.value
@@ -232,9 +230,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   // ── methods helpers ─────────────────────────────────────────────────
 
-  const allMethodsSelected = computed(() =>
-    ALL_METHODS.every((m) => routeForm.methods.includes(m)),
-  )
+  const allMethodsSelected = computed(() => ALL_METHODS.every((m) => routeForm.methods.includes(m)))
 
   function toggleAllMethods() {
     routeForm.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]
@@ -254,9 +250,8 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   function viewPluginConfigDetail(pg: PluginConfig, pname: string, pcfg: unknown) {
-    const configStr =
-      typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
-    Modal.info({
+    const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
+    showOverlayModal({
       title: `${pg.name} - ${pname}`,
       content: h(
         'pre',
@@ -267,6 +262,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         configStr,
       ),
       okText: '关闭',
+      showCancel: false,
       width: 560,
     })
   }
@@ -382,10 +378,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeForm.upstream_id = routeData.upstream_id
     routeForm.description = routeData.description || ''
     routeForm.advancedMatch = { vars: [...(routeData.vars || [])] }
-    routeForm.advancedMatchEnabled = !!(
-      routeData.advanced_match_enabled ||
-      (routeForm.advancedMatch.vars.length > 0)
-    )
+    routeForm.advancedMatchEnabled = !!(routeData.advanced_match_enabled || routeForm.advancedMatch.vars.length > 0)
     routeForm.enableWebsocket = !!routeData.enable_websocket
     routeForm.plugins = []
     routeForm.plugin_config_ids = (routeData as unknown as Record<string, unknown>).plugin_config_ids
@@ -428,10 +421,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeForm.upstream_id = sourceRoute.upstream_id
     routeForm.description = sourceRoute.description || ''
     routeForm.advancedMatch = { vars: sourceRoute.vars || [] }
-    routeForm.advancedMatchEnabled = !!(
-      sourceRoute.advanced_match_enabled ||
-      (routeForm.advancedMatch.vars.length > 0)
-    )
+    routeForm.advancedMatchEnabled = !!(sourceRoute.advanced_match_enabled || routeForm.advancedMatch.vars.length > 0)
     routeForm.plugins = []
     routeModalActiveTab.value = 'basic'
 

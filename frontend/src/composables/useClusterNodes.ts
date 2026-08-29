@@ -1,5 +1,6 @@
 import { ref, reactive, computed, watch, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { showOverlayModal } from './useOverlayModal'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useFeaturesStore } from '@/stores/features'
@@ -814,22 +815,21 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
   }
 
   const startNode = async (node: Node) => {
-    Modal.confirm({
+    showOverlayModal({
       title: '确认启动节点',
       content: `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
       okText: '确认启动',
-      okType: 'primary',
       cancelText: '取消',
       onOk: () => executeNodeAction(node, 'start', '启动'),
     })
   }
 
   const stopNode = async (node: Node) => {
-    Modal.confirm({
+    showOverlayModal({
       title: '确认停止节点',
       content: `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
       okText: '确认停止',
-      okType: 'danger',
+      okDanger: true,
       cancelText: '取消',
       onOk: () => executeNodeAction(node, 'stop', '停止'),
     })

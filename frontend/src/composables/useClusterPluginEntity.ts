@@ -1,10 +1,11 @@
 import { ref, reactive, h, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin, GlobalRule, PluginConfig } from '@/types'
 import { showDeleteConfirm } from './useClusterUtils'
 import { getApiErrorMessage } from '@/utils/error'
 import { useClusterResourceCore, type VersionModalState } from './useClusterResourceCore'
+import { showOverlayModal } from './useOverlayModal'
 
 /** 插件实体资源（插件组/全局规则）的公共形状 */
 type PluginEntityItem = (GlobalRule | PluginConfig) & { plugins: Record<string, unknown> }
@@ -172,7 +173,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
 
   const viewPluginDetail = (parent: PluginEntityItem, pname: string, pcfg: unknown) => {
     const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
-    Modal.info({
+    showOverlayModal({
       title: `${parent.name} - ${pname}`,
       content: h(
         'pre',
@@ -183,6 +184,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
         configStr,
       ),
       okText: '关闭',
+      showCancel: false,
       width: 560,
     })
   }

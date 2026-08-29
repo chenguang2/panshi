@@ -1,5 +1,5 @@
 import { ref, reactive, computed, type Ref } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, StaticResource } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
@@ -11,6 +11,7 @@ import {
 } from './useClusterUtils'
 import { formatFileSize } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
+import { showOverlayModal } from './useOverlayModal'
 
 export interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
@@ -192,14 +193,13 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
       const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
       const totalSize = file.size
 
-      const modal = Modal.info({
+      const modal = showOverlayModal({
         title: `上传静态资源: ${sr.name}`,
         width: 600,
         content: buildDeleteProgressContent(progress, logs),
         okText: '确定',
-        okButtonProps: { disabled: true },
-        cancelText: '',
-        closable: true,
+        okDisabled: true,
+        showCancel: false,
       })
       const updateContent = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
 
@@ -245,7 +245,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         addLog('')
         addLog('✅ 上传成功')
         updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+        modal.update({ okDisabled: false })
 
         await loadStaticResources(cluster)
       } catch (error: unknown) {
@@ -255,7 +255,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         addLog('')
         addLog(`❌ 上传失败: ${errMsg}`)
         updateContent()
-        modal.update({ okButtonProps: { disabled: false } })
+        modal.update({ okDisabled: false })
       }
     }
     input.click()
