@@ -22,6 +22,9 @@
 >   admin 直通 / 用户按 UserPermission 门控，全局资源按前端权限键、集群子资源由 clusters
 >   容器门控、/stream-proxies 用 require_any）；M1 操作审计日志（复用既有 AuditLog 模型，
 >   log_audit 接入集群/用户/数据库/清单/导入/插件开关等系统级操作 + GET /system/operations）。
+> - Phase 6 剩余项已提交（e880fe4）——脱敏（清单 ansible_ssh_pass/become_pass 对外掩码
+>   ****** + 保存恢复、SSL 私钥抽屉默认掩码+显示切换）；列表 N+1 修复（upstreams targets
+>   批量 IN 查询）；ECharts 按需加载侦察确认本已达标（三处均 echarts/core 树摇引入）。
 
 ## 0. 执行摘要
 
