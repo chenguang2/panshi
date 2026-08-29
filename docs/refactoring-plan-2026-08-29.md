@@ -5,9 +5,12 @@
 > **实施状态**：
 > - Phase 0（安全加固）已于 2026-08-29 完成（83f9525 / eb1d170）——20 个路由文件认证补齐、
 >   全局异常不泄漏、CORS 收紧、JWT 密钥治理、NodeTaskCenter 流式改造、守卫测试、E2E 适配。
-> - Phase 1（死代码 + 低风险合并）已于同日完成（5700f27）——删除 useClusterStreamProxies.ts、
+> - Phase 1（死代码 + 低风险合并）已于同日完成（5700f27 + 7851130）——删除 useClusterStreamProxies.ts、
 >   SAVE_SCROLL_KEY 死代码；`utils/format.ts` 收敛 12 处 formatDate 重复实现；密码校验器抽取；
 >   auth.py 认证实现并入 deps.py（含禁用用户状态校验）。
+> - Phase 2（前端界面统一，进行中）已提交（1236394）——U2 发布状态渲染统一为 PublishStatusTag.vue
+>   （publishStatusRender 委托化，11 个视图内联模板替换）；U3 列配置弹层收敛为 ColumnConfigPopover.vue。
+>   剩余：U1 手写 modal → AntD AppModal（风险最高，需同步改 useClusterUtils 测试契约）。
 
 ## 0. 执行摘要
 
