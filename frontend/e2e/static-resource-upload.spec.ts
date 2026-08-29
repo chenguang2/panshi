@@ -22,7 +22,14 @@ test.describe('静态资源上传', () => {
   });
 
   test('API 返回格式包含 storage_path', async ({ page }) => {
-    const resp = await page.request.get('http://localhost:9100/api/v1/clusters/1/static-resources');
+    // 后端已要求认证（Phase 0 安全加固），先登录取 token
+    const loginResp = await page.request.post('http://localhost:9100/api/v1/auth/login', {
+      data: { username: 'admin', password: 'panshi123' },
+    });
+    const { access_token } = await loginResp.json();
+    const resp = await page.request.get('http://localhost:9100/api/v1/clusters/1/static-resources', {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
     const body = await resp.json();
     expect(resp.ok()).toBeTruthy();
     expect(body.items.length).toBeGreaterThan(0);
