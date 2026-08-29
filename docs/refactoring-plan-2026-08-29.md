@@ -2,10 +2,12 @@
 
 > 日期：2026-08-29　·　范围：backend/app + frontend/src　·　证据基准：本次全量侦察（代码知识图谱 + 源码阅读）
 
-> **实施状态**：Phase 0（安全加固）已于 2026-08-29 完成并提交（83f9525 / eb1d170）——
-> 20 个路由文件认证补齐、全局异常不泄漏、CORS 收紧、JWT 密钥治理、NodeTaskCenter
-> 流式改造、守卫测试新增、16 个存量测试与 1 个 E2E 用例适配。后端 pytest 1409 passed，
-> E2E 90 passed。
+> **实施状态**：
+> - Phase 0（安全加固）已于 2026-08-29 完成（83f9525 / eb1d170）——20 个路由文件认证补齐、
+>   全局异常不泄漏、CORS 收紧、JWT 密钥治理、NodeTaskCenter 流式改造、守卫测试、E2E 适配。
+> - Phase 1（死代码 + 低风险合并）已于同日完成（5700f27）——删除 useClusterStreamProxies.ts、
+>   SAVE_SCROLL_KEY 死代码；`utils/format.ts` 收敛 12 处 formatDate 重复实现；密码校验器抽取；
+>   auth.py 认证实现并入 deps.py（含禁用用户状态校验）。
 
 ## 0. 执行摘要
 
