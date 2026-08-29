@@ -28,9 +28,6 @@ KNOWN_HOST_KEYS = (
 )
 
 _CRED_KEYS = ("ansible_ssh_user", "ansible_ssh_pass")
-# 脱敏（Phase 6）：对外展示时掩码的密码字段与掩码值
-_PASSWORD_KEYS = ("ansible_ssh_pass", "ansible_become_pass")
-_CRED_MASK = "******"
 
 _EDGE_PATH = ["all", "children", "edge_cluster"]
 
@@ -82,7 +79,7 @@ def _fail(message: str) -> dict[str, Any]:
     return {"hosts": [], "vars": {}, "unknown_keys": [], "errors": [message]}
 
 
-def parse_inventory(raw_text: str, mask_credentials: bool = False) -> dict[str, Any]:
+def parse_inventory(raw_text: str) -> dict[str, Any]:
     """Parse inventory YAML text into a structured document.
 
     Returns ``{"hosts": [...], "vars": {...}, "unknown_keys": [...], "errors": []}``.
@@ -90,8 +87,9 @@ def parse_inventory(raw_text: str, mask_credentials: bool = False) -> dict[str, 
     key; on any error ``errors`` holds one message with line number and the
     other fields are empty.
 
-    ``mask_credentials=True`` 时（对外展示用）把主机与分组级密码字段替换为
-    ``******``，避免清单密码明文泄漏到前端；保存时由 restore_credentials 恢复。
+    ``mask_credentials`` 参数已于 2026-08 移除：主机清单页是需要查看/编辑
+    SSH 密码的凭据管理模块，掩码会把 ``******`` 写回清单文件导致连接异常
+    （曾误存为掩码值、真实密码不可恢复）。
     """
     # 运维编辑器常留下行尾制表符，PyYAML 会拒绝（"found character '\\t' that
     # cannot start any token"）导致整个文件解析失败。行尾空白对 YAML 无语义，
@@ -144,16 +142,6 @@ def parse_inventory(raw_text: str, mask_credentials: bool = False) -> dict[str, 
         for key in entry:
             if key != "ip" and key not in KNOWN_HOST_KEYS and key not in unknown_keys:
                 unknown_keys.append(key)
-
-    if mask_credentials:
-        for entry in host_list:
-            for key in _PASSWORD_KEYS:
-                if entry.get(key):
-                    entry[key] = _CRED_MASK
-        if vars_ is not None:
-            for key in _PASSWORD_KEYS:
-                if vars_.get(key):
-                    vars_[key] = _CRED_MASK
 
     return {
         "hosts": host_list,
@@ -294,36 +282,6 @@ def _current_inventory_text() -> str:
         if path.exists():
             return path.read_text(encoding="utf-8")
     return ""
-
-
-def restore_credentials(hosts: list[dict[str, Any]], vars_: dict[str, Any] | None) -> None:
-    """把掩码密码字段（``******``）恢复为当前清单中的真实值。
-
-    Phase 6 脱敏配套：前端表格模式基于（已掩码的）parse 结果重组提交，若密码
-    仍为掩码占位，说明用户未修改该密码——从磁盘清单恢复原值；仅当用户显式输入
-    新密码时才保留新值。
-    """
-    current = parse_inventory(_current_inventory_text())
-    cur_hosts = {h.get("ip"): h for h in current["hosts"]}
-    cur_vars = current["vars"]
-
-    for h in hosts:
-        cur = cur_hosts.get(h.get("ip"), {})
-        for key in _PASSWORD_KEYS:
-            if h.get(key) == _CRED_MASK:
-                real = cur.get(key)
-                if real:
-                    h[key] = real
-                else:
-                    h.pop(key, None)
-    if vars_ is not None:
-        for key in _PASSWORD_KEYS:
-            if vars_.get(key) == _CRED_MASK:
-                real = cur_vars.get(key)
-                if real:
-                    vars_[key] = real
-                else:
-                    vars_.pop(key, None)
 
 
 def save_inventory(new_text: str) -> None:

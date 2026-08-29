@@ -95,9 +95,9 @@ class TestAnsibleInventoryAPI:
         assert resp.status_code == 200
         data = resp.json()
         assert data["raw_text"] == VALID_INVENTORY
-        # Phase 6 脱敏：密码字段对外掩码，不返回明文
+        # 清单页是凭据管理模块，密码明文返回（掩码曾把 ****** 写回文件导致异常）
         assert data["hosts"] == [
-            {"ip": TEST_IP_MANAGED, "ansible_ssh_user": "jboss", "ansible_ssh_pass": "******"}
+            {"ip": TEST_IP_MANAGED, "ansible_ssh_user": "jboss", "ansible_ssh_pass": "pass1"}
         ]
         assert data["vars"] == {"ansible_ssh_user": "group_user"}
         assert data["unknown_keys"] == []
@@ -231,30 +231,6 @@ class TestAnsibleInventoryAPI:
         # 数值序渲染：10.0.0.2 必须排在 192.168.100.42 之前（平台节点一并保留）
         assert ip_order.index("10.0.0.2") < ip_order.index("192.168.100.42")
         assert "group_user" in text
-
-    async def test_put_hosts_masked_password_restored(self, inv_env):
-        """表格模式提交掩码密码（******）时，应从当前文件恢复真实值（脱敏配套）。"""
-        inv_env.parent.mkdir(parents=True)
-        inv_env.write_text(VALID_INVENTORY, encoding="utf-8")
-
-        async with await self._client() as client:
-            headers = await self._login(client)
-            resp = await client.put(
-                "/api/v1/ansible/inventory", headers=headers,
-                json={
-                    "hosts": [
-                        *[{"ip": ip} for ip in await _platform_ips()],
-                        {"ip": TEST_IP_MANAGED, "ansible_ssh_user": "jboss",
-                         "ansible_ssh_pass": "******"},
-                    ],
-                    "vars": {},
-                },
-            )
-
-        assert resp.status_code == 200
-        text = inv_env.read_text(encoding="utf-8")
-        assert "ansible_ssh_pass: pass1" in text
-        assert "******" not in text
 
     async def test_put_deletion_protection_returns_400(self, inv_env):
         cleanup = await _create_node(TEST_IP_MANAGED)
