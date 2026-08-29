@@ -2,20 +2,14 @@ import { ref, reactive, h, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin, GlobalRule, PluginConfig } from '@/types'
-import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from './useClusterUtils'
+import { showDeleteConfirm } from './useClusterUtils'
 import { getApiErrorMessage } from '@/utils/error'
+import { useClusterResourceCore, type VersionModalState } from './useClusterResourceCore'
 
 /** 插件实体资源（插件组/全局规则）的公共形状 */
 type PluginEntityItem = (GlobalRule | PluginConfig) & { plugins: Record<string, unknown> }
 
-export interface VersionModalState {
-  type: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
-  visible: Ref<boolean>
-  resourceId: Ref<number | null>
-  clusterId: Ref<number | null>
-  resourceName: Ref<string>
-  edgeUuid: Ref<string>
-}
+export { type VersionModalState } from './useClusterResourceCore'
 
 export interface PluginEntityConfig {
   /** API endpoint path segment, e.g. 'plugin_configs' or 'global_rules' */
@@ -39,12 +33,28 @@ export interface PluginEntityDeps {
 /**
  * Shared composable for plugin-config and global-rule CRUD.
  *
- * Both resources have identical structure: name + description + plugins,
- * differing only in the API endpoint and display label.
+ * 删除/发布/版本管理由 useClusterResourceCore 共享实现（Phase 4 合并）；
+ * 本工厂保留表单/抽屉/加载等插件实体专属逻辑。
  */
 export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginEntityDeps) {
   const { clusters, versionModal, availablePlugins, loadAvailablePlugins, openPublishModal } = deps
   const { apiEndpoint, displayName, clusterProp, versionType } = config
+
+  const core = useClusterResourceCore(
+    {
+      noun: displayName,
+      endpoint: apiEndpoint,
+      versionType,
+      getSelected: (c) => (c.selectedPluginConfig as PluginEntityItem | null) ?? null,
+      setSelected: (c, item) => {
+        c.selectedPluginConfig = item as PluginEntityItem | null
+      },
+      getSelectedKeys: () => [],
+      setSelectedKeys: () => {},
+      refresh: (c) => loadItems(c),
+    },
+    { openPublishModal, showDeleteConfirm, versionModal },
+  )
 
   const modalVisible = ref(false)
   const activeTab = ref('basic')
@@ -141,56 +151,23 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   }
 
   const deleteItem = async (cluster: Cluster, item: PluginEntityItem) => {
-    showDeleteConfirm({
-      title: `确定要删除${displayName} "${item.name}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/${apiEndpoint}/${item.id}`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `删除${displayName}: ${item.name}`,
-          apiEndpoint: `/clusters/${cluster.id}/${apiEndpoint}/${item.id}`,
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadItems(cluster),
-          clearSelectedFn: () => {
-            cluster.selectedPluginConfig = null
-          },
-        })
-      },
-    })
+    await core.deleteByRecord(cluster, item)
   }
 
   const publishItem = async (cluster: Cluster, item?: PluginEntityItem) => {
-    const target = item || cluster.selectedPluginConfig
-    if (!target) {
-      message.warning(`请先选择一个${displayName}`)
-      return
+    if (item) {
+      await core.publishByRecord(cluster, item)
+    } else {
+      await core.publishSelected(cluster)
     }
-    const nodeIds = await openPublishModal(`发布${displayName}: ${target.name}`, cluster.id)
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布${displayName}: ${target.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/${apiEndpoint}/${target.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadItems(cluster),
-    })
   }
 
   const openVersionManagement = (cluster: Cluster, item?: PluginEntityItem) => {
-    const target = item || cluster.selectedPluginConfig
-    if (!target) {
-      message.warning(`请先选择一个${displayName}`)
-      return
+    if (item) {
+      core.openVersionManagementByRecord(cluster, item)
+    } else {
+      core.openVersionManagement(cluster)
     }
-    versionModal.type.value = versionType
-    versionModal.resourceId.value = target.id
-    versionModal.clusterId.value = cluster.id
-    versionModal.resourceName.value = target.name
-    versionModal.edgeUuid.value = target.edge_uuid || ''
-    versionModal.visible.value = true
   }
 
   const viewPluginDetail = (parent: PluginEntityItem, pname: string, pcfg: unknown) => {
