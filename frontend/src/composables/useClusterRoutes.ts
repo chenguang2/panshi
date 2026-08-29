@@ -72,10 +72,6 @@ export interface RouteComposableDeps {
 
   loadPluginConfigs: (cluster: Cluster) => Promise<void>
 
-  /** Shared plugin list — if not provided, composable loads its own */
-  availablePlugins?: Ref<Plugin[]>
-  loadAvailablePlugins?: () => Promise<void>
-
   // ── version-management shared refs (owned by the embedding component) ─
   versionModalVisible: Ref<boolean>
   versionModalType: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
