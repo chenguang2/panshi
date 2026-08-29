@@ -3,15 +3,17 @@
 import asyncio
 import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base, get_db
+from app.core.security import hash_password
 from app.models.cluster import Node
+from app.models.user import User
+from tests.api_helpers import AuthedTestClient, auth_headers_for
 
 
 @pytest.fixture
 def db_env():
-    """Create in-memory DB with a node, override get_db, return (app, sessionmaker)."""
+    """Create in-memory DB with a node + user, override get_db, return (app, sessionmaker, auth_headers)."""
     from app.main import app
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
@@ -23,6 +25,8 @@ def db_env():
         async with S() as s:
             s.add(Node(id=1, cluster_id=1, ip="192.168.0.24", edge_path="/data/uap-edge",
                       service_port=80, management_port=16620))
+            s.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
+                      role="user", status=1))
             await s.commit()
         return S
 
@@ -34,50 +38,50 @@ def db_env():
 
     app.dependency_overrides[get_db] = override_get_db
 
-    yield app, S
+    yield app, S, auth_headers_for(1)
 
     app.dependency_overrides.clear()
     asyncio.run(engine.dispose())
 
 
 def test_autostart_node_not_found(db_env):
-    app, _ = db_env
-    with TestClient(app) as c:
+    app, _, AUTH = db_env
+    with AuthedTestClient(app, headers=AUTH) as c:
         resp = c.post("/api/v1/nodes/999/autostart", json={"action": "status"})
         assert resp.status_code == 404
 
 
 def test_autostart_invalid_action(db_env):
-    app, _ = db_env
-    with TestClient(app) as c:
+    app, _, AUTH = db_env
+    with AuthedTestClient(app, headers=AUTH) as c:
         resp = c.post("/api/v1/nodes/1/autostart", json={"action": "bogus"})
         assert resp.status_code == 422
 
 
 def test_autostart_enable_requires_root_password(db_env):
-    app, _ = db_env
+    app, _, AUTH = db_env
     import app.api.v1.edge_autostart as mod
 
     with patch.object(mod, "is_node_in_inventory", return_value=True):
-        with TestClient(app) as c:
+        with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "enable"})
             assert resp.status_code == 422
             assert "root 密码" in resp.json()["detail"]
 
 
 def test_autostart_node_not_in_inventory(db_env):
-    app, _ = db_env
+    app, _, AUTH = db_env
     import app.api.v1.edge_autostart as mod
 
     with patch.object(mod, "is_node_in_inventory", return_value=False):
-        with TestClient(app) as c:
+        with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "enable", "root_password": "x"})
             assert resp.status_code == 400
             assert "inventory" in resp.json()["detail"]
 
 
 def test_autostart_status_uses_ssh_and_streams(db_env):
-    app, _ = db_env
+    app, _, AUTH = db_env
     import app.api.v1.edge_autostart as mod
 
     async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
@@ -87,7 +91,7 @@ def test_autostart_status_uses_ssh_and_streams(db_env):
         patch.object(mod, "is_node_in_inventory", return_value=True),
         patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart) as mock_ssh,
     ):
-        with TestClient(app) as c:
+        with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "status"})
             assert resp.status_code == 200
             assert "text/event-stream" in resp.headers["content-type"]
@@ -107,7 +111,7 @@ def test_autostart_writes_record(db_env):
     from app.api.v1 import edge_autostart as mod
     from app.models.autostart import NodeAutostart
 
-    app, S = db_env
+    app, S, AUTH = db_env
 
     async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
         return {"rc": 0, "status": "successful", "stdout": "disabled",
@@ -117,7 +121,7 @@ def test_autostart_writes_record(db_env):
         patch.object(mod, "is_node_in_inventory", return_value=True),
         patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart),
     ):
-        with TestClient(app) as c:
+        with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "disable", "root_password": "secret123"})
             assert resp.status_code == 200
 
@@ -138,7 +142,7 @@ def test_autostart_records_read(db_env):
     from app.api.v1 import edge_autostart as mod
     from app.models.autostart import NodeAutostart
 
-    app, S = db_env
+    app, S, AUTH = db_env
 
     async def _seed():
         async with S() as s:
@@ -148,7 +152,7 @@ def test_autostart_records_read(db_env):
     asyncio.run(_seed())
 
     with patch.object(mod, "is_node_in_inventory", return_value=True):
-        with TestClient(app) as c:
+        with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.get("/api/v1/nodes/autostart/records")
             assert resp.status_code == 200
             items = resp.json() if isinstance(resp.json(), list) else resp.json().get("items", [])

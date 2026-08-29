@@ -21,8 +21,10 @@ from app.schemas.cluster import PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
 
-router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"])
-global_router = APIRouter(prefix="/ssl", tags=["ssl"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"], dependencies=[Depends(get_current_user)])
+global_router = APIRouter(prefix="/ssl", tags=["ssl"], dependencies=[Depends(get_current_user)])
 
 # 系统保留域名：Edge 网关内部管理/健康检查的默认访问域名。
 # 生成/更新/回滚 server 证书时强制合并进 DNS SAN 与 sni 字段，不可被用户移除。

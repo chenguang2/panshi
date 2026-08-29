@@ -25,7 +25,9 @@ from app.services.ansible_service import (
     sanitize_command_for_store,
 )
 
-router = APIRouter(prefix="/nodes", tags=["nodes-autostart"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(get_current_user)])
 
 _ansible_service = AnsibleRunnerService()
 

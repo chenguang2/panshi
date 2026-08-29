@@ -54,9 +54,10 @@ async def test_cluster_not_found_returns_chinese():
 
 @pytest.mark.asyncio
 async def test_route_not_found_returns_chinese():
+    from tests.api_helpers import admin_auth_headers
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.get("/api/v1/clusters/1/routes/99999")
+        response = await ac.get("/api/v1/clusters/1/routes/99999", headers=admin_auth_headers())
         assert response.status_code == 404
         assert response.json()["detail"] == "路由不存在"
 

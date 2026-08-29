@@ -29,7 +29,7 @@ from app.services.ansible_service import (
 from app.services.ansible_service import MAX_LOG_LINES
 from app.core.deps import get_current_user
 
-router = APIRouter(prefix="/clusters", tags=["clusters"])
+router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(get_current_user)])
 
 NODE_ALLOWED_SORT_FIELDS = {"name", "ip", "service_port", "management_port", "status", "created_at"}
 NODE_ALLOWED_SEARCH_FIELDS = {"name", "ip"}

@@ -9,7 +9,9 @@ from app.models.user import User
 from pydantic import BaseModel
 from typing import List
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/dashboard", tags=["dashboard"], dependencies=[Depends(get_current_user)])
 
 
 class RecentRouteItem(BaseModel):

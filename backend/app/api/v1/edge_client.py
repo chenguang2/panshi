@@ -9,7 +9,9 @@ from app.core.database import get_db
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.models.cluster import Node, Cluster
 
-router = APIRouter(prefix="/edge-client", tags=["edge-client"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/edge-client", tags=["edge-client"], dependencies=[Depends(get_current_user)])
 
 
 async def run_edge_sync(call, timeout=10.0):

@@ -1,7 +1,7 @@
 """Tests for plugins.py feature-config whitelist filtering."""
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base, get_db
 
@@ -37,6 +37,10 @@ class TestPluginWhitelist:
                 await conn.run_sync(Base.metadata.create_all)
             async with TestSession() as s:
                 s.add(PluginEnabled(plugin_name="cors", enabled=0))
+                from app.models.user import User
+                from app.core.security import hash_password
+                s.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
+                           role="user", status=1))
                 await s.commit()
         asyncio.run(_setup())
 
@@ -46,7 +50,7 @@ class TestPluginWhitelist:
 
         app.dependency_overrides[get_db] = override_get_db
         try:
-            with TestClient(app) as c:
+            with AuthedTestClient(app) as c:
                 yield c
         finally:
             app.dependency_overrides.clear()

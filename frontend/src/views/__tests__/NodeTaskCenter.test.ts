@@ -703,37 +703,29 @@ describe('NodeTaskCenter software_check flow', () => {
 })
 
 describe('NodeTaskCenter live log streaming', () => {
-  class MockEventSource {
-    static instances: MockEventSource[] = []
-    onmessage: ((msg: { data: string }) => void) | null = null
-    onerror: (() => void) | null = null
-    closed = false
-    constructor(public url: string) {
-      MockEventSource.instances.push(this)
-    }
-    close() {
-      this.closed = true
-    }
-    dispatch(data: unknown) {
-      this.onmessage?.({ data: JSON.stringify(data) })
-    }
-    dispatchError() {
-      this.onerror?.()
+  // 组件改为 fetch 流式（带 Authorization 头），测试用可控 ReadableStream mock
+  function makeStreamHarness() {
+    let controller!: ReadableStreamDefaultController<Uint8Array>
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) { controller = c },
+    })
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, body: stream }))
+    vi.stubGlobal('fetch', fetchMock)
+    return {
+      push: (data: unknown) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)),
+      close: () => controller.close(),
+      fail: () => controller.error(new Error('network down')),
+      fetchMock,
     }
   }
-
-  let originalEventSource: unknown
 
   beforeEach(() => {
     vi.clearAllMocks()
     document.body.innerHTML = ''
-    originalEventSource = (globalThis as Record<string, unknown>).EventSource
-    ;(globalThis as Record<string, unknown>).EventSource = MockEventSource
-    MockEventSource.instances = []
   })
 
   afterEach(() => {
-    ;(globalThis as Record<string, unknown>).EventSource = originalEventSource
+    vi.unstubAllGlobals()
   })
 
   function makeDetailTask(overrides: Record<string, unknown> = {}) {
@@ -766,12 +758,14 @@ describe('NodeTaskCenter live log streaming', () => {
     }
   }
 
-  it('opens EventSource for a running task and appends log_line events', async () => {
+  it('opens a fetch stream with Authorization header and appends log_line events', async () => {
+    localStorage.setItem('token', 'test-jwt')
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
       if (url === '/node-tasks/99') return { data: makeDetailTask() }
       return { data: { total: 0, items: [] } }
     })
+    const harness = makeStreamHarness()
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -780,15 +774,15 @@ describe('NodeTaskCenter live log streaming', () => {
     await detailBtn!.trigger('click')
     await flushPromises()
 
-    expect(MockEventSource.instances.length).toBe(1)
-    expect(MockEventSource.instances[0].url).toContain('/node-tasks/99/stream')
+    expect(harness.fetchMock).toHaveBeenCalledWith(
+      '/api/v1/node-tasks/99/stream',
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-jwt' } }),
+    )
 
-    const es = MockEventSource.instances[0]
-    es.dispatch({ type: 'log_line', task_id: 99, node_id: 7, line: 'TASK [edge : Build edge server]' })
-    es.dispatch({ type: 'log_line', task_id: 99, node_id: 7, line: 'gcc -o nginx main.c' })
+    harness.push({ type: 'log_line', task_id: 99, node_id: 7, line: 'TASK [edge : Build edge server]' })
+    harness.push({ type: 'log_line', task_id: 99, node_id: 7, line: 'gcc -o nginx main.c' })
     await flushPromises()
 
-    // expand the row's log panel to render the live lines
     // expand the row's log panel to render the live lines
     const expandBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === '展开')
     expandBtn!.click()
@@ -796,16 +790,19 @@ describe('NodeTaskCenter live log streaming', () => {
 
     expect(document.body.textContent || '').toContain('TASK [edge : Build edge server]')
     expect(document.body.textContent || '').toContain('gcc -o nginx main.c')
+    harness.close()
+    await flushPromises()
     wrapper.unmount()
   })
 
-  it('polls detail as fallback when SSE errors', async () => {
+  it('polls detail as fallback when the stream errors', async () => {
     vi.useFakeTimers()
     vi.mocked(api.get).mockImplementation(async (url: string) => {
       if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
       if (url === '/node-tasks/99') return { data: makeDetailTask() }
       return { data: { total: 0, items: [] } }
     })
+    const harness = makeStreamHarness()
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -813,8 +810,7 @@ describe('NodeTaskCenter live log streaming', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('详情'))!.trigger('click')
     await flushPromises()
 
-    const es = MockEventSource.instances[0]
-    es.dispatchError()
+    harness.fail()
     await vi.advanceTimersByTimeAsync(2100)
     await flushPromises()
 
@@ -830,6 +826,7 @@ describe('NodeTaskCenter live log streaming', () => {
       if (url === '/node-tasks/99') return { data: makeDetailTask({ status: detailStatus }) }
       return { data: { total: 0, items: [] } }
     })
+    const harness = makeStreamHarness()
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -837,12 +834,12 @@ describe('NodeTaskCenter live log streaming', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('详情'))!.trigger('click')
     await flushPromises()
 
-    const es = MockEventSource.instances[0]
+    const signal = harness.fetchMock.mock.calls[0][1].signal as AbortSignal
     detailStatus = 'success'
-    es.dispatch({ type: 'done', task_id: 99 })
+    harness.push({ type: 'done', task_id: 99 })
     await flushPromises()
     await vi.waitFor(() => {
-      expect(es.closed).toBe(true)
+      expect(signal.aborted).toBe(true)
     })
     wrapper.unmount()
   })

@@ -5,7 +5,7 @@ import stat
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 import pytest
 from pydantic import ValidationError
 from unittest.mock import AsyncMock, patch
@@ -74,7 +74,7 @@ class TestOpenrestyFilesEndpoint:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_endpoint_returns_200(self, client, tmp_path, monkeypatch):
@@ -153,7 +153,7 @@ class TestInstallOpenrestyRouter:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_install_openresty_endpoint_returns_404(self, client):
@@ -183,7 +183,7 @@ class TestInstallEdgeRouter:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_install_edge_endpoint_exists(self, client):
@@ -197,7 +197,7 @@ class TestEdgePackListEndpoint:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_endpoint_exists(self, client):
@@ -215,7 +215,7 @@ class TestEdgePackAddEndpoint:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_endpoint_exists(self, client):
@@ -232,7 +232,7 @@ class TestEdgePackRebaseEndpoint:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_endpoint_exists(self, client):
@@ -249,7 +249,7 @@ class TestAssociateNewOpenrestyRouter:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_endpoint_exists(self, client):

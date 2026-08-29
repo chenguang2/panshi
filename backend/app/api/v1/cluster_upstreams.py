@@ -18,7 +18,7 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 from app.services import edge_sync
 from app.core.deps import get_current_user
 
-router = APIRouter(prefix="/clusters", tags=["clusters"])
+router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(get_current_user)])
 
 UPSTREAM_ALLOWED_SORT_FIELDS = {"name", "load_balance", "description", "created_at"}
 UPSTREAM_ALLOWED_SEARCH_FIELDS = {"name", "description"}

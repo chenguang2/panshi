@@ -1,6 +1,6 @@
 """Tests for the reload endpoint (renamed from restart)."""
 import pytest
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 
 
 class TestNodeReloadEndpoint:
@@ -8,7 +8,7 @@ class TestNodeReloadEndpoint:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_reload_endpoint_exists(self, client):

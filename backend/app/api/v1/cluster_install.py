@@ -292,7 +292,9 @@ async def _ssh_run(ip: str, cmd: str, ssh_user: str = "jboss", port: int | None 
 
 # ── Router A: install-openresty + cancel-install ─────────────────────
 
-install_openresty_router = APIRouter(prefix="/clusters", tags=["clusters-install-openresty"])
+from app.core.deps import get_current_user
+
+install_openresty_router = APIRouter(prefix="/clusters", tags=["clusters-install-openresty"], dependencies=[Depends(get_current_user)])
 
 
 @install_openresty_router.get("/{cluster_id}/nodes/openresty-files")
@@ -414,7 +416,7 @@ async def cancel_install(
 
 # ── Router B: install-edge / upgrade edge / pack management ────────────
 
-install_edge_router = APIRouter(prefix="/clusters", tags=["clusters-install-edge"])
+install_edge_router = APIRouter(prefix="/clusters", tags=["clusters-install-edge"], dependencies=[Depends(get_current_user)])
 
 
 @install_edge_router.post("/{cluster_id}/nodes/{node_id}/associate-new-openresty")

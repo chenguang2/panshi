@@ -24,7 +24,9 @@ from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 
-router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/clusters/{cluster_id}/static-resources", tags=["static-resources"], dependencies=[Depends(get_current_user)])
 
 ALLOWED_SORT_FIELDS = {"name", "created_at"}
 ALLOWED_SEARCH_FIELDS = {"name", "description"}

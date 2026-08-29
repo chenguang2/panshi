@@ -1,6 +1,7 @@
 """Tests for GET /api/v1/metrics/* endpoints."""
 import pytest
 from unittest.mock import patch
+from tests.api_helpers import admin_auth_headers
 
 
 class TestMetricsAPI:
@@ -9,8 +10,8 @@ class TestMetricsAPI:
     @pytest.fixture
     def client(self):
         from app.main import app
-        from fastapi.testclient import TestClient
-        with TestClient(app) as c:
+        from tests.api_helpers import AuthedTestClient
+        with AuthedTestClient(app) as c:
             yield c
 
     # ── GET /api/v1/metrics/names ─────────────────────────
@@ -114,7 +115,7 @@ class TestMetricsAPINonBlocking:
             return []
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=admin_auth_headers()) as client:
             with patch("app.services.metrics_service.execute_query", side_effect=slow_query):
                 t0 = time.perf_counter()
                 summary_task = asyncio.create_task(client.get("/api/v1/metrics/summary"))

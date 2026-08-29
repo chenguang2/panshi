@@ -1,11 +1,11 @@
 """Tests for status analysis API endpoint."""
 import pytest
 from unittest.mock import patch
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 from app.main import app
 
 
-client = TestClient(app)
+client = AuthedTestClient(app)
 
 
 class TestStatusAnalysisEndpoint:

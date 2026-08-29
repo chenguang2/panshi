@@ -43,7 +43,8 @@ class TestDnsUpstreamPluginAPI:
         import importlib
         importlib.reload(app.main)
         from app.main import app
-        with TestClient(app) as c:
+        from tests.api_helpers import AuthedTestClient
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_builtin_all_returns_dns_upstream(self, client):

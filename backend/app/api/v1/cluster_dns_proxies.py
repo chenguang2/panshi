@@ -32,7 +32,9 @@ from app.api.v1.cluster_stream_proxies import (
     ALLOWED_SORT_FIELDS,
 )
 
-router = APIRouter(prefix="/clusters", tags=["dns-proxies"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/clusters", tags=["dns-proxies"], dependencies=[Depends(get_current_user)])
 
 ALLOWED_SEARCH_FIELDS_DNS = ALLOWED_SEARCH_FIELDS
 

@@ -44,7 +44,7 @@ app = FastAPI(title="Panshi Admin API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:12345").split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,9 +56,14 @@ app.middleware("http")(maintenance_middleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # 只记日志，不向客户端泄漏内部错误细节（路径/堆栈/DB 信息）
+    logging.getLogger("app").error(
+        "Unhandled error: %s %s | %s",
+        request.method, request.url.path, exc, exc_info=True,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": str(exc)},
+        content={"detail": "服务器内部错误"},
     )
 
 

@@ -12,7 +12,9 @@ from app.schemas.edge_import import (
     PreviewRequest,
 )
 
-router = APIRouter(prefix="/edge-import", tags=["edge-import"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/edge-import", tags=["edge-import"], dependencies=[Depends(get_current_user)])
 
 
 @router.post("/test-connection", response_model=TestConnectionResponse)

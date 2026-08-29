@@ -17,7 +17,7 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 from app.services import edge_sync
 from app.core.deps import get_current_user
 
-router = APIRouter(prefix="/clusters", tags=["clusters"])
+router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/{cluster_id}/global_rules", response_model=dict)

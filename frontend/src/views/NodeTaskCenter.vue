@@ -330,7 +330,7 @@ const detail = ref<NodeTaskData | null>(null)
 const expandedIp = ref<string | null>(null)
 const liveLogs = ref<Record<number, string[]>>({})
 const liveDetail = ref<Record<number, NodeTaskItemData>>({})
-let eventSource: EventSource | null = null
+let streamAbort: AbortController | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let streamTaskId = 0
 
@@ -598,9 +598,9 @@ async function openDetail(record: NodeTaskData) {
 }
 
 function stopStream() {
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
+  if (streamAbort) {
+    streamAbort.abort()
+    streamAbort = null
   }
   if (pollTimer) {
     clearInterval(pollTimer)
@@ -632,28 +632,64 @@ function applyStreamEvent(ev: TaskStreamEvent) {
 
 function startStream(taskId: number) {
   streamTaskId = taskId
-  eventSource = new EventSource(`/api/v1/node-tasks/${taskId}/stream`)
-  eventSource.onmessage = (msg) => {
-    const ev = parseTaskEvent(msg.data)
-    if (!ev) return
-    applyStreamEvent(ev)
-    if (ev.type === 'done') {
-      stopStream()
-      getNodeTask(taskId).then((fresh) => { detail.value = fresh })
-    }
-  }
-  eventSource.onerror = () => {
-    // Fallback to polling while disconnected; EventSource auto-reconnects.
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = setInterval(async () => {
-      if (!streamTaskId) return
-      const fresh = await getNodeTask(streamTaskId)
-      detail.value = fresh
-      if (!['pending', 'running'].includes(fresh.status)) {
-        stopStream()
+  streamAbort = new AbortController()
+  const token = localStorage.getItem('token')
+
+  // 原生 EventSource 无法携带 Authorization 头（任务流接口现已要求认证），
+  // 改用 fetch 流式读取，与 useInstallStream 保持同一模式。
+  fetch(`/api/v1/node-tasks/${taskId}/stream`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    signal: streamAbort.signal,
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('no reader')
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      // for(;;) 单 promise 链：读流/解析错误沿链传到下方 .catch，避免游离拒绝
+      const pump = async (): Promise<void> => {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) {
+            stopStream()
+            return
+          }
+          buffer += decoder.decode(value, { stream: true })
+          const events = buffer.split('\n\n')
+          buffer = events.pop() || ''
+          for (const evt of events) {
+            for (const raw of evt.split('\n')) {
+              if (!raw.startsWith('data: ')) continue
+              const ev = parseTaskEvent(raw.slice(6))
+              if (!ev) continue
+              applyStreamEvent(ev)
+              if (ev.type === 'done') {
+                stopStream()
+                getNodeTask(taskId).then((fresh) => { detail.value = fresh })
+                return
+              }
+            }
+          }
+        }
       }
-    }, 2000)
-  }
+      return pump()
+    })
+    .catch((err: unknown) => {
+      // 主动 abort（stopStream/卸载）不触发轮询回退
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      // 流断开/出错时回退轮询（原 EventSource onerror 行为）
+      if (pollTimer) clearInterval(pollTimer)
+      pollTimer = setInterval(async () => {
+        if (!streamTaskId) return
+        const fresh = await getNodeTask(streamTaskId)
+        detail.value = fresh
+        if (!['pending', 'running'].includes(fresh.status)) {
+          stopStream()
+        }
+      }, 2000)
+    })
 }
 
 function streamItem(record: NodeTaskItemData): NodeTaskItemData {

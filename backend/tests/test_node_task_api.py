@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
@@ -30,15 +30,25 @@ async def _seed_nodes(session: AsyncSession):
 class TestNodeTaskApi:
     @pytest.fixture
     def client(self, test_db):
-        """Override get_db to use test_db session and seed required nodes."""
+        """Override get_db to use test_db session and seed required nodes + api user."""
         async def override_get_db():
             yield test_db
 
         app.dependency_overrides[get_db] = override_get_db
-        # Seed nodes before tests run
+        # Seed nodes + auth user before tests run
         import asyncio
+        from app.models.user import User
+        from app.core.security import hash_password
         asyncio.run(_seed_nodes(test_db))
-        with TestClient(app) as c:
+
+        async def _seed_user():
+            if await test_db.get(User, 1) is None:
+                test_db.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
+                                 role="user", status=1))
+                await test_db.commit()
+        asyncio.run(_seed_user())
+
+        with AuthedTestClient(app) as c:
             yield c
         app.dependency_overrides.clear()
 

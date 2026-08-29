@@ -22,10 +22,12 @@ from app.services import edge_sync
 from app.services.edge_client import EdgeClient
 from app.services.ansible_service import AnsibleRunnerService
 
-router = APIRouter(prefix="/clusters", tags=["stream-proxies"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/clusters", tags=["stream-proxies"], dependencies=[Depends(get_current_user)])
 
 # Global stream proxy list endpoint (not cluster-scoped)
-global_router = APIRouter(prefix="/stream-proxies", tags=["stream-proxies"])
+global_router = APIRouter(prefix="/stream-proxies", tags=["stream-proxies"], dependencies=[Depends(get_current_user)])
 
 # Module-level singleton (V1/V6): all callers share the same instance so the
 # max_playbooks semaphore is a true process-wide limit.

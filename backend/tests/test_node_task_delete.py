@@ -1,7 +1,7 @@
 """Tests for node task hard-delete (single + batch endpoints, row deletion)."""
 
 import pytest
-from fastapi.testclient import TestClient
+from tests.api_helpers import AuthedTestClient
 from sqlalchemy import select
 
 from app.models.node_task import NodeTask, NodeTaskItem
@@ -11,7 +11,7 @@ from app.services import task_log_store
 @pytest.fixture
 def client():
     from app.main import app
-    with TestClient(app) as c:
+    with AuthedTestClient(app) as c:
         yield c
 
 

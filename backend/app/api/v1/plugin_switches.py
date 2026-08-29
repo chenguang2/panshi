@@ -7,7 +7,9 @@ from app.core.database import get_db
 from app.models.cluster import PluginEnabled, RoutePlugin, PluginConfig, GlobalRule
 from app.schemas.plugin_switch import PluginSwitchItem
 
-router = APIRouter(prefix="/plugin-switches", tags=["plugin-switches"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/plugin-switches", tags=["plugin-switches"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("")

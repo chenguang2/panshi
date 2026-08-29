@@ -7,7 +7,9 @@ from app.models.cluster import PluginEnabled
 from app.config.plugin_definitions import BUILTIN_PLUGINS
 from app.core.features import get_enabled_plugins
 
-router = APIRouter(prefix="/plugins", tags=["plugins"])
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/plugins", tags=["plugins"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/builtin")

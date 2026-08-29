@@ -486,12 +486,13 @@ class TestProxyTypeFilter:
     @pytest.fixture
     def client(self):
         from app.main import app
-        with TestClient(app) as c:
+        from tests.api_helpers import AuthedTestClient
+        with AuthedTestClient(app) as c:
             yield c
 
     def test_global_list_accepts_proxy_type_param(self, client):
         resp = client.get("/api/v1/stream-proxies?proxy_type=normal")
-        assert resp.status_code in (200, 401, 422)
+        assert resp.status_code in (200, 422)
 
     def test_global_list_rejects_invalid_proxy_type(self, client):
         resp = client.get("/api/v1/stream-proxies?proxy_type=invalid")

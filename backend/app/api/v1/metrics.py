@@ -7,7 +7,7 @@ the esapm OpenTelemetry pipeline.
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.services.metrics_service import (
     query_metric_names,
@@ -20,7 +20,9 @@ from app.services.metrics_service import (
     query_node_health,
 )
 
-router = APIRouter(tags=["metrics"])
+from app.core.deps import get_current_user
+
+router = APIRouter(tags=["metrics"], dependencies=[Depends(get_current_user)])
 
 VALID_ROUTE_STATS_TYPES = {"qps", "bandwidth", "error_rate", "latency"}
 
