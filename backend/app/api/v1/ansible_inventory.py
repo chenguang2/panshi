@@ -12,13 +12,13 @@ import logging
 from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.deps import get_current_admin_user as require_admin
 from app.models.cluster import Node
 from app.models.node_task import NodeTask
 from app.models.user import User
@@ -28,32 +28,6 @@ from app.services.ansible_service import _inventory_lock
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ansible", tags=["ansible-inventory"])
-
-
-async def require_admin(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Admin guard (same pattern as database.py require_db_admin)."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="未认证")
-    try:
-        token = authorization[7:] if authorization.startswith("Bearer ") else authorization
-        payload = decode_access_token(token)
-        if payload is None or payload.get("sub") is None:
-            raise HTTPException(status_code=401, detail="未认证")
-        user_id = int(payload["sub"])
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        if user.role != "admin":
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        return user
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="未认证")
 
 
 def _read_raw_text() -> tuple[str, bool]:

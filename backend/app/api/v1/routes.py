@@ -10,7 +10,7 @@ from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstr
 from app.models.user import User, UserCluster
 from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 

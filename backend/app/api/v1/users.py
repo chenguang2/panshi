@@ -1,81 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import decode_access_token, hash_password
+from app.core.deps import get_current_user, get_current_admin_user
+from app.core.security import hash_password
 from app.models.user import User, UserPermission, UserCluster
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
 from app.services import edge_sync
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
-
-
-async def get_current_admin_user(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
-) -> User:
-    if not authorization:
-        raise HTTPException(status_code=401, detail="未认证")
-
-    try:
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-        else:
-            token = authorization
-
-        payload = decode_access_token(token)
-        if payload is None:
-            raise HTTPException(status_code=401, detail="未认证")
-
-        user_id = int(payload.get("sub"))
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-
-        if user.role != "admin":
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-
-        return user
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="未认证")
-
-
-async def get_current_user(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
-) -> User:
-    if not authorization:
-        raise HTTPException(status_code=401, detail="未认证")
-
-    try:
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-        else:
-            token = authorization
-
-        payload = decode_access_token(token)
-        if payload is None:
-            raise HTTPException(status_code=401, detail="未认证")
-
-        user_id = int(payload.get("sub"))
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-
-        return user
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="未认证")
 
 
 @router.get("/me", response_model=UserResponse)

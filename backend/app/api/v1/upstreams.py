@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion
 from app.models.user import User, UserCluster
 from app.schemas.cluster import UpstreamWithTargets, UpstreamTargetSchema
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/upstreams", tags=["upstreams"])
 

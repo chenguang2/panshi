@@ -43,6 +43,15 @@ async def get_or_404(
     return item
 
 
+async def verify_node(
+    db: AsyncSession,
+    cluster_id: int,
+    node_id: int,
+) -> Node:
+    """Return the node of a cluster or raise 404 ("节点不存在")."""
+    return await get_or_404(db, Node, id=node_id, cluster_id=cluster_id, detail="节点不存在")
+
+
 async def get_active_nodes(
     cluster_id: int,
     db: AsyncSession,

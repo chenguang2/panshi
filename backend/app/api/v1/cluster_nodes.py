@@ -27,7 +27,7 @@ from app.services.ansible_service import (
     ip_sort_key,
 )
 from app.services.ansible_service import MAX_LOG_LINES
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -67,16 +67,6 @@ class AnsibleRunRequest(BaseModel):
 # ── shared helpers ───────────────────────────────────────────
 
 _ansible_service = AnsibleRunnerService()
-
-
-async def _verify_node(cluster_id: int, node_id: int, db: AsyncSession) -> Node:
-    result = await db.execute(
-        select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id)
-    )
-    node = result.scalar_one_or_none()
-    if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
-    return node
 
 
 async def _update_status_detail(db: AsyncSession, node: Node, detail: dict[str, Any]) -> None:
@@ -349,7 +339,7 @@ async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Bo
 
 @router.post("/{cluster_id}/nodes/{node_id}/start")
 async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     result = await _run_and_update(
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_start"},
@@ -366,7 +356,7 @@ async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(g
 
 @router.post("/{cluster_id}/nodes/{node_id}/stop")
 async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     result = await _run_and_update(
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_stop"},
@@ -383,7 +373,7 @@ async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(ge
 
 @router.post("/{cluster_id}/nodes/{node_id}/reload")
 async def reload_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     result = await _run_and_update(
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_reload"},
@@ -400,7 +390,7 @@ async def reload_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(
 
 @router.post("/{cluster_id}/nodes/{node_id}/check")
 async def check_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     result = await _run_and_update(
         db, node, "nginx_cmd_run",
         _nginx_extravars(node) | {"nginx_cmd": "nginx_check"},
@@ -418,7 +408,7 @@ async def statistic_node(
     ports: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     if not ports:
         ports = str(node.management_port)
     result = await _run_and_update(
@@ -438,7 +428,7 @@ async def statistic_node(
 
 @router.get("/{cluster_id}/nodes/{node_id}/status")
 async def get_node_status(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     detail: dict[str, Any] = {}
     if node.status_detail:
         try:
@@ -459,7 +449,7 @@ async def ansible_run(
     body: AnsibleRunRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     if body.tag not in ALLOWED_TAGS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

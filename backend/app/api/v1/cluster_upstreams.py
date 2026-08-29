@@ -17,7 +17,7 @@ from app.schemas.cluster import (
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 from app.services import edge_sync
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 

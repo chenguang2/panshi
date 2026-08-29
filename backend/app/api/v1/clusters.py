@@ -9,7 +9,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.deps import get_current_user
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata, StreamProxy
 from app.models.static_resource import StaticResource
 from app.models.ssl import SslCertificate
@@ -24,37 +24,6 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
-
-
-async def get_current_user(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
-) -> User:
-    if not authorization:
-        raise HTTPException(status_code=401, detail="未认证")
-
-    try:
-        if authorization.startswith("Bearer "):
-            token = authorization[7:]
-        else:
-            token = authorization
-
-        payload = decode_access_token(token)
-        if payload is None:
-            raise HTTPException(status_code=401, detail="未认证")
-
-        user_id = int(payload.get("sub"))
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-
-        return user
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="未认证")
 
 
 @router.get("/my", response_model=ClusterListResponse)

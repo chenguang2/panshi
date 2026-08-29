@@ -32,7 +32,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      message.error('Authentication failed, please login again')
+      message.error('登录状态已失效，请重新登录')
       router.push('/login')
     }
     return Promise.reject(error)

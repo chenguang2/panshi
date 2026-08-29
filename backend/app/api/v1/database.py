@@ -9,14 +9,14 @@ Design (see openspec/changes/support-postgres-database/design.md D6):
 import asyncio
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core import db_config, maintenance
 from app.core.database import get_db, build_sync_engine_for
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
-from app.core.security import decode_access_token
+from app.core.deps import get_current_admin_user as require_db_admin
 from app.models.user import User
 from app.models.db_migration import DbMigrationLog
 from app.schemas.database import (
@@ -30,32 +30,6 @@ from app.schemas.database import (
 from app.services import db_archive_service, db_migration_service
 
 router = APIRouter(prefix="/database", tags=["database"])
-
-
-async def require_db_admin(
-    authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Admin + database_management permission guard."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="未认证")
-    try:
-        token = authorization[7:] if authorization.startswith("Bearer ") else authorization
-        payload = decode_access_token(token)
-        if payload is None or payload.get("sub") is None:
-            raise HTTPException(status_code=401, detail="未认证")
-        user_id = int(payload["sub"])
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=401, detail="用户不存在")
-        if user.role != "admin":
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        return user
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="未认证")
 
 
 def _get_config() -> DbConfig:

@@ -6,20 +6,15 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 from app.core.database import get_db
 from app.services.cluster_backup import (
     BackupOptions, build_backup, compute_checksum, import_backup,
     validate_backup_document,
 )
+from app.utils.text import sanitize_filename
 
 router = APIRouter(prefix="/clusters", tags=["cluster-backup"])
-
-
-def _sanitize_filename(name: str) -> str:
-    import re
-
-    return re.sub(r'[\\/:*?"<>|]', "_", name).strip() or "cluster"
 
 
 @router.get("/{cluster_id}/backup")
@@ -39,7 +34,7 @@ async def download_cluster_backup(
         raise HTTPException(status_code=404, detail="集群不存在")
     from datetime import datetime
 
-    filename = (f"{_sanitize_filename(doc['source_cluster']['name'])}"
+    filename = (f"{sanitize_filename(doc['source_cluster']['name'], fallback='cluster')}"
                 f"_备份_{datetime.now():%Y%m%d}.json")
     return JSONResponse(
         content=doc,

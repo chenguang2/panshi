@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.models.cluster import Node
+from app.services import edge_sync
 from app.services.ansible_service import (
     AnsibleRunnerService,
     _run_ansible_stream,
@@ -145,16 +145,6 @@ class EdgePackRebaseRequest(BaseModel):
 
 
 # ── helper functions ──────────────────────────────────────────────────
-
-async def _verify_node(cluster_id: int, node_id: int, db: AsyncSession) -> Node:
-    result = await db.execute(
-        select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id)
-    )
-    node = result.scalar_one_or_none()
-    if not node:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
-    return node
-
 
 async def _install_openresty_stream(
     ansible_svc: Any,
@@ -322,7 +312,7 @@ async def install_openresty_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Install OpenResty on a target node via ansible + SSH, streaming real-time logs."""
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     from app.services.ansible_service import PRIVATE_DATA_DIR
     prefix = node.openresty_path or body.prefix
     srcpath = f"{PRIVATE_DATA_DIR}/soft"
@@ -339,7 +329,7 @@ async def cancel_install(
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel install-openresty: kill SSH process, verify remote, pkill if still alive."""
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     steps: list[dict] = []
     ssh_user = get_ssh_user(node.ip)
     ssh_port = resolve_ssh_port(node)
@@ -437,7 +427,7 @@ async def associate_new_openresty_stream(
     The node's openresty_path must already be updated to point to the new
     OpenResty before calling this endpoint. Ansible runs manager upgrade + init.
     """
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     prefix = node.openresty_path
     if not prefix:
         raise HTTPException(status_code=422, detail="节点 Nginx安装路径为空，请先编辑节点")
@@ -454,7 +444,7 @@ async def edge_pack_list(
     db: AsyncSession = Depends(get_db),
 ):
     """List available edge version packs on the target node via ansible."""
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     try:
         result = await _ansible_service.generic_run(
             ip=node.ip, tag="edge_pack_list",
@@ -497,7 +487,7 @@ async def edge_pack_add_stream(
 ):
     """Add an edge version pack to the target node: copy file + manager pack-add."""
     from app.services.ansible_service import PRIVATE_DATA_DIR
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     prefix = node.openresty_path
     srcpath = f"{PRIVATE_DATA_DIR}/soft"
     destpath = str(Path(prefix).parent) + "/"
@@ -518,7 +508,7 @@ async def edge_pack_rebase_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Switch edge version: pack-rebase + init + reload."""
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     extravars = {"edge_target": node.edge_path, "version": body.version}
     return StreamingResponse(
         _run_ansible_stream(_ansible_service, ip=node.ip, tag="edge_pack_rebase", extravars=extravars, ssh_port=resolve_ssh_port(node)),
@@ -533,7 +523,7 @@ async def install_edge_stream(
     db: AsyncSession = Depends(get_db),
 ):
     """Install Edge service on a target node via ansible, streaming real-time logs via SSE."""
-    node = await _verify_node(cluster_id, node_id, db)
+    node = await edge_sync.verify_node(db, cluster_id, node_id)
     prefix = node.openresty_path or body.prefix
     extravars = {"prefix": prefix, "edge_target": node.edge_path}
     return StreamingResponse(

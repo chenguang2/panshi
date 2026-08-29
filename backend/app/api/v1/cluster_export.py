@@ -20,17 +20,13 @@ from app.models.cluster import (
 )
 from app.models.static_resource import StaticResource
 from app.models.ssl import SslCertificate
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 from app.services.edge_sync import get_or_404
+from app.utils.text import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
-
-
-def _sanitize_filename(name):
-    import re
-    return re.sub(r'[\\/:*?"<>|#]', '_', name).strip()
 
 
 def _fmt_json(val):
@@ -374,7 +370,7 @@ async def export_cluster_data(
     buf = _build_workbook(data)
 
     cluster_name = data["cluster"].name
-    filename = f"{_sanitize_filename(cluster_name)}_配置导出.xlsx"
+    filename = f"{sanitize_filename(cluster_name, extra_unsafe="#")}_配置导出.xlsx"
 
     from urllib.parse import quote
 

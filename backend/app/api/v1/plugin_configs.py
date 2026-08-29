@@ -8,7 +8,7 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, PluginConfig, ConfigVersion
 from app.models.user import User, UserCluster
 from app.schemas.cluster import PluginConfigResponse
-from app.api.v1.clusters import get_current_user
+from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/plugin_configs", tags=["plugin_configs"])
 
