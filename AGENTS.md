@@ -159,3 +159,6 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 - [ ] 依赖写入正确的 manifest（pyproject.toml / package.json）
 - [ ] 提交前 `git status` 确认，不 force-add 忽略文件（尤其 `backend/data/`）
 - [ ] 本文件与代码冲突时，已按代码修正本文件
+
+
+=============================================================================
