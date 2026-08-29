@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, delete, func
 from typing import Optional
 
 from app.core.database import get_db
@@ -140,6 +140,11 @@ async def delete_user(
 
     if user.role == "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="不能删除管理员用户")
+
+    # 级联清理关联数据：权限与集群授权（避免孤儿行 + SQLite 主键复用导致
+    # 新用户意外继承已删用户的权限）
+    await db.execute(delete(UserPermission).where(UserPermission.user_id == user_id))
+    await db.execute(delete(UserCluster).where(UserCluster.user_id == user_id))
 
     await db.delete(user)
     await db.commit()

@@ -19,15 +19,21 @@
     <!-- Filter Bar -->
     <div class="user-filter-bar">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索用户名..." class="form-input" @input="onFilterChange">
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="搜索用户名..."
+          class="form-input"
+          @input="onFilterChange"
+        />
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="roleFilter" class="form-input" style="width:120px;" @change="onFilterChange">
+      <select v-model="roleFilter" class="form-input" style="width: 120px" @change="onFilterChange">
         <option value="">全部角色</option>
         <option value="admin">管理员</option>
         <option value="user">普通用户</option>
       </select>
-      <select v-model="statusFilter" class="form-input" style="width:120px;" @change="onFilterChange">
+      <select v-model="statusFilter" class="form-input" style="width: 120px" @change="onFilterChange">
         <option value="">全部状态</option>
         <option :value="1">启用</option>
         <option :value="0">禁用</option>
@@ -36,102 +42,116 @@
     </div>
 
     <div class="table-container">
-    <a-table
-      :data-source="pagedUsers"
-      :columns="columns"
-      :row-key="(record: User) => record.id"
-      :pagination="paginationProps"
-      :loading="loading"
-      size="middle"
-      class="user-table"
-      @change="handleTableChange"
-    >
-      <!-- 用户名列 -->
-      <template #bodyCell="{ column, record, index }">
-        <template v-if="column.key === 'index'">
-          <span class="text-muted">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
-        </template>
-        <template v-if="column.key === 'username'">
-          <span class="cell-primary">{{ record.username }}</span>
-        </template>
+      <a-table
+        :data-source="pagedUsers"
+        :columns="columns"
+        :row-key="(record: User) => record.id"
+        :pagination="paginationProps"
+        :loading="loading"
+        size="middle"
+        class="user-table"
+        @change="handleTableChange"
+      >
+        <!-- 用户名列 -->
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            <span class="text-muted">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+          </template>
+          <template v-if="column.key === 'username'">
+            <span class="cell-primary">{{ record.username }}</span>
+          </template>
 
-        <!-- 角色列 -->
-        <template v-if="column.key === 'role'">
-          <span class="role-badge" :class="record.role">
-            {{ record.role === 'admin' ? '管理员' : '普通用户' }}
-          </span>
-        </template>
+          <!-- 角色列 -->
+          <template v-if="column.key === 'role'">
+            <span class="role-badge" :class="record.role">
+              {{ record.role === 'admin' ? '管理员' : '普通用户' }}
+            </span>
+          </template>
 
-        <!-- 状态列 -->
-        <template v-if="column.key === 'status'">
-          <BadgeStatus
-            :text="record.status === 1 ? '启用' : '禁用'"
-            :status="record.status === 1 ? 'online' : 'offline'"
-          />
-        </template>
+          <!-- 状态列 -->
+          <template v-if="column.key === 'status'">
+            <BadgeStatus
+              :text="record.status === 1 ? '启用' : '禁用'"
+              :status="record.status === 1 ? 'online' : 'offline'"
+            />
+          </template>
 
-        <!-- 权限列 -->
-        <template v-if="column.key === 'permissions'">
-          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
-          <span v-else-if="getUserPerms(record).length">
-            <span
-              v-for="p in getUserPerms(record)"
-              :key="p"
-              class="perm-tag active"
-            >{{ permissionKeyToLabel[p] || p }}</span>
-          </span>
-          <span v-else class="text-muted text-sm">—</span>
-        </template>
+          <!-- 权限列 -->
+          <template v-if="column.key === 'permissions'">
+            <span v-if="record.role === 'admin'" class="text-muted text-sm">全部权限</span>
+            <span v-else-if="getUserPerms(record).length" class="text-muted text-sm">
+              <span v-for="p in getUserPerms(record).slice(0, 3)" :key="p" class="perm-tag active">{{
+                permissionKeyToLabel[p] || p
+              }}</span>
+              <a-tooltip v-if="getUserPerms(record).length > 3">
+                <template #title>
+                  <div>
+                    {{
+                      getUserPerms(record)
+                        .map((p) => permissionKeyToLabel[p] || p)
+                        .join('、')
+                    }}
+                  </div>
+                </template>
+                <span class="perm-tag active more-tag">+{{ getUserPerms(record).length - 3 }}</span>
+              </a-tooltip>
+            </span>
+            <span v-else class="text-muted text-sm">—</span>
+          </template>
 
-        <!-- 可访问集群列 -->
-        <template v-if="column.key === 'clusters'">
-          <span v-if="record.role === 'admin'" class="text-muted text-sm">全部集群</span>
-          <span v-else-if="getUserClusterIds(record).length" class="text-muted text-sm">
-            <span
-              v-for="c in getUserClusterIds(record).slice(0, 3)"
-              :key="c"
-              class="perm-tag"
-            >{{ getClusterName(c) }}</span>
-            <a-tooltip v-if="getUserClusterIds(record).length > 3">
-              <template #title>
-                <div>{{ getUserClusterIds(record).map(c => getClusterName(c)).join('、') }}</div>
+          <!-- 可访问集群列 -->
+          <template v-if="column.key === 'clusters'">
+            <span v-if="record.role === 'admin'" class="text-muted text-sm">全部集群</span>
+            <span v-else-if="getUserClusterIds(record).length" class="text-muted text-sm">
+              <span v-for="c in getUserClusterIds(record).slice(0, 3)" :key="c" class="perm-tag">{{
+                getClusterName(c)
+              }}</span>
+              <a-tooltip v-if="getUserClusterIds(record).length > 3">
+                <template #title>
+                  <div>
+                    {{
+                      getUserClusterIds(record)
+                        .map((c) => getClusterName(c))
+                        .join('、')
+                    }}
+                  </div>
+                </template>
+                <span class="perm-tag more-tag">+{{ getUserClusterIds(record).length - 3 }}</span>
+              </a-tooltip>
+            </span>
+            <span v-else class="text-muted text-sm">—</span>
+          </template>
+
+          <!-- 创建时间列 -->
+          <template v-if="column.key === 'created_at'">
+            <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
+          </template>
+
+          <!-- 操作列 -->
+          <template v-if="column.key === 'actions' && isAdmin">
+            <a-dropdown :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item @click="editUser(record)">编辑</a-menu-item>
+                  <a-menu-item @click="toggleUserStatus(record)">
+                    {{ record.status === 1 ? '禁用' : '启用' }}
+                  </a-menu-item>
+                  <a-menu-item danger @click="deleteUser(record)">删除</a-menu-item>
+                </a-menu>
               </template>
-              <span class="perm-tag more-tag">+{{ getUserClusterIds(record).length - 3 }}</span>
-            </a-tooltip>
-          </span>
-          <span v-else class="text-muted text-sm">—</span>
+            </a-dropdown>
+          </template>
         </template>
 
-        <!-- 创建时间列 -->
-        <template v-if="column.key === 'created_at'">
-          <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
+        <!-- 空状态 -->
+        <template #empty>
+          <div class="empty-state">
+            <div class="empty-state-icon">◎</div>
+            <p>暂无用户</p>
+          </div>
         </template>
-
-        <!-- 操作列 -->
-        <template v-if="column.key === 'actions' && isAdmin">
-          <a-dropdown :trigger="['click']">
-            <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="editUser(record)">编辑</a-menu-item>
-                <a-menu-item @click="toggleUserStatus(record)">
-                  {{ record.status === 1 ? '禁用' : '启用' }}
-                </a-menu-item>
-                <a-menu-item danger @click="deleteUser(record)">删除</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </template>
-      </template>
-
-      <!-- 空状态 -->
-      <template #empty>
-        <div class="empty-state">
-          <div class="empty-state-icon">◎</div>
-          <p>暂无用户</p>
-        </div>
-      </template>
-    </a-table>
+      </a-table>
     </div>
 
     <!-- 新建/编辑用户弹窗（与节点弹窗风格一致） -->
@@ -142,14 +162,46 @@
           <button class="modal-close" @click="closeModal">&times;</button>
         </div>
         <div class="modal-body">
-  <div class="form-row">
-    <div class="form-group">
-      <label class="form-label">用户名 <span class="required">*</span></label>
-      <input v-model="formState.username" type="text" class="form-input" :class="{ 'has-error': formErrors.username }" placeholder="newuser" :disabled="!!editingUser">
-      <span class="form-error" v-if="formErrors.username">{{ formErrors.username }}</span>
-    </div>
-            <div class="form-group">
-              <label class="form-label">角色</label>
+          <div class="form-row">
+            <div class="form-group field-inline">
+              <label class="form-label">用户名 <span class="required">*</span></label>
+              <input
+                v-model="formState.username"
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': formErrors.username }"
+                placeholder="newuser"
+                :disabled="!!editingUser"
+              />
+              <span class="form-error" v-if="formErrors.username">{{ formErrors.username }}</span>
+            </div>
+            <div v-if="!editingUser" class="form-group field-inline">
+              <label class="form-label">密码 <span class="required">*</span></label>
+              <input
+                v-model="formState.password"
+                type="password"
+                class="form-input"
+                :class="{ 'has-error': formErrors.password }"
+                placeholder="6-50 位字符"
+              />
+              <span class="form-error" v-if="formErrors.password">{{ formErrors.password }}</span>
+            </div>
+            <div v-else class="form-group field-inline">
+              <label class="form-label">重置密码</label>
+              <input v-model="resetPwdValue" type="password" class="form-input" placeholder="新密码（留空不修改）" />
+              <button class="btn btn-secondary btn-sm reset-pwd-btn" @click="handleResetPassword">重置</button>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group field-inline">
+              <label class="checkbox-label">
+                <input v-model="formState.status" type="checkbox" />
+                <span>启用</span>
+              </label>
+            </div>
+            <div class="form-group field-inline">
+              <label class="form-label">角色 <span class="required">*</span></label>
               <select v-model="formState.role" class="form-input" @change="onRoleChange">
                 <option value="user">普通用户</option>
                 <option value="admin">管理员</option>
@@ -157,29 +209,35 @@
             </div>
           </div>
 
-          <div v-if="!editingUser" class="form-group">
-            <label class="form-label">密码 <span class="required">*</span></label>
-            <input v-model="formState.password" type="password" class="form-input" :class="{ 'has-error': formErrors.password }" placeholder="6-50 位字符">
-            <span class="form-error" v-if="formErrors.password">{{ formErrors.password }}</span>
-          </div>
-
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input v-model="formState.status" type="checkbox">
-              <span>启用</span>
-            </label>
-          </div>
-
           <!-- 资源权限（非管理员） -->
           <template v-if="formState.role !== 'admin'">
             <div class="permissions-section">
               <h3>资源权限</h3>
-              <p class="text-muted text-sm" style="margin-bottom:8px;">分配用户可操作的资源模块</p>
-              <div class="perm-grid">
-                <label v-for="perm in allPermissions" :key="perm.key">
-                  <input type="checkbox" :checked="selectedPermKeys.includes(perm.key)" @change="togglePerm(perm.key)">
-                  <span>{{ perm.label }}</span>
-                </label>
+              <p class="text-muted text-sm" style="margin-bottom: 8px">
+                分配用户可操作的资源模块（勾选分类可全选/取消该分类下所有项目）
+              </p>
+              <div class="perm-groups">
+                <div v-for="group in permissionGroups" :key="group.title" class="perm-group">
+                  <div class="perm-group-header" @click="togglePermGroup(group.items)">
+                    <a-checkbox
+                      :checked="isPermGroupAllSelected(group.items)"
+                      :indeterminate="isPermGroupPartial(group.items)"
+                      @click.stop="togglePermGroup(group.items)"
+                    />
+                    <span class="perm-group-title">{{ group.title }}</span>
+                    <span class="perm-group-count">{{ group.items.length }} 项</span>
+                  </div>
+                  <div class="perm-group-body">
+                    <a-checkbox
+                      v-for="perm in group.items"
+                      :key="perm.key"
+                      class="perm-group-item"
+                      :checked="selectedPermKeys.includes(perm.key)"
+                      @change="togglePerm(perm.key)"
+                      >{{ perm.label }}</a-checkbox
+                    >
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -188,36 +246,25 @@
           <template v-if="formState.role !== 'admin'">
             <div class="permissions-section">
               <h3>集群权限</h3>
-              <p class="text-muted text-sm" style="margin-bottom:8px;">选择用户可访问的集群</p>
+              <p class="text-muted text-sm" style="margin-bottom: 8px">选择用户可访问的集群</p>
               <div class="selected-clusters">
                 <span v-for="cid in selectedClusterIds" :key="cid" class="selected-cluster-tag">
                   {{ getClusterName(cid) }}
                   <span class="remove" @click="toggleCluster(cid)">&times;</span>
                 </span>
-                <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding:4px 0;">暂未选择集群</span>
+                <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding: 4px 0"
+                  >暂未选择集群</span
+                >
                 <span class="select-clusters-btn" @click="clusterPickerVisible = true">+ 选择集群</span>
-              </div>
-            </div>
-          </template>
-
-          <!-- 密码重置（编辑模式） -->
-          <template v-if="editingUser">
-            <div class="password-section">
-              <h3>重置密码</h3>
-              <div class="form-row" style="display:flex;gap:12px;">
-                <div class="form-group" style="flex:0 0 auto;margin-bottom:0;">
-                  <input v-model="resetPwdValue" type="password" class="form-input" placeholder="新密码（留空不修改）" style="width:200px">
-                </div>
-                <div style="display:flex;align-items:flex-end;flex-shrink:0;">
-                  <button class="btn btn-secondary btn-sm" style="height:36px;" @click="handleResetPassword">重置密码</button>
-                </div>
               </div>
             </div>
           </template>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
-          <button class="btn btn-primary" @click="handleSave" :disabled="modalSubmitting">{{ modalSubmitting ? '提交中...' : '保存' }}</button>
+          <button class="btn btn-primary" @click="handleSave" :disabled="modalSubmitting">
+            {{ modalSubmitting ? '提交中...' : '保存' }}
+          </button>
         </div>
       </div>
     </div>
@@ -231,17 +278,22 @@
         </div>
         <div class="modal-body">
           <div class="picker-search">
-            <input v-model="clusterSearchText" type="text" placeholder="搜索集群名称...">
+            <input v-model="clusterSearchText" type="text" placeholder="搜索集群名称..." />
           </div>
           <div v-for="group in filteredGroupedClusters" :key="group.name" class="picker-group">
             <div class="picker-group-header" @click="toggleGroup(group.clusters)">
-              <input type="checkbox" class="group-checkbox" :checked="isGroupAllSelected(group.clusters)" @click.stop="toggleGroup(group.clusters)">
+              <input
+                type="checkbox"
+                class="group-checkbox"
+                :checked="isGroupAllSelected(group.clusters)"
+                @click.stop="toggleGroup(group.clusters)"
+              />
               <span>{{ group.name }}</span>
               <span class="group-count">{{ group.clusters.length }} 个集群</span>
             </div>
             <div class="picker-group-body">
               <label v-for="c in group.clusters" :key="c.id" class="picker-cluster-item">
-                <input type="checkbox" :checked="isClusterSelected(c.id)" @change="toggleCluster(c.id)">
+                <input type="checkbox" :checked="isClusterSelected(c.id)" @change="toggleCluster(c.id)" />
                 <span class="picker-cluster-name">{{ c.display_name || c.name }}</span>
                 <span v-if="c.display_name" class="picker-cluster-tag">{{ c.name }}</span>
               </label>
@@ -249,7 +301,9 @@
           </div>
         </div>
         <div class="picker-actions">
-          <span style="font-size:12px;color:var(--muted);margin-right:auto;">已选 {{ selectedClusterIds.length }} 个集群</span>
+          <span style="font-size: 12px; color: var(--muted); margin-right: auto"
+            >已选 {{ selectedClusterIds.length }} 个集群</span
+          >
           <button class="btn btn-secondary" @click="clusterPickerVisible = false">取消</button>
           <button class="btn btn-primary" @click="clusterPickerVisible = false">确认</button>
         </div>
@@ -258,13 +312,15 @@
 
     <!-- Delete Confirm Modal -->
     <div class="modal-overlay" :style="{ display: deleteConfirm.visible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 420px;">
+      <div class="modal" style="max-width: 420px">
         <div class="modal-header">
           <h2>删除用户</h2>
           <button class="modal-close" @click="deleteConfirm.visible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">确定删除用户 "{{ deleteConfirm.username }}" 吗？</p>
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">
+            确定删除用户 "{{ deleteConfirm.username }}" 吗？
+          </p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="deleteConfirm.visible = false">取消</button>
@@ -312,13 +368,13 @@ const filteredUsers = computed(() => {
   let list = allUsers.value
   if (searchText.value) {
     const q = searchText.value.toLowerCase()
-    list = list.filter(u => u.username.toLowerCase().includes(q))
+    list = list.filter((u) => u.username.toLowerCase().includes(q))
   }
   if (roleFilter.value) {
-    list = list.filter(u => u.role === roleFilter.value)
+    list = list.filter((u) => u.role === roleFilter.value)
   }
   if (statusFilter.value !== '') {
-    list = list.filter(u => u.status === statusFilter.value)
+    list = list.filter((u) => u.status === statusFilter.value)
   }
   return list
 })
@@ -340,12 +396,27 @@ const paginationProps = computed<TablePaginationConfig>(() =>
 const columns = computed(() => {
   const cols: any[] = [
     { title: '#', key: 'index', width: 45 },
-    { title: '用户名', dataIndex: 'username', key: 'username', sorter: (a: User, b: User) => a.username.localeCompare(b.username) },
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      sorter: (a: User, b: User) => a.username.localeCompare(b.username),
+    },
     { title: '角色', dataIndex: 'role', key: 'role', sorter: (a: User, b: User) => a.role.localeCompare(b.role) },
-    { title: '状态', dataIndex: 'status', key: 'status', sorter: (a: User, b: User) => (a.status || 0) - (b.status || 0) },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      sorter: (a: User, b: User) => (a.status || 0) - (b.status || 0),
+    },
     { title: '权限', key: 'permissions' },
     { title: '可访问集群', key: 'clusters' },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: User, b: User) => (a.created_at || '').localeCompare(b.created_at || '') },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      sorter: (a: User, b: User) => (a.created_at || '').localeCompare(b.created_at || ''),
+    },
   ]
   if (isAdmin.value) {
     cols.push({ title: '操作', key: 'actions', width: 80 })
@@ -382,13 +453,16 @@ const permissionKeyToLabel: Record<string, string> = {
   edge_nodes: 'Edge直连',
   edge_import: '数据导入',
   tools: '工具箱',
+  edge_autostart: '自启动管理',
+  ansible_inventory: 'Ansible 主机清单',
   task_center: '节点任务',
+  database_management: '数据库管理',
 }
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
 
 function getClusterName(clusterId: number): string {
-  const c = clusters.value.find(c => c.id === clusterId)
+  const c = clusters.value.find((c) => c.id === clusterId)
   return c?.display_name || c?.name || `集群#${clusterId}`
 }
 
@@ -439,33 +513,70 @@ const permissionFeatureMap: Record<string, string> = {
   task_center: 'task_center',
 }
 
-const allPermissions = computed(() => {
-  const base: { key: string; label: string }[] = [
-    { key: 'clusters', label: '集群管理' },
-    { key: 'nodes', label: '节点管理' },
-    { key: 'upstreams', label: '上游管理' },
-    { key: 'routes', label: '路由管理' },
-    { key: 'plugin_groups', label: '插件组管理' },
-    { key: 'global_rules', label: '全局规则管理' },
-    { key: 'plugin_metadata', label: '插件元数据' },
-    { key: 'static_resources', label: '静态资源' },
-    { key: 'ssl_cert', label: 'SSL 证书' },
-    { key: 'edge_env', label: 'edge.env 配置' },
-    { key: 'stream_proxy', label: '四层代理' },
-    { key: 'dns_proxy_udp', label: 'DNS代理[UDP]' },
-    { key: 'dns_proxy_http', label: 'DNS代理[HTTP]' },
-    { key: 'central_management', label: '统一管理' },
-    { key: 'metrics', label: '指标查询/总览' },
-    { key: 'edge_nodes', label: 'Edge直连' },
-    { key: 'edge_import', label: '数据导入' },
-    { key: 'tools', label: '工具箱' },
-    { key: 'task_center', label: '节点任务' },
+interface PermItem {
+  key: string
+  label: string
+}
+
+// 资源权限按左侧菜单分类分组（与 AppSidebar.vue 的 navSections 一致）
+const permissionGroups = computed(() => {
+  const rawGroups: { title: string; items: PermItem[] }[] = [
+    {
+      title: '核心功能',
+      items: [
+        { key: 'clusters', label: '集群管理' },
+        { key: 'nodes', label: '节点管理' },
+        { key: 'upstreams', label: '上游管理' },
+        { key: 'routes', label: '路由管理' },
+        { key: 'plugin_groups', label: '插件组管理' },
+        { key: 'plugin_metadata', label: '插件元数据' },
+        { key: 'global_rules', label: '全局规则管理' },
+        { key: 'static_resources', label: '静态资源' },
+        { key: 'ssl_cert', label: 'SSL 证书' },
+      ],
+    },
+    {
+      title: '边缘网络',
+      items: [
+        { key: 'edge_env', label: 'edge.env 配置' },
+        { key: 'stream_proxy', label: '四层代理' },
+        { key: 'dns_proxy_udp', label: 'DNS代理[UDP]' },
+        { key: 'dns_proxy_http', label: 'DNS代理[HTTP]' },
+      ],
+    },
+    {
+      title: '综合',
+      items: [
+        { key: 'central_management', label: '统一管理' },
+        { key: 'metrics', label: '指标查询/总览' },
+      ],
+    },
+    {
+      title: '系统管理',
+      items: [{ key: 'database_management', label: '数据库管理' }],
+    },
+    {
+      title: '运维管理',
+      items: [
+        { key: 'edge_nodes', label: 'Edge直连' },
+        { key: 'edge_import', label: '数据导入' },
+        { key: 'tools', label: '工具箱' },
+        { key: 'edge_autostart', label: '自启动管理' },
+        { key: 'ansible_inventory', label: 'Ansible 主机清单' },
+        { key: 'task_center', label: '节点任务' },
+      ],
+    },
   ]
   const featuresStore = useFeaturesStore()
-  return base.filter((p) => {
-    const feature = permissionFeatureMap[p.key]
-    return !feature || featuresStore.has(feature)
-  })
+  return rawGroups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((p) => {
+        const feature = permissionFeatureMap[p.key]
+        return !feature || featuresStore.has(feature)
+      }),
+    }))
+    .filter((g) => g.items.length > 0)
 })
 
 const selectedPermKeys = ref<string[]>([])
@@ -474,6 +585,24 @@ function togglePerm(key: string) {
   const idx = selectedPermKeys.value.indexOf(key)
   if (idx >= 0) selectedPermKeys.value.splice(idx, 1)
   else selectedPermKeys.value.push(key)
+}
+
+function isPermGroupAllSelected(items: PermItem[]): boolean {
+  return items.length > 0 && items.every((p) => selectedPermKeys.value.includes(p.key))
+}
+
+function isPermGroupPartial(items: PermItem[]): boolean {
+  const selected = items.filter((p) => selectedPermKeys.value.includes(p.key)).length
+  return selected > 0 && selected < items.length
+}
+
+function togglePermGroup(items: PermItem[]) {
+  const allSelected = isPermGroupAllSelected(items)
+  for (const p of items) {
+    const idx = selectedPermKeys.value.indexOf(p.key)
+    if (allSelected && idx >= 0) selectedPermKeys.value.splice(idx, 1)
+    else if (!allSelected && idx < 0) selectedPermKeys.value.push(p.key)
+  }
 }
 
 function onRoleChange() {
@@ -572,10 +701,20 @@ async function handleSave() {
     loadUsers()
   } catch (error: any) {
     const detail = error.response?.data?.detail
-    const errMsg = Array.isArray(detail) ? detail[0]?.msg?.replace(/^Value error,\s*/, '') : typeof detail === 'string' ? detail.replace(/^Value error,\s*/, '') : ''
+    const errMsg = Array.isArray(detail)
+      ? detail[0]?.msg?.replace(/^Value error,\s*/, '')
+      : typeof detail === 'string'
+        ? detail.replace(/^Value error,\s*/, '')
+        : ''
     if (errMsg && (errMsg.includes('password') || errMsg.includes('密码'))) {
       formErrors.password = errMsg
-    } else if (errMsg && (errMsg.includes('username') || errMsg.includes('用户名') || errMsg.includes('already exists') || errMsg.includes('重复'))) {
+    } else if (
+      errMsg &&
+      (errMsg.includes('username') ||
+        errMsg.includes('用户名') ||
+        errMsg.includes('already exists') ||
+        errMsg.includes('重复'))
+    ) {
       formErrors.username = errMsg
     } else if (errMsg) {
       message.error(errMsg)
@@ -606,8 +745,8 @@ const filteredGroupedClusters = computed(() => {
   const q = clusterSearchText.value.toLowerCase()
   if (!q) return groupedClusters.value
   return groupedClusters.value
-    .map(g => ({ ...g, clusters: g.clusters.filter(c => (c.display_name || c.name).toLowerCase().includes(q)) }))
-    .filter(g => g.clusters.length > 0)
+    .map((g) => ({ ...g, clusters: g.clusters.filter((c) => (c.display_name || c.name).toLowerCase().includes(q)) }))
+    .filter((g) => g.clusters.length > 0)
 })
 
 function isClusterSelected(id: number) {
@@ -621,7 +760,7 @@ function toggleCluster(id: number) {
 }
 
 function isGroupAllSelected(group: typeof clusters.value) {
-  return group.every(c => selectedClusterIds.value.includes(c.id))
+  return group.every((c) => selectedClusterIds.value.includes(c.id))
 }
 
 function toggleGroup(group: typeof clusters.value) {
@@ -717,7 +856,9 @@ onMounted(loadUsers)
 <style scoped>
 /* ── 以下保持与当前设计稿一致的视觉样式 ── */
 
-.user-list { position: relative; }
+.user-list {
+  position: relative;
+}
 
 .user-filter-bar {
   display: flex;
@@ -727,26 +868,71 @@ onMounted(loadUsers)
   flex-wrap: nowrap;
 }
 
-.text-muted { color: var(--muted); }
-.text-sm { font-size: 12px; }
+.text-muted {
+  color: var(--muted);
+}
+.text-sm {
+  font-size: 12px;
+}
 
 /* ── Modal（与节点弹窗风格一致） ── */
 .modal-overlay {
-  position: fixed; inset: 0; background: oklch(0% 0 0 / 40%);
-  z-index: 1000; display: flex; align-items: center; justify-content: center;
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .modal {
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-  width: 100%; max-width: 600px; max-height: 80vh;
-  display: flex; flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
-.modal-wide { max-width: 700px; }
-.picker-modal { max-width: 640px; }
+.modal-wide {
+  max-width: 700px;
+}
+.picker-modal {
+  max-width: 640px;
+}
 
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 0;
+}
 
-.form-group { flex: 1; margin-bottom: 16px; }
+.form-group {
+  flex: 1;
+  margin-bottom: 16px;
+}
+
+/* 标签与输入框同行布局（用户名+密码 / 启用+角色 各占一行） */
+.field-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.field-inline .form-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+.field-inline .form-input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.field-inline .form-error {
+  flex-basis: 100%;
+  margin-left: 0;
+}
 
 .form-label {
   display: block;
@@ -756,7 +942,9 @@ onMounted(loadUsers)
   font-weight: 500;
 }
 
-.required { color: var(--danger); }
+.required {
+  color: var(--danger);
+}
 
 .checkbox-label {
   display: flex;
@@ -766,7 +954,7 @@ onMounted(loadUsers)
   color: var(--muted);
   cursor: pointer;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
@@ -784,32 +972,53 @@ onMounted(loadUsers)
   color: var(--fg);
 }
 
-.perm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
+.perm-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin-top: 8px;
 }
-.perm-grid label {
+.perm-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.perm-group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 9px 14px;
+  background: oklch(97% 0.005 250);
   cursor: pointer;
-  color: var(--muted);
-}
-.perm-grid label:hover { color: var(--fg); }
-
-.password-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.password-section h3 {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  margin: 0 0 8px;
   color: var(--fg);
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.perm-group-header:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.perm-group-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.perm-group-body {
+  padding: 8px 14px 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px 8px;
+}
+.perm-group-item {
+  font-size: 13px;
+}
+
+/* 编辑模式第一行"重置密码"按钮与输入框同行 */
+.reset-pwd-btn {
+  flex: 0 0 auto;
+  height: 36px;
 }
 
 /* ── 选中集群标签 ── */
@@ -838,7 +1047,9 @@ onMounted(loadUsers)
   line-height: 1;
   opacity: 0.5;
 }
-.selected-cluster-tag .remove:hover { opacity: 1; }
+.selected-cluster-tag .remove:hover {
+  opacity: 1;
+}
 .select-clusters-btn {
   display: inline-flex;
   align-items: center;
@@ -859,8 +1070,12 @@ onMounted(loadUsers)
 }
 
 /* ── Picker 模式（与节点弹窗一致） ── */
-.picker-modal { max-width: 640px; }
-.picker-search { margin-bottom: 16px; }
+.picker-modal {
+  max-width: 640px;
+}
+.picker-search {
+  margin-bottom: 16px;
+}
 .picker-search input {
   width: 100%;
   height: 36px;
@@ -872,7 +1087,9 @@ onMounted(loadUsers)
   background: var(--bg);
   color: var(--fg);
 }
-.picker-search input:focus { border-color: var(--accent); }
+.picker-search input:focus {
+  border-color: var(--accent);
+}
 .picker-group {
   margin-bottom: 12px;
   border: 1px solid var(--border);
@@ -896,7 +1113,8 @@ onMounted(loadUsers)
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .picker-group-header .group-checkbox {
-  width: 16px; height: 16px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--accent);
 }
 .picker-group-header .group-count {
@@ -922,10 +1140,23 @@ onMounted(loadUsers)
   color: var(--fg);
   transition: background 0.1s;
 }
-.picker-cluster-item:hover { background: var(--bg); }
-.picker-cluster-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); }
-.picker-cluster-name { font-weight: 500; }
-.picker-cluster-tag { font-size: 10px; color: var(--muted); margin-left: auto; font-family: var(--font-mono); }
+.picker-cluster-item:hover {
+  background: var(--bg);
+}
+.picker-cluster-item input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+.picker-cluster-name {
+  font-weight: 500;
+}
+.picker-cluster-tag {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
 .picker-actions {
   display: flex;
   justify-content: flex-end;
@@ -985,9 +1216,15 @@ onMounted(loadUsers)
 }
 
 /* 用户名 */
-.cell-primary { font-weight: 500; color: var(--fg); }
+.cell-primary {
+  font-weight: 500;
+  color: var(--fg);
+}
 
-.cell-secondary { font-size: 12px; color: var(--muted); }
+.cell-secondary {
+  font-size: 12px;
+  color: var(--muted);
+}
 
 /* 角色徽章 */
 .role-badge {
@@ -1024,7 +1261,10 @@ onMounted(loadUsers)
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   color: var(--accent);
 }
-.more-tag { cursor: pointer; border-style: dashed; }
+.more-tag {
+  cursor: pointer;
+  border-style: dashed;
+}
 
 /* 操作按钮 */
 .action-trigger-btn {
@@ -1035,10 +1275,19 @@ onMounted(loadUsers)
 }
 
 /* 空状态 */
-.empty-state { text-align: center; color: var(--muted); padding: 32px; }
-.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 32px;
+}
+.empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
 
 @media (max-width: 768px) {
-  .user-filter-bar { flex-wrap: wrap; }
+  .user-filter-bar {
+    flex-wrap: wrap;
+  }
 }
 </style>
