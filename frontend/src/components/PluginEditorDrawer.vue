@@ -7,7 +7,11 @@
     @close="handleClose"
   >
     <template #extra>
-      <label class="toggle" v-if="hasFormFields"><input type="checkbox" :checked="isJsonMode" @change="isJsonMode = !isJsonMode" /><span class="toggle-slider"></span></label>
+      <label class="toggle" v-if="hasFormFields"
+        ><input type="checkbox" :checked="isJsonMode" @change="isJsonMode = !isJsonMode" /><span
+          class="toggle-slider"
+        ></span
+      ></label>
     </template>
 
     <!-- JSON 模式 -->
@@ -72,14 +76,10 @@
                   <DownOutlined v-if="accordionExpanded.set" />
                   <RightOutlined v-else />
                   <span>Set - 设置 Header</span>
-                  <span class="count-badge">({{ headersData.set.filter(h => h.key).length }})</span>
+                  <span class="count-badge">({{ headersData.set.filter((h) => h.key).length }})</span>
                 </div>
                 <div v-if="accordionExpanded.set" class="accordion-content">
-                  <div
-                    v-for="(item, idx) in headersData.set"
-                    :key="item.id"
-                    class="kv-row"
-                  >
+                  <div v-for="(item, idx) in headersData.set" :key="item.id" class="kv-row">
                     <a-input v-model:value="item.key" placeholder="Header 名称" class="key-input" />
                     <a-input v-model:value="item.value" placeholder="值" class="value-input" />
                     <DeleteOutlined class="delete-btn" @click="removeRow('set', idx)" />
@@ -98,14 +98,10 @@
                   <DownOutlined v-if="accordionExpanded.add" />
                   <RightOutlined v-else />
                   <span>Add - 追加 Header</span>
-                  <span class="count-badge">({{ headersData.add.filter(h => h.key).length }})</span>
+                  <span class="count-badge">({{ headersData.add.filter((h) => h.key).length }})</span>
                 </div>
                 <div v-if="accordionExpanded.add" class="accordion-content">
-                  <div
-                    v-for="(item, idx) in headersData.add"
-                    :key="item.id"
-                    class="kv-row"
-                  >
+                  <div v-for="(item, idx) in headersData.add" :key="item.id" class="kv-row">
                     <a-input v-model:value="item.key" placeholder="Header 名称" class="key-input" />
                     <a-input v-model:value="item.value" placeholder="值" class="value-input" />
                     <DeleteOutlined class="delete-btn" @click="removeRow('add', idx)" />
@@ -124,47 +120,41 @@
                   <DownOutlined v-if="accordionExpanded.remove" />
                   <RightOutlined v-else />
                   <span>Remove - 删除 Header</span>
-                  <span class="count-badge">({{ headersData.remove.filter(h => h.key).length }})</span>
+                  <span class="count-badge">({{ headersData.remove.filter((h) => h.key).length }})</span>
                 </div>
                 <div v-if="accordionExpanded.remove" class="accordion-content remove-content">
-                  <div
-                    v-for="(item, idx) in headersData.remove"
-                    :key="item.id"
-                    class="kv-row remove-row"
-                  >
+                  <div v-for="(item, idx) in headersData.remove" :key="item.id" class="kv-row remove-row">
                     <a-input v-model:value="item.key" placeholder="Header 名称" class="key-only-input" />
                     <DeleteOutlined class="delete-btn" @click="removeRow('remove', idx)" />
                   </div>
                   <a-button type="link" @click="addRow('remove')" class="add-row-btn">+ 添加一项</a-button>
+                </div>
+              </div>
+              <div v-if="schema.examples?.length" class="field-example" style="margin-top: 8px">
+                <template v-if="isComplexExample(schema.examples[0])">
+                  <a-button size="small" type="link" @click="toggleExample(key)">
+                    {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
+                  </a-button>
+                  <JsonEditorVue
+                    v-if="expandedExamples[key] !== false"
+                    :model-value="schema.examples[0]"
+                    :mode="textMode"
+                    read-only
+                    :navigation-bar="false"
+                    :status-bar="false"
+                    class="json-example-viewer"
+                  />
+                </template>
+                <template v-else> 示例：{{ formatExample(schema.examples[0]) }} </template>
+              </div>
+              <div v-if="schema.hints" class="field-hints">
+                <InfoCircleOutlined class="hint-icon" />
+                {{ schema.hints }}
               </div>
             </div>
-            <div v-if="schema.examples?.length" class="field-example" style="margin-top: 8px;">
-              <template v-if="isComplexExample(schema.examples[0])">
-                <a-button size="small" type="link" @click="toggleExample(key)">
-                  {{ expandedExamples[key] === false ? '展开' : '收起' }} 示例
-                </a-button>
-                <JsonEditorVue
-                  v-if="expandedExamples[key] !== false"
-                  :model-value="schema.examples[0]"
-                  :mode="textMode"
-                  read-only
-                  :navigation-bar="false"
-                  :status-bar="false"
-                  class="json-example-viewer"
-                />
-              </template>
-              <template v-else>
-                示例：{{ formatExample(schema.examples[0]) }}
-              </template>
-            </div>
-            <div v-if="schema.hints" class="field-hints">
-              <InfoCircleOutlined class="hint-icon" />
-              {{ schema.hints }}
-            </div>
-          </div>
-        </template>
+          </template>
 
-        <!-- string 类型 -->
+          <!-- string 类型 -->
           <template v-else-if="getFieldType(schema) === 'string'">
             <div class="field-block">
               <div class="field-block-header">
@@ -191,9 +181,7 @@
                     class="json-example-viewer"
                   />
                 </template>
-                <template v-else>
-                  示例：{{ formatExample(schema.examples[0]) }}
-                </template>
+                <template v-else> 示例：{{ formatExample(schema.examples[0]) }} </template>
               </div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
@@ -210,9 +198,7 @@
                 <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
               </div>
               <a-input-number v-model:value="formData[key]" style="width: 100%" class="field-input" />
-              <div v-if="schema.examples?.length" class="field-example">
-                示例：{{ schema.examples[0] }}
-              </div>
+              <div v-if="schema.examples?.length" class="field-example">示例：{{ schema.examples[0] }}</div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
                 {{ schema.hints }}
@@ -227,10 +213,12 @@
                 <span class="field-block-title">{{ key }}</span>
                 <span v-if="schema.description" class="field-block-desc">{{ schema.description }}</span>
               </div>
-              <label class="toggle field-input"><input type="checkbox" :checked="formData[key]" @change="formData[key] = !formData[key]" /><span class="toggle-slider"></span></label>
-              <div v-if="schema.examples?.length" class="field-example">
-                示例：{{ schema.examples[0] }}
-              </div>
+              <label class="toggle field-input"
+                ><input type="checkbox" :checked="formData[key]" @change="formData[key] = !formData[key]" /><span
+                  class="toggle-slider"
+                ></span
+              ></label>
+              <div v-if="schema.examples?.length" class="field-example">示例：{{ schema.examples[0] }}</div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
                 {{ schema.hints }}
@@ -253,7 +241,9 @@
                     <template v-if="split._exprRaw">
                       <a-tag color="orange">条件表达式 (JSON)</a-tag>
                     </template>
-                    <a-button type="link" size="small" @click="toggleExprMode(si)">{{ split._exprRaw ? '切换表单' : '切换JSON' }}</a-button>
+                    <a-button type="link" size="small" @click="toggleExprMode(si)">{{
+                      split._exprRaw ? '切换表单' : '切换JSON'
+                    }}</a-button>
                     <DeleteOutlined class="delete-btn" @click="removeSplit(si)" />
                   </div>
                 </div>
@@ -266,7 +256,7 @@
                       v-model:value="split._exprRaw"
                       :rows="2"
                       placeholder='[["key", "op", "value"]]'
-                      style="font-family: monospace;"
+                      style="font-family: monospace"
                       @change="syncSplitExprRaw(si)"
                     />
                     <div v-if="split._exprError" class="field-error">{{ split._exprError }}</div>
@@ -278,7 +268,7 @@
                         <a-select-option value="==">==</a-select-option>
                         <a-select-option value="!=">!=</a-select-option>
                         <a-select-option value=">">></a-select-option>
-                        <a-select-option value="<"><</a-select-option>
+                        <a-select-option :value="'<'">&lt;</a-select-option>
                         <a-select-option value="~~">~~ (正则)</a-select-option>
                         <a-select-option value="~*">~* (正则忽略大小写)</a-select-option>
                         <a-select-option value="IN">IN</a-select-option>
@@ -287,7 +277,9 @@
                       <a-input v-model:value="cond[2]" placeholder="值" class="cond-val" size="small" />
                       <DeleteOutlined class="delete-btn" @click="removeCondition(si, ci)" />
                     </div>
-                    <a-button type="link" size="small" @click="addCondition(si)" class="add-row-btn">+ 添加条件</a-button>
+                    <a-button type="link" size="small" @click="addCondition(si)" class="add-row-btn"
+                      >+ 添加条件</a-button
+                    >
                   </template>
                 </div>
 
@@ -306,11 +298,19 @@
                         {{ opt.label }}
                       </a-select-option>
                     </a-select>
-                    <a-input-number v-model:value="up.weight" :min="1" placeholder="权重" class="weight-input" size="small" />
+                    <a-input-number
+                      v-model:value="up.weight"
+                      :min="1"
+                      placeholder="权重"
+                      class="weight-input"
+                      size="small"
+                    />
                     <span class="weight-label">权重</span>
                     <DeleteOutlined class="delete-btn" @click="removeUpstream(si, ui)" />
                   </div>
-                  <a-button type="link" size="small" @click="addUpstream(si)" class="add-row-btn">+ 添加上游目标</a-button>
+                  <a-button type="link" size="small" @click="addUpstream(si)" class="add-row-btn"
+                    >+ 添加上游目标</a-button
+                  >
                 </div>
               </div>
 
@@ -333,7 +333,7 @@
                 />
               </div>
 
-              <div v-if="schema.hints" class="field-hints" style="margin-top: 8px;">
+              <div v-if="schema.hints" class="field-hints" style="margin-top: 8px">
                 <InfoCircleOutlined class="hint-icon" />
                 {{ schema.hints }}
               </div>
@@ -368,9 +368,7 @@
                     class="json-example-viewer"
                   />
                 </template>
-                <template v-else>
-                  示例：{{ formatExample(schema.examples[0]) }}
-                </template>
+                <template v-else> 示例：{{ formatExample(schema.examples[0]) }} </template>
               </div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
@@ -391,9 +389,7 @@
                   {{ opt === '' ? '保持原样' : opt }}
                 </a-select-option>
               </a-select>
-              <div v-if="schema.examples?.length" class="field-example">
-                可选值：{{ schema.examples[0] }}
-              </div>
+              <div v-if="schema.examples?.length" class="field-example">可选值：{{ schema.examples[0] }}</div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
                 {{ schema.hints }}
@@ -412,7 +408,7 @@
                 v-model:value="formData[key]"
                 :rows="4"
                 :placeholder="'请输入 JSON 配置'"
-                style="font-family: monospace;"
+                style="font-family: monospace"
               />
               <div v-if="schema.examples?.length" class="field-example">
                 <template v-if="isComplexExample(schema.examples[0])">
@@ -429,9 +425,7 @@
                     class="json-example-viewer"
                   />
                 </template>
-                <template v-else>
-                  示例：{{ formatExample(schema.examples[0]) }}
-                </template>
+                <template v-else> 示例：{{ formatExample(schema.examples[0]) }} </template>
               </div>
               <div v-if="schema.hints" class="field-hints">
                 <InfoCircleOutlined class="hint-icon" />
@@ -466,21 +460,17 @@ const expandedSplitExample = ref(false)
 
 const splitExampleData = [
   {
-    ups_expr: [["arg_dc", "==", "1"]],
-    upstreams: [{ upstream_id: "ups_test1" }]
+    ups_expr: [['arg_dc', '==', '1']],
+    upstreams: [{ upstream_id: 'ups_test1' }],
   },
   {
-    ups_expr: [["arg_dc", "==", "2"]],
-    upstreams: [{ upstream_id: "ups_test2" }]
+    ups_expr: [['arg_dc', '==', '2']],
+    upstreams: [{ upstream_id: 'ups_test2' }],
   },
   {
-    ups_expr: [["arg_dc", "==", "12"]],
-    upstreams: [
-      { upstream_id: "ups_test1", weight: 1 },
-      { upstream_id: "ups_test2", weight: 2 },
-      { weight: 3 }
-    ]
-  }
+    ups_expr: [['arg_dc', '==', '12']],
+    upstreams: [{ upstream_id: 'ups_test1', weight: 1 }, { upstream_id: 'ups_test2', weight: 2 }, { weight: 3 }],
+  },
 ]
 
 interface UpstreamOption {
@@ -497,12 +487,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [val: boolean]
-  'save': [config: string]
+  save: [config: string]
 }>()
 
 const visible = computed({
   get: () => props.open,
-  set: (val) => emit('update:open', val)
+  set: (val) => emit('update:open', val),
 })
 
 const editingPlugin = computed(() => props.plugin)
@@ -522,70 +512,84 @@ const splitsData = ref<SplitItem[]>([])
 
 const initSplitsData = () => {
   const raw = formData.value.splits
-  if (!raw) { splitsData.value = []; return }
+  if (!raw) {
+    splitsData.value = []
+    return
+  }
   try {
     const parsed = JSON.parse(typeof raw === 'string' ? raw : '[]')
     if (Array.isArray(parsed)) {
       splitsData.value = parsed.map((s: any) => ({
         ups_expr: Array.isArray(s.ups_expr) ? s.ups_expr.map((c: any) => [...c]) : [],
-        upstreams: Array.isArray(s.upstreams) ? s.upstreams.map((u: any) => ({ upstream_id: u.upstream_id, weight: u.weight })) : [],
+        upstreams: Array.isArray(s.upstreams)
+          ? s.upstreams.map((u: any) => ({ upstream_id: u.upstream_id, weight: u.weight }))
+          : [],
         _exprRaw: undefined,
         _exprError: undefined,
       }))
     }
-  } catch { splitsData.value = [] }
+  } catch {
+    splitsData.value = []
+  }
 }
 
 const syncSplitsToForm = () => {
-  const cleaned = splitsData.value.map(s => {
-    const item: any = {}
-    // ups_expr: 如果使用 raw JSON 模式
-    if (s._exprRaw) {
-      try { item.ups_expr = JSON.parse(s._exprRaw) } catch { item.ups_expr = s.ups_expr }
-    } else {
-      item.ups_expr = s.ups_expr
-        .filter(c => c[0] || c[2])
-        .map(c => {
-          const val = c[2]
-          let typedVal: any = val
-          // 空值不处理
-          if (val === '' || val === undefined || val === null) {
-            typedVal = val
-          }
-          // 用引号包裹的字符串 → 去除引号，保留为字符串
-          else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
-            typedVal = val.slice(1, -1)
-          }
-          // 纯数字 → 转为 number
-          else if (/^-?\d+$/.test(val)) {
-            typedVal = Number(val)
-          }
-          // 浮点数 → 转为 number
-          else if (/^-?\d+\.\d+$/.test(val)) {
-            typedVal = Number(val)
-          }
-          // 其他 → 保持字符串
-          return [c[0], c[1], typedVal]
+  const cleaned = splitsData.value
+    .map((s) => {
+      const item: any = {}
+      // ups_expr: 如果使用 raw JSON 模式
+      if (s._exprRaw) {
+        try {
+          item.ups_expr = JSON.parse(s._exprRaw)
+        } catch {
+          item.ups_expr = s.ups_expr
+        }
+      } else {
+        item.ups_expr = s.ups_expr
+          .filter((c) => c[0] || c[2])
+          .map((c) => {
+            const val = c[2]
+            let typedVal: any = val
+            // 空值不处理
+            if (val === '' || val === undefined || val === null) {
+              typedVal = val
+            }
+            // 用引号包裹的字符串 → 去除引号，保留为字符串
+            else if (/^".*"$/.test(val) || /^'.*'$/.test(val)) {
+              typedVal = val.slice(1, -1)
+            }
+            // 纯数字 → 转为 number
+            else if (/^-?\d+$/.test(val)) {
+              typedVal = Number(val)
+            }
+            // 浮点数 → 转为 number
+            else if (/^-?\d+\.\d+$/.test(val)) {
+              typedVal = Number(val)
+            }
+            // 其他 → 保持字符串
+            return [c[0], c[1], typedVal]
+          })
+      }
+      // upstreams
+      const us = s.upstreams.filter((u) => u.upstream_id || u.weight)
+      if (us.length > 0) {
+        item.upstreams = us.map((u) => {
+          const entry: any = {}
+          if (u.upstream_id) entry.upstream_id = u.upstream_id
+          if (u.weight && u.weight > 0) entry.weight = u.weight
+          return entry
         })
-    }
-    // upstreams
-    const us = s.upstreams.filter(u => u.upstream_id || u.weight)
-    if (us.length > 0) {
-      item.upstreams = us.map(u => {
-        const entry: any = {}
-        if (u.upstream_id) entry.upstream_id = u.upstream_id
-        if (u.weight && u.weight > 0) entry.weight = u.weight
-        return entry
-      })
-    }
-    // 跳过空策略
-    const hasExpr = Array.isArray(item.ups_expr) && item.ups_expr.length > 0 && item.ups_expr.some((c: any) => c[0] || c[2])
-    const hasUpstreams = Array.isArray(item.upstreams) && item.upstreams.length > 0
-    if (!hasExpr && !hasUpstreams) return null
-    if (!hasExpr) delete item.ups_expr
-    if (!hasUpstreams) delete item.upstreams
-    return item
-  }).filter(Boolean)
+      }
+      // 跳过空策略
+      const hasExpr =
+        Array.isArray(item.ups_expr) && item.ups_expr.length > 0 && item.ups_expr.some((c: any) => c[0] || c[2])
+      const hasUpstreams = Array.isArray(item.upstreams) && item.upstreams.length > 0
+      if (!hasExpr && !hasUpstreams) return null
+      if (!hasExpr) delete item.ups_expr
+      if (!hasUpstreams) delete item.upstreams
+      return item
+    })
+    .filter(Boolean)
 
   formData.value.splits = cleaned.length > 0 ? JSON.stringify(cleaned) : ''
 }
@@ -627,7 +631,7 @@ const toggleExprMode = (si: number) => {
     }
   } else {
     // 切到 JSON: 序列化当前条件
-    split._exprRaw = JSON.stringify(split.ups_expr.filter(c => c[0] || c[2]))
+    split._exprRaw = JSON.stringify(split.ups_expr.filter((c) => c[0] || c[2]))
     split._exprError = undefined
   }
   syncSplitsToForm()
@@ -654,7 +658,13 @@ const removeUpstream = (si: number, ui: number) => {
   syncSplitsToForm()
 }
 // ── 监听 splits 数据变化自动同步 ──
-watch(splitsData, () => { syncSplitsToForm() }, { deep: true })
+watch(
+  splitsData,
+  () => {
+    syncSplitsToForm()
+  },
+  { deep: true },
+)
 
 const hasFormFields = computed(() => Object.keys(currentSchema.value).length > 0)
 
@@ -683,7 +693,7 @@ interface HeaderItem {
 const accordionExpanded = reactive({
   set: true,
   add: false,
-  remove: false
+  remove: false,
 })
 
 const headersData = reactive<{
@@ -693,7 +703,7 @@ const headersData = reactive<{
 }>({
   set: [],
   add: [],
-  remove: []
+  remove: [],
 })
 
 // 检测是否为 headers 字段（proxy-rewrite 或 response-rewrite）
@@ -731,25 +741,25 @@ const removeRow = (section: 'set' | 'add' | 'remove', index: number) => {
 const serializeHeaders = (): Record<string, any> => {
   const result: Record<string, any> = {}
 
-  const setEntries = headersData.set.filter(h => h.key && h.value)
+  const setEntries = headersData.set.filter((h) => h.key && h.value)
   if (setEntries.length > 0) {
     result.set = {}
-    setEntries.forEach(h => {
+    setEntries.forEach((h) => {
       result.set[h.key] = h.value || ''
     })
   }
 
-  const addEntries = headersData.add.filter(h => h.key && h.value)
+  const addEntries = headersData.add.filter((h) => h.key && h.value)
   if (addEntries.length > 0) {
     result.add = {}
-    addEntries.forEach(h => {
+    addEntries.forEach((h) => {
       result.add[h.key] = h.value || ''
     })
   }
 
-  const removeEntries = headersData.remove.filter(h => h.key)
+  const removeEntries = headersData.remove.filter((h) => h.key)
   if (removeEntries.length > 0) {
-    result.remove = removeEntries.map(h => h.key)
+    result.remove = removeEntries.map((h) => h.key)
   }
 
   return result
@@ -791,7 +801,11 @@ const deserializeHeaders = (json: Record<string, any>) => {
 }
 
 // 简单 KV 编辑器（用于无嵌套 properties 的 headers 对象）
-interface KvItem { id: number; key: string; value: string }
+interface KvItem {
+  id: number
+  key: string
+  value: string
+}
 const simpleKvData = ref<KvItem[]>([{ id: 1, key: '', value: '' }])
 
 const getFieldType = (schema: any): string => {
@@ -833,10 +847,15 @@ const parseConfig = (configStr: string) => {
     if (config.headers) {
       // 简单 KV（无 set/add/remove 嵌套）
       const headerSchema = currentSchema.value.headers
-      if (!headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))) {
+      if (
+        !headerSchema?.properties ||
+        !Object.keys(headerSchema.properties).some((k) => ['set', 'add', 'remove'].includes(k))
+      ) {
         initialSimpleHeaders = { ...config.headers }
         simpleKvData.value = Object.entries(config.headers).map(([key, value], i) => ({
-          id: i + 1, key, value: String(value)
+          id: i + 1,
+          key,
+          value: String(value),
         }))
         if (simpleKvData.value.length === 0) {
           simpleKvData.value = [{ id: 1, key: '', value: '' }]
@@ -948,7 +967,11 @@ const buildConfigFromForm = (): string => {
     if (fieldDefault !== undefined) {
       let compareValue = value
       if (fieldType === 'array' && typeof value === 'string') {
-        try { compareValue = JSON.parse(value) } catch { /* keep as string */ }
+        try {
+          compareValue = JSON.parse(value)
+        } catch {
+          /* keep as string */
+        }
       }
       if (JSON.stringify(compareValue) === JSON.stringify(fieldDefault)) continue
     }
@@ -977,7 +1000,11 @@ const buildConfigFromForm = (): string => {
         break
       case 'object':
         if (typeof value === 'string') {
-          try { config[key] = JSON.parse(value) } catch { config[key] = value }
+          try {
+            config[key] = JSON.parse(value)
+          } catch {
+            config[key] = value
+          }
         } else {
           config[key] = value
         }
@@ -992,7 +1019,8 @@ const buildConfigFromForm = (): string => {
 
   // 处理 headers 特殊字段
   const headerSchema = currentSchema.value.headers
-  const isSimpleHeaders = !headerSchema?.properties || !Object.keys(headerSchema.properties).some(k => ['set', 'add', 'remove'].includes(k))
+  const isSimpleHeaders =
+    !headerSchema?.properties || !Object.keys(headerSchema.properties).some((k) => ['set', 'add', 'remove'].includes(k))
 
   if (isSimpleHeaders) {
     const rawHeaders = formData.value.headers
@@ -1019,16 +1047,23 @@ const buildConfigFromForm = (): string => {
 }
 
 // 监听抽屉打开
-watch(() => props.open, (newVal) => {
-  if (newVal && props.plugin) {
-    const schema = props.pluginInfo?.schema || {}
-    const hasFields = Object.keys(schema).length > 0
-    isJsonMode.value = !hasFields
-    jsonConfig.value = props.plugin.config || '{}'
-    try { jsonEditorValue.value = JSON.parse(props.plugin.config || '{}') } catch { jsonEditorValue.value = {} }
-    parseConfig(jsonConfig.value)
-  }
-})
+watch(
+  () => props.open,
+  (newVal) => {
+    if (newVal && props.plugin) {
+      const schema = props.pluginInfo?.schema || {}
+      const hasFields = Object.keys(schema).length > 0
+      isJsonMode.value = !hasFields
+      jsonConfig.value = props.plugin.config || '{}'
+      try {
+        jsonEditorValue.value = JSON.parse(props.plugin.config || '{}')
+      } catch {
+        jsonEditorValue.value = {}
+      }
+      parseConfig(jsonConfig.value)
+    }
+  },
+)
 
 // 监听 JSON 模式切换
 watch(isJsonMode, (val) => {
@@ -1037,7 +1072,11 @@ watch(isJsonMode, (val) => {
     if (hasFormFields.value) {
       jsonConfig.value = buildConfigFromForm()
     }
-    try { jsonEditorValue.value = JSON.parse(jsonConfig.value) } catch {}
+    try {
+      jsonEditorValue.value = JSON.parse(jsonConfig.value)
+    } catch {
+      /* 非法 JSON：保留原文 */
+    }
   } else {
     // 切到表单模式：从 JSON 重建表单
     parseConfig(jsonConfig.value)
@@ -1339,9 +1378,15 @@ const handleClose = () => {
   margin-bottom: 6px;
 }
 
-.condition-row .cond-key { flex: 1.5; }
-.condition-row .cond-op { flex: 1; }
-.condition-row .cond-val { flex: 1.5; }
+.condition-row .cond-key {
+  flex: 1.5;
+}
+.condition-row .cond-op {
+  flex: 1;
+}
+.condition-row .cond-val {
+  flex: 1.5;
+}
 
 .upstream-row {
   display: flex;
@@ -1350,8 +1395,12 @@ const handleClose = () => {
   margin-bottom: 6px;
 }
 
-.upstream-row .upstream-select { flex: 1.5; }
-.upstream-row .weight-input { width: 80px; }
+.upstream-row .upstream-select {
+  flex: 1.5;
+}
+.upstream-row .weight-input {
+  width: 80px;
+}
 .upstream-row .weight-label {
   font-size: 11px;
   color: var(--muted);

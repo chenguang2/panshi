@@ -4,7 +4,23 @@ import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useFeaturesStore } from '@/stores/features'
 import { useColumnConfig } from './useColumnConfig'
-import { showDeleteConfirm, executeDeleteWithProgress, buildDeleteProgressContent, showBatchResultModal, showBatchStatusModal, type BatchResultItem } from './useClusterUtils'
+
+/** 节点命令执行结果（/clusters/{id}/nodes/{nid}/{action} 响应） */
+interface ExecCommandResult {
+  command?: string
+  rc?: number | null
+  stdout?: string
+  stderr?: string
+  statistic?: Record<string, string | number>
+}
+import {
+  showDeleteConfirm,
+  executeDeleteWithProgress,
+  buildDeleteProgressContent,
+  showBatchResultModal,
+  showBatchStatusModal,
+  type BatchResultItem,
+} from './useClusterUtils'
 import { stripAnsi } from '@/utils/ansi'
 import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImport'
 
@@ -35,7 +51,7 @@ export const allNodeColumns = [
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
   { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
   { title: '状态', key: 'status', sorter: true },
-  { title: '操作', key: 'actions', width: 280 }
+  { title: '操作', key: 'actions', width: 280 },
 ]
 
 export const allNodeActionButtons = [
@@ -45,13 +61,10 @@ export const allNodeActionButtons = [
   { key: 'diff', title: '数据库对比' },
   { key: 'start', title: '启动' },
   { key: 'stop', title: '停止' },
-  { key: 'status', title: '状态查询' }
+  { key: 'status', title: '状态查询' },
 ]
 
-export function useClusterNodes(options: {
-  clusters: Ref<Cluster[]>
-  onRefresh: () => void | Promise<void>
-}) {
+export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: () => void | Promise<void> }) {
   const { clusters, onRefresh } = options
 
   const featuresStore = useFeaturesStore()
@@ -76,7 +89,8 @@ export function useClusterNodes(options: {
   const execDrawerVisible = ref(false)
   const execDrawerTitle = ref('')
   const execProgress = reactive<{ percent: number; status: 'active' | 'success' | 'exception' }>({
-    percent: 0, status: 'active',
+    percent: 0,
+    status: 'active',
   })
   const execLogs = ref<string[]>([])
   const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
@@ -87,12 +101,14 @@ export function useClusterNodes(options: {
   // ── Batch action progress state ─────────────────────────────
   const batchProgressVisible = ref(false)
   const batchProgressTitle = ref('')
-  const batchProgressItems = ref<Array<{
-    ip: string
-    status: 'pending' | 'running' | 'success' | 'error'
-    logs: string[]
-    rc?: number
-  }>>([])
+  const batchProgressItems = ref<
+    Array<{
+      ip: string
+      status: 'pending' | 'running' | 'success' | 'error'
+      logs: string[]
+      rc?: number
+    }>
+  >([])
   const batchProgressExpandedIp = ref<string | null>(null)
 
   let _pulseTimer: ReturnType<typeof setInterval> | null = null
@@ -113,8 +129,14 @@ export function useClusterNodes(options: {
   }
 
   function stopTimers(finalPercent: number) {
-    if (_pulseTimer) { clearInterval(_pulseTimer); _pulseTimer = null }
-    if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null }
+    if (_pulseTimer) {
+      clearInterval(_pulseTimer)
+      _pulseTimer = null
+    }
+    if (_elapsedTimer) {
+      clearInterval(_elapsedTimer)
+      _elapsedTimer = null
+    }
     execProgress.percent = finalPercent
   }
 
@@ -129,13 +151,11 @@ export function useClusterNodes(options: {
   const nodeSearchVisible = nodeCfg.searchVisible
   const nodeActionsSelected = nodeCfg.actionsSelected
 
-  const moreNodeActions = computed(() =>
-    allNodeActionButtons.filter(b => !nodeActionsSelected.value.includes(b.key))
-  )
+  const moreNodeActions = computed(() => allNodeActionButtons.filter((b) => !nodeActionsSelected.value.includes(b.key)))
 
   const visibleNodeColumns = computed(() => {
     const selected = new Set(nodeColumnsSelected.value)
-    return allNodeColumns.filter(col => selected.has(col.key))
+    return allNodeColumns.filter((col) => selected.has(col.key))
   })
 
   const nodeForm = reactive({
@@ -145,24 +165,26 @@ export function useClusterNodes(options: {
     ssh_port: 22,
     edge_path: '',
     openresty_path: '',
-    status: 1
+    status: 1,
   })
 
   // ── Batch import state ────────────────────────────────────────
   const nodeImportMode = ref<'single' | 'batch'>('single')
   const nodeImportTab = ref<'text' | 'csv'>('text')
   const nodeImportText = ref('')
-  const nodeImportRows = ref<Array<{
-    ip: string
-    service_port: number
-    management_port: number
-    edge_path: string
-    openresty_path: string
-    status: number
-    valid: boolean
-    line?: number
-    error?: string
-  }>>([])
+  const nodeImportRows = ref<
+    Array<{
+      ip: string
+      service_port: number
+      management_port: number
+      edge_path: string
+      openresty_path: string
+      status: number
+      valid: boolean
+      line?: number
+      error?: string
+    }>
+  >([])
   const nodeImportDefaults = reactive({
     service_port: 80,
     management_port: 9180,
@@ -189,7 +211,7 @@ export function useClusterNodes(options: {
     callback()
   }
   const getNodeActionButtonTitle = (key: string) => {
-    const btn = allNodeActionButtons.find(b => b.key === key)
+    const btn = allNodeActionButtons.find((b) => b.key === key)
     return btn?.title || key
   }
 
@@ -221,7 +243,11 @@ export function useClusterNodes(options: {
     }
   }
 
-  const handleNodeTableChange = (cluster: Cluster, pag: Record<string, unknown>, sorter: Record<string, unknown> | null) => {
+  const handleNodeTableChange = (
+    cluster: Cluster,
+    pag: Record<string, unknown>,
+    sorter: Record<string, unknown> | null,
+  ) => {
     if (cluster.nodesPagination) {
       cluster.nodesPagination.page = pag.current as number
       cluster.nodesPagination.pageSize = pag.pageSize as number
@@ -232,7 +258,7 @@ export function useClusterNodes(options: {
         service_port: 'service_port',
         management_port: 'management_port',
         status: 'status',
-        created_at: 'created_at'
+        created_at: 'created_at',
       }
       cluster.nodesSortBy = fieldMap[sorter.field as string] || (sorter.field as string)
       cluster.nodesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
@@ -256,7 +282,13 @@ export function useClusterNodes(options: {
       sortBy: cluster.nodesSortBy || '',
       sortOrder: cluster.nodesSortOrder || '',
     }
-    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
+    if (
+      prev &&
+      (prev.search !== next.search ||
+        prev.field !== next.field ||
+        prev.sortBy !== next.sortBy ||
+        prev.sortOrder !== next.sortOrder)
+    ) {
       cluster.selectedNodeKeys = []
       cluster.selectedNode = null
     }
@@ -265,7 +297,7 @@ export function useClusterNodes(options: {
     try {
       const params: Record<string, unknown> = {
         page: cluster.nodesPagination?.page || 1,
-        page_size: cluster.nodesPagination?.pageSize || 20
+        page_size: cluster.nodesPagination?.pageSize || 20,
       }
       if (cluster.nodesSearch) {
         params.search = cluster.nodesSearch
@@ -282,7 +314,7 @@ export function useClusterNodes(options: {
       cluster.nodesPagination = {
         total: res.data.total,
         page: res.data.page,
-        pageSize: res.data.page_size
+        pageSize: res.data.page_size,
       }
     } catch (error) {
       message.error('加载节点列表失败')
@@ -310,7 +342,7 @@ export function useClusterNodes(options: {
       management_port: 9180,
       edge_path: '',
       openresty_path: '',
-      status: 1
+      status: 1,
     })
     nodeModalVisible.value = true
   }
@@ -366,7 +398,7 @@ export function useClusterNodes(options: {
         message.success('节点已添加')
       }
       nodeModalVisible.value = false
-      const cluster = clusters.value.find(c => c.id === clusterId)
+      const cluster = clusters.value.find((c) => c.id === clusterId)
       if (cluster) {
         const res = await api.get(`/clusters/${cluster.id}/nodes`)
         cluster.nodes = res.data.items
@@ -379,15 +411,18 @@ export function useClusterNodes(options: {
     }
   }
 
-  const importNodes = async (cluster: Cluster, rows: Array<{
-    ip: string
-    service_port: number
-    management_port: number
-    edge_path: string
-    openresty_path: string
-    status: number
-    valid: boolean
-  }>) => {
+  const importNodes = async (
+    cluster: Cluster,
+    rows: Array<{
+      ip: string
+      service_port: number
+      management_port: number
+      edge_path: string
+      openresty_path: string
+      status: number
+      valid: boolean
+    }>,
+  ) => {
     const validRows = rows.filter((r) => r.valid)
     if (validRows.length === 0) {
       message.warning('没有有效的节点可创建')
@@ -443,9 +478,11 @@ export function useClusterNodes(options: {
           deleteEdge,
           nodeIds,
           refreshFn: () => loadNodes(cluster),
-          clearSelectedFn: () => { cluster.selectedNode = null },
+          clearSelectedFn: () => {
+            cluster.selectedNode = null
+          },
         })
-      }
+      },
     })
   }
 
@@ -457,9 +494,10 @@ export function useClusterNodes(options: {
     }
     const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
     const ips = nodes.map((n) => n.ip)
-    const title = ips.length > 3
-      ? `确定要删除选中的 ${ips.length} 条节点吗？${ips.slice(0, 3).join('、')} 等 ${ips.length} 条`
-      : `确定要删除选中的 ${ips.length} 条节点吗？${ips.join('、')}`
+    const title =
+      ips.length > 3
+        ? `确定要删除选中的 ${ips.length} 条节点吗？${ips.slice(0, 3).join('、')} 等 ${ips.length} 条`
+        : `确定要删除选中的 ${ips.length} 条节点吗？${ips.join('、')}`
     showDeleteConfirm({
       title,
       apiEndpoint: `/clusters/${cluster.id}/nodes`,
@@ -473,9 +511,12 @@ export function useClusterNodes(options: {
           deleteEdge,
           nodeIds,
           refreshFn: () => loadNodes(cluster),
-          clearSelectedFn: () => { cluster.selectedNodeKeys = []; cluster.selectedNode = null },
+          clearSelectedFn: () => {
+            cluster.selectedNodeKeys = []
+            cluster.selectedNode = null
+          },
         })
-      }
+      },
     })
   }
 
@@ -570,9 +611,9 @@ export function useClusterNodes(options: {
         let detail = ''
         if (rc !== 0) {
           const errText = data.stderr || data.stdout || ''
-          const errLines = errText.split('\n').filter((l: string) =>
-            /error|failed|refused|timeout|unreachable|fatal/i.test(l),
-          )
+          const errLines = errText
+            .split('\n')
+            .filter((l: string) => /error|failed|refused|timeout|unreachable|fatal/i.test(l))
           detail = errLines.slice(0, 2).join(' | ') || `返回码非 0 (rc=${rc})`
         }
         rows.push({
@@ -611,7 +652,7 @@ export function useClusterNodes(options: {
       // Nginx process status
       if (/Nginx process/i.test(trimmed) || /Nginx.*(PID|running|stopped|started|exist)/i.test(trimmed)) {
         highlights.push(trimmed)
-      }      // Error / failure lines
+      } // Error / failure lines
       if (/Failed to|Error|Invalid command/i.test(trimmed) && !highlights.includes(trimmed)) {
         highlights.push(trimmed)
       }
@@ -635,12 +676,21 @@ export function useClusterNodes(options: {
     return `ansible-playbook -i inventory edge.yml --tags ${tag} -e "${evParts.join(' ')}"`
   }
 
-  const executeNodeAction = async (node: Node, action: 'start' | 'stop' | 'restart' | 'reload', actionLabel: string) => {
-    const cluster = clusters.value.find(c => c.id === node.cluster_id)
+  const executeNodeAction = async (
+    node: Node,
+    action: 'start' | 'stop' | 'restart' | 'reload',
+    actionLabel: string,
+  ) => {
+    const cluster = clusters.value.find((c) => c.id === node.cluster_id)
     if (!cluster) return
 
     // Build command string upfront so it's available even on failure
-    const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', restart: 'nginx_reload', reload: 'nginx_reload' }
+    const nginxCmdMap: Record<string, string> = {
+      start: 'nginx_start',
+      stop: 'nginx_stop',
+      restart: 'nginx_reload',
+      reload: 'nginx_reload',
+    }
     const nginxCmd = nginxCmdMap[action] || action
     const cmdExtravars: Record<string, string> = {
       ips: node.ip,
@@ -678,7 +728,7 @@ export function useClusterNodes(options: {
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
       stopTimers(60)
-      const data = res.data as Record<string, any>
+      const data = res.data as ExecCommandResult
       execProgress.percent = 60
 
       // 1. 显示完整命令（优先用服务端返回的精确命令，回退到本地构建）
@@ -737,7 +787,7 @@ export function useClusterNodes(options: {
         stdout: data.stdout || '',
         stderr: data.stderr || '',
         command: finalCommand,
-        rc: data.rc,
+        rc: data.rc ?? null,
       }
 
       stopTimers(100)
@@ -786,7 +836,7 @@ export function useClusterNodes(options: {
   }
 
   const queryNodeStatus = async (node: Node) => {
-    const cluster = clusters.value.find(c => c.id === node.cluster_id)
+    const cluster = clusters.value.find((c) => c.id === node.cluster_id)
     if (!cluster) return
 
     // Build command string upfront
@@ -823,8 +873,10 @@ export function useClusterNodes(options: {
 
       startTimers(65) // 执行期间脉冲到 65%
 
-      const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, { ports: String(node.management_port) })
-      const data = res.data as Record<string, any>
+      const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, {
+        ports: String(node.management_port),
+      })
+      const data = res.data as ExecCommandResult
       stopTimers(70)
 
       // 1. 完整命令（优先用服务端返回的精确命令，回退到本地构建）
@@ -904,7 +956,7 @@ export function useClusterNodes(options: {
         stdout: data.stdout || '',
         stderr: data.stderr || '',
         command: finalCommand,
-        rc: data.rc,
+        rc: data.rc ?? null,
       }
 
       stopTimers(100)

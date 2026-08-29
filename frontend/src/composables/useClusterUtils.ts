@@ -1,4 +1,4 @@
-import { h, render } from 'vue'
+import { h, render, type VNode } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
@@ -46,42 +46,69 @@ export function showDeleteConfirm(opts: {
   }
 
   const renderModal = () => {
-    const statsSection = (opts.showResourceStats && opts.stats) ? h('div', {
-      style: 'background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;margin-bottom:12px;font-size:12px;',
-    }, [
-      h('div', { style: 'font-weight:600;margin-bottom:6px;color:var(--fg);' }, '集群资源清单'),
-      ...Object.entries(opts.stats).map(([k, v]) =>
-        h('div', { style: 'display:flex;justify-content:space-between;padding:2px 0;' }, [
-          h('span', { style: 'color:var(--muted);' }, resourceLabels[k] || k),
-          h('span', { style: 'font-weight:500;color:var(--fg);' }, String(v)),
-        ])
-      ),
-      h('div', { style: 'display:flex;justify-content:space-between;padding:4px 0 0;font-weight:600;border-top:1px solid var(--border);margin-top:4px;color:var(--fg);' }, [
-        h('span', '合计'),
-        h('span', `${totalCount} 条记录`),
-      ]),
-    ]) : null
-
-    const nodeSection = (opts.nodes && opts.nodes.length > 0 && !opts.noNodeSelection) ? h('div', {
-      style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};`,
-    }, [
-      h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:4px;' }, '选择要删除的 Edge 节点：'),
-      ...opts.nodes.map(n =>
-        h('label', { style: 'display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
-          h('input', {
-            type: 'checkbox', checked: selectedNodeIds.has(n.id),
-            onInput: (e: any) => {
-              if (e.target.checked) selectedNodeIds.add(n.id)
-              else selectedNodeIds.delete(n.id)
-              updateOkDisabled()
-              renderModal()
+    const statsSection =
+      opts.showResourceStats && opts.stats
+        ? h(
+            'div',
+            {
+              style:
+                'background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:12px;margin-bottom:12px;font-size:12px;',
             },
-            style: 'width:14px;height:14px;accent-color:var(--accent);cursor:pointer;',
-          }),
-          h('span', { style: 'font-family:var(--font-mono);' }, `${n.ip}:${n.management_port}`),
-        ])
-      ),
-    ]) : null
+            [
+              h('div', { style: 'font-weight:600;margin-bottom:6px;color:var(--fg);' }, '集群资源清单'),
+              ...Object.entries(opts.stats).map(([k, v]) =>
+                h('div', { style: 'display:flex;justify-content:space-between;padding:2px 0;' }, [
+                  h('span', { style: 'color:var(--muted);' }, resourceLabels[k] || k),
+                  h('span', { style: 'font-weight:500;color:var(--fg);' }, String(v)),
+                ]),
+              ),
+              h(
+                'div',
+                {
+                  style:
+                    'display:flex;justify-content:space-between;padding:4px 0 0;font-weight:600;border-top:1px solid var(--border);margin-top:4px;color:var(--fg);',
+                },
+                [h('span', '合计'), h('span', `${totalCount} 条记录`)],
+              ),
+            ],
+          )
+        : null
+
+    const nodeSection =
+      opts.nodes && opts.nodes.length > 0 && !opts.noNodeSelection
+        ? h(
+            'div',
+            {
+              style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};`,
+            },
+            [
+              h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:4px;' }, '选择要删除的 Edge 节点：'),
+              ...opts.nodes.map((n) =>
+                h(
+                  'label',
+                  {
+                    style:
+                      'display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;font-size:13px;color:var(--fg);',
+                  },
+                  [
+                    h('input', {
+                      type: 'checkbox',
+                      checked: selectedNodeIds.has(n.id),
+                      onInput: (e: Event) => {
+                        if ((e.target as HTMLInputElement).checked) selectedNodeIds.add(n.id)
+                        else selectedNodeIds.delete(n.id)
+                        updateOkDisabled()
+                        renderModal()
+                      },
+                      style: 'width:14px;height:14px;accent-color:var(--accent);cursor:pointer;',
+                    }),
+                    h('span', { style: 'font-family:var(--font-mono);' }, `${n.ip}:${n.management_port}`),
+                  ],
+                ),
+              ),
+            ],
+          )
+        : null
 
     const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
       h('div', { class: 'modal', style: 'max-width:520px;' }, [
@@ -93,43 +120,68 @@ export function showDeleteConfirm(opts: {
           h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
           statsSection,
           h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
-            h('label', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
-              h('input', {
-                type: 'checkbox', checked: deleteDb,
-                onInput: (e: any) => { deleteDb = e.target.checked; updateOkDisabled(); renderModal() },
-                style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
-              }),
-              h('span', { style: 'font-weight:500;' }, '数据库'),
-              h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
-            ]),
-            h('label', { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' }, [
-              h('input', {
-                type: 'checkbox', checked: deleteEdge,
-                onInput: (e: any) => {
-                  deleteEdge = e.target.checked
-                  if (!deleteEdge) selectedNodeIds.clear()
-                  updateOkDisabled()
-                  renderModal()
-                },
-                style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
-              }),
-              h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
-              h('span', { style: 'color:var(--muted);font-size:12px;' }, opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除'),
-            ]),
+            h(
+              'label',
+              {
+                style:
+                  'display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px;color:var(--fg);',
+              },
+              [
+                h('input', {
+                  type: 'checkbox',
+                  checked: deleteDb,
+                  onInput: (e: Event) => {
+                    deleteDb = (e.target as HTMLInputElement).checked
+                    updateOkDisabled()
+                    renderModal()
+                  },
+                  style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+                }),
+                h('span', { style: 'font-weight:500;' }, '数据库'),
+                h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
+              ],
+            ),
+            h(
+              'label',
+              { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' },
+              [
+                h('input', {
+                  type: 'checkbox',
+                  checked: deleteEdge,
+                  onInput: (e: Event) => {
+                    deleteEdge = (e.target as HTMLInputElement).checked
+                    if (!deleteEdge) selectedNodeIds.clear()
+                    updateOkDisabled()
+                    renderModal()
+                  },
+                  style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+                }),
+                h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
+                h(
+                  'span',
+                  { style: 'color:var(--muted);font-size:12px;' },
+                  opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除',
+                ),
+              ],
+            ),
             nodeSection,
           ]),
         ]),
         h('div', { class: 'modal-footer' }, [
           h('button', { class: 'btn btn-secondary', onClick: close }, '取消'),
-          h('button', {
-            class: 'btn btn-danger',
-            disabled: okDisabled,
-            style: okDisabled ? 'opacity:0.5;cursor:not-allowed;' : '',
-            onClick: () => {
-              opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
-              close()
+          h(
+            'button',
+            {
+              class: 'btn btn-danger',
+              disabled: okDisabled,
+              style: okDisabled ? 'opacity:0.5;cursor:not-allowed;' : '',
+              onClick: () => {
+                opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
+                close()
+              },
             },
-          }, '确认删除'),
+            '确认删除',
+          ),
         ]),
       ]),
     ])
@@ -142,24 +194,37 @@ export function showDeleteConfirm(opts: {
 
 export function buildDeleteProgressContent(
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
-  logs: string[]
+  logs: string[],
 ) {
   return h('div', [
     h('div', { style: 'margin-bottom: 8px;' }, [
       h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
-        h('div', {
-          style: `flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;`,
-        }, [
-          h('div', {
-            style: `width:${progress.percent}%;height:100%;border-radius:3px;background:${progress.status === 'exception' ? 'var(--danger)' : progress.status === 'success' ? 'var(--success)' : 'var(--accent)'};transition:width 0.3s;`,
-          }),
-        ]),
-        h('span', { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' }, `${progress.percent}%`),
+        h(
+          'div',
+          {
+            style: `flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;`,
+          },
+          [
+            h('div', {
+              style: `width:${progress.percent}%;height:100%;border-radius:3px;background:${progress.status === 'exception' ? 'var(--danger)' : progress.status === 'success' ? 'var(--success)' : 'var(--accent)'};transition:width 0.3s;`,
+            }),
+          ],
+        ),
+        h(
+          'span',
+          { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' },
+          `${progress.percent}%`,
+        ),
       ]),
     ]),
-    h('div', {
-      style: 'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--fg);',
-    }, logs.map(l => h('div', { style: 'white-space:pre-wrap;' }, l))),
+    h(
+      'div',
+      {
+        style:
+          'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--fg);',
+      },
+      logs.map((l) => h('div', { style: 'white-space:pre-wrap;' }, l)),
+    ),
   ])
 }
 
@@ -175,23 +240,34 @@ function createProgressModal(title: string, progress: { percent: number; status:
       h('div', { class: 'modal', style: 'max-width:600px;' }, [
         h('div', { class: 'modal-header' }, [
           h('h2', title),
-          h('button', {
-            class: 'modal-close',
-            onClick: () => { render(null, container); container.remove() },
-          }, '\u00D7'),
-        ]),
-        h('div', { class: 'modal-body' }, [
-          buildDeleteProgressContent(
-            progress as { percent: number; status: 'active' | 'success' | 'exception' },
-            logs,
+          h(
+            'button',
+            {
+              class: 'modal-close',
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '\u00D7',
           ),
         ]),
+        h('div', { class: 'modal-body' }, [
+          buildDeleteProgressContent(progress as { percent: number; status: 'active' | 'success' | 'exception' }, logs),
+        ]),
         h('div', { class: 'modal-footer' }, [
-          h('button', {
-            class: 'btn btn-primary',
-            disabled: progress.percent < 100,
-            onClick: () => { render(null, container); container.remove() },
-          }, '确定'),
+          h(
+            'button',
+            {
+              class: 'btn btn-primary',
+              disabled: progress.percent < 100,
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '确定',
+          ),
         ]),
       ]),
     ])
@@ -200,7 +276,13 @@ function createProgressModal(title: string, progress: { percent: number; status:
 
   update()
 
-  return { update, close: () => { render(null, container); container.remove() } }
+  return {
+    update,
+    close: () => {
+      render(null, container)
+      container.remove()
+    },
+  }
 }
 
 export interface BatchResultItem {
@@ -216,32 +298,59 @@ export function showBatchResultModal(title: string, items: BatchResultItem[]) {
   const renderModal = () => {
     const rows = items.map((item) => {
       const ok = item.status === 'success'
-      return h('div', { style: 'display:flex;gap:8px;padding:3px 0;font-size:12px;font-family:var(--font-mono);line-height:1.6;' }, [
-        h('span', { style: `flex-shrink:0;color:${ok ? 'var(--success)' : 'var(--danger)'};` }, ok ? '✅' : '❌'),
-        h('span', { style: 'flex-shrink:0;color:var(--fg);min-width:110px;' }, item.ip),
-        h('span', { style: `flex-shrink:0;${ok ? 'color:var(--success);' : 'color:var(--danger);'}` }, ok ? '成功' : '失败'),
-        h('span', { style: 'color:var(--muted);word-break:break-all;' }, item.error || ''),
-      ])
+      return h(
+        'div',
+        { style: 'display:flex;gap:8px;padding:3px 0;font-size:12px;font-family:var(--font-mono);line-height:1.6;' },
+        [
+          h('span', { style: `flex-shrink:0;color:${ok ? 'var(--success)' : 'var(--danger)'};` }, ok ? '✅' : '❌'),
+          h('span', { style: 'flex-shrink:0;color:var(--fg);min-width:110px;' }, item.ip),
+          h(
+            'span',
+            { style: `flex-shrink:0;${ok ? 'color:var(--success);' : 'color:var(--danger);'}` },
+            ok ? '成功' : '失败',
+          ),
+          h('span', { style: 'color:var(--muted);word-break:break-all;' }, item.error || ''),
+        ],
+      )
     })
     const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
       h('div', { class: 'modal', style: 'max-width:600px;' }, [
         h('div', { class: 'modal-header' }, [
           h('h2', title),
-          h('button', {
-            class: 'modal-close',
-            onClick: () => { render(null, container); container.remove() },
-          }, '\u00D7'),
+          h(
+            'button',
+            {
+              class: 'modal-close',
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '\u00D7',
+          ),
         ]),
         h('div', { class: 'modal-body' }, [
-          h('div', {
-            style: 'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-size:12px;',
-          }, rows),
+          h(
+            'div',
+            {
+              style:
+                'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-size:12px;',
+            },
+            rows,
+          ),
         ]),
         h('div', { class: 'modal-footer' }, [
-          h('button', {
-            class: 'btn btn-primary',
-            onClick: () => { render(null, container); container.remove() },
-          }, '确定'),
+          h(
+            'button',
+            {
+              class: 'btn btn-primary',
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '确定',
+          ),
         ]),
       ]),
     ])
@@ -268,81 +377,123 @@ export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
   const expandedIps = new Set<string>()
 
   const renderModal = () => {
-    const bodyRows: any[] = []
+    const bodyRows: VNode[] = []
     for (const item of items) {
       const ok = item.status === 'success'
       const healthy = item.healthy
-      const healthText = ok
-        ? (healthy === true ? '健康' : healthy === false ? '离线' : '未知')
-        : '失败'
+      const healthText = ok ? (healthy === true ? '健康' : healthy === false ? '离线' : '未知') : '失败'
       const healthColor = ok
-        ? (healthy === true ? 'var(--success)' : healthy === false ? 'var(--danger)' : 'var(--muted)')
+        ? healthy === true
+          ? 'var(--success)'
+          : healthy === false
+            ? 'var(--danger)'
+            : 'var(--muted)'
         : 'var(--danger)'
       const hasDetails = item.command || item.stdout || item.stderr || item.detail
-      bodyRows.push(h('tr', { style: 'border-bottom:1px solid var(--border);' }, [
-        h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.ip),
-        h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.version || '-'),
-        h('td', { style: `padding:6px 8px;color:${healthColor};white-space:nowrap;` }, healthText),
-        h('td', { style: 'padding:6px 8px;color:var(--danger);font-size:11px;word-break:break-all;' }, item.detail || ''),
-        h('td', { style: 'padding:6px 8px;text-align:right;' }, hasDetails
-          ? h('button', {
-              class: 'btn btn-ghost btn-sm',
-              onClick: () => {
-                if (expandedIps.has(item.ip)) expandedIps.delete(item.ip)
-                else expandedIps.add(item.ip)
-                renderModal()
-              },
-            }, expandedIps.has(item.ip) ? '收起' : '详情')
-          : ''),
-      ]))
+      bodyRows.push(
+        h('tr', { style: 'border-bottom:1px solid var(--border);' }, [
+          h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.ip),
+          h('td', { style: 'padding:6px 8px;font-family:var(--font-mono);' }, item.version || '-'),
+          h('td', { style: `padding:6px 8px;color:${healthColor};white-space:nowrap;` }, healthText),
+          h(
+            'td',
+            { style: 'padding:6px 8px;color:var(--danger);font-size:11px;word-break:break-all;' },
+            item.detail || '',
+          ),
+          h(
+            'td',
+            { style: 'padding:6px 8px;text-align:right;' },
+            hasDetails
+              ? h(
+                  'button',
+                  {
+                    class: 'btn btn-ghost btn-sm',
+                    onClick: () => {
+                      if (expandedIps.has(item.ip)) expandedIps.delete(item.ip)
+                      else expandedIps.add(item.ip)
+                      renderModal()
+                    },
+                  },
+                  expandedIps.has(item.ip) ? '收起' : '详情',
+                )
+              : '',
+          ),
+        ]),
+      )
       if (expandedIps.has(item.ip) && hasDetails) {
         const detailLines: string[] = []
         if (item.command) detailLines.push(`命令: ${item.command}`)
         if (item.stdout) detailLines.push('--- stdout ---', item.stdout)
         if (item.stderr) detailLines.push('--- stderr ---', item.stderr)
         if (item.detail) detailLines.push(`失败: ${item.detail}`)
-        bodyRows.push(h('tr', { style: 'border-bottom:1px solid var(--border);background:var(--bg);' }, [
-          h('td', { colSpan: 5, style: 'padding:6px 12px;' }, [
-            h('div', {
-              class: 'batch-status-detail',
-              style: 'background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word;',
-            }, detailLines.map((l) => h('div', l))),
+        bodyRows.push(
+          h('tr', { style: 'border-bottom:1px solid var(--border);background:var(--bg);' }, [
+            h('td', { colSpan: 5, style: 'padding:6px 12px;' }, [
+              h(
+                'div',
+                {
+                  class: 'batch-status-detail',
+                  style:
+                    'background:#1e1e1e;color:#d4d4d4;padding:8px;border-radius:4px;font-family:var(--font-mono);font-size:11px;line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word;',
+                },
+                detailLines.map((l) => h('div', l)),
+              ),
+            ]),
           ]),
-        ]))
+        )
       }
     }
     const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
       h('div', { class: 'modal', style: 'max-width:860px;' }, [
         h('div', { class: 'modal-header' }, [
           h('h2', title),
-          h('button', {
-            class: 'modal-close',
-            onClick: () => { render(null, container); container.remove() },
-          }, '\u00D7'),
+          h(
+            'button',
+            {
+              class: 'modal-close',
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '\u00D7',
+          ),
         ]),
         h('div', { class: 'modal-body' }, [
-          h('div', {
-            style: 'max-height:360px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);',
-          }, [
-            h('table', { style: 'width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;' }, [
-              h('thead', [
-                h('tr', { style: 'background:var(--bg);color:var(--muted);text-align:left;' }, [
-                  h('th', { style: 'padding:6px 8px;width:140px;' }, '节点IP'),
-                  h('th', { style: 'padding:6px 8px;width:110px;' }, 'Edge版本'),
-                  h('th', { style: 'padding:6px 8px;width:90px;' }, '健康状态'),
-                  h('th', { style: 'padding:6px 8px;' }, '失败原因'),
-                  h('th', { style: 'padding:6px 8px;width:70px;' }, ''),
+          h(
+            'div',
+            {
+              style:
+                'max-height:360px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);',
+            },
+            [
+              h('table', { style: 'width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;' }, [
+                h('thead', [
+                  h('tr', { style: 'background:var(--bg);color:var(--muted);text-align:left;' }, [
+                    h('th', { style: 'padding:6px 8px;width:140px;' }, '节点IP'),
+                    h('th', { style: 'padding:6px 8px;width:110px;' }, 'Edge版本'),
+                    h('th', { style: 'padding:6px 8px;width:90px;' }, '健康状态'),
+                    h('th', { style: 'padding:6px 8px;' }, '失败原因'),
+                    h('th', { style: 'padding:6px 8px;width:70px;' }, ''),
+                  ]),
                 ]),
+                h('tbody', bodyRows),
               ]),
-              h('tbody', bodyRows),
-            ]),
-          ]),
+            ],
+          ),
         ]),
         h('div', { class: 'modal-footer' }, [
-          h('button', {
-            class: 'btn btn-primary',
-            onClick: () => { render(null, container); container.remove() },
-          }, '确定'),
+          h(
+            'button',
+            {
+              class: 'btn btn-primary',
+              onClick: () => {
+                render(null, container)
+                container.remove()
+              },
+            },
+            '确定',
+          ),
         ]),
       ]),
     ])
@@ -352,13 +503,35 @@ export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
   renderModal()
 }
 
+export interface PublishResultData {
+  status?: string
+  message?: string
+  version?: number
+  results?: Array<{
+    node?: string
+    status: string
+    error?: string
+    scope?: string
+    message?: string
+    stdout?: string
+    stderr?: string
+    rc?: number
+    [key: string]: unknown
+  }>
+  [key: string]: unknown
+}
+
 export interface PublishOptions {
   title: string
   apiEndpoint: string
   nodeIds: number[]
   refreshFn: () => Promise<void>
   /** Custom handler for response data. Default handles { status: 'ok'|'partial', message, version, results } */
-  handleResult?: (data: Record<string, any>, addLog: (text: string) => void, progress: { percent: number; status: 'active' | 'success' | 'exception' }) => void
+  handleResult?: (
+    data: PublishResultData,
+    addLog: (text: string) => void,
+    progress: { percent: number; status: 'active' | 'success' | 'exception' },
+  ) => void
 }
 
 export async function executePublish(opts: PublishOptions): Promise<void> {
@@ -367,7 +540,8 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
   const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-    percent: 0, status: 'active',
+    percent: 0,
+    status: 'active',
   }
 
   const modal = createProgressModal(opts.title, progress, logs)
@@ -388,7 +562,7 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
     updateContent()
 
     const res = await api.post(opts.apiEndpoint, { node_ids: opts.nodeIds })
-    const data = res.data as Record<string, any>
+    const data = res.data as PublishResultData
     progress.percent = 70
 
     if (opts.handleResult) {
@@ -444,6 +618,23 @@ export interface ResourceKey {
   keys: number[]
 }
 
+/** 删除接口返回的单条结果（数据库/Edge 作用域，批量模式含嵌套 results） */
+interface DeleteResponseItem {
+  scope?: string
+  status?: string
+  message?: string
+  error?: string
+  node?: string
+  details?: Record<string, number>
+  results?: DeleteResponseItem[]
+  [key: string]: unknown
+}
+
+interface DeleteResponseData {
+  results?: DeleteResponseItem[]
+  [key: string]: unknown
+}
+
 export interface DeleteProgressOptions {
   title: string
   apiEndpoint: string
@@ -467,7 +658,8 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
   const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-    percent: 0, status: 'active',
+    percent: 0,
+    status: 'active',
   }
 
   const modal = createProgressModal(opts.title, progress, logs)
@@ -483,8 +675,9 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
   await new Promise((r) => setTimeout(r, 400))
 
   try {
-    const resourceKey = opts.resourceKey
-      ?? (opts.routeIds && opts.routeIds.length > 0
+    const resourceKey =
+      opts.resourceKey ??
+      (opts.routeIds && opts.routeIds.length > 0
         ? { field: 'route_ids', label: '路由', nameField: 'route_name', keys: opts.routeIds }
         : undefined)
     const res = await api.delete(opts.apiEndpoint, {
@@ -521,7 +714,7 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
 }
 
 function logBatchDeleteResults(
-  data: any,
+  data: DeleteResponseData,
   resourceKey: ResourceKey,
   addLog: (text: string) => void,
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
@@ -536,19 +729,27 @@ function logBatchDeleteResults(
       if (sub.scope === 'database') {
         parts.push(sub.status === 'success' ? '数据库✅' : `数据库❌ ${sub.message || ''}`)
       } else if (sub.scope === 'edge') {
-        parts.push(sub.status === 'success' ? `Edge ${sub.node}✅` : sub.status === 'skipped' ? 'Edge 跳过' : `Edge ${sub.node}❌ ${sub.error || ''}`)
+        parts.push(
+          sub.status === 'success'
+            ? `Edge ${sub.node}✅`
+            : sub.status === 'skipped'
+              ? 'Edge 跳过'
+              : `Edge ${sub.node}❌ ${sub.error || ''}`,
+        )
       }
     }
-    if (parts.length === 0) parts.push(r.status)
+    if (parts.length === 0) parts.push(r.status || '')
     if (r.error) parts.push(r.error)
     addLog(`删除${label} ${r[nameField] || r.id}: ${parts.join(' / ')}`)
-    if (r.status === 'failed' || (r.results || []).some((sub: any) => sub.status === 'failed')) {
+    if (r.status === 'failed' || (r.results || []).some((sub) => sub.status === 'failed')) {
       failCount++
     }
   }
   progress.percent = 100
   addLog('')
-  const anyEdgeFail = items.some((r: any) => (r.results || []).some((sub: any) => sub.scope === 'edge' && sub.status === 'failed'))
+  const anyEdgeFail = items.some((r) =>
+    (r.results || []).some((sub) => sub.scope === 'edge' && sub.status === 'failed'),
+  )
   if (failCount > 0 || anyEdgeFail) {
     progress.status = 'exception'
     addLog(`⚠️ 部分${label}删除失败，请手动清理`)
@@ -559,25 +760,35 @@ function logBatchDeleteResults(
 }
 
 function logSingleDeleteResults(
-  data: any,
+  data: DeleteResponseData,
   opts: DeleteProgressOptions,
   addLog: (text: string) => void,
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
 ) {
-  const dbResult = data.results?.find((r: any) => r.scope === 'database')
+  const dbResult = data.results?.find((r) => r.scope === 'database')
   if (dbResult) {
     addLog('正在从数据库删除...')
     let dbDetail = ''
     if (dbResult.details) {
-      const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据', stream_proxies: '四层代理', ssl_certificates: 'SSL证书', nodes: '节点', config_versions: '版本历史' }
-      const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details[k] ?? 0}`)
+      const labels: Record<string, string> = {
+        routes: '路由',
+        upstreams: '上游',
+        plugin_configs: '插件组',
+        global_rules: '全局规则',
+        plugin_metadatas: '插件元数据',
+        stream_proxies: '四层代理',
+        ssl_certificates: 'SSL证书',
+        nodes: '节点',
+        config_versions: '版本历史',
+      }
+      const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${dbResult.details?.[k] ?? 0}`)
       dbDetail = ` (${parts.join(' ')})`
     }
     addLog(`数据库: ${dbResult.message || '已删除'}${dbDetail}`)
   }
   addLog('')
 
-  const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
+  const edgeResults = data.results?.filter((r) => r.scope === 'edge') || []
   if (edgeResults.length > 0) {
     addLog('正在从 Edge 节点同步删除...')
     progress.percent = 80
@@ -590,8 +801,14 @@ function logSingleDeleteResults(
       else failCount++
       let detail = ''
       if (r.details) {
-        const labels: Record<string, string> = { routes: '路由', upstreams: '上游', plugin_configs: '插件组', global_rules: '全局规则', plugin_metadatas: '插件元数据' }
-        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${r.details[k] ?? 0}`)
+        const labels: Record<string, string> = {
+          routes: '路由',
+          upstreams: '上游',
+          plugin_configs: '插件组',
+          global_rules: '全局规则',
+          plugin_metadatas: '插件元数据',
+        }
+        const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${r.details?.[k] ?? 0}`)
         detail = ` (${parts.join(' ')})`
       }
       addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)
@@ -604,10 +821,10 @@ function logSingleDeleteResults(
 
   progress.percent = 100
   addLog('')
-  if (edgeResults.length > 0 && !edgeResults.some((r: any) => r.status === 'failed')) {
+  if (edgeResults.length > 0 && !edgeResults.some((r) => r.status === 'failed')) {
     progress.status = 'success'
     addLog('✅ 删除完成!')
-  } else if (edgeResults.some((r: any) => r.status === 'failed')) {
+  } else if (edgeResults.some((r) => r.status === 'failed')) {
     progress.status = 'exception'
     addLog('⚠️ 部分节点删除失败，请手动清理')
   } else {
@@ -629,7 +846,10 @@ export function showNameConfirm(opts: {
   let confirmed = false
   const container = document.createElement('div')
   document.body.appendChild(container)
-  const closeModal = () => { render(null, container); container.remove() }
+  const closeModal = () => {
+    render(null, container)
+    container.remove()
+  }
   const renderModal = () => {
     const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
       h('div', { class: 'modal', style: 'max-width:440px;' }, [
@@ -638,26 +858,36 @@ export function showNameConfirm(opts: {
           h('button', { class: 'modal-close', onClick: closeModal }, '\u00D7'),
         ]),
         h('div', { class: 'modal-body' }, [
-          h('div', { style: 'font-size:13px;color:var(--muted);margin-bottom:12px;' }, `请输入集群名称 "${opts.expectedName}" 以确认删除：`),
+          h(
+            'div',
+            { style: 'font-size:13px;color:var(--muted);margin-bottom:12px;' },
+            `请输入集群名称 "${opts.expectedName}" 以确认删除：`,
+          ),
           h('input', {
-            type: 'text', placeholder: '请输入集群名称',
+            type: 'text',
+            placeholder: '请输入集群名称',
             class: 'form-input',
-            onInput: (e: any) => {
-              confirmed = (e.target.value || '').trim() === (opts.expectedName || '').trim()
+            onInput: (e: Event) => {
+              confirmed = ((e.target as HTMLInputElement).value || '').trim() === (opts.expectedName || '').trim()
               renderModal()
             },
           }),
         ]),
         h('div', { class: 'modal-footer' }, [
           h('button', { class: 'btn btn-secondary', onClick: closeModal }, '取消'),
-          h('button', {
-            class: 'btn btn-danger', disabled: !confirmed,
-            onClick: async () => {
-              if (!confirmed) return
-              closeModal()
-              await opts.onConfirm()
+          h(
+            'button',
+            {
+              class: 'btn btn-danger',
+              disabled: !confirmed,
+              onClick: async () => {
+                if (!confirmed) return
+                closeModal()
+                await opts.onConfirm()
+              },
             },
-          }, opts.confirmText || '确认删除'),
+            opts.confirmText || '确认删除',
+          ),
         ]),
       ]),
     ])

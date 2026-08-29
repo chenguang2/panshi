@@ -5,7 +5,7 @@ import { useClusterPluginEntity, type PluginEntityDeps, type VersionModalState }
 // Re-export for backward compatibility
 export type { VersionModalState }
 
-export interface PluginConfigDeps extends PluginEntityDeps {}
+export type PluginConfigDeps = PluginEntityDeps
 
 const CONFIG = {
   apiEndpoint: 'plugin_configs',

@@ -1,97 +1,134 @@
 <template>
   <Teleport to="body">
-  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:1000px;">
-      <div class="modal-header">
-        <h2>版本管理 - {{ resourceType === 'upstream' ? '上游' : resourceType === 'route' ? '路由' : resourceType === 'static_resource' ? '静态资源' : resourceType === 'edge_env' ? 'edge.env' : resourceType === 'stream_proxy' ? '四层代理' : resourceType === 'dns_proxy' ? 'DNS 代理' : resourceType === 'ssl' ? 'SSL 证书' : '插件' }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}</h2>
-        <button class="modal-close" @click="handleClose">&times;</button>
-      </div>
+    <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+      <div class="modal modal-wide" style="max-width: 1000px">
+        <div class="modal-header">
+          <h2>
+            版本管理 -
+            {{
+              resourceType === 'upstream'
+                ? '上游'
+                : resourceType === 'route'
+                  ? '路由'
+                  : resourceType === 'static_resource'
+                    ? '静态资源'
+                    : resourceType === 'edge_env'
+                      ? 'edge.env'
+                      : resourceType === 'stream_proxy'
+                        ? '四层代理'
+                        : resourceType === 'dns_proxy'
+                          ? 'DNS 代理'
+                          : resourceType === 'ssl'
+                            ? 'SSL 证书'
+                            : '插件'
+            }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}
+          </h2>
+          <button class="modal-close" @click="handleClose">&times;</button>
+        </div>
 
-      <div class="modal-body">
-        <div class="version-management">
-          <div v-if="loading" class="loading-hint">
-            加载中...
-          </div>
+        <div class="modal-body">
+          <div class="version-management">
+            <div v-if="loading" class="loading-hint">加载中...</div>
 
-          <div v-else-if="versions.length === 0" class="empty-hint">
-            暂无发布历史
-          </div>
+            <div v-else-if="versions.length === 0" class="empty-hint">暂无发布历史</div>
 
-          <div v-else class="version-content">
-            <div class="version-list-panel">
-              <div class="panel-header">
-                <span>版本列表</span>
-                <label class="checkbox-label" style="font-size:12px;cursor:pointer;user-select:none;">
-                  <input type="checkbox" :checked="compareMode" @change="compareMode = !compareMode">
-                  <span>对比模式</span>
-                </label>
-              </div>
-              <div class="version-list">
-                <div
-                  v-for="v in versions"
-                  :key="v.id"
-                  :class="['version-item', { 'version-item--current': v.version === currentVersion, 'version-item--selected': selectedVersions.includes(v.version) }]"
-                  @click="handleVersionClick(v)"
-                >
-                  <div class="version-item-main">
-                    <input
-                      v-if="compareMode"
-                      type="radio"
-                      class="radio-input"
-                      :checked="selectedVersions.includes(v.version)"
-                      @click.stop="toggleVersionSelection(v.version)"
-                    />
-                    <span class="version-number" @click.stop="selectVersion(v)">v{{ v.version }}</span>
-                    <span v-if="v.version === currentVersion" class="version-current-tag">当前</span>
-                  </div>
-                  <div class="version-item-meta">
-                    {{ formatDate(v.created_at) }}
-                  </div>
+            <div v-else class="version-content">
+              <div class="version-list-panel">
+                <div class="panel-header">
+                  <span>版本列表</span>
+                  <label class="checkbox-label" style="font-size: 12px; cursor: pointer; user-select: none">
+                    <input type="checkbox" :checked="compareMode" @change="compareMode = !compareMode" />
+                    <span>对比模式</span>
+                  </label>
                 </div>
-              </div>
-            </div>
-
-            <div class="version-detail-panel">
-              <div v-if="compareMode && selectedVersions.length === 2" class="diff-view">
-                <div class="diff-header">
-                  <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
-                </div>
-                <div class="diff-container">
-                  <div v-if="resourceType === 'edge_env'" class="diff-tree" style="font-family:var(--font-mono,monospace);font-size:12px;white-space:pre-wrap" v-html="textDiffHtml"></div>
-                  <div v-else class="diff-tree" v-html="diffTreeHtml"></div>
-                </div>
-              </div>
-
-              <div v-else-if="selectedVersionData" class="single-view">
-                <div class="detail-header">
-                  <span class="version-info">
-                    版本 v{{ selectedVersionData.version }}
-                    <span v-if="selectedVersionData.version === currentVersion" class="version-current-tag">当前</span>
-                  </span>
-                  <div class="detail-actions">
-                    <button class="btn btn-sm btn-ghost" @click="copyConfig">{{ resourceType === 'edge_env' ? '复制 YAML' : '复制JSON' }}</button>
-                    <button class="btn btn-sm btn-primary" @click="handleRepublish">{{ resourceType === 'edge_env' ? '加载到编辑器' : '切换到此版本' }}</button>
-                    <button v-if="resourceType !== 'edge_env'" class="btn btn-sm btn-danger" @click="handleDelete" :disabled="selectedVersionData.version === currentVersion">删除</button>
+                <div class="version-list">
+                  <div
+                    v-for="v in versions"
+                    :key="v.id"
+                    :class="[
+                      'version-item',
+                      {
+                        'version-item--current': v.version === currentVersion,
+                        'version-item--selected': selectedVersions.includes(v.version),
+                      },
+                    ]"
+                    @click="handleVersionClick(v)"
+                  >
+                    <div class="version-item-main">
+                      <input
+                        v-if="compareMode"
+                        type="radio"
+                        class="radio-input"
+                        :checked="selectedVersions.includes(v.version)"
+                        @click.stop="toggleVersionSelection(v.version)"
+                      />
+                      <span class="version-number" @click.stop="selectVersion(v)">v{{ v.version }}</span>
+                      <span v-if="v.version === currentVersion" class="version-current-tag">当前</span>
+                    </div>
+                    <div class="version-item-meta">
+                      {{ formatDate(v.created_at) }}
+                    </div>
                   </div>
                 </div>
-                <div class="detail-config">
-                  <textarea readonly class="json-textarea">{{ formattedConfig }}</textarea>
-                </div>
               </div>
 
-              <div v-else class="select-hint">
-                点击左侧版本号查看详情，或选择两个版本进行对比
+              <div class="version-detail-panel">
+                <div v-if="compareMode && selectedVersions.length === 2" class="diff-view">
+                  <div class="diff-header">
+                    <span>对比: v{{ selectedVersions[0] }} → v{{ selectedVersions[1] }}</span>
+                  </div>
+                  <div class="diff-container">
+                    <div
+                      v-if="resourceType === 'edge_env'"
+                      class="diff-tree"
+                      style="font-family: var(--font-mono, monospace); font-size: 12px; white-space: pre-wrap"
+                      v-html="textDiffHtml"
+                    ></div>
+                    <div v-else class="diff-tree" v-html="diffTreeHtml"></div>
+                  </div>
+                </div>
+
+                <div v-else-if="selectedVersionData" class="single-view">
+                  <div class="detail-header">
+                    <span class="version-info">
+                      版本 v{{ selectedVersionData.version }}
+                      <span v-if="selectedVersionData.version === currentVersion" class="version-current-tag"
+                        >当前</span
+                      >
+                    </span>
+                    <div class="detail-actions">
+                      <button class="btn btn-sm btn-ghost" @click="copyConfig">
+                        {{ resourceType === 'edge_env' ? '复制 YAML' : '复制JSON' }}
+                      </button>
+                      <button class="btn btn-sm btn-primary" @click="handleRepublish">
+                        {{ resourceType === 'edge_env' ? '加载到编辑器' : '切换到此版本' }}
+                      </button>
+                      <button
+                        v-if="resourceType !== 'edge_env'"
+                        class="btn btn-sm btn-danger"
+                        @click="handleDelete"
+                        :disabled="selectedVersionData.version === currentVersion"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                  <div class="detail-config">
+                    <textarea readonly class="json-textarea" :value="formattedConfig"></textarea>
+                  </div>
+                </div>
+
+                <div v-else class="select-hint">点击左侧版本号查看详情，或选择两个版本进行对比</div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" @click="handleClose">关闭</button>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="handleClose">关闭</button>
+        </div>
       </div>
     </div>
-  </div>
   </Teleport>
 </template>
 
@@ -113,7 +150,17 @@ interface ConfigVersion {
 
 const props = defineProps<{
   open: boolean
-  resourceType: 'upstream' | 'route' | 'plugin_metadata' | 'plugin_config' | 'global_rule' | 'static_resource' | 'edge_env' | 'stream_proxy' | 'dns_proxy' | 'ssl'
+  resourceType:
+    | 'upstream'
+    | 'route'
+    | 'plugin_metadata'
+    | 'plugin_config'
+    | 'global_rule'
+    | 'static_resource'
+    | 'edge_env'
+    | 'stream_proxy'
+    | 'dns_proxy'
+    | 'ssl'
   resourceId: number | null
   clusterId: number | null
   resourceName: string
@@ -122,15 +169,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [val: boolean]
-  'edit': [data: { plugin_name: string; config: string }]
+  edit: [data: { plugin_name: string; config: string }]
   'version-change': [data: { plugin_name: string; version: number; metadata: Record<string, any> }]
-  'published': [data: { plugin_name: string }]
-  'republish': [data: { content: string; version: number }]
+  published: [data: { plugin_name: string }]
+  republish: [data: { content: string; version: number }]
 }>()
 
 const visible = computed({
   get: () => props.open,
-  set: (val) => emit('update:open', val)
+  set: (val) => emit('update:open', val),
 })
 
 const edgeUuid = computed(() => props.edgeUuid || '')
@@ -145,7 +192,7 @@ const currentVersion = ref<number | null>(null)
 const selectedVersionData = computed(() => {
   const sv = selectedVersion.value
   if (sv === null) return null
-  const selected = versions.value.find(v => String(v.version) === String(sv))
+  const selected = versions.value.find((v) => String(v.version) === String(sv))
   return selected || null
 })
 
@@ -192,16 +239,23 @@ watch(selectedVersion, (newVal) => {
     emit('version-change', {
       plugin_name: props.resourceName,
       version: selectedVersionData.value.version,
-      metadata: selectedVersionData.value.metadata
+      metadata: selectedVersionData.value.metadata,
     })
   }
 })
 
-watch(() => props.open, async (newVal) => {
-  if (newVal && props.clusterId && (props.resourceId || (props.resourceType === 'plugin_metadata' && props.resourceName))) {
-    await loadHistory()
-  }
-})
+watch(
+  () => props.open,
+  async (newVal) => {
+    if (
+      newVal &&
+      props.clusterId &&
+      (props.resourceId || (props.resourceType === 'plugin_metadata' && props.resourceName))
+    ) {
+      await loadHistory()
+    }
+  },
+)
 
 const loadHistory = async () => {
   if (!props.clusterId) return
@@ -229,23 +283,24 @@ const loadHistory = async () => {
   if (!props.resourceId) return
   loading.value = true
   try {
-    const endpoint = props.resourceType === 'upstream'
-      ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history`
-      : props.resourceType === 'plugin_config'
-      ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history`
-      : props.resourceType === 'global_rule'
-      ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history`
-      : props.resourceType === 'static_resource'
-      ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history`
-      : props.resourceType === 'stream_proxy'
-      ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history`
-      : props.resourceType === 'dns_proxy'
-      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history`
-      : props.resourceType === 'ssl'
-      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history`
-      : props.resourceType === 'edge_env'
-      ? `/clusters/${props.clusterId}/edge-env/versions`
-      : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`
+    const endpoint =
+      props.resourceType === 'upstream'
+        ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history`
+        : props.resourceType === 'plugin_config'
+          ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history`
+          : props.resourceType === 'global_rule'
+            ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history`
+            : props.resourceType === 'static_resource'
+              ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history`
+              : props.resourceType === 'stream_proxy'
+                ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history`
+                : props.resourceType === 'dns_proxy'
+                  ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history`
+                  : props.resourceType === 'ssl'
+                    ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history`
+                    : props.resourceType === 'edge_env'
+                      ? `/clusters/${props.clusterId}/edge-env/versions`
+                      : `/clusters/${props.clusterId}/routes/${props.resourceId}/history`
     const res = await api.get(endpoint)
     versions.value = res.data.items || []
     currentVersion.value = res.data.current_version || null
@@ -290,11 +345,13 @@ const sortValue = (val: any): any => {
   if (Array.isArray(val)) {
     if (val.length === 0) return val
     if (typeof val[0] === 'object') {
-      return val.map(item => sortValue(item)).sort((a, b) => {
-        const aKey = Object.keys(a)[0] || ''
-        const bKey = Object.keys(b)[0] || ''
-        return aKey.localeCompare(bKey)
-      })
+      return val
+        .map((item) => sortValue(item))
+        .sort((a, b) => {
+          const aKey = Object.keys(a)[0] || ''
+          const bKey = Object.keys(b)[0] || ''
+          return aKey.localeCompare(bKey)
+        })
     }
     return [...val].sort((a, b) => {
       if (typeof a === 'number' && typeof b === 'number') return a - b
@@ -349,7 +406,7 @@ const computeDiff = (objA: any, objB: any): DiffResult => {
     }
   }
 
-  const hasChange = Object.values(children).some(c => c.status !== 'same')
+  const hasChange = Object.values(children).some((c) => c.status !== 'same')
   if (hasChange) {
     return { status: 'changed', children }
   }
@@ -361,15 +418,15 @@ const diffTreeHtml = computed(() => {
 
   const v1 = Math.min(...selectedVersions.value)
   const v2 = Math.max(...selectedVersions.value)
-  const versionA = versions.value.find(v => v.version === v1)
-  const versionB = versions.value.find(v => v.version === v2)
+  const versionA = versions.value.find((v) => v.version === v1)
+  const versionB = versions.value.find((v) => v.version === v2)
 
   if (!versionA || !versionB) return ''
 
   try {
     // 兼容两种字段名称：plugin_metadata 使用 metadata，upstream/route 使用 config
     const getRawData = (v: any) => v.metadata || v.config
-    const parseMetadata = (m: any) => typeof m === 'string' ? JSON.parse(m) : m
+    const parseMetadata = (m: any) => (typeof m === 'string' ? JSON.parse(m) : m)
     const objA = sortValue(parseMetadata(getRawData(versionA)))
     const objB = sortValue(parseMetadata(getRawData(versionB)))
     const diff = computeDiff(objA, objB)
@@ -383,8 +440,8 @@ const textDiffHtml = computed(() => {
   if (selectedVersions.value.length !== 2) return ''
   const v1 = Math.min(...selectedVersions.value)
   const v2 = Math.max(...selectedVersions.value)
-  const versionA = versions.value.find(v => v.version === v1)
-  const versionB = versions.value.find(v => v.version === v2)
+  const versionA = versions.value.find((v) => v.version === v1)
+  const versionB = versions.value.find((v) => v.version === v2)
   if (!versionA || !versionB) return ''
 
   const getContent = (v: any): string => {
@@ -392,7 +449,9 @@ const textDiffHtml = computed(() => {
     try {
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
       return parsed.yaml || raw
-    } catch { return typeof raw === 'string' ? raw : JSON.stringify(raw) }
+    } catch {
+      return typeof raw === 'string' ? raw : JSON.stringify(raw)
+    }
   }
 
   const linesA = (getContent(versionA) || '').split('\n')
@@ -426,7 +485,16 @@ const renderDiffTree = (diff: DiffResult, indent = 0): string => {
   if (diff.status === 'changed' && !diff.children) {
     const valA = diff.valueA === undefined ? '(空)' : diff.valueA
     const valB = diff.valueB === undefined ? '(空)' : diff.valueB
-    return pad + '<span class="diff-changed-a">' + escapeHtml(String(valA)) + '</span><br>' + pad + '<span class="diff-changed-b">' + escapeHtml(String(valB)) + '</span>'
+    return (
+      pad +
+      '<span class="diff-changed-a">' +
+      escapeHtml(String(valA)) +
+      '</span><br>' +
+      pad +
+      '<span class="diff-changed-b">' +
+      escapeHtml(String(valB)) +
+      '</span>'
+    )
   }
 
   if (diff.children) {
@@ -437,18 +505,44 @@ const renderDiffTree = (diff: DiffResult, indent = 0): string => {
       const child = diff.children[key]
 
       if (child.status === 'same') {
-        html += pad + '<span class="diff-key">' + escapeHtml(key) + ':</span> <span class="diff-same">' + escapeHtml(formatValue(child.valueA)) + '</span><br>'
+        html +=
+          pad +
+          '<span class="diff-key">' +
+          escapeHtml(key) +
+          ':</span> <span class="diff-same">' +
+          escapeHtml(formatValue(child.valueA)) +
+          '</span><br>'
       } else if (child.status === 'added') {
-        html += pad + '<span class="diff-key">' + escapeHtml(key) + ':</span> <span class="diff-added">' + escapeHtml(formatValue(child.valueB)) + '</span><br>'
+        html +=
+          pad +
+          '<span class="diff-key">' +
+          escapeHtml(key) +
+          ':</span> <span class="diff-added">' +
+          escapeHtml(formatValue(child.valueB)) +
+          '</span><br>'
       } else if (child.status === 'removed') {
-        html += pad + '<span class="diff-key">' + escapeHtml(key) + ':</span> <span class="diff-removed">' + escapeHtml(formatValue(child.valueA)) + '</span><br>'
+        html +=
+          pad +
+          '<span class="diff-key">' +
+          escapeHtml(key) +
+          ':</span> <span class="diff-removed">' +
+          escapeHtml(formatValue(child.valueA)) +
+          '</span><br>'
       } else if (child.children) {
         html += pad + '<span class="diff-key">' + escapeHtml(key) + ':</span><br>'
         html += renderDiffTree(child, indent + 1)
       } else {
         const valA = child.valueA === undefined ? '(空)' : child.valueA
         const valB = child.valueB === undefined ? '(空)' : child.valueB
-        html += pad + '  <span class="diff-removed">' + escapeHtml(String(valA)) + '</span><br>' + pad + '  <span class="diff-added">' + escapeHtml(String(valB)) + '</span><br>'
+        html +=
+          pad +
+          '  <span class="diff-removed">' +
+          escapeHtml(String(valA)) +
+          '</span><br>' +
+          pad +
+          '  <span class="diff-added">' +
+          escapeHtml(String(valB)) +
+          '</span><br>'
       }
     }
 
@@ -468,11 +562,7 @@ const formatValue = (val: any): string => {
 }
 
 const escapeHtml = (str: string): string => {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 const handleRepublish = async () => {
@@ -481,11 +571,13 @@ const handleRepublish = async () => {
     if (!props.clusterId || !props.resourceName) return
     const versionToSelect = selectedVersion.value
     try {
-      await api.post(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`)
+      await api.post(
+        `/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`,
+      )
       message.success('已切换到版本 v' + selectedVersion.value)
       emit('published', { plugin_name: props.resourceName })
       await loadHistory()
-      if (versions.value.some(v => v.version === versionToSelect)) {
+      if (versions.value.some((v) => v.version === versionToSelect)) {
         selectedVersion.value = versionToSelect
       }
     } catch (error: any) {
@@ -503,7 +595,11 @@ const handleRepublish = async () => {
       const res = await api.get(detailEndpoint)
       const config = res.data.config || '{}'
       let yamlContent = ''
-      try { yamlContent = JSON.parse(config).yaml || config } catch { yamlContent = config }
+      try {
+        yamlContent = JSON.parse(config).yaml || config
+      } catch {
+        yamlContent = config
+      }
       emit('republish', { content: yamlContent, version: selectedVersion.value })
       message.success('已加载版本 v' + selectedVersion.value + ' 到编辑器')
       handleClose()
@@ -514,24 +610,25 @@ const handleRepublish = async () => {
   }
 
   try {
-    const endpoint = props.resourceType === 'upstream'
-      ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
-      : props.resourceType === 'plugin_config'
-      ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${selectedVersion.value}`
-      : props.resourceType === 'global_rule'
-      ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${selectedVersion.value}`
-      : props.resourceType === 'static_resource'
-      ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
-      : props.resourceType === 'ssl'
-      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
-      : props.resourceType === 'dns_proxy'
-      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
-      : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
+    const endpoint =
+      props.resourceType === 'upstream'
+        ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/rollback/${selectedVersion.value}`
+        : props.resourceType === 'plugin_config'
+          ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/rollback/${selectedVersion.value}`
+          : props.resourceType === 'global_rule'
+            ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${selectedVersion.value}`
+            : props.resourceType === 'static_resource'
+              ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
+              : props.resourceType === 'ssl'
+                ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
+                : props.resourceType === 'dns_proxy'
+                  ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
+                  : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success('已切换到版本 v' + selectedVersion.value)
     emit('published', { plugin_name: props.resourceName })
     await loadHistory()
-    if (versions.value.some(v => v.version === versionToSelect)) {
+    if (versions.value.some((v) => v.version === versionToSelect)) {
       selectedVersion.value = versionToSelect
     }
   } catch (error: any) {
@@ -547,26 +644,29 @@ const handleDelete = async () => {
   }
   try {
     if (props.resourceType === 'plugin_metadata') {
-      await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/versions/${selectedVersionData.value.id}`)
+      await api.delete(
+        `/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/versions/${selectedVersionData.value.id}`,
+      )
     } else {
       if (!props.resourceId) return
-    const endpoint = props.resourceType === 'upstream'
-      ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'plugin_config'
-      ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'global_rule'
-      ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'static_resource'
-      ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'stream_proxy'
-      ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'dns_proxy'
-      ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'ssl'
-      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history/${selectedVersionData.value.id}`
-      : props.resourceType === 'edge_env'
-      ? `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value.id}`
-      : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
+      const endpoint =
+        props.resourceType === 'upstream'
+          ? `/clusters/${props.clusterId}/upstreams/${props.resourceId}/history/${selectedVersionData.value.id}`
+          : props.resourceType === 'plugin_config'
+            ? `/clusters/${props.clusterId}/plugin_configs/${props.resourceId}/history/${selectedVersionData.value.id}`
+            : props.resourceType === 'global_rule'
+              ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/history/${selectedVersionData.value.id}`
+              : props.resourceType === 'static_resource'
+                ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/history/${selectedVersionData.value.id}`
+                : props.resourceType === 'stream_proxy'
+                  ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
+                  : props.resourceType === 'dns_proxy'
+                    ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/history/${selectedVersionData.value.id}`
+                    : props.resourceType === 'ssl'
+                      ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/history/${selectedVersionData.value.id}`
+                      : props.resourceType === 'edge_env'
+                        ? `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value.id}`
+                        : `/clusters/${props.clusterId}/routes/${props.resourceId}/history/${selectedVersionData.value.id}`
       await api.delete(endpoint)
     }
     message.success('历史版本已删除')
@@ -588,21 +688,25 @@ const handleClose = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.modal-close { flex-shrink: 0; }
+.modal-close {
+  flex-shrink: 0;
+}
 .modal-body {
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.modal-footer { flex-shrink: 0; }
+.modal-footer {
+  flex-shrink: 0;
+}
 
 .checkbox-label {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 14px;
   height: 14px;
   accent-color: var(--accent);
@@ -649,16 +753,49 @@ const handleClose = () => {
   line-height: 1.5;
   white-space: nowrap;
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
-.btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-.btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
-.btn-ghost:hover { background: var(--bg); color: var(--fg); }
-.btn-danger { background: transparent; color: var(--danger); border-color: var(--border); }
-.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 8%, transparent); border-color: var(--danger); }
-.btn-sm { padding: 3px 10px; font-size: 11px; }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.btn-secondary {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background: var(--bg);
+  color: var(--fg);
+}
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--border);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-color: var(--danger);
+}
+.btn-sm {
+  padding: 3px 10px;
+  font-size: 11px;
+}
 
 .loading-hint,
 .empty-hint {

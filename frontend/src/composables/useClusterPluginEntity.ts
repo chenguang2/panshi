@@ -1,9 +1,12 @@
 import { ref, reactive, h, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
-import type { Cluster, Plugin } from '@/types'
+import type { Cluster, Plugin, GlobalRule, PluginConfig } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from './useClusterUtils'
 import { getApiErrorMessage } from '@/utils/error'
+
+/** 插件实体资源（插件组/全局规则）的公共形状 */
+type PluginEntityItem = (GlobalRule | PluginConfig) & { plugins: Record<string, unknown> }
 
 export interface VersionModalState {
   type: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
@@ -56,7 +59,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   })
 
   const viewDrawerVisible = ref(false)
-  const viewingItem = ref<any>(null)
+  const viewingItem = ref<PluginEntityItem | null>(null)
 
   const loadItems = async (cluster: Cluster) => {
     try {
@@ -79,19 +82,19 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     modalVisible.value = true
   }
 
-  const viewItem = (item: any) => {
+  const viewItem = (item: PluginEntityItem) => {
     viewingItem.value = item
     viewDrawerVisible.value = true
   }
 
-  const editItem = async (cluster: Cluster, item: any) => {
+  const editItem = async (cluster: Cluster, item: PluginEntityItem) => {
     if (availablePlugins.value.length === 0) await loadAvailablePlugins()
     formMode.value = 'edit'
     editingClusterId.value = cluster.id
     editingId.value = item.id
     formData.name = item.name || ''
     formData.description = item.description || ''
-    formData.selectedPlugins = Object.entries(item.plugins || {}).map(([plugin_name, config]: [string, any]) => ({
+    formData.selectedPlugins = Object.entries(item.plugins).map(([plugin_name, config]) => ({
       plugin_name,
       config: JSON.stringify(config),
     }))
@@ -106,10 +109,14 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       return
     }
 
-    const plugins: Record<string, any> = {}
+    const plugins: Record<string, unknown> = {}
     for (const sp of formData.selectedPlugins) {
       if (sp.config) {
-        try { plugins[sp.plugin_name] = JSON.parse(sp.config) } catch { plugins[sp.plugin_name] = sp.config }
+        try {
+          plugins[sp.plugin_name] = JSON.parse(sp.config)
+        } catch {
+          plugins[sp.plugin_name] = sp.config
+        }
       } else {
         plugins[sp.plugin_name] = {}
       }
@@ -126,14 +133,14 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       }
 
       modalVisible.value = false
-      const cluster = clusters.value.find(c => c.id === editingClusterId.value)
+      const cluster = clusters.value.find((c) => c.id === editingClusterId.value)
       if (cluster) await loadItems(cluster)
     } catch (error: unknown) {
       message.error(getApiErrorMessage(error))
     }
   }
 
-  const deleteItem = async (cluster: Cluster, item: any) => {
+  const deleteItem = async (cluster: Cluster, item: PluginEntityItem) => {
     showDeleteConfirm({
       title: `确定要删除${displayName} "${item.name}" 吗？`,
       apiEndpoint: `/clusters/${cluster.id}/${apiEndpoint}/${item.id}`,
@@ -147,13 +154,15 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
           deleteEdge,
           nodeIds,
           refreshFn: () => loadItems(cluster),
-          clearSelectedFn: () => { cluster.selectedPluginConfig = null },
+          clearSelectedFn: () => {
+            cluster.selectedPluginConfig = null
+          },
         })
       },
     })
   }
 
-  const publishItem = async (cluster: Cluster, item?: any) => {
+  const publishItem = async (cluster: Cluster, item?: PluginEntityItem) => {
     const target = item || cluster.selectedPluginConfig
     if (!target) {
       message.warning(`请先选择一个${displayName}`)
@@ -170,7 +179,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     })
   }
 
-  const openVersionManagement = (cluster: Cluster, item?: any) => {
+  const openVersionManagement = (cluster: Cluster, item?: PluginEntityItem) => {
     const target = item || cluster.selectedPluginConfig
     if (!target) {
       message.warning(`请先选择一个${displayName}`)
@@ -184,11 +193,18 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     versionModal.visible.value = true
   }
 
-  const viewPluginDetail = (parent: any, pname: string, pcfg: any) => {
+  const viewPluginDetail = (parent: PluginEntityItem, pname: string, pcfg: unknown) => {
     const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
     Modal.info({
       title: `${parent.name} - ${pname}`,
-      content: h('pre', { style: 'font-size:12px;white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;color:var(--fg);' }, configStr),
+      content: h(
+        'pre',
+        {
+          style:
+            'font-size:12px;white-space:pre-wrap;background:var(--bg);padding:12px;border-radius:4px;max-height:400px;overflow-y:auto;color:var(--fg);',
+        },
+        configStr,
+      ),
       okText: '关闭',
       width: 560,
     })

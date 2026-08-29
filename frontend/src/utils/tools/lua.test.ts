@@ -5,13 +5,13 @@ describe('luaToConfigString', () => {
   it('直接序列化完整函数定义，不添加外壳', () => {
     const input = 'function(conf, ctx)\n  ngx.log(ngx.ERR, "hello")\nend'
     const result = luaToConfigString(input)
-    expect(result).toBe('"function(conf, ctx)\\n  ngx.log(ngx.ERR, \\\"hello\\\")\\nend"')
+    expect(result).toBe('"function(conf, ctx)\\n  ngx.log(ngx.ERR, \\"hello\\")\\nend"')
   })
 
   it('处理单行函数定义', () => {
     const input = 'function(conf) return "ok" end'
     const result = luaToConfigString(input)
-    expect(result).toBe('"function(conf) return \\\"ok\\\" end"')
+    expect(result).toBe('"function(conf) return \\"ok\\" end"')
   })
 
   it('处理空字符串', () => {
@@ -19,7 +19,7 @@ describe('luaToConfigString', () => {
   })
 
   it('处理包含特殊字符的函数', () => {
-    const input = 'function(conf)\n  local s = \'test\'\n  ngx.say(s)\nend'
+    const input = "function(conf)\n  local s = 'test'\n  ngx.say(s)\nend"
     const result = luaToConfigString(input)
     const parsed = JSON.parse(result)
     expect(parsed).toBe(input)
@@ -29,13 +29,13 @@ describe('luaToConfigString', () => {
 describe('configStringToLua', () => {
   describe('新版格式（无外壳）', () => {
     it('直接解析完整函数定义', () => {
-      const input = '"function(conf, ctx)\\n  ngx.log(ngx.ERR, \\\"hello\\\")\\nend"'
+      const input = '"function(conf, ctx)\\n  ngx.log(ngx.ERR, \\"hello\\")\\nend"'
       const result = configStringToLua(input)
       expect(result).toBe('function(conf, ctx)\n  ngx.log(ngx.ERR, "hello")\nend')
     })
 
     it('解析单行函数', () => {
-      const input = '"function(conf) return \\\"ok\\\" end"'
+      const input = '"function(conf) return \\"ok\\" end"'
       const result = configStringToLua(input)
       expect(result).toBe('function(conf) return "ok" end')
     })
@@ -47,7 +47,7 @@ describe('configStringToLua', () => {
 
   describe('旧版格式兼容（有 return 外壳）', () => {
     it('剥离 return function(conf, ctx) 外壳', () => {
-      const input = '"return function(conf, ctx)\\n  ngx.log(ngx.ERR, \\\"hello\\\")\\nend"'
+      const input = '"return function(conf, ctx)\\n  ngx.log(ngx.ERR, \\"hello\\")\\nend"'
       const result = configStringToLua(input)
       expect(result).toBe('  ngx.log(ngx.ERR, "hello")')
     })

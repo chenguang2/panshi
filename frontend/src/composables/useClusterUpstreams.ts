@@ -133,87 +133,82 @@ export function useClusterUpstreams(options: {
 
   // ── 通用骨架：load/select/delete/publish/version 十件套 ─────────────
 
-  const core = useClusterResource<Upstream>({
-    noun: '上游',
-    endpoint: 'upstreams',
-    versionType: 'upstream',
-    keys: {
-      items: 'upstreams',
-      pagination: 'upstreamsPagination',
-      loading: 'upstreamsLoading',
-      search: 'upstreamsSearch',
-      searchField: 'upstreamsSearchField',
-      sortBy: 'upstreamsSortBy',
-      sortOrder: 'upstreamsSortOrder',
-      selected: 'selectedUpstream',
-      selectedKeys: 'selectedUpstreamKeys',
-    },
-    sortFieldMap: {
-      name: 'name',
-      load_balance: 'load_balance',
-      description: 'description',
-      created_at: 'created_at',
-    },
-    deleteGuard: async (cluster, upstream) => {
-      // Ensure routes are loaded to check for linked routes
-      if (!cluster.routes || cluster.routes.length === 0) {
-        try {
-          const res = await api.get(
-            `/clusters/${cluster.id}/routes`,
-            { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
-          )
-          cluster.routes = res.data.items
-        } catch {
-          // If we can't load routes, continue (the API delete will catch issues)
+  const core = useClusterResource<Upstream>(
+    {
+      noun: '上游',
+      endpoint: 'upstreams',
+      versionType: 'upstream',
+      keys: {
+        items: 'upstreams',
+        pagination: 'upstreamsPagination',
+        loading: 'upstreamsLoading',
+        search: 'upstreamsSearch',
+        searchField: 'upstreamsSearchField',
+        sortBy: 'upstreamsSortBy',
+        sortOrder: 'upstreamsSortOrder',
+        selected: 'selectedUpstream',
+        selectedKeys: 'selectedUpstreamKeys',
+      },
+      sortFieldMap: {
+        name: 'name',
+        load_balance: 'load_balance',
+        description: 'description',
+        created_at: 'created_at',
+      },
+      deleteGuard: async (cluster, upstream) => {
+        // Ensure routes are loaded to check for linked routes
+        if (!cluster.routes || cluster.routes.length === 0) {
+          try {
+            const res = await api.get(`/clusters/${cluster.id}/routes`, {
+              params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
+            })
+            cluster.routes = res.data.items
+          } catch {
+            // If we can't load routes, continue (the API delete will catch issues)
+          }
         }
-      }
-      const linkedRoutes = (cluster.routes || []).filter(
-        (r: Route) => r.upstream_id === upstream.id,
-      )
-      if (linkedRoutes.length > 0) {
-        const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
-        return `该上游已被路由 "${routeNames}" 引用，请先删除这些路由`
-      }
-      return null
-    },
-    deleteGuardLevel: 'error',
-    batchFilter: async (cluster, upstreams) => {
-      if (!cluster.routes || cluster.routes.length === 0) {
-        try {
-          const res = await api.get(
-            `/clusters/${cluster.id}/routes`,
-            { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
-          )
-          cluster.routes = res.data.items
-        } catch {
-          // 加载失败时放弃前端守卫，交给后端拦截
+        const linkedRoutes = (cluster.routes || []).filter((r: Route) => r.upstream_id === upstream.id)
+        if (linkedRoutes.length > 0) {
+          const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
+          return `该上游已被路由 "${routeNames}" 引用，请先删除这些路由`
         }
-      }
-      const referenced = upstreams.filter((u) =>
-        (cluster.routes || []).some((r) => r.upstream_id === u.id),
-      )
-      if (referenced.length > 0) {
-        const names = referenced.map((u) => u.name).join('、')
-        message.warning(`上游 "${names}" 已被路由引用，已跳过删除，请先删除引用路由`)
-      }
-      const deletable = upstreams.filter((u) =>
-        !(cluster.routes || []).some((r) => r.upstream_id === u.id),
-      )
-      return deletable.length > 0 ? deletable : null
+        return null
+      },
+      deleteGuardLevel: 'error',
+      batchFilter: async (cluster, upstreams) => {
+        if (!cluster.routes || cluster.routes.length === 0) {
+          try {
+            const res = await api.get(`/clusters/${cluster.id}/routes`, {
+              params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
+            })
+            cluster.routes = res.data.items
+          } catch {
+            // 加载失败时放弃前端守卫，交给后端拦截
+          }
+        }
+        const referenced = upstreams.filter((u) => (cluster.routes || []).some((r) => r.upstream_id === u.id))
+        if (referenced.length > 0) {
+          const names = referenced.map((u) => u.name).join('、')
+          message.warning(`上游 "${names}" 已被路由引用，已跳过删除，请先删除引用路由`)
+        }
+        const deletable = upstreams.filter((u) => !(cluster.routes || []).some((r) => r.upstream_id === u.id))
+        return deletable.length > 0 ? deletable : null
+      },
+      batchResourceKey: { field: 'upstream_ids', label: '上游', nameField: 'upstream_name' },
     },
-    batchResourceKey: { field: 'upstream_ids', label: '上游', nameField: 'upstream_name' },
-  }, {
-    openPublishModal,
-    showDeleteConfirm,
-    versionModal: {
-      type: versionModalType,
-      visible: versionModalVisible,
-      resourceId: versionModalResourceId,
-      clusterId: versionModalClusterId,
-      resourceName: versionModalResourceName,
-      edgeUuid: versionModalEdgeUuid,
+    {
+      openPublishModal,
+      showDeleteConfirm,
+      versionModal: {
+        type: versionModalType,
+        visible: versionModalVisible,
+        resourceId: versionModalResourceId,
+        clusterId: versionModalClusterId,
+        resourceName: versionModalResourceName,
+        edgeUuid: versionModalEdgeUuid,
+      },
     },
-  })
+  )
 
   const loadUpstreams = core.load
   const handleUpstreamTableChange = core.handleTableChange
@@ -253,9 +248,14 @@ export function useClusterUpstreams(options: {
 
   const retriesSubmitValue = computed<number | null>(() => {
     switch (retriesRadio.value) {
-      case 'auto': return null
-      case 'custom': return upstreamForm.retriesInput ?? null
-      case 'disabled': return 0
+      case 'auto':
+        return null
+      case 'custom':
+        return upstreamForm.retriesInput ?? null
+      case 'disabled':
+        return 0
+      default:
+        return null
     }
   })
 
@@ -298,10 +298,7 @@ export function useClusterUpstreams(options: {
       key: 'publish_status',
       width: 140,
       customRender: ({ record }: { record: Record<string, unknown> }) =>
-        publishStatusRender(
-          (record.current_version as number) ?? null,
-          (record.published_at as string) ?? null,
-        ),
+        publishStatusRender((record.current_version as number) ?? null, (record.published_at as string) ?? null),
     },
     { title: '操作', key: 'actions', width: 340 },
   ]
@@ -357,11 +354,7 @@ export function useClusterUpstreams(options: {
     return core.getActionButtonTitle(key, allUpstreamActionButtons)
   }
 
-  const handleUpstreamAction = (
-    cluster: Cluster,
-    record: Upstream,
-    action: string,
-  ) => {
+  const handleUpstreamAction = (cluster: Cluster, record: Upstream, action: string) => {
     switch (action) {
       case 'copy':
         copyUpstreamByRecord(cluster, record)
@@ -448,14 +441,16 @@ export function useClusterUpstreams(options: {
     formErrors.pass_host = ''
     let valid = true
     if (toggleChecks.value && !upstreamForm.checks) {
-      formErrors.checks = '健康检查配置不完整'; valid = false
+      formErrors.checks = '健康检查配置不完整'
+      valid = false
     }
     if (toggleTimeout.value) {
       const cv = readDomValue('connect')
       const sv = readDomValue('send')
       const rv = readDomValue('read')
       if (!cv || !sv || !rv) {
-        formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'; valid = false
+        formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'
+        valid = false
       } else {
         upstreamForm.timeout.connect = parseFloat(cv)
         upstreamForm.timeout.send = parseFloat(sv)
@@ -467,7 +462,8 @@ export function useClusterUpstreams(options: {
       const idle = readDomValue('idle_timeout')
       const req = readDomValue('requests')
       if (!size || !idle || !req) {
-        formErrors.keepalive_pool = '请填写完整的连接池配置'; valid = false
+        formErrors.keepalive_pool = '请填写完整的连接池配置'
+        valid = false
       } else {
         upstreamForm.keepalive_pool.size = parseFloat(size)
         upstreamForm.keepalive_pool.idle_timeout = parseFloat(idle)
@@ -477,7 +473,8 @@ export function useClusterUpstreams(options: {
     if (toggleRetryTimeout.value) {
       const rtv = readDomValue('秒')
       if (!rtv) {
-        formErrors.retry_timeout = '请填写重试超时（0 = 不限制）'; valid = false
+        formErrors.retry_timeout = '请填写重试超时（0 = 不限制）'
+        valid = false
       } else {
         upstreamForm.retry_timeout = parseInt(rtv)
       }
@@ -485,13 +482,15 @@ export function useClusterUpstreams(options: {
     if (toggleRetries.value && retriesRadio.value === 'custom') {
       const rv = readDomValue('次数')
       if (!rv || parseInt(rv) < 1) {
-        formErrors.retries = '请输入大于 0 的重试次数'; valid = false
+        formErrors.retries = '请输入大于 0 的重试次数'
+        valid = false
       } else {
         upstreamForm.retriesInput = parseInt(rv)
       }
     }
     if (toggleHost.value && upstreamForm.pass_host === 'rewrite' && !upstreamForm.upstream_host) {
-      formErrors.pass_host = '请填写上游 Host'; valid = false
+      formErrors.pass_host = '请填写上游 Host'
+      valid = false
     }
     return valid
   }
@@ -517,7 +516,7 @@ export function useClusterUpstreams(options: {
     toggleScheme.value = false
     retriesRadio.value = 'auto'
     checksMode.value = 'active'
-    upstreamForm.checks = null  // null = use HealthCheckForm defaults when toggled on
+    upstreamForm.checks = null // null = use HealthCheckForm defaults when toggled on
     upstreamForm.retriesInput = undefined
     upstreamForm.retry_timeout = 0
     upstreamForm.timeout = { ...defaultTimeout }
@@ -526,7 +525,7 @@ export function useClusterUpstreams(options: {
     upstreamForm.scheme = 'http'
     upstreamForm.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
     targetValidation.value = {}
-    Object.keys(formErrors).forEach(k => formErrors[k] = '')
+    Object.keys(formErrors).forEach((k) => (formErrors[k] = ''))
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
   }
@@ -574,7 +573,11 @@ export function useClusterUpstreams(options: {
     toggleTimeout.value = u.timeout !== null && u.timeout !== undefined
     const t = u.timeout ? (typeof u.timeout === 'string' ? JSON.parse(u.timeout) : u.timeout) : null
     upstreamForm.timeout = t
-      ? { connect: t.connect ?? defaultTimeout.connect, send: t.send ?? defaultTimeout.send, read: t.read ?? defaultTimeout.read }
+      ? {
+          connect: t.connect ?? defaultTimeout.connect,
+          send: t.send ?? defaultTimeout.send,
+          read: t.read ?? defaultTimeout.read,
+        }
       : { ...defaultTimeout }
 
     toggleRetries.value = u.retries !== null && u.retries !== undefined
@@ -624,12 +627,10 @@ export function useClusterUpstreams(options: {
         }
       })
     } else {
-      upstreamForm.targets = [
-        { key: ++upstreamTargetKey, host: '', port: 80, weight: 100 },
-      ]
+      upstreamForm.targets = [{ key: ++upstreamTargetKey, host: '', port: 80, weight: 100 }]
     }
     targetValidation.value = {}
-    Object.keys(formErrors).forEach(k => formErrors[k] = '')
+    Object.keys(formErrors).forEach((k) => (formErrors[k] = ''))
   }
 
   const editUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
@@ -708,31 +709,22 @@ export function useClusterUpstreams(options: {
       submitData.retry_timeout = toggleRetryTimeout.value ? upstreamForm.retry_timeout : null
 
       submitData.pass_host = toggleHost.value ? upstreamForm.pass_host : null
-      submitData.upstream_host = toggleHost.value && upstreamForm.pass_host === 'rewrite' ? (upstreamForm.upstream_host || null) : null
+      submitData.upstream_host =
+        toggleHost.value && upstreamForm.pass_host === 'rewrite' ? upstreamForm.upstream_host || null : null
       submitData.scheme = toggleScheme.value ? upstreamForm.scheme : null
       if (editingUpstream.value) {
-        await api.put(
-          `/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`,
-          submitData,
-        )
+        await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
         message.success('上游已更新')
       } else {
-        await api.post(
-          `/clusters/${currentClusterId.value}/upstreams`,
-          submitData,
-        )
+        await api.post(`/clusters/${currentClusterId.value}/upstreams`, submitData)
         message.success('上游已添加')
       }
 
       // Refresh the cluster's upstream list so the table and re-edit show latest data
       upstreamModalVisible.value = false
-      const c = options.clusters?.value?.find(
-        (c) => c.id === currentClusterId.value,
-      )
+      const c = options.clusters?.value?.find((c) => c.id === currentClusterId.value)
       if (c) {
-        const res = await api.get(
-          `/clusters/${currentClusterId.value}/upstreams`,
-        )
+        const res = await api.get(`/clusters/${currentClusterId.value}/upstreams`)
         c.upstreams = res.data.items
         c.upstream_count = c.upstreams!.length
       }

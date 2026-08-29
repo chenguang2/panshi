@@ -78,11 +78,11 @@ export interface Cluster {
   selectedRouteKeys?: number[]
   plugin_configs?: PluginConfig[]
   selectedPluginConfig?: PluginConfig | null
-  global_rules?: any[]
-  selectedGlobalRule?: any | null
-  static_resources?: any[]
+  global_rules?: GlobalRule[]
+  selectedGlobalRule?: GlobalRule | null
+  static_resources?: StaticResource[]
   staticResourcesLoading?: boolean
-  selectedStaticResource?: any | null
+  selectedStaticResource?: StaticResource | null
 }
 
 export interface Node {
@@ -95,6 +95,7 @@ export interface Node {
   edge_path?: string
   openresty_path?: string
   status: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
   status_detail?: Record<string, any>
   created_at?: string
 }
@@ -145,7 +146,30 @@ export interface Route {
 
 export type MatchRuleType = 'header' | 'query' | 'postarg' | 'cookie' | 'builtin'
 
-export type MatchOperator = '==' | '==*' | '!=' | '!=*' | '>' | '>=' | '<' | '<=' | 'v>' | 'v>=' | 'v<' | 'v<=' | '~~' | '~~*' | 'ip~' | 'not_ip~' | 'has' | 'has*' | 'in*' | 'rx~' | 'rx~*' | 'IN' | 'NOT IN'
+export type MatchOperator =
+  | '=='
+  | '==*'
+  | '!='
+  | '!=*'
+  | '>'
+  | '>='
+  | '<'
+  | '<='
+  | 'v>'
+  | 'v>='
+  | 'v<'
+  | 'v<='
+  | '~~'
+  | '~~*'
+  | 'ip~'
+  | 'not_ip~'
+  | 'has'
+  | 'has*'
+  | 'in*'
+  | 'rx~'
+  | 'rx~*'
+  | 'IN'
+  | 'NOT IN'
 
 export interface MatchRule {
   type: MatchRuleType
@@ -159,7 +183,9 @@ export interface Plugin {
   display_name?: string
   category?: string
   description: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
   schema: Record<string, any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
   metadata_schema?: Record<string, any>
   enable_metadata?: boolean
 }
@@ -172,13 +198,36 @@ export interface RoutePlugin {
 export interface PluginConfig {
   id: number
   name: string
-  description: string
-  plugins: Record<string, any>
+  description?: string
+  plugins: Record<string, unknown>
   edge_uuid?: string
-  current_version?: number
-  published_at?: string
-  created_at?: string
-  updated_at?: string
+  current_version?: number | null
+  published_at?: string | null
+}
+
+/** 全局规则（global_rules 资源） */
+export interface GlobalRule {
+  id: number
+  name: string
+  description?: string
+  plugins: Record<string, unknown>
+  edge_uuid?: string
+  current_version?: number | null
+  published_at?: string | null
+}
+
+/** 静态资源（static_resources 资源） */
+export interface StaticResource {
+  id: number
+  cluster_id?: number
+  name: string
+  url_path?: string
+  description?: string
+  route_id?: number
+  storage_path?: string
+  file_size?: number
+  current_version?: number | null
+  updated_at?: string | null
 }
 
 export interface StreamProxyTarget {
@@ -200,10 +249,12 @@ export interface StreamProxy {
   targets?: StreamProxyTarget[]
   timeout?: Record<string, number>
   keepalive_pool?: Record<string, number>
-  checks?: Record<string, unknown> | string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
+  checks?: Record<string, any> | string
   retries?: number
   retry_timeout?: number
   proxy_type?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
   dns_config?: Record<string, any> | string
   remote_addr?: string
   sni?: string

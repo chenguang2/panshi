@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:800px;">
+    <div class="modal modal-wide" style="max-width: 800px">
       <div class="modal-header">
         <h2>{{ copyingUpstream ? '复制上游' : editingUpstream ? '编辑上游' : '添加上游' }}</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
@@ -8,8 +8,12 @@
 
       <!-- Tab Bar -->
       <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础配置</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">高级配置</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">
+          基础配置
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">
+          高级配置
+        </button>
       </div>
 
       <div class="modal-body">
@@ -18,7 +22,7 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">名称 <span class="required">*</span></label>
-              <input v-model="form.name" type="text" class="form-input" placeholder="请输入上游名称">
+              <input v-model="form.name" type="text" class="form-input" placeholder="请输入上游名称" />
               <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
             </div>
             <div class="form-group">
@@ -43,7 +47,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">描述</label>
-              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息">
+              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息" />
             </div>
           </div>
 
@@ -60,7 +64,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Key <span class="required">*</span></label>
-                <input v-model="form.key" type="text" class="form-input" placeholder="请输入哈希 Key">
+                <input v-model="form.key" type="text" class="form-input" placeholder="请输入哈希 Key" />
               </div>
             </div>
           </template>
@@ -75,21 +79,43 @@
                     <th>主机/域名</th>
                     <th>端口</th>
                     <th>权重</th>
-                    <th style="width:60px;">操作</th>
+                    <th style="width: 60px">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="(t, i) in form.targets" :key="t.key">
                     <td>
-                      <input v-model="t.host" type="text" class="form-input" placeholder="主机地址（IP 或域名）" style="height:30px;font-size:12px;">
+                      <input
+                        v-model="t.host"
+                        type="text"
+                        class="form-input"
+                        placeholder="主机地址（IP 或域名）"
+                        style="height: 30px; font-size: 12px"
+                      />
                       <div v-if="targetValidation[i]?.host" class="form-error">{{ targetValidation[i].host }}</div>
                     </td>
                     <td>
-                      <input v-model.number="t.port" type="number" class="form-input" min="1" max="65535" placeholder="端口" style="height:30px;font-size:12px;">
+                      <input
+                        v-model.number="t.port"
+                        type="number"
+                        class="form-input"
+                        min="1"
+                        max="65535"
+                        placeholder="端口"
+                        style="height: 30px; font-size: 12px"
+                      />
                       <div v-if="targetValidation[i]?.port" class="form-error">{{ targetValidation[i].port }}</div>
                     </td>
                     <td>
-                      <input v-model.number="t.weight" type="number" class="form-input" min="1" max="100" placeholder="权重" style="height:30px;font-size:12px;">
+                      <input
+                        v-model.number="t.weight"
+                        type="number"
+                        class="form-input"
+                        min="1"
+                        max="100"
+                        placeholder="权重"
+                        style="height: 30px; font-size: 12px"
+                      />
                       <div v-if="targetValidation[i]?.weight" class="form-error">{{ targetValidation[i].weight }}</div>
                     </td>
                     <td>
@@ -99,8 +125,14 @@
                 </tbody>
               </table>
             </div>
-            <div v-if="formErrors.targets" class="form-error" style="margin-top:8px;">{{ formErrors.targets }}</div>
-            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;border:1px dashed var(--border);" @click="addTarget">+ 添加节点</button>
+            <div v-if="formErrors.targets" class="form-error" style="margin-top: 8px">{{ formErrors.targets }}</div>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="width: 100%; margin-top: 8px; border: 1px dashed var(--border)"
+              @click="addTarget"
+            >
+              + 添加节点
+            </button>
           </div>
         </div>
 
@@ -109,7 +141,7 @@
           <!-- 健康检查 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleChecks">
+              <input type="checkbox" v-model="toggleChecks" />
               <span>健康检查</span>
             </label>
             <HealthCheckForm
@@ -117,80 +149,180 @@
               v-model:enabled="toggleChecks"
               v-model:modelMode="checksMode"
             />
-            <div v-if="formErrors.checks" class="form-error" style="margin-top:6px;">{{ formErrors.checks }}</div>
+            <div v-if="formErrors.checks" class="form-error" style="margin-top: 6px">{{ formErrors.checks }}</div>
           </div>
 
           <!-- 超时配置 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleTimeout">
+              <input type="checkbox" v-model="toggleTimeout" />
               <span>超时配置（秒）</span>
             </label>
             <div class="form-row-sm">
               <div class="form-sub-group">
                 <div class="form-sub-label">连接</div>
-                <input :value="form.timeout.connect ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.connect = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="connect" style="height:30px;" :disabled="!toggleTimeout">
+                <input
+                  :value="form.timeout.connect ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.timeout.connect = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="0"
+                  placeholder="connect"
+                  style="height: 30px"
+                  :disabled="!toggleTimeout"
+                />
               </div>
               <div class="form-sub-group">
                 <div class="form-sub-label">发送</div>
-                <input :value="form.timeout.send ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.send = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="send" style="height:30px;" :disabled="!toggleTimeout">
+                <input
+                  :value="form.timeout.send ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.timeout.send = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="0"
+                  placeholder="send"
+                  style="height: 30px"
+                  :disabled="!toggleTimeout"
+                />
               </div>
               <div class="form-sub-group">
                 <div class="form-sub-label">读取</div>
-                <input :value="form.timeout.read ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.timeout.read = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="read" style="height:30px;" :disabled="!toggleTimeout">
+                <input
+                  :value="form.timeout.read ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.timeout.read = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="0"
+                  placeholder="read"
+                  style="height: 30px"
+                  :disabled="!toggleTimeout"
+                />
               </div>
             </div>
-            <div v-if="formErrors.timeout" class="form-error" style="margin-top:6px;">{{ formErrors.timeout }}</div>
+            <div v-if="formErrors.timeout" class="form-error" style="margin-top: 6px">{{ formErrors.timeout }}</div>
           </div>
 
           <!-- 连接池 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="togglePool">
+              <input type="checkbox" v-model="togglePool" />
               <span>连接池</span>
             </label>
             <div class="form-row-sm">
               <div class="form-sub-group">
                 <div class="form-sub-label">大小</div>
-                <input :value="form.keepalive_pool.size ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.size = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="1" placeholder="大小" style="height:30px;" :disabled="!togglePool">
+                <input
+                  :value="form.keepalive_pool.size ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.keepalive_pool.size = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="1"
+                  placeholder="大小"
+                  style="height: 30px"
+                  :disabled="!togglePool"
+                />
               </div>
               <div class="form-sub-group">
                 <div class="form-sub-label">空闲超时（秒）</div>
-                <input :value="form.keepalive_pool.idle_timeout ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.idle_timeout = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="空闲超时" style="height:30px;" :disabled="!togglePool">
+                <input
+                  :value="form.keepalive_pool.idle_timeout ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.keepalive_pool.idle_timeout = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="0"
+                  placeholder="空闲超时"
+                  style="height: 30px"
+                  :disabled="!togglePool"
+                />
               </div>
               <div class="form-sub-group">
                 <div class="form-sub-label">最大请求数</div>
-                <input :value="form.keepalive_pool.requests ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.keepalive_pool.requests = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="1" placeholder="最大请求" style="height:30px;" :disabled="!togglePool">
+                <input
+                  :value="form.keepalive_pool.requests ?? ''"
+                  @input="
+                    (e) => {
+                      const v = (e.target as HTMLInputElement).value
+                      form.keepalive_pool.requests = v === '' ? undefined : parseFloat(v)
+                    }
+                  "
+                  type="number"
+                  class="form-input"
+                  min="1"
+                  placeholder="最大请求"
+                  style="height: 30px"
+                  :disabled="!togglePool"
+                />
               </div>
             </div>
-            <div v-if="formErrors.keepalive_pool" class="form-error" style="margin-top:6px;">{{ formErrors.keepalive_pool }}</div>
+            <div v-if="formErrors.keepalive_pool" class="form-error" style="margin-top: 6px">
+              {{ formErrors.keepalive_pool }}
+            </div>
           </div>
 
           <!-- 重试次数 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleRetries">
+              <input type="checkbox" v-model="toggleRetries" />
               <span>重试次数</span>
             </label>
             <div :style="{ opacity: toggleRetries ? 1 : 0.45 }">
               <div class="radio-group">
                 <label class="radio-label">
-                  <input type="radio" value="auto" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <input type="radio" value="auto" v-model="retriesRadio" :disabled="!toggleRetries" />
                   <span>自动（使用可用节点数）</span>
                 </label>
                 <label class="radio-label">
-                  <input type="radio" value="custom" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <input type="radio" value="custom" v-model="retriesRadio" :disabled="!toggleRetries" />
                   <span>指定重试次数</span>
                 </label>
                 <template v-if="retriesRadio === 'custom'">
-                  <input :value="form.retriesInput ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.retriesInput = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="次数" style="height:30px;width:120px;margin-left:24px;" :disabled="!toggleRetries">
+                  <input
+                    :value="form.retriesInput ?? ''"
+                    @input="
+                      (e) => {
+                        const v = (e.target as HTMLInputElement).value
+                        form.retriesInput = v === '' ? undefined : parseFloat(v)
+                      }
+                    "
+                    type="number"
+                    class="form-input"
+                    min="0"
+                    placeholder="次数"
+                    style="height: 30px; width: 120px; margin-left: 24px"
+                    :disabled="!toggleRetries"
+                  />
                 </template>
                 <label class="radio-label">
-                  <input type="radio" value="disabled" v-model="retriesRadio" :disabled="!toggleRetries">
+                  <input type="radio" value="disabled" v-model="retriesRadio" :disabled="!toggleRetries" />
                   <span>禁用重试</span>
                 </label>
               </div>
-              <div v-if="formErrors.retries" class="form-error" style="margin-top:4px;">{{ formErrors.retries }}</div>
+              <div v-if="formErrors.retries" class="form-error" style="margin-top: 4px">{{ formErrors.retries }}</div>
               <div class="form-hint">自动 = 使用后端可用节点数作为重试次数</div>
             </div>
           </div>
@@ -198,22 +330,38 @@
           <!-- 重试超时 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleRetryTimeout">
+              <input type="checkbox" v-model="toggleRetryTimeout" />
               <span>重试超时（秒）</span>
             </label>
-            <input :value="form.retry_timeout ?? ''" @input="e => { const v = (e.target as HTMLInputElement).value; form.retry_timeout = v === '' ? undefined : parseFloat(v) }" type="number" class="form-input" min="0" placeholder="秒" style="max-width:200px;" :disabled="!toggleRetryTimeout">
-            <div v-if="formErrors.retry_timeout" class="form-error" style="margin-top:4px;">{{ formErrors.retry_timeout }}</div>
+            <input
+              :value="form.retry_timeout ?? ''"
+              @input="
+                (e) => {
+                  const v = (e.target as HTMLInputElement).value
+                  form.retry_timeout = v === '' ? undefined : parseFloat(v)
+                }
+              "
+              type="number"
+              class="form-input"
+              min="0"
+              placeholder="秒"
+              style="max-width: 200px"
+              :disabled="!toggleRetryTimeout"
+            />
+            <div v-if="formErrors.retry_timeout" class="form-error" style="margin-top: 4px">
+              {{ formErrors.retry_timeout }}
+            </div>
             <div class="form-hint">0 = 不限制重试时间</div>
           </div>
 
           <!-- Host 策略 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleHost">
+              <input type="checkbox" v-model="toggleHost" />
               <span>Host 策略</span>
             </label>
             <div class="form-row-sm">
-              <div class="form-sub-group" style="max-width:260px;">
+              <div class="form-sub-group" style="max-width: 260px">
                 <div class="form-sub-label">Host 策略</div>
                 <select v-model="form.pass_host" class="form-input" :disabled="!toggleHost">
                   <option value="pass">pass（透传客户端 Host）</option>
@@ -223,19 +371,25 @@
               </div>
               <div v-if="form.pass_host === 'rewrite'" class="form-sub-group">
                 <div class="form-sub-label">上游 Host</div>
-                <input v-model="form.upstream_host" type="text" class="form-input" placeholder="指定上游请求的Host" :disabled="!toggleHost">
+                <input
+                  v-model="form.upstream_host"
+                  type="text"
+                  class="form-input"
+                  placeholder="指定上游请求的Host"
+                  :disabled="!toggleHost"
+                />
               </div>
             </div>
-            <div v-if="formErrors.pass_host" class="form-error" style="margin-top:6px;">{{ formErrors.pass_host }}</div>
+            <div v-if="formErrors.pass_host" class="form-error" style="margin-top: 6px">{{ formErrors.pass_host }}</div>
           </div>
 
           <!-- 通信协议 -->
           <div class="advanced-section">
             <label class="checkbox-label section-toggle">
-              <input type="checkbox" v-model="toggleScheme">
+              <input type="checkbox" v-model="toggleScheme" />
               <span>通信协议</span>
             </label>
-            <select v-model="form.scheme" class="form-input" style="max-width:200px;" :disabled="!toggleScheme">
+            <select v-model="form.scheme" class="form-input" style="max-width: 200px" :disabled="!toggleScheme">
               <option value="http">http</option>
               <option value="https">https</option>
               <option value="tcp">tcp</option>
@@ -247,7 +401,9 @@
 
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="$emit('close')">取消</button>
-        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '提交中...' : '保存' }}</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
+          {{ submitting ? '提交中...' : '保存' }}
+        </button>
       </div>
     </div>
   </div>
@@ -347,9 +503,14 @@ const retriesRadio = ref<'auto' | 'custom' | 'disabled'>('auto')
 // computed submit value for retries
 const retriesSubmitValue = computed<number | null>(() => {
   switch (retriesRadio.value) {
-    case 'auto': return null
-    case 'custom': return form.retriesInput ?? null
-    case 'disabled': return 0
+    case 'auto':
+      return null
+    case 'custom':
+      return form.retriesInput ?? null
+    case 'disabled':
+      return 0
+    default:
+      return null
   }
 })
 
@@ -369,23 +530,34 @@ const form = reactive({
   pass_host: 'pass',
   upstream_host: '',
   scheme: 'http',
-  keepalive_pool: { size: undefined as number | undefined, idle_timeout: undefined as number | undefined, requests: undefined as number | undefined },
+  keepalive_pool: {
+    size: undefined as number | undefined,
+    idle_timeout: undefined as number | undefined,
+    requests: undefined as number | undefined,
+  },
   checks: null as Record<string, unknown> | null,
 })
 
 // Watch load_balance change - reset hash fields when not chash
-watch(() => form.load_balance, (val) => {
-  if (val !== 'chash') {
-    form.hash_on = 'vars'
-    form.key = ''
-  }
-})
+watch(
+  () => form.load_balance,
+  (val) => {
+    if (val !== 'chash') {
+      form.hash_on = 'vars'
+      form.key = ''
+    }
+  },
+)
 
 // Populate form when visible changes
-watch(() => props.visible, (v) => {
-  if (!v) return
-  populateForm()
-}, { immediate: true })
+watch(
+  () => props.visible,
+  (v) => {
+    if (!v) return
+    populateForm()
+  },
+  { immediate: true },
+)
 
 function populateForm() {
   formErrors.name = ''
@@ -502,8 +674,14 @@ function validateForm(): boolean {
   formErrors.cluster_id = ''
   targetValidation.value = {}
 
-  if (!form.name.trim()) { formErrors.name = '请输入上游名称'; return false }
-  if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
+  if (!form.name.trim()) {
+    formErrors.name = '请输入上游名称'
+    return false
+  }
+  if (!form.cluster_id) {
+    formErrors.cluster_id = '请选择所属集群'
+    return false
+  }
 
   let valid = true
   formErrors.targets = ''
@@ -514,16 +692,30 @@ function validateForm(): boolean {
   const seen = new Set<string>()
   form.targets.forEach((t, i) => {
     const errors: Record<string, string> = {}
-    if (!t.host) { errors.host = '主机地址不能为空'; valid = false }
-    else {
+    if (!t.host) {
+      errors.host = '主机地址不能为空'
+      valid = false
+    } else {
       const hostResult = validateHost(t.host)
-      if (!hostResult.valid) { errors.host = hostResult.error; valid = false }
+      if (!hostResult.valid) {
+        errors.host = hostResult.error
+        valid = false
+      }
     }
-    if (!t.port || t.port < 1 || t.port > 65535) { errors.port = '端口不合法'; valid = false }
-    if (!t.weight || t.weight < 1 || t.weight > 100) { errors.weight = '权重不合法'; valid = false }
+    if (!t.port || t.port < 1 || t.port > 65535) {
+      errors.port = '端口不合法'
+      valid = false
+    }
+    if (!t.weight || t.weight < 1 || t.weight > 100) {
+      errors.weight = '权重不合法'
+      valid = false
+    }
     if (t.host && t.port) {
       const key = `${t.host}:${t.port}`
-      if (seen.has(key)) { errors.host = `主机和端口与第 ${[...seen].indexOf(key) + 1} 行重复`; valid = false }
+      if (seen.has(key)) {
+        errors.host = `主机和端口与第 ${[...seen].indexOf(key) + 1} 行重复`
+        valid = false
+      }
       seen.add(key)
     }
     targetValidation.value[`${i}`] = errors
@@ -542,9 +734,17 @@ function validateForm(): boolean {
   }
   if (toggleTimeout.value) {
     const t = form.timeout
-    if (t.connect === undefined || t.connect === null || isNaN(t.connect) ||
-        t.send === undefined || t.send === null || isNaN(t.send) ||
-        t.read === undefined || t.read === null || isNaN(t.read)) {
+    if (
+      t.connect === undefined ||
+      t.connect === null ||
+      isNaN(t.connect) ||
+      t.send === undefined ||
+      t.send === null ||
+      isNaN(t.send) ||
+      t.read === undefined ||
+      t.read === null ||
+      isNaN(t.read)
+    ) {
       formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'
       valid = false
     }
@@ -585,7 +785,7 @@ async function handleSubmit() {
       name: form.name,
       load_balance: form.load_balance,
       description: form.description,
-      targets: form.targets.map(t => ({ target: buildTarget(t.host, t.port), weight: t.weight })),
+      targets: form.targets.map((t) => ({ target: buildTarget(t.host, t.port), weight: t.weight })),
     }
     if (form.load_balance === 'chash') {
       submitData.hash_on = form.hash_on
@@ -613,7 +813,7 @@ async function handleSubmit() {
     submitData.retry_timeout = toggleRetryTimeout.value ? form.retry_timeout : null
 
     submitData.pass_host = toggleHost.value ? form.pass_host : null
-    submitData.upstream_host = toggleHost.value && form.pass_host === 'rewrite' ? (form.upstream_host || null) : null
+    submitData.upstream_host = toggleHost.value && form.pass_host === 'rewrite' ? form.upstream_host || null : null
     submitData.scheme = toggleScheme.value ? form.scheme : null
 
     const clusterId = form.cluster_id
@@ -636,10 +836,22 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
-.form-row-sm { display: flex; gap: 8px; }
-.form-group { flex: 1; margin-bottom: 16px; }
-.form-sub-group { flex: 1; }
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.form-row-sm {
+  display: flex;
+  gap: 8px;
+}
+.form-group {
+  flex: 1;
+  margin-bottom: 16px;
+}
+.form-sub-group {
+  flex: 1;
+}
 
 /* ── Advanced sections ── */
 .advanced-sections {
@@ -674,7 +886,9 @@ async function handleSubmit() {
   transition: all 0.15s;
   font-family: var(--font-body);
 }
-.tab-btn:hover { color: var(--fg); }
+.tab-btn:hover {
+  color: var(--fg);
+}
 .tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -694,7 +908,9 @@ async function handleSubmit() {
   margin-bottom: 4px;
 }
 
-.required { color: var(--danger); }
+.required {
+  color: var(--danger);
+}
 
 .form-hint {
   font-size: 11px;
@@ -716,7 +932,7 @@ async function handleSubmit() {
   color: var(--fg);
   cursor: pointer;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
@@ -741,7 +957,7 @@ async function handleSubmit() {
   font-size: 13px;
   cursor: pointer;
 }
-.radio-label input[type="radio"] {
+.radio-label input[type='radio'] {
   accent-color: var(--accent);
 }
 
@@ -751,7 +967,10 @@ async function handleSubmit() {
   border-radius: var(--radius-md);
   overflow: hidden;
 }
-.inline-table { width: 100%; border-collapse: collapse; }
+.inline-table {
+  width: 100%;
+  border-collapse: collapse;
+}
 .inline-table thead th {
   background: oklch(97% 0.005 250);
   padding: 8px 12px;
@@ -766,5 +985,7 @@ async function handleSubmit() {
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
-.inline-table tbody tr:last-child td { border-bottom: none; }
+.inline-table tbody tr:last-child td {
+  border-bottom: none;
+}
 </style>

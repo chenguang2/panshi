@@ -2,34 +2,39 @@ import { ref, computed, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
+import { getApiErrorMessage } from '@/utils/error'
+import type { Cluster, StreamProxy } from '@/types'
+
+/** API 返回的代理项（带服务端聚合的集群组名） */
+type StreamProxyItem = StreamProxy & { cluster_group_name?: string }
 
 export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
-  const proxies = ref<any[]>([])
-  const clusters = ref<any[]>([])
+  const proxies = ref<StreamProxyItem[]>([])
+  const clusters = ref<Cluster[]>([])
   const totalCount = ref(0)
   const loading = ref(false)
   const searchText = ref('')
   const clusterFilter = ref<string | number>('')
   const groupFilter = ref('__all__')
 
-  const pageTitle = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : '四层代理')
-  const pageDesc = computed(() => proxyType.value === 'dns'
-    ? '管理集群级的 DNS 代理规则'
-    : '管理集群级的 TCP/UDP/TLS 四层转发规则')
+  const pageTitle = computed(() => (proxyType.value === 'dns' ? 'DNS 代理' : '四层代理'))
+  const pageDesc = computed(() =>
+    proxyType.value === 'dns' ? '管理集群级的 DNS 代理规则' : '管理集群级的 TCP/UDP/TLS 四层转发规则',
+  )
 
   const groupOptions = computed(() => {
-    const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
+    const names = new Set(clusters.value.map((c) => c.group_name || ''))
     return Array.from(names).filter(Boolean).sort()
   })
 
   const filteredClusters = computed(() => {
     if (groupFilter.value === '__all__') return clusters.value
-    if (groupFilter.value === '__ung__') return clusters.value.filter((c: any) => !c.group_name)
-    return clusters.value.filter((c: any) => c.group_name === groupFilter.value)
+    if (groupFilter.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
+    return clusters.value.filter((c) => c.group_name === groupFilter.value)
   })
 
   const displayedProxies = computed(() => {
-    return [...proxies.value].sort((a: any, b: any) => {
+    return [...proxies.value].sort((a, b) => {
       const ga = a.cluster_group_name || ''
       const gb = b.cluster_group_name || ''
       if (ga && !gb) return 1
@@ -44,16 +49,14 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
 
   const groupProxies = computed(() => {
     if (groupFilter.value === '__all__' || groupFilter.value === '__ung__') return []
-    return proxies.value
-      .filter((p: any) => (p.cluster_group_name || '') === groupFilter.value)
-      .map((p: any) => p.id as number)
+    return proxies.value.filter((p) => (p.cluster_group_name || '') === groupFilter.value).map((p) => p.id)
   })
 
-  const filteredProxies = computed(() => displayedProxies.value.map((p: any) => p.id as number))
+  const filteredProxies = computed(() => displayedProxies.value.map((p) => p.id))
 
   const selectedProxies = computed(() => {
     const idSet = new Set(selectedProxyIds.value)
-    return proxies.value.filter((p: any) => idSet.has(p.id as number))
+    return proxies.value.filter((p) => idSet.has(p.id))
   })
 
   const allGroupSelected = computed(() => {
@@ -112,16 +115,18 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
   async function loadProxies() {
     loading.value = true
     try {
-      const params: Record<string, any> = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value, proxy_type: proxyType.value }
+      const params: Record<string, string | number> = {
+        page_size: PAGE_SIZE_CARD_GRID,
+        group_name: groupFilter.value,
+        proxy_type: proxyType.value,
+      }
       if (clusterFilter.value) params.cluster_id = clusterFilter.value
       if (searchText.value) params.search = searchText.value
       const res = await api.get('/stream-proxies', { params })
       proxies.value = res.data.items || []
       totalCount.value = res.data.total || 0
-    } catch (e: any) {
-      const detail = e?.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : (e?.message || `加载${pageTitle.value}失败`)
-      message.error(msg)
+    } catch (e: unknown) {
+      message.error(getApiErrorMessage(e))
     } finally {
       loading.value = false
     }
@@ -131,23 +136,44 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     try {
       const res = await api.get('/clusters')
       clusters.value = res.data?.items || res.data || []
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
-  const itemLabel = computed(() => proxyType.value === 'dns' ? 'DNS 代理' : '四层代理')
+  const itemLabel = computed(() => (proxyType.value === 'dns' ? 'DNS 代理' : '四层代理'))
   const createButtonText = computed(() => `+ 新建 ${itemLabel.value}`)
 
   return {
-    proxies, clusters, totalCount, loading,
-    searchText, clusterFilter, groupFilter,
-    pageTitle, pageDesc, itemLabel, createButtonText,
-    groupOptions, filteredClusters, displayedProxies,
-    batchMode, selectedProxyIds, selectedProxies,
-    groupProxies, filteredProxies,
-    allGroupSelected, allFilteredSelected, showGroupSelectAll,
-    toggleBatchMode, toggleProxy,
-    toggleSelectAllGroup, toggleSelectAllFiltered, clearSelection,
-    loadProxies, loadClusters,
+    proxies,
+    clusters,
+    totalCount,
+    loading,
+    searchText,
+    clusterFilter,
+    groupFilter,
+    pageTitle,
+    pageDesc,
+    itemLabel,
+    createButtonText,
+    groupOptions,
+    filteredClusters,
+    displayedProxies,
+    batchMode,
+    selectedProxyIds,
+    selectedProxies,
+    groupProxies,
+    filteredProxies,
+    allGroupSelected,
+    allFilteredSelected,
+    showGroupSelectAll,
+    toggleBatchMode,
+    toggleProxy,
+    toggleSelectAllGroup,
+    toggleSelectAllFiltered,
+    clearSelection,
+    loadProxies,
+    loadClusters,
     proxyType,
   }
 }

@@ -1,9 +1,14 @@
 import { ref, reactive, computed, type Ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
-import type { Cluster } from '@/types'
+import type { Cluster, Route, RoutePlugin, StaticResource } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
-import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
+import {
+  showDeleteConfirm,
+  executePublish,
+  executeDeleteWithProgress,
+  buildDeleteProgressContent,
+} from './useClusterUtils'
 import { formatFileSize } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
 
@@ -31,7 +36,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
 
   const selectedRoute = computed(() => {
     if (!staticResourceFormData.route_id || !staticResourceEditingCluster.value) return null
-    return staticResourceEditingCluster.value.routes?.find((r: any) => r.id === staticResourceFormData.route_id) || null
+    return staticResourceEditingCluster.value.routes?.find((r) => r.id === staticResourceFormData.route_id) || null
   })
   const uriValid = computed(() => {
     const r = selectedRoute.value
@@ -44,7 +49,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
   const pluginValid = computed(() => {
     const r = selectedRoute.value
     if (!r) return false
-    return (r.plugins || []).some((p: any) => p.plugin_name === 'static_resource')
+    return (r.plugins || []).some((p) => p.plugin_name === 'static_resource')
   })
   const staticResourceFormValid = computed(() => {
     return staticResourceFormData.route_id && uriValid.value && publishedValid.value && pluginValid.value
@@ -65,7 +70,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
   const onStaticResourceRouteChange = (routeId: number) => {
     const cluster = staticResourceEditingCluster.value
     if (!cluster) return
-    const route = cluster.routes?.find((r: any) => r.id === routeId)
+    const route = cluster.routes?.find((r) => r.id === routeId)
     if (!route) {
       staticResourceRouteInfo.value = null
       return
@@ -97,12 +102,12 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     staticResourceModalVisible.value = true
   }
 
-  const editStaticResource = (cluster: Cluster, sr: any) => {
+  const editStaticResource = (cluster: Cluster, sr: StaticResource) => {
     staticResourceFormMode.value = 'edit'
     staticResourceEditingCluster.value = cluster
     staticResourceEditingId.value = sr.id
     staticResourceFormData.name = sr.name
-    staticResourceFormData.url_path = sr.url_path
+    staticResourceFormData.url_path = sr.url_path || ''
     staticResourceFormData.description = sr.description || ''
     staticResourceRouteInfo.value = null
     staticResourceModalVisible.value = true
@@ -132,7 +137,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         await api.post(`/clusters/${cluster.id}/static-resources`, payload)
         message.success('静态资源已创建')
       } else {
-        const payload: Record<string, any> = {}
+        const payload: Record<string, unknown> = {}
         if (staticResourceFormData.description !== undefined) {
           payload.description = staticResourceFormData.description || undefined
         }
@@ -147,7 +152,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     }
   }
 
-  const deleteStaticResource = async (cluster: Cluster, sr: any) => {
+  const deleteStaticResource = async (cluster: Cluster, sr: StaticResource) => {
     showDeleteConfirm({
       title: `确定要删除静态资源 "${sr.name}" 吗？`,
       apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
@@ -161,13 +166,15 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
           deleteEdge,
           nodeIds,
           refreshFn: () => loadStaticResources(cluster),
-          clearSelectedFn: () => { cluster.selectedStaticResource = null },
+          clearSelectedFn: () => {
+            cluster.selectedStaticResource = null
+          },
         })
       },
     })
   }
 
-  const uploadStaticResource = (sr: any) => {
+  const uploadStaticResource = (sr: StaticResource) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.zip'
@@ -175,13 +182,13 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
       const file = input.files?.[0]
       if (!file) return
 
-      const cluster = clusters.value.find((c: Cluster) =>
-        c.static_resources?.some((s: any) => s.id === sr.id)
-      )
+      const cluster = clusters.value.find((c) => c.static_resources?.some((s) => s.id === sr.id))
       if (!cluster) return
 
       const logs: string[] = []
-      const addLog = (text: string) => { logs.push(`[${new Date().toLocaleTimeString()}] ${text}`) }
+      const addLog = (text: string) => {
+        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+      }
       const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
       const totalSize = file.size
 
@@ -200,7 +207,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
       progress.percent = 5
       updateContent()
 
-      await new Promise(r => setTimeout(r, 200))
+      await new Promise((r) => setTimeout(r, 200))
 
       try {
         const formData = new FormData()
@@ -212,7 +219,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
 
         const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/upload`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (e: any) => {
+          onUploadProgress: (e: { loaded: number; total?: number }) => {
             if (e.total) {
               const pct = Math.round(20 + (e.loaded / e.total) * 50)
               progress.percent = pct
@@ -254,7 +261,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     input.click()
   }
 
-  const publishStaticResource = async (cluster: Cluster, sr: any) => {
+  const publishStaticResource = async (cluster: Cluster, sr: StaticResource) => {
     const nodeIds = await openPublishModal(`发布静态资源: ${sr.name}`, cluster.id)
     if (!nodeIds.length) return
 
@@ -266,19 +273,26 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
       handleResult: (data, addLog, progress) => {
         if (data.current_version !== undefined) addLog(`当前版本: v${data.current_version}`)
         if (data.results && data.results.length > 0) {
-          addLog(''); addLog('节点同步结果:')
+          addLog('')
+          addLog('节点同步结果:')
           for (const r of data.results) {
             addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
           }
         }
-        progress.percent = 100; addLog('')
-        if (data.success) { progress.status = 'success'; addLog('✅ 发布成功!') }
-        else { progress.status = 'exception'; addLog('⚠️ 发布完成，部分节点失败') }
+        progress.percent = 100
+        addLog('')
+        if (data.success) {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else {
+          progress.status = 'exception'
+          addLog('⚠️ 发布完成，部分节点失败')
+        }
       },
     })
   }
 
-  const openStaticResourceVersionManagement = (cluster: Cluster, sr: any) => {
+  const openStaticResourceVersionManagement = (cluster: Cluster, sr: StaticResource) => {
     versionModal.type.value = 'static_resource'
     versionModal.resourceId.value = sr.id
     versionModal.clusterId.value = cluster.id

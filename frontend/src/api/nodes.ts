@@ -1,4 +1,5 @@
 import api from '@/api'
+import type { Node } from '@/types'
 
 export interface NodeListParams {
   page?: number
@@ -39,7 +40,7 @@ export interface NodeListResponse {
   total: number
   page: number
   page_size: number
-  items: any[]
+  items: Node[]
 }
 
 export function listNodes(params: NodeListParams = {}) {

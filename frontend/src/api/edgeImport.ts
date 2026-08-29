@@ -59,7 +59,7 @@ export interface Conflict {
 
 export interface PluginMetadataPreview {
   plugin_name: string
-  config_data: Record<string, any>
+  config_data: Record<string, unknown>
 }
 
 export interface SslCertificatePreview {
@@ -70,13 +70,13 @@ export interface SslCertificatePreview {
 }
 
 export interface PreviewResponse {
-  upstreams: Record<string, any>[]
-  routes: Record<string, any>[]
-  plugin_configs: Record<string, any>[]
-  global_rules: Record<string, any>[]
+  upstreams: Record<string, unknown>[]
+  routes: Record<string, unknown>[]
+  plugin_configs: Record<string, unknown>[]
+  global_rules: Record<string, unknown>[]
   plugin_metadata: PluginMetadataPreview[]
   ssl_certificates: SslCertificatePreview[]
-  stream_proxies: Record<string, any>[]
+  stream_proxies: Record<string, unknown>[]
   conflicts: Conflict[]
   plugin_summary: PluginSummary
   warnings?: string[]
@@ -110,7 +110,7 @@ export function testConnection(clusterId: number, nodeId: number, adminKey?: str
 }
 
 export function getPreview(clusterId: number, nodeId: number, adminKey?: string) {
-  const body: Record<string, any> = { cluster_id: clusterId, node_id: nodeId }
+  const body: Record<string, unknown> = { cluster_id: clusterId, node_id: nodeId }
   if (adminKey) body.admin_key = adminKey
   return api.post<PreviewResponse>('/edge-import/preview', body)
 }

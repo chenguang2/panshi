@@ -56,18 +56,16 @@ export function useClusterBackup() {
         // 非 JSON blob（不应发生）——忽略
       }
       return { warnings }
-    } catch (e: any) {
-      error.value = e.response?.data?.detail || e.message || '备份下载失败'
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } }; message?: string }
+      error.value = err.response?.data?.detail || err.message || '备份下载失败'
       return null
     } finally {
       downloading.value = false
     }
   }
 
-  async function importBackup(
-    file: File,
-    targetClusterName: string,
-  ): Promise<ImportBackupResult | null> {
+  async function importBackup(file: File, targetClusterName: string): Promise<ImportBackupResult | null> {
     importing.value = true
     error.value = ''
     try {
@@ -78,12 +76,13 @@ export function useClusterBackup() {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       return res.data as ImportBackupResult
-    } catch (e: any) {
-      const detail = e.response?.data?.detail
-      if (detail?.errors && Array.isArray(detail.errors)) {
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: { errors?: string[] } | string } }; message?: string }
+      const detail = err.response?.data?.detail
+      if (typeof detail === 'object' && detail?.errors && Array.isArray(detail.errors)) {
         error.value = detail.errors.join('；')
       } else {
-        error.value = detail || e.message || '导入失败'
+        error.value = typeof detail === 'string' ? detail : err.message || '导入失败'
       }
       return null
     } finally {

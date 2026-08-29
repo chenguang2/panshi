@@ -42,7 +42,12 @@ export function useInstallStream() {
       if (!response.ok) {
         const errText = await response.text().catch(() => '')
         let errMsg = `请求失败 (${response.status})`
-        try { const j = JSON.parse(errText); errMsg = j.detail || errMsg } catch { /* ignore */ }
+        try {
+          const j = JSON.parse(errText)
+          errMsg = j.detail || errMsg
+        } catch {
+          /* ignore */
+        }
         options.onError?.(errMsg)
         error.value = errMsg
         status.value = 'error'
@@ -98,9 +103,10 @@ export function useInstallStream() {
           }
         }
       }
-    } catch (e: any) {
-      if (e.name === 'AbortError') return
-      const msg = e.message || '安装失败'
+    } catch (e: unknown) {
+      const err = e as { name?: string; message?: string }
+      if (err.name === 'AbortError') return
+      const msg = err.message || '安装失败'
       error.value = msg
       status.value = 'error'
       options.onError?.(msg)

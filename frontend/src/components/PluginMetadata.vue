@@ -22,14 +22,14 @@
                     <div class="plugin-card-name">{{ plugin.name }}</div>
                     <div class="plugin-card-desc">{{ plugin.description }}</div>
                   </div>
-                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)">+ 添加</a-button>
+                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)"
+                    >+ 添加</a-button
+                  >
                 </div>
               </div>
             </div>
           </template>
-          <div v-if="pluginGroups.length === 0" class="empty-hint">
-            未找到可配置的插件
-          </div>
+          <div v-if="pluginGroups.length === 0" class="empty-hint">未找到可配置的插件</div>
         </div>
       </div>
 
@@ -39,20 +39,24 @@
           <span class="plugin-count">({{ configuredPlugins.length }})</span>
         </div>
         <div class="plugin-list">
-          <div
-            v-for="item in configuredPlugins"
-            :key="item.id"
-            class="plugin-item configured"
-          >
+          <div v-for="item in configuredPlugins" :key="item.id" class="plugin-item configured">
             <div class="plugin-info">
               <div class="plugin-name">{{ item.plugin_name }}</div>
               <div class="plugin-right">
                 <div>
-                  <span v-if="item.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+                  <span v-if="item.current_version" class="badge badge-success"
+                    ><span class="status-dot online"></span>已发布</span
+                  >
                   <span v-else class="badge badge-neutral">未发布</span>
                 </div>
                 <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--success)' : 'var(--muted)' }">
-                  {{ item.current_version && item.updated_at ? `v${item.current_version} · ${formatDate(item.updated_at)}` : item.current_version ? `v${item.current_version} · 未同步` : '' }}
+                  {{
+                    item.current_version && item.updated_at
+                      ? `v${item.current_version} · ${formatDate(item.updated_at)}`
+                      : item.current_version
+                        ? `v${item.current_version} · 未同步`
+                        : ''
+                  }}
                 </div>
               </div>
             </div>
@@ -65,9 +69,7 @@
               <a-button size="small" @click="openVersionManagement(item)">版本管理</a-button>
             </div>
           </div>
-          <div v-if="configuredPlugins.length === 0" class="empty-hint">
-            点击左侧"添加"按钮配置插件
-          </div>
+          <div v-if="configuredPlugins.length === 0" class="empty-hint">点击左侧"添加"按钮配置插件</div>
         </div>
       </div>
     </div>
@@ -83,7 +85,9 @@
           <a-descriptions-item label="插件名称">{{ viewingPlugin.plugin_name }}</a-descriptions-item>
           <a-descriptions-item label="版本">v{{ viewingPlugin.current_version || '未发布' }}</a-descriptions-item>
           <a-descriptions-item label="状态">
-            <span v-if="viewingPlugin.is_published" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+            <span v-if="viewingPlugin.is_published" class="badge badge-success"
+              ><span class="status-dot online"></span>已发布</span
+            >
             <span v-else class="badge badge-neutral">未发布</span>
           </a-descriptions-item>
           <a-descriptions-item label="创建时间">{{ formatDate(viewingPlugin.created_at) }}</a-descriptions-item>
@@ -193,15 +197,28 @@ const editingPluginName = ref<string>('')
 
 // 插件分类元数据（标签映射）
 const CATEGORY_CONFIG: Record<string, string> = {
-  flow: '流量控制', rewrite: '请求/响应重写', auth: '认证',
-  process: '数据处理', static: '静态资源', security: '安全防护', monitor: '监控',
+  flow: '流量控制',
+  rewrite: '请求/响应重写',
+  auth: '认证',
+  process: '数据处理',
+  static: '静态资源',
+  security: '安全防护',
+  monitor: '监控',
 }
 
 const expandedCategories = reactive<Record<string, boolean>>({
-  flow: true, rewrite: true, process: true, static: true, security: true, monitor: true, auth: true,
+  flow: true,
+  rewrite: true,
+  process: true,
+  static: true,
+  security: true,
+  monitor: true,
+  auth: true,
 })
 
-function toggleCategory(key: string) { expandedCategories[key] = !expandedCategories[key] }
+function toggleCategory(key: string) {
+  expandedCategories[key] = !expandedCategories[key]
+}
 
 const pluginGroups = computed(() => {
   const result: { key: string; label: string; plugins: Plugin[] }[] = []
@@ -230,8 +247,8 @@ const versionModalVisible = ref(false)
 const versionModalPluginName = ref('')
 
 const availablePlugins = computed(() => {
-  const configuredNames = new Set(configuredPlugins.value.map(p => p.plugin_name))
-  return allPlugins.value.filter(p => p.enable_metadata === true && !configuredNames.has(p.name))
+  const configuredNames = new Set(configuredPlugins.value.map((p) => p.plugin_name))
+  return allPlugins.value.filter((p) => p.enable_metadata === true && !configuredNames.has(p.name))
 })
 
 const loadPlugins = async () => {
@@ -250,7 +267,7 @@ const loadConfiguredPlugins = async () => {
     configuredPlugins.value = (res.data.items || []).map((item: any) => ({
       ...item,
       version: item.current_version,
-      is_published: !!item.current_version
+      is_published: !!item.current_version,
     }))
   } catch (error) {
     console.error('加载已配置插件失败', error)
@@ -277,15 +294,15 @@ const viewPlugin = (item: ConfiguredPlugin) => {
 }
 
 const editPlugin = (item: ConfiguredPlugin) => {
-  const pluginInfo = allPlugins.value.find(p => p.name === item.plugin_name)
+  const pluginInfo = allPlugins.value.find((p) => p.name === item.plugin_name)
   editingPluginName.value = item.plugin_name
   editingPlugin.value = {
     plugin_name: item.plugin_name,
-    config: JSON.stringify(item.metadata, null, 2)
+    config: JSON.stringify(item.metadata, null, 2),
   }
   editingPluginInfo.value = {
     ...(pluginInfo || {}),
-    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
+    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {},
   }
   editorDrawerVisible.value = true
 }
@@ -304,15 +321,15 @@ const handleSavePlugin = async (config: string) => {
 }
 
 const handleVersionManagementEdit = (data: { plugin_name: string; config: string }) => {
-  const pluginInfo = allPlugins.value.find(p => p.name === data.plugin_name)
+  const pluginInfo = allPlugins.value.find((p) => p.name === data.plugin_name)
   editingPluginName.value = data.plugin_name
   editingPlugin.value = {
     plugin_name: data.plugin_name,
-    config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config, null, 2)
+    config: typeof data.config === 'string' ? data.config : JSON.stringify(data.config, null, 2),
   }
   editingPluginInfo.value = {
     ...(pluginInfo || {}),
-    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {}
+    schema: pluginInfo?.metadata_schema || pluginInfo?.schema || {},
   }
   editorDrawerVisible.value = true
 }
@@ -322,7 +339,7 @@ const handleVersionChange = (data: { plugin_name: string; version: number; metad
     viewingPlugin.value = {
       ...viewingPlugin.value,
       version: data.version,
-      metadata: data.metadata
+      metadata: data.metadata,
     }
   }
   loadConfiguredPlugins()
@@ -355,12 +372,13 @@ const deletePlugin = (item: ConfiguredPlugin) => {
 
       const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
       addLog(`开始删除插件元数据: ${item.plugin_name}`)
-      progress.percent = 20; update()
-      await new Promise(r => setTimeout(r, 400))
+      progress.percent = 20
+      update()
+      await new Promise((r) => setTimeout(r, 400))
 
       try {
         const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`, {
-          data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined }
+          data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined },
         })
         const data = response.data
         progress.percent = 60
@@ -375,11 +393,14 @@ const deletePlugin = (item: ConfiguredPlugin) => {
         const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
         if (edgeResults.length > 0) {
           addLog('正在从 Edge 节点同步删除...')
-          progress.percent = 80; update()
+          progress.percent = 80
+          update()
           addLog('Edge 节点同步删除结果:')
-          let ok = 0, fail = 0
+          let ok = 0,
+            fail = 0
           for (const r of edgeResults) {
-            r.status === 'success' ? ok++ : fail++
+            if (r.status === 'success') ok++
+            else fail++
             addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
           }
           addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
@@ -405,8 +426,10 @@ const deletePlugin = (item: ConfiguredPlugin) => {
         }
         await Promise.all([loadConfiguredPlugins(), loadPlugins()])
       } catch (error: any) {
-        progress.percent = 100; progress.status = 'exception'
-        addLog(''); addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
+        progress.percent = 100
+        progress.status = 'exception'
+        addLog('')
+        addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
         update()
         modal.update({ okButtonProps: { disabled: false } })
       }
@@ -431,17 +454,21 @@ const openVersionManagement = (item: ConfiguredPlugin) => {
   versionModalVisible.value = true
 }
 
-watch(() => props.clusterId, () => {
-  if (props.clusterId) {
-    // 关闭所有弹窗
-    viewDrawerVisible.value = false
-    editorDrawerVisible.value = false
-    versionModalVisible.value = false
-    publishModalVisible.value = false
-    loadPlugins()
-    loadConfiguredPlugins()
-  }
-}, { immediate: true })
+watch(
+  () => props.clusterId,
+  () => {
+    if (props.clusterId) {
+      // 关闭所有弹窗
+      viewDrawerVisible.value = false
+      editorDrawerVisible.value = false
+      versionModalVisible.value = false
+      publishModalVisible.value = false
+      loadPlugins()
+      loadConfiguredPlugins()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -538,41 +565,108 @@ watch(() => props.clusterId, () => {
   border-radius: 4px;
   transition: background 0.15s;
 }
-.category-header:hover { background: oklch(56% 0.16 210 / 10%); }
-.category-header .tree-toggle { font-size: 11px; color: var(--accent); opacity: 0.6; }
-.category-label { font-size: 13px; font-weight: 500; color: var(--fg); }
-.category-count { font-size: 11px; color: var(--muted); margin-left: auto; }
-
-.cat-flow { border-left-color: var(--accent); }
-.cat-rewrite { border-left-color: var(--warning); }
-.cat-process { border-left-color: var(--success); }
-.cat-auth { border-left-color: var(--accent); }
-.cat-static { border-left-color: var(--info); }
-.cat-security { border-left-color: var(--danger); }
-.cat-monitor { border-left-color: var(--accent); }
-.cat-other { border-left-color: var(--muted); }
-
-.plugin-tree { padding: 4px 0 4px 28px; position: relative; }
-.plugin-tree::before {
-  content: ''; position: absolute; left: 13px; top: 0; bottom: 0;
-  width: 2px; background: var(--accent); opacity: 0.3;
+.category-header:hover {
+  background: oklch(56% 0.16 210 / 10%);
+}
+.category-header .tree-toggle {
+  font-size: 11px;
+  color: var(--accent);
+  opacity: 0.6;
+}
+.category-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.category-count {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
 }
 
-.tree-item { position: relative; display: flex; margin-bottom: 6px; }
-.tree-item:last-child { margin-bottom: 0; }
+.cat-flow {
+  border-left-color: var(--accent);
+}
+.cat-rewrite {
+  border-left-color: var(--warning);
+}
+.cat-process {
+  border-left-color: var(--success);
+}
+.cat-auth {
+  border-left-color: var(--accent);
+}
+.cat-static {
+  border-left-color: var(--info);
+}
+.cat-security {
+  border-left-color: var(--danger);
+}
+.cat-monitor {
+  border-left-color: var(--accent);
+}
+.cat-other {
+  border-left-color: var(--muted);
+}
 
-.tree-connector { position: absolute; left: -15px; top: 0; width: 13px; height: 100%; pointer-events: none; }
+.plugin-tree {
+  padding: 4px 0 4px 28px;
+  position: relative;
+}
+.plugin-tree::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0.3;
+}
+
+.tree-item {
+  position: relative;
+  display: flex;
+  margin-bottom: 6px;
+}
+.tree-item:last-child {
+  margin-bottom: 0;
+}
+
+.tree-connector {
+  position: absolute;
+  left: -15px;
+  top: 0;
+  width: 13px;
+  height: 100%;
+  pointer-events: none;
+}
 .tree-connector::before {
-  content: ''; position: absolute; left: 0; top: 0;
-  width: 2px; height: 100%; background: var(--accent); opacity: 0.3;
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.3;
 }
 .tree-connector::after {
-  content: ''; position: absolute; left: 0; top: 18px;
-  width: 11px; height: 2px; background: var(--accent); opacity: 0.3;
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18px;
+  width: 11px;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.3;
 }
 
 .plugin-card {
-  flex: 1; display: flex; align-items: center; gap: 8px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -587,8 +681,11 @@ watch(() => props.clusterId, () => {
 }
 
 .plugin-card-body {
-  flex: 1; min-width: 0;
-  display: flex; flex-direction: column; gap: 2px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .plugin-card-name {
@@ -606,21 +703,39 @@ watch(() => props.clusterId, () => {
 .plugin-card .add-btn {
   flex-shrink: 0;
   opacity: 0.85;
-  transition: opacity 0.2s, transform 0.15s;
+  transition:
+    opacity 0.2s,
+    transform 0.15s;
 }
 .plugin-card:hover .add-btn {
   opacity: 1;
   transform: scale(1.05);
 }
 
-.border-flow { border-left: 3px solid var(--accent); }
-.border-rewrite { border-left: 3px solid var(--warning); }
-.border-process { border-left: 3px solid var(--success); }
-.border-auth { border-left: 3px solid var(--accent); }
-.border-static { border-left: 3px solid var(--info); }
-.border-security { border-left: 3px solid var(--danger); }
-.border-monitor { border-left: 3px solid var(--accent); }
-.border-other { border-left: 3px solid var(--muted); }
+.border-flow {
+  border-left: 3px solid var(--accent);
+}
+.border-rewrite {
+  border-left: 3px solid var(--warning);
+}
+.border-process {
+  border-left: 3px solid var(--success);
+}
+.border-auth {
+  border-left: 3px solid var(--accent);
+}
+.border-static {
+  border-left: 3px solid var(--info);
+}
+.border-security {
+  border-left: 3px solid var(--danger);
+}
+.border-monitor {
+  border-left: 3px solid var(--accent);
+}
+.border-other {
+  border-left: 3px solid var(--muted);
+}
 
 .plugin-item.configured {
   flex-direction: column;
@@ -628,11 +743,31 @@ watch(() => props.clusterId, () => {
 }
 
 /* 右侧面板样式 */
-.plugin-info { flex: 1; min-width: 0; display: flex; justify-content: space-between; align-items: flex-start; }
-.plugin-right { text-align: right; flex-shrink: 0; }
-.plugin-name { font-weight: 500; color: var(--fg); }
-.plugin-desc { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.plugin-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.plugin-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.plugin-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+.plugin-name {
+  font-weight: 500;
+  color: var(--fg);
+}
+.plugin-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.plugin-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
 
 .plugin-right {
   text-align: right;

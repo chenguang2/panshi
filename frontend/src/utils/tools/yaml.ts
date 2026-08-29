@@ -16,8 +16,8 @@ export function format(input: string): string {
   try {
     const doc = parse(input)
     return stringify(doc, { indent: 2 })
-  } catch (e: any) {
-    const msg = e.message || String(e)
+  } catch (e: unknown) {
+    const msg = (e as { message?: string }).message || String(e)
     return `YAML 解析失败: ${msg}`
   }
 }

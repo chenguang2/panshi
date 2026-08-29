@@ -11,25 +11,32 @@ import { ref, watch } from 'vue'
 export function usePluginConfigSync() {
   const jsonConfig = ref('')
   const jsonError = ref('')
-  const jsonEditorValue = ref<any>({})
+  const jsonEditorValue = ref<unknown>({})
 
   // 同步 jsonEditorValue → jsonConfig
   // text 模式下 v-model 发出原始字符串 → 原样保留（单层 JSON）；对象/数组才 stringify
-  watch(jsonEditorValue, (newVal) => {
-    try {
-      jsonConfig.value = typeof newVal === 'string' ? newVal : JSON.stringify(newVal)
-      jsonError.value = ''
-    } catch {
-      // keep old value
-    }
-  }, { deep: true })
+  watch(
+    jsonEditorValue,
+    (newVal) => {
+      try {
+        jsonConfig.value = typeof newVal === 'string' ? newVal : JSON.stringify(newVal)
+        jsonError.value = ''
+      } catch {
+        // keep old value
+      }
+    },
+    { deep: true },
+  )
 
   // 同步 jsonConfig → jsonEditorValue
   // 仅当 jsonEditorValue 不是字符串（非 text 模式输入中）才回写对象，阻断字符串→对象反馈环
   watch(jsonConfig, (newVal) => {
     try {
       const parsed = JSON.parse(newVal || '{}')
-      if (typeof jsonEditorValue.value !== 'string' && JSON.stringify(parsed) !== JSON.stringify(jsonEditorValue.value)) {
+      if (
+        typeof jsonEditorValue.value !== 'string' &&
+        JSON.stringify(parsed) !== JSON.stringify(jsonEditorValue.value)
+      ) {
         jsonEditorValue.value = parsed
       }
       jsonError.value = ''

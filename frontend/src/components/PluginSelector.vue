@@ -1,12 +1,7 @@
 <template>
   <div class="plugin-selector">
     <!-- 搜索 -->
-    <a-input-search
-      v-model:value="searchText"
-      placeholder="搜索插件..."
-      allow-clear
-      class="plugin-search"
-    />
+    <a-input-search v-model:value="searchText" placeholder="搜索插件..." allow-clear class="plugin-search" />
 
     <div class="two-columns">
       <!-- 左侧：分类树 + 网格 -->
@@ -18,17 +13,9 @@
             {{ allExpanded ? '全部折叠' : '全部展开' }}
           </a-button>
         </div>
-        <div
-          v-for="category in filteredCategories"
-          :key="category.key"
-          class="category-group"
-        >
+        <div v-for="category in filteredCategories" :key="category.key" class="category-group">
           <!-- 分类标题 -->
-          <div
-            class="category-header"
-            :class="'cat-' + category.key"
-            @click="toggleCategory(category.key)"
-          >
+          <div class="category-header" :class="'cat-' + category.key" @click="toggleCategory(category.key)">
             <CaretDownOutlined v-if="expanded[category.key]" class="tree-toggle" />
             <CaretRightOutlined v-else class="tree-toggle" />
             <span class="category-label">{{ category.label }}</span>
@@ -37,11 +24,7 @@
 
           <!-- 分类下的插件树形列表 -->
           <div v-if="expanded[category.key]" class="plugin-tree">
-            <div
-              v-for="plugin in category.plugins"
-              :key="plugin.name"
-              class="tree-item"
-            >
+            <div v-for="plugin in category.plugins" :key="plugin.name" class="tree-item">
               <div class="tree-connector"></div>
               <a-tooltip
                 :title="isSelected(plugin) ? '点击取消选择' : '点击选择插件'"
@@ -56,16 +39,24 @@
                   <div class="plugin-name">{{ plugin.display_name || plugin.name }}</div>
                   <div class="plugin-desc">{{ plugin.description }}</div>
                   <a-tag v-if="isSelected(plugin)" color="processing" class="selected-tag">已选 ✓</a-tag>
-                  <span v-if="isSelected(plugin)" class="remove-badge" @click.stop="confirmRemove(plugin.name, selectedPlugins.findIndex(p => p.plugin_name === plugin.name))">× 移除</span>
+                  <span
+                    v-if="isSelected(plugin)"
+                    class="remove-badge"
+                    @click.stop="
+                      confirmRemove(
+                        plugin.name,
+                        selectedPlugins.findIndex((p) => p.plugin_name === plugin.name),
+                      )
+                    "
+                    >× 移除</span
+                  >
                 </div>
               </a-tooltip>
             </div>
           </div>
         </div>
 
-        <div v-if="filteredCategories.length === 0" class="empty-hint">
-          未找到匹配的插件
-        </div>
+        <div v-if="filteredCategories.length === 0" class="empty-hint">未找到匹配的插件</div>
       </div>
 
       <!-- 右侧：已选插件列表 -->
@@ -78,7 +69,10 @@
             v-for="(plugin, index) in selectedPlugins"
             :key="plugin.plugin_name + index"
             class="selected-item"
-            :class="[getCategoryClass(plugin.plugin_name), { removing: removingIndex === index, flashing: flashIndex === index }]"
+            :class="[
+              getCategoryClass(plugin.plugin_name),
+              { removing: removingIndex === index, flashing: flashIndex === index },
+            ]"
           >
             <div class="selected-info">
               <span class="selected-name">{{ plugin.plugin_name }}</span>
@@ -97,9 +91,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="empty-hint">
-          点击左侧插件添加到路由
-        </div>
+        <div v-else class="empty-hint">点击左侧插件添加到路由</div>
       </div>
     </div>
 
@@ -114,13 +106,15 @@
 
     <!-- Custom Confirm Modal -->
     <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 420px;">
+      <div class="modal" style="max-width: 420px">
         <div class="modal-header">
           <h2>确认移除</h2>
           <button class="modal-close" @click="confirmVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">确定要移除插件「{{ confirmPluginName }}」吗？</p>
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">
+            确定要移除插件「{{ confirmPluginName }}」吗？
+          </p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="confirmVisible = false">取消</button>
@@ -133,7 +127,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { CaretDownOutlined, CaretRightOutlined, EditOutlined, DeleteOutlined, CheckCircleFilled } from '@ant-design/icons-vue'
+import {
+  CaretDownOutlined,
+  CaretRightOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  CheckCircleFilled,
+} from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { Tooltip as ATooltip } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
@@ -147,7 +147,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [plugins: RoutePlugin[]]
-  'edit': [plugin: RoutePlugin, index: number]
+  edit: [plugin: RoutePlugin, index: number]
 }>()
 
 // 分类标签和颜色映射（通用配置，不绑定具体插件名）
@@ -209,18 +209,20 @@ const editingPluginIndex = ref(-1)
 const removingIndex = ref<number | null>(null)
 
 // 是否所有分类都已展开
-const allExpanded = computed(() => availableCategories.value.every(cat => expanded[cat.key]))
+const allExpanded = computed(() => availableCategories.value.every((cat) => expanded[cat.key]))
 
 // 全部展开/全部折叠
 const toggleAll = () => {
   const target = !allExpanded.value
-  availableCategories.value.forEach(cat => { expanded[cat.key] = target })
+  availableCategories.value.forEach((cat) => {
+    expanded[cat.key] = target
+  })
 }
 
 // 有已选插件时自动展开对应分类
 const expandCategoryWithSelected = () => {
   for (const cat of availableCategories.value) {
-    if (!expanded[cat.key] && selectedPlugins.value.some(p => cat.plugins.some(pl => pl.name === p.plugin_name))) {
+    if (!expanded[cat.key] && selectedPlugins.value.some((p) => cat.plugins.some((pl) => pl.name === p.plugin_name))) {
       expanded[cat.key] = true
     }
   }
@@ -233,52 +235,63 @@ const confirmPluginName = ref('')
 const pendingRemoveIndex = ref(-1)
 
 // 监听 props.modelValue 变化
-watch(() => props.modelValue, (newVal) => {
-  if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
-    // 重置展开状态：全部折叠，再自动展开有已选插件的分类
-    availableCategories.value.forEach(cat => { expanded[cat.key] = false })
-    selectedPlugins.value = newVal.map(p => {
-      const pluginInfo = props.plugins.find(pl => pl.name === p.plugin_name)
-      let config: Record<string, any> = {}
-      try {
-        config = JSON.parse(p.config || '{}')
-      } catch {}
-      return {
-        plugin_name: p.plugin_name,
-        config: config,
-        schema: pluginInfo?.schema || {}
-      }
-    })
-  }
-}, { immediate: true, deep: true })
+watch(
+  () => props.modelValue,
+  (newVal) => {
+    if (JSON.stringify(newVal) !== JSON.stringify(selectedPlugins.value)) {
+      // 重置展开状态：全部折叠，再自动展开有已选插件的分类
+      availableCategories.value.forEach((cat) => {
+        expanded[cat.key] = false
+      })
+      selectedPlugins.value = newVal.map((p) => {
+        const pluginInfo = props.plugins.find((pl) => pl.name === p.plugin_name)
+        let config: Record<string, any> = {}
+        try {
+          config = JSON.parse(p.config || '{}')
+        } catch {
+          /* 非法配置：回退空对象 */
+        }
+        return {
+          plugin_name: p.plugin_name,
+          config: config,
+          schema: pluginInfo?.schema || {},
+        }
+      })
+    }
+  },
+  { immediate: true, deep: true },
+)
 
 // 过滤后的分类（搜索）
 const filteredCategories = computed(() => {
   const search = searchText.value.toLowerCase().trim()
 
-  const results = availableCategories.value.map(category => {
-    let plugins = category.plugins
+  const results = availableCategories.value
+    .map((category) => {
+      let plugins = category.plugins
 
-    if (search) {
-      plugins = plugins.filter(p =>
-        p.name.toLowerCase().includes(search) ||
-        (p.display_name || '').toLowerCase().includes(search) ||
-        p.description.toLowerCase().includes(search)
-      )
-    }
+      if (search) {
+        plugins = plugins.filter(
+          (p) =>
+            p.name.toLowerCase().includes(search) ||
+            (p.display_name || '').toLowerCase().includes(search) ||
+            p.description.toLowerCase().includes(search),
+        )
+      }
 
-    return {
-      ...category,
-      plugins
-    }
-  }).filter(category => category.plugins.length > 0)
+      return {
+        ...category,
+        plugins,
+      }
+    })
+    .filter((category) => category.plugins.length > 0)
 
   return results
 })
 
 // 检查插件是否已选
 const isSelected = (plugin: Plugin) => {
-  return selectedPlugins.value.some(p => p.plugin_name === plugin.name)
+  return selectedPlugins.value.some((p) => p.plugin_name === plugin.name)
 }
 
 // 检查插件是否有配置
@@ -299,13 +312,16 @@ const toggleCategory = (key: string) => {
 // 添加/移除插件（左侧点击：未选→添加，已选→确认移除）
 const addPlugin = (plugin: Plugin) => {
   if (isSelected(plugin)) {
-    confirmRemove(plugin.name, selectedPlugins.value.findIndex(p => p.plugin_name === plugin.name))
+    confirmRemove(
+      plugin.name,
+      selectedPlugins.value.findIndex((p) => p.plugin_name === plugin.name),
+    )
     return
   }
   const newPlugin: SelectedPlugin = {
     plugin_name: plugin.name,
     config: {},
-    schema: plugin.schema
+    schema: plugin.schema,
   }
 
   selectedPlugins.value.push(newPlugin)
@@ -348,7 +364,7 @@ const handleEdit = (plugin: SelectedPlugin, index: number) => {
   editingPluginIndex.value = index
   editingPlugin.value = {
     plugin_name: plugin.plugin_name,
-    config: typeof plugin.config === 'string' ? plugin.config : JSON.stringify(plugin.config)
+    config: typeof plugin.config === 'string' ? plugin.config : JSON.stringify(plugin.config),
   }
   drawerVisible.value = true
 }
@@ -356,7 +372,7 @@ const handleEdit = (plugin: SelectedPlugin, index: number) => {
 // 获取插件信息
 const editingPluginInfo = computed(() => {
   if (!editingPlugin.value) return null
-  return props.plugins.find(p => p.name === editingPlugin.value?.plugin_name) || null
+  return props.plugins.find((p) => p.name === editingPlugin.value?.plugin_name) || null
 })
 
 // 保存插件配置
@@ -365,7 +381,7 @@ const handleSavePlugin = (config: string) => {
     selectedPlugins.value[editingPluginIndex.value] = {
       plugin_name: editingPlugin.value.plugin_name,
       config: config,
-      schema: editingPluginInfo.value?.schema || {}
+      schema: editingPluginInfo.value?.schema || {},
     }
     emitUpdate()
   }
@@ -376,9 +392,9 @@ const handleSavePlugin = (config: string) => {
 
 // 触发更新
 const emitUpdate = () => {
-  const plugins: RoutePlugin[] = selectedPlugins.value.map(p => ({
+  const plugins: RoutePlugin[] = selectedPlugins.value.map((p) => ({
     plugin_name: p.plugin_name,
-    config: typeof p.config === 'string' ? p.config : JSON.stringify(p.config)
+    config: typeof p.config === 'string' ? p.config : JSON.stringify(p.config),
   }))
   emit('update:modelValue', plugins)
 }
@@ -433,7 +449,9 @@ const emitUpdate = () => {
   border-radius: 10px;
   padding: 0 10px;
   opacity: 0.85;
-  transition: opacity 0.2s, background 0.2s;
+  transition:
+    opacity 0.2s,
+    background 0.2s;
 }
 .toggle-all-btn:hover {
   opacity: 1;
@@ -475,13 +493,27 @@ const emitUpdate = () => {
 }
 
 /* 分类颜色 — 左色条（跟随主题） */
-.cat-flow { border-left-color: var(--accent); }
-.cat-rewrite { border-left-color: var(--warning); }
-.cat-process { border-left-color: var(--success); }
-.cat-static { border-left-color: var(--info); }
-.cat-auth { border-left-color: var(--accent); }
-.cat-security { border-left-color: var(--danger); }
-.cat-monitor { border-left-color: var(--accent); }
+.cat-flow {
+  border-left-color: var(--accent);
+}
+.cat-rewrite {
+  border-left-color: var(--warning);
+}
+.cat-process {
+  border-left-color: var(--success);
+}
+.cat-static {
+  border-left-color: var(--info);
+}
+.cat-auth {
+  border-left-color: var(--accent);
+}
+.cat-security {
+  border-left-color: var(--danger);
+}
+.cat-monitor {
+  border-left-color: var(--accent);
+}
 
 .category-content {
   padding: 4px 0;
@@ -606,13 +638,27 @@ const emitUpdate = () => {
 }
 
 /* 插件卡片左色条（跟随主题） */
-.border-flow { border-left: 3px solid var(--accent); }
-.border-rewrite { border-left: 3px solid var(--warning); }
-.border-process { border-left: 3px solid var(--success); }
-.border-static { border-left: 3px solid var(--info); }
-.border-auth { border-left: 3px solid var(--accent); }
-.border-security { border-left: 3px solid var(--danger); }
-.border-monitor { border-left: 3px solid var(--accent); }
+.border-flow {
+  border-left: 3px solid var(--accent);
+}
+.border-rewrite {
+  border-left: 3px solid var(--warning);
+}
+.border-process {
+  border-left: 3px solid var(--success);
+}
+.border-static {
+  border-left: 3px solid var(--info);
+}
+.border-auth {
+  border-left: 3px solid var(--accent);
+}
+.border-security {
+  border-left: 3px solid var(--danger);
+}
+.border-monitor {
+  border-left: 3px solid var(--accent);
+}
 
 .plugin-card.selected {
   position: relative;
@@ -707,7 +753,9 @@ const emitUpdate = () => {
   font-size: 13px;
   color: var(--fg);
   border-left: 3px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
   cursor: default;
 }
 
@@ -720,12 +768,24 @@ const emitUpdate = () => {
 }
 
 /* 颜色条继承左侧分类色 */
-.selected-item.border-flow { border-left-color: var(--accent); }
-.selected-item.border-rewrite { border-left-color: var(--warning); }
-.selected-item.border-process { border-left-color: var(--success); }
-.selected-item.border-static { border-left-color: var(--info); }
-.selected-item.border-security { border-left-color: var(--danger); }
-.selected-item.border-monitor { border-left-color: var(--accent); }
+.selected-item.border-flow {
+  border-left-color: var(--accent);
+}
+.selected-item.border-rewrite {
+  border-left-color: var(--warning);
+}
+.selected-item.border-process {
+  border-left-color: var(--success);
+}
+.selected-item.border-static {
+  border-left-color: var(--info);
+}
+.selected-item.border-security {
+  border-left-color: var(--danger);
+}
+.selected-item.border-monitor {
+  border-left-color: var(--accent);
+}
 
 .selected-item-name {
   color: var(--accent);
@@ -774,9 +834,16 @@ const emitUpdate = () => {
 }
 
 @keyframes shakeHint {
-  0% { background-color: var(--bg); }
-  50% { background-color: color-mix(in srgb, var(--danger) 8%, transparent); border-color: var(--danger); }
-  100% { background-color: var(--bg); }
+  0% {
+    background-color: var(--bg);
+  }
+  50% {
+    background-color: color-mix(in srgb, var(--danger) 8%, transparent);
+    border-color: var(--danger);
+  }
+  100% {
+    background-color: var(--bg);
+  }
 }
 
 /* 右侧项高亮（持续到下次添加） */

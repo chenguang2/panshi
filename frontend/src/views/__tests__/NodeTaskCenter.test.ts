@@ -183,10 +183,7 @@ describe('NodeTaskCenter', () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {
         total: 2,
-        items: [
-          makeTask({ id: 1, status: 'success' }),
-          makeTask({ id: 2, status: 'running' }),
-        ],
+        items: [makeTask({ id: 1, status: 'success' }), makeTask({ id: 2, status: 'running' })],
       },
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
@@ -230,10 +227,7 @@ describe('NodeTaskCenter', () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {
         total: 2,
-        items: [
-          makeTask({ id: 1, status: 'success' }),
-          makeTask({ id: 2, status: 'failed' }),
-        ],
+        items: [makeTask({ id: 1, status: 'success' }), makeTask({ id: 2, status: 'failed' })],
       },
     })
     vi.mocked(api.post).mockResolvedValue({ data: { deleted: [1, 2], skipped: [] } })
@@ -302,7 +296,15 @@ describe('NodeTaskCenter create-task flow', () => {
         return Promise.resolve({ data: { items: [{ id: 1, name: 'prod', display_name: '生产集群' }] } })
       }
       if (url === '/clusters/1/nodes') {
-        return Promise.resolve({ data: { total: 2, items: [{ id: 10, ip: '10.0.0.10' }, { id: 11, ip: '10.0.0.11' }] } })
+        return Promise.resolve({
+          data: {
+            total: 2,
+            items: [
+              { id: 10, ip: '10.0.0.10' },
+              { id: 11, ip: '10.0.0.11' },
+            ],
+          },
+        })
       }
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
@@ -346,7 +348,10 @@ describe('NodeTaskCenter create-task flow', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
 
     // select cluster (Teleport -> body)
@@ -403,7 +408,10 @@ describe('NodeTaskCenter create-task flow', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
 
     // select cluster
@@ -423,7 +431,9 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(document.body.textContent || '').toContain('openresty-edge-26062608.tar.gz')
 
     // select the package
-    const pkgSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'openresty-file')
+    const pkgSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'openresty-file',
+    )
     expect(pkgSel).toBeTruthy()
     pkgSel!.value = 'openresty-edge-26062608.tar.gz'
     pkgSel!.dispatchEvent(new Event('change', { bubbles: true }))
@@ -465,7 +475,10 @@ describe('NodeTaskCenter create-task flow', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
@@ -482,7 +495,9 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/edge-pack-files')
     expect(document.body.textContent || '').toContain('edge-pack-gm-26072208.tar.gz')
 
-    const packSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'edge-pack-file')
+    const packSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'edge-pack-file',
+    )
     packSel!.value = 'edge-pack-gm-26072208.tar.gz'
     packSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -521,7 +536,10 @@ describe('NodeTaskCenter create-task flow', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
@@ -543,7 +561,9 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/10/edge-pack-list')
     expect(document.body.textContent || '').toContain('edge-26071508')
 
-    const verSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'edge-pack-version')
+    const verSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'edge-pack-version',
+    )
     verSel!.value = 'edge-26071508'
     verSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -569,17 +589,26 @@ describe('NodeTaskCenter create-task node selection', () => {
   async function mountWithNodes() {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 3, items: [
-        { id: 10, ip: '10.0.0.1', edge_path: '/edge/a' },
-        { id: 11, ip: '10.0.0.2', edge_path: '/edge/b' },
-        { id: 12, ip: '10.0.0.3', edge_path: '/edge/c' },
-      ] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({
+          data: {
+            total: 3,
+            items: [
+              { id: 10, ip: '10.0.0.1', edge_path: '/edge/a' },
+              { id: 11, ip: '10.0.0.2', edge_path: '/edge/b' },
+              { id: 12, ip: '10.0.0.3', edge_path: '/edge/c' },
+            ],
+          },
+        })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
     // 选集群
     const bodySelects = Array.from(document.querySelectorAll('select'))
@@ -625,7 +654,8 @@ describe('NodeTaskCenter software_check flow', () => {
   it('shows software list selector and passes software_list param', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
@@ -633,16 +663,21 @@ describe('NodeTaskCenter software_check flow', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('新建任务'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
     await flushPromises()
 
-    let bodySelects = Array.from(document.querySelectorAll('select'))
+    const bodySelects = Array.from(document.querySelectorAll('select'))
     const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
 
-    let typeSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'task-type')
+    const typeSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'task-type',
+    )
     typeSel!.value = 'software_check'
     typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -662,27 +697,45 @@ describe('NodeTaskCenter software_check flow', () => {
     const body = call[1] as { task_type: string; params: Record<string, unknown> }
     expect(body.task_type).toBe('software_check')
     expect(Array.isArray(body.params.software_list)).toBe(true)
-    expect((body.params.software_list as string[])).toContain('nc')
-    expect((body.params.software_list as string[])).toContain('vim')
+    expect(body.params.software_list as string[]).toContain('nc')
+    expect(body.params.software_list as string[]).toContain('vim')
     wrapper.unmount()
   })
 
   it('renders software x node matrix for a software_check task detail', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === '/node-tasks') return Promise.resolve({ data: { total: 1, items: [makeTask({ id: 1, task_type: 'software_check', status: 'success' })] } })
+      if (url === '/node-tasks')
+        return Promise.resolve({
+          data: { total: 1, items: [makeTask({ id: 1, task_type: 'software_check', status: 'success' })] },
+        })
       if (url === '/node-tasks/1') {
-        return Promise.resolve({ data: {
-          id: 1, task_type: 'software_check', status: 'success', params: {},
-          success_nodes: 1, failed_nodes: 0, cancelled_nodes: 0, total_nodes: 1,
-          items: [
-            { id: 1, node_id: 10, ip: '10.0.0.10', status: 'success', rc: 0, logs: [],
-              stdout: JSON.stringify({
-                nc: { installed: true, pkg: 'nmap-7.80', ver: 'Ncat 7.80' },
-                vim: { installed: true, pkg: 'vim-9.0', ver: 'VIM 9.0' },
-                dos2unix: { installed: false, pkg: '未安装', ver: '' },
-              }) },
-          ],
-        } })
+        return Promise.resolve({
+          data: {
+            id: 1,
+            task_type: 'software_check',
+            status: 'success',
+            params: {},
+            success_nodes: 1,
+            failed_nodes: 0,
+            cancelled_nodes: 0,
+            total_nodes: 1,
+            items: [
+              {
+                id: 1,
+                node_id: 10,
+                ip: '10.0.0.10',
+                status: 'success',
+                rc: 0,
+                logs: [],
+                stdout: JSON.stringify({
+                  nc: { installed: true, pkg: 'nmap-7.80', ver: 'Ncat 7.80' },
+                  vim: { installed: true, pkg: 'vim-9.0', ver: 'VIM 9.0' },
+                  dos2unix: { installed: false, pkg: '未安装', ver: '' },
+                }),
+              },
+            ],
+          },
+        })
       }
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
@@ -707,7 +760,9 @@ describe('NodeTaskCenter live log streaming', () => {
   function makeStreamHarness() {
     let controller!: ReadableStreamDefaultController<Uint8Array>
     const stream = new ReadableStream<Uint8Array>({
-      start(c) { controller = c },
+      start(c) {
+        controller = c
+      },
     })
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, body: stream }))
     vi.stubGlobal('fetch', fetchMock)
@@ -807,7 +862,10 @@ describe('NodeTaskCenter live log streaming', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('详情'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('详情'))!
+      .trigger('click')
     await flushPromises()
 
     harness.fail()
@@ -831,7 +889,10 @@ describe('NodeTaskCenter live log streaming', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('详情'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('详情'))!
+      .trigger('click')
     await flushPromises()
 
     const signal = harness.fetchMock.mock.calls[0][1].signal as AbortSignal
@@ -855,7 +916,10 @@ describe('NodeTaskCenter live log streaming', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    await wrapper.findAll('button').find((b) => b.text().includes('详情'))!.trigger('click')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('详情'))!
+      .trigger('click')
     await flushPromises()
 
     const fullLogBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === '完整日志')
@@ -870,7 +934,6 @@ describe('NodeTaskCenter live log streaming', () => {
   })
 })
 
-
 describe('NodeTaskCenter cmd_exec flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -884,12 +947,14 @@ describe('NodeTaskCenter cmd_exec flow', () => {
   }
 
   async function selectClusterAndType(wrapper: any, taskType: string) {
-    let bodySelects = Array.from(document.querySelectorAll('select'))
+    const bodySelects = Array.from(document.querySelectorAll('select'))
     const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
-    const typeSel = Array.from(document.querySelectorAll('select')).find((s) => s.getAttribute('data-test') === 'task-type')
+    const typeSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'task-type',
+    )
     typeSel!.value = taskType
     typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -905,7 +970,8 @@ describe('NodeTaskCenter cmd_exec flow', () => {
   it('shows cmd_exec form with command input, strategy radios and timeout default 30', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
@@ -924,7 +990,9 @@ describe('NodeTaskCenter cmd_exec flow', () => {
     expect(text).toContain('白名单')
     expect(text).toContain('不限制')
 
-    const timeoutInput = Array.from(document.querySelectorAll('input')).find((i) => i.getAttribute('data-test') === 'cmd-timeout') as HTMLInputElement
+    const timeoutInput = Array.from(document.querySelectorAll('input')).find(
+      (i) => i.getAttribute('data-test') === 'cmd-timeout',
+    ) as HTMLInputElement
     expect(timeoutInput).toBeTruthy()
     expect(timeoutInput.value).toBe('30')
     wrapper.unmount()
@@ -933,7 +1001,8 @@ describe('NodeTaskCenter cmd_exec flow', () => {
   it('submits params {cmd, security, timeout} for blacklist without whitelist', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
@@ -967,7 +1036,8 @@ describe('NodeTaskCenter cmd_exec flow', () => {
   it('whitelist mode shows builtin commands and custom add, passes whitelist param', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
@@ -979,7 +1049,9 @@ describe('NodeTaskCenter cmd_exec flow', () => {
     await selectClusterAndType(wrapper, 'cmd_exec')
     await checkFirstNode()
 
-    const wlRadio = Array.from(document.querySelectorAll('input[type="radio"]')).find((r) => (r as HTMLInputElement).value === 'whitelist') as HTMLInputElement
+    const wlRadio = Array.from(document.querySelectorAll('input[type="radio"]')).find(
+      (r) => (r as HTMLInputElement).value === 'whitelist',
+    ) as HTMLInputElement
     wlRadio.checked = true
     wlRadio.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -1015,7 +1087,8 @@ describe('NodeTaskCenter cmd_exec flow', () => {
   it('requires cmd before submitting', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
-      if (url === '/clusters/1/nodes') return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       return Promise.resolve({ data: { total: 0, items: [] } })
     })
     vi.mocked(api.post).mockResolvedValue({ data: makeTask() })

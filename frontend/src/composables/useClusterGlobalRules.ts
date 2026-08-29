@@ -2,7 +2,7 @@ import type { Ref } from 'vue'
 import type { Cluster, Plugin } from '@/types'
 import { useClusterPluginEntity, type PluginEntityDeps, type VersionModalState } from './useClusterPluginEntity'
 
-export interface GlobalRuleDeps extends PluginEntityDeps {}
+export type GlobalRuleDeps = PluginEntityDeps
 
 const CONFIG = {
   apiEndpoint: 'global_rules',

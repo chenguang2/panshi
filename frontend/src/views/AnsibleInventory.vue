@@ -34,12 +34,13 @@
 
         <!-- 未录入平台的 IP 联动提醒条 -->
         <a-alert v-if="unmanagedIps.length" type="warning" show-icon class="stack-alert">
-          <template #message>
-            以下 {{ unmanagedIps.length }} 个 IP 存在于主机清单，但尚未录入节点管理
-          </template>
+          <template #message> 以下 {{ unmanagedIps.length }} 个 IP 存在于主机清单，但尚未录入节点管理 </template>
           <template #description>
             <div class="alert-desc-row">
-              <span><span class="mono">{{ unmanagedIps.join('、') }}</span>　节点任务只会操作平台已录入的节点，如需纳管请先添加。</span>
+              <span
+                ><span class="mono">{{ unmanagedIps.join('、') }}</span
+                >&#x3000;节点任务只会操作平台已录入的节点，如需纳管请先添加。</span
+              >
               <a @click="goNodes">前往节点管理 →</a>
             </div>
           </template>
@@ -47,7 +48,14 @@
 
         <!-- ── 表格视图 ── -->
         <template v-if="viewMode === 'table'">
-          <a-alert v-if="unknownKeys.length && showUnknownHint" type="info" show-icon closable class="stack-alert" @close="showUnknownHint = false">
+          <a-alert
+            v-if="unknownKeys.length && showUnknownHint"
+            type="info"
+            show-icon
+            closable
+            class="stack-alert"
+            @close="showUnknownHint = false"
+          >
             <template #message>
               部分主机包含自定义字段：<span class="mono">{{ unknownKeys.join('、') }}</span>
             </template>
@@ -73,22 +81,20 @@
               </div>
               <div class="group-field">
                 <label>SSH 密码（明文）</label>
-                <a-input
-                  v-model:value="groupPass"
-                  placeholder="留空则主机需自带凭据"
-                  allow-clear
-                  @change="markDirty"
-                />
+                <a-input v-model:value="groupPass" placeholder="留空则主机需自带凭据" allow-clear @change="markDirty" />
               </div>
             </div>
             <div v-if="extraVars.length" class="group-extra-vars">
-              vars 还包含其他键：<span class="mono">{{ extraVars.join('、') }}</span>（仅源码模式可维护，保存时原样保留）
+              vars 还包含其他键：<span class="mono">{{ extraVars.join('、') }}</span
+              >（仅源码模式可维护，保存时原样保留）
             </div>
           </div>
 
           <div class="card">
             <div class="card-title-row table-toolbar">
-              <span class="card-title">主机列表<span class="count-pill">{{ rows.length }}</span></span>
+              <span class="card-title"
+                >主机列表<span class="count-pill">{{ rows.length }}</span></span
+              >
               <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
             </div>
             <a-table
@@ -108,38 +114,44 @@
                       <a-tooltip v-if="def.hint" :title="def.hint"><span class="hint-mark">?</span></a-tooltip>
                       <a-popover v-if="def.helpRef" trigger="click" placement="bottom" overlay-class="ssh-help-popover">
                         <template #content>
-                          <div style="max-height:360px;overflow:auto;min-width:360px">
-                            <div style="font-weight:600;margin-bottom:8px">常用参数速查</div>
-                            <table style="width:100%;font-size:12px;border-collapse:collapse">
-                              <tr style="background:#fafafa"><td style="padding:4px 8px;font-weight:600">参数</td><td style="padding:4px 8px">含义</td></tr>
-                              <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom:1px solid #f0f0f0">
-                                <td style="padding:4px 8px;font-family:monospace;white-space:nowrap;cursor:pointer" :title="'点击复制：' + r.param" @click="copyText(r.param)">{{ r.param }}</td>
-                                <td style="padding:4px 8px">{{ r.desc }}</td>
+                          <div style="max-height: 360px; overflow: auto; min-width: 360px">
+                            <div style="font-weight: 600; margin-bottom: 8px">常用参数速查</div>
+                            <table style="width: 100%; font-size: 12px; border-collapse: collapse">
+                              <tr style="background: #fafafa">
+                                <td style="padding: 4px 8px; font-weight: 600">参数</td>
+                                <td style="padding: 4px 8px">含义</td>
+                              </tr>
+                              <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom: 1px solid #f0f0f0">
+                                <td
+                                  style="padding: 4px 8px; font-family: monospace; white-space: nowrap; cursor: pointer"
+                                  :title="'点击复制：' + r.param"
+                                  @click="copyText(r.param)"
+                                >
+                                  {{ r.param }}
+                                </td>
+                                <td style="padding: 4px 8px">{{ r.desc }}</td>
                               </tr>
                             </table>
                           </div>
                         </template>
-                        <span class="hint-mark" style="cursor:pointer">📋</span>
+                        <span class="hint-mark" style="cursor: pointer">📋</span>
                       </a-popover>
                     </label>
                     <a-input-number
                       v-if="def.type === 'number'"
                       v-model:value="record[def.key]"
-                      style="width:100%"
-                      :min="1" :max="65535"
+                      style="width: 100%"
+                      :min="1"
+                      :max="65535"
                       placeholder="未设置"
                       @change="markDirty"
                     />
-                    <a-switch
-                      v-else-if="def.type === 'switch'"
-                      v-model:checked="record[def.key]"
-                      @change="markDirty"
-                    />
+                    <a-switch v-else-if="def.type === 'switch'" v-model:checked="record[def.key]" @change="markDirty" />
                     <a-auto-complete
                       v-else-if="def.type === 'select'"
                       :value="asString(record[def.key])"
                       :options="def.options?.map((o) => ({ value: o }))"
-                      style="width:100%"
+                      style="width: 100%"
                       placeholder="留空继承默认"
                       allow-clear
                       @change="(v: string) => setAdvanced(record, def.key, v)"
@@ -176,17 +188,35 @@
               </a-table-column>
               <a-table-column title="SSH 用户" key="user" width="200">
                 <template #default="{ record }">
-                  <a-input v-model:value="record.ansible_ssh_user" placeholder="留空继承组级默认" allow-clear @change="markDirty" />
+                  <a-input
+                    v-model:value="record.ansible_ssh_user"
+                    placeholder="留空继承组级默认"
+                    allow-clear
+                    @change="markDirty"
+                  />
                 </template>
               </a-table-column>
               <a-table-column title="SSH 密码（明文）" key="pass" width="220">
                 <template #default="{ record }">
-                  <a-input v-model:value="record.ansible_ssh_pass" placeholder="留空继承组级默认" allow-clear @change="markDirty" />
+                  <a-input
+                    v-model:value="record.ansible_ssh_pass"
+                    placeholder="留空继承组级默认"
+                    allow-clear
+                    @change="markDirty"
+                  />
                 </template>
               </a-table-column>
               <a-table-column title="高级" key="adv" width="80">
                 <template #default="{ record }">
-                  <a-tooltip :title="rowHasAdvanced(record) ? '已配置高级连接变量' : (rowUnknownKeys(record).length ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、') : '')">
+                  <a-tooltip
+                    :title="
+                      rowHasAdvanced(record)
+                        ? '已配置高级连接变量'
+                        : rowUnknownKeys(record).length
+                          ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、')
+                          : ''
+                    "
+                  >
                     <a-button type="text" size="small" @click="toggleExpand(record)">
                       高级
                       <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
@@ -215,7 +245,12 @@
           <div class="source-hint">
             源码为 inventory 文件原文（保留注释与全部自定义字段）；YAML 校验由服务端完成，保存前自动备份当前文件。
           </div>
-          <MonacoEditor :model-value="sourceDraft" language="yaml" height="calc(100vh - 380px)" @update:model-value="onEditorInput" />
+          <MonacoEditor
+            :model-value="sourceDraft"
+            language="yaml"
+            height="calc(100vh - 380px)"
+            @update:model-value="onEditorInput"
+          />
         </template>
       </div>
     </a-spin>
@@ -239,8 +274,8 @@
           文本内 {{ bulkImportResult.duplicatesInText }} 条重复已合并
         </div>
         <div v-if="bulkImportResult.errors.length === 0 && bulkImportResult.entries.length">
-          <span v-if="bulkImportResult.entries.some(e => rows.some(r => r.ip === e.ip))" class="bulk-hint">
-            将覆盖 {{ bulkImportResult.entries.filter(e => rows.some(r => r.ip === e.ip)).length }} 条现有主机凭据
+          <span v-if="bulkImportResult.entries.some((e) => rows.some((r) => r.ip === e.ip))" class="bulk-hint">
+            将覆盖 {{ bulkImportResult.entries.filter((e) => rows.some((r) => r.ip === e.ip)).length }} 条现有主机凭据
           </span>
         </div>
         <div v-for="err in bulkImportResult.errors" :key="err.line" class="bulk-error">
@@ -259,12 +294,7 @@ import { message, Modal } from 'ant-design-vue'
 import type { RadioChangeEvent } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
-import {
-  getInventory,
-  parseInventory,
-  renderInventory,
-  saveInventory,
-} from '@/api/ansibleInventory'
+import { getInventory, parseInventory, renderInventory, saveInventory } from '@/api/ansibleInventory'
 import type { InventoryHostEntry, InventorySavePayload } from '@/api/ansibleInventory'
 import {
   ADVANCED_FIELDS,
@@ -644,13 +674,22 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.ai-page { padding: 20px 24px; }
+.ai-page {
+  padding: 20px 24px;
+}
 
-.ai-body { min-height: 320px; }
+.ai-body {
+  min-height: 320px;
+}
 
-.dirty-tag { margin-right: 4px; cursor: default; }
+.dirty-tag {
+  margin-right: 4px;
+  cursor: default;
+}
 
-.stack-alert { margin-bottom: 16px; }
+.stack-alert {
+  margin-bottom: 16px;
+}
 
 .alert-desc-row {
   display: flex;
@@ -659,7 +698,9 @@ onUnmounted(() => {
   gap: 16px;
   flex-wrap: wrap;
 }
-.alert-desc-row a { white-space: nowrap; }
+.alert-desc-row a {
+  white-space: nowrap;
+}
 
 .card {
   background: var(--surface);
@@ -676,7 +717,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.table-toolbar { margin-bottom: 12px; }
+.table-toolbar {
+  margin-bottom: 12px;
+}
 
 .card-title {
   font-size: 15px;
@@ -684,7 +727,10 @@ onUnmounted(() => {
   color: var(--fg);
 }
 
-.card-subtitle { font-size: 12px; color: var(--muted); }
+.card-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
 
 .count-pill {
   display: inline-block;
@@ -726,10 +772,17 @@ onUnmounted(() => {
   color: var(--muted);
 }
 
-.mono { font-family: var(--font-mono); word-break: break-all; }
-.muted { color: var(--muted); }
+.mono {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.muted {
+  color: var(--muted);
+}
 
-.custom-tag { cursor: help; }
+.custom-tag {
+  cursor: help;
+}
 
 .orange-dot {
   display: inline-block;
@@ -750,7 +803,9 @@ onUnmounted(() => {
   padding: 10px 0;
   text-align: center;
   border-radius: var(--radius-md);
-  transition: border-color 0.2s, color 0.2s;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
 }
 .add-row-dashed:hover {
   border-color: #1677ff;
@@ -807,8 +862,12 @@ onUnmounted(() => {
   animation: row-highlight-flash 2s ease-out;
 }
 @keyframes row-highlight-flash {
-  0% { background-color: #fff7e6; }
-  100% { background-color: transparent; }
+  0% {
+    background-color: #fff7e6;
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 /* 批量导入预览 */

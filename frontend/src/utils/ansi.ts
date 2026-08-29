@@ -16,14 +16,14 @@
 
 // ANSI 颜色码 → CSS 颜色映射
 const ANSI_COLORS: Record<string, string> = {
-  '0;32': '#859900',  // green - ok/changed
-  '0;31': '#dc322f',  // red - fatal/FAILED
-  '1;34': '#268bd2',  // blue - PLAY header
-  '0;36': '#2aa198',  // cyan - TASK header
-  '0;33': '#b58900',  // yellow - WARNING
-  '0;35': '#d33682',  // magenta - skipped
-  '1;35': '#d33682',  // bright magenta - warnings
-  '0':    '#d4d4d4',  // reset → default log-box foreground
+  '0;32': '#859900', // green - ok/changed
+  '0;31': '#dc322f', // red - fatal/FAILED
+  '1;34': '#268bd2', // blue - PLAY header
+  '0;36': '#2aa198', // cyan - TASK header
+  '0;33': '#b58900', // yellow - WARNING
+  '0;35': '#d33682', // magenta - skipped
+  '1;35': '#d33682', // bright magenta - warnings
+  '0': '#d4d4d4', // reset → default log-box foreground
 }
 
 // 默认前景色（与 log-box 的 color: #d4d4d4 一致）
@@ -31,6 +31,7 @@ const DEFAULT_FG = '#d4d4d4'
 
 // 匹配完整 ANSI 转义序列: ESC[<参数>m
 // 在 JSON 传输中 ESC (0x1B) 编码为 \u001b，在 JS 字符串中即 \x1b
+// eslint-disable-next-line no-control-regex
 const FULL_ANSI_RE = /\x1b\[([\d;]*)m/g
 
 // 兜底匹配：如果浏览器渲染时 ESC 字符丢失，仅匹配可见的 [<参数>m
@@ -112,7 +113,5 @@ export function ansiToHtml(text: string): string {
  * 用于复制日志等不需要颜色格式的场景。
  */
 export function stripAnsi(text: string): string {
-  return text
-    .replace(FULL_ANSI_RE, '')
-    .replace(VISIBLE_ANSI_RE, '')
+  return text.replace(FULL_ANSI_RE, '').replace(VISIBLE_ANSI_RE, '')
 }

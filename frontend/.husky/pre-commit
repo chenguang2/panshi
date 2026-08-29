@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# 提交前检查：前端 lint + 格式化（仅暂存文件）
+cd frontend
+npx lint-staged
