@@ -83,11 +83,20 @@ async def list_upstreams(
     pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if upstream_ids else {}
 
     items = []
+    # 批量查询 targets（消除 N+1：一次 IN 查询替代逐行 select）
+    targets_map: dict[int, list[UpstreamTarget]] = {}
+    if upstream_ids:
+        targets_result = await db.execute(
+            select(UpstreamTarget)
+            .where(UpstreamTarget.upstream_id.in_(upstream_ids))
+            .order_by(UpstreamTarget.id)
+        )
+        for t in targets_result.scalars().all():
+            targets_map.setdefault(t.upstream_id, []).append(t)
+
     for u in upstreams:
-        targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == u.id))
-        targets = targets_result.scalars().all()
         response = UpstreamWithTargets.model_validate(u)
-        response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+        response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets_map.get(u.id, [])]
         response.current_version = u.current_version
         ts = pub_map.get(u.id)
         response.published_at = ts.isoformat() + 'Z' if ts else None

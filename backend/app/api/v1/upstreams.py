@@ -106,16 +106,23 @@ async def list_all_upstreams(
         pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()}
 
     items = []
-    for u in upstreams:
+    # 批量查询 targets（消除 N+1）
+    targets_map: dict[int, list[UpstreamTarget]] = {}
+    if upstream_ids:
         targets_result = await db.execute(
-            select(UpstreamTarget).where(UpstreamTarget.upstream_id == u.id)
+            select(UpstreamTarget)
+            .where(UpstreamTarget.upstream_id.in_(upstream_ids))
+            .order_by(UpstreamTarget.id)
         )
-        targets = targets_result.scalars().all()
+        for t in targets_result.scalars().all():
+            targets_map.setdefault(t.upstream_id, []).append(t)
+
+    for u in upstreams:
         # edge_uuid may be None for legacy rows; generate fallback to satisfy schema
         upstream_data = {**u.__dict__}
         upstream_data["edge_uuid"] = u.edge_uuid or str(uuid.uuid4())
         item = UpstreamWithTargets.model_validate(upstream_data)
-        item.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
+        item.targets = [UpstreamTargetSchema.model_validate(t) for t in targets_map.get(u.id, [])]
         item.current_version = u.current_version
         ts = pub_map.get(u.id)
         item.published_at = ts.isoformat() + "Z" if ts else None

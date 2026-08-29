@@ -78,7 +78,7 @@ async def get_inventory(
 ) -> dict[str, Any]:
     with _inventory_lock:
         raw, file_exists = _read_raw_text()
-    parsed = inventory_service.parse_inventory(raw)
+    parsed = inventory_service.parse_inventory(raw, mask_credentials=True)
     # 文件不存在（全新部署）→ 空结构且无错误；文件存在但解析失败 → errors 透出
     if not file_exists:
         parsed["errors"] = []
@@ -118,6 +118,8 @@ async def put_inventory(
         hosts, norm_errors = inventory_service.normalize_hosts(payload.hosts or [])
         if norm_errors:
             raise HTTPException(status_code=400, detail="\n".join(norm_errors))
+        # 表格模式提交的密码字段可能是掩码占位（******），恢复为当前文件真实值
+        inventory_service.restore_credentials(hosts, payload.vars)
         new_text = inventory_service.render_inventory(hosts, payload.vars or {})
         doc = yaml.safe_load(new_text) or {}
         platform_ips = await _platform_node_ips(db)
@@ -145,4 +147,4 @@ async def parse_inventory_endpoint(
     req: ParseRequest,
     current_user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    return inventory_service.parse_inventory(req.raw_text)
+    return inventory_service.parse_inventory(req.raw_text, mask_credentials=True)
