@@ -55,6 +55,7 @@ def test_infer_status_uses_stderr_for_not_configured():
     assert _infer_status(0, "enabled\n", "") == "enabled"
     assert _infer_status(1, "disabled\n", "") == "disabled"
     assert _infer_status(126, "", "Failed to get unit file state for edge.service: Permission denied") == "permission_denied"
+    assert _infer_status(126, "", "bash: /usr/bin/systemctl: 权限不够") == "permission_denied"
     assert _infer_status(1, "", "") == "unknown"
 
 

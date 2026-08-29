@@ -1,6 +1,9 @@
 <template>
   <div class="autostart-page">
-    <PageHeader title="自启动管理" description="管理 Edge 节点开机自启动（systemd）。启用/禁用需提供 root 凭据（仅本次使用，不保存）">
+    <PageHeader
+      title="自启动管理"
+      description="管理 Edge 节点开机自启动（systemd）。启用/禁用需提供 root 凭据（仅本次使用，不保存）"
+    >
     </PageHeader>
 
     <div class="card">
@@ -8,7 +11,7 @@
         <a-select
           v-model:value="clusterFilter"
           placeholder="全部集群"
-          style="width: 220px;"
+          style="width: 220px"
           allow-clear
           @change="loadNodes"
         >
@@ -19,13 +22,7 @@
         <a-button @click="loadNodes">刷新</a-button>
       </div>
 
-      <a-table
-        :data-source="nodes"
-        :loading="loading"
-        :pagination="false"
-        row-key="id"
-        size="middle"
-      >
+      <a-table :data-source="nodes" :loading="loading" :pagination="false" row-key="id" size="middle">
         <a-table-column title="集群" data-index="cluster_name" key="cluster_name" />
         <a-table-column title="节点 IP" data-index="ip" key="ip" />
         <a-table-column title="Edge 目录" data-index="edge_path" key="edge_path" />
@@ -41,8 +38,8 @@
         <a-table-column title="操作" key="action" width="360">
           <template #default="{ record }">
             <a-button size="small" type="primary" @click="openAction(record, 'enable')">启用</a-button>
-            <a-button size="small" style="margin-left:6px" @click="openAction(record, 'disable')">禁用</a-button>
-            <a-button size="small" style="margin-left:6px" @click="queryStatus(record)">查询状态</a-button>
+            <a-button size="small" style="margin-left: 6px" @click="openAction(record, 'disable')">禁用</a-button>
+            <a-button size="small" style="margin-left: 6px" @click="queryStatus(record)">查询状态</a-button>
           </template>
         </a-table-column>
       </a-table>
@@ -76,7 +73,9 @@
         <div class="field-block">
           <div class="field-block-header">
             <span class="field-block-title">运行用户（edge.service 的 User=）</span>
-            <span class="field-block-desc">edge.service 将以该用户执行；默认已填节点配置用户，请确认是否为节点 Edge 实际运行用户</span>
+            <span class="field-block-desc"
+              >edge.service 将以该用户执行；默认已填节点配置用户，请确认是否为节点 Edge 实际运行用户</span
+            >
           </div>
           <a-input v-model:value="actionForm.run_user" placeholder="默认取节点 inventory 用户" class="field-input" />
         </div>
@@ -95,7 +94,11 @@
               <span class="field-block-title">root 密码</span>
               <span class="field-block-desc">必填，仅本次操作使用，不保存</span>
             </div>
-            <a-input-password v-model:value="actionForm.root_password" placeholder="必填，仅本次使用" class="field-input" />
+            <a-input-password
+              v-model:value="actionForm.root_password"
+              placeholder="必填，仅本次使用"
+              class="field-input"
+            />
           </div>
         </template>
       </a-form>
@@ -169,7 +172,9 @@ async function loadClusters() {
   try {
     const res = await api.get('/clusters')
     clusters.value = res.data?.items || res.data || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 async function loadAutostartRecords() {
@@ -183,7 +188,9 @@ async function loadAutostartRecords() {
     for (const n of nodes.value) {
       if (map.has(n.id)) n.autostart_status = map.get(n.id)!
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 async function loadNodes() {
@@ -199,7 +206,8 @@ async function loadNodes() {
     const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))
     nodes.value = items.map((n: any) => ({
       ...n,
-      cluster_name: clusterMap.get(n.cluster_id)?.display_name || clusterMap.get(n.cluster_id)?.name || String(n.cluster_id),
+      cluster_name:
+        clusterMap.get(n.cluster_id)?.display_name || clusterMap.get(n.cluster_id)?.name || String(n.cluster_id),
       autostart_status: null as AutostartStatus | null,
     }))
     await loadAutostartRecords()
@@ -219,7 +227,9 @@ async function openAction(node: any, act: 'enable' | 'disable') {
   try {
     const res = await api.get(`/nodes/${node.id}/autostart/defaults`)
     actionForm.run_user = res.data?.run_user || defaultRunUser.value || ''
-  } catch { actionForm.run_user = defaultRunUser.value || '' }
+  } catch {
+    actionForm.run_user = defaultRunUser.value || ''
+  }
   actionForm.root_user = 'root'
   actionForm.root_password = ''
   actionModalVisible.value = true
@@ -233,7 +243,8 @@ async function confirmAction() {
   }
   actionSubmitting.value = true
   actionModalVisible.value = false
-  execTitle.value = action.value === 'enable' ? `启用自启动: ${selectedNode.value.ip}` : `禁用自启动: ${selectedNode.value.ip}`
+  execTitle.value =
+    action.value === 'enable' ? `启用自启动: ${selectedNode.value.ip}` : `禁用自启动: ${selectedNode.value.ip}`
   resetExec()
   execVisible.value = true
 
@@ -241,44 +252,48 @@ async function confirmAction() {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
 
-  await start(autostartUrl(selectedNode.value.id), {
-    action: action.value,
-    edge_path: actionForm.edge_path || undefined,
-    run_user: actionForm.run_user || undefined,
-    root_user: actionForm.root_user || undefined,
-    root_password: actionForm.root_password,
-  }, {
-    onLine: (line) => {
-      captureCommandLine(line)
-      addLog(line)
+  await start(
+    autostartUrl(selectedNode.value.id),
+    {
+      action: action.value,
+      edge_path: actionForm.edge_path || undefined,
+      run_user: actionForm.run_user || undefined,
+      root_user: actionForm.root_user || undefined,
+      root_password: actionForm.root_password,
     },
-    onComplete: (rc, status) => {
-      execProgress.percent = 100
-      execProgress.status = rc === 0 ? 'success' : 'exception'
-      // 保留 captureCommandLine 捕获的真实 SSH 命令，避免被覆盖为描述字符串
-      const realCommand = execResult.value?.command || `autostart ${action.value} ${selectedNode.value.ip}`
-      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: realCommand, rc }
-      const appliedState: AutostartStatus = action.value === 'enable' ? 'enabled' : 'disabled'
-      if (rc === 0) {
-        // 同步更新表格状态列（不调用 loadNodes，避免其重置 autostart_status 为 null）
-        selectedNode.value.autostart_status = appliedState
-        execHighlights.value = [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`]
-        addLog(`✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功`)
-        message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
-      } else {
-        execHighlights.value = []
-        addLog(`❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
-        message.error(`操作失败: ${status}`)
-      }
+    {
+      onLine: (line) => {
+        captureCommandLine(line)
+        addLog(line)
+      },
+      onComplete: (rc, status) => {
+        execProgress.percent = 100
+        execProgress.status = rc === 0 ? 'success' : 'exception'
+        // 保留 captureCommandLine 捕获的真实 SSH 命令，避免被覆盖为描述字符串
+        const realCommand = execResult.value?.command || `autostart ${action.value} ${selectedNode.value.ip}`
+        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: realCommand, rc }
+        const appliedState: AutostartStatus = action.value === 'enable' ? 'enabled' : 'disabled'
+        if (rc === 0) {
+          // 同步更新表格状态列（不调用 loadNodes，避免其重置 autostart_status 为 null）
+          selectedNode.value.autostart_status = appliedState
+          execHighlights.value = [`${action.value === 'enable' ? '已启用' : '已禁用'}自启动`]
+          addLog(`✅ ${action.value === 'enable' ? '启用' : '禁用'}自启动成功`)
+          message.success(action.value === 'enable' ? '已启用自启动' : '已禁用自启动')
+        } else {
+          execHighlights.value = []
+          addLog(`❌ ${action.value === 'enable' ? '启用' : '禁用'}自启动失败`)
+          message.error(`操作失败: ${status}`)
+        }
+      },
+      onError: (e) => {
+        execProgress.percent = 100
+        execProgress.status = 'exception'
+        streamError.value = e
+        addLog(`❌ 操作失败: ${e}`)
+        message.error(e)
+      },
     },
-    onError: (e) => {
-      execProgress.percent = 100
-      execProgress.status = 'exception'
-      streamError.value = e
-      addLog(`❌ 操作失败: ${e}`)
-      message.error(e)
-    },
-  })
+  )
   actionSubmitting.value = false
 }
 
@@ -291,51 +306,63 @@ async function queryStatus(node: any) {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
   }
 
-  await start(autostartUrl(node.id), { action: 'status' }, {
-    onLine: (line) => {
-      captureCommandLine(line)
-      addLog(line)
+  await start(
+    autostartUrl(node.id),
+    { action: 'status' },
+    {
+      onLine: (line) => {
+        captureCommandLine(line)
+        addLog(line)
+      },
+      onComplete: () => {
+        // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。
+        // 查询是否成功取决于能否解析出状态，而非 rc。
+        const state = parseAutostartState(execLogs.value)
+        node.autostart_status = state
+        const queryOk = state !== 'unknown'
+        execProgress.percent = 100
+        execProgress.status = queryOk ? 'success' : 'exception'
+        const labels: Record<AutostartStatus, string> = {
+          enabled: '已启用',
+          disabled: '已禁用',
+          not_configured: '未配置',
+          permission_denied: '无权限查询',
+          unknown: '未知',
+        }
+        if (state === 'permission_denied') {
+          const rcInfo = extractAutostartRc(execLogs.value)
+          execStatistics.value = { 自启动状态: labels[state], 原因: rcInfo }
+          execHighlights.value = [`无权限执行 systemctl（${rcInfo}），请确认节点普通用户能否读取 systemctl`]
+        } else {
+          execStatistics.value = { 自启动状态: labels[state] }
+          execHighlights.value = queryOk ? [`自启动状态: ${labels[state]}`] : []
+        }
+        addLog(queryOk ? `✅ 查询成功（${labels[state]}）` : `❌ 查询失败（${labels[state]}）`)
+        if (queryOk && state === 'not_configured') message.info('该节点未配置自启动服务')
+        if (state === 'permission_denied') message.warning('该节点普通用户无权限查询自启动状态')
+      },
+      onError: (e) => {
+        execProgress.percent = 100
+        execProgress.status = 'exception'
+        streamError.value = e
+        addLog(`❌ 查询失败: ${e}`)
+        message.error(e)
+      },
     },
-    onComplete: () => {
-      // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。
-      // 查询是否成功取决于能否解析出状态，而非 rc。
-      const state = parseAutostartState(execLogs.value)
-      node.autostart_status = state
-      const queryOk = state !== 'unknown'
-      execProgress.percent = 100
-      execProgress.status = queryOk ? 'success' : 'exception'
-      const labels: Record<AutostartStatus, string> = {
-        enabled: '已启用', disabled: '已禁用', not_configured: '未配置', permission_denied: '无权限查询', unknown: '未知',
-      }
-      if (state === 'permission_denied') {
-        const rcInfo = extractAutostartRc(execLogs.value)
-        execStatistics.value = { '自启动状态': labels[state], '原因': rcInfo }
-        execHighlights.value = [`无权限执行 systemctl（${rcInfo}），请确认节点普通用户能否读取 systemctl`]
-      } else {
-        execStatistics.value = { '自启动状态': labels[state] }
-        execHighlights.value = queryOk ? [`自启动状态: ${labels[state]}`] : []
-      }
-      addLog(queryOk ? `✅ 查询成功（${labels[state]}）` : `❌ 查询失败（${labels[state]}）`)
-      if (queryOk && state === 'not_configured') message.info('该节点未配置自启动服务')
-      if (state === 'permission_denied') message.warning('该节点普通用户无权限查询自启动状态')
-    },
-    onError: (e) => {
-      execProgress.percent = 100
-      execProgress.status = 'exception'
-      streamError.value = e
-      addLog(`❌ 查询失败: ${e}`)
-      message.error(e)
-    },
-  })
+  )
 }
 
 function parseAutostartState(logs: string[]): AutostartStatus {
   // SSH 版 status 的 stdout 直接输出 is-enabled 结果（enabled/disabled/
-  // No such file...），从日志行中识别状态
+  // No such file...），从日志行中识别状态。
+  // 注意："手工执行命令: ... systemctl is-enabled edge" 回显行含子串
+  // "enabled"（is-enabled），必须跳过，否则命令回显会误报为"已启用"。
   for (const line of logs) {
+    if (line.startsWith('手工执行命令')) continue
     if (/No such file or directory/.test(line)) return 'not_configured'
     if (/enabled/.test(line)) return 'enabled'
     if (/disabled/.test(line)) return 'disabled'
+    if (/权限不够|Permission denied|permission denied/.test(line)) return 'permission_denied'
   }
   return 'unknown'
 }
@@ -375,16 +402,30 @@ onMounted(async () => {
   try {
     const res = await api.get('/nodes/autostart/defaults')
     defaultRunUser.value = res.data?.default_run_user || ''
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   await loadClusters()
   await loadNodes()
 })
 </script>
 
 <style scoped>
-.autostart-page { padding: 20px 24px; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; }
-.toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+.autostart-page {
+  padding: 20px 24px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: center;
+}
 
 /* 参考路由插件编辑抽屉（PluginEditorDrawer）的 field-block 风格 */
 .field-block {
@@ -394,7 +435,9 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.field-block-header { margin-bottom: 8px; }
+.field-block-header {
+  margin-bottom: 8px;
+}
 .field-block-title {
   display: block;
   font-size: 16px;
@@ -407,7 +450,9 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--muted);
 }
-.field-input { margin-bottom: 6px; }
+.field-input {
+  margin-bottom: 6px;
+}
 .field-value {
   font-size: 13px;
   color: var(--fg);

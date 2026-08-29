@@ -64,7 +64,7 @@ def _infer_status(rc: int, stdout: str, stderr: str = "") -> str:
         return "enabled"
     if "disabled" in out:
         return "disabled"
-    if "permission denied" in out.lower() or "not been booted with systemd" in out.lower():
+    if "permission denied" in out.lower() or "not been booted with systemd" in out.lower() or "权限不够" in out:
         return "permission_denied"
     return "unknown"
 
