@@ -1,10 +1,10 @@
-import { ref, reactive, computed, watch, h } from 'vue'
-import type { Ref } from 'vue'
+import { ref, reactive, computed, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route, HealthCheckConfig } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
-import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
+import { useClusterResource } from './useClusterResource'
+import { showDeleteConfirm, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 interface UpstreamExtras {
@@ -121,7 +121,6 @@ export function useClusterUpstreams(options: {
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
 }) {
   const {
-    clusters,
     versionModalVisible,
     versionModalType,
     versionModalResourceId,
@@ -131,6 +130,103 @@ export function useClusterUpstreams(options: {
     openPublishModal,
   } = options
 
+  // ── 通用骨架：load/select/delete/publish/version 十件套 ─────────────
+
+  const core = useClusterResource<Upstream>({
+    noun: '上游',
+    endpoint: 'upstreams',
+    versionType: 'upstream',
+    keys: {
+      items: 'upstreams',
+      pagination: 'upstreamsPagination',
+      loading: 'upstreamsLoading',
+      search: 'upstreamsSearch',
+      searchField: 'upstreamsSearchField',
+      sortBy: 'upstreamsSortBy',
+      sortOrder: 'upstreamsSortOrder',
+      selected: 'selectedUpstream',
+      selectedKeys: 'selectedUpstreamKeys',
+    },
+    sortFieldMap: {
+      name: 'name',
+      load_balance: 'load_balance',
+      description: 'description',
+      created_at: 'created_at',
+    },
+    deleteGuard: async (cluster, upstream) => {
+      // Ensure routes are loaded to check for linked routes
+      if (!cluster.routes || cluster.routes.length === 0) {
+        try {
+          const res = await api.get(
+            `/clusters/${cluster.id}/routes`,
+            { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
+          )
+          cluster.routes = res.data.items
+        } catch {
+          // If we can't load routes, continue (the API delete will catch issues)
+        }
+      }
+      const linkedRoutes = (cluster.routes || []).filter(
+        (r: Route) => r.upstream_id === upstream.id,
+      )
+      if (linkedRoutes.length > 0) {
+        const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
+        return `该上游已被路由 "${routeNames}" 引用，请先删除这些路由`
+      }
+      return null
+    },
+    deleteGuardLevel: 'error',
+    batchFilter: async (cluster, upstreams) => {
+      if (!cluster.routes || cluster.routes.length === 0) {
+        try {
+          const res = await api.get(
+            `/clusters/${cluster.id}/routes`,
+            { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
+          )
+          cluster.routes = res.data.items
+        } catch {
+          // 加载失败时放弃前端守卫，交给后端拦截
+        }
+      }
+      const referenced = upstreams.filter((u) =>
+        (cluster.routes || []).some((r) => r.upstream_id === u.id),
+      )
+      if (referenced.length > 0) {
+        const names = referenced.map((u) => u.name).join('、')
+        message.warning(`上游 "${names}" 已被路由引用，已跳过删除，请先删除引用路由`)
+      }
+      const deletable = upstreams.filter((u) =>
+        !(cluster.routes || []).some((r) => r.upstream_id === u.id),
+      )
+      return deletable.length > 0 ? deletable : null
+    },
+    batchResourceKey: { field: 'upstream_ids', label: '上游', nameField: 'upstream_name' },
+  }, {
+    openPublishModal,
+    showDeleteConfirm,
+    versionModal: {
+      type: versionModalType,
+      visible: versionModalVisible,
+      resourceId: versionModalResourceId,
+      clusterId: versionModalClusterId,
+      resourceName: versionModalResourceName,
+      edgeUuid: versionModalEdgeUuid,
+    },
+  })
+
+  const loadUpstreams = core.load
+  const handleUpstreamTableChange = core.handleTableChange
+  const selectUpstream = core.selectOne
+  const selectUpstreams = core.selectMany
+  const deleteUpstream = core.deleteSelected
+  const deleteUpstreamByRecord = core.deleteByRecord
+  const deleteUpstreams = core.deleteMany
+  const publishUpstream = core.publishSelected
+  const publishUpstreamByRecord = core.publishByRecord
+  const openUpstreamVersionManagement = core.openVersionManagement
+  const openUpstreamVersionManagementByRecord = core.openVersionManagementByRecord
+
+  // ── Modal / form state ──
   const upstreamModalVisible = ref(false)
   const upstreamModalActiveTab = ref('basic')
   const editingUpstream = ref<Upstream | null>(null)
@@ -140,7 +236,7 @@ export function useClusterUpstreams(options: {
   const upstreamFormRef = ref()
 
   const targetValidation = ref<Record<string, { host?: string; port?: string; weight?: string }>>({})
-const formErrors = reactive<Record<string, string>>({})
+  const formErrors = reactive<Record<string, string>>({})
 
   // ── Individual toggle states ──
   const toggleChecks = ref(false)
@@ -244,90 +340,6 @@ const formErrors = reactive<Record<string, string>>({})
     },
   )
 
-  // ── Core: load upstreams ──
-  const lastUpstreamQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
-
-  const loadUpstreams = async (cluster: Cluster) => {
-    const prev = lastUpstreamQuery.get(cluster)
-    const next = {
-      search: cluster.upstreamsSearch || '',
-      field: cluster.upstreamsSearchField || '',
-      sortBy: cluster.upstreamsSortBy || '',
-      sortOrder: cluster.upstreamsSortOrder || '',
-    }
-    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
-      cluster.selectedUpstreamKeys = []
-      cluster.selectedUpstream = null
-    }
-    lastUpstreamQuery.set(cluster, next)
-    cluster.upstreamsLoading = true
-    try {
-      const params: Record<string, unknown> = {
-        page: cluster.upstreamsPagination?.page || 1,
-        page_size: cluster.upstreamsPagination?.pageSize || 20,
-      }
-      if (cluster.upstreamsSearch) {
-        params.search = cluster.upstreamsSearch
-        if (cluster.upstreamsSearchField) {
-          params.search_field = cluster.upstreamsSearchField
-        }
-      }
-      if (cluster.upstreamsSortBy) {
-        params.sort_by = cluster.upstreamsSortBy
-        params.sort_order = cluster.upstreamsSortOrder
-      }
-      const res = await api.get(`/clusters/${cluster.id}/upstreams`, { params })
-      cluster.upstreams = res.data.items
-      cluster.upstreamsPagination = {
-        total: res.data.total,
-        page: res.data.page,
-        pageSize: res.data.page_size,
-      }
-    } catch {
-      message.error('加载上游列表失败')
-    } finally {
-      cluster.upstreamsLoading = false
-    }
-  }
-
-  // ── Table events ──
-  const handleUpstreamTableChange = (
-    cluster: Cluster,
-    pag: { current: number; pageSize: number },
-    sorter: { field?: string; order?: string },
-  ) => {
-    if (cluster.upstreamsPagination) {
-      cluster.upstreamsPagination.page = pag.current
-      cluster.upstreamsPagination.pageSize = pag.pageSize
-    }
-    if (sorter && sorter.field) {
-      const fieldMap: Record<string, string> = {
-        name: 'name',
-        load_balance: 'load_balance',
-        description: 'description',
-        created_at: 'created_at',
-      }
-      cluster.upstreamsSortBy = fieldMap[sorter.field] || sorter.field
-      cluster.upstreamsSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
-      // 排序改变数据集，清除批量勾选与单选（D9）
-      cluster.selectedUpstreamKeys = []
-      cluster.selectedUpstream = null
-    } else {
-      cluster.upstreamsSortBy = ''
-      cluster.upstreamsSortOrder = 'asc'
-    }
-    loadUpstreams(cluster)
-  }
-
-  const selectUpstream = (cluster: Cluster, upstream: Upstream | undefined) => {
-    cluster.selectedUpstream = upstream || null
-  }
-
-  const selectUpstreams = (cluster: Cluster, keys: number[] | (string | number)[], rows: Upstream[]) => {
-    cluster.selectedUpstreamKeys = keys as number[]
-    cluster.selectedUpstream = keys.length === 1 ? (rows[0] ?? null) : null
-  }
-
   // ── Helpers ──
   const getClusterUpstreams = (clusters: Cluster[]): Upstream[] => {
     const cluster = clusters.find((c) => c.id === currentClusterId.value)
@@ -341,8 +353,7 @@ const formErrors = reactive<Record<string, string>>({})
   }
 
   const getUpstreamActionButtonTitle = (key: string): string => {
-    const btn = allUpstreamActionButtons.find((b) => b.key === key)
-    return btn?.title || key
+    return core.getActionButtonTitle(key, allUpstreamActionButtons)
   }
 
   const handleUpstreamAction = (
@@ -521,11 +532,9 @@ const formErrors = reactive<Record<string, string>>({})
 
   // ── Modal: edit upstream ──
   const editUpstream = (cluster: Cluster) => {
-    if (!cluster.selectedUpstream) {
-      message.warning('请先选择一个上游')
-      return
-    }
-    editUpstreamByRecord(cluster, cluster.selectedUpstream)
+    const selected = core.requireSelected(cluster)
+    if (!selected) return
+    editUpstreamByRecord(cluster, selected)
   }
 
   const fillUpstreamForm = (upstream: Upstream) => {
@@ -716,7 +725,7 @@ const formErrors = reactive<Record<string, string>>({})
 
       // Refresh the cluster's upstream list so the table and re-edit show latest data
       upstreamModalVisible.value = false
-      const c = clusters?.value?.find(
+      const c = options.clusters?.value?.find(
         (c) => c.id === currentClusterId.value,
       )
       if (c) {
@@ -731,171 +740,6 @@ const formErrors = reactive<Record<string, string>>({})
       const detail = err.response?.data?.detail
       message.error(typeof detail === 'string' ? detail : '操作失败')
     }
-  }
-
-  // ── Delete upstream ──
-  const deleteUpstream = async (cluster: Cluster) => {
-    if (!cluster.selectedUpstream) {
-      message.warning('请先选择一个上游')
-      return
-    }
-    await deleteUpstreamByRecord(cluster, cluster.selectedUpstream)
-  }
-
-  const deleteUpstreamByRecord = async (
-    cluster: Cluster,
-    upstream: Upstream,
-  ) => {
-    // Ensure routes are loaded to check for linked routes
-    if (!cluster.routes || cluster.routes.length === 0) {
-      try {
-        const res = await api.get(
-          `/clusters/${cluster.id}/routes`,
-          { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
-        )
-        cluster.routes = res.data.items
-      } catch {
-        // If we can't load routes, continue (the API delete will catch issues)
-      }
-    }
-    const linkedRoutes = (cluster.routes || []).filter(
-      (r: Route) => r.upstream_id === upstream.id,
-    )
-    if (linkedRoutes.length > 0) {
-      const routeNames = linkedRoutes.map((r: Route) => r.name).join(', ')
-      message.error(`该上游已被路由 "${routeNames}" 引用，请先删除这些路由`)
-      return
-    }
-
-    showDeleteConfirm({
-      title: `确定要删除上游 "${upstream.name}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `删除上游: ${upstream.name}`,
-          apiEndpoint: `/clusters/${cluster.id}/upstreams/${upstream.id}`,
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadUpstreams(cluster),
-          clearSelectedFn: () => { cluster.selectedUpstream = null },
-        })
-      },
-    })
-  }
-
-  const deleteUpstreams = async (cluster: Cluster) => {
-    const keys = cluster.selectedUpstreamKeys || []
-    if (keys.length === 0) {
-      message.warning('请先勾选要删除的上游')
-      return
-    }
-    const upstreams = (cluster.upstreams || []).filter((u) => keys.includes(u.id))
-    if (!cluster.routes || cluster.routes.length === 0) {
-      try {
-        const res = await api.get(
-          `/clusters/${cluster.id}/routes`,
-          { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } },
-        )
-        cluster.routes = res.data.items
-      } catch {
-        // 加载失败时放弃前端守卫，交给后端拦截
-      }
-    }
-    const referenced = upstreams.filter((u) =>
-      (cluster.routes || []).some((r) => r.upstream_id === u.id),
-    )
-    if (referenced.length > 0) {
-      const names = referenced.map((u) => u.name).join('、')
-      message.warning(`上游 "${names}" 已被路由引用，已跳过删除，请先删除引用路由`)
-    }
-    const deletable = upstreams.filter((u) =>
-      !(cluster.routes || []).some((r) => r.upstream_id === u.id),
-    )
-    if (deletable.length === 0) return
-    const names = deletable.map((u) => u.name)
-    const title = names.length > 3
-      ? `确定要删除选中的 ${names.length} 条上游吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
-      : `确定要删除选中的 ${names.length} 条上游吗？${names.join('、')}`
-    const deletableIds = deletable.map((u) => u.id)
-    showDeleteConfirm({
-      title,
-      apiEndpoint: `/clusters/${cluster.id}/upstreams`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `批量删除上游: ${names.join('、')}`,
-          apiEndpoint: `/clusters/${cluster.id}/upstreams`,
-          resourceKey: { field: 'upstream_ids', label: '上游', nameField: 'upstream_name', keys: deletableIds },
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadUpstreams(cluster),
-          clearSelectedFn: () => { cluster.selectedUpstreamKeys = []; cluster.selectedUpstream = null },
-        })
-      },
-    })
-  }
-
-  // ── Publish upstream ──
-  const publishUpstream = async (cluster: Cluster) => {
-    if (!cluster.selectedUpstream) {
-      message.warning('请先选择一个上游')
-      return
-    }
-    const nodeIds = await openPublishModal(
-      `发布上游: ${cluster.selectedUpstream.name}`,
-      cluster.id,
-    )
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布上游: ${cluster.selectedUpstream.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/upstreams/${cluster.selectedUpstream.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadUpstreams(cluster),
-    })
-  }
-
-  const publishUpstreamByRecord = async (cluster: Cluster, record: Upstream) => {
-    const nodeIds = await openPublishModal(`发布上游: ${record.name}`, cluster.id)
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布上游: ${record.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/upstreams/${record.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadUpstreams(cluster),
-    })
-  }
-
-  // ── Version management ──
-  const openUpstreamVersionManagement = (cluster: Cluster) => {
-    if (!cluster.selectedUpstream) {
-      message.warning('请先选择一个上游')
-      return
-    }
-    versionModalType.value = 'upstream'
-    versionModalResourceId.value = cluster.selectedUpstream.id
-    versionModalClusterId.value = cluster.id
-    versionModalResourceName.value = cluster.selectedUpstream.name
-    versionModalEdgeUuid.value = cluster.selectedUpstream.edge_uuid || ''
-    versionModalVisible.value = true
-  }
-
-  const openUpstreamVersionManagementByRecord = (
-    cluster: Cluster,
-    record: Upstream,
-  ) => {
-    versionModalType.value = 'upstream'
-    versionModalResourceId.value = record.id
-    versionModalClusterId.value = cluster.id
-    versionModalResourceName.value = record.name
-    versionModalEdgeUuid.value = record.edge_uuid || ''
-    versionModalVisible.value = true
   }
 
   // ── Return everything ──

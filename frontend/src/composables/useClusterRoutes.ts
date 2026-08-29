@@ -4,7 +4,8 @@ import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useColumnConfig } from './useColumnConfig'
-import { executePublish, executeDeleteWithProgress, publishStatusRender, formatPublishDateTime } from './useClusterUtils'
+import { useClusterResource } from './useClusterResource'
+import { publishStatusRender } from './useClusterUtils'
 
 // ── helpers ────────────────────────────────────────────────────────────
 
@@ -103,6 +104,69 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   } = deps
 
   const authStore = useAuthStore()
+
+  // ── 通用骨架：load/select/delete/publish/version 十件套 ─────────────
+
+  const core = useClusterResource<Route>({
+    noun: '路由',
+    endpoint: 'routes',
+    versionType: 'route',
+    keys: {
+      items: 'routes',
+      pagination: 'routesPagination',
+      loading: 'routesLoading',
+      search: 'routesSearch',
+      searchField: 'routesSearchField',
+      sortBy: 'routesSortBy',
+      sortOrder: 'routesSortOrder',
+      selected: 'selectedRoute',
+      selectedKeys: 'selectedRouteKeys',
+    },
+    sortFieldMap: {
+      name: 'name',
+      uri: 'uri',
+      priority: 'priority',
+      status: 'status',
+      created_at: 'created_at',
+    },
+    deleteGuard: (_cluster, route) =>
+      isDnsRoute(route) ? '这是一条 DNS 查询路由，请在 DNS 查询页面管理' : null,
+    batchFilter: (_cluster, routes) => {
+      const dnsRoute = hasDnsRouteIn(routes)
+      if (dnsRoute) {
+        message.warning(`路由 "${dnsRoute.name}" 是 DNS 查询路由，请在 DNS 查询页面管理`)
+        return null
+      }
+      return routes
+    },
+    batchResourceKey: { field: 'route_ids', label: '路由', nameField: 'route_name' },
+  }, {
+    openPublishModal,
+    showDeleteConfirm,
+    versionModal: {
+      type: versionModalType,
+      visible: versionModalVisible,
+      resourceId: versionModalResourceId,
+      clusterId: versionModalClusterId,
+      resourceName: versionModalResourceName,
+      edgeUuid: versionModalEdgeUuid,
+    },
+  })
+
+  const loadRoutes = core.load
+  const handleRouteTableChange = core.handleTableChange
+  const selectRoute = core.selectOne
+  const selectRoutes = core.selectMany
+  const deleteRouteByRecord = core.deleteByRecord
+  const deleteRoutes = core.deleteMany
+  const publishRoute = core.publishSelected
+  const publishRouteByRecord = core.publishByRecord
+  const openRouteVersionManagement = core.openVersionManagement
+  const openRouteVersionManagementByRecord = core.openVersionManagementByRecord
+
+  function getActionButtonTitle(key: string) {
+    return core.getActionButtonTitle(key, allActionButtons)
+  }
 
   // ── modal / form state ──────────────────────────────────────────────
 
@@ -237,11 +301,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   // ── actions ────────────────────────────────────────────────────────
 
-  function getActionButtonTitle(key: string) {
-    const btn = allActionButtons.find((b) => b.key === key)
-    return btn?.title || key
-  }
-
   function handleRouteAction(cluster: Cluster, record: Route, action: string) {
     switch (action) {
       case 'publish':
@@ -262,15 +321,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     }
   }
 
-  function selectRoute(cluster: Cluster, route: Route | undefined) {
-    cluster.selectedRoute = route || null
-  }
-
-  function selectRoutes(cluster: Cluster, keys: number[] | (string | number)[], rows: Route[]) {
-    cluster.selectedRouteKeys = keys as number[]
-    cluster.selectedRoute = keys.length === 1 ? (rows[0] ?? null) : null
-  }
-
   function isDnsRoute(record: Route): boolean {
     return Array.isArray(record.plugins) && record.plugins.some((p) => p.plugin_name === 'dns_upstream')
   }
@@ -278,80 +328,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   function hasDnsRouteIn(records: Route[]): Route | undefined {
     return records.find(isDnsRoute)
   }
-
-  // ── load routes ────────────────────────────────────────────────────
-
-  const lastRouteQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
-
-  async function loadRoutes(cluster: Cluster) {
-    const prev = lastRouteQuery.get(cluster)
-    const next = {
-      search: cluster.routesSearch || '',
-      field: cluster.routesSearchField || '',
-      sortBy: cluster.routesSortBy || '',
-      sortOrder: cluster.routesSortOrder || '',
-    }
-    if (prev && (prev.search !== next.search || prev.field !== next.field || prev.sortBy !== next.sortBy || prev.sortOrder !== next.sortOrder)) {
-      cluster.selectedRouteKeys = []
-      cluster.selectedRoute = null
-    }
-    lastRouteQuery.set(cluster, next)
-    cluster.routesLoading = true
-    try {
-      const params: Record<string, unknown> = {
-        page: cluster.routesPagination?.page || 1,
-        page_size: cluster.routesPagination?.pageSize || 20,
-      }
-      if (cluster.routesSearch) {
-        params.search = cluster.routesSearch
-        if (cluster.routesSearchField) {
-          params.search_field = cluster.routesSearchField
-        }
-      }
-      if (cluster.routesSortBy) {
-        params.sort_by = cluster.routesSortBy
-        params.sort_order = cluster.routesSortOrder
-      }
-      const res = await api.get(`/clusters/${cluster.id}/routes`, { params })
-      cluster.routes = res.data.items
-      cluster.routesPagination = {
-        total: res.data.total,
-        page: res.data.page,
-        pageSize: res.data.page_size,
-      }
-    } catch {
-      message.error('加载路由列表失败')
-    } finally {
-      cluster.routesLoading = false
-    }
-  }
-
-  function handleRouteTableChange(cluster: Cluster, pag: { current: number; pageSize: number }, sorter: { field?: string; order?: string }) {
-    if (cluster.routesPagination) {
-      cluster.routesPagination.page = pag.current
-      cluster.routesPagination.pageSize = pag.pageSize
-    }
-    if (sorter && sorter.field) {
-      const fieldMap: Record<string, string> = {
-        name: 'name',
-        uri: 'uri',
-        priority: 'priority',
-        status: 'status',
-        created_at: 'created_at',
-      }
-      cluster.routesSortBy = fieldMap[sorter.field] || sorter.field
-      cluster.routesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
-      // 排序改变数据集，清除批量勾选与单选（D9）
-      cluster.selectedRouteKeys = []
-      cluster.selectedRoute = null
-    } else {
-      cluster.routesSortBy = ''
-      cluster.routesSortOrder = 'asc'
-    }
-    loadRoutes(cluster)
-  }
-
-  // ── load plugins ───────────────────────────────────────────────────
 
   // ── add / edit / copy modal ────────────────────────────────────────
 
@@ -382,11 +358,9 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   function editRoute(cluster: Cluster) {
-    if (!cluster.selectedRoute) {
-      message.warning('请先选择一个路由')
-      return
-    }
-    editRouteByRecord(cluster, cluster.selectedRoute)
+    const selected = core.requireSelected(cluster)
+    if (!selected) return
+    editRouteByRecord(cluster, selected)
   }
 
   async function editRouteByRecord(cluster: Cluster, route: Route) {
@@ -434,11 +408,9 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   function copyRoute(cluster: Cluster) {
-    if (!cluster.selectedRoute) {
-      message.warning('请先选择一个路由')
-      return
-    }
-    copyRouteByRecord(cluster, cluster.selectedRoute)
+    const selected = core.requireSelected(cluster)
+    if (!selected) return
+    copyRouteByRecord(cluster, selected)
   }
 
   async function copyRouteByRecord(cluster: Cluster, route: Route) {
@@ -553,129 +525,9 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   // ── delete ─────────────────────────────────────────────────────────
 
   function deleteRoute(cluster: Cluster) {
-    if (!cluster.selectedRoute) {
-      message.warning('请先选择一个路由')
-      return
-    }
-    if (isDnsRoute(cluster.selectedRoute)) {
-      message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
-      return
-    }
-    deleteRouteByRecord(cluster, cluster.selectedRoute)
-  }
-
-  function deleteRouteByRecord(cluster: Cluster, route: Route) {
-    if (isDnsRoute(route)) {
-      message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
-      return
-    }
-    showDeleteConfirm({
-      title: `确定要删除路由 "${route.name}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `删除路由: ${route.name}`,
-          apiEndpoint: `/clusters/${cluster.id}/routes/${route.id}`,
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadRoutes(cluster),
-          clearSelectedFn: () => { cluster.selectedRoute = null },
-        })
-      },
-    })
-  }
-
-  function deleteRoutes(cluster: Cluster) {
-    const keys = cluster.selectedRouteKeys || []
-    if (keys.length === 0) {
-      message.warning('请先勾选要删除的路由')
-      return
-    }
-    const routes = (cluster.routes || []).filter((r) => keys.includes(r.id))
-    const dnsRoute = hasDnsRouteIn(routes)
-    if (dnsRoute) {
-      message.warning(`路由 "${dnsRoute.name}" 是 DNS 查询路由，请在 DNS 查询页面管理`)
-      return
-    }
-    const names = routes.map((r) => r.name)
-    const title = names.length > 3
-      ? `确定要删除选中的 ${names.length} 条路由吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
-      : `确定要删除选中的 ${names.length} 条路由吗？${names.join('、')}`
-    showDeleteConfirm({
-      title,
-      apiEndpoint: `/clusters/${cluster.id}/routes`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `批量删除路由: ${names.join('、')}`,
-          apiEndpoint: `/clusters/${cluster.id}/routes`,
-          resourceKey: { field: 'route_ids', label: '路由', nameField: 'route_name', keys },
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadRoutes(cluster),
-          clearSelectedFn: () => { cluster.selectedRouteKeys = []; cluster.selectedRoute = null },
-        })
-      },
-    })
-  }
-
-  // ── publish ────────────────────────────────────────────────────────
-
-  async function publishRoute(cluster: Cluster) {
-    if (!cluster.selectedRoute) {
-      message.warning('请先选择一个路由')
-      return
-    }
-    const nodeIds = await openPublishModal(`发布路由: ${cluster.selectedRoute.name}`, cluster.id)
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布路由: ${cluster.selectedRoute.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/routes/${cluster.selectedRoute.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadRoutes(cluster),
-    })
-  }
-
-  async function publishRouteByRecord(cluster: Cluster, record: Route) {
-    const nodeIds = await openPublishModal(`发布路由: ${record.name}`, cluster.id)
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布路由: ${record.name}`,
-      apiEndpoint: `/clusters/${cluster.id}/routes/${record.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadRoutes(cluster),
-    })
-  }
-
-  // ── version management ─────────────────────────────────────────────
-
-  function openRouteVersionManagement(cluster: Cluster) {
-    if (!cluster.selectedRoute) {
-      message.warning('请先选择一个路由')
-      return
-    }
-    versionModalType.value = 'route'
-    versionModalResourceId.value = cluster.selectedRoute.id
-    versionModalClusterId.value = cluster.id
-    versionModalResourceName.value = cluster.selectedRoute.name
-    versionModalEdgeUuid.value = cluster.selectedRoute.edge_uuid || ''
-    versionModalVisible.value = true
-  }
-
-  function openRouteVersionManagementByRecord(cluster: Cluster, record: Route) {
-    versionModalType.value = 'route'
-    versionModalResourceId.value = record.id
-    versionModalClusterId.value = cluster.id
-    versionModalResourceName.value = record.name
-    versionModalEdgeUuid.value = record.edge_uuid || ''
-    versionModalVisible.value = true
+    const selected = core.requireSelected(cluster)
+    if (!selected) return
+    deleteRouteByRecord(cluster, selected)
   }
 
   // ── hasPermission shortcut ─────────────────────────────────────────
