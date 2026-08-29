@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_admin_user as require_admin
+from app.core.deps import require_permission
 from app.services.audit import log_audit
 from app.models.cluster import Node
 from app.models.node_task import NodeTask
@@ -73,7 +73,7 @@ class PutPayload(BaseModel):
 
 @router.get("/inventory")
 async def get_inventory(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission('ansible_inventory')),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     with _inventory_lock:
@@ -100,7 +100,7 @@ async def get_inventory(
 @router.put("/inventory")
 async def put_inventory(
     payload: PutPayload,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission('ansible_inventory')),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     if payload.raw_text is None and payload.hosts is None:
@@ -135,7 +135,7 @@ async def put_inventory(
 @router.post("/inventory/render")
 async def render_inventory_endpoint(
     req: RenderRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission('ansible_inventory')),
 ) -> dict[str, str]:
     return {"text": inventory_service.render_inventory(req.hosts, req.vars)}
 
@@ -143,6 +143,6 @@ async def render_inventory_endpoint(
 @router.post("/inventory/parse")
 async def parse_inventory_endpoint(
     req: ParseRequest,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_permission('ansible_inventory')),
 ) -> dict[str, Any]:
     return inventory_service.parse_inventory(req.raw_text)

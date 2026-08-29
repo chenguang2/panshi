@@ -31,13 +31,13 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     path: 'edge-autostart',
     name: 'EdgeAutostart',
     component: () => import('@/views/EdgeAutostart.vue'),
-    meta: { permission: 'tools' },
+    meta: { permission: 'edge_autostart' },
   },
   ansible_inventory: {
     path: 'ansible-inventory',
     name: 'AnsibleInventory',
     component: () => import('@/views/AnsibleInventory.vue'),
-    meta: { permission: 'tools' },
+    meta: { permission: 'ansible_inventory' },
   },
   plugin_switches: {
     path: 'plugin-switches',
@@ -119,15 +119,60 @@ const coreRoutes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue') },
-      { path: 'central-management', name: 'CentralManagement', component: () => import('@/views/CentralList.vue'), meta: { permission: 'central_management' } },
-      { path: 'clusters', name: 'ClusterList', component: () => import('@/views/ClusterList.vue'), meta: { permission: 'clusters' } },
-      { path: 'upstreams', name: 'UpstreamList', component: () => import('@/views/UpstreamList.vue'), meta: { permission: 'upstreams' } },
-      { path: 'routes', name: 'RouteList', component: () => import('@/views/RouteList.vue'), meta: { permission: 'routes' } },
-      { path: 'plugin-configs', name: 'PluginConfigList', component: () => import('@/views/PluginConfigList.vue'), meta: { permission: 'plugin_groups' } },
-      { path: 'global-rules', name: 'GlobalRuleList', component: () => import('@/views/GlobalRuleList.vue'), meta: { permission: 'global_rules' } },
-      { path: 'static-resources', name: 'StaticResourceList', component: () => import('@/views/StaticResourceList.vue'), meta: { permission: 'static_resources' } },
-      { path: 'plugin-metadata', name: 'PluginMetadataList', component: () => import('@/views/PluginMetadataList.vue'), meta: { permission: 'plugin_metadata' } },
-      { path: 'nodes', name: 'NodeList', component: () => import('@/views/NodeList.vue'), meta: { permission: 'nodes' } },
+      {
+        path: 'central-management',
+        name: 'CentralManagement',
+        component: () => import('@/views/CentralList.vue'),
+        meta: { permission: 'central_management' },
+      },
+      {
+        path: 'clusters',
+        name: 'ClusterList',
+        component: () => import('@/views/ClusterList.vue'),
+        meta: { permission: 'clusters' },
+      },
+      {
+        path: 'upstreams',
+        name: 'UpstreamList',
+        component: () => import('@/views/UpstreamList.vue'),
+        meta: { permission: 'upstreams' },
+      },
+      {
+        path: 'routes',
+        name: 'RouteList',
+        component: () => import('@/views/RouteList.vue'),
+        meta: { permission: 'routes' },
+      },
+      {
+        path: 'plugin-configs',
+        name: 'PluginConfigList',
+        component: () => import('@/views/PluginConfigList.vue'),
+        meta: { permission: 'plugin_groups' },
+      },
+      {
+        path: 'global-rules',
+        name: 'GlobalRuleList',
+        component: () => import('@/views/GlobalRuleList.vue'),
+        meta: { permission: 'global_rules' },
+      },
+      {
+        path: 'static-resources',
+        name: 'StaticResourceList',
+        component: () => import('@/views/StaticResourceList.vue'),
+        meta: { permission: 'static_resources' },
+      },
+      {
+        path: 'plugin-metadata',
+        name: 'PluginMetadataList',
+        component: () => import('@/views/PluginMetadataList.vue'),
+        meta: { permission: 'plugin_metadata' },
+      },
+      {
+        path: 'nodes',
+        name: 'NodeList',
+        component: () => import('@/views/NodeList.vue'),
+        meta: { permission: 'nodes' },
+      },
     ],
   },
 ]
@@ -149,12 +194,16 @@ router.beforeEach((to, _from) => {
     return '/login'
   }
 
+  const authStore = useAuthStore()
   const requiredPermission = to.meta?.permission as string | undefined
   if (requiredPermission) {
-    const authStore = useAuthStore()
     if (!authStore.hasPermission(requiredPermission)) {
       return '/'
     }
+  }
+  // admin-only 路由（如 Ansible 主机清单——后端要求管理员，前端对齐）
+  if (to.meta?.adminOnly && authStore.user?.role !== 'admin') {
+    return '/'
   }
 })
 

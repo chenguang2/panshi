@@ -27,7 +27,7 @@ from app.services.ansible_service import (
 
 from app.core.deps import require_permission
 
-router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(require_permission('tools'))])
+router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(require_permission('edge_autostart'))])
 
 _ansible_service = AnsibleRunnerService()
 

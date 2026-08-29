@@ -165,11 +165,18 @@ class TestAnsibleInventoryAPI:
 
             no_token = await client.get("/api/v1/ansible/inventory")
             forbidden = await client.get("/api/v1/ansible/inventory", headers=user_headers)
+            # 每个菜单项独立权限：授予 ansible_inventory 后普通用户可访问
+            await client.put(
+                f"/api/v1/admin/users/{created.json()['id']}/permissions",
+                headers=admin_headers, json={"permissions": ["ansible_inventory"]},
+            )
+            granted = await client.get("/api/v1/ansible/inventory", headers=user_headers)
             uid = created.json()["id"]
             await client.delete(f"/api/v1/admin/users/{uid}", headers=admin_headers)
 
         assert no_token.status_code == 401
         assert forbidden.status_code == 403
+        assert granted.status_code == 200
 
     # ── PUT ──────────────────────────────────────────────────────
 

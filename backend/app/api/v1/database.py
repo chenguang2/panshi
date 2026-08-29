@@ -17,7 +17,7 @@ from app.core import db_config, maintenance
 from app.core.database import get_db, build_sync_engine_for
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
 from app.services.audit import log_audit
-from app.core.deps import get_current_admin_user as require_db_admin
+from app.core.deps import require_permission as require_db_admin
 from app.models.user import User
 from app.models.db_migration import DbMigrationLog
 from app.schemas.database import (
@@ -42,7 +42,7 @@ def _save(cfg: DbConfig) -> None:
 
 
 @router.get("/status")
-async def get_status(current_user: User = Depends(require_db_admin)):
+async def get_status(current_user: User = Depends(require_db_admin('database_management'))):
     cfg = _get_config()
     active = cfg.get_active()
     return {
@@ -53,7 +53,7 @@ async def get_status(current_user: User = Depends(require_db_admin)):
 
 
 @router.get("/connections")
-async def list_connections(current_user: User = Depends(require_db_admin)):
+async def list_connections(current_user: User = Depends(require_db_admin('database_management'))):
     cfg = _get_config()
     return [c.public_dict() for c in cfg.connections]
 
@@ -61,7 +61,7 @@ async def list_connections(current_user: User = Depends(require_db_admin)):
 @router.post("/connections")
 async def create_connection(
     body: ConnectionCreate,
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     conn_id = _new_id(cfg)
@@ -86,7 +86,7 @@ async def create_connection(
 async def update_connection(
     conn_id: str,
     body: ConnectionUpdate,
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     conn = cfg.get_connection(conn_id)
@@ -115,7 +115,7 @@ async def update_connection(
 @router.delete("/connections/{conn_id}")
 async def delete_connection(
     conn_id: str,
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     if conn_id == cfg.active:
@@ -131,7 +131,7 @@ async def delete_connection(
 @router.post("/connections/{conn_id}/test")
 async def test_connection(
     conn_id: str,
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     conn = cfg.get_connection(conn_id)
@@ -161,7 +161,7 @@ async def _do_test(conn: ConnectionConfig):
 async def switch_database(
     body: SwitchRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     from app.services import db_switch_service
     result = await db_switch_service.perform_switch(body.connection_id, db)
@@ -173,7 +173,7 @@ async def switch_database(
 async def migrate_database(
     body: MigrateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     source = cfg.get_connection(body.source_id)
@@ -220,7 +220,7 @@ async def migrate_database(
 async def export_archive(
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     source = cfg.get_connection(body.source_id)
@@ -239,7 +239,7 @@ async def export_archive(
 async def import_archive(
     body: ImportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     cfg = _get_config()
     target = cfg.get_connection(body.target_id)
@@ -268,7 +268,7 @@ async def import_archive(
 @router.get("/history")
 async def migration_history(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin),
+    current_user: User = Depends(require_db_admin('database_management')),
 ):
     result = await db.execute(
         select(DbMigrationLog).order_by(DbMigrationLog.id.desc()).limit(100)

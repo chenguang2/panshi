@@ -7,9 +7,14 @@
       <span v-show="!collapsed" class="sidebar-logo-version">v1.0</span>
     </div>
 
-        <!-- Navigation -->
+    <!-- Navigation -->
     <nav class="sidebar-nav">
-      <div v-for="section in navSections" :key="section.title" class="sidebar-section" v-show="section.visible !== false">
+      <div
+        v-for="section in navSections"
+        :key="section.title"
+        class="sidebar-section"
+        v-show="section.visible !== false"
+      >
         <div v-show="!collapsed" class="sidebar-section-title">{{ section.title }}</div>
         <router-link
           v-for="item in section.items"
@@ -31,13 +36,9 @@
           <div>类型：{{ dbStatus?.active?.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</div>
           <div>地址：{{ dbStatus?.active?.display_address || '-' }}</div>
           <div>连接数：{{ dbStatus?.connections_count }}</div>
-          <div v-if="dbFeatureOn" style="margin-top:2px;opacity:.7;">点击进入数据库管理</div>
+          <div v-if="dbFeatureOn" style="margin-top: 2px; opacity: 0.7">点击进入数据库管理</div>
         </template>
-        <div
-          class="sidebar-db-row"
-          :class="{ collapsed, linkable: dbFeatureOn }"
-          @click="goDatabaseManagement"
-        >
+        <div class="sidebar-db-row" :class="{ collapsed, linkable: dbFeatureOn }" @click="goDatabaseManagement">
           <span class="sidebar-db-dot"></span>
           <span v-show="!collapsed" class="sidebar-db-text">{{ dbStatusLabel }}</span>
         </div>
@@ -111,6 +112,8 @@ interface NavItem {
   route: string
   icon: string
   permission?: string
+  /** 仅管理员可见（如 Ansible 主机清单——后端 admin-only，管理全部节点 SSH 凭据） */
+  adminOnly?: boolean
   feature?: string
 }
 
@@ -126,13 +129,49 @@ const navSections = computed<NavSection[]>(() => {
   const _fs = featuresStore.features
 
   const edgeItems: NavItem[] = [
-    { label: 'Edge直连', route: '/edge-client', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg>', permission: 'edge_nodes', feature: 'edge_client' },
-    { label: '数据导入', route: '/edge-import', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>', permission: 'edge_import', feature: 'edge_import' },
-    { label: '工具箱', route: '/tools', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>', permission: 'tools', feature: 'tools' },
-    { label: '自启动管理', route: '/edge-autostart', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>', permission: 'tools', feature: 'edge_autostart' },
-    { label: 'Ansible 主机清单', route: '/ansible-inventory', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg>', permission: 'tools', feature: 'ansible_inventory' },
-    { label: '节点任务', route: '/node-tasks', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>', permission: 'task_center', feature: 'task_center' },
-  ].filter(item => {
+    {
+      label: 'Edge直连',
+      route: '/edge-client',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg>',
+      permission: 'edge_nodes',
+      feature: 'edge_client',
+    },
+    {
+      label: '数据导入',
+      route: '/edge-import',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>',
+      permission: 'edge_import',
+      feature: 'edge_import',
+    },
+    {
+      label: '工具箱',
+      route: '/tools',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg>',
+      permission: 'tools',
+      feature: 'tools',
+    },
+    {
+      label: '自启动管理',
+      route: '/edge-autostart',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>',
+      permission: 'edge_autostart',
+      feature: 'edge_autostart',
+    },
+    {
+      label: 'Ansible 主机清单',
+      route: '/ansible-inventory',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg>',
+      permission: 'ansible_inventory',
+      feature: 'ansible_inventory',
+    },
+    {
+      label: '节点任务',
+      route: '/node-tasks',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg>',
+      permission: 'task_center',
+      feature: 'task_center',
+    },
+  ].filter((item) => {
     const passFeature = !item.feature || featuresStore.has(item.feature)
     const passPermission = !item.permission || authStore.hasPermission(item.permission)
     return passFeature && passPermission
@@ -142,47 +181,169 @@ const navSections = computed<NavSection[]>(() => {
     {
       title: '核心功能',
       items: [
-        { label: '概览', route: '/', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h6v6H2V2zm8 0h6v6h-6V2zM2 10h6v6H2v-6zm8 0h6v6h-6v-6z"/></svg>' },
-        { label: '集群管理', route: '/clusters', permission: 'clusters', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="5" y="8" width="8" height="3" rx="1"/><rect x="6" y="13" width="6" height="3" rx="1"/></svg>' },
-        { label: '节点管理', route: '/nodes', permission: 'nodes', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>' },
-        { label: '上游管理', route: '/upstreams', permission: 'upstreams', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg>' },
-        { label: '路由管理', route: '/routes', permission: 'routes', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg>' },
-        { label: '插件组', route: '/plugin-configs', permission: 'plugin_groups', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h10v10H6V3z"/><path d="M3 6h3v10H3V6z"/><path d="M6 6l3 3M6 9l3-3M9 6l3 3M9 9l3-3"/></svg>' },
-        { label: '插件元数据', route: '/plugin-metadata', permission: 'plugin_metadata', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>' },
-        { label: '全局规则', route: '/global-rules', permission: 'global_rules', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>' },
-        { label: '静态资源', route: '/static-resources', permission: 'static_resources', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1v8M6 4l3-3 3 3"/><path d="M3 10v4a1 1 0 001 1h10a1 1 0 001-1v-4"/></svg>' },
-        { label: 'SSL 证书', route: '/ssl', permission: 'ssl_cert', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="12" height="10" rx="1"/><path d="M6 7V5a3 3 0 016 0v2"/><circle cx="9" cy="11" r="1"/><path d="M9 11v2"/></svg>', feature: 'ssl_cert' },
-      ].filter(item => !item.feature || featuresStore.has(item.feature)).filter(item => !item.permission || authStore.hasPermission(item.permission))
+        {
+          label: '概览',
+          route: '/',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h6v6H2V2zm8 0h6v6h-6V2zM2 10h6v6H2v-6zm8 0h6v6h-6v-6z"/></svg>',
+        },
+        {
+          label: '集群管理',
+          route: '/clusters',
+          permission: 'clusters',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="5" y="8" width="8" height="3" rx="1"/><rect x="6" y="13" width="6" height="3" rx="1"/></svg>',
+        },
+        {
+          label: '节点管理',
+          route: '/nodes',
+          permission: 'nodes',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>',
+        },
+        {
+          label: '上游管理',
+          route: '/upstreams',
+          permission: 'upstreams',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg>',
+        },
+        {
+          label: '路由管理',
+          route: '/routes',
+          permission: 'routes',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg>',
+        },
+        {
+          label: '插件组',
+          route: '/plugin-configs',
+          permission: 'plugin_groups',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h10v10H6V3z"/><path d="M3 6h3v10H3V6z"/><path d="M6 6l3 3M6 9l3-3M9 6l3 3M9 9l3-3"/></svg>',
+        },
+        {
+          label: '插件元数据',
+          route: '/plugin-metadata',
+          permission: 'plugin_metadata',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>',
+        },
+        {
+          label: '全局规则',
+          route: '/global-rules',
+          permission: 'global_rules',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v5c0 3-2.5 5.5-6 6-3.5-.5-6-3-6-6V5l6-3z"/><path d="M6 9l2 2 4-4"/></svg>',
+        },
+        {
+          label: '静态资源',
+          route: '/static-resources',
+          permission: 'static_resources',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1v8M6 4l3-3 3 3"/><path d="M3 10v4a1 1 0 001 1h10a1 1 0 001-1v-4"/></svg>',
+        },
+        {
+          label: 'SSL 证书',
+          route: '/ssl',
+          permission: 'ssl_cert',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="12" height="10" rx="1"/><path d="M6 7V5a3 3 0 016 0v2"/><circle cx="9" cy="11" r="1"/><path d="M9 11v2"/></svg>',
+          feature: 'ssl_cert',
+        },
+      ]
+        .filter((item) => !item.feature || featuresStore.has(item.feature))
+        .filter((item) => !item.permission || authStore.hasPermission(item.permission)),
     },
     {
       title: '边缘网络',
       items: [
-        { label: 'edge.env 配置', route: '/edge-env', permission: 'edge_env', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg>', feature: 'edge_env' },
-        { label: '四层代理', route: '/stream-proxies', permission: 'stream_proxy', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg>', feature: 'stream_proxy' },
-        { label: 'DNS代理[UDP]', route: '/dns-proxies', permission: 'dns_proxy_udp', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>', feature: 'dns_proxy_udp' },
-        { label: 'DNS代理[HTTP]', route: '/dns-queries', permission: 'dns_proxy_http', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>', feature: 'dns_proxy_http' },
-      ].filter(item => (!item.feature || featuresStore.has(item.feature)) && (!item.permission || authStore.hasPermission(item.permission)))
+        {
+          label: 'edge.env 配置',
+          route: '/edge-env',
+          permission: 'edge_env',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg>',
+          feature: 'edge_env',
+        },
+        {
+          label: '四层代理',
+          route: '/stream-proxies',
+          permission: 'stream_proxy',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg>',
+          feature: 'stream_proxy',
+        },
+        {
+          label: 'DNS代理[UDP]',
+          route: '/dns-proxies',
+          permission: 'dns_proxy_udp',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>',
+          feature: 'dns_proxy_udp',
+        },
+        {
+          label: 'DNS代理[HTTP]',
+          route: '/dns-queries',
+          permission: 'dns_proxy_http',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>',
+          feature: 'dns_proxy_http',
+        },
+      ].filter(
+        (item) =>
+          (!item.feature || featuresStore.has(item.feature)) &&
+          (!item.permission || authStore.hasPermission(item.permission)),
+      ),
     },
     {
       title: '综合',
       items: [
-        { label: '统一管理', route: '/central-management', permission: 'central_management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>' },
+        {
+          label: '统一管理',
+          route: '/central-management',
+          permission: 'central_management',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>',
+        },
         ...(featuresStore.has('metrics')
           ? [
-              { label: '指标查询', route: '/metrics', permission: 'metrics', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>' } as NavItem,
-              { label: '指标总览', route: '/metrics/dashboard', permission: 'metrics', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 13h2v3H4zM8 9h2v7H8zM12 5h2v11h-2z"/></svg>' } as NavItem,
+              {
+                label: '指标查询',
+                route: '/metrics',
+                permission: 'metrics',
+                icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>',
+              } as NavItem,
+              {
+                label: '指标总览',
+                route: '/metrics/dashboard',
+                permission: 'metrics',
+                icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 13h2v3H4zM8 9h2v7H8zM12 5h2v11h-2z"/></svg>',
+              } as NavItem,
             ]
           : []),
-      ].filter(item => (!item.feature || featuresStore.has(item.feature)) && (!item.permission || authStore.hasPermission(item.permission)))
+      ].filter(
+        (item) =>
+          (!item.feature || featuresStore.has(item.feature)) &&
+          (!item.permission || authStore.hasPermission(item.permission)),
+      ),
     },
     {
       title: '系统管理',
-      visible: authStore.user?.role === 'admin',
+      // 管理员始终可见；普通用户持有 database_management 权限时可见数据库管理
+      visible: authStore.user?.role === 'admin' || authStore.hasPermission('database_management'),
       items: [
-        { label: '插件开关', route: '/plugin-switches', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>', feature: 'plugin_switches' },
-        { label: '数据库管理', route: '/database-management', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>', feature: 'database_management' },
-        { label: '用户管理', route: '/users', icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>' },
-      ].filter(item => !item.feature || featuresStore.has(item.feature))
+        {
+          label: '插件开关',
+          route: '/plugin-switches',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>',
+          adminOnly: true,
+          feature: 'plugin_switches',
+        },
+        {
+          label: '数据库管理',
+          route: '/database-management',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>',
+          permission: 'database_management',
+          feature: 'database_management',
+        },
+        {
+          label: '用户管理',
+          route: '/users',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>',
+          adminOnly: true,
+        },
+      ].filter(
+        (item) =>
+          (!item.feature || featuresStore.has(item.feature)) &&
+          (!item.permission || authStore.hasPermission(item.permission)) &&
+          (!item.adminOnly || authStore.user?.role === 'admin'),
+      ),
     },
     {
       title: '运维管理',
@@ -221,7 +382,6 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/node-tasks') return name === 'NodeTaskCenter'
   return false
 }
-
 </script>
 
 <style scoped>
@@ -427,5 +587,4 @@ function isActive(item: NavItem): boolean {
   opacity: 0.6;
   line-height: 1.3;
 }
-
 </style>
