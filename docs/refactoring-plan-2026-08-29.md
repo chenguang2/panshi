@@ -14,6 +14,10 @@
 > - Phase 3 + M5 已提交（9245ebe）——后端 `edge_sync.rollback_resource` 通用回滚工厂收敛 8 个
 >   rollback 端点（history/delete-history 本已集中，无需额外工厂）；前端 `utils/error.ts`
 >   `getApiErrorMessage` 统一 4+ 处手写错误提取。
+> - Phase 5（工程化）已提交（20cfc8d）——ESLint 10 flat config + Prettier + husky 9 +
+>   lint-staged（pre-commit 仅处理暂存文件）；存量 lint 错误 46→0；生产 TS `any` 76→~1
+>   （新增 GlobalRule/StaticResource 类型、composables/api 全面定型）；.vue 模板内 any
+>   474 处保留为 warn 增量治理。
 
 ## 0. 执行摘要
 
