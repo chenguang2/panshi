@@ -10,7 +10,7 @@ from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstr
 from app.models.user import User, UserCluster
 from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
@@ -32,7 +32,7 @@ async def list_all_routes(
     plugin: Optional[str] = Query(None, description="Filter by plugin name"),
     sort_by: Optional[str] = Query(None),
     sort_order: Optional[str] = Query("asc"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('routes')),
 ):
     query = select(Route)
 
@@ -190,7 +190,7 @@ async def list_all_routes(
 async def get_routes_by_edge_uuids(
     edge_uuids: list[str],
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('routes')),
 ):
     """批量查询路由信息（用于指标关联路由名）"""
     if not edge_uuids:

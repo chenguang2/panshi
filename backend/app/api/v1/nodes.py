@@ -8,7 +8,7 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Node, Cluster
 from app.models.user import User, UserCluster
 from app.schemas.cluster import NodeResponse
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 from app.services import edge_sync
 from app.services.ansible_service import ip_sort_key
 
@@ -32,7 +32,7 @@ async def list_or_find_nodes(
     management_port: Optional[int] = Query(None),
     # Auth
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('nodes')),
 ):
     # ── Backward-compatible single-node lookup ──────────────────
     if ip is not None and management_port is not None:

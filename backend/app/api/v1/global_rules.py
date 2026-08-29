@@ -8,7 +8,7 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, GlobalRule, ConfigVersion
 from app.models.user import User, UserCluster
 from app.schemas.cluster import GlobalRuleResponse
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
 router = APIRouter(prefix="/global_rules", tags=["global_rules"])
 
@@ -21,7 +21,7 @@ async def list_all_global_rules(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('global_rules')),
 ):
     query = select(GlobalRule)
 

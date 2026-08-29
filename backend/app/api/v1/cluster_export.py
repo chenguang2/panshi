@@ -20,7 +20,8 @@ from app.models.cluster import (
 )
 from app.models.static_resource import StaticResource
 from app.models.ssl import SslCertificate
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
+from app.services.audit import log_audit
 from app.services.edge_sync import get_or_404
 from app.utils.text import sanitize_filename
 
@@ -364,13 +365,15 @@ def _build_workbook(data):
 async def export_cluster_data(
     cluster_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission('clusters')),
 ):
     data = await _query_all_data(cluster_id, db)
     buf = _build_workbook(data)
 
     cluster_name = data["cluster"].name
     filename = f"{sanitize_filename(cluster_name, extra_unsafe='#')}_配置导出.xlsx"
+
+    log_audit(db, user=current_user, action="export_cluster", resource="cluster", resource_id=cluster_id, detail=f"导出集群 {cluster_name} Excel 配置")
 
     from urllib.parse import quote
 

@@ -18,12 +18,12 @@ from app.core.database import get_db
 from app.models.node_task import NodeTask, NodeTaskItem
 from app.services.node_task_service import get_node_task_service
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(prefix="/clusters", tags=["node-tasks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/clusters", tags=["node-tasks"], dependencies=[Depends(require_permission('clusters'))])
 
 # Global task center router (cross-cluster).
-global_router = APIRouter(prefix="/node-tasks", tags=["node-tasks"], dependencies=[Depends(get_current_user)])
+global_router = APIRouter(prefix="/node-tasks", tags=["node-tasks"], dependencies=[Depends(require_permission('task_center'))])
 
 TaskType = Literal[
     "install_openresty",

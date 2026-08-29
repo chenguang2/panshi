@@ -40,7 +40,7 @@ async def edge_env_db(test_db):
     from app.core.security import hash_password
     if await test_db.get(User, 1) is None:
         test_db.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
-                         role="user", status=1))
+                         role="admin", status=1))
         await test_db.commit()
     return test_db
 

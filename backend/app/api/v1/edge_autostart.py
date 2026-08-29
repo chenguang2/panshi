@@ -25,9 +25,9 @@ from app.services.ansible_service import (
     sanitize_command_for_store,
 )
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(require_permission('tools'))])
 
 _ansible_service = AnsibleRunnerService()
 

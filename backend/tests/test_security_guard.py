@@ -10,6 +10,7 @@
 """
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.main import app
 from tests.api_helpers import admin_auth_headers, AuthedTestClient
@@ -111,3 +112,149 @@ def test_disabled_user_token_rejected():
     finally:
         app.dependency_overrides.clear()
         asyncio.run(engine.dispose())
+
+
+def _make_db_with_users(users: list[dict]):
+    """构建 in-memory 库（含用户/权限），返回依赖覆盖后的 app 与 user_id→headers 映射。"""
+    import asyncio
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+    from app.core.database import Base, get_db
+    from app.models.user import User, UserPermission
+    from app.core.security import hash_password, create_access_token
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+
+    async def _setup():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with S() as s:
+            for u in users:
+                s.add(User(id=u["id"], username=u["username"], password_hash=hash_password("password123"),
+                           role=u["role"], status=1))
+                for perm in u.get("permissions", []):
+                    s.add(UserPermission(user_id=u["id"], resource_type=perm, enabled=1))
+            await s.commit()
+        return S
+
+    S = asyncio.run(_setup())
+
+    async def override_get_db():
+        async with S() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    headers = {u["id"]: {"Authorization": f"Bearer {create_access_token({'sub': str(u['id'])})}"} for u in users}
+    return app, S, headers, engine
+
+
+def test_non_admin_without_permission_gets_403():
+    """普通用户无 routes 权限访问全局路由端点 → 403（S6 资源级权限）。"""
+    app, S, headers, engine = _make_db_with_users([
+        {"id": 1, "username": "plain_user", "role": "user", "permissions": []},
+    ])
+    try:
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/routes", headers=headers[1])
+            assert resp.status_code == 403
+            assert "没有权限" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+        asyncio.run(engine.dispose())
+
+
+def test_non_admin_with_permission_passes():
+    """普通用户持有 routes 权限访问全局路由端点 → 到达业务层（非 403）。"""
+    app, S, headers, engine = _make_db_with_users([
+        {"id": 1, "username": "routes_user", "role": "user", "permissions": ["routes"]},
+    ])
+    try:
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/routes", headers=headers[1])
+            assert resp.status_code != 403
+            assert resp.status_code in (200, 404, 422)
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+        asyncio.run(engine.dispose())
+
+
+def test_require_any_permission_stream_proxy():
+    """/stream-proxies 同时服务 stream_proxy 与 dns_proxy_udp 两种权限用户（任一放行）。"""
+    app, S, headers, engine = _make_db_with_users([
+        {"id": 1, "username": "dns_only_user", "role": "user", "permissions": ["dns_proxy_udp"]},
+    ])
+    try:
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/stream-proxies?proxy_type=dns", headers=headers[1])
+            assert resp.status_code != 403
+            assert resp.status_code in (200, 404, 422)
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+        asyncio.run(engine.dispose())
+
+
+def test_cluster_resource_requires_clusters_permission():
+    """集群子资源（/clusters/{id}/routes）由 clusters 容器权限门控。"""
+    app, S, headers, engine = _make_db_with_users([
+        {"id": 1, "username": "route_only_user", "role": "user", "permissions": ["routes"]},
+    ])
+    try:
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/clusters/1/routes", headers=headers[1])
+            assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+        asyncio.run(engine.dispose())
+
+
+def test_operations_endpoint_admin_only():
+    """/system/operations 仅管理员可访问（M1 操作审计查询）。"""
+    app, S, headers, engine = _make_db_with_users([
+        {"id": 1, "username": "admin_user", "role": "admin"},
+        {"id": 2, "username": "plain_user", "role": "user"},
+    ])
+    try:
+        with TestClient(app) as c:
+            resp_admin = c.get("/api/v1/system/operations", headers=headers[1])
+            assert resp_admin.status_code == 200
+            assert isinstance(resp_admin.json(), list)
+            resp_user = c.get("/api/v1/system/operations", headers=headers[2])
+            assert resp_user.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+        asyncio.run(engine.dispose())
+
+
+def test_log_audit_writes_row():
+    """log_audit 写入 sys_audit_log（M1）。"""
+    import asyncio
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+    from app.core.database import Base
+    from app.models.system import AuditLog
+    from app.services.audit import log_audit
+    from app.models.user import User
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+
+    async def _run():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with S() as s:
+            user = User(id=1, username="tester", password_hash="x", role="admin", status=1)
+            s.add(user)
+            log_audit(s, user=user, action="create_cluster", resource="cluster", resource_id=42, detail="创建集群 demo")
+            await s.commit()
+            rows = (await s.execute(select(AuditLog))).scalars().all()
+            assert len(rows) == 1
+            assert rows[0].username == "tester"
+            assert rows[0].action == "create_cluster"
+            assert rows[0].resource_id == 42
+
+    asyncio.run(_run())
+    asyncio.run(engine.dispose())

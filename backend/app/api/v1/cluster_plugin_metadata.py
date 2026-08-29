@@ -10,9 +10,9 @@ from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"], dependencies=[Depends(require_permission('clusters'))])
 
 
 # ─── 列表 ────────────────────────────────────────────

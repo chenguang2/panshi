@@ -9,7 +9,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, Route, RoutePlugin, Node, ConfigVersion, PluginConfig, GlobalRule, PluginMetadata, StreamProxy
 from app.models.static_resource import StaticResource
 from app.models.ssl import SslCertificate
@@ -19,6 +19,7 @@ from app.schemas.cluster import (
     DeleteClusterRequest,
 )
 from app.services import edge_sync
+from app.services.audit import log_audit
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def list_my_clusters(
     page: int = 1,
     page_size: int = 200,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('clusters'))
 ):
     assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == current_user.id)
     query = select(Cluster).where(Cluster.id.in_(assigned_ids))
@@ -130,7 +131,7 @@ async def list_clusters(
 async def create_cluster(
     cluster: ClusterCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_permission('clusters'))
 ):
     result = await db.execute(select(Cluster).where(Cluster.name == cluster.name))
     if result.scalar_one_or_none():
@@ -140,6 +141,7 @@ async def create_cluster(
     db.add(db_cluster)
     await db.commit()
     await db.refresh(db_cluster)
+    log_audit(db, user=current_user, action="create_cluster", resource="cluster", resource_id=db_cluster.id, detail=f"创建集群 {db_cluster.name}")
 
     existing = await db.execute(
         select(UserCluster).where(
@@ -161,7 +163,8 @@ async def get_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{cluster_id}", response_model=ClusterResponse)
-async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: AsyncSession = Depends(get_db)):
+async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters'))):
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     if cluster_update.name is not None:
@@ -174,6 +177,7 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: Asy
 
     await db.commit()
     await db.refresh(cluster)
+    log_audit(db, user=current_user, action="update_cluster", resource="cluster", resource_id=cluster.id, detail=f"更新集群 {cluster.name}")
     return ClusterResponse.model_validate(cluster)
 
 
@@ -209,6 +213,7 @@ async def delete_cluster(
     cluster_id: int,
     body: Optional[DeleteClusterRequest] = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters')),
 ):
 
     if body is None:
@@ -330,6 +335,7 @@ async def delete_cluster(
 
         await db.delete(cluster)
         await db.commit()
+        log_audit(db, user=current_user, action="delete_cluster", resource="cluster", resource_id=cluster_id, detail=f"删除集群（数据库+Edge）")
 
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除", "details": db_details})
         return {"message": "集群已删除", "results": results}

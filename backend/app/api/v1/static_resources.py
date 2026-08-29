@@ -9,7 +9,7 @@ from app.models.cluster import Cluster, ConfigVersion
 from app.models.static_resource import StaticResource
 from app.models.user import User, UserCluster
 from app.schemas.static_resource import StaticResourceResponse
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
 router = APIRouter(prefix="/static_resources", tags=["static_resources"])
 
@@ -22,7 +22,7 @@ async def list_all_static_resources(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('static_resources')),
 ):
     query = select(StaticResource)
 

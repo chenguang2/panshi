@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
-from app.models.user import User
+from app.models.user import User, UserPermission
 
 
 async def get_current_user(
@@ -76,3 +76,38 @@ async def get_current_admin_user(
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="未认证")
+
+
+def require_permission(resource: str):
+    """资源级权限依赖工厂（Phase 6 / S6）。
+
+    admin 角色直接放行；普通用户须拥有该资源的 UserPermission（enabled=1），
+    否则 403。资源名与前端权限键一致（clusters/routes/upstreams/...）。
+    """
+    return require_any_permission(resource)
+
+
+def require_any_permission(*resources: str):
+    """多资源任一权限依赖工厂：拥有列表中任一资源权限即放行（如 /stream-proxies
+    同时服务 stream_proxy 与 dns_proxy_udp 两种页面）。"""
+    async def _dependency(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        if current_user.role == "admin":
+            return current_user
+        result = await db.execute(
+            select(UserPermission).where(
+                UserPermission.user_id == current_user.id,
+                UserPermission.resource_type.in_(resources),
+                UserPermission.enabled == 1,
+            )
+        )
+        if result.scalars().first() is None:
+            raise HTTPException(
+                status_code=403,
+                detail=f"没有权限访问该资源（需要: {' / '.join(resources)}）",
+            )
+        return current_user
+
+    return _dependency

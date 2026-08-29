@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 from app.core.database import get_db
 from app.services.cluster_backup import (
     BackupOptions, build_backup, compute_checksum, import_backup,
@@ -23,7 +23,7 @@ async def download_cluster_backup(
     include_secrets: bool = Query(False),
     include_files: bool = Query(False),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission('clusters')),
 ):
     try:
         doc = await build_backup(db, cluster_id,
@@ -52,7 +52,7 @@ async def import_cluster_backup(
     target_cluster_name: str = Form(...),
     expected_checksum: str = Form(""),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission('clusters')),
 ):
     raw = await file.read()
     try:

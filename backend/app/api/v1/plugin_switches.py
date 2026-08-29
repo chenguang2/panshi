@@ -7,9 +7,11 @@ from app.core.database import get_db
 from app.models.cluster import PluginEnabled, RoutePlugin, PluginConfig, GlobalRule
 from app.schemas.plugin_switch import PluginSwitchItem
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
+from app.models.user import User
+from app.services.audit import log_audit
 
-router = APIRouter(prefix="/plugin-switches", tags=["plugin-switches"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/plugin-switches", tags=["plugin-switches"], dependencies=[Depends(require_permission('plugin_management'))])
 
 
 @router.get("")
@@ -76,6 +78,7 @@ async def _detect_plugin_refs(disabled_names: set[str], db: AsyncSession) -> dic
 async def update_plugin_switches(
     switches: list[PluginSwitchItem],
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('plugin_management')),
 ):
     disabled_names = {sw.plugin_name for sw in switches if not sw.enabled}
     warnings = await _detect_plugin_refs(disabled_names, db)
@@ -89,6 +92,7 @@ async def update_plugin_switches(
             )
             db.add(db_item)
         await db.commit()
+        log_audit(db, user=current_user, action="update_plugin_switches", resource="plugin_switches", detail="更新插件开关")
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=500, detail="保存插件开关失败")

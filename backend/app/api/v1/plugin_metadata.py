@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import PluginMetadata, Cluster
 from app.models.user import User, UserCluster
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
 router = APIRouter(prefix="/plugin_metadata", tags=["plugin_metadata"])
 
@@ -21,7 +21,7 @@ async def list_all_plugin_metadata(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('plugin_metadata')),
 ):
     query = select(PluginMetadata)
 

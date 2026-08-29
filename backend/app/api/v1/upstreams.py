@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion
 from app.models.user import User, UserCluster
 from app.schemas.cluster import UpstreamWithTargets, UpstreamTargetSchema
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
 router = APIRouter(prefix="/upstreams", tags=["upstreams"])
 
@@ -24,7 +24,7 @@ async def list_all_upstreams(
     search: Optional[str] = None,
     cluster_id: Optional[int] = None,
     load_balance: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permission('upstreams')),
 ):
     query = select(Upstream)
 

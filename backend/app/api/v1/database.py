@@ -16,6 +16,7 @@ from sqlalchemy import select
 from app.core import db_config, maintenance
 from app.core.database import get_db, build_sync_engine_for
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
+from app.services.audit import log_audit
 from app.core.deps import get_current_admin_user as require_db_admin
 from app.models.user import User
 from app.models.db_migration import DbMigrationLog
@@ -164,6 +165,7 @@ async def switch_database(
 ):
     from app.services import db_switch_service
     result = await db_switch_service.perform_switch(body.connection_id, db)
+    log_audit(db, user=current_user, action="switch_database", resource="database", detail=f"切换数据库连接 {body.connection_id}")
     return result
 
 
@@ -210,12 +212,14 @@ async def migrate_database(
         include_logs=body.include_logs,
         tables_count=done,
     )
+    log_audit(db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{done} 张表）")
     return {"message": f"迁移完成，共迁移 {done} 张表", "tables_migrated": done}
 
 
 @router.post("/export")
 async def export_archive(
     body: ExportRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_db_admin),
 ):
     cfg = _get_config()
@@ -227,6 +231,7 @@ async def export_archive(
         db_archive_service.export_archive(source, path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"导出失败: {e}")
+    log_audit(db, user=current_user, action="export_database", resource="database", detail=f"导出数据库 {body.source_id} → {path}")
     return {"message": "导出完成", "archive_path": path}
 
 
@@ -256,6 +261,7 @@ async def import_archive(
         mode="replace",
         status="success",
     )
+    log_audit(db, user=current_user, action="import_database", resource="database", detail=f"导入归档 {body.archive_path} → {body.target_id}")
     return {"message": "归档导入完成"}
 
 

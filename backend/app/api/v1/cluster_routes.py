@@ -14,9 +14,9 @@ from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, 
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"], dependencies=[Depends(require_permission('clusters'))])
 
 # Allowed sort fields
 ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}

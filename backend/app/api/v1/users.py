@@ -10,6 +10,7 @@ from app.models.user import User, UserPermission, UserCluster
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
 from app.services import edge_sync
+from app.services.audit import log_audit
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -94,6 +95,7 @@ async def create_user(
     )
     db.add(db_user)
     await db.commit()
+    log_audit(db, user=current_user, action="create_user", resource="user", resource_id=db_user.id, detail=f"创建用户 {db_user.username}（role={db_user.role}）")
     await db.refresh(db_user)
     return UserResponse.model_validate(db_user)
 
@@ -124,6 +126,7 @@ async def update_user(
 
     await db.commit()
     await db.refresh(user)
+    log_audit(db, user=current_user, action="update_user", resource="user", resource_id=user.id, detail=f"更新用户 {user.username}")
     return UserResponse.model_validate(user)
 
 
@@ -140,6 +143,7 @@ async def delete_user(
 
     await db.delete(user)
     await db.commit()
+    log_audit(db, user=current_user, action="delete_user", resource="user", resource_id=user_id, detail=f"删除用户 {user.username}")
     return {"message": "用户已删除"}
 
 
@@ -154,6 +158,7 @@ async def reset_password(
 
     user.password_hash = hash_password(request.new_password)
     await db.commit()
+    log_audit(db, user=current_user, action="reset_password", resource="user", resource_id=user_id, detail=f"重置用户 {user.username} 密码")
     return {"message": "密码重置成功"}
 
 
@@ -183,6 +188,7 @@ async def assign_clusters(
         db.add(UserCluster(user_id=user_id, cluster_id=cluster_id))
 
     await db.commit()
+    log_audit(db, user=current_user, action="assign_clusters", resource="user", resource_id=user_id, detail=f"分配集群权限")
     return {"message": "Clusters assigned"}
 
 
@@ -212,4 +218,5 @@ async def update_user_permissions(
         db.add(UserPermission(user_id=user_id, resource_type=perm, enabled=1))
 
     await db.commit()
+    log_audit(db, user=current_user, action="update_permissions", resource="user", resource_id=user_id, detail="更新用户权限")
     return {"message": "Permissions updated", "permissions": request.permissions}

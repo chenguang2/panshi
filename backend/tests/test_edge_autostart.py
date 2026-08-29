@@ -26,7 +26,7 @@ def db_env():
             s.add(Node(id=1, cluster_id=1, ip="192.168.0.24", edge_path="/data/uap-edge",
                       service_port=80, management_port=16620))
             s.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
-                      role="user", status=1))
+                      role="admin", status=1))
             await s.commit()
         return S
 

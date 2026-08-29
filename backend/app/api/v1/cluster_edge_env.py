@@ -22,9 +22,9 @@ from app.utils.yaml_validator import validate_yaml, validate_edge_env
 
 logger = logging.getLogger(__name__)
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(tags=["edge-env"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["edge-env"], dependencies=[Depends(require_permission('edge_env'))])
 _ansible_service = AnsibleRunnerService()
 
 

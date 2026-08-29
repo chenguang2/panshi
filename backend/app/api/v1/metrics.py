@@ -20,9 +20,9 @@ from app.services.metrics_service import (
     query_node_health,
 )
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(tags=["metrics"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["metrics"], dependencies=[Depends(require_permission('metrics'))])
 
 VALID_ROUTE_STATS_TYPES = {"qps", "bandwidth", "error_rate", "latency"}
 

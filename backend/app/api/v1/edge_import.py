@@ -12,9 +12,9 @@ from app.schemas.edge_import import (
     PreviewRequest,
 )
 
-from app.core.deps import get_current_user
+from app.core.deps import require_permission
 
-router = APIRouter(prefix="/edge-import", tags=["edge-import"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/edge-import", tags=["edge-import"], dependencies=[Depends(require_permission('edge_import'))])
 
 
 @router.post("/test-connection", response_model=TestConnectionResponse)
@@ -62,4 +62,5 @@ async def execute_import(
         selections=body.selections,
         session=db,
     )
+    log_audit(db, user=None, action="edge_import_execute", resource="edge_import", detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
     return result

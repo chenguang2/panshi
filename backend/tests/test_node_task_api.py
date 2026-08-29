@@ -44,7 +44,7 @@ class TestNodeTaskApi:
         async def _seed_user():
             if await test_db.get(User, 1) is None:
                 test_db.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
-                                 role="user", status=1))
+                                 role="admin", status=1))
                 await test_db.commit()
         asyncio.run(_seed_user())
 

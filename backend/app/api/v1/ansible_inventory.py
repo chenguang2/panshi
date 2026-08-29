@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_admin_user as require_admin
+from app.services.audit import log_audit
 from app.models.cluster import Node
 from app.models.node_task import NodeTask
 from app.models.user import User
@@ -126,6 +127,7 @@ async def put_inventory(
 
     # save_inventory 内部持有 _inventory_lock（与运行时注入互斥），此处勿重复加锁
     inventory_service.save_inventory(new_text)
+    log_audit(db, user=current_user, action="save_inventory", resource="ansible_inventory", detail="更新 Ansible 主机清单")
     logger.info("Inventory updated by admin user %s", current_user.username)
     return {"ok": True}
 
