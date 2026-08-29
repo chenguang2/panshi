@@ -1,76 +1,64 @@
 import { test, expect } from '@playwright/test';
+import { login, gotoResourcePage } from './helpers/navigation';
 
-test.describe('ClusterList Route Modal Tabs - 集群管理页路由弹窗 Tab 验证', () => {
+test.describe('ClusterList Route Modal Tabs - 路由弹窗 Tab 验证', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#username', 'admin');
-    await page.fill('#password', 'panshi123');
-    await page.click('button[type="submit"]');
-    await page.waitForTimeout(2000);
-    await page.goto('/central-management');
-    await page.waitForTimeout(2000);
+    await login(page);
   });
 
-  async function openRouteModalFromClusterList(page: any) {
-    await page.waitForSelector('.cluster-grid .cluster-card', { timeout: 10000 });
-
-    const firstCard = page.locator('.cluster-grid .cluster-card').first();
-    const clusterTabs = firstCard.locator('.ant-tabs');
-    await clusterTabs.waitFor({ timeout: 5000 });
-
-    await clusterTabs.locator('.ant-tabs-tab').filter({ hasText: '上游' }).click();
-    await page.waitForTimeout(1500);
-
-    await clusterTabs.locator('.ant-tabs-tab').filter({ hasText: '路由' }).click();
-    await page.waitForTimeout(1000);
-
-    await firstCard.locator('button:has-text("添加路由")').click();
-    await page.waitForTimeout(800);
+  /** 进入路由列表并打开新建路由弹窗 */
+  async function openRouteModal(page: import('@playwright/test').Page) {
+    await gotoResourcePage(page, '路由');
+    await expect(page.locator('.route-table')).toBeVisible({ timeout: 10000 });
+    await page.locator('button:has-text("新建路由")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' });
+    await expect(modal).toBeVisible({ timeout: 5000 });
+    return modal;
   }
 
-  test('TC-CL-1: 集群管理页路由弹窗有三个 Tab，Tab1 默认激活', async ({ page }) => {
-    await openRouteModalFromClusterList(page);
+  test('TC-CL-1: 路由弹窗有三个 Tab，基础配置默认激活', async ({ page }) => {
+    const modal = await openRouteModal(page);
 
-    await expect(page.locator('.ant-modal-content')).toBeVisible();
-
-    const basicTab = page.locator('.ant-modal-content .ant-tabs-tab').filter({ hasText: '基础配置' });
-    const advancedTab = page.locator('.ant-modal-content .ant-tabs-tab').filter({ hasText: '高级匹配' });
-    const pluginsTab = page.locator('.ant-modal-content .ant-tabs-tab').filter({ hasText: '插件管理' });
+    const basicTab = modal.locator('.tab-btn').filter({ hasText: '基础配置' });
+    const advancedTab = modal.locator('.tab-btn').filter({ hasText: '高级匹配' });
+    const pluginsTab = modal.locator('.tab-btn').filter({ hasText: '插件管理' });
 
     await expect(basicTab).toBeVisible();
     await expect(advancedTab).toBeVisible();
     await expect(pluginsTab).toBeVisible();
+    await expect(basicTab).toHaveClass(/active/);
 
-    const activeTab = page.locator('.ant-modal-content .ant-tabs-tab-active .ant-tabs-tab-btn');
-    await expect(activeTab).toContainText('基础配置');
-
-    await page.locator('.ant-modal-content button:has-text("Cancel")').click();
+    await modal.locator('.modal-close').first().click();
   });
 
-  test('TC-CL-2: Tab2 高级匹配未启用时显示提示', async ({ page }) => {
-    await openRouteModalFromClusterList(page);
+  test('TC-CL-2: 高级匹配未启用时显示提示', async ({ page }) => {
+    const modal = await openRouteModal(page);
 
-    await page.locator('.ant-modal-content .ant-tabs-tab').filter({ hasText: '高级匹配' }).click();
-    await page.waitForTimeout(500);
+    const advancedTab = modal.locator('.tab-btn').filter({ hasText: '高级匹配' });
+    await advancedTab.click();
+    await expect(advancedTab).toHaveClass(/active/);
 
-    const hint = page.locator('.advanced-disabled-hint');
+    const hint = modal.locator('.advanced-disabled-hint').filter({ hasText: '高级匹配未启用' });
     await expect(hint).toBeVisible();
     await expect(hint).toContainText('高级匹配未启用');
 
-    await page.locator('.ant-modal-content button:has-text("Cancel")').click();
+    await modal.locator('.modal-close').first().click();
   });
 
-  test('TC-CL-3: Tab1 开启高级匹配 → Tab2 不再显示提示', async ({ page }) => {
-    await openRouteModalFromClusterList(page);
+  test('TC-CL-3: 开启高级匹配后提示消失', async ({ page }) => {
+    const modal = await openRouteModal(page);
 
-    await page.locator('.ant-modal-content .ant-switch').click();
-    await page.waitForTimeout(300);
+    // 基础配置中开启高级匹配
+    const enableToggle = modal.locator('.checkbox-label', { hasText: '开启高级匹配' });
+    await enableToggle.click();
+    await expect(enableToggle.locator('input[type="checkbox"]')).toBeChecked();
 
-    await page.locator('.ant-modal-content .ant-tabs-tab').filter({ hasText: '高级匹配' }).click();
-    await page.waitForTimeout(500);
+    const advancedTab = modal.locator('.tab-btn').filter({ hasText: '高级匹配' });
+    await advancedTab.click();
+    await expect(advancedTab).toHaveClass(/active/);
 
-    await expect(page.locator('.advanced-tab')).toBeVisible();
+    await expect(modal.locator('.advanced-disabled-hint').filter({ hasText: '高级匹配未启用' })).toHaveCount(0);
 
-    await page.locator('.ant-modal-content button:has-text("Cancel")').click();
+    await modal.locator('.modal-close').first().click();
   });
 });

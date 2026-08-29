@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { login } from './helpers/navigation'
 
 test('basic cluster navigation', async ({ page }) => {
-  await page.goto('/login')
-  await page.waitForSelector('#username', { timeout: 10000 })
-  await page.fill('#username', 'admin')
-  await page.fill('#password', 'panshi123')
-  await page.click('button[type="submit"]')
-  await page.waitForURL('/')
+  await login(page)
 
   await page.click('text=集群管理')
-  await page.waitForTimeout(2000)
+  await page.waitForTimeout(1000)
 
-  await expect(page.locator('.ant-card')).toBeVisible({ timeout: 5000 })
+  await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 5000 })
 })

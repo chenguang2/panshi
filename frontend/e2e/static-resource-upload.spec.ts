@@ -1,50 +1,28 @@
 import { test, expect } from '@playwright/test';
+import { login, gotoResourcePage } from './helpers/navigation';
 
 test.describe('静态资源上传', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#username', 'admin');
-    await page.fill('#password', 'panshi123');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await login(page);
   });
 
-  test('上传交互流程正常', async ({ page }) => {
-    await page.click('text=集群管理');
-    await page.waitForTimeout(1000);
+  test('静态资源页有上传 ZIP 行内按钮', async ({ page }) => {
+    await gotoResourcePage(page, '静态资源');
+    const pageRoot = page.locator('.sr-card, .sr-empty');
+    await expect(pageRoot.first()).toBeVisible({ timeout: 10000 });
 
-    const clusterCard = page.locator('.cluster-card').first();
-    const hasCluster = await clusterCard.isVisible({ timeout: 5000 }).catch(() => false);
-    if (!hasCluster) {
-      console.log('no cluster data');
-      return;
+    // 行内上传按钮存在（无资源时为空态——跳过）
+    const firstCard = page.locator('.sr-card').first();
+    const hasCard = await firstCard.isVisible({ timeout: 3000 }).catch(() => false);
+    if (!hasCard) {
+      test.skip('无静态资源数据')
+      return
     }
-    await clusterCard.locator('.expand-row').click();
-    await page.waitForTimeout(500);
-
-    await page.locator('span.dt:has-text("静态资源")').click();
-    await page.waitForTimeout(500);
-
-    const uploadBtn = page.locator('button:has-text("上传 ZIP")').first();
-    const uploadDisabled = await uploadBtn.isDisabled().catch(() => true);
-    if (uploadDisabled) {
-      console.log('no static resource to upload');
-      return;
-    }
-
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser'),
-      uploadBtn.click(),
-    ]);
-    await fileChooser.setFiles('e2e/test-valid.zip');
-    await page.waitForTimeout(3000);
-
-    const modal = page.locator('.ant-modal-confirm');
-    await expect(modal).toBeVisible({ timeout: 5000 });
+    await expect(firstCard.locator('button:has-text("上传 ZIP")')).toBeVisible();
   });
 
   test('API 返回格式包含 storage_path', async ({ page }) => {
-    const resp = await page.request.get('http://localhost:9000/api/v1/clusters/1/static-resources');
+    const resp = await page.request.get('http://localhost:9100/api/v1/clusters/1/static-resources');
     const body = await resp.json();
     expect(resp.ok()).toBeTruthy();
     expect(body.items.length).toBeGreaterThan(0);

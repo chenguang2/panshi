@@ -8,7 +8,7 @@ const CONN_NAME = `e2e-pg-${Date.now()}`;
 async function gotoDatabasePage(page: Page): Promise<void> {
   await page.hover('text=系统管理');
   await page.click('text=数据库管理');
-  await expect(page.locator('h2')).toContainText('数据库管理');
+  await expect(page.locator('.page-header h1')).toContainText('数据库管理');
 }
 
 test.describe('Database Management', () => {
@@ -22,22 +22,26 @@ test.describe('Database Management', () => {
 
   test('页面渲染：标题、连接列表、数据迁移卡片', async ({ page }) => {
     await gotoDatabasePage(page);
-    await expect(page.locator('.add-conn-btn')).toBeVisible();
+    await expect(page.locator('button:has-text("添加连接")').first()).toBeVisible();
     await expect(page.locator('.ant-table')).toBeVisible();
-    await expect(page.locator('.card-title', { hasText: '数据迁移' })).toBeVisible();
+    await expect(page.locator('.card-header', { hasText: '数据迁移' })).toBeVisible();
     // 当前数据库状态卡片显示本地 SQLite
-    await expect(page.locator('.status-card')).toContainText('SQLite');
+    await expect(page.locator('.card-header', { hasText: '当前数据库' })).toBeVisible();
+    await expect(page.locator('.status-body')).toContainText('SQLite');
   });
 
   test('添加 PostgreSQL 连接：草稿测试提示 → 保存成功 → 表格出现新行', async ({ page }) => {
     await gotoDatabasePage(page);
-    await page.click('.add-conn-btn');
-    const modal = page.locator('.ant-modal').filter({ hasText: '添加连接' });
+    await page.locator('button:has-text("添加连接")').first().click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '添加连接' });
     await expect(modal).toBeVisible();
 
-    // 类型切换为 PostgreSQL
-    await modal.locator('.ant-select').first().click();
-    await page.locator('.ant-select-dropdown .ant-select-item').filter({ hasText: 'PostgreSQL' }).click();
+    // 类型切换为 PostgreSQL（原生 select）
+    const typeSelect = modal.locator('select.form-input').first();
+    const typeOpts = await typeSelect.locator('option').allTextContents();
+    const pgIndex = typeOpts.findIndex((t) => t.includes('PostgreSQL') || t === 'postgres');
+    await typeSelect.selectOption({ index: pgIndex >= 0 ? pgIndex : 1 });
+    await page.waitForTimeout(300);
 
     // 填写连接字段
     await modal.locator('input[placeholder="连接名称"]').fill(CONN_NAME);
@@ -73,6 +77,8 @@ test.describe('Database Management', () => {
 
   test('迁移校验：未选择源/目标时提示错误', async ({ page }) => {
     await gotoDatabasePage(page);
+    // 现行 UI：需先勾选「我了解将清空目标库」按钮才可用
+    await page.locator('.checkbox-label', { hasText: '我了解将清空目标库' }).click();
     await page.locator('.migrate-btn').click();
     await expect(page.locator('.ant-message')).toContainText('请选择源数据库与目标数据库');
   });

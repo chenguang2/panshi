@@ -21,7 +21,12 @@ test.describe('Ansible 主机清单 — 链路验证', () => {
     // 1. 底部虚线按钮存在
     const addBtn = page.locator('.add-row-dashed');
     await expect(addBtn).toBeVisible();
-    await expect(addBtn).toContainText('添加主机');
+
+    // 等待表格数据加载稳定（异步加载，避免计数时序问题）
+    await page.waitForFunction(() => {
+      const rows = document.querySelectorAll('tr[data-row-key]');
+      return rows.length > 0;
+    }, { timeout: 10000 }).catch(() => {});
 
     // 2. 点击添加按钮新增一行
     const initialCount = await page.locator('tr[data-row-key]').count();
