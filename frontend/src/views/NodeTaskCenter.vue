@@ -35,7 +35,7 @@
         :loading="loading"
         row-key="id"
         :row-selection="{ selectedRowKeys, onChange: onSelectionChange }"
-        :pagination="{ current: page, pageSize, total, showSizeChanger: true, showTotal: (t: number) => `共 ${t} 条`, pageSizeOptions: ['10', '20', '50'] }"
+        :pagination="paginationProps({ page, pageSize, total }, '条')"
         size="middle"
         class="node-task-table"
         @change="onTableChange"
@@ -314,6 +314,7 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeTaskLogViewer from '@/components/NodeTaskLogViewer.vue'
 import { listNodeTasks, getNodeTask, cancelNodeTask, retryNodeTask, createNodeTask, fetchTaskItemLog, deleteNodeTask, batchDeleteNodeTasks, parseTaskEvent, type NodeTaskData, type NodeTaskItemData, type TaskStreamEvent } from '@/composables/useNodeTasks'
+import { paginationProps } from '@/composables/usePagination'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])

@@ -63,15 +63,7 @@
     <a-table
       :columns="visibleUpstreamColumns"
       :data-source="cluster.upstreams || []"
-      :pagination="{
-        current: cluster.upstreamsPagination?.page,
-        pageSize: cluster.upstreamsPagination?.pageSize,
-        total: cluster.upstreamsPagination?.total,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 条`,
-        pageSizeOptions: ['10', '20', '50', '100'],
-        showQuickJumper: true
-      }"
+      :pagination="paginationProps(cluster.upstreamsPagination)"
       :loading="cluster.upstreamsLoading"
       :row-selection="{ selectedRowKeys: cluster.selectedUpstreamKeys || [], preserveSelectedRowKeys: true, onChange: (keys: any, rows: any) => selectUpstreams(cluster, keys, rows) }"
       :custom-row="(record: any) => ({ onClick: () => { cluster.selectedUpstream = record } })"
@@ -297,6 +289,7 @@ import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
+import { paginationProps } from '@/composables/usePagination'
 
 const props = defineProps<{
   cluster: Cluster

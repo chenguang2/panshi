@@ -61,15 +61,7 @@
     <a-table
       :columns="visibleRouteColumns"
       :data-source="cluster.routes || []"
-      :pagination="{
-        current: cluster.routesPagination?.page,
-        pageSize: cluster.routesPagination?.pageSize,
-        total: cluster.routesPagination?.total,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 条`,
-        pageSizeOptions: ['10', '20', '50', '100'],
-        showQuickJumper: true
-      }"
+      :pagination="paginationProps(cluster.routesPagination)"
       :loading="cluster.routesLoading"
       :row-selection="{
         selectedRowKeys: cluster.selectedRouteKeys || [],
@@ -262,6 +254,7 @@ import { ref, computed, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Plugin } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
+import { paginationProps } from '@/composables/usePagination'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'

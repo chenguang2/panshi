@@ -140,6 +140,30 @@ def _nginx_extravars(node: Node, ports: str = "") -> dict[str, Any]:
     }
 
 
+# 单节点 nginx 动作 → 用户文案（check 响应不含 message/stderr/command，见 check_node）
+_NGINX_ACTION_MESSAGES = {
+    "nginx_start": "节点已启动",
+    "nginx_stop": "节点已停止",
+    "nginx_reload": "节点已重启",
+}
+
+
+async def _run_nginx_cmd(db: AsyncSession, node: Node, nginx_cmd: str) -> dict[str, Any]:
+    """执行 nginx 动作并返回标准响应（status/message/rc/stdout/stderr/command）。"""
+    result = await _run_and_update(
+        db, node, "nginx_cmd_run",
+        _nginx_extravars(node) | {"nginx_cmd": nginx_cmd},
+    )
+    return {
+        "status": "ok",
+        "message": _NGINX_ACTION_MESSAGES[nginx_cmd],
+        "rc": result.get("rc"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "command": result.get("command", ""),
+    }
+
+
 @router.get("/{cluster_id}/nodes", response_model=dict)
 async def list_nodes(
     cluster_id: int,
@@ -340,52 +364,19 @@ async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Bo
 @router.post("/{cluster_id}/nodes/{node_id}/start")
 async def start_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
     node = await edge_sync.verify_node(db, cluster_id, node_id)
-    result = await _run_and_update(
-        db, node, "nginx_cmd_run",
-        _nginx_extravars(node) | {"nginx_cmd": "nginx_start"},
-    )
-    return {
-        "status": "ok",
-        "message": "节点已启动",
-        "rc": result.get("rc"),
-        "stdout": result.get("stdout", ""),
-        "stderr": result.get("stderr", ""),
-        "command": result.get("command", ""),
-    }
+    return await _run_nginx_cmd(db, node, "nginx_start")
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/stop")
 async def stop_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
     node = await edge_sync.verify_node(db, cluster_id, node_id)
-    result = await _run_and_update(
-        db, node, "nginx_cmd_run",
-        _nginx_extravars(node) | {"nginx_cmd": "nginx_stop"},
-    )
-    return {
-        "status": "ok",
-        "message": "节点已停止",
-        "rc": result.get("rc"),
-        "stdout": result.get("stdout", ""),
-        "stderr": result.get("stderr", ""),
-        "command": result.get("command", ""),
-    }
+    return await _run_nginx_cmd(db, node, "nginx_stop")
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/reload")
 async def reload_node(cluster_id: int, node_id: int, db: AsyncSession = Depends(get_db)):
     node = await edge_sync.verify_node(db, cluster_id, node_id)
-    result = await _run_and_update(
-        db, node, "nginx_cmd_run",
-        _nginx_extravars(node) | {"nginx_cmd": "nginx_reload"},
-    )
-    return {
-        "status": "ok",
-        "message": "节点已重启",
-        "rc": result.get("rc"),
-        "stdout": result.get("stdout", ""),
-        "stderr": result.get("stderr", ""),
-        "command": result.get("command", ""),
-    }
+    return await _run_nginx_cmd(db, node, "nginx_reload")
 
 
 @router.post("/{cluster_id}/nodes/{node_id}/check")

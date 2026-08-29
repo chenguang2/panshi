@@ -35,14 +35,7 @@
       :data-source="displayedUpstreams"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="{
-        current: page,
-        pageSize,
-        total: totalCount,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 个上游`,
-        pageSizeOptions: ['10', '20', '50'],
-      }"
+      :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
       :loading="loading"
       size="middle"
       class="upstream-table"
@@ -149,6 +142,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { paginationProps } from '@/composables/usePagination'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()

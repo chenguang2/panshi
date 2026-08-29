@@ -48,7 +48,7 @@
       :data-source="displayedRoutes"
       :columns="columns"
       :row-key="(record: any) => record.id"
-      :pagination="{ current: page, pageSize, total: totalCount, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 条路由`, pageSizeOptions: ['10', '20', '50'] }"
+      :pagination="paginationProps({ page, pageSize, total: totalCount }, '条路由')"
       :loading="loading"
       size="middle"
       class="route-table"
@@ -138,6 +138,7 @@ import RouteFormModal from '@/components/RouteFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { paginationProps } from '@/composables/usePagination'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()

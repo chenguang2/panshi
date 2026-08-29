@@ -75,15 +75,7 @@
     <a-table
       :columns="visibleNodeColumns"
       :data-source="cluster.nodes || []"
-      :pagination="{
-        current: cluster.nodesPagination?.page,
-        pageSize: cluster.nodesPagination?.pageSize,
-        total: cluster.nodesPagination?.total,
-        showSizeChanger: true,
-        showTotal: (total: number) => `共 ${total} 条`,
-        pageSizeOptions: ['10', '20', '50', '100'],
-        showQuickJumper: true
-      }"
+      :pagination="paginationProps(cluster.nodesPagination)"
       :row-selection="{ selectedRowKeys: cluster.selectedNodeKeys || [], preserveSelectedRowKeys: true, onChange: (keys: unknown, rows: unknown[]) => selectNodes(cluster, keys as number[], rows as import('@/types').Node[]) }"
       :custom-row="(record: import('@/types').Node) => ({ onClick: () => { cluster.selectedNode = record } })"
       :loading="cluster.nodesLoading"
@@ -363,6 +355,7 @@ import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 
 const featuresStore = useFeaturesStore()

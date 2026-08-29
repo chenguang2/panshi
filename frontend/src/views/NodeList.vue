@@ -33,7 +33,7 @@
         :data-source="displayedNodes"
         :columns="columns"
         :row-key="(record: any) => record.id"
-        :pagination="{ current: page, pageSize, total: totalCount, showSizeChanger: true, showTotal: (total: number) => `共 ${total} 个节点`, pageSizeOptions: ['10', '20', '50'] }"
+        :pagination="paginationProps({ page, pageSize, total: totalCount }, '个节点')"
         :loading="loading"
         size="middle"
         class="node-table"
@@ -281,6 +281,7 @@ import ConfigDiff from '@/views/ConfigDiff.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
 

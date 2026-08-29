@@ -279,6 +279,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
+import { paginationProps as buildTablePagination } from '@/composables/usePagination'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -326,15 +327,13 @@ const pagedUsers = computed(() => {
   return filteredUsers.value.slice(start, start + pageSize.value)
 })
 
-// a-table 分页配置
-const paginationProps = computed<TablePaginationConfig>(() => ({
-  current: currentPage.value,
-  pageSize: pageSize.value,
-  total: filteredUsers.value.length,
-  showSizeChanger: true,
-  showTotal: (total: number) => `共 ${total} 个用户`,
-  pageSizeOptions: ['10', '20', '50'],
-}))
+// a-table 分页配置（统一走 usePagination 工厂）
+const paginationProps = computed<TablePaginationConfig>(() =>
+  buildTablePagination(
+    { page: currentPage.value, pageSize: pageSize.value, total: filteredUsers.value.length },
+    '个用户',
+  ),
+)
 
 // 表格列定义
 const columns = computed(() => {
