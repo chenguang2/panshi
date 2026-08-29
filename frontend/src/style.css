@@ -683,7 +683,9 @@ select.form-input {
   border: 1px solid var(--border) !important;
 }
 .ant-modal-header {
-  background: var(--surface) !important;
+  /* 全局统一：AntD 弹窗（EdgeImport/UserList/AnsibleInventory 等 a-modal）头部
+     品牌色染，与 AppModal/.app-modal 及 modal-overlay 系保持一致 */
+  background: oklch(56% 0.16 210 / 10%) !important;
   border-bottom: 1px solid var(--border) !important;
 }
 .ant-modal-title {
@@ -898,4 +900,52 @@ select.form-input {
 }
 .ant-modal-confirm .ant-modal-confirm-btns .ant-btn + .ant-btn {
   margin-inline-start: 0 !important;
+}
+
+/* ===========================
+   U1 统一：Modal.confirm/info 弹窗复刻系统 modal 风格
+   （品牌色染头部条 / 圆角边框 / 隐藏图标；无独立 .ant-modal-header 元素，
+   用 .ant-modal-confirm-title 全宽出血模拟头部条）
+   =========================== */
+.ant-modal.ant-modal-confirm {
+  top: 5vh;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  max-width: calc(100vw - 32px);
+}
+.ant-modal.ant-modal-confirm .ant-modal-content {
+  padding: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.ant-modal.ant-modal-confirm .ant-modal-confirm-body-wrapper {
+  margin: 0;
+}
+.ant-modal.ant-modal-confirm .ant-modal-confirm-body {
+  padding: 0;
+}
+/* 品牌色染头部条：title 是 inline span，转块级全宽出血 */
+.ant-modal.ant-modal-confirm .ant-modal-confirm-title {
+  display: block;
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 14px 20px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg) !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* 图标与头部条冲突且非系统风格，隐藏 */
+.ant-modal.ant-modal-confirm .ant-modal-confirm-body > .anticon {
+  display: none;
+}
+/* 内容文本 */
+.ant-modal.ant-modal-confirm .ant-modal-confirm-content {
+  padding: 16px 20px;
+  font-size: 13px;
+  color: var(--fg);
 }
