@@ -16,11 +16,20 @@ export async function login(page: Page): Promise<void> {
 export async function gotoResourcePage(page: Page, statLabel: string): Promise<void> {
   await page.click('text=集群管理')
   await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 15000 })
-  await page
+  // 等待统计链接完全可点（Vue 挂载 router-link 处理器需短暂时间，过早点击会丢失导航）
+  const link = page
     .locator('.cl-card')
     .first()
     .locator('.cl-stat-link')
     .filter({ hasText: statLabel })
     .first()
-    .click()
+  await expect(link).toBeVisible({ timeout: 10000 })
+  await expect(link).toHaveAttribute('href', /.+/)
+  await link.click({ timeout: 10000 })
+  // router-link 点击偶发丢失导航（Vue 处理器绑定竞态）：校验 URL，失败则重试一次
+  await page.waitForTimeout(800)
+  if (!/\/upstreams|\/routes|\/nodes|\/plugin-configs|\/global-rules|\/plugin-metadata|\/static-resources/.test(page.url())) {
+    await link.click({ timeout: 10000 }).catch(() => {})
+    await page.waitForTimeout(1000)
+  }
 }
