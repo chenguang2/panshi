@@ -72,14 +72,18 @@ describe('executeDeleteWithProgress', () => {
         message: '批量删除完成',
         results: [
           {
-            route_id: 1, route_name: 'login-api', status: 'success',
+            route_id: 1,
+            route_name: 'login-api',
+            status: 'success',
             results: [
               { scope: 'database', status: 'success' },
               { node: '10.0.0.1:9180', scope: 'edge', status: 'success' },
             ],
           },
           {
-            route_id: 2, route_name: 'order-api', status: 'success',
+            route_id: 2,
+            route_name: 'order-api',
+            status: 'success',
             results: [
               { scope: 'database', status: 'success' },
               { node: '10.0.0.2:9180', scope: 'edge', status: 'failed', error: 'timeout' },
@@ -114,7 +118,9 @@ describe('executeDeleteWithProgress', () => {
         message: '批量删除完成',
         results: [
           {
-            route_id: 1, route_name: 'a', status: 'success',
+            route_id: 1,
+            route_name: 'a',
+            status: 'success',
             results: [
               { scope: 'database', status: 'success' },
               { node: '10.0.0.1:9180', scope: 'edge', status: 'failed', error: 'timeout' },
@@ -146,7 +152,9 @@ describe('executeDeleteWithProgress', () => {
         message: '批量删除完成',
         results: [
           {
-            upstream_id: 1, upstream_name: 'ref-upstream', status: 'failed',
+            upstream_id: 1,
+            upstream_name: 'ref-upstream',
+            status: 'failed',
             results: [],
             error: '该上游已被路由引用，请先删除引用路由',
           },
@@ -177,7 +185,9 @@ describe('executeDeleteWithProgress', () => {
         message: '批量删除完成',
         results: [
           {
-            upstream_id: 2, upstream_name: 'edge-fail-upstream', status: 'failed',
+            upstream_id: 2,
+            upstream_name: 'edge-fail-upstream',
+            status: 'failed',
             results: [
               { scope: 'database', status: 'success' },
               { scope: 'edge', status: 'failed', node: '10.0.0.1:9180', error: 'connection refused' },
@@ -234,14 +244,18 @@ describe('executeDeleteWithProgress', () => {
         message: '批量删除完成',
         results: [
           {
-            upstream_id: 10, upstream_name: 'login-api', status: 'success',
+            upstream_id: 10,
+            upstream_name: 'login-api',
+            status: 'success',
             results: [
               { scope: 'database', status: 'success' },
               { node: '10.0.0.1:9180', scope: 'edge', status: 'success' },
             ],
           },
           {
-            upstream_id: 11, upstream_name: 'order-api', status: 'success',
+            upstream_id: 11,
+            upstream_name: 'order-api',
+            status: 'success',
             results: [
               { scope: 'database', status: 'success' },
               { scope: 'edge', status: 'skipped' },
@@ -315,9 +329,7 @@ describe('executeDeleteWithProgress', () => {
     mockApiDelete.mockRejectedValue({
       response: {
         data: {
-          detail: [
-            { loc: ['body', 'upstream_ids'], msg: 'Field required', type: 'missing' },
-          ],
+          detail: [{ loc: ['body', 'upstream_ids'], msg: 'Field required', type: 'missing' }],
         },
       },
     })
@@ -374,9 +386,9 @@ describe('executeDeleteWithProgress', () => {
       refreshFn: vi.fn(),
     })
 
-    expect(document.querySelector('.modal-overlay .modal')).not.toBeNull()
-    expect(document.querySelector('.modal-header h2')?.textContent).toContain('删除上游')
-    expect(document.querySelector('.modal-footer .btn-primary')).not.toBeNull()
+    expect(document.querySelector('.ant-modal')).not.toBeNull()
+    expect(document.querySelector('.ant-modal-title')?.textContent).toContain('删除上游')
+    expect(document.querySelector('.ant-modal-footer .ant-btn-primary')).not.toBeNull()
   })
 
   it('renders batch status modal as a table with version and health columns', async () => {
@@ -386,7 +398,7 @@ describe('executeDeleteWithProgress', () => {
       { ip: '10.0.0.2', status: 'error', detail: '连接超时', version: '', healthy: false },
     ])
 
-    const modal = document.querySelector('.modal-overlay .modal')
+    const modal = document.querySelector('.ant-modal')
     expect(modal).not.toBeNull()
     const text = document.body.textContent || ''
     expect(text).toContain('10.0.0.1')
@@ -412,8 +424,13 @@ describe('executeDeleteWithProgress', () => {
     const { showBatchStatusModal } = await import('../useClusterUtils')
     showBatchStatusModal('批量状态查询', [
       {
-        ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true,
-        command: 'ansible-playbook ...', stdout: 'cpu_usage: 1.5', stderr: '',
+        ip: '10.0.0.1',
+        status: 'success',
+        version: 'v1.2.3',
+        healthy: true,
+        command: 'ansible-playbook ...',
+        stdout: 'cpu_usage: 1.5',
+        stderr: '',
       },
     ])
 
@@ -433,8 +450,13 @@ describe('executeDeleteWithProgress', () => {
     const longLine = 'TASK [edge : run] ' + 'x'.repeat(2000)
     showBatchStatusModal('批量状态查询', [
       {
-        ip: '10.0.0.1', status: 'success', version: 'v1.2.3', healthy: true,
-        command: longLine, stdout: 'stdout', stderr: '',
+        ip: '10.0.0.1',
+        status: 'success',
+        version: 'v1.2.3',
+        healthy: true,
+        command: longLine,
+        stdout: 'stdout',
+        stderr: '',
       },
     ])
 

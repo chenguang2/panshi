@@ -2,6 +2,7 @@ import { h, render, type VNode } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
 
 export const resourceLabels: Record<string, string> = {
@@ -110,81 +111,77 @@ export function showDeleteConfirm(opts: {
           )
         : null
 
-    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
-      h('div', { class: 'modal', style: 'max-width:520px;' }, [
-        h('div', { class: 'modal-header' }, [
-          h('h2', '确认删除'),
-          h('button', { class: 'modal-close', onClick: close }, '\u00D7'),
-        ]),
-        h('div', { class: 'modal-body' }, [
-          h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
-          statsSection,
-          h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
-            h(
-              'label',
-              {
-                style:
-                  'display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px;color:var(--fg);',
-              },
-              [
-                h('input', {
-                  type: 'checkbox',
-                  checked: deleteDb,
-                  onInput: (e: Event) => {
-                    deleteDb = (e.target as HTMLInputElement).checked
-                    updateOkDisabled()
-                    renderModal()
-                  },
-                  style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
-                }),
-                h('span', { style: 'font-weight:500;' }, '数据库'),
-                h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
-              ],
-            ),
-            h(
-              'label',
-              { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' },
-              [
-                h('input', {
-                  type: 'checkbox',
-                  checked: deleteEdge,
-                  onInput: (e: Event) => {
-                    deleteEdge = (e.target as HTMLInputElement).checked
-                    if (!deleteEdge) selectedNodeIds.clear()
-                    updateOkDisabled()
-                    renderModal()
-                  },
-                  style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
-                }),
-                h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
-                h(
-                  'span',
-                  { style: 'color:var(--muted);font-size:12px;' },
-                  opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除',
-                ),
-              ],
-            ),
-            nodeSection,
+    const vnode = h(
+      AppModal,
+      {
+        open: true,
+        title: '确认删除',
+        width: 520,
+        okText: '确认删除',
+        okDanger: true,
+        okDisabled,
+        onOk: () => {
+          opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
+          close()
+        },
+        onCancel: close,
+        onClose: close,
+      },
+      {
+        default: () =>
+          h('div', [
+            h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
+            statsSection,
+            h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
+              h(
+                'label',
+                {
+                  style:
+                    'display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px;color:var(--fg);',
+                },
+                [
+                  h('input', {
+                    type: 'checkbox',
+                    checked: deleteDb,
+                    onInput: (e: Event) => {
+                      deleteDb = (e.target as HTMLInputElement).checked
+                      updateOkDisabled()
+                      renderModal()
+                    },
+                    style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+                  }),
+                  h('span', { style: 'font-weight:500;' }, '数据库'),
+                  h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
+                ],
+              ),
+              h(
+                'label',
+                { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' },
+                [
+                  h('input', {
+                    type: 'checkbox',
+                    checked: deleteEdge,
+                    onInput: (e: Event) => {
+                      deleteEdge = (e.target as HTMLInputElement).checked
+                      if (!deleteEdge) selectedNodeIds.clear()
+                      updateOkDisabled()
+                      renderModal()
+                    },
+                    style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+                  }),
+                  h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
+                  h(
+                    'span',
+                    { style: 'color:var(--muted);font-size:12px;' },
+                    opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除',
+                  ),
+                ],
+              ),
+              nodeSection,
+            ]),
           ]),
-        ]),
-        h('div', { class: 'modal-footer' }, [
-          h('button', { class: 'btn btn-secondary', onClick: close }, '取消'),
-          h(
-            'button',
-            {
-              class: 'btn btn-danger',
-              disabled: okDisabled,
-              style: okDisabled ? 'opacity:0.5;cursor:not-allowed;' : '',
-              onClick: () => {
-                opts.onOk(deleteDb, deleteEdge, Array.from(selectedNodeIds))
-                close()
-              },
-            },
-            '确认删除',
-          ),
-        ]),
-      ]),
-    ])
+      },
+    )
 
     render(vnode, container)
   }
@@ -236,41 +233,28 @@ function createProgressModal(title: string, progress: { percent: number; status:
   document.body.appendChild(container)
 
   const update = () => {
-    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
-      h('div', { class: 'modal', style: 'max-width:600px;' }, [
-        h('div', { class: 'modal-header' }, [
-          h('h2', title),
-          h(
-            'button',
-            {
-              class: 'modal-close',
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '\u00D7',
-          ),
-        ]),
-        h('div', { class: 'modal-body' }, [
+    const vnode = h(
+      AppModal,
+      {
+        open: true,
+        title,
+        width: 600,
+        okText: '确定',
+        okDisabled: progress.percent < 100,
+        onOk: () => {
+          render(null, container)
+          container.remove()
+        },
+        onCancel: () => {
+          render(null, container)
+          container.remove()
+        },
+      },
+      {
+        default: () =>
           buildDeleteProgressContent(progress as { percent: number; status: 'active' | 'success' | 'exception' }, logs),
-        ]),
-        h('div', { class: 'modal-footer' }, [
-          h(
-            'button',
-            {
-              class: 'btn btn-primary',
-              disabled: progress.percent < 100,
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '确定',
-          ),
-        ]),
-      ]),
-    ])
+      },
+    )
     render(vnode, container)
   }
 
@@ -313,23 +297,20 @@ export function showBatchResultModal(title: string, items: BatchResultItem[]) {
         ],
       )
     })
-    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
-      h('div', { class: 'modal', style: 'max-width:600px;' }, [
-        h('div', { class: 'modal-header' }, [
-          h('h2', title),
-          h(
-            'button',
-            {
-              class: 'modal-close',
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '\u00D7',
-          ),
-        ]),
-        h('div', { class: 'modal-body' }, [
+    const vnode = h(
+      AppModal,
+      {
+        open: true,
+        title,
+        width: 600,
+        okText: '确定',
+        onOk: () => {
+          render(null, container)
+          container.remove()
+        },
+      },
+      {
+        default: () =>
           h(
             'div',
             {
@@ -338,22 +319,8 @@ export function showBatchResultModal(title: string, items: BatchResultItem[]) {
             },
             rows,
           ),
-        ]),
-        h('div', { class: 'modal-footer' }, [
-          h(
-            'button',
-            {
-              class: 'btn btn-primary',
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '确定',
-          ),
-        ]),
-      ]),
-    ])
+      },
+    )
     render(vnode, container)
   }
 
@@ -443,23 +410,20 @@ export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
         )
       }
     }
-    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
-      h('div', { class: 'modal', style: 'max-width:860px;' }, [
-        h('div', { class: 'modal-header' }, [
-          h('h2', title),
-          h(
-            'button',
-            {
-              class: 'modal-close',
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '\u00D7',
-          ),
-        ]),
-        h('div', { class: 'modal-body' }, [
+    const vnode = h(
+      AppModal,
+      {
+        open: true,
+        title,
+        width: 860,
+        okText: '确定',
+        onOk: () => {
+          render(null, container)
+          container.remove()
+        },
+      },
+      {
+        default: () =>
           h(
             'div',
             {
@@ -481,22 +445,8 @@ export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
               ]),
             ],
           ),
-        ]),
-        h('div', { class: 'modal-footer' }, [
-          h(
-            'button',
-            {
-              class: 'btn btn-primary',
-              onClick: () => {
-                render(null, container)
-                container.remove()
-              },
-            },
-            '确定',
-          ),
-        ]),
-      ]),
-    ])
+      },
+    )
     render(vnode, container)
   }
 
@@ -851,46 +801,42 @@ export function showNameConfirm(opts: {
     container.remove()
   }
   const renderModal = () => {
-    const vnode = h('div', { class: 'modal-overlay', style: 'display:flex;z-index:2000;' }, [
-      h('div', { class: 'modal', style: 'max-width:440px;' }, [
-        h('div', { class: 'modal-header' }, [
-          h('h2', opts.title),
-          h('button', { class: 'modal-close', onClick: closeModal }, '\u00D7'),
-        ]),
-        h('div', { class: 'modal-body' }, [
-          h(
-            'div',
-            { style: 'font-size:13px;color:var(--muted);margin-bottom:12px;' },
-            `请输入集群名称 "${opts.expectedName}" 以确认删除：`,
-          ),
-          h('input', {
-            type: 'text',
-            placeholder: '请输入集群名称',
-            class: 'form-input',
-            onInput: (e: Event) => {
-              confirmed = ((e.target as HTMLInputElement).value || '').trim() === (opts.expectedName || '').trim()
-              renderModal()
-            },
-          }),
-        ]),
-        h('div', { class: 'modal-footer' }, [
-          h('button', { class: 'btn btn-secondary', onClick: closeModal }, '取消'),
-          h(
-            'button',
-            {
-              class: 'btn btn-danger',
-              disabled: !confirmed,
-              onClick: async () => {
-                if (!confirmed) return
-                closeModal()
-                await opts.onConfirm()
+    const vnode = h(
+      AppModal,
+      {
+        open: true,
+        title: opts.title,
+        width: 440,
+        okText: opts.confirmText || '确认删除',
+        okDanger: true,
+        okDisabled: !confirmed,
+        onOk: async () => {
+          if (!confirmed) return
+          closeModal()
+          await opts.onConfirm()
+        },
+        onCancel: closeModal,
+      },
+      {
+        default: () =>
+          h('div', [
+            h(
+              'div',
+              { style: 'font-size:13px;color:var(--muted);margin-bottom:12px;' },
+              `请输入集群名称 "${opts.expectedName}" 以确认删除：`,
+            ),
+            h('input', {
+              type: 'text',
+              placeholder: '请输入集群名称',
+              class: 'form-input',
+              onInput: (e: Event) => {
+                confirmed = ((e.target as HTMLInputElement).value || '').trim() === (opts.expectedName || '').trim()
+                renderModal()
               },
-            },
-            opts.confirmText || '确认删除',
-          ),
-        ]),
-      ]),
-    ])
+            }),
+          ]),
+      },
+    )
     render(vnode, container)
   }
   renderModal()

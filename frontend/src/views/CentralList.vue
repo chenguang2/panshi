@@ -419,70 +419,43 @@
         </div>
         <div class="card-detail">
           <div class="dtabs">
-            <span
-              class="dt"
-              :class="{ active: cluster.activeTab === 'nodes' }"
-              @click="
-                cluster.activeTab = 'nodes'
-                handleTabClick(cluster, 'nodes')
-              "
+            <span class="dt" :class="{ active: cluster.activeTab === 'nodes' }" @click="switchTab(cluster, 'nodes')"
               >集群节点 <span class="db">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span
             >
             <span
               class="dt"
               :class="{ active: cluster.activeTab === 'upstreams' }"
-              @click="
-                cluster.activeTab = 'upstreams'
-                handleTabClick(cluster, 'upstreams')
-              "
+              @click="switchTab(cluster, 'upstreams')"
               >上游 <span class="db">{{ cluster.upstream_count }}</span></span
             >
-            <span
-              class="dt"
-              :class="{ active: cluster.activeTab === 'routes' }"
-              @click="
-                cluster.activeTab = 'routes'
-                handleTabClick(cluster, 'routes')
-              "
+            <span class="dt" :class="{ active: cluster.activeTab === 'routes' }" @click="switchTab(cluster, 'routes')"
               >路由 <span class="db">{{ cluster.route_count }}</span></span
             >
             <span
               v-if="authStore.hasPermission('plugin_groups')"
               class="dt"
               :class="{ active: cluster.activeTab === 'pluginConfigs' }"
-              @click="
-                cluster.activeTab = 'pluginConfigs'
-                handleTabClick(cluster, 'pluginConfigs')
-              "
+              @click="switchTab(cluster, 'pluginConfigs')"
               >插件组 <span class="db">{{ cluster.plugin_config_count }}</span></span
             >
             <span
               v-if="authStore.hasPermission('plugin_metadata')"
               class="dt"
               :class="{ active: cluster.activeTab === 'globalPlugins' }"
-              @click="
-                cluster.activeTab = 'globalPlugins'
-                handleTabClick(cluster, 'globalPlugins')
-              "
+              @click="switchTab(cluster, 'globalPlugins')"
               >插件元数据</span
             >
             <span
               v-if="authStore.hasPermission('global_rules')"
               class="dt"
               :class="{ active: cluster.activeTab === 'globalRules' }"
-              @click="
-                cluster.activeTab = 'globalRules'
-                handleTabClick(cluster, 'globalRules')
-              "
+              @click="switchTab(cluster, 'globalRules')"
               >全局规则 <span class="db">{{ cluster.global_rule_count }}</span></span
             >
             <span
               class="dt"
               :class="{ active: cluster.activeTab === 'staticResources' }"
-              @click="
-                cluster.activeTab = 'staticResources'
-                handleTabClick(cluster, 'staticResources')
-              "
+              @click="switchTab(cluster, 'staticResources')"
               >静态资源 <span class="db">{{ cluster.static_resource_count }}</span></span
             >
           </div>
@@ -549,15 +522,8 @@
       :visible="modalVisible"
       :editing-cluster="editingCluster"
       :group-options="groupOptions"
-      @close="
-        modalVisible = false
-        editingCluster = null
-      "
-      @saved="
-        modalVisible = false
-        editingCluster = null
-        loadClusters()
-      "
+      @close="closeEditModal"
+      @saved="onClusterSaved"
     />
 
     <!-- Node Form Modal -->
@@ -889,6 +855,22 @@ function toggleExpand(clusterId: number) {
   }
   expandedIds.value = s
   expandedOrder.value = order
+}
+
+const closeEditModal = () => {
+  modalVisible.value = false
+  editingCluster.value = null
+}
+
+const onClusterSaved = () => {
+  modalVisible.value = false
+  editingCluster.value = null
+  loadClusters()
+}
+
+function switchTab(cluster: Cluster, key: string) {
+  cluster.activeTab = key
+  handleTabClick(cluster, key)
 }
 
 const handleTabClick = async (cluster: Cluster, key: string) => {

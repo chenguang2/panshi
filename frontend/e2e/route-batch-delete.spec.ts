@@ -16,7 +16,10 @@ test.describe('Route Batch Delete E2E', () => {
     await page.waitForTimeout(3000)
 
     // 点击集群卡片上"路由"统计格 → 最大化集群并切换到路由 Tab
-    const routeStat = page.locator('.cl-stat-link').filter({ has: page.locator('.cl-stat-label', { hasText: '路由' }) }).first()
+    const routeStat = page
+      .locator('.cl-stat-link')
+      .filter({ has: page.locator('.cl-stat-label', { hasText: '路由' }) })
+      .first()
     await expect(routeStat).toBeVisible({ timeout: 10000 })
     await routeStat.click()
     await page.waitForTimeout(2500)
@@ -66,7 +69,7 @@ test.describe('Route Batch Delete E2E', () => {
     await page.waitForTimeout(800)
 
     // Confirm dialog should exist (custom modal with "确认删除")
-    const modal = page.locator('.modal-overlay').last()
+    const modal = page.locator('.ant-modal').last()
     const modalVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
     if (!modalVisible) {
       test.skip('Delete confirm modal did not appear')
@@ -79,7 +82,7 @@ test.describe('Route Batch Delete E2E', () => {
     await page.waitForTimeout(300)
 
     // Find the confirm button (btn-danger)
-    const confirmBtn = modal.locator('button.btn-danger').last()
+    const confirmBtn = modal.locator('button.ant-btn-dangerous').last()
     await confirmBtn.click()
     await page.waitForTimeout(2500)
 

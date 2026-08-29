@@ -14,7 +14,10 @@ test.describe('Upstream Batch Delete E2E', () => {
     await page.goto('/central-management')
     await page.waitForTimeout(3000)
 
-    const upstreamStat = page.locator('.cl-stat-link').filter({ has: page.locator('.cl-stat-label', { hasText: '上游' }) }).first()
+    const upstreamStat = page
+      .locator('.cl-stat-link')
+      .filter({ has: page.locator('.cl-stat-label', { hasText: '上游' }) })
+      .first()
     await expect(upstreamStat).toBeVisible({ timeout: 10000 })
     await upstreamStat.click()
     await page.waitForTimeout(2500)
@@ -57,7 +60,7 @@ test.describe('Upstream Batch Delete E2E', () => {
     await deleteBtn.click()
     await page.waitForTimeout(800)
 
-    const modal = page.locator('.modal-overlay').last()
+    const modal = page.locator('.ant-modal').last()
     const modalVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
     if (!modalVisible) {
       test.skip('Delete confirm modal did not appear')
@@ -68,7 +71,7 @@ test.describe('Upstream Batch Delete E2E', () => {
     await dbOption.locator('input[type="checkbox"]').check()
     await page.waitForTimeout(300)
 
-    const confirmBtn = modal.locator('button.btn-danger').last()
+    const confirmBtn = modal.locator('button.ant-btn-dangerous').last()
     await confirmBtn.click()
     await page.waitForTimeout(2500)
 
