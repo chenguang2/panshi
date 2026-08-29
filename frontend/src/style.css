@@ -519,8 +519,10 @@ select.form-input {
   overflow: hidden;
 }
 .ant-modal.app-modal .ant-modal-header {
-  background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 1px solid var(--border);
+  /* !important：压过下方全局 `.ant-modal-header { background: var(--surface) !important }`
+     白头部规则，恢复保真的品牌色染头部（仅作用于 AppModal） */
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 14px 20px;
   margin: 0;
