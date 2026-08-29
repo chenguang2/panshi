@@ -25,6 +25,9 @@
 > - Phase 6 剩余项已提交（e880fe4）——脱敏（清单 ansible_ssh_pass/become_pass 对外掩码
 >   ****** + 保存恢复、SSL 私钥抽屉默认掩码+显示切换）；列表 N+1 修复（upstreams targets
 >   批量 IN 查询）；ECharts 按需加载侦察确认本已达标（三处均 echarts/core 树摇引入）。
+> - Phase 4 已提交（db7f475）——双 CRUD 工厂合并：提取 useClusterResourceCore 共享骨架
+>   （删除/发布/版本/选择，selection 访问器参数化），useClusterResource 与
+>   useClusterPluginEntity 变薄适配层，消除约 150 行逐字重复；VersionModalState 收敛单定义。
 
 ## 0. 执行摘要
 
