@@ -3,7 +3,8 @@
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddGlobalRule(cluster)">添加全局规则</a-button>
     </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+    <div v-if="loading" class="loading-state">加载中...</div>
+    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
       <div
         v-for="gr in cluster.global_rules"
         :key="gr.id"
@@ -126,6 +127,7 @@ import { formatDate } from '@/composables/useClusterUtils'
 
 const props = defineProps<{
   cluster: Cluster
+  loading?: boolean
   clusters: Cluster[]
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   availablePlugins: Plugin[]
@@ -280,4 +282,5 @@ function onVersionPublished() {
   gap: 4px;
   align-items: center;
 }
+.loading-state { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
 </style>

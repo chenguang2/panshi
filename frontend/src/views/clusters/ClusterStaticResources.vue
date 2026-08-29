@@ -3,7 +3,8 @@
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">添加静态资源</a-button>
     </div>
-    <div style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+    <div v-if="loading" class="loading-state">加载中...</div>
+    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
       <div
         v-for="sr in cluster.static_resources"
         :key="sr.id"
@@ -121,6 +122,7 @@ import { formatDate } from '@/composables/useClusterUtils'
 
 const props = defineProps<{
   cluster: Cluster
+  loading?: boolean
   clusters: Cluster[]
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   loadRoutes: (cluster: Cluster) => Promise<void>
@@ -280,4 +282,5 @@ function onVersionPublished() {
   padding: 40px;
   color: var(--muted);
 }
+.loading-state { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
 </style>
