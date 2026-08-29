@@ -190,7 +190,7 @@ class TestAnsibleInventoryAPI:
         assert resp.status_code == 200
         saved = inv_env.read_text(encoding="utf-8")
         assert saved == new_raw  # 原文写回（含注释）
-        baks = list(inv_env.parent.glob("host.bak.*"))
+        baks = list((inv_env.parent / "backups").glob("host.bak.*"))
         assert len(baks) == 1 and baks[0].read_text(encoding="utf-8") == VALID_INVENTORY
 
     async def test_put_invalid_yaml_returns_400_with_line_and_no_write(self, inv_env):
@@ -207,7 +207,7 @@ class TestAnsibleInventoryAPI:
         assert resp.status_code == 400
         assert "第 2 行" in resp.json()["detail"]
         assert inv_env.read_text(encoding="utf-8") == VALID_INVENTORY  # 文件未变
-        assert not list(inv_env.parent.glob("host.bak.*"))  # 未产生备份
+        assert not list((inv_env.parent / "backups").glob("host.bak.*"))  # 未产生备份
 
     async def test_put_hosts_vars_renders_to_file(self, inv_env):
         async with await self._client() as client:

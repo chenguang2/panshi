@@ -339,8 +339,19 @@ def save_inventory(new_text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
             ts = datetime.now().strftime("%Y%m%d%H%M%S")
-            shutil.copy2(path, path.parent / f"host.bak.{ts}")
-            _rotate_backups(path.parent, keep=_BACKUP_KEEP)
+            # 备份移入 backups/ 子目录——inventory 目录会被 ansible-runner 整体当作
+            # inventory 源（-i <dir>），host.bak.* 留在同目录会被 Ansible 尝试解析，
+            # 产生 "Invalid host pattern 'all:'" 告警并可能污染主机清单。
+            backup_dir = path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            # 自愈：把历史遗留在 inventory 目录的 host.bak.* 一并迁入
+            for legacy in path.parent.glob("host.bak.*"):
+                try:
+                    shutil.move(str(legacy), backup_dir / legacy.name)
+                except OSError:
+                    pass
+            shutil.copy2(path, backup_dir / f"host.bak.{ts}")
+            _rotate_backups(backup_dir, keep=_BACKUP_KEEP)
         fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".host.tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

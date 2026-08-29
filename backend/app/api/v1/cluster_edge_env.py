@@ -96,6 +96,7 @@ async def deploy_edge_env(
 
             try:
                 node_rc = -1
+                ansible_stdout = ""
                 async for event in _run_ansible_stream(
                     runner_method=_ansible_service,
                     ip=node.ip,
@@ -107,10 +108,27 @@ async def deploy_edge_env(
                     # Capture the final rc event to determine node success
                     try:
                         ev = json.loads(event.removeprefix("data: ").removesuffix("\n\n"))
+                        if ev.get("line"):
+                            ansible_stdout += ev["line"] + "\n"
                         if "rc" in ev:
                             node_rc = ev.get("rc", -1)
                     except (json.JSONDecodeError, TypeError):
                         pass
+
+                # 防假成功（镜像 edge_read_env / node_task_service 的 Bug 3 防护）：
+                # ansible rc==0 但 playbook 未实际执行目标主机（节点不在清单 → "no hosts
+                # matched"）时仍会以 rc=0 退出，必须判为失败并给出可读错误。
+                if node_rc == 0 and (
+                    "no hosts matched" in ansible_stdout.lower()
+                    or "could not match supplied host pattern" in ansible_stdout.lower()
+                ):
+                    node_rc = -1
+                    err = f"节点 {node.ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+                    all_success = False
+                    node_results.append({"ip": node.ip, "status": "failed", "error": err})
+                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'failed', 'error': err})}\n\n"
+                    continue
+
                 if node_rc == 0:
                     node_results.append({"ip": node.ip, "status": "success"})
                     yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'success'})}\n\n"

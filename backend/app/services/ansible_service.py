@@ -785,6 +785,11 @@ class AnsibleRunnerService:
         runner_kwargs = dict(
             private_data_dir=self._private_data_dir,
             playbook="edge.yml",
+            # 精确指向 inventory/host 文件而非整个 inventory 目录——ansible 对目录
+            # inventory 源会递归扫描其中所有文件，host.bak.* 备份（即使在 backups/
+            # 子目录）都会被尝试解析，产生 "Invalid host pattern 'all:'" 告警并可能
+            # 污染主机清单。
+            inventory=str(Path(self._private_data_dir) / "inventory" / "host"),
             tags=tag,
             extravars=ev,
             envvars=_runner_env,

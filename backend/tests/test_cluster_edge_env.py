@@ -85,6 +85,80 @@ class TestEdgeEnvDeploy:
             body = resp.json()
             assert "detail" in body
 
+    async def test_deploy_false_success_guard(self, mock_ansible, edge_env_db):
+        """rc==0 但 playbook 未执行目标主机（节点不在清单 → no hosts matched）必须判为 failed。
+
+        镜像 node_task_service 的 Bug 3 防护：ansible 对空匹配以 rc=0 退出，
+        若按 rc==0 报 success 会把"没做任何事"误报为部署成功。
+        """
+        c = Cluster(name="tc-guard", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        n1 = Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1)
+        edge_env_db.add(n1)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(n1)
+
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_run_playbook(**kwargs):
+            handler = kwargs.get("event_handler")
+            if handler:
+                handler({"stdout": "skipping: no hosts matched"})
+            return {"rc": 0, "status": "successful", "stdout": "skipping: no hosts matched", "stderr": ""}
+
+        mock_ansible.run_playbook = AsyncMock(side_effect=fake_run_playbook)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+            async with cl.stream(
+                "POST", f"/api/v1/clusters/{c.id}/edge-env/deploy",
+                json={"content": valid_content, "node_ids": [n1.id]},
+            ) as resp:
+                assert resp.status_code == 200
+                body = "".join([line async for line in resp.aiter_lines()])
+                # 节点必须判为 failed 并给出友好错误，整体状态 all_failed
+                # （SSE 内 JSON 中文以 \uXXXX 转义，需解析后再断言文案）
+                import json as _json
+                assert '"status": "failed"' in body
+                assert "all_failed" in body
+                complete = next(l for l in body.split("data: ") if '"type": "complete"' in l)
+                payload = _json.loads(complete)
+                assert payload["node_results"][0]["error"] and "不在 Ansible 主机清单" in payload["node_results"][0]["error"]
+
+    async def test_deploy_normal_success_still_success(self, mock_ansible, edge_env_db):
+        """rc==0 且输出无 no-hosts 标记 → 保持 success（守卫不误伤正常成功）。"""
+        c = Cluster(name="tc-normal", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        n1 = Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1)
+        edge_env_db.add(n1)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(n1)
+
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_run_playbook(**kwargs):
+            handler = kwargs.get("event_handler")
+            if handler:
+                handler({"stdout": "ok: [192.168.0.24]"})
+            return {"rc": 0, "status": "successful", "stdout": "ok: [192.168.0.24]", "stderr": ""}
+
+        mock_ansible.run_playbook = AsyncMock(side_effect=fake_run_playbook)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+            async with cl.stream(
+                "POST", f"/api/v1/clusters/{c.id}/edge-env/deploy",
+                json={"content": valid_content, "node_ids": [n1.id]},
+            ) as resp:
+                assert resp.status_code == 200
+                body = "".join([line async for line in resp.aiter_lines()])
+                assert '"status": "success"' in body
+                assert "all_success" in body
+
     async def test_deploy_with_node_ids(self, mock_ansible, edge_env_db):
         """Deploy with specific node_ids should only deploy to listed nodes."""
         c = Cluster(name="tc", status=1)

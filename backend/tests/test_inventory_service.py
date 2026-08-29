@@ -189,7 +189,7 @@ class TestSaveInventory:
         save_inventory("all:\n  children: {}\n")
 
         assert inv_path.read_text(encoding="utf-8") == "all:\n  children: {}\n"
-        baks = sorted(inv_dir.glob("host.bak.*"))
+        baks = sorted((inv_dir / "backups").glob("host.bak.*"))
         assert len(baks) == 1
         assert baks[0].read_text(encoding="utf-8") == "old: content\n"
 
@@ -197,15 +197,16 @@ class TestSaveInventory:
         inv_path, inv_dir = inv_env
         from app.services.inventory_service import save_inventory
 
-        inv_dir.mkdir(parents=True)
+        inv_dir.mkdir(parents=True, exist_ok=True)
+        (inv_dir / "backups").mkdir(parents=True, exist_ok=True)
         inv_path.write_text("current\n", encoding="utf-8")
         # 预置 12 份旧备份（时间戳命名，字典序即时间序）
         for i in range(1, 13):
-            (inv_dir / f"host.bak.2026010{i:02d}000000").write_text(f"bak{i}\n")
+            (inv_dir / "backups" / f"host.bak.2026010{i:02d}000000").write_text(f"bak{i}\n")
 
         save_inventory("new\n")
 
-        baks = sorted(inv_dir.glob("host.bak.*"))
+        baks = sorted((inv_dir / "backups").glob("host.bak.*"))
         assert len(baks) == 10
         # 最旧的两份被删除
         names = [b.name for b in baks]
