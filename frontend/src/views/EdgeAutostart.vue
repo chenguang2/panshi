@@ -39,7 +39,7 @@
           <template #default="{ record }">
             <a-button size="small" type="primary" @click="openAction(record, 'enable')">启用</a-button>
             <a-button size="small" style="margin-left: 6px" @click="openAction(record, 'disable')">禁用</a-button>
-            <a-button size="small" style="margin-left: 6px" @click="queryStatus(record)">查询状态</a-button>
+            <a-button size="small" style="margin-left: 6px" @click="openAction(record, 'status')">查询状态</a-button>
           </template>
         </a-table-column>
       </a-table>
@@ -48,7 +48,7 @@
     <!-- 高级参数 / root 凭据抽屉（启用/禁用，参考路由插件编辑抽屉风格） -->
     <a-drawer
       v-model:open="actionModalVisible"
-      :title="action === 'enable' ? '启用自启动' : '禁用自启动'"
+      :title="action === 'enable' ? '启用自启动' : action === 'disable' ? '禁用自启动' : '查询自启动状态'"
       width="560"
       :closable="true"
       @close="actionModalVisible = false"
@@ -80,16 +80,32 @@
           <a-input v-model:value="actionForm.run_user" placeholder="默认取节点 inventory 用户" class="field-input" />
         </div>
 
-        <template v-if="action === 'enable' || action === 'disable'">
-          <div class="field-block">
+        <template v-if="action === 'enable' || action === 'disable' || action === 'status'">
+          <!-- 查询状态支持两种凭据模式：当前用户直查 / root 查询 -->
+          <div v-if="action === 'status'" class="field-block">
+            <div class="field-block-header">
+              <span class="field-block-title">查询方式</span>
+              <span class="field-block-desc"
+                >普通用户可能无权限读取 systemctl；root 查询需提供密码（仅本次使用，不保存）</span
+              >
+            </div>
+            <a-radio-group v-model:value="statusQueryMode" button-style="solid" size="small">
+              <a-radio-button value="direct">直接查询（当前用户）</a-radio-button>
+              <a-radio-button value="root">使用 root 查询</a-radio-button>
+            </a-radio-group>
+          </div>
+
+          <div v-if="action === 'enable' || action === 'disable' || statusQueryMode === 'root'" class="field-block">
             <div class="field-block-header">
               <span class="field-block-title">root 账号</span>
-              <span class="field-block-desc">启用/禁用自启动需 root 权限</span>
+              <span class="field-block-desc">{{
+                action === 'status' ? '以 root 查询自启动状态' : '启用/禁用自启动需 root 权限'
+              }}</span>
             </div>
             <a-input v-model:value="actionForm.root_user" placeholder="root" class="field-input" />
           </div>
 
-          <div class="field-block">
+          <div v-if="action === 'enable' || action === 'disable' || statusQueryMode === 'root'" class="field-block">
             <div class="field-block-header">
               <span class="field-block-title">root 密码</span>
               <span class="field-block-desc">必填，仅本次操作使用，不保存</span>
@@ -107,7 +123,7 @@
         <a-space>
           <a-button @click="actionModalVisible = false">取消</a-button>
           <a-button type="primary" :loading="actionSubmitting" @click="confirmAction">
-            {{ action === 'enable' ? '确认启用' : '确认禁用' }}
+            {{ action === 'enable' ? '确认启用' : action === 'disable' ? '确认禁用' : '查询' }}
           </a-button>
         </a-space>
       </template>
@@ -147,7 +163,9 @@ const defaultRunUser = ref('')
 
 const actionModalVisible = ref(false)
 const actionSubmitting = ref(false)
-const action = ref<'enable' | 'disable'>('enable')
+const action = ref<'enable' | 'disable' | 'status'>('enable')
+/** 查询状态时的凭据模式：direct=当前用户 / root=输入 root 密码 */
+const statusQueryMode = ref<'direct' | 'root'>('direct')
 const selectedNode = ref<any | null>(null)
 const actionForm = reactive({
   edge_path: '',
@@ -218,7 +236,7 @@ async function loadNodes() {
   }
 }
 
-async function openAction(node: any, act: 'enable' | 'disable') {
+async function openAction(node: any, act: 'enable' | 'disable' | 'status') {
   action.value = act
   selectedNode.value = node
   actionForm.edge_path = node.edge_path || ''
@@ -232,11 +250,25 @@ async function openAction(node: any, act: 'enable' | 'disable') {
   }
   actionForm.root_user = 'root'
   actionForm.root_password = ''
+  statusQueryMode.value = 'direct'
   actionModalVisible.value = true
 }
 
 async function confirmAction() {
   if (!selectedNode.value) return
+  if (action.value === 'status') {
+    // 查询状态：direct（当前用户）无需密码；root 模式需 root 密码
+    if (statusQueryMode.value === 'root' && !actionForm.root_password) {
+      message.warning('请输入 root 密码')
+      return
+    }
+    const useRoot = statusQueryMode.value === 'root'
+    actionSubmitting.value = true
+    actionModalVisible.value = false
+    await queryStatus(selectedNode.value, useRoot)
+    actionSubmitting.value = false
+    return
+  }
   if (!actionForm.root_password) {
     message.warning('请输入 root 密码')
     return
@@ -297,7 +329,7 @@ async function confirmAction() {
   actionSubmitting.value = false
 }
 
-async function queryStatus(node: any) {
+async function queryStatus(node: any, useRoot = false) {
   execTitle.value = `查询自启动状态: ${node.ip}`
   resetExec()
   execVisible.value = true
@@ -308,7 +340,9 @@ async function queryStatus(node: any) {
 
   await start(
     autostartUrl(node.id),
-    { action: 'status' },
+    useRoot
+      ? { action: 'status', root_user: actionForm.root_user || 'root', root_password: actionForm.root_password }
+      : { action: 'status' },
     {
       onLine: (line) => {
         captureCommandLine(line)

@@ -44,6 +44,41 @@ def db_env():
     asyncio.run(engine.dispose())
 
 
+def test_status_with_root_creds_uses_root_user():
+    """查询状态传 root_user/root_password 时，edge_autostart 应以 root 凭据连接。"""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+    from app.services.ansible_service import AnsibleRunnerService
+
+    svc = AnsibleRunnerService(private_data_dir="/tmp/runner-ut")
+    called = {}
+
+    async def fake_run_ssh(ip, user, cmd, password="", on_line=None, port=None):
+        called["user"] = user
+        called["password"] = password
+        return (1, "", "Failed to get unit file state for edge.service: No such file or directory")
+
+    with patch("app.services.ansible_service._run_ssh_with_fallback", side_effect=fake_run_ssh):
+        result = asyncio.run(svc.edge_autostart(
+            ip="192.168.0.13", action="status", edge_service_content=None,
+            ssh_user="root", ssh_pass="secret-root-pw",
+        ))
+    assert called["user"] == "root"
+    assert called["password"] == "secret-root-pw"
+    assert result["rc"] == 1
+
+    # 未传 root 凭据 → 回退 inventory 用户
+    called.clear()
+    with patch("app.services.ansible_service._run_ssh_with_fallback", side_effect=fake_run_ssh):
+        with patch("app.services.ansible_service.get_ssh_user", return_value="jboss"):
+            with patch("app.services.ansible_service.get_ssh_password", return_value="jbosspw"):
+                asyncio.run(svc.edge_autostart(
+                    ip="192.168.0.13", action="status", edge_service_content=None,
+                ))
+    assert called["user"] == "jboss"
+    assert called["password"] == "jbosspw"
+
+
 def test_infer_status_uses_stderr_for_not_configured():
     """未配置服务的 systemctl 报错在 stderr（rc≠0）——must 判为 not_configured 而非 unknown。
 

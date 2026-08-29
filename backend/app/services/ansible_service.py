@@ -938,7 +938,9 @@ class AnsibleRunnerService:
 
         enable/disable connect as root (ssh_user/ssh_pass, passed per-request
         and not persisted) to write edge.service and run systemctl.
-        status uses the inventory SSH user (no root needed) to read is-enabled.
+        status 默认用 inventory SSH 用户读取 is-enabled；若传入 ssh_user/
+        ssh_pass（前端"使用 root 查询"），则以 root 凭据查询——普通用户
+        无 systemctl 权限时可借此读取真实状态。
 
         Returns dict with keys rc/status/stdout/stderr.
         """
@@ -947,6 +949,10 @@ class AnsibleRunnerService:
 
         if action in ("enable", "disable"):
             user = ssh_user or "root"
+            password = ssh_pass or ""
+        elif ssh_user:
+            # 查询状态：显式传入 root 凭据时以 root 查询
+            user = ssh_user
             password = ssh_pass or ""
         else:
             user = get_ssh_user(ip)

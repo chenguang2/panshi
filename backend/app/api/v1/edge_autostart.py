@@ -127,8 +127,8 @@ async def node_autostart(
     if not edge_path:
         raise HTTPException(status_code=422, detail="节点 Edge 目录为空，无法配置自启动")
 
-    inject_root = body.action in ("enable", "disable")
-    if inject_root and not body.root_password:
+    inject_root = body.action in ("enable", "disable") or (body.action == "status" and body.root_password)
+    if body.action in ("enable", "disable") and not body.root_password:
         raise HTTPException(status_code=422, detail="启用/禁用自启动需要提供 root 密码")
 
     run_user = body.run_user or getpass.getuser()
