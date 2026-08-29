@@ -389,16 +389,20 @@ async function queryStatus(node: any, useRoot = false) {
 function parseAutostartState(logs: string[]): AutostartStatus {
   // SSH 版 status 的 stdout 直接输出 is-enabled 结果（enabled/disabled/
   // No such file...），从日志行中识别状态。
-  // 注意："手工执行命令: ... systemctl is-enabled edge" 回显行含子串
+  // 注意1：'手工执行命令: ... systemctl is-enabled edge' 回显行含子串
   // "enabled"（is-enabled），必须跳过，否则命令回显会误报为"已启用"。
+  // 注意2：权限错误行（如 fallback 重试前的一次 "Permission denied"）可能
+  // 出现在真实结果之前——真实状态（enabled/disabled/not_configured）优先，
+  // 权限错误仅在没有真实结果时作为兜底（与后端 _infer_status 语义一致）。
+  let sawPermissionError = false
   for (const line of logs) {
     if (line.startsWith('手工执行命令')) continue
     if (/No such file or directory/.test(line)) return 'not_configured'
     if (/enabled/.test(line)) return 'enabled'
     if (/disabled/.test(line)) return 'disabled'
-    if (/权限不够|Permission denied|permission denied/.test(line)) return 'permission_denied'
+    if (/权限不够|Permission denied|permission denied/.test(line)) sawPermissionError = true
   }
-  return 'unknown'
+  return sawPermissionError ? 'permission_denied' : 'unknown'
 }
 
 function captureCommandLine(line: string) {
