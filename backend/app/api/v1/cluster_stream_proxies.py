@@ -591,26 +591,20 @@ async def rollback_stream_proxy(
     version: int,
     db: AsyncSession = Depends(get_db),
 ):
-    proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
-    config_version = await edge_sync.get_or_404(
-        db, ConfigVersion,
-        resource_type="stream_proxy", resource_id=proxy_id, version=version,
-        detail="版本不存在",
-    )
+    async def _restore(_db, proxy, cfg):
+        for key in ("name", "load_balance", "scheme", "remote_addr", "sni", "status"):
+            if key in cfg:
+                setattr(proxy, key, cfg[key])
+        if "targets" in cfg:
+            proxy.targets = json.dumps(cfg["targets"]) if isinstance(cfg["targets"], list) else cfg["targets"]
+        if "timeout" in cfg:
+            proxy.timeout = json.dumps(cfg["timeout"]) if isinstance(cfg["timeout"], dict) else cfg["timeout"]
+        if "keepalive_pool" in cfg:
+            proxy.keepalive_pool = json.dumps(cfg["keepalive_pool"]) if isinstance(cfg["keepalive_pool"], dict) else cfg["keepalive_pool"]
 
-    config_data = json.loads(config_version.config)
-    for key in ("name", "load_balance", "scheme", "remote_addr", "sni", "status"):
-        if key in config_data:
-            setattr(proxy, key, config_data[key])
-    if "targets" in config_data:
-        proxy.targets = json.dumps(config_data["targets"]) if isinstance(config_data["targets"], list) else config_data["targets"]
-    if "timeout" in config_data:
-        proxy.timeout = json.dumps(config_data["timeout"]) if isinstance(config_data["timeout"], dict) else config_data["timeout"]
-    if "keepalive_pool" in config_data:
-        proxy.keepalive_pool = json.dumps(config_data["keepalive_pool"]) if isinstance(config_data["keepalive_pool"], dict) else config_data["keepalive_pool"]
-    proxy.current_version = version
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, StreamProxy, resource_type="stream_proxy", resource_id=proxy_id, version=version,
+        not_found_detail="四层代理不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"四层代理已切换到版本 v{version}", "version": version}
 
 

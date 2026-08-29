@@ -469,60 +469,42 @@ async def get_route_history(cluster_id: int, route_id: int, db: AsyncSession = D
 
 @router.post("/{route_id}/rollback/{version}")
 async def rollback_route(cluster_id: int, route_id: int, version: int, db: AsyncSession = Depends(get_db)):
+    async def _restore(_db, route, cfg):
+        # Normalize types: config_version may store data in different formats
+        raw_methods = cfg.get("methods", route.methods)
+        if isinstance(raw_methods, list):
+            raw_methods = ",".join(raw_methods)
+        raw_upstream_id = cfg.get("upstream_id", route.upstream_id)
+        if not isinstance(raw_upstream_id, int) or raw_upstream_id is None:
+            raw_upstream_id = None
 
-    route_result = await db.execute(select(Route).where(Route.id == route_id, Route.cluster_id == cluster_id))
-    route = route_result.scalar_one_or_none()
-    if not route:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路由不存在")
+        route.uri = cfg.get("uri", route.uri)
+        route.methods = raw_methods
+        route.priority = cfg.get("priority", route.priority)
+        route.status = cfg.get("status", route.status)
+        route.upstream_id = raw_upstream_id
+        route.hosts = cfg.get("hosts", route.hosts)
+        route.remote_addrs = cfg.get("remote_addrs", route.remote_addrs)
+        route.vars = json.dumps(cfg.get("vars")) if cfg.get("vars") else None
+        route.advanced_match_enabled = 1 if cfg.get("advanced_match_enabled") else 0
+        pids = cfg.get("plugin_config_ids")
+        route.plugin_config_ids = json.dumps(pids) if pids else None
+        route.enable_websocket = cfg.get("enable_websocket", route.enable_websocket)
 
-    config_version = await edge_sync.get_or_404(db, ConfigVersion, resource_type="route", resource_id=route_id, version=version, detail="版本不存在")
+        await _db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
+        plugins_data = cfg.get("plugins", {})
+        if isinstance(plugins_data, dict):
+            for plugin_name, plugin_config in plugins_data.items():
+                _db.add(RoutePlugin(
+                    route_id=route_id, plugin_name=plugin_name,
+                    config=json.dumps(plugin_config) if isinstance(plugin_config, dict) else str(plugin_config)))
+        elif isinstance(plugins_data, list):
+            for p in plugins_data:
+                _db.add(RoutePlugin(route_id=route_id, plugin_name=p.get("plugin_name"), config=p.get("config")))
 
-    config_data = json.loads(config_version.config)
-
-    # Normalize types: config_version may store data in different formats
-    raw_methods = config_data.get("methods", route.methods)
-    if isinstance(raw_methods, list):
-        raw_methods = ",".join(raw_methods)
-
-    raw_upstream_id = config_data.get("upstream_id", route.upstream_id)
-    if not isinstance(raw_upstream_id, int) or raw_upstream_id is None:
-        raw_upstream_id = None
-
-    route.uri = config_data.get("uri", route.uri)
-    route.methods = raw_methods
-    route.priority = config_data.get("priority", route.priority)
-    route.status = config_data.get("status", route.status)
-    route.upstream_id = raw_upstream_id
-    route.hosts = config_data.get("hosts", route.hosts)
-    route.remote_addrs = config_data.get("remote_addrs", route.remote_addrs)
-    route.vars = json.dumps(config_data.get("vars")) if config_data.get("vars") else None
-    route.advanced_match_enabled = 1 if config_data.get("advanced_match_enabled") else 0
-    pids = config_data.get("plugin_config_ids")
-    route.plugin_config_ids = json.dumps(pids) if pids else None
-    route.enable_websocket = config_data.get("enable_websocket", route.enable_websocket)
-    route.current_version = version
-
-    await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
-    plugins_data = config_data.get("plugins", {})
-    if isinstance(plugins_data, dict):
-        for plugin_name, plugin_config in plugins_data.items():
-            plugin = RoutePlugin(
-                route_id=route_id,
-                plugin_name=plugin_name,
-                config=json.dumps(plugin_config) if isinstance(plugin_config, dict) else str(plugin_config)
-            )
-            db.add(plugin)
-    elif isinstance(plugins_data, list):
-        for p in plugins_data:
-            plugin = RoutePlugin(
-                route_id=route_id,
-                plugin_name=p.get("plugin_name"),
-                config=p.get("config")
-            )
-            db.add(plugin)
-
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, Route, resource_type="route", resource_id=route_id, version=version,
+        not_found_detail="路由不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"路由已切换到版本 v{version}", "version": version}
 
 

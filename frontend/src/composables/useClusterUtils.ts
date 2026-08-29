@@ -2,6 +2,7 @@ import { h, render } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import { getApiErrorMessage } from '@/utils/error'
 
 export const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
@@ -510,21 +511,11 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
     }
     await opts.refreshFn()
     opts.clearSelectedFn?.()
-  } catch (error: any) {
-    const detail = error.response?.data?.detail
+  } catch (error: unknown) {
     progress.percent = 100
     progress.status = 'exception'
     addLog('')
-    let reason = '未知错误'
-    if (typeof detail === 'string') {
-      reason = detail
-    } else if (Array.isArray(detail)) {
-      reason = detail.map((d: any) => {
-        const loc = Array.isArray(d?.loc) ? d.loc.filter((x: string) => x !== 'body').join('.') : ''
-        return `${loc ? `${loc}: ` : ''}${d?.msg || JSON.stringify(d)}`
-      }).filter(Boolean).join('；')
-    }
-    addLog(`❌ 删除失败: ${reason}`)
+    addLog(`❌ 删除失败: ${getApiErrorMessage(error)}`)
     updateContent()
   }
 }

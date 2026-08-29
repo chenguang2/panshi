@@ -128,21 +128,14 @@ async def get_global_rule_history(cluster_id: int, rule_id: int, db: AsyncSessio
 
 @router.post("/{cluster_id}/global_rules/{rule_id}/rollback/{version}")
 async def rollback_global_rule(cluster_id: int, rule_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
-    cv_result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id == rule_id, ConfigVersion.version == version))
-    cv = cv_result.scalar_one_or_none()
-    if not cv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
-    config_data = json.loads(cv.config)
-    rule.name = config_data.get("name", rule.name)
-    rule.description = config_data.get("description")
-    if config_data.get("plugins") is not None:
-        rule.plugins = json.dumps(config_data["plugins"])
-    else:
-        rule.plugins = None
-    rule.current_version = version
-    await db.commit()
+    async def _restore(_db, rule, cfg):
+        rule.name = cfg.get("name", rule.name)
+        rule.description = cfg.get("description")
+        rule.plugins = json.dumps(cfg["plugins"]) if cfg.get("plugins") is not None else None
+
+    await edge_sync.rollback_resource(
+        db, GlobalRule, resource_type="global_rule", resource_id=rule_id, version=version,
+        not_found_detail="全局规则不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"全局规则已切换到版本 v{version}", "version": version}
 
 

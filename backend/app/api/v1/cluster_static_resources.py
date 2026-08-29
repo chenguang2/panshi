@@ -508,29 +508,11 @@ async def rollback_static_resource(
     version: int,
     db: AsyncSession = Depends(get_db),
 ):
+    async def _restore(_db, resource, cfg):
+        resource.storage_path = cfg.get("file_path", resource.storage_path)
+        resource.file_size = cfg.get("file_size", resource.file_size)
 
-    sr = await db.execute(
-        select(StaticResource).where(StaticResource.id == resource_id, StaticResource.cluster_id == cluster_id)
-    )
-    resource = sr.scalar_one_or_none()
-    if not resource:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
-
-    cv = await db.execute(
-        select(ConfigVersion).where(
-            ConfigVersion.resource_type == "static_resource",
-            ConfigVersion.resource_id == resource_id,
-            ConfigVersion.version == version,
-        )
-    )
-    config_version = cv.scalar_one_or_none()
-    if not config_version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
-
-    config_data = json.loads(config_version.config)
-    resource.storage_path = config_data.get("file_path", resource.storage_path)
-    resource.file_size = config_data.get("file_size", resource.file_size)
-    resource.current_version = version
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, StaticResource, resource_type="static_resource", resource_id=resource_id, version=version,
+        not_found_detail="静态资源不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"message": f"已回滚到版本 v{version}", "current_version": version}

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useColumnConfig } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { publishStatusRender } from './useClusterUtils'
+import { getApiErrorMessage } from '@/utils/error'
 
 // ── helpers ────────────────────────────────────────────────────────────
 
@@ -505,16 +506,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         }
         return
       }
-      const detail = (err as { response?: { data?: { detail?: unknown; message?: string } } }).response?.data?.detail
-      if (typeof detail === 'string') {
-        message.error(detail)
-      } else if (Array.isArray(detail)) {
-        message.error(detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; '))
-      } else if ((err as { response?: { data?: { message?: string } } }).response?.data?.message) {
-        message.error((err as { response: { data: { message: string } } }).response.data.message)
-      } else {
-        message.error('操作失败')
-      }
+      message.error(getApiErrorMessage(error))
     }
   }
 

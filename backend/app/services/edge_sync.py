@@ -54,6 +54,50 @@ async def verify_node(
     return await get_or_404(db, Node, id=node_id, cluster_id=cluster_id, detail="节点不存在")
 
 
+async def rollback_resource(
+    db: AsyncSession,
+    model: type,
+    *,
+    resource_type: str,
+    resource_id: int,
+    version: int,
+    not_found_detail: str,
+    cluster_id: Optional[int] = None,
+    loader: Optional[Callable[[AsyncSession], Awaitable]] = None,
+    restore_fn: Optional[Callable] = None,
+) -> Any:
+    """通用版本回滚骨架：加载资源+版本 → 解析 config → restore_fn 恢复 → 更新 current_version → commit。
+
+    Phase 3 收敛：替换 8 个 cluster_* 路由中重复的 rollback 前置/后置样板。
+    - ``loader``：自定义资源加载器（默认按 model + id[/cluster_id] 走 get_or_404）；
+    - ``restore_fn(db, resource, config_data)``：资源特定字段恢复逻辑（可 async，可空）；
+    - 返回 resource，调用方自行构造响应体以保留各端点既有响应形状。
+    """
+    if loader is not None:
+        resource = await loader(db)
+    else:
+        filters: dict[str, Any] = {"id": resource_id}
+        if cluster_id is not None:
+            filters["cluster_id"] = cluster_id
+        resource = await get_or_404(db, model, detail=not_found_detail, **filters)
+
+    config_version = await get_or_404(
+        db, ConfigVersion,
+        resource_type=resource_type, resource_id=resource_id, version=version,
+        detail="版本不存在",
+    )
+    config_data = json.loads(config_version.config)
+
+    if restore_fn is not None:
+        result = restore_fn(db, resource, config_data)
+        if result is not None and hasattr(result, "__await__"):
+            await result
+
+    resource.current_version = version
+    await db.commit()
+    return resource
+
+
 async def publish_resource(
     db: AsyncSession,
     *,

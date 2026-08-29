@@ -5,6 +5,7 @@ import type { Cluster } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
 import { formatFileSize } from '@/utils/format'
+import { getApiErrorMessage } from '@/utils/error'
 
 export interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
@@ -141,8 +142,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
 
       staticResourceModalVisible.value = false
       await loadStaticResources(cluster)
-    } catch (error: any) {
-      message.error('操作失败: ' + (error.response?.data?.detail || error.message))
+    } catch (error: unknown) {
+      message.error(getApiErrorMessage(error))
     }
   }
 
@@ -240,8 +241,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         modal.update({ okButtonProps: { disabled: false } })
 
         await loadStaticResources(cluster)
-      } catch (error: any) {
-        const errMsg = error.response?.data?.detail || error.message || '未知错误'
+      } catch (error: unknown) {
+        const errMsg = getApiErrorMessage(error)
         progress.percent = 100
         progress.status = 'exception'
         addLog('')

@@ -3,6 +3,7 @@ import { message, Modal } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from './useClusterUtils'
+import { getApiErrorMessage } from '@/utils/error'
 
 export interface VersionModalState {
   type: Ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>
@@ -127,9 +128,8 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       modalVisible.value = false
       const cluster = clusters.value.find(c => c.id === editingClusterId.value)
       if (cluster) await loadItems(cluster)
-    } catch (error: any) {
-      const detail = error.response?.data?.detail
-      message.error(typeof detail === 'string' ? detail : '操作失败')
+    } catch (error: unknown) {
+      message.error(getApiErrorMessage(error))
     }
   }
 

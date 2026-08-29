@@ -392,32 +392,25 @@ async def rollback_ssl_certificate(
     version: int,
     db: AsyncSession = Depends(get_db),
 ):
-    cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
+    async def _restore(_db, cert, cfg):
+        if "name" in cfg:
+            cert.name = cfg["name"]
+        if "sni" in cfg:
+            cert.sni = cfg["sni"]
+        if "cert" in cfg:
+            cert.cert = cfg["cert"]
+        if "key" in cfg:
+            cert.private_key = cfg["key"]
+        if "type" in cfg:
+            cert.cert_type = cfg["type"]
+        if "ssl_protocols" in cfg:
+            cert.ssl_protocols = json.dumps(cfg["ssl_protocols"]) if isinstance(cfg["ssl_protocols"], list) else cfg["ssl_protocols"]
+        if cert.cert_type == "server" and not cert.is_ca:
+            cert.sni = merge_reserved_into_sni_str(cert.sni)
 
-    config_version = await edge_sync.get_or_404(
-        db, ConfigVersion,
-        resource_type="ssl", resource_id=cert_id, version=version,
-        detail="版本不存在",
-    )
-
-    config_data = json.loads(config_version.config)
-    if "name" in config_data:
-        cert.name = config_data["name"]
-    if "sni" in config_data:
-        cert.sni = config_data["sni"]
-    if "cert" in config_data:
-        cert.cert = config_data["cert"]
-    if "key" in config_data:
-        cert.private_key = config_data["key"]
-    if "type" in config_data:
-        cert.cert_type = config_data["type"]
-    if "ssl_protocols" in config_data:
-        cert.ssl_protocols = json.dumps(config_data["ssl_protocols"]) if isinstance(config_data["ssl_protocols"], list) else config_data["ssl_protocols"]
-    cert.current_version = version
-    if cert.cert_type == "server" and not cert.is_ca:
-        cert.sni = merge_reserved_into_sni_str(cert.sni)
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, SslCertificate, resource_type="ssl", resource_id=cert_id, version=version,
+        not_found_detail="SSL 证书不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"SSL 证书已切换到版本 v{version}", "version": version}
 
 

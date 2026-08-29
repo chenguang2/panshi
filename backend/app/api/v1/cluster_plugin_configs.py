@@ -130,23 +130,14 @@ async def get_plugin_config_history(cluster_id: int, config_id: int, db: AsyncSe
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/rollback/{version}")
 async def rollback_plugin_config(cluster_id: int, config_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
-    cv_result = await db.execute(select(ConfigVersion).where(
-        ConfigVersion.resource_type == "plugin_config",
-        ConfigVersion.resource_id == config_id,
-        ConfigVersion.version == version))
-    cv = cv_result.scalar_one_or_none()
-    if not cv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
-    config_data = json.loads(cv.config)
-    config.name = config_data.get("name", config.name)
-    config.description = config_data.get("description")
-    if config_data.get("plugins") is not None:
-        config.plugins = json.dumps(config_data["plugins"])
-    else:
-        config.plugins = None
-    config.current_version = version
-    await db.commit()
+    async def _restore(_db, config, cfg):
+        config.name = cfg.get("name", config.name)
+        config.description = cfg.get("description")
+        config.plugins = json.dumps(cfg["plugins"]) if cfg.get("plugins") is not None else None
+
+    await edge_sync.rollback_resource(
+        db, PluginConfig, resource_type="plugin_config", resource_id=config_id, version=version,
+        not_found_detail="插件组不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"插件组已切换到版本 v{version}", "version": version}
 
 

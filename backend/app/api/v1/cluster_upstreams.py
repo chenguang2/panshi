@@ -319,32 +319,17 @@ async def get_upstream_history(cluster_id: int, upstream_id: int, db: AsyncSessi
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/rollback/{version}")
 async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db: AsyncSession = Depends(get_db)):
-    upstream_result = await db.execute(select(Upstream).where(Upstream.id == upstream_id, Upstream.cluster_id == cluster_id))
-    upstream = upstream_result.scalar_one_or_none()
-    if not upstream:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="上游服务不存在")
+    async def _restore(_db, upstream, cfg):
+        upstream.load_balance = cfg.get("load_balance", upstream.load_balance)
+        upstream.hash_on = cfg.get("hash_on")
+        upstream.key = cfg.get("key")
+        await _db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
+        for t in cfg.get("targets", []):
+            _db.add(UpstreamTarget(upstream_id=upstream_id, target=t["target"], weight=t["weight"]))
 
-    config_version = await edge_sync.get_or_404(db, ConfigVersion, resource_type="upstream", resource_id=upstream_id, version=version, detail="版本不存在")
-
-    config_data = json.loads(config_version.config)
-
-    upstream.load_balance = config_data.get("load_balance", upstream.load_balance)
-    upstream.hash_on = config_data.get("hash_on")
-    upstream.key = config_data.get("key")
-    upstream.current_version = version
-
-    await db.execute(UpstreamTarget.__table__.delete().where(UpstreamTarget.upstream_id == upstream_id))
-
-    for t in config_data.get("targets", []):
-        target = UpstreamTarget(
-            upstream_id=upstream_id,
-            target=t["target"],
-            weight=t["weight"]
-        )
-        db.add(target)
-
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, Upstream, resource_type="upstream", resource_id=upstream_id, version=version,
+        not_found_detail="上游服务不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"status": "ok", "message": f"上游已切换到版本 v{version}", "version": version}
 
 
