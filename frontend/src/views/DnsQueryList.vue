@@ -193,7 +193,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import DnsQueryFormModal from '@/components/DnsQueryFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress, formatDate } from '@/composables/useClusterUtils'
+import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 
 const route = useRoute()

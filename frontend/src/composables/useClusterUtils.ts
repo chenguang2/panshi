@@ -1,6 +1,7 @@
 import { h, render } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import { formatPublishDateTime } from '@/utils/format'
 
 export const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
@@ -624,23 +625,6 @@ function logSingleDeleteResults(
   }
 }
 
-export function formatPublishDateTime(isoStr: string | null): string {
-  if (!isoStr) return ''
-  try {
-    return new Date(isoStr).toLocaleString('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-  } catch {
-    return isoStr || ''
-  }
-}
-
 export function publishStatusRender(version: number | null, publishedAt: string | null) {
   const published = version !== null && version !== undefined
   if (published && publishedAt) {
@@ -665,13 +649,6 @@ export function publishStatusRender(version: number | null, publishedAt: string 
     style:
       'display:inline-block;font-size:12px;line-height:18px;padding:0 6px;border-radius:3px;border:1px solid #d9d9d9;color:#999;background:#fafafa;',
   }, '未发布')
-}
-
-export function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function showNameConfirm(opts: {

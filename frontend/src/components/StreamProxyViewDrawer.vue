@@ -126,6 +126,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { StreamProxy } from '@/types'
+import { formatMonthDayTime as formatDate } from '@/utils/format'
 
 const props = defineProps<{
   visible: boolean
@@ -173,10 +174,6 @@ const hasKeepalivePool = computed(() => {
   return props.proxy?.keepalive_pool && Object.keys(props.proxy.keepalive_pool).length > 0
 })
 
-function formatDate(d: string | null | undefined): string {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return d }
-}
 </script>
 
 <style scoped>

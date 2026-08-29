@@ -131,7 +131,8 @@ import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
-import { formatDate, showDeleteConfirm, buildDeleteProgressContent, executePublish } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
+import { showDeleteConfirm, buildDeleteProgressContent, executePublish } from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string

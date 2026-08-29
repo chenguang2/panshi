@@ -280,6 +280,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { paginationProps as buildTablePagination } from '@/composables/usePagination'
+import { formatDateOnly as formatDate } from '@/utils/format'
 import api from '@/api'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -692,15 +693,6 @@ async function handleResetPassword() {
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────
-function formatDate(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleDateString('zh-CN', {
-      year: 'numeric', month: '2-digit', day: '2-digit',
-    })
-  } catch {
-    return dateStr
-  }
-}
 
 // ── Load ──────────────────────────────────────────────────────────────────
 async function loadUsers() {

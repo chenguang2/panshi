@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatMonthDayTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -215,11 +216,6 @@ const availablePlugins = computed(() => {
     (p: any) => p.enable_metadata === true && !configuredNamesInCluster.value.has(p.name)
   )
 })
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return d }
-}
 
 function onSearch() {
   onDebouncedSearch(() => { loadItems() })

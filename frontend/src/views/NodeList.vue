@@ -271,6 +271,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatDateTime as formatDate } from '@/utils/format'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -983,11 +984,6 @@ function handleDiff(record: any) {
 }
 
 // ── Utils ──
-
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '-'
-  try { return new Date(dateStr).toLocaleString('zh-CN') } catch { return dateStr }
-}
 
 function nginxRunning(node: any): boolean {
   const sd = node.status_detail

@@ -38,6 +38,11 @@ async def get_current_user(
         if not user:
             raise HTTPException(status_code=401, detail="用户不存在")
 
+        # 统一状态校验（原 auth.py 独立实现的行为，Phase 1 合并至此）：
+        # 被禁用的用户即使持有未过期 token 也立即失效
+        if user.status != 1:
+            raise HTTPException(status_code=401, detail="用户已禁用")
+
         return user
     except HTTPException:
         raise
@@ -64,6 +69,8 @@ async def get_current_admin_user(
             raise HTTPException(status_code=401, detail="用户不存在")
         if user.role != "admin":
             raise HTTPException(status_code=403, detail="需要管理员权限")
+        if user.status != 1:
+            raise HTTPException(status_code=401, detail="用户已禁用")
         return user
     except HTTPException:
         raise

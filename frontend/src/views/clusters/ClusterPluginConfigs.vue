@@ -116,7 +116,7 @@ import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
 
 const props = defineProps<{
   cluster: Cluster

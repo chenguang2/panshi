@@ -76,6 +76,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatDateTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -136,11 +137,6 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) } catch { return d }
-}
 
 function onSearch() {
   onDebouncedSearch(() => { loadRules() })

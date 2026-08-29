@@ -4,18 +4,13 @@ import api from '@/api'
 import type { Cluster } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress, buildDeleteProgressContent } from './useClusterUtils'
+import { formatFileSize } from '@/utils/format'
 
 export interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
   versionModal: VersionModalState
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
   loadRoutes: (cluster: Cluster) => Promise<void>
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 export function useClusterStaticResources(deps: StaticResourceDeps) {

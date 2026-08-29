@@ -161,6 +161,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatMonthDayTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -278,11 +279,6 @@ function formatZipModified(dt: string): string {
     // Format: YYYY-MM-DDTHH:mm:ss → YYYY-MM-DD HH:mm
     return dt.replace('T', ' ')
   } catch { return dt }
-}
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return d }
 }
 
 function onSearch() {

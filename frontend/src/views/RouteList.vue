@@ -129,6 +129,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatDateOnly as formatDate } from '@/utils/format'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -211,11 +212,6 @@ const methodFilters = [
   { label: 'CONNECT', value: 'CONNECT' },
   { label: 'TRACE', value: 'TRACE' },
 ]
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleDateString('zh-CN') } catch { return d }
-}
 
 function onFilterChange() {
   page.value = 1

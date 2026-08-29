@@ -120,6 +120,7 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { isReservedSni, splitSniString } from '@/utils/sniTags'
+import { formatDateTime as formatDate } from '@/utils/format'
 
 const certs = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -174,11 +175,6 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingCert = ref<any | null>(null)
 const caCreateVisible = ref(false)
-
-function formatDate(d: string) {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) } catch { return d }
-}
 
 function onSearch() {
   // computed filters automatically

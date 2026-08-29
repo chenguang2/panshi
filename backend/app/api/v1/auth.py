@@ -4,58 +4,12 @@ from sqlalchemy import select
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, decode_access_token
+from app.core.deps import get_current_user
+from app.core.security import verify_password, create_access_token
 from app.models.user import User, UserPermission
 from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-async def get_current_user(
-    token: str = None,
-    db: AsyncSession = Depends(get_db)
-) -> User:
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无法验证凭据",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    payload = decode_access_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无法验证凭据",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无法验证凭据",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    if user.status != 1:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户已禁用",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    return user
 
 
 @router.post("/login", response_model=LoginResponse)

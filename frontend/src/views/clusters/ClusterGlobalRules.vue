@@ -123,7 +123,7 @@ import PluginSelector from '@/components/PluginSelector.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
 
 const props = defineProps<{
   cluster: Cluster

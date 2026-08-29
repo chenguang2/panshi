@@ -156,6 +156,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
 
 // ── Proxy type from route query ──
@@ -235,11 +236,6 @@ function isWanEnabled(p: any): boolean {
     const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
     return !!(cfg && cfg.wan_enabled)
   } catch { return false }
-}
-
-function formatDate(d: string | null | undefined): string {
-  if (!d) return '-'
-  try { return new Date(d).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) } catch { return d }
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null

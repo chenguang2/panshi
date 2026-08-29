@@ -99,7 +99,7 @@
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
-import { formatDate } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
 
 interface ConfigVersion {
   id: number

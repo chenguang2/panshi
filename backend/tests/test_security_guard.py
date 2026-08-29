@@ -71,3 +71,43 @@ def test_secured_endpoint_passes_with_valid_token():
         resp = c.get("/api/v1/clusters/1/routes/99999")
         assert resp.status_code in (200, 404)
         assert resp.status_code != 401
+
+
+def test_disabled_user_token_rejected():
+    """status=0 用户的 token 应被拒绝（Phase 1 统一状态校验后的行为）。"""
+    import asyncio
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+    from app.core.database import Base, get_db
+    from app.models.user import User
+    from app.core.security import hash_password, create_access_token
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+
+    async def _setup():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with S() as s:
+            s.add(User(id=1, username="disabled_user",
+                       password_hash=hash_password("password123"),
+                       role="user", status=0))
+            await s.commit()
+        return S
+
+    S = asyncio.run(_setup())
+
+    async def override_get_db():
+        async with S() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        token = create_access_token({"sub": "1"})
+        with TestClient(app) as c:
+            resp = c.get("/api/v1/clusters/1/routes",
+                         headers={"Authorization": f"Bearer {token}"})
+            assert resp.status_code == 401
+            assert resp.json()["detail"] == "用户已禁用"
+    finally:
+        app.dependency_overrides.clear()
+        asyncio.run(engine.dispose())

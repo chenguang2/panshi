@@ -4,7 +4,8 @@ import api from '@/api'
 import type { Cluster, Upstream, Route, HealthCheckConfig } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
-import { showDeleteConfirm, buildDeleteProgressContent, publishStatusRender, formatPublishDateTime } from '@/composables/useClusterUtils'
+import { showDeleteConfirm, buildDeleteProgressContent, publishStatusRender } from '@/composables/useClusterUtils'
+import { formatPublishDateTime } from '@/utils/format'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 interface UpstreamExtras {

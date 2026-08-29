@@ -118,7 +118,7 @@ import type { Cluster } from '@/types'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate } from '@/composables/useClusterUtils'
+import { formatDate } from '@/utils/format'
 
 const props = defineProps<{
   cluster: Cluster

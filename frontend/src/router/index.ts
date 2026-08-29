@@ -132,8 +132,6 @@ const coreRoutes: RouteRecordRaw[] = [
   },
 ]
 
-const SAVE_SCROLL_KEY = 'panshi_scroll'
-
 const router: Router = createRouter({
   history: createWebHistory(),
   routes: coreRoutes,
@@ -146,8 +144,6 @@ const router: Router = createRouter({
 })
 
 router.beforeEach((to, _from) => {
-  sessionStorage.setItem(SAVE_SCROLL_KEY + '_' + _from.path, JSON.stringify({ x: window.scrollX, y: window.scrollY }))
-
   const token = localStorage.getItem('token')
   if (to.path !== '/login' && !token) {
     return '/login'

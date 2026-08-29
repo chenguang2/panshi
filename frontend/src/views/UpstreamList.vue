@@ -132,6 +132,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { formatDateOnly as formatDate } from '@/utils/format'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -203,11 +204,6 @@ const lbLabels: Record<string, string> = {
   chash: '一致性哈希',
   ewma: 'EWMA',
   least_conn: '最少连接',
-}
-
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '-'
-  try { return new Date(dateStr).toLocaleDateString('zh-CN') } catch { return dateStr }
 }
 
 function handleAction(action: string, record: any) {
