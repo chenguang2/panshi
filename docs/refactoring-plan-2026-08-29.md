@@ -11,6 +11,9 @@
 > - Phase 2（前端界面统一，进行中）已提交（1236394）——U2 发布状态渲染统一为 PublishStatusTag.vue
 >   （publishStatusRender 委托化，11 个视图内联模板替换）；U3 列配置弹层收敛为 ColumnConfigPopover.vue。
 >   剩余：U1 手写 modal → AntD AppModal（风险最高，需同步改 useClusterUtils 测试契约）。
+> - Phase 3 + M5 已提交（9245ebe）——后端 `edge_sync.rollback_resource` 通用回滚工厂收敛 8 个
+>   rollback 端点（history/delete-history 本已集中，无需额外工厂）；前端 `utils/error.ts`
+>   `getApiErrorMessage` 统一 4+ 处手写错误提取。
 
 ## 0. 执行摘要
 
