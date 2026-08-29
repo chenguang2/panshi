@@ -1,34 +1,21 @@
 import { test, expect } from '@playwright/test'
+import { login, gotoResourcePage } from './helpers/navigation'
 
 test.describe('Route Advanced Match Toggle', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.waitForSelector('#username', { timeout: 10000 })
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'panshi123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL('/')
-    await page.waitForTimeout(1500)
+    await login(page)
   })
 
   test('should show advanced match tab in route modal', async ({ page }) => {
-    await page.click('text=集群管理')
-    await page.waitForTimeout(2000)
+    await gotoResourcePage(page, '路由')
+    await expect(page.locator('.route-table')).toBeVisible({ timeout: 15000 })
+    await page.locator('button:has-text("新建路由")').click({ timeout: 10000 })
+    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' })
+    await expect(modal).toBeVisible({ timeout: 5000 })
 
-    const clusterCard = page.locator('.cluster-card').first()
-
-    const routesTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '路由' })
-    await routesTab.click()
-    await page.waitForTimeout(1000)
-
-    const addRouteBtn = clusterCard.locator('button:has-text("添加路由")')
-    await addRouteBtn.click()
-    await page.waitForTimeout(1000)
-
-    const modal = page.locator('.ant-modal')
-    await expect(modal).toBeVisible()
-
-    const advancedTab = modal.locator('.ant-tabs-tab').filter({ hasText: '高级匹配' })
+    const advancedTab = modal.locator('.tab-btn').filter({ hasText: '高级匹配' })
     await expect(advancedTab).toBeVisible()
+
+    await modal.locator('.modal-close').first().click()
   })
 })

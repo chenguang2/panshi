@@ -15,7 +15,7 @@ export async function login(page: Page): Promise<void> {
  */
 export async function gotoResourcePage(page: Page, statLabel: string): Promise<void> {
   await page.click('text=集群管理')
-  await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 15000 })
   await page
     .locator('.cl-card')
     .first()

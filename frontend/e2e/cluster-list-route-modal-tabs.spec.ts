@@ -50,7 +50,7 @@ test.describe('ClusterList Route Modal Tabs - 路由弹窗 Tab 验证', () => {
 
     // 基础配置中开启高级匹配
     const enableToggle = modal.locator('.checkbox-label', { hasText: '开启高级匹配' });
-    await enableToggle.click();
+    await enableToggle.locator('input[type="checkbox"]').check();
     await expect(enableToggle.locator('input[type="checkbox"]')).toBeChecked();
 
     const advancedTab = modal.locator('.tab-btn').filter({ hasText: '高级匹配' });

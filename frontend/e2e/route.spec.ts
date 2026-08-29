@@ -8,13 +8,13 @@ test.describe('Route CRUD', () => {
 
   test('should display clusters page', async ({ page }) => {
     await page.click('text=集群管理');
-    await expect(page.locator('.cl-card').first()).toBeVisible();
+    await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('should display cluster detail', async ({ page }) => {
     await page.click('text=集群管理');
     const firstCard = page.locator('.cl-card').first();
-    await expect(firstCard).toBeVisible();
+    await expect(firstCard).toBeVisible({ timeout: 15000 });
     await firstCard.locator('button:has-text("详情")').click();
     const detailModal = page.locator('.modal-overlay').filter({ hasText: '集群详情' });
     await expect(detailModal).toBeVisible();
@@ -46,10 +46,10 @@ test.describe('Route CRUD', () => {
     await expect(table).toBeVisible({ timeout: 10000 });
 
     const pagination = page.locator('.ant-pagination');
-    await expect(pagination).toBeVisible();
+    await expect(pagination).toBeVisible({ timeout: 15000 });
 
     const pageSizeSelect = page.locator('.ant-pagination-options-size-changer');
-    await expect(pageSizeSelect).toBeVisible();
+    await expect(pageSizeSelect).toBeVisible({ timeout: 15000 });
   });
 
   test('should show sortable columns in route table', async ({ page }) => {

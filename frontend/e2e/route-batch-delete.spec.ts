@@ -92,8 +92,8 @@ test.describe('Route Batch Delete E2E', () => {
     // Selection should be cleared after delete (checkboxes unchecked / delete btn no count)
     const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
     await expect(deleteBtnAfter).toBeVisible({ timeout: 5000 })
-    const textAfter = (await deleteBtnAfter.textContent()) || ''
-    expect(textAfter.includes('(')).toBe(false)
+    // 等待选择清除（删除进度完成后按钮文案不再含数量）
+    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 
   test('search clears batch selection (D9)', async ({ page }) => {
@@ -129,8 +129,7 @@ test.describe('Route Batch Delete E2E', () => {
 
     // Selection should be cleared after search
     const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    const textAfter = (await deleteBtnAfter.textContent()) || ''
-    expect(textAfter.includes('(')).toBe(false)
+    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 
   test('DNS route checkbox is disabled', async ({ page }) => {

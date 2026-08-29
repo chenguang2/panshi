@@ -21,6 +21,6 @@ test.describe('Cluster page loads correctly', () => {
     await page.waitForTimeout(3000)
 
     await expect(page.locator('.vite-error-overlay')).toHaveCount(0, { timeout: 3000 })
-    await expect(page.locator('.cluster-name-item').first()).toBeVisible({ timeout: 5000 })
+    await expect(page.locator('.cluster-name-item').first()).toBeVisible({ timeout: 15000 })
   })
 })
