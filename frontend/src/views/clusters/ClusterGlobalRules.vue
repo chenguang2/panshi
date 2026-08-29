@@ -20,8 +20,7 @@
               <a-tag v-else color="orange" size="small">未发布</a-tag>
             </div>
             <div class="pcc-version">
-              <template v-if="gr.current_version && gr.published_at">v{{ gr.current_version }} · {{ formatDate(gr.published_at) }}</template>
-              <template v-else-if="gr.current_version">v{{ gr.current_version }} · 未同步</template>
+              <template v-if="gr.current_version"><PublishStatusTag :version="gr.current_version" :published-at="gr.published_at" /></template>
               <template v-else>&nbsp;</template>
             </div>
           </div>
@@ -124,6 +123,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import { formatDate } from '@/utils/format'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const props = defineProps<{
   cluster: Cluster

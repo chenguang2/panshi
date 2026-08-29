@@ -43,8 +43,7 @@
             <span v-if="sr.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral">未发布</span>
             <div class="sr-version-text">
-              <template v-if="sr.current_version && sr.updated_at">v{{ sr.current_version }} · {{ formatDate(sr.updated_at) }}</template>
-              <template v-else-if="sr.current_version">v{{ sr.current_version }} · 未同步</template>
+              <template v-if="sr.current_version"><PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" /></template>
             </div>
           </div>
         </div>
@@ -174,6 +173,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const resources = ref<any[]>([])
 const clusters = ref<any[]>([])

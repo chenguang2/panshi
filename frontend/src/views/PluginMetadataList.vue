@@ -42,8 +42,7 @@
             <span v-if="item.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="pml-version-text">
-              <template v-if="item.current_version && item.updated_at">v{{ item.current_version }} · {{ formatDate(item.updated_at) }}</template>
-              <template v-else-if="item.current_version">v{{ item.current_version }} · 未同步</template>
+              <template v-if="item.current_version"><PublishStatusTag :version="item.current_version" :published-at="item.updated_at" /></template>
             </div>
           </div>
         </div>
@@ -141,6 +140,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 // ——— List view state ———
 const items = ref<any[]>([])

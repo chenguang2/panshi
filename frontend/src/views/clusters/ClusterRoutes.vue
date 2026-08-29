@@ -10,27 +10,14 @@
       <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled">发布</a-button>
       <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled">版本管理</a-button>
       <a-divider type="vertical" />
-      <a-popover v-model:open="routeColumnPopoverVisible" trigger="click" placement="bottomRight">
-        <template #title>选择显示列</template>
-        <template #content>
-          <a-checkbox-group v-model:value="routeColumnsSelected">
-            <div v-for="col in allRouteColumns" :key="col.key" style="min-width: 120px; margin-bottom: 8px;">
-              <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-            </div>
-          </a-checkbox-group>
-          <a-divider style="margin: 12px 0;" />
-          <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
-          <a-checkbox-group v-model:value="routeActionsSelected">
-            <div v-for="btn in allActionButtons" :key="btn.key" style="min-width: 120px; margin-bottom: 8px;">
-              <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
-            </div>
-          </a-checkbox-group>
-          <a-divider style="margin: 12px 0;" />
-          <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
-          <a-checkbox v-model:checked="routeSearchVisible">显示搜索框</a-checkbox>
-        </template>
-        <a-button size="small">列配置</a-button>
-      </a-popover>
+      <ColumnConfigPopover
+          v-model:open="routeColumnPopoverVisible"
+          :all-columns="allRouteColumns"
+          v-model:columns="routeColumnsSelected"
+          :all-actions="allActionButtons"
+          v-model:actions="routeActionsSelected"
+          v-model:search="routeSearchVisible"
+        />
 
       <div class="toolbar-right">
         <template v-if="routeSearchVisible">
@@ -260,6 +247,7 @@ import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
+import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 
 const props = defineProps<{
   cluster: Cluster

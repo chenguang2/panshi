@@ -44,8 +44,7 @@
             <span v-if="r.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="dq-version-text">
-              <template v-if="r.current_version && r.published_at">v{{ r.current_version }} &middot; {{ formatDate(r.published_at) }}</template>
-              <template v-else-if="r.current_version">v{{ r.current_version }} &middot; 未同步</template>
+              <template v-if="r.current_version"><PublishStatusTag :version="r.current_version" :published-at="r.published_at" /></template>
             </div>
           </div>
         </div>
@@ -196,6 +195,7 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { formatDate } from '@/utils/format'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const route = useRoute()
 

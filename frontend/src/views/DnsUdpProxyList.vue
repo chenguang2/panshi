@@ -51,8 +51,7 @@
             <span v-if="p.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="sp-version-text">
-              <template v-if="p.current_version && p.published_at">v{{ p.current_version }} · {{ formatDate(p.published_at) }}</template>
-              <template v-else-if="p.current_version">v{{ p.current_version }} · 未同步</template>
+              <template v-if="p.current_version"><PublishStatusTag :version="p.current_version" :published-at="p.published_at" /></template>
             </div>
           </div>
         </div>
@@ -140,6 +139,7 @@ import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const proxyType = computed<'dns'>(() => 'dns')
 

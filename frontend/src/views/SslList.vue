@@ -61,8 +61,7 @@
             <span v-else-if="cert.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="ssl-version-text">
-              <template v-if="cert.current_version && cert.published_at">v{{ cert.current_version }} · {{ formatDate(cert.published_at) }}</template>
-              <template v-else-if="cert.current_version">v{{ cert.current_version }} · 未同步</template>
+              <template v-if="cert.current_version"><PublishStatusTag :version="cert.current_version" :published-at="cert.published_at" /></template>
             </div>
           </div>
         </div>
@@ -121,6 +120,7 @@ import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { isReservedSni, splitSniString } from '@/utils/sniTags'
 import { formatDateTime as formatDate } from '@/utils/format'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const certs = ref<any[]>([])
 const clusters = ref<any[]>([])

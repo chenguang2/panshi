@@ -8,34 +8,14 @@
       <a-button size="small" @click="publishUpstream(cluster)" :disabled="!singleOpEnabled">发布</a-button>
       <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!singleOpEnabled">版本管理</a-button>
       <a-divider type="vertical" />
-      <a-popover v-model:open="upstreamColumnPopoverVisible" trigger="click" placement="bottomRight">
-        <template #title>选择显示列</template>
-        <template #content>
-          <div style="min-width: 400px;">
-            <div style="font-weight: 500; margin-bottom: 8px;">列选择</div>
-            <a-checkbox-group v-model:value="upstreamColumnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <div v-for="col in allUpstreamColumns" :key="col.key" style="margin-bottom: 4px;">
-                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0;" />
-            <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
-            <a-checkbox-group v-model:value="upstreamActionsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <div v-for="btn in allUpstreamActionButtons" :key="btn.key" style="margin-bottom: 4px;">
-                  <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0;" />
-            <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
-            <a-checkbox v-model:checked="upstreamSearchVisible">显示搜索框</a-checkbox>
-          </div>
-        </template>
-        <a-button size="small">列配置</a-button>
-      </a-popover>
+      <ColumnConfigPopover
+          v-model:open="upstreamColumnPopoverVisible"
+          :all-columns="allUpstreamColumns"
+          v-model:columns="upstreamColumnsSelected"
+          :all-actions="allUpstreamActionButtons"
+          v-model:actions="upstreamActionsSelected"
+          v-model:search="upstreamSearchVisible"
+        />
 
       <div class="toolbar-right">
         <template v-if="upstreamSearchVisible">
@@ -290,6 +270,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { paginationProps } from '@/composables/usePagination'
+import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 
 const props = defineProps<{
   cluster: Cluster
