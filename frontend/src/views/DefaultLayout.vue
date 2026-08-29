@@ -4,16 +4,8 @@
     <div class="app-main">
       <header class="app-header">
         <div class="header-left">
-          <MenuUnfoldOutlined
-            v-if="themeStore.sidebarCollapsed"
-            class="trigger"
-            @click="themeStore.toggleSidebar()"
-          />
-          <MenuFoldOutlined
-            v-else
-            class="trigger"
-            @click="themeStore.toggleSidebar()"
-          />
+          <MenuUnfoldOutlined v-if="themeStore.sidebarCollapsed" class="trigger" @click="themeStore.toggleSidebar()" />
+          <MenuFoldOutlined v-else class="trigger" @click="themeStore.toggleSidebar()" />
           <div class="header-breadcrumb">
             <span class="crumb-item">{{ currentSection }}</span>
             <span class="crumb-sep">/</span>
@@ -81,6 +73,8 @@ const sectionMap: Record<string, string> = {
   EdgeClient: '运维管理',
   EdgeImport: '运维管理',
   Tools: '运维管理',
+  EdgeAutostart: '运维管理',
+  AnsibleInventory: '运维管理',
   NodeTaskCenter: '运维管理',
 }
 
@@ -108,6 +102,8 @@ const pageNameMap: Record<string, string> = {
   PluginSwitches: '插件开关',
   DatabaseManagement: '数据库管理',
   SslList: 'SSL 证书',
+  EdgeAutostart: '自启动管理',
+  AnsibleInventory: 'Ansible 主机清单',
   NodeTaskCenter: '节点任务',
 }
 
