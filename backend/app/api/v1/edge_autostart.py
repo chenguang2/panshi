@@ -50,15 +50,22 @@ async def _get_node(node_id: int, db: AsyncSession) -> Node:
     return node
 
 
-def _infer_status(rc: int, stdout: str) -> str:
-    """Infer autostart status from a status action's rc/stdout."""
-    out = stdout or ""
+def _infer_status(rc: int, stdout: str, stderr: str = "") -> str:
+    """Infer autostart status from a status action's rc/stdout(+stderr).
+
+    注意 systemctl is-enabled 对未配置/无权限服务的报错走 stderr（rc≠0），
+    必须合并 stderr 判断，否则存库状态与前端（解析 stdout+stderr 行）不一致：
+    查询时显示"未配置"，刷新后却回退"未知"。
+    """
+    out = (stdout or "") + "\n" + (stderr or "")
     if "No such file or directory" in out:
         return "not_configured"
     if "enabled" in out:
         return "enabled"
     if "disabled" in out:
         return "disabled"
+    if "permission denied" in out.lower() or "not been booted with systemd" in out.lower():
+        return "permission_denied"
     return "unknown"
 
 
@@ -172,13 +179,14 @@ async def node_autostart(
             percent = min(percent + 1, 99)
             yield f"data: {json.dumps({'line': item, 'percent': percent})}\n\n"
 
-        yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
-
-        # 操作完成后写库（状态 + 脱敏命令审计，绝不存密码明文）
+        # 操作完成后写库（状态 + 脱敏命令审计，绝不存密码明文）。
+        # 必须在最终 yield 之前执行：SSE 流结束时客户端断开会让 Starlette 在
+        # yield 处 aclose() 生成器，yield 之后的代码永不执行（状态因此从未持久化，
+        # 刷新页面后回到"未知"）。
         try:
             from sqlalchemy import select
             if body.action == "status":
-                stored_status = _infer_status(rc, result.get("stdout", ""))
+                stored_status = _infer_status(rc, result.get("stdout", ""), result.get("stderr", ""))
             elif rc == 0:
                 stored_status = "enabled" if body.action == "enable" else "disabled"
             else:
@@ -202,5 +210,7 @@ async def node_autostart(
         except Exception:
             # 写库失败不影响操作结果返回
             pass
+
+        yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

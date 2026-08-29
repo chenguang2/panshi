@@ -44,6 +44,20 @@ def db_env():
     asyncio.run(engine.dispose())
 
 
+def test_infer_status_uses_stderr_for_not_configured():
+    """未配置服务的 systemctl 报错在 stderr（rc≠0）——must 判为 not_configured 而非 unknown。
+
+    回归：此前只读 stdout，前端（解析 stdout+stderr）显示"未配置"而库存"unknown"，
+    刷新页面后状态回退"未知"。
+    """
+    from app.api.v1.edge_autostart import _infer_status
+    assert _infer_status(1, "", "Failed to get unit file state for edge.service: No such file or directory") == "not_configured"
+    assert _infer_status(0, "enabled\n", "") == "enabled"
+    assert _infer_status(1, "disabled\n", "") == "disabled"
+    assert _infer_status(126, "", "Failed to get unit file state for edge.service: Permission denied") == "permission_denied"
+    assert _infer_status(1, "", "") == "unknown"
+
+
 def test_autostart_node_not_found(db_env):
     app, _, AUTH = db_env
     with AuthedTestClient(app, headers=AUTH) as c:
