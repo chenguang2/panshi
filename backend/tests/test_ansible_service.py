@@ -911,16 +911,29 @@ class TestEdgeAutostart:
 
     async def test_status_calls_ssh_is_enabled_with_inventory_user(self, service):
         from app.services import ansible_service as mod
+        # 未传 root 凭据 → status 回退 inventory 用户
         with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock, return_value=(0, "disabled", "")) as mock_ssh:
+            result = await service.edge_autostart(
+                ip="192.168.1.1", action="status",
+                edge_service_content=None,
+            )
+            args, kwargs = mock_ssh.call_args
+            assert args[1] == mod.get_ssh_user("192.168.1.1")
+            assert "systemctl is-enabled edge" in args[2]
+            assert result["rc"] == 0
+
+    async def test_status_with_root_creds_uses_root(self, service):
+        from app.services import ansible_service as mod
+        # 显式传 root 凭据 → status 以 root 查询（普通用户无 systemctl 权限时可读取真实状态）
+        with patch.object(mod, "_run_ssh_with_fallback", new_callable=AsyncMock, return_value=(1, "", "No such file")) as mock_ssh:
             result = await service.edge_autostart(
                 ip="192.168.1.1", action="status",
                 edge_service_content=None, ssh_user="root", ssh_pass="secret123",
             )
             args, kwargs = mock_ssh.call_args
-            # status 用 inventory 用户（get_ssh_user），非 root
-            assert args[1] == mod.get_ssh_user("192.168.1.1")
+            assert args[1] == "root"
             assert "systemctl is-enabled edge" in args[2]
-            assert result["rc"] == 0
+            assert result["rc"] == 1
 
     async def test_unknown_action_raises(self, service):
         from app.services import ansible_service as mod
