@@ -18,6 +18,10 @@
 >   lint-staged（pre-commit 仅处理暂存文件）；存量 lint 错误 46→0；生产 TS `any` 76→~1
 >   （新增 GlobalRule/StaticResource 类型、composables/api 全面定型）；.vue 模板内 any
 >   474 处保留为 warn 增量治理。
+> - Phase 6 安全/后端项已提交（142c058）——S6 后端资源级权限（require_permission 工厂，
+>   admin 直通 / 用户按 UserPermission 门控，全局资源按前端权限键、集群子资源由 clusters
+>   容器门控、/stream-proxies 用 require_any）；M1 操作审计日志（复用既有 AuditLog 模型，
+>   log_audit 接入集群/用户/数据库/清单/导入/插件开关等系统级操作 + GET /system/operations）。
 
 ## 0. 执行摘要
 
