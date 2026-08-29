@@ -10,7 +10,7 @@ test('delete test-11 and show details', async ({ page }) => {
   const token = await page.evaluate(() => localStorage.getItem('token'))
 
   // 先删数据库+Edge，获取详细统计
-  const resp = await page.request.fetch('http://localhost:9000/api/v1/clusters/4', {
+  const resp = await page.request.fetch('http://localhost:9100/api/v1/clusters/4', {
     method: 'DELETE',
     headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
     data: { delete_db: true, delete_edge: true, node_ids: [4] },

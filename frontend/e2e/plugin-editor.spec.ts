@@ -1,59 +1,47 @@
 import { test, expect } from '@playwright/test';
+import { login, gotoResourcePage } from './helpers/navigation';
 
 test.describe('Plugin Editor - proxy-rewrite headers', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.fill('#username', 'admin');
-    await page.fill('#password', 'panshi123');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    await login(page);
   });
 
   test('should open plugin selector in route modal', async ({ page }) => {
-    await page.click('text=集群管理');
-    await page.waitForTimeout(1500);
+    await gotoResourcePage(page, '路由');
+    const table = page.locator('.route-table');
+    await expect(table).toBeVisible({ timeout: 10000 });
 
-    const clusterCard = page.locator('.cluster-card').first();
-
-    const routesTab = clusterCard.locator('.ant-tabs-tab').filter({ hasText: '路由' });
-    await routesTab.click();
-    await page.waitForTimeout(500);
-
-    const addRouteBtn = clusterCard.locator('button:has-text("添加路由")');
-    await addRouteBtn.click();
-    await page.waitForTimeout(500);
-
-    const modal = page.locator('.ant-modal');
+    await page.locator('button:has-text("新建路由")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' });
     await expect(modal).toBeVisible();
 
-    const pluginsTab = modal.locator('.ant-tabs-tab').filter({ hasText: '插件管理' });
+    // 切到插件管理 Tab，并等待其真正激活（v-show 切换 + 插件异步加载）
+    const pluginsTab = modal.locator('.tab-btn').filter({ hasText: '插件管理' });
     await pluginsTab.click();
-    await page.waitForTimeout(500);
+    await expect(pluginsTab).toHaveClass(/active/);
 
-    const pluginSelector = page.locator('.plugin-selector');
-    await expect(pluginSelector).toBeVisible({ timeout: 5000 });
+    const pluginSelector = modal.locator('.plugin-selector');
+    await expect(pluginSelector).toBeVisible({ timeout: 8000 });
+
+    await modal.locator('.modal-close').first().click();
   });
 
   test('should show plugin selector in route modal', async ({ page }) => {
-    await page.click('text=集群管理');
-    await page.waitForTimeout(1500);
+    await gotoResourcePage(page, '路由');
+    const table = page.locator('.route-table');
+    await expect(table).toBeVisible({ timeout: 10000 });
 
-    const clusterCard = page.locator('.cluster-card').first();
-    await clusterCard.locator('.ant-tabs-tab').filter({ hasText: '路由' }).click();
-    await page.waitForTimeout(500);
-
-    const addRouteBtn = clusterCard.locator('button:has-text("添加路由")');
-    await addRouteBtn.click();
-    await page.waitForTimeout(500);
-
-    const modal = page.locator('.ant-modal');
+    await page.locator('button:has-text("新建路由")').click();
+    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' });
     await expect(modal).toBeVisible();
 
-    const pluginsTab = modal.locator('.ant-tabs-tab').filter({ hasText: '插件管理' });
+    const pluginsTab = modal.locator('.tab-btn').filter({ hasText: '插件管理' });
     await pluginsTab.click();
-    await page.waitForTimeout(500);
+    await expect(pluginsTab).toHaveClass(/active/);
 
-    const pluginSelector = page.locator('.plugin-selector');
-    await expect(pluginSelector).toBeVisible();
+    const pluginSelector = modal.locator('.plugin-selector');
+    await expect(pluginSelector).toBeVisible({ timeout: 8000 });
+
+    await modal.locator('.modal-close').first().click();
   });
 });

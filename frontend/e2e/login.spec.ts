@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Login Flow', () => {
   test('should display login page with Chinese text', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('.login-card h2')).toContainText('磐石管理后台');
+    await expect(page.locator('.login-brand-name')).toContainText('磐石 Gateway');
     await expect(page.locator('input#username')).toBeVisible();
     await expect(page.locator('input#password')).toBeVisible();
   });
@@ -22,6 +22,6 @@ test.describe('Login Flow', () => {
     await page.fill('#password', 'wrongpassword');
     await page.click('button[type="submit"]');
     await page.waitForTimeout(1000);
-    await expect(page.locator('.ant-message')).toBeVisible();
+    await expect(page.locator('.login-error')).toBeVisible();
   });
 });
