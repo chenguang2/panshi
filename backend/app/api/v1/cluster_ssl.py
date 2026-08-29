@@ -20,7 +20,6 @@ from app.models.cluster import Cluster, ConfigVersion, Node
 from app.schemas.cluster import PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
-from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"])
 global_router = APIRouter(prefix="/ssl", tags=["ssl"])
@@ -350,53 +349,38 @@ async def publish_ssl_certificate(
                 client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
             config_data["client"] = client
 
-    new_version = await edge_sync.create_config_version(db, "ssl", cert_id, cluster_id, config_data, cert)
-
     # 证书链：由 CA 签发的证书（国密/非国密）应把 CA 证书拼接到 cert 字段一起发布，
     # 否则 nginx 只下发 server 证书，浏览器无法构建信任链（域名/IP 访问均报警）。
     # 拼接仅用于发布（publish_to_nodes），不写入版本历史，避免回滚污染数据库 cert 字段。
-    if cert.ca_cert_id:
-        ca_record = await db.get(SslCertificate, cert.ca_cert_id)
-        if ca_record and ca_record.cert:
-            from app.services.cert_generator import get_cert_expiry, detect_openssl
-            try:
-                openssl_info = detect_openssl()
-                if openssl_info["path"] and ca_record.cert:
-                    if get_cert_expiry(openssl_info["path"], ca_record.cert) < date.today():
-                        raise HTTPException(status_code=400, detail="签发该证书的 CA 已过期，无法发布")
-            except Exception:
-                pass
-            server_pem = (cert.cert or "").strip()
-            ca_pem = (ca_record.cert or "").strip()
-            if server_pem and ca_pem and server_pem != ca_pem:
-                config_data["cert"] = server_pem + "\n" + ca_pem
+    # → 放在 post_version_hook 中执行，确保版本快照使用拼接前的原始证书内容。
+    async def _apply_cert_chain():
+        if cert.ca_cert_id:
+            ca_record = await db.get(SslCertificate, cert.ca_cert_id)
+            if ca_record and ca_record.cert:
+                from app.services.cert_generator import get_cert_expiry, detect_openssl
+                try:
+                    openssl_info = detect_openssl()
+                    if openssl_info["path"] and ca_record.cert:
+                        if get_cert_expiry(openssl_info["path"], ca_record.cert) < date.today():
+                            raise HTTPException(status_code=400, detail="签发该证书的 CA 已过期，无法发布")
+                except Exception:
+                    pass
+                server_pem = (cert.cert or "").strip()
+                ca_pem = (ca_record.cert or "").strip()
+                if server_pem and ca_pem and server_pem != ca_pem:
+                    config_data["cert"] = server_pem + "\n" + ca_pem
 
-    cluster = await db.get(Cluster, cluster_id)
-    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
-    if not active_nodes:
-        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
-
-    edge_logger = get_edge_logger()
-    results, success_count, fail_count = await edge_sync.publish_to_nodes(
-        cluster_id, active_nodes, config_data,
+    return await edge_sync.publish_resource(
+        db, cluster_id=cluster_id, resource=cert, resource_type="ssl",
+        config_data=config_data, edge_data=config_data,
         publish_fn=lambda client: client.api("ssl", "update", cert.edge_uuid, config_data),
-        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="ssl",
-            cluster_id=cluster_id,
-            cluster_name=cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id),
-            resource_id=cert_id,
-            resource_name=cert.name,
-            method="PUT",
-            path=f"/edge/admin/ssl/{cert.edge_uuid}",
-            request_body=config_data,
-            encrypted_body=encrypted,
-            response_status=201,
-            response_body=response,
-            error=error,
-        ),
+        display_name=f"SSL 证书 {cert.name} ",
+        log_path=f"/edge/admin/ssl/{cert.edge_uuid}",
+        log_resource_id=cert_id, log_resource_name=cert.name,
+        node_ids=req.node_ids if req else None,
+        prefer_display_name=True,
+        post_version_hook=_apply_cert_chain,
     )
-
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"SSL 证书 {cert.name} ", new_version)
 
 
 @router.post("/{cert_id}/rollback/{version}")
@@ -441,21 +425,9 @@ async def get_ssl_certificate_history(
     cert_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
-
     await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
-
-    versions = (
-        await db.execute(
-            select(ConfigVersion)
-            .where(ConfigVersion.resource_type == "ssl", ConfigVersion.resource_id == cert_id)
-            .order_by(ConfigVersion.version.desc())
-        )
-    ).scalars().all()
-
-    return ConfigVersionListResponse(
-        total=len(versions),
-        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+    return await edge_sync.list_config_versions(
+        db, resource_type="ssl", resource_id=cert_id,
         current_version=(await db.get(SslCertificate, cert_id)).current_version,
     )
 
@@ -467,13 +439,8 @@ async def delete_ssl_certificate_history(
     history_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    config_version = await edge_sync.get_or_404(
-        db, ConfigVersion,
-        id=history_id, resource_type="ssl", resource_id=cert_id,
-        detail="版本不存在",
-    )
-    await db.delete(config_version)
-    await db.commit()
+    await edge_sync.delete_config_version(
+        db, resource_type="ssl", resource_id=cert_id, history_id=history_id, detail="版本不存在")
     return {"status": "ok", "message": "历史版本已删除"}
 
 

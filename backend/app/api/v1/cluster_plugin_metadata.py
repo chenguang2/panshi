@@ -5,11 +5,10 @@ from typing import Optional, Dict, Any
 import json
 
 from app.core.database import get_db
-from app.models.cluster import PluginMetadata, ConfigVersion, Node, Cluster
+from app.models.cluster import PluginMetadata, ConfigVersion, Node
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/plugin-metadata", tags=["plugin-metadata"])
 
@@ -160,53 +159,18 @@ async def publish_plugin_metadata(
 
     plugin_config = json.loads(item.config_data) if item.config_data else {}
     config_data = {"plugin_name": item.plugin_name, "config_data": plugin_config}
-    new_version = await edge_sync.create_config_version(db, "plugin_metadata", item.id, cluster_id, config_data, item)
-
     edge_data = plugin_config
 
-    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = cluster_result.scalar_one_or_none()
-    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
-    if not active_nodes:
-        return {"status": "error", "message": "集群中没有活跃的 edge 节点", "version": new_version, "results": []}
-
-    edge_logger = get_edge_logger()
-
-    results, success_count, fail_count = await edge_sync.publish_to_nodes(
-        cluster_id, active_nodes, edge_data,
+    return await edge_sync.publish_resource(
+        db, cluster_id=cluster_id, resource=item, resource_type="plugin_metadata",
+        config_data=config_data, edge_data=edge_data,
         publish_fn=lambda client: client.create_plugin_metadata(plugin_name, edge_data),
-        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="plugin_metadata",
-            cluster_id=cluster_id,
-            cluster_name=cluster.name if cluster else str(cluster_id),
-            resource_id=None,
-            resource_name=plugin_name,
-            method="PUT",
-            path=f"/edge/admin/plugin_metadata/{plugin_name}",
-            request_body=edge_data,
-            encrypted_body=encrypted,
-            response_status=201,
-            response_body=response,
-            error=error,
-        ),
+        display_name="插件元数据",
+        log_path=f"/edge/admin/plugin_metadata/{plugin_name}",
+        log_resource_id=None, log_resource_name=plugin_name,
+        node_ids=req.node_ids if req else None,
         post_publish_fn=lambda client: client.reload_plugins(),
-        post_log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="plugin_metadata",
-            cluster_id=cluster_id,
-            cluster_name=cluster.name if cluster else str(cluster_id),
-            resource_id=None,
-            resource_name=plugin_name,
-            method="PUT",
-            path="/edge/admin/plugins/reload",
-            request_body={},
-            encrypted_body=encrypted,
-            response_status=200,
-            response_body=response,
-            error=error,
-        ),
     )
-
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), "插件元数据", new_version)
 
 
 # ─── 版本历史 ──────────────────────────────────────

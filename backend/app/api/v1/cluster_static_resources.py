@@ -20,7 +20,7 @@ from app.schemas.static_resource import (
     StaticResourceListResponse,
 )
 from app.services import edge_sync
-from app.schemas.cluster import DeleteClusterRequest, PublishRequest, ConfigVersionResponse, ConfigVersionListResponse
+from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
 
@@ -477,23 +477,13 @@ async def get_static_resource_history(
     db: AsyncSession = Depends(get_db),
 ):
 
-    result = await db.execute(
-        select(ConfigVersion).where(
-            ConfigVersion.resource_type == "static_resource",
-            ConfigVersion.resource_id == resource_id,
-        ).order_by(ConfigVersion.version.desc())
-    )
-    versions = result.scalars().all()
-
     sr = await db.execute(
         select(StaticResource).where(StaticResource.id == resource_id, StaticResource.cluster_id == cluster_id)
     )
     resource = sr.scalar_one_or_none()
-
-    return ConfigVersionListResponse(
-        total=len(versions),
-        items=[ConfigVersionResponse.model_validate(v) for v in versions],
-        current_version=resource.current_version if resource else None
+    return await edge_sync.list_config_versions(
+        db, resource_type="static_resource", resource_id=resource_id,
+        current_version=resource.current_version if resource else None,
     )
 
 
@@ -505,19 +495,7 @@ async def delete_static_resource_history(
     db: AsyncSession = Depends(get_db),
 ):
 
-    result = await db.execute(
-        select(ConfigVersion).where(
-            ConfigVersion.id == version_id,
-            ConfigVersion.resource_type == "static_resource",
-            ConfigVersion.resource_id == resource_id,
-        )
-    )
-    version = result.scalar_one_or_none()
-    if not version:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="历史版本不存在")
-
-    await db.delete(version)
-    await db.commit()
+    await edge_sync.delete_config_version(db, resource_type="static_resource", resource_id=resource_id, history_id=version_id)
     return {"message": "历史版本已删除"}
 
 

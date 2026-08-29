@@ -370,7 +370,7 @@ async def export_cluster_data(
     buf = _build_workbook(data)
 
     cluster_name = data["cluster"].name
-    filename = f"{sanitize_filename(cluster_name, extra_unsafe="#")}_配置导出.xlsx"
+    filename = f"{sanitize_filename(cluster_name, extra_unsafe='#')}_配置导出.xlsx"
 
     from urllib.parse import quote
 

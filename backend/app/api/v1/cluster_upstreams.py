@@ -6,16 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion, Node, Route
+from app.models.cluster import Upstream, UpstreamTarget, ConfigVersion, Node, Route
 from app.models.user import User
 from app.schemas.cluster import (
     UpstreamCreate, UpstreamUpdate,
     UpstreamWithTargets, UpstreamTargetSchema,
-    ConfigVersionResponse, ConfigVersionListResponse,
+    ConfigVersionListResponse,
     DeleteClusterRequest, PublishRequest, BatchDeleteUpstreamsRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-from app.services.edge_logger import get_edge_logger
 from app.services import edge_sync
 from app.core.deps import get_current_user
 
@@ -272,9 +271,6 @@ async def delete_upstreams_batch(cluster_id: int, body: BatchDeleteUpstreamsRequ
 async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
-    cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
-    cluster = cluster_result.scalar_one_or_none()
-
     targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
     targets = targets_result.scalars().all()
     targets_list = [{"target": t.target, "weight": t.weight} for t in targets]
@@ -290,7 +286,6 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
         "scheme": upstream.scheme,
         "keepalive_pool": json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None,
     }
-    new_version = await edge_sync.create_config_version(db, "upstream", upstream_id, cluster_id, config_data, upstream)
 
     upstream_checks = json.loads(upstream.checks) if upstream.checks else None
     upstream_timeout = json.loads(upstream.timeout) if upstream.timeout else None
@@ -302,49 +297,24 @@ async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[Publ
         timeout=upstream_timeout, pass_host=upstream.pass_host, upstream_host=upstream.upstream_host,
         scheme=upstream.scheme, keepalive_pool=upstream_keepalive)
 
-    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
-    if not active_nodes:
-        return {"status": "error", "message": f"上游 {upstream.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
-
-    edge_logger = get_edge_logger()
-
-    results, success_count, fail_count = await edge_sync.publish_to_nodes(
-        cluster_id, active_nodes, edge_data,
+    return await edge_sync.publish_resource(
+        db, cluster_id=cluster_id, resource=upstream, resource_type="upstream",
+        config_data=config_data, edge_data=edge_data,
         publish_fn=lambda client: client.update_upstream(upstream.edge_uuid, edge_data),
-        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="upstream",
-            cluster_id=cluster_id,
-            cluster_name=cluster.name if cluster else str(cluster_id),
-            resource_id=upstream_id,
-            resource_name=upstream.name,
-            method="PUT",
-            path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
-            request_body=edge_data,
-            encrypted_body=encrypted,
-            response_status=201,
-            response_body=response,
-            error=error,
-        ))
-
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"上游 {upstream.name} ", new_version)
+        display_name=f"上游 {upstream.name} ",
+        log_path=f"/edge/admin/upstreams/{upstream.edge_uuid}",
+        log_resource_id=upstream_id, log_resource_name=upstream.name,
+        node_ids=req.node_ids if req else None,
+        no_nodes_message=f"上游 {upstream.name} 发布成功，但集群中没有活跃的 edge 节点",
+    )
 
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}/history", response_model=ConfigVersionListResponse)
 async def get_upstream_history(cluster_id: int, upstream_id: int, db: AsyncSession = Depends(get_db)):
     upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
-
-    query = select(ConfigVersion).where(
-        ConfigVersion.resource_type == "upstream",
-        ConfigVersion.resource_id == upstream_id
-    ).order_by(ConfigVersion.version.desc())
-
-    result = await db.execute(query)
-    versions = result.scalars().all()
-    return ConfigVersionListResponse(
-        total=len(versions),
-        items=[ConfigVersionResponse.model_validate(v) for v in versions],
-        current_version=upstream.current_version
-    )
+    return await edge_sync.list_config_versions(
+        db, resource_type="upstream", resource_id=upstream_id,
+        current_version=upstream.current_version)
 
 
 @router.post("/{cluster_id}/upstreams/{upstream_id}/rollback/{version}")
@@ -380,8 +350,5 @@ async def rollback_upstream(cluster_id: int, upstream_id: int, version: int, db:
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}/history/{history_id}")
 async def delete_upstream_history(cluster_id: int, upstream_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    config_version = await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="upstream", resource_id=upstream_id, detail="历史版本不存在")
-
-    await db.delete(config_version)
-    await db.commit()
+    await edge_sync.delete_config_version(db, resource_type="upstream", resource_id=upstream_id, history_id=history_id)
     return {"status": "ok", "message": "历史版本已删除"}

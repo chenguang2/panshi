@@ -6,14 +6,16 @@ that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 """
 
 import json
-from typing import Any, Optional, Callable
+from typing import Any, Awaitable, Optional, Callable
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, inspect as sa_inspect
 
-from app.models.cluster import Node, ConfigVersion, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata
+from app.models.cluster import Cluster, Node, ConfigVersion, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata
 from app.models.static_resource import StaticResource
+from app.schemas.cluster import ConfigVersionListResponse, ConfigVersionResponse
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services.edge_logger import get_edge_logger
 
 
 async def get_or_404(
@@ -50,6 +52,147 @@ async def verify_node(
 ) -> Node:
     """Return the node of a cluster or raise 404 ("节点不存在")."""
     return await get_or_404(db, Node, id=node_id, cluster_id=cluster_id, detail="节点不存在")
+
+
+async def publish_resource(
+    db: AsyncSession,
+    *,
+    cluster_id: int,
+    resource: Any,
+    resource_type: str,
+    config_data: dict,
+    edge_data: Any,
+    publish_fn: Callable,
+    display_name: str,
+    log_path: str,
+    log_resource_id: Optional[int],
+    log_resource_name: Optional[str],
+    node_ids: Optional[list[int]] = None,
+    cluster_name: Optional[str] = None,
+    prefer_display_name: bool = False,
+    no_nodes_status: str = "error",
+    no_nodes_message: str = "集群中没有活跃的 edge 节点",
+    log_method: str = "PUT",
+    log_status: Optional[int] = 201,
+    log_error_as_str: bool = False,
+    post_version_hook: Optional[Callable[[], Awaitable[None]]] = None,
+    post_publish_fn: Optional[Callable] = None,
+) -> dict:
+    """通用发布编排：建版本 →（钩子）→ 选节点 → 逐节点发布 + 日志 → 汇总响应。
+
+    调用方只负责资源载荷构造与取回 resource；其余脚手架统一在此维护。
+    差异点通过参数表达：
+    - cluster_name: 已解析的集群名；None 时按 prefer_display_name 决定解析规则
+    - no_nodes_status/no_nodes_message: 无活跃节点时的响应（route 为 "ok" + 前缀文案）
+    - log_status: dns/stream 原实现不传 response_status，传 None 保持一致
+    - log_error_as_str: dns/stream 原实现对错误日志做 str() 归一化
+    - post_version_hook: 版本快照之后执行（ssl 的 CA 过期检查与证书链拼接）
+    - post_publish_fn: 发布后的附加动作（plugin_metadata 的 reload_plugins）
+    """
+    new_version = await create_config_version(db, resource_type, resource.id, cluster_id, config_data, resource)
+
+    if post_version_hook is not None:
+        await post_version_hook()
+
+    active_nodes = await get_active_nodes(cluster_id, db, node_ids)
+    if not active_nodes:
+        return {"status": no_nodes_status, "message": no_nodes_message, "version": new_version, "results": []}
+
+    if cluster_name is None:
+        cluster = await db.get(Cluster, cluster_id)
+        if prefer_display_name:
+            cluster_name = cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id)
+        else:
+            cluster_name = cluster.name if cluster else str(cluster_id)
+
+    edge_logger = get_edge_logger()
+
+    def _log_fn(node_result, response, error, encrypted):
+        kwargs = dict(
+            resource_type=resource_type,
+            cluster_id=cluster_id,
+            cluster_name=cluster_name,
+            resource_id=log_resource_id,
+            resource_name=log_resource_name,
+            method=log_method,
+            path=log_path,
+            request_body=edge_data,
+            encrypted_body=encrypted,
+            response_body=response,
+            error=error,
+        )
+        if log_status is not None:
+            kwargs["response_status"] = log_status
+        if log_error_as_str:
+            kwargs["response_body"] = response if error is None else None
+            kwargs["error"] = str(error) if error else None
+        return edge_logger.log_publish_result(**kwargs)
+
+    post_log_fn = None
+    if post_publish_fn is not None:
+        def post_log_fn(node_result, response, error, encrypted):
+            return edge_logger.log_publish_result(
+                resource_type=resource_type,
+                cluster_id=cluster_id,
+                cluster_name=cluster_name,
+                resource_id=log_resource_id,
+                resource_name=log_resource_name,
+                method="PUT",
+                path="/edge/admin/plugins/reload",
+                request_body={},
+                encrypted_body=encrypted,
+                response_status=200,
+                response_body=response,
+                error=error,
+            )
+
+    results, success_count, fail_count = await publish_to_nodes(
+        cluster_id, active_nodes, edge_data,
+        publish_fn=publish_fn,
+        log_fn=_log_fn,
+        post_publish_fn=post_publish_fn,
+        post_log_fn=post_log_fn,
+    )
+    return build_publish_response(results, success_count, fail_count, len(active_nodes), display_name, new_version)
+
+
+async def list_config_versions(
+    db: AsyncSession,
+    *,
+    resource_type: str,
+    resource_id: int,
+    current_version: Optional[int] = None,
+) -> ConfigVersionListResponse:
+    """按版本号倒序列出资源配置版本。"""
+    result = await db.execute(
+        select(ConfigVersion)
+        .where(ConfigVersion.resource_type == resource_type, ConfigVersion.resource_id == resource_id)
+        .order_by(ConfigVersion.version.desc())
+    )
+    versions = result.scalars().all()
+    return ConfigVersionListResponse(
+        total=len(versions),
+        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+        current_version=current_version,
+    )
+
+
+async def delete_config_version(
+    db: AsyncSession,
+    *,
+    resource_type: str,
+    resource_id: int,
+    history_id: int,
+    detail: str = "历史版本不存在",
+) -> None:
+    """删除一条配置版本（不存在则 404）。"""
+    config_version = await get_or_404(
+        db, ConfigVersion,
+        id=history_id, resource_type=resource_type, resource_id=resource_id,
+        detail=detail,
+    )
+    await db.delete(config_version)
+    await db.commit()
 
 
 async def get_active_nodes(

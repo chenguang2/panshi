@@ -10,10 +10,9 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
+from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-from app.services.edge_logger import get_edge_logger
 
 router = APIRouter(prefix="/clusters/{cluster_id}/routes", tags=["routes"])
 
@@ -403,15 +402,6 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
         "plugins": plugins_edge_format,
         "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
         "enable_websocket": route.enable_websocket or False}
-    new_version = await edge_sync.create_config_version(db, "route", route_id, cluster_id, config_data, route)
-
-    if req and req.node_ids:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids)
-    else:
-        active_nodes = await edge_sync.get_active_nodes(cluster_id, db)
-
-    if not active_nodes:
-        return {"status": "ok", "message": f"路由 {route.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
 
     edge_data = EdgeClient.convert_route_to_edge_format(
         edge_uuid=route.edge_uuid, name=route.name, uri=route.uri,
@@ -422,27 +412,18 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
         plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
         enable_websocket=route.enable_websocket)
 
-    edge_logger = get_edge_logger()
-
-    results, success_count, fail_count = await edge_sync.publish_to_nodes(
-        cluster_id, active_nodes, edge_data,
+    return await edge_sync.publish_resource(
+        db, cluster_id=cluster_id, resource=route, resource_type="route",
+        config_data=config_data, edge_data=edge_data,
         publish_fn=lambda client: client.update_route(route.edge_uuid, edge_data),
-        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="route",
-            cluster_id=cluster_id,
-            cluster_name=str(cluster_id),
-            resource_id=route_id,
-            resource_name=route.name,
-            method="PUT",
-            path=f"/edge/admin/routes/{route.edge_uuid}",
-            request_body=edge_data,
-            encrypted_body=encrypted,
-            response_status=201,
-            response_body=response,
-            error=error,
-        ))
-
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"路由 {route.name} ", new_version)
+        display_name=f"路由 {route.name} ",
+        log_path=f"/edge/admin/routes/{route.edge_uuid}",
+        log_resource_id=route_id, log_resource_name=route.name,
+        node_ids=req.node_ids if req else None,
+        cluster_name=str(cluster_id),
+        no_nodes_status="ok",
+        no_nodes_message=f"路由 {route.name} 发布成功，但集群中没有活跃的 edge 节点",
+    )
 
 
 @router.post("/publish")
@@ -479,19 +460,9 @@ async def update_route_plugins(cluster_id: int, route_id: int, request: PluginUp
 @router.get("/{route_id}/history")
 async def get_route_history(cluster_id: int, route_id: int, db: AsyncSession = Depends(get_db)):
     route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
-
-    query = select(ConfigVersion).where(
-        ConfigVersion.resource_type == "route",
-        ConfigVersion.resource_id == route_id
-    ).order_by(ConfigVersion.version.desc())
-
-    result = await db.execute(query)
-    versions = result.scalars().all()
-    return ConfigVersionListResponse(
-        total=len(versions),
-        items=[ConfigVersionResponse.model_validate(v) for v in versions],
-        current_version=route.current_version
-    )
+    return await edge_sync.list_config_versions(
+        db, resource_type="route", resource_id=route_id,
+        current_version=route.current_version)
 
 
 @router.post("/{route_id}/rollback/{version}")
@@ -555,8 +526,5 @@ async def rollback_route(cluster_id: int, route_id: int, version: int, db: Async
 
 @router.delete("/{route_id}/history/{history_id}")
 async def delete_route_history(cluster_id: int, route_id: int, history_id: int, db: AsyncSession = Depends(get_db)):
-    config_version = await edge_sync.get_or_404(db, ConfigVersion, id=history_id, resource_type="route", resource_id=route_id, detail="历史版本不存在")
-
-    await db.delete(config_version)
-    await db.commit()
+    await edge_sync.delete_config_version(db, resource_type="route", resource_id=route_id, history_id=history_id)
     return {"status": "ok", "message": "历史版本已删除"}

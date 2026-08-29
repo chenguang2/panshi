@@ -18,11 +18,10 @@ from app.schemas.stream_proxy import (
     StreamProxyCreate, StreamProxyUpdate, StreamProxyResponse,
     DetectPortsRequest, DetectPortsResponse,
 )
-from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
+from app.schemas.cluster import ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
 from app.services.dns_wan import build_dns_plugins
 from app.services.edge_client import EdgeClient
-from app.services.edge_logger import get_edge_logger
 from app.api.v1.cluster_stream_proxies import (
     _proxy_response_with_cluster_name,
     _build_publish_map,
@@ -213,34 +212,20 @@ async def publish_dns_proxy(
     edge_body["plugins"] = plugins
 
     config_data = StreamProxyResponse.model_validate(proxy).model_dump()
-    new_version = await edge_sync.create_config_version(db, "stream_proxy", proxy_id, cluster_id, config_data, proxy)
 
-    active_nodes = await edge_sync.get_active_nodes(cluster_id, db, req.node_ids if req else None)
-    if not active_nodes:
-        return {"status": "error", "message": f"DNS 代理 {proxy.name} 发布成功，但集群中没有活跃的 edge 节点", "version": new_version, "results": []}
-
-    cluster = await db.get(Cluster, cluster_id)
-    edge_logger = get_edge_logger()
-
-    results, success_count, fail_count = await edge_sync.publish_to_nodes(
-        cluster_id, active_nodes, edge_body,
+    return await edge_sync.publish_resource(
+        db, cluster_id=cluster_id, resource=proxy, resource_type="stream_proxy",
+        config_data=config_data, edge_data=edge_body,
         publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_body),
-        log_fn=lambda node_result, response, error, encrypted: edge_logger.log_publish_result(
-            resource_type="stream_proxy",
-            cluster_id=cluster_id,
-            cluster_name=cluster.display_name or cluster.name or str(cluster_id) if cluster else str(cluster_id),
-            resource_id=proxy_id,
-            resource_name=proxy.name,
-            method="PUT",
-            path=f"/stream/edge/admin/routes/{proxy.edge_uuid}",
-            request_body=edge_body,
-            encrypted_body=encrypted,
-            response_body=response if error is None else None,
-            error=str(error) if error else None,
-        ),
+        display_name=f"DNS 代理 {proxy.name} ",
+        log_path=f"/stream/edge/admin/routes/{proxy.edge_uuid}",
+        log_resource_id=proxy_id, log_resource_name=proxy.name,
+        node_ids=req.node_ids if req else None,
+        prefer_display_name=True,
+        log_status=None,
+        log_error_as_str=True,
+        no_nodes_message=f"DNS 代理 {proxy.name} 发布成功，但集群中没有活跃的 edge 节点",
     )
-
-    return edge_sync.build_publish_response(results, success_count, fail_count, len(active_nodes), f"DNS 代理 {proxy.name} ", new_version)
 
 
 @router.get("/{cluster_id}/dns-proxies/{proxy_id}/history", response_model=ConfigVersionListResponse)
@@ -250,16 +235,9 @@ async def get_dns_proxy_history(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_proxy_or_404(db, proxy_id, cluster_id, "DNS 代理不存在")
-    versions = (await db.execute(
-        select(ConfigVersion)
-        .where(ConfigVersion.resource_type == "stream_proxy", ConfigVersion.resource_id == proxy_id)
-        .order_by(ConfigVersion.version.desc())
-    )).scalars().all()
-
     proxy = await db.get(StreamProxy, proxy_id)
-    return ConfigVersionListResponse(
-        total=len(versions),
-        items=[ConfigVersionResponse.model_validate(v) for v in versions],
+    return await edge_sync.list_config_versions(
+        db, resource_type="stream_proxy", resource_id=proxy_id,
         current_version=proxy.current_version if proxy else None,
     )
 
@@ -301,11 +279,5 @@ async def delete_dns_proxy_history(
     history_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    config_version = await edge_sync.get_or_404(
-        db, ConfigVersion,
-        id=history_id, resource_type="stream_proxy", resource_id=proxy_id,
-        detail="历史版本不存在",
-    )
-    await db.delete(config_version)
-    await db.commit()
+    await edge_sync.delete_config_version(db, resource_type="stream_proxy", resource_id=proxy_id, history_id=history_id)
     return {"status": "ok", "message": "历史版本已删除"}

@@ -11,17 +11,20 @@ def _check_returns_contain_version(filepath: str, func_name: str):
     match = re.search(pattern, source, re.DOTALL)
     assert match, f"找不到函数 {func_name}"
     body = match.group(1)
-    # 检查 new_version 传入了 build_publish_response（重构后的模式）
-    # 或者 'version' 出现在 return 语句中（重构前的模式）
+    # 检查 new_version 传入了 build_publish_response（直接编排模式），
+    # 或者函数委托给 edge_sync.publish_resource（通用编排，内部保证调用
+    # build_publish_response 并透传 new_version），
+    # 或者 'version' 出现在 return 语句中（最早期模式）。
     has_build = "build_publish_response" in body
+    has_delegate = "edge_sync.publish_resource" in body or "publish_resource(" in body
     has_version_in_return = False
     for line in body.split("\n"):
         s = line.strip()
         if s.startswith("return ") and ("'version'" in s or '"version"' in s):
             has_version_in_return = True
             break
-    assert has_build or has_version_in_return, \
-        f"函数 {func_name} 既没有调用 build_publish_response(new_version)，也没有直接 return version"
+    assert has_build or has_delegate or has_version_in_return, \
+        f"函数 {func_name} 既没有调用 build_publish_response(new_version)，也没有委托 publish_resource，也没有直接 return version"
 
 
 UPSTREAMS = "app/api/v1/cluster_upstreams.py"
