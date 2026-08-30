@@ -26,4 +26,4 @@
 ## 4. 收尾
 
 - [x] 4.1 `git status` 确认仅预期文件；提交 `fix: 自启动持久化统一以实际输出为准——失败不覆盖最后已知状态、禁写操作期望值（含 4 回归用例）`（不含 db_config.json/prompt-1.txt）
-- [ ] 4.2 按 openspec-archive-change 流程归档本变更（delta specs 合入 main specs）
+- [x] 4.2 按 openspec-archive-change 流程归档本变更（delta specs 合入 main specs）
