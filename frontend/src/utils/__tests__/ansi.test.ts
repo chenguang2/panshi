@@ -42,3 +42,16 @@ describe('stripAnsi', () => {
     expect(text).toBe('ok line')
   })
 })
+
+describe('escapeHtml', () => {
+  it('escapes all HTML-significant characters', async () => {
+    const { escapeHtml } = await import('../ansi')
+    expect(escapeHtml(`<script>"x" & 'y'</script>`)).toBe(
+      '&lt;script&gt;&quot;x&quot; &amp; &#39;y&#39;&lt;/script&gt;',
+    )
+  })
+  it('leaves plain text untouched', async () => {
+    const { escapeHtml } = await import('../ansi')
+    expect(escapeHtml('nginx-upstream 集群A')).toBe('nginx-upstream 集群A')
+  })
+})

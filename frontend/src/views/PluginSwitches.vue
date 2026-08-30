@@ -5,9 +5,11 @@
     <!-- Status Bar -->
     <div class="switch-status-bar">
       <div class="ssb-left">
-        <span class="ssb-count">已启用 <strong>{{ totalEnabled }}</strong> / <strong>{{ allPlugins.length }}</strong> 个插件</span>
+        <span class="ssb-count"
+          >已启用 <strong>{{ totalEnabled }}</strong> / <strong>{{ allPlugins.length }}</strong> 个插件</span
+        >
       </div>
-      <div style="display:flex;gap:8px;">
+      <div style="display: flex; gap: 8px">
         <a-button size="small" @click="enableAll">全部启用</a-button>
         <a-button size="small" @click="disableAll">全部禁用</a-button>
       </div>
@@ -15,18 +17,15 @@
 
     <!-- Category Pills -->
     <div class="plugin-categories">
-      <span
-        class="plugin-cat"
-        :class="{ active: activeCategory === 'all' }"
-        @click="activeCategory = 'all'"
-      >全部</span>
+      <span class="plugin-cat" :class="{ active: activeCategory === 'all' }" @click="activeCategory = 'all'">全部</span>
       <span
         v-for="cat in categoryList"
         :key="cat.key"
         class="plugin-cat"
         :class="{ active: activeCategory === cat.key }"
         @click="activeCategory = cat.key"
-      >{{ cat.label }}</span>
+        >{{ cat.label }}</span
+      >
     </div>
 
     <!-- Filter Bar -->
@@ -34,7 +33,7 @@
       <div class="search-input-wrap">
         <a-input-search v-model:value="searchText" placeholder="搜索插件名称..." />
       </div>
-      <a-select v-model:value="statusFilter" style="width:120px;">
+      <a-select v-model:value="statusFilter" style="width: 120px">
         <a-select-option value="all">全部状态</a-select-option>
         <a-select-option value="enabled">已启用</a-select-option>
         <a-select-option value="disabled">已禁用</a-select-option>
@@ -76,18 +75,22 @@
               v-if="item.schema && item.schema !== '{}'"
               class="plugin-schema-toggle"
               @click="toggleSchema(item.plugin_name)"
-            >⚙ schema</span>
+              >⚙ schema</span
+            >
           </div>
           <label class="toggle">
-            <input type="checkbox" :checked="item.enabled" @change="(e) => toggleSwitch(item, (e.target as HTMLInputElement).checked)" />
+            <input
+              type="checkbox"
+              :checked="item.enabled"
+              @change="(e) => toggleSwitch(item, (e.target as HTMLInputElement).checked)"
+            />
             <span class="toggle-slider"></span>
           </label>
         </div>
 
-        <div
-          v-if="openSchemas[item.plugin_name]"
-          class="plugin-schema-box visible"
-        >{{ formatSchema(item.schema) }}</div>
+        <div v-if="openSchemas[item.plugin_name]" class="plugin-schema-box visible">
+          {{ formatSchema(item.schema) }}
+        </div>
       </div>
     </div>
 
@@ -99,13 +102,13 @@
 
     <!-- Custom Confirm Modal -->
     <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 420px;">
+      <div class="modal" style="max-width: 420px">
         <div class="modal-header">
           <h2>确认离开</h2>
           <button class="modal-close" @click="cancelLeave">&times;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">有未保存的更改，确定要离开吗？</p>
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">有未保存的更改，确定要离开吗？</p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="cancelLeave">取消</button>
@@ -116,7 +119,7 @@
 
     <!-- Custom Info Modal (success/warning) -->
     <div class="modal-overlay" :style="{ display: infoModal.visible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 480px;">
+      <div class="modal" style="max-width: 480px">
         <div class="modal-header">
           <h2>{{ infoModal.title }}</h2>
           <button class="modal-close" @click="infoModal.visible = false">&times;</button>
@@ -135,6 +138,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
+import { escapeHtml } from '@/utils/ansi'
 import PageHeader from '@/components/PageHeader.vue'
 
 interface PluginItem {
@@ -183,7 +187,7 @@ function getCategoryLabel(cat: string): string {
 }
 
 const filteredPlugins = computed(() => {
-  return allPlugins.value.filter(p => {
+  return allPlugins.value.filter((p) => {
     if (activeCategory.value !== 'all' && p.category !== activeCategory.value) return false
     if (statusFilter.value === 'enabled' && !p.enabled) return false
     if (statusFilter.value === 'disabled' && p.enabled) return false
@@ -196,7 +200,7 @@ const filteredPlugins = computed(() => {
   })
 })
 
-const totalEnabled = computed(() => allPlugins.value.filter(p => p.enabled).length)
+const totalEnabled = computed(() => allPlugins.value.filter((p) => p.enabled).length)
 const hasUnsavedChanges = computed(() => {
   if (allPlugins.value.length !== originalPlugins.value.length) return false
   return allPlugins.value.some((p, i) => p.enabled !== originalPlugins.value[i]?.enabled)
@@ -220,11 +224,15 @@ function formatSchema(schema?: string): string {
 }
 
 function enableAll() {
-  allPlugins.value.forEach(p => { p.enabled = true })
+  allPlugins.value.forEach((p) => {
+    p.enabled = true
+  })
 }
 
 function disableAll() {
-  allPlugins.value.forEach(p => { p.enabled = false })
+  allPlugins.value.forEach((p) => {
+    p.enabled = false
+  })
 }
 
 async function loadSwitches() {
@@ -234,9 +242,7 @@ async function loadSwitches() {
       api.get('/plugin-switches'),
       api.get('/plugins/builtin', { params: { all: 1 } }),
     ])
-    const existing = new Map<string, boolean>(
-      swRes.data.items.map((s: any) => [s.plugin_name, s.enabled])
-    )
+    const existing = new Map<string, boolean>(swRes.data.items.map((s: any) => [s.plugin_name, s.enabled]))
     allPlugins.value = builtinRes.data.plugins.map((p: any) => ({
       plugin_name: p.name,
       display_name: p.display_name || p.name,
@@ -245,7 +251,7 @@ async function loadSwitches() {
       schema: p.schema ? JSON.stringify(p.schema) : '{}',
       enabled: existing.has(p.name) ? existing.get(p.name)! : true,
     }))
-    originalPlugins.value = allPlugins.value.map(p => ({ ...p, schema: p.schema }))
+    originalPlugins.value = allPlugins.value.map((p) => ({ ...p, schema: p.schema }))
   } catch {
     message.error('加载插件列表失败')
   } finally {
@@ -256,20 +262,28 @@ async function loadSwitches() {
 async function saveSwitches() {
   saving.value = true
   try {
-    const res = await api.put('/plugin-switches', allPlugins.value.map(s => ({
-      plugin_name: s.plugin_name,
-      enabled: s.enabled,
-    })))
-    originalPlugins.value = allPlugins.value.map(p => ({ ...p, schema: p.schema }))
+    const res = await api.put(
+      '/plugin-switches',
+      allPlugins.value.map((s) => ({
+        plugin_name: s.plugin_name,
+        enabled: s.enabled,
+      })),
+    )
+    originalPlugins.value = allPlugins.value.map((p) => ({ ...p, schema: p.schema }))
     const warnings = res.data?.warnings
     if (warnings && warnings.length > 0) {
-      const warningHtml = warnings.map((w: any) => {
-        const refs = Object.entries(w.refs)
-          .filter(([, count]) => (count as number) > 0)
-          .map(([type, count]) => `${type === 'routes' ? '路由' : type === 'plugin_configs' ? '插件组' : '全局规则'}: ${count} 个`)
-          .join('，')
-        return `<div style="margin-bottom:8px;"><strong>${w.plugin}</strong>：${refs}</div>`
-      }).join('')
+      const warningHtml = warnings
+        .map((w: any) => {
+          const refs = Object.entries(w.refs)
+            .filter(([, count]) => (count as number) > 0)
+            .map(
+              ([type, count]) =>
+                `${type === 'routes' ? '路由' : type === 'plugin_configs' ? '插件组' : '全局规则'}: ${count} 个`,
+            )
+            .join('，')
+          return `<div style="margin-bottom:8px;"><strong>${escapeHtml(String(w.plugin))}</strong>：${refs}</div>`
+        })
+        .join('')
       infoModal.title = '插件引用警告'
       infoModal.htmlContent = `<p style="margin-bottom:12px;color:var(--muted);">以下插件已被禁用，但仍有配置引用：</p>${warningHtml}`
       infoModal.visible = true
@@ -320,7 +334,9 @@ onMounted(loadSwitches)
 </script>
 
 <style scoped>
-.plugin-switches { padding: 20px 24px; }
+.plugin-switches {
+  padding: 20px 24px;
+}
 
 .switch-status-bar {
   display: flex;
@@ -333,9 +349,18 @@ onMounted(loadSwitches)
   margin-bottom: 20px;
 }
 
-.ssb-left { display: flex; align-items: center; gap: 12px; }
-.ssb-count { font-size: 13px; color: var(--muted); }
-.ssb-count strong { font-family: var(--font-mono); }
+.ssb-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ssb-count {
+  font-size: 13px;
+  color: var(--muted);
+}
+.ssb-count strong {
+  font-family: var(--font-mono);
+}
 
 .plugin-categories {
   display: flex;
@@ -389,7 +414,10 @@ onMounted(loadSwitches)
   font-size: 14px;
 }
 
-.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+.empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
 
 .plugin-grid {
   display: grid;
@@ -403,7 +431,9 @@ onMounted(loadSwitches)
   border-radius: var(--radius-lg);
   padding: 16px 20px;
   box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s, border-color 0.2s;
+  transition:
+    box-shadow 0.2s,
+    border-color 0.2s;
   display: flex;
   flex-direction: column;
 }
@@ -413,7 +443,9 @@ onMounted(loadSwitches)
   box-shadow: var(--shadow-md);
 }
 
-.plugin-card.disabled-state { opacity: 0.55; }
+.plugin-card.disabled-state {
+  opacity: 0.55;
+}
 
 .plugin-card-header {
   display: flex;
@@ -422,7 +454,9 @@ onMounted(loadSwitches)
   margin-bottom: 10px;
 }
 
-.plugin-card-info { flex: 1; }
+.plugin-card-info {
+  flex: 1;
+}
 
 .plugin-card-name {
   font-size: 15px;
@@ -478,7 +512,9 @@ onMounted(loadSwitches)
   cursor: pointer;
 }
 
-.plugin-schema-toggle:hover { text-decoration: underline; }
+.plugin-schema-toggle:hover {
+  text-decoration: underline;
+}
 
 .plugin-schema-box {
   display: none;
@@ -494,7 +530,9 @@ onMounted(loadSwitches)
   white-space: pre-wrap;
 }
 
-.plugin-schema-box.visible { display: block; }
+.plugin-schema-box.visible {
+  display: block;
+}
 
 .switch-actions-save {
   display: flex;
@@ -512,9 +550,22 @@ onMounted(loadSwitches)
 }
 
 @media (max-width: 768px) {
-  .plugin-grid { grid-template-columns: 1fr; }
-  .plugin-filter-bar { flex-direction: column; align-items: stretch; }
-  .plugin-categories { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
-  .switch-status-bar { flex-direction: column; gap: 8px; align-items: stretch; }
+  .plugin-grid {
+    grid-template-columns: 1fr;
+  }
+  .plugin-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .plugin-categories {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+  .switch-status-bar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
 }
 </style>

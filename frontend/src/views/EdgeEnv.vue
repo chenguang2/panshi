@@ -2,12 +2,14 @@
   <div class="ee-page">
     <PageHeader title="edge.env 配置" description="远程读取、编辑和部署 Edge 网关的 edge.env 配置文件">
       <template #actions>
-        <button class="btn btn-primary" @click="startReadTemplate" :disabled="!selectedClusterId || !selectedNodeId || readStreaming">
+        <button
+          class="btn btn-primary"
+          @click="startReadTemplate"
+          :disabled="!selectedClusterId || !selectedNodeId || readStreaming"
+        >
           {{ readStreaming ? '读取中...' : '获取配置模板' }}
         </button>
-        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId">
-          发布
-        </button>
+        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId">发布</button>
         <button class="btn btn-secondary" @click="showVersionManagement" :disabled="!selectedClusterId">
           版本管理
         </button>
@@ -16,19 +18,25 @@
 
     <div class="ee-toolbar">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索集群名称..." class="form-input" @input="onSearch">
+        <input v-model="searchText" type="text" placeholder="搜索集群名称..." class="form-input" @input="onSearch" />
         <span class="search-icon">&#128269;</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width:140px;" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="selectedClusterId" class="form-input" style="width:160px;" @change="onClusterChange">
+      <select v-model="selectedClusterId" class="form-input" style="width: 160px" @change="onClusterChange">
         <option value="">请选择集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="selectedNodeId" class="form-input" style="width:240px;" @change="onNodeChange" :disabled="!nodes.length">
+      <select
+        v-model="selectedNodeId"
+        class="form-input"
+        style="width: 240px"
+        @change="onNodeChange"
+        :disabled="!nodes.length"
+      >
         <option value="">请选择节点</option>
         <option v-for="n in nodes" :key="n.id" :value="n.id" :class="{ 'ee-node-offline': n.status !== 1 }">
           {{ n.ip }}:{{ n.management_port }}{{ n.status === 1 ? '' : ' (离线)' }}
@@ -61,7 +69,7 @@
           <div v-if="readLogs.length > 0" class="ee-log-area">
             <div v-for="(log, i) in readLogs" :key="i" class="ee-log-line" v-html="ansiToHtml(log)"></div>
           </div>
-          <div v-if="readError" class="ee-node-error" style="margin-top:8px">{{ readError }}</div>
+          <div v-if="readError" class="ee-node-error" style="margin-top: 8px">{{ readError }}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeReadModal">关闭</button>
@@ -77,7 +85,7 @@
           <button class="modal-close" @click="onConfirmCancel">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="font-size:14px;padding:8px 0">{{ confirmContent }}</div>
+          <div style="font-size: 14px; padding: 8px 0">{{ confirmContent }}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="onConfirmCancel">取消</button>
@@ -94,7 +102,7 @@
           <button class="modal-close" @click="alertVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="font-size:14px;padding:8px 0">{{ alertContent }}</div>
+          <div style="font-size: 14px; padding: 8px 0">{{ alertContent }}</div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-primary" @click="alertVisible = false">确定</button>
@@ -128,31 +136,48 @@
           <button class="modal-close" @click="publishNodeModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted);">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 8px;
+              font-size: 12px;
+              color: var(--muted);
+            "
+          >
             <div>
-              <a style="cursor:pointer;margin-right:12px;color:var(--accent);" @click="selectAllPublishNodes">全选</a>
-              <a style="cursor:pointer;color:var(--accent);" @click="clearAllPublishNodes">取消全选</a>
+              <a style="cursor: pointer; margin-right: 12px; color: var(--accent)" @click="selectAllPublishNodes"
+                >全选</a
+              >
+              <a style="cursor: pointer; color: var(--accent)" @click="clearAllPublishNodes">取消全选</a>
             </div>
             <span>已选择 {{ selectedPublishNodeIds.length }} / {{ allNodes.length }} 个节点</span>
           </div>
           <div class="publish-node-list">
-            <div
-              v-for="n in allNodes"
-              :key="n.id"
-              class="publish-node-item"
-              @click="togglePublishNode(n)"
-            >
+            <div v-for="n in allNodes" :key="n.id" class="publish-node-item" @click="togglePublishNode(n)">
               <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" />
               <span class="publish-node-ip">{{ n.ip }}:{{ n.management_port }}</span>
               <span v-if="n.status !== 1" class="badge badge-neutral">离线</span>
               <span v-else class="badge badge-success">在线</span>
             </div>
           </div>
-          <div v-if="selectedPublishNodeIds.length === 0" style="color:var(--danger);font-size:12px;margin-top:8px">请至少选择一个节点</div>
+          <div
+            v-if="selectedPublishNodeIds.length === 0"
+            style="color: var(--danger); font-size: 12px; margin-top: 8px"
+          >
+            请至少选择一个节点
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="publishNodeModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="executePublish" :disabled="selectedPublishNodeIds.length === 0 || publishing">确认发布</button>
+          <button
+            class="btn btn-primary"
+            @click="executePublish"
+            :disabled="selectedPublishNodeIds.length === 0 || publishing"
+          >
+            确认发布
+          </button>
         </div>
       </div>
     </div>
@@ -172,7 +197,16 @@
           <div v-for="nodeResult in nodeResults" :key="nodeResult.ip" class="ee-node-card">
             <div class="ee-node-card-header">
               <span class="ee-node-card-ip">{{ nodeResult.ip }}</span>
-              <span class="badge" :class="nodeResult.status === 'success' ? 'badge-success' : nodeResult.status === 'failed' ? 'badge-danger' : 'badge-neutral'">
+              <span
+                class="badge"
+                :class="
+                  nodeResult.status === 'success'
+                    ? 'badge-success'
+                    : nodeResult.status === 'failed'
+                      ? 'badge-danger'
+                      : 'badge-neutral'
+                "
+              >
                 {{ nodeResult.status === 'success' ? '成功' : nodeResult.status === 'failed' ? '失败' : '发布中...' }}
               </span>
             </div>
@@ -182,8 +216,15 @@
             <div v-for="(log, i) in publishLogs" :key="i" class="ee-log-line" v-html="ansiToHtml(log)"></div>
           </div>
           <div v-if="publishResult" class="ee-deploy-result">
-            整体状态: <strong>{{ publishResult.status === 'all_success' ? '全部成功' : publishResult.status === 'all_failed' ? '全部失败' : '部分成功' }}</strong>
-            <span v-if="deploySummary" style="margin-left:8px;color:var(--muted);">
+            整体状态:
+            <strong>{{
+              publishResult.status === 'all_success'
+                ? '全部成功'
+                : publishResult.status === 'all_failed'
+                  ? '全部失败'
+                  : '部分成功'
+            }}</strong>
+            <span v-if="deploySummary" style="margin-left: 8px; color: var(--muted)">
               成功 {{ deploySummary.success }} / 失败 {{ deploySummary.failed }}
             </span>
           </div>
@@ -219,7 +260,7 @@ import { useInstallStream } from '@/composables/useInstallStream'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
-import { ansiToHtml } from '@/utils/ansi'
+import { ansiToHtml, escapeHtml } from '@/utils/ansi'
 
 const route = useRoute()
 
@@ -232,17 +273,17 @@ const searchText = ref('')
 const groupFilter = ref('__all__')
 
 const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  const names = new Set(clusters.value.map((c) => c.group_name || ''))
   return Array.from(names).filter(Boolean).sort()
 })
 
 const filteredClusters = computed(() => {
   let list = clusters.value
-  if (groupFilter.value === '__ung__') list = list.filter(c => !c.group_name)
-  else if (groupFilter.value !== '__all__') list = list.filter(c => c.group_name === groupFilter.value)
+  if (groupFilter.value === '__ung__') list = list.filter((c) => !c.group_name)
+  else if (groupFilter.value !== '__all__') list = list.filter((c) => c.group_name === groupFilter.value)
   if (searchText.value) {
     const q = searchText.value.toLowerCase()
-    list = list.filter(c => (c.display_name || c.name).toLowerCase().includes(q))
+    list = list.filter((c) => (c.display_name || c.name).toLowerCase().includes(q))
   }
   return list
 })
@@ -266,7 +307,9 @@ function showConfirm(opts: { title: string; content: string; okText?: string }):
   confirmContent.value = opts.content
   confirmOkText.value = opts.okText || '确认'
   confirmVisible.value = true
-  return new Promise((resolve) => { confirmResolve = resolve })
+  return new Promise((resolve) => {
+    confirmResolve = resolve
+  })
 }
 function onConfirmOk() {
   confirmVisible.value = false
@@ -316,7 +359,10 @@ const deploySummary = computed(() => {
   const failed = results.filter((r: any) => r.status === 'failed').length
   return { success, failed }
 })
-onUnmounted(() => { installStream.cancel(); readAbort?.abort() })
+onUnmounted(() => {
+  installStream.cancel()
+  readAbort?.abort()
+})
 
 const noActiveNodes = computed(() => {
   if (!selectedClusterId.value) return false
@@ -328,7 +374,7 @@ function onSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => {
     if (selectedClusterId.value) {
-      const stillInList = filteredClusters.value.find(c => c.id === Number(selectedClusterId.value))
+      const stillInList = filteredClusters.value.find((c) => c.id === Number(selectedClusterId.value))
       if (!stillInList) {
         selectedClusterId.value = ''
         selectedNodeId.value = ''
@@ -372,7 +418,9 @@ async function loadClusters() {
 async function loadNodes() {
   if (!selectedClusterId.value) return
   try {
-    const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
+    const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, {
+      params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
+    })
     allNodes.value = res.data.items || []
     nodes.value = allNodes.value
   } catch {
@@ -385,7 +433,7 @@ async function onClusterChange() {
   editorContent.value = ''
   errorMsg.value = ''
   selectedNodeId.value = ''
-  const cluster = clusters.value.find(c => c.id === Number(selectedClusterId.value))
+  const cluster = clusters.value.find((c) => c.id === Number(selectedClusterId.value))
   selectedClusterName.value = cluster?.display_name || cluster?.name || String(selectedClusterId.value)
   await loadNodes()
   if (nodes.value.length > 0) {
@@ -468,9 +516,11 @@ function validateFields(content: string): string | null {
     if (!parsed.deploy) return '缺少必填字段: deploy'
     if (!parsed.deploy.http) return '缺少必填字段: deploy → http'
     const edgeListen = parsed.deploy.http.edge?.listen
-    if (!Array.isArray(edgeListen) || edgeListen.length === 0) return '缺少必填字段或为空: deploy → http → edge → listen'
+    if (!Array.isArray(edgeListen) || edgeListen.length === 0)
+      return '缺少必填字段或为空: deploy → http → edge → listen'
     const adminListen = parsed.deploy.http.admin?.listen
-    if (!Array.isArray(adminListen) || adminListen.length === 0) return '缺少必填字段或为空: deploy → http → admin → listen'
+    if (!Array.isArray(adminListen) || adminListen.length === 0)
+      return '缺少必填字段或为空: deploy → http → admin → listen'
   } catch {
     return 'YAML 格式解析失败'
   }
@@ -508,13 +558,12 @@ function computeDiff() {
   diffHtml.value = html
 }
 
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 function onPublishClick() {
   if (!selectedClusterId.value) return
-  if (!allNodes.value.length) { showAlert('提示', '该集群下没有节点'); return }
+  if (!allNodes.value.length) {
+    showAlert('提示', '该集群下没有节点')
+    return
+  }
 
   // Empty content check
   if (!editorContent.value || !editorContent.value.trim()) {
@@ -573,7 +622,7 @@ async function executePublish() {
         if (data.type === 'node_start') {
           nodeResults.value.push({ ip: data.ip, status: 'deploying', logs: [] })
         } else if (data.type === 'node_done') {
-          const nr = nodeResults.value.find(n => n.ip === data.ip)
+          const nr = nodeResults.value.find((n) => n.ip === data.ip)
           if (nr) nr.status = data.status === 'success' ? 'success' : 'failed'
         } else if (data.type === 'complete') {
           publishResult.value = data
@@ -581,9 +630,13 @@ async function executePublish() {
           message.success('发布完成')
           installStream.forceComplete()
         }
-      } catch { /* ansible log text */ }
+      } catch {
+        /* ansible log text */
+      }
     },
-    onProgress() { /* no-op */ },
+    onProgress() {
+      /* no-op */
+    },
     onComplete(rc, _status) {
       // 兜底：仅在流异常结束时（未收到 complete 事件）设置状态。
       // rc==0 的中途节点事件不设 publishResult（整体成败由 complete 事件权威判定），
@@ -618,31 +671,148 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 </script>
 
 <style scoped>
-.ee-page { padding: 20px 24px; }
-.ee-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-.ee-filter-group { display: flex; align-items: center; gap: 6px; }
-.ee-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
-.ee-select { width: 200px; }
-.ee-empty { text-align: center; padding: 60px 0; }
-.ee-empty-text { font-size: 14px; color: var(--muted); }
-.ee-editor-area { margin-top: 0; }
-.ee-diff { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px; max-height: 400px; overflow: auto; }
-.ee-diff-empty { text-align: center; padding: 20px; color: var(--muted); }
-.ee-deploying { text-align: center; padding: 40px 0; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.ee-spinner { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-.ee-node-offline { color: var(--danger); }
-@keyframes spin { to { transform: rotate(360deg); } }
-.ee-node-card { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 12px; margin-bottom: 8px; }
-.ee-node-card-header { display: flex; align-items: center; justify-content: space-between; }
-.ee-node-card-ip { font-family: var(--font-mono); font-weight: 600; }
-.ee-node-error { margin-top: 8px; font-size: 12px; color: var(--danger); font-family: var(--font-mono); }
-.ee-deploy-result { margin-top: 12px; padding: 8px; text-align: center; font-size: 14px; }
-.ee-log-area { margin-top: 12px; max-height: 300px; overflow-y: auto; background: #1a1a2e; border-radius: 4px; padding: 8px; font-family: var(--font-mono); font-size: 11px; }
-.ee-log-line { color: #a0d2ff; padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
-.loading-state { text-align: center; padding: 60px 0; color: var(--muted); }
-.publish-node-list { max-height: 400px; overflow-y: auto; }
-.publish-node-item { display: flex; align-items: center; gap: 8px; padding: 8px 4px; cursor: pointer; border-bottom: 1px solid var(--border); }
-.publish-node-item:hover { background: var(--bg); }
-.publish-node-item.disabled { opacity: 0.5; cursor: not-allowed; }
-.publish-node-ip { font-family: var(--font-mono); flex: 1; }
+.ee-page {
+  padding: 20px 24px;
+}
+.ee-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.ee-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ee-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ee-select {
+  width: 200px;
+}
+.ee-empty {
+  text-align: center;
+  padding: 60px 0;
+}
+.ee-empty-text {
+  font-size: 14px;
+  color: var(--muted);
+}
+.ee-editor-area {
+  margin-top: 0;
+}
+.ee-diff {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 400px;
+  overflow: auto;
+}
+.ee-diff-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--muted);
+}
+.ee-deploying {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.ee-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.ee-node-offline {
+  color: var(--danger);
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ee-node-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.ee-node-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ee-node-card-ip {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.ee-node-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--danger);
+  font-family: var(--font-mono);
+}
+.ee-deploy-result {
+  margin-top: 12px;
+  padding: 8px;
+  text-align: center;
+  font-size: 14px;
+}
+.ee-log-area {
+  margin-top: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #1a1a2e;
+  border-radius: 4px;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.ee-log-line {
+  color: #a0d2ff;
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.loading-state {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--muted);
+}
+.publish-node-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.publish-node-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.publish-node-item:hover {
+  background: var(--bg);
+}
+.publish-node-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.publish-node-ip {
+  font-family: var(--font-mono);
+  flex: 1;
+}
 </style>

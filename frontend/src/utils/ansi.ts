@@ -42,7 +42,7 @@ const VISIBLE_ANSI_RE = /\[(\d+(?:;\d+)*)m/g
 /**
  * HTML 转义特殊字符，防止 XSS
  */
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
