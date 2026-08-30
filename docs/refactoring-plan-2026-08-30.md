@@ -10,7 +10,7 @@
 > **实施状态（2026-08-30）**：7A 死代码已提交（6364c76，stash 对照确认失败集=基线）；
 > 7B 安全已提交（89fac27：auth safeParse+3 单测、PluginSwitches 转义、escapeHtml 收敛单实现；
 > Tools.vue diff 核验已转义；可选 JWT 8h 未做，留待决策）；7D vite 分包已提交（50a1339：
-> 入口 index 1540→55.5 kB，E2E 全量 91 绿）；7C（useClusterUtils 拆分）用户指定跳过。
+> 入口 index 1540→55.5 kB，E2E 全量 91 绿）；7C（useClusterUtils 拆分）**经讨论决定取消**——理由与触发条件见 R1 决策记录。
 
 ## 0. 执行摘要
 
@@ -22,7 +22,7 @@ v1 之后代码库健康度进一步提高，本轮排查确认**无 P0 级问�
 |---|---|---|
 | P1 | PluginSwitches `warningHtml` 未转义拼接后端数据（v-html 注入面） | 7B 修复 |
 | P1 | `stores/auth.ts` 对 localStorage 损坏 JSON 直接 `JSON.parse`，启动即崩溃（v1 S5 遗留） | 7B 修复 |
-| P2 | `useClusterUtils.ts` 843 行 / 15 导出 / 4 类职责混杂（v1 A2 遗留且膨胀 +122 行） | 7C 拆分 |
+| P2 | `useClusterUtils.ts` 843 行 / 15 导出 / 4 类职责混杂（v1 A2 遗留且膨胀 +122 行） | **已取消**（维持单文件，触发条件见 R1 决策） |
 | P2 | 死代码 3 处（FilterChip / MethodTag / api/dnsProxy.ts） | 7A 删除 |
 | P3 | CentralList 调试 console.log 残留 | 7A 清理 |
 | P3 | vite 无 manualChunks 分包 | 7D 评估 |
@@ -50,7 +50,23 @@ v1 之后代码库健康度进一步提高，本轮排查确认**无 P0 级问�
 
 ## 2. 函数合并与代码治理（Phase 7C）
 
-### R1 `useClusterUtils.ts` 拆分（843 行 → 4 文件）
+### R1 `useClusterUtils.ts` 拆分 —— **决策：不拆（2026-08-30）**
+
+> **决策记录**：经讨论取消本项。核心依据：本仓库主要由 LLM 会话维护，文件边界的正确切分维度是
+> **"会话读取的原子单位"** 而非"职责的哲学分类"。单文件 843 行 ≈ 8k tokens，一次 read 获得完整上下文
+> （共享的 AppModal/进度/错误基础设施尽收眼前）；拆成 4 文件后每个新会话从零开始，漏读 helper 与间接层
+> （shim + 多 import 路径）成本上升、真实 token 开销反而更高，且删除/发布/批量三流程共享 modal 基础设施，
+> 切开后只能复制 plumbing 或互相 import，两头变差。本文件还是 Phase 4 合并的产物（memory #30
+> "新资源一律基于这两个工厂"依赖其单点可发现性），拆回去等于稀释刚做的合并决策。
+>
+> **重启触发条件**（满足任一再评估，映射表可作起点）：
+> 1. 文件突破 ~1500 行，或出现与既有流程**零共享代码**的新职责；
+> 2. 团队引入非 LLM 协作者，或小上下文子代理成为主要维护方式；
+> 3. 某次跨切面修改实际发生"连续读 3+ 相邻文件才能安全下笔"的定位成本。
+>
+> **替代动作（已含在本决策内，低优先）**：保留 4 段 section banner，文件头补一份导出清单 TOC 注释即可。
+
+以下为原拆分方案（若触发重启则参照执行）：
 
 现状导出清单（`grep -n '^export'` 实测）分四类职责：
 
@@ -130,7 +146,7 @@ v1 已统一：弹窗体系（AppModal + useOverlayModal，memory #31）、发�
 - API 层：`api/index.ts` 单实例 + 请求/响应拦截器（401 统一登出跳转），按资源分模块（AGENTS.md 约定 #6），达标。
 - 状态管理：Pinia（auth/theme/features），列表状态全部在 composable 工厂内（memory #30），无散落。
 - 后端：发布/版本/回滚编排单实现（memory #21）、权限依赖工厂（memory #28）、审计单入口 `log_audit`，达标。
-- 唯一遗留 = R1 大文件拆分（治理问题，非架构问题）。
+- 唯一遗留 = R1 大文件拆分（已决策取消，维持单文件，见 R1 决策记录）。
 
 ## 5. 安全加固（Phase 7B）
 
@@ -154,8 +170,8 @@ v1 已统一：弹窗体系（AppModal + useOverlayModal，memory #31）、发�
 ## 7. 工程化建设
 
 v1 Phase 5 已建立 ESLint flat config + Prettier + husky + lint-staged（memory #27），本轮用户管理改动全程走该管线验证。
-新增要求仅一条：R1 拆分产出的 `useDeleteFlow/usePublishFlow/useBatchModal` 必须带等价迁移单测（现 `useClusterUtils*.test.ts` 拆随），
-保持「工厂逻辑必有单测」基线。TypeScript 评估项（模板 any 474）见 R4，维持增量策略。
+~~新增要求仅一条：R1 拆分产出的 `useDeleteFlow/usePublishFlow/useBatchModal` 必须带等价迁移单测~~（随 R1 取消而失效；若重启拆分，此要求恢复）。
+「工厂逻辑必有单测」基线维持。TypeScript 评估项（模板 any 474）见 R4，维持增量策略。
 
 ## 8. 可维护性提升
 
@@ -170,12 +186,12 @@ v1 Phase 5 已建立 ESLint flat config + Prettier + husky + lint-staged（memor
 |---|---|---|---|---|
 | 7A 死代码 | D1–D4 删除 | 0.5h | 极低 | `vue-tsc -b` + 全量 vitest + `npm run build` |
 | 7B 安全 | U1 auth 崩溃保护、U2 PluginSwitches 转义、（可选 S2 生产 JWT 8h） | 1h | 低 | 新增单测 ×3（损坏 JSON 回退 ×2、escapeHtml 生效 ×1）+ E2E 全量（登录流必测：`e2e/login.spec.ts`、`user.spec.ts`）；手工验证登录页在 localStorage 被塞垃圾串时可正常进入 |
-| 7C 治理 | R1 拆分（re-export shim 渐进迁移） | 2–4h | **中**：弹窗进度类函数与测试契约耦合（memory #22/#31 先例）；shim 阶段可分多次提交 | 每挪一类跑一次 vitest 全量；`useClusterUtils.test.ts` 断言全部随迁不删；Playwright 覆盖发布/删除进度弹窗的 spec（routes/upstreams）全绿为完成门 |
+| ~~7C 治理~~ | ~~R1 拆分~~ **已取消**（决策与触发条件见 R1 决策记录） | — | — | — |
 | 7D 性能 | P2 vite manualChunks + 产物分析 | 1h | 低 | `npm run build` 产物对比（dist 尺寸 + 首屏 chunk 数）+ E2E 全量回归 |
 
 **总体风险点**：
 
-1. R1 是本轮唯一中等风险项——`showDeleteConfirm/showBatchResultModal` 等被 8+ 视图经共享工具链间接引用，务必用 shim 保证 import 路径兼容，禁止一次性改全部调用方。
+1. ~~R1 是本轮唯一中等风险项~~（R1 已取消，风险项随闭；若按触发条件重启，原约束仍然有效：`showDeleteConfirm/showBatchResultModal` 等被 8+ 视图间接引用，务必用 shim 保证 import 兼容，禁止一次性改全部调用方）。
 2. 7B 触碰认证 store——修改后必须手工走一遍「登录 → 刷新页面 → 退出」闭环，防止权限 store 初始化时序问题（features store 加载顺序在 auth 之后，参考 `main.ts` 挂载序）。
 3. 每阶段独立 commit，出问题按阶段回滚；不做跨阶段混合提交（对齐仓库 `type: 中文描述` 风格）。
 4. 不做项（R2/R3/S2 大改/P3 虚拟滚动）如需重启，须有新的性能/工单证据，防止范围蔓延。
