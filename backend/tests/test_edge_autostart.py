@@ -207,3 +207,127 @@ def test_autostart_records_read(db_env):
             assert resp.status_code == 200
             items = resp.json() if isinstance(resp.json(), list) else resp.json().get("items", [])
             assert any(it["node_id"] == 1 and it["status"] == "enabled" for it in items)
+
+
+# ── fix-autostart-perm-status：统一持久化规则（以内容为准 + 失败不覆盖）──────────
+
+def _seed_autostart_row(S, status, node_id=1, cluster_id=1):
+    """预置 ps_node_autostart 行。"""
+    from app.models.autostart import NodeAutostart
+
+    async def _s():
+        async with S() as s:
+            s.add(NodeAutostart(node_id=node_id, cluster_id=cluster_id, status=status,
+                                action="enable", command="sshpass -p ***** ssh ...", rc=0))
+            await s.commit()
+    asyncio.run(_s())
+
+
+def _fetch_autostart_rows(S):
+    from sqlalchemy import select
+    from app.models.autostart import NodeAutostart
+
+    async def _f():
+        async with S() as s:
+            return (await s.execute(select(NodeAutostart))).scalars().all()
+    return asyncio.run(_f())
+
+
+def _fake_ssh_result(**kw):
+    async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
+        return {"status": "successful" if kw.get("rc", -1) == 0 else "failed",
+                "command": f"ssh root@{ip} systemctl is-enabled edge", **kw}
+    return fake_autostart
+
+
+def test_failed_status_query_preserves_last_known_state(db_env):
+    """1.1 无权限查询（permission_denied）不得覆盖库中最后已知真实态。"""
+    from app.api.v1 import edge_autostart as mod
+
+    app, S, AUTH = db_env
+    _seed_autostart_row(S, "disabled")
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart",
+                     side_effect=_fake_ssh_result(rc=126, stdout="",
+                                                  stderr="bash: /usr/bin/systemctl: 权限不够")),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart", json={"action": "status"})
+            assert resp.status_code == 200
+
+    rows = _fetch_autostart_rows(S)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.status == "disabled", f"失败查询覆盖了最后已知真实态: {row.status}"
+    assert row.action == "status"
+    assert row.rc == 126
+
+
+def test_failed_enable_preserves_last_known_state(db_env):
+    """1.2 enable 失败（SSH rc=255 无有效输出）不得把已知真实态抹成 unknown。"""
+    from app.api.v1 import edge_autostart as mod
+
+    app, S, AUTH = db_env
+    _seed_autostart_row(S, "enabled")
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart",
+                     side_effect=_fake_ssh_result(rc=255, stdout="",
+                                                  stderr="Permission denied (publickey,password).")),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart",
+                          json={"action": "enable", "root_password": "secret123"})
+            assert resp.status_code == 200
+
+    row = _fetch_autostart_rows(S)[0]
+    assert row.status == "enabled", f"失败的 enable 抹掉了已知状态: {row.status}"
+    assert row.action == "enable"
+    assert row.rc == 255
+
+
+def test_disable_false_success_records_actual_state(db_env):
+    """1.3 disable 命令因 || true 恒 rc=0，但 is-enabled 实际输出 enabled 时，
+    库必须记录实际值（不得写操作期望值 disabled）。"""
+    from app.api.v1 import edge_autostart as mod
+
+    app, S, AUTH = db_env
+    _seed_autostart_row(S, "enabled")
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart",
+                     side_effect=_fake_ssh_result(rc=0, stdout="enabled", stderr="")),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart",
+                          json={"action": "disable", "root_password": "secret123"})
+            assert resp.status_code == 200
+
+    row = _fetch_autostart_rows(S)[0]
+    assert row.status == "enabled", f"写入了操作期望值而非实际输出: {row.status}"
+    assert row.action == "disable"
+
+
+def test_status_query_real_output_updates_despite_rc1(db_env):
+    """1.4 判据是输出内容而非 rc：is-enabled 对 disabled 合法返回 rc=1，
+    推导出真实态必须正常刷新（重构中不得回退此行为）。"""
+    from app.api.v1 import edge_autostart as mod
+
+    app, S, AUTH = db_env
+    _seed_autostart_row(S, "enabled")
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart",
+                     side_effect=_fake_ssh_result(rc=1, stdout="disabled", stderr="")),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart", json={"action": "status"})
+            assert resp.status_code == 200
+
+    row = _fetch_autostart_rows(S)[0]
+    assert row.status == "disabled", f"rc=1 的真实输出未刷新: {row.status}"

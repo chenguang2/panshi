@@ -7,6 +7,7 @@ status uses the inventory non-root connection.
 
 import getpass
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -28,6 +29,7 @@ from app.services.ansible_service import (
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/nodes", tags=["nodes-autostart"], dependencies=[Depends(require_permission('edge_autostart'))])
+logger = logging.getLogger(__name__)
 
 _ansible_service = AnsibleRunnerService()
 
@@ -67,6 +69,11 @@ def _infer_status(rc: int, stdout: str, stderr: str = "") -> str:
     if "permission denied" in out.lower() or "not been booted with systemd" in out.lower() or "权限不够" in out:
         return "permission_denied"
     return "unknown"
+
+
+# 从命令实际输出可推导出的"真实态"；其余（permission_denied/unknown）为失败推导，
+# 不得覆盖已持久化的真实态（见 fix-autostart-perm-status design D1）。
+_REAL_STATES = ("enabled", "disabled", "not_configured")
 
 
 @router.get("/autostart/defaults")
@@ -184,16 +191,19 @@ async def node_autostart(
         # yield 处 aclose() 生成器，yield 之后的代码永不执行（状态因此从未持久化，
         # 刷新页面后回到"未知"）。
         try:
-            from sqlalchemy import select
-            if body.action == "status":
-                stored_status = _infer_status(rc, result.get("stdout", ""), result.get("stderr", ""))
-            elif rc == 0:
-                stored_status = "enabled" if body.action == "enable" else "disabled"
-            else:
-                stored_status = "unknown"
+            # 统一持久化规则（fix-autostart-perm-status）：状态只信命令实际输出，
+            # 不信 action 期望值（disable 命令 || true 恒 rc=0）也不信 rc（is-enabled
+            # 对 disabled 合法 rc=1）。未推导 out真实态时保留原值，失败仅记 action/rc。
+            inferred = _infer_status(rc, result.get("stdout", ""), result.get("stderr", ""))
             existing = (await db.execute(
                 select(NodeAutostart).where(NodeAutostart.node_id == node.id)
             )).scalar_one_or_none()
+            if inferred in _REAL_STATES:
+                stored_status = inferred
+            elif existing and existing.status in _REAL_STATES:
+                stored_status = existing.status
+            else:
+                stored_status = inferred
             if existing is None:
                 db.add(NodeAutostart(
                     node_id=node.id, cluster_id=node.cluster_id,
@@ -208,8 +218,8 @@ async def node_autostart(
                 existing.rc = rc
             await db.commit()
         except Exception:
-            # 写库失败不影响操作结果返回
-            pass
+            # 写库失败不影响操作结果返回，但必须留痕（历史上曾静默吞异常致排查困难）
+            logger.exception("autostart 持久化失败 node_id=%s action=%s", node.id, body.action)
 
         yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
 
