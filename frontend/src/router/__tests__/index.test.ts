@@ -15,9 +15,11 @@ describe('Router', () => {
     }
   })
 
-  it('has /dns-queries route registered', async () => {
-    const routes = (await import('../index')).default.getRoutes()
-    const names = routes.map((r: any) => r.name)
-    expect(names).toContain('DnsQueryList')
+  it('has /dns-queries route registered in feature route map (dynamic registration)', async () => {
+    const { featureRouteMap } = await import('../index')
+    const found = Object.values(featureRouteMap)
+      .flat()
+      .some((r: unknown) => (r as { name?: string }).name === 'DnsQueryList')
+    expect(found).toBe(true)
   })
 })

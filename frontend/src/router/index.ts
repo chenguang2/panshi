@@ -101,6 +101,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/DatabaseManagement.vue'),
     meta: { permission: 'database_management' },
   },
+  clickhouse_config: {
+    path: 'clickhouse-config',
+    name: 'ClickHouseConfig',
+    component: () => import('@/views/ClickHouseConfig.vue'),
+    meta: { permission: 'clickhouse_config' },
+  },
 }
 
 // ── Static routes (always registered) ─────────────────────────────────

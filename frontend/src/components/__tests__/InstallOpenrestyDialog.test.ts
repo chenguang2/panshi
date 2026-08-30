@@ -6,11 +6,11 @@ const mockApiGet = vi.fn()
 vi.mock('@/api', () => ({
   default: {
     get: (...args: any[]) => mockApiGet(...args),
-  }
+  },
 }))
 
 function flush() {
-  return new Promise(r => setTimeout(r, 100))
+  return new Promise((r) => setTimeout(r, 100))
 }
 
 const MOCK_FILES = [
@@ -22,13 +22,18 @@ const MOCK_NODE = { ip: '192.168.1.100', openresty_path: '/data/openresty', clus
 
 async function createWrapper(props = {}) {
   const Dialog = (await import('../InstallOpenrestyDialog.vue')).default
-  return mount(Dialog, {
-    props: { visible: true, node: MOCK_NODE, clusterId: 1, ...props },
+  // 组件经 watch(visible) 触发取数（真实流程是弹窗从隐藏打开），需 false→true 驱动
+  const wrapper = mount(Dialog, {
+    props: { visible: false, node: MOCK_NODE, clusterId: 1 },
   })
+  await wrapper.setProps({ visible: true, ...props })
+  return wrapper
 }
 
 describe('InstallOpenrestyDialog.vue', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it('renders title and node info', async () => {
     mockApiGet.mockResolvedValue({ data: { files: MOCK_FILES } })
@@ -60,10 +65,12 @@ describe('InstallOpenrestyDialog.vue', () => {
     await flush()
     ;(wrapper.vm as any).selectedFile = 'openresty-edge-26071515.tar.gz'
     await wrapper.vm.$nextTick()
-    const btn = wrapper.findAll('button').filter(w => w.text().includes('开始安装'))
+    const btn = wrapper.findAll('button').filter((w) => w.text().includes('开始安装'))
     await btn[0].trigger('click')
     expect(wrapper.emitted('confirm')![0][0]).toEqual({
-      node: MOCK_NODE, clusterId: 1, openrestyFile: 'openresty-edge-26071515.tar.gz',
+      node: MOCK_NODE,
+      clusterId: 1,
+      openrestyFile: 'openresty-edge-26071515.tar.gz',
     })
   })
 
@@ -72,7 +79,7 @@ describe('InstallOpenrestyDialog.vue', () => {
     const wrapper = await createWrapper()
     await flush()
     expect(wrapper.text()).toContain('未找到 OpenResty 安装包')
-    const btn = wrapper.findAll('button').filter(w => w.text().includes('开始安装'))
+    const btn = wrapper.findAll('button').filter((w) => w.text().includes('开始安装'))
     expect((btn[0].element as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -80,7 +87,7 @@ describe('InstallOpenrestyDialog.vue', () => {
     mockApiGet.mockResolvedValue({ data: { files: MOCK_FILES } })
     const wrapper = await createWrapper()
     await flush()
-    const btn = wrapper.findAll('button').filter(w => w.text().includes('取消'))
+    const btn = wrapper.findAll('button').filter((w) => w.text().includes('取消'))
     await btn[0].trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
   })

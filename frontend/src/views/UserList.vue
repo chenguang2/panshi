@@ -457,6 +457,7 @@ const permissionKeyToLabel: Record<string, string> = {
   ansible_inventory: 'Ansible 主机清单',
   task_center: '节点任务',
   database_management: '数据库管理',
+  clickhouse_config: 'ClickHouse 配置',
 }
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
@@ -553,7 +554,10 @@ const permissionGroups = computed(() => {
     },
     {
       title: '系统管理',
-      items: [{ key: 'database_management', label: '数据库管理' }],
+      items: [
+        { key: 'database_management', label: '数据库管理' },
+        { key: 'clickhouse_config', label: 'ClickHouse 配置' },
+      ],
     },
     {
       title: '运维管理',

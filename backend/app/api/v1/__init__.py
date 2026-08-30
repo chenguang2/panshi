@@ -17,6 +17,7 @@ from app.api.v1 import (
     edge_autostart,
     database,
     ansible_inventory,
+    clickhouse_config,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -46,6 +47,7 @@ api_router.include_router(cluster_export.router)
 api_router.include_router(cluster_backup.router)
 api_router.include_router(plugin_metadata.router)
 api_router.include_router(cluster_stream_proxies.global_router)
+api_router.include_router(clickhouse_config.router)
 
 # ── Combined router for SSL (router + global_router share the same feature gate) ──
 ssl_router = APIRouter()

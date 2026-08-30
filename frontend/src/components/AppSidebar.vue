@@ -316,7 +316,10 @@ const navSections = computed<NavSection[]>(() => {
     {
       title: '系统管理',
       // 管理员始终可见；普通用户持有 database_management 权限时可见数据库管理
-      visible: authStore.user?.role === 'admin' || authStore.hasPermission('database_management'),
+      visible:
+        authStore.user?.role === 'admin' ||
+        authStore.hasPermission('database_management') ||
+        authStore.hasPermission('clickhouse_config'),
       items: [
         {
           label: '插件开关',
@@ -331,6 +334,12 @@ const navSections = computed<NavSection[]>(() => {
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>',
           permission: 'database_management',
           feature: 'database_management',
+        },
+        {
+          label: 'ClickHouse 配置',
+          route: '/clickhouse-config',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5l7-3 7 3-7 3-7-3z"/><path d="M2 5v8l7 3 7-3V5"/><path d="M9 8v8"/></svg>',
+          permission: 'clickhouse_config',
         },
         {
           label: '用户管理',

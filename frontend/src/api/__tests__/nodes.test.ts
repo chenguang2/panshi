@@ -11,7 +11,7 @@ vi.mock('@/api', () => ({
     post: (...args: any[]) => mockApiPost(...args),
     put: (...args: any[]) => mockApiPut(...args),
     delete: (...args: any[]) => mockApiDelete(...args),
-  }
+  },
 }))
 
 describe('nodes API module', () => {
@@ -23,29 +23,43 @@ describe('nodes API module', () => {
     mockApiGet.mockResolvedValue({ data: { total: 0, page: 1, page_size: 20, items: [] } })
     const { listNodes } = await import('../nodes')
     await listNodes({ page: 1, pageSize: 20 })
-    expect(mockApiGet).toHaveBeenCalledWith('/nodes', { params: { page: 1, page_size: 20 } })
+    expect(mockApiGet).toHaveBeenCalledWith('/nodes', { params: { page: 1, page_size: 20, group_name: '__all__' } })
   })
 
   it('listNodes forwards cluster_id filter', async () => {
     mockApiGet.mockResolvedValue({ data: { total: 0, page: 1, page_size: 20, items: [] } })
     const { listNodes } = await import('../nodes')
     await listNodes({ clusterId: 2 })
-    expect(mockApiGet).toHaveBeenCalledWith('/nodes', { params: { cluster_id: 2, page: 1, page_size: 20 } })
+    expect(mockApiGet).toHaveBeenCalledWith('/nodes', {
+      params: { cluster_id: 2, page: 1, page_size: 20, group_name: '__all__' },
+    })
   })
 
   it('listNodes forwards search and status filters', async () => {
     mockApiGet.mockResolvedValue({ data: { total: 0, page: 1, page_size: 20, items: [] } })
     const { listNodes } = await import('../nodes')
     await listNodes({ search: '10.0', status: 1 })
-    expect(mockApiGet).toHaveBeenCalledWith('/nodes', { params: { search: '10.0', status: 1, page: 1, page_size: 20 } })
+    expect(mockApiGet).toHaveBeenCalledWith('/nodes', {
+      params: { search: '10.0', status: 1, page: 1, page_size: 20, group_name: '__all__' },
+    })
   })
 
   it('createNode calls POST /clusters/{clusterId}/nodes', async () => {
     mockApiPost.mockResolvedValue({ data: { id: 1 } })
     const { createNode } = await import('../nodes')
-    await createNode(1, { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1 })
+    await createNode(1, {
+      ip: '10.0.0.1',
+      service_port: 80,
+      management_port: 9180,
+      edge_path: '/usr/local/edge',
+      status: 1,
+    })
     expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes', {
-      ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/usr/local/edge', status: 1,
+      ip: '10.0.0.1',
+      service_port: 80,
+      management_port: 9180,
+      edge_path: '/usr/local/edge',
+      status: 1,
     })
   })
 
