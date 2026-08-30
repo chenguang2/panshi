@@ -55,8 +55,11 @@ cd frontend && npm run build
 |---|---|---|
 | 后端 | 12344 | `develop/linux/start.sh` 指定 |
 | 前端 | 12345 | start.sh 指定 |
+| E2E Vite | 9100 | Playwright 自起第二个 dev server（baseURL=http://localhost:9100），代理 /api 到 12344 |
 
 Vite 代理将 `/api` 请求转发到 `localhost:12344`（读取 `backend/.port` 文件，缺省 12344）。
+
+**日志位置**：应用日志 `backend/logs/app.log`（level=WARNING）；uvicorn 访问/stdout `backend.log`、前端 `frontend.log`（仓库根，start.sh 重定向）。E2E spec 内直接调 API 用前缀 `/api/v1`（勿用 `/api`），且须先登录取 token 带 `Authorization` 头（2026-08-29 起全部要求鉴权）。
 
 ## 国内网络环境（重要约定）
 
@@ -129,6 +132,19 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 12. **重构治理文档统一放 `docs/refactoring/`** — 重构方案（`refactoring-plan-*.md`）、代码评审报告（`code-review-report*.md`）等治理类文档一律写入该目录，**不得散落在 `docs/` 根**（根目录只留 user-manual、architecture 等长期文档）。新会话产出重构计划前先确认此归属。
 13. **经验与规则沉淀一律写本文件，不用 magic-context memory** — 需要"防未来会话犯错"的规则/教训（原 ctx_memory 类）直接追加到本文件关键约定或相应节；ctx_memory 仅用于尚未成熟、值得观察的临时偏好。决策论证类长文落 `docs/` 对应文档，本文件只放一行规则+指针。
 14. **排查"写库不生效/数据陈旧"先查活动数据库** — `backend/db_config.json` 的 `active` 连接决定运行时库，可被"数据库管理"功能切走（2026-08-30 实测 active 长期为 `./data/manual-demo.db` 而非默认 `./data/panshi.db`）。直连 SQLite 取证前必须先确认 active，曾连续两轮误诊"写库静默失败"（实为读错副本库），真实 bug 另在其因（修复于 commit 23a94f9 覆盖逻辑）。
+15. **禁止使用子代理（task/explorer/fixer 等）** — 当前模型对子代理有限制，会话频繁报错。所有侦察、实现、审查一律由主代理直接完成。
+16. **新功能/缺陷修复走 TDD** — 先写失败测试（RED）并验证失败，最小实现（GREEN）验证通过，再重构；openspec 变更的 `tasks.md` 逐项打勾推进。
+17. **集群 JSON 备份/导入为 clone-only 单向语义** — 丢弃全部平台 ID、由库分配新 ID、FK 经插入期捕获的旧→新映射重建（主键全库唯一，保号导入必撞车；`stream_proxies.ref_node_id` 随 nodes 重映射；Node 表无 name 字段，备份/还原以 `ip+service_port` 为节点身份键）。导入总是新建未发布集群（status=1，需手动发布）；目标名须过 NAME_PATTERN 且查重先于任何写库。整库还原走"数据库管理"功能，勿造保号模式。
+18. **发布/版本/回滚编排单实现** — `edge_sync.publish_resource()` / `list_config_versions()` / `delete_config_version()` 是所有集群域资源的唯一实现，资源差异用参数表达（post_version_hook、prefer_display_name、日志字段），禁止逐资源复制。`backend/tests/test_publish_response.py` 是**源码模式守卫测试**（正则检查 publish 函数体），把响应构建/版本返回搬离原位时必须同步更新该守卫。
+19. **权限与审计统一方案** — 全部 API 路由在 `APIRouter()` 声明处 `dependencies=[Depends(get_current_user)]`（仅 system/features 与 /health 有意公开）；资源级门控用 `deps.py` 的 `require_permission(resource)` / `require_any_permission(*resources)` 工厂（admin 直通；`cluster_*` 子资源由 clusters 容器权限门控）。**新增可路由资源须双端注册权限键**（后端门控 + 前端权限 keys，对齐左侧菜单分类，见 `user-management-ui`）。操作审计走 `services/audit.py` 的 `log_audit`（写 sys_audit_log），查询端 `GET /system/operations`（管理员）。认证流式端点必须 fetch 流式带 Authorization 头（原生 EventSource 不能加 header）。后端鉴权测试复用 `tests/api_helpers.py`（AuthedTestClient，seed admin id=1）。
+20. **JWT 密钥解析链**（`app/core/security.py`）— 显式 `JWT_SECRET_KEY` 环境变量 → `.env.<APP_ENV>` 中非占位值 → `APP_ENV=production` 无配置即启动失败 → 开发自动生成并持久化 `backend/data/.jwt_secret`。注意：该 key 同时是 `db_config.py` 的 **Fernet 密钥**（数据库连接密码加密），换 key 会使已存密码不可解。
+21. **Ansible 执行两条铁律** — ① `run_playbook` 必须显式传 `inventory=<inventory/host 文件>`（ansible-runner 对 inventory/ 目录是递归扫描，遗留 .bak 会被当主机源解析报 "Invalid host pattern 'all:'"）；备份统一在 `inventory/backups/`。② rc=0 ≠ 执行成功：ansible 对空匹配（节点不在清单，'no hosts matched'）以 rc=0 退出，判定前必须扫描输出标记——false-success 守卫见 `node_task_service._ansible_false_success_error` 与 cluster_edge_env 部署/读取流。
+22. **Edge 网关 URI 透传，不做裸路径兼容** — APISIX 类 radixtree 下 `X/*` 不匹配裸 `X`（只匹配 `X/` 及子路径），WebSocket 客户端须连带斜杠的 `/ws/`；`convert_route_to_edge_format` 仅透传 uri，补兼容曾评估后**决定不做**（用户决策）。
+23. **字段名错位仅两处，序列化按 mapper 读列名** — `SslCertificate.private_key` 对应 DB 列 `key`（`_serialize` 输出 dict 键用 `attr.columns[0].name`、取值用 `attr.key`）；`StreamProxy.timeout` 列型为 TEXT（备份保字符串原样如 `"15"`）。其余模型名一致。
+24. **前端 CRUD 一律基于工厂** — `useClusterResourceCore.ts` 是删除/发布/版本/选择十件套的唯一实现（selection 访问器参数化）；分页资源用 `useClusterResource`，插件实体（plugin_configs/global_rules）用 `useClusterPluginEntity`——两者是薄适配层。`VersionModalState` 单定义于 core、两文件重导出。新资源 composable 禁止复制删除/发布/版本逻辑。
+25. **弹窗三层制** — 普通确认/信息 → `useOverlayModal`（showOverlayModal，手写 modal-overlay，全站 Modal.confirm 已清零）；删除/发布进度等共享流程 → AppModal（`components/AppModal.vue` + useClusterUtils 的 5 个共享弹窗）；视图级内联弹窗保持手写 modal-overlay。例外：EdgeImport/UserList/AnsibleInventory 三页保留 a-modal（品牌色头部）。教训：Vue 属性内多语句 `a; b` 会被 prettier 重排破坏编译——须提取为函数调用。
+26. **日期/文件大小格式化只用 `utils/format.ts`** — formatDate（dash）/formatDateTime（slash 含秒）/formatMonthDayTime/formatDateOnly/formatPublishDateTime(Asia/Shanghai)/formatFileSize；禁止视图内再写本地 formatDate（Phase 1 已消除 12 处重复）。模板内需要全角空格 U+3000 时写实体 `&#x3000;`（prettier 会破坏裸字符及注释位置）。
+27. **前端工程化管线** — ESLint 10 flat config（vue3-essential + typescript-eslint；`no-explicit-any`/`no-unused-vars` 为 warn 级）、Prettier（无分号/单引号/120 宽）、husky 9 + lint-staged（`.husky` 在 frontend/，已配 `core.hooksPath`；pre-commit 自动 fix 暂存文件）。`types/index.ts` 中动态 JSON 的 `Record<string, any>` 为有意豁免（带 eslint-disable 注释）；`.vue` 模板层 ~474 处存量 any warn 走增量治理，**不开专项清理**（全量回归 UI 的 ROI 为负）。
 
 ## 新增功能步骤
 
