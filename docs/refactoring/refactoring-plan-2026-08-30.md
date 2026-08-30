@@ -2,7 +2,7 @@
 
 > 日期：2026-08-30 · 范围：backend/app + frontend/src · 证据基准：本次全量增量侦察（grep + 源码核验）
 >
-> **前置说明**：v1 方案（`docs/refactoring-plan-2026-08-29.md`）八个方向已全部落地
+> **前置说明**：v1 方案（`docs/refactoring/refactoring-plan-2026-08-29.md`）八个方向已全部落地
 > （Phase 0 安全加固 83f9525 / Phase 1 死代码+合并 5700f27+7851130 / Phase 2 UI 统一 1236394+2f9663f+6bb93ca /
 > Phase 3 回滚+错误提取 9245ebe / Phase 4 双工厂合并 db7f475 / Phase 5 工程化 20cfc8d / Phase 6 资源级权限+审计 142c058）。
 > 本文档**不重复 v1 已完成项**，只给出经当前代码验证的**真实剩余问题**与执行计划。
