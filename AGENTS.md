@@ -127,6 +127,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 10. **清单与自启动模块禁止密码脱敏** — Ansible 主机清单（`GET /inventory`、`POST /inventory/parse`）与自启动管理（走 `get_ssh_password` 读清单文件）依赖真实 SSH 密码，**不得对 `ansible_ssh_pass`/`ansible_become_pass` 做任何掩码/脱敏**。历史教训（2026-08）：Phase 6 曾给 parse 加掩码，`******` 占位被表格模式保存时**写回 inventory/host 文件本体**，真实密码被覆盖且不可恢复，两个模块功能全挂；已在 commit c88aa26 彻底移除该机制。清单密码明文返回（前端 `a-input-password` 展示），真实密码备份在 `backend/ansible/inventory/backups/`。
 11. **`useClusterUtils.ts` 维持单文件、禁止按职责拆分** — 承 #7：它是发布/删除/批量弹窗的单一实现，其价值在于单点可发现性（LLM 一次 read 即得完整上下文），拆成多文件反而增加漏读与间接层成本（它是 Phase 4 合并产物）。本仓库主要由 LLM 维护，文件切分维度是"会话读取的原子单位"而非"职责哲学分类"——任何"大文件=坏味道"的重构直觉先按此判据复核。重启拆分的触发条件见 `docs/refactoring/refactoring-plan-2026-08-30.md` R1 决策记录（突破 ~1500 行 / 出现零共享代码的新职责 / 实际发生连读 3+ 文件才敢下笔的定位成本）。
 12. **重构治理文档统一放 `docs/refactoring/`** — 重构方案（`refactoring-plan-*.md`）、代码评审报告（`code-review-report*.md`）等治理类文档一律写入该目录，**不得散落在 `docs/` 根**（根目录只留 user-manual、architecture 等长期文档）。新会话产出重构计划前先确认此归属。
+13. **经验与规则沉淀一律写本文件，不用 magic-context memory** — 需要"防未来会话犯错"的规则/教训（原 ctx_memory 类）直接追加到本文件关键约定或相应节；ctx_memory 仅用于尚未成熟、值得观察的临时偏好。决策论证类长文落 `docs/` 对应文档，本文件只放一行规则+指针。
+14. **排查"写库不生效/数据陈旧"先查活动数据库** — `backend/db_config.json` 的 `active` 连接决定运行时库，可被"数据库管理"功能切走（2026-08-30 实测 active 长期为 `./data/manual-demo.db` 而非默认 `./data/panshi.db`）。直连 SQLite 取证前必须先确认 active，曾连续两轮误诊"写库静默失败"（实为读错副本库），真实 bug 另在其因（修复于 commit 23a94f9 覆盖逻辑）。
 
 ## 新增功能步骤
 
