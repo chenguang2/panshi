@@ -6,6 +6,11 @@
 > （Phase 0 安全加固 83f9525 / Phase 1 死代码+合并 5700f27+7851130 / Phase 2 UI 统一 1236394+2f9663f+6bb93ca /
 > Phase 3 回滚+错误提取 9245ebe / Phase 4 双工厂合并 db7f475 / Phase 5 工程化 20cfc8d / Phase 6 资源级权限+审计 142c058）。
 > 本文档**不重复 v1 已完成项**，只给出经当前代码验证的**真实剩余问题**与执行计划。
+>
+> **实施状态（2026-08-30）**：7A 死代码已提交（6364c76，stash 对照确认失败集=基线）；
+> 7B 安全已提交（89fac27：auth safeParse+3 单测、PluginSwitches 转义、escapeHtml 收敛单实现；
+> Tools.vue diff 核验已转义；可选 JWT 8h 未做，留待决策）；7D vite 分包已提交（50a1339：
+> 入口 index 1540→55.5 kB，E2E 全量 91 绿）；7C（useClusterUtils 拆分）用户指定跳过。
 
 ## 0. 执行摘要
 
