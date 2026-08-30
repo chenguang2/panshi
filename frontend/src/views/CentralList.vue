@@ -1330,15 +1330,9 @@ const deleteCluster = async (cluster: Cluster) => {
 
   // 获取节点列表（用于第一个界面的节点选择）
   let availableNodes: { id: number; ip: string; management_port: number }[] = []
-  console.log('[删除集群] cluster.id:', cluster.id, 'clusterName:', clusterName)
   try {
     const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
     availableNodes = res.data.items || []
-    console.log(
-      '[删除集群] 获取到节点数:',
-      availableNodes.length,
-      JSON.stringify(availableNodes.map((n: any) => n.ip + ':' + n.management_port)),
-    )
   } catch (e) {
     console.error('[删除集群] 加载节点列表失败', e)
   }
