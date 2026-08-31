@@ -13,6 +13,7 @@ from app.schemas.edge_import import (
 )
 
 from app.core.deps import require_permission
+from app.services.audit import log_audit
 
 router = APIRouter(prefix="/edge-import", tags=["edge-import"], dependencies=[Depends(require_permission('edge_import'))])
 
