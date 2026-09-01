@@ -2,7 +2,7 @@
 active: ck_default
 connections:
 - id: ck_default
-  name: 默认
+  name: 192.168.100.42
   host: 192.168.100.42
   port: 9000
   database: esapm_metrics

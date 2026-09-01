@@ -37,6 +37,18 @@
       "username": null,
       "password_enc": null,
       "ssl": false
+    },
+    {
+      "id": "conn_f9d0d3f3",
+      "type": "postgres",
+      "name": "e2e-pg-1787982488432",
+      "path": null,
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "panshi_e2e",
+      "username": "postgres",
+      "password_enc": "gAAAAABqknKcEuOu43ENR3glAOheXgiHTcGRJQjBxpWl-V3xM0lKDUYheXx0ifrtWv7qZaMwvZpS1_ldo1TMw-Rwye75UGfJ-A==",
+      "ssl": false
     }
   ]
 }
