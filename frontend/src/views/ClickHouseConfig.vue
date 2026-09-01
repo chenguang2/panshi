@@ -1,31 +1,52 @@
 <template>
   <div class="clickhouse-config">
-    <PageHeader
-      title="ClickHouse 配置"
-      description="管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。"
-    >
+    <PageHeader title="ClickHouse 配置" description="管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 新建连接</button>
       </template>
     </PageHeader>
 
+    <!-- 当前连接状态卡片 -->
     <div class="card">
-      <div class="card-header"><h3>连接列表</h3></div>
+      <div class="card-header"><h3>当前连接</h3></div>
+      <div class="card-body">
+        <div class="status-body">
+          <template v-if="activeConnection">
+            <span class="status-dot online"></span>
+            <div class="active-info">
+              <div class="active-name">
+                <a-tag color="blue">ClickHouse</a-tag>
+                <span class="name">{{ activeConnection.name }}</span>
+              </div>
+              <div class="active-address">{{ activeConnection.host }}:{{ activeConnection.port }}/{{ activeConnection.database }}</div>
+            </div>
+          </template>
+          <a-empty v-else description="未配置活动连接" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 连接列表 -->
+    <div class="card">
+      <div class="card-header">
+        <h3>连接列表</h3>
+        <button class="btn btn-primary btn-sm" @click="openCreateModal">+ 新建连接</button>
+      </div>
       <div class="card-body table-body">
         <a-table
-          :columns="columns"
           :data-source="connections"
+          :columns="columns"
           :loading="loading"
           row-key="id"
           :pagination="false"
-          size="middle"
+          class="connection-table"
         >
           <template #bodyCell="{ record, column }">
             <template v-if="column.key === 'address'">
               <span class="mono">{{ record.host }}:{{ record.port }}</span>
             </template>
             <template v-else-if="column.key === 'active'">
-              <a-tag v-if="record.is_active" color="blue">当前激活</a-tag>
+              <span v-if="record.is_active" class="badge badge-success">当前</span>
               <span v-else class="text-muted">-</span>
             </template>
             <template v-else-if="column.key === 'actions'">
@@ -141,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { h, onMounted, reactive, ref } from 'vue'
+import { h, computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
@@ -170,6 +191,8 @@ const columns = [
 const connections = ref<ClickhouseConnectionPublic[]>([])
 const loading = ref(false)
 const testingId = ref<string | null>(null)
+
+const activeConnection = computed(() => connections.value.find((c) => c.is_active) || null)
 
 const modal = reactive({
   open: false,
@@ -347,6 +370,47 @@ onMounted(load)
 </script>
 
 <style scoped>
+.clickhouse-config {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── 当前连接 ── */
+.status-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.online {
+  background: oklch(65% 0.19 145);
+}
+.active-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.active-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.active-name .name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.active-address {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── 连接列表表格 ── */
 .mono {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
@@ -354,10 +418,38 @@ onMounted(load)
 .table-body {
   padding: 0;
 }
+.connection-table :deep(.ant-table) {
+  background: transparent;
+}
+.connection-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 8px 14px;
+}
+.connection-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.connection-table :deep(.ant-table-tbody > tr > td) {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+.connection-table :deep(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none;
+}
+.connection-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--bg);
+}
 .table-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
 }
 .empty-hint {
   padding: 14px 16px;
@@ -365,6 +457,8 @@ onMounted(load)
   color: var(--muted);
   border-top: 1px solid var(--border);
 }
+
+/* ── 弹窗 ── */
 .footer-spacer {
   flex: 1;
 }
