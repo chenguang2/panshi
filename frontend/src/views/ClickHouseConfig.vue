@@ -24,19 +24,9 @@
             <template v-if="column.key === 'address'">
               <span class="mono">{{ record.host }}:{{ record.port }}</span>
             </template>
-            <template v-else-if="column.key === 'password'">
-              <a-tag v-if="record.password_set" color="green">已设置</a-tag>
-              <a-tag v-else>未设置</a-tag>
-            </template>
             <template v-else-if="column.key === 'active'">
               <a-tag v-if="record.is_active" color="blue">当前激活</a-tag>
-              <button
-                class="btn btn-sm set-active-btn"
-                :disabled="testingId === record.id"
-                @click="handleActivate(record)"
-              >
-                设为激活
-              </button>
+              <span v-else class="text-muted">-</span>
             </template>
             <template v-else-if="column.key === 'actions'">
               <div class="table-actions">
@@ -47,6 +37,12 @@
                 >
                   {{ testingId === record.id ? '测试中…' : '测试' }}
                 </button>
+                <button
+                  class="btn btn-sm"
+                  :class="record.is_active ? 'btn-secondary' : 'btn-primary'"
+                  :disabled="record.is_active"
+                  @click="handleActivate(record)"
+                >设为当前</button>
                 <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
                 <button
                   class="btn btn-danger btn-sm"
@@ -167,8 +163,7 @@ const columns = [
   { title: '地址', key: 'address' },
   { title: '数据库', dataIndex: 'database', key: 'database' },
   { title: '用户', dataIndex: 'user', key: 'user' },
-  { title: '密码', key: 'password' },
-  { title: '激活状态', key: 'active' },
+  { title: '当前', key: 'active' },
   { title: '操作', key: 'actions' },
 ]
 
@@ -363,16 +358,6 @@ onMounted(load)
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-}
-.set-active-btn {
-  background: oklch(94% 0.04 210);
-  color: oklch(40% 0.12 210);
-  border: 1px solid oklch(80% 0.06 210);
-  cursor: pointer;
-}
-.set-active-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .empty-hint {
   padding: 14px 16px;

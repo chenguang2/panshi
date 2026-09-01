@@ -209,7 +209,7 @@
           <div class="switch-body">
             <a-alert type="warning" show-icon message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。" />
             <div class="switch-restart-hint">
-              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行 <code>systemctl restart panshi-backend</code>。
+              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行 <code>sh stop.sh; sh start.sh</code>。
             </div>
             <div class="switch-target">
               <span>切换至：</span>
@@ -231,6 +231,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import {
   getDatabaseStatus,
   listConnections,
@@ -415,9 +416,17 @@ async function handleSwitch() {
 }
 
 async function handleDelete(record: DbConnection) {
-  await deleteConnection(record.id)
-  message.success('连接已删除')
-  await loadData()
+  showOverlayModal({
+    title: '删除连接',
+    content: `确定删除数据库连接「${record.name}」？该操作仅删除配置，不影响数据库本身。`,
+    okText: '删除',
+    okDanger: true,
+    onOk: async () => {
+      await deleteConnection(record.id)
+      message.success('连接已删除')
+      await loadData()
+    },
+  })
 }
 
 async function handleMigrate() {
