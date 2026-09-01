@@ -21,7 +21,8 @@ class TestDnsUpstreamPluginDef:
         assert plugin["display_name"] == "DNS 上游解析"
         assert plugin["category"] == "process"
         assert plugin["enable_metadata"] is False
-        assert plugin["schema"] == {}
+        assert "disable" in plugin["schema"]
+        assert "hosts" in plugin["schema"]
 
 
 class TestDnsUpstreamPluginAPI:

@@ -1243,7 +1243,21 @@ BUILTIN_PLUGINS = [
         "category": "process",
         "description": "智能 DNS 域名解析及动态负载调度（在 HTTP 路由中覆盖 DNS 解析行为）",
         "enable_metadata": False,
-        "schema": {}
+        "schema": {
+            "disable": {
+                "type": "boolean",
+                "default": False,
+                "description": "是否禁用该插件",
+                "examples": [False, True],
+                "hints": "设为 true 时跳过此插件的 DNS 解析逻辑，默认 false"
+            },
+            "hosts": {
+                "type": "object",
+                "description": "域名解析配置，键为域名，值为该域名的解析规则",
+                "examples": [{"api.example.com": {"resolve": ["1.1.1.1", "2.2.2.2"], "checks": {"active": {"type": "http", "http_path": "/health"}}}}],
+                "hints": "每个域名可配置 resolve（上游 DNS 列表）、nodes（解析节点映射）、checks（健康检查）。结构较复杂，建议切换到 JSON 模式编辑"
+            }
+        }
     },
     {
         "name": "redirect",
