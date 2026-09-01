@@ -340,6 +340,7 @@ const navSections = computed<NavSection[]>(() => {
           route: '/clickhouse-config',
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5l7-3 7 3-7 3-7-3z"/><path d="M2 5v8l7 3 7-3V5"/><path d="M9 8v8"/></svg>',
           permission: 'clickhouse_config',
+          feature: 'clickhouse_config',
         },
         {
           label: '用户管理',

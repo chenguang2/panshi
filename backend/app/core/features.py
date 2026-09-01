@@ -34,6 +34,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "database_management",
     "edge_autostart",
     "ansible_inventory",
+    "clickhouse_config",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.
