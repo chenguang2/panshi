@@ -44,16 +44,26 @@ KNOWN_CONCURRENCY_KEYS: frozenset[str] = frozenset({
     "batch_action",
 })
 
-# ── Module-level cache (set once at startup) ───────────────────────────
+# ── Module-level cache with mtime-based invalidation ──────────────────
 _features: dict | None = None
+_features_mtime: float = 0.0
+
+_FEATURES_PATH = Path("features.yaml")
 
 
 # ── Public helpers ─────────────────────────────────────────────────────
 
 
 def get_features() -> dict:
-    """Return the full parsed features dict, loading on first access."""
-    if _features is None:
+    """Return the full parsed features dict, re-reading when file changes."""
+    global _features, _features_mtime
+    p = _FEATURES_PATH
+    try:
+        current_mtime = p.stat().st_mtime if p.exists() else 0.0
+    except OSError:
+        current_mtime = 0.0
+    if _features is None or current_mtime != _features_mtime:
+        _features = None  # force reload
         return load_features()
     return _features
 
@@ -80,18 +90,16 @@ def load_features(path: str = "features.yaml") -> dict:
     """Read and validate *path*, then cache and return the result.
 
     Rules:
-    - If ``_features`` is already set, return it immediately (no re-read).
     - File not found → default config (all enabled, no plugin restrictions).
     - Malformed YAML / invalid structure / unknown keys → sys.exit(1).
     """
-    global _features
-    if _features is not None:
-        return _features
+    global _features, _features_mtime
 
     p = Path(path)
 
     if not p.exists():
         _features = {"features": {}, "enabled_plugins": []}
+        _features_mtime = 0.0
         return _features
 
     try:
@@ -103,6 +111,10 @@ def load_features(path: str = "features.yaml") -> dict:
     _validate(raw)
     _validate_concurrency(raw)
     _features = raw  # type: ignore[assignment]
+    try:
+        _features_mtime = p.stat().st_mtime
+    except OSError:
+        _features_mtime = 0.0
     return _features
 
 

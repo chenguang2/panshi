@@ -12,7 +12,7 @@ features:
   dns_proxy_udp: true
   dns_proxy_http: true
   task_center: true
-  database_management: true
+  database_management: false
   edge_autostart: true
   ansible_inventory: true
   clickhouse_config: true
