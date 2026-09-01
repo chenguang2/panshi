@@ -28,6 +28,7 @@ enabled_plugins:
   - traceid
   - monitor
   - dns_upstream
+  - redirect
 # 并发参数：batch_action 为前端批量节点操作并发，max_playbooks 为后端全局
 # ansible 并发上限。前端实际并发为 min(batch_action, max_playbooks)，建议两值联动。
 concurrency:

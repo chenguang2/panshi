@@ -1244,5 +1244,55 @@ BUILTIN_PLUGINS = [
         "description": "智能 DNS 域名解析及动态负载调度（在 HTTP 路由中覆盖 DNS 解析行为）",
         "enable_metadata": False,
         "schema": {}
+    },
+    {
+        "name": "redirect",
+        "display_name": "重定向",
+        "category": "rewrite",
+        "description": "HTTP 重定向（HTTP→HTTPS 强制跳转、URI 重写、正则匹配重定向）",
+        "enable_metadata": False,
+        "schema": {
+            "http_to_https": {
+                "type": "boolean",
+                "default": False,
+                "description": "HTTP 强制跳转 HTTPS",
+                "examples": [True, False],
+                "hints": "设为 true 时 HTTP 请求自动 301 重定向到 HTTPS，保留原始 URI 和 query string。与 uri 和 regex_uri 互斥，三选一；与 append_query_string 互斥"
+            },
+            "uri": {
+                "type": "string",
+                "description": "重定向目标 URI",
+                "examples": ["/test/default.html", "$uri/index.html", "https://example.com/foo/bar"],
+                "hints": "重定向到的新 URI，支持 Nginx 变量（如 $uri、$host、$request_uri）。与 http_to_https 和 regex_uri 互斥，三选一"
+            },
+            "regex_uri": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "正则匹配重定向 [正则, 替换模板]",
+                "examples": [["^/old/(.*)/(.*)", "/new/$1-$2"], ["^/blog/(\\d{4})/(\\d{2})/(.*)$", "/articles/$1-$2-$3"]],
+                "hints": "数组长度必须为 2：第一项为 PCRE 正则，第二项为替换模板（支持捕获组 $1、$2）。与 http_to_https 和 uri 互斥，三选一"
+            },
+            "ret_code": {
+                "type": "integer",
+                "default": 302,
+                "description": "重定向 HTTP 状态码",
+                "examples": [301, 302, 307, 308],
+                "hints": "返回给客户端的重定向状态码，默认 302。常用 301（永久）、302（临时）、307（保持方法）、308（永久保持方法）"
+            },
+            "encode_uri": {
+                "type": "boolean",
+                "default": False,
+                "description": "对 Location URI 做 RFC3986 编码",
+                "examples": [True, False],
+                "hints": "设为 true 时对重定向 URI 做 RFC3986 编码，默认 false"
+            },
+            "append_query_string": {
+                "type": "boolean",
+                "default": False,
+                "description": "追加原始请求的 query string",
+                "examples": [True, False],
+                "hints": "设为 true 时将原始请求的 query string 追加到重定向 URI。如果目标 URI 已含 query string，会用 & 拼接。与 http_to_https 互斥"
+            }
+        }
     }
 ]
