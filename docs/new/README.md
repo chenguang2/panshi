@@ -48,24 +48,25 @@
 | 12 | DNS 代理 | [12-dns-proxy.md](12-dns-proxy.md) |
 | 13 | 绑定域名并验证 | [13-domain-verify.md](13-domain-verify.md) |
 
-## 第二篇 · 进阶与运维（第 14-23 章，覆盖左侧菜单剩余项）
+## 第二篇 · 进阶与运维（第 14-28 章，覆盖左侧菜单剩余项）
 
 | 章 | 内容（菜单项） | 文件 |
 | --- | --- | --- |
 | 14 | 概览 | [14-overview.md](14-overview.md) |
 | 15 | 静态资源 | [15-static-resources.md](15-static-resources.md) |
 | 16 | DNS代理[HTTP] | [16-dns-http.md](16-dns-http.md) |
-| 17 | 指标总览与指标查询 | [17-metrics.md](17-metrics.md) |
-| 18 | 统一管理 | [18-central-management.md](18-central-management.md) |
-| 19 | 插件开关 | [19-plugin-switches.md](19-plugin-switches.md) |
+| 17 | 插件开关 | [17-plugin-switches.md](17-plugin-switches.md) |
+| 18 | 数据库管理 | [18-database-management.md](18-database-management.md) |
+| 19 | ClickHouse 配置 | [19-clickhouse-config.md](19-clickhouse-config.md) |
 | 20 | 用户管理 | [20-users.md](20-users.md) |
-| 21 | 数据库管理 | [21-database-management.md](21-database-management.md) |
-| 22 | Edge直连 / 数据导入 | [22-edge-client-import.md](22-edge-client-import.md) |
-| 23 | 工具箱 | [23-tools.md](23-tools.md) |
-| 24 | 自启动管理 | [24-autostart.md](24-autostart.md) |
-| 25 | 节点任务 | [25-node-tasks.md](25-node-tasks.md) |
-| 26 | Ansible 主机清单 | [26-ansible-inventory.md](26-ansible-inventory.md) |
-| 27 | ClickHouse 配置 | [27-clickhouse-config.md](27-clickhouse-config.md) |
+| 21 | 统一管理 | [21-central-management.md](21-central-management.md) |
+| 22 | 指标总览与指标查询 | [22-metrics.md](22-metrics.md) |
+| 23 | Edge 直连 | [23-edge-client.md](23-edge-client.md) |
+| 24 | 数据导入 | [24-data-import.md](24-data-import.md) |
+| 25 | 工具箱 | [25-tools.md](25-tools.md) |
+| 26 | 自启动管理 | [26-autostart.md](26-autostart.md) |
+| 27 | Ansible 主机清单 | [27-ansible-inventory.md](27-ansible-inventory.md) |
+| 28 | 节点任务 | [28-node-tasks.md](28-node-tasks.md) |
 
 ## 附录（客户端环境配置）
 

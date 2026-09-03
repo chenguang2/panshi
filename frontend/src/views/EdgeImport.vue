@@ -1,7 +1,7 @@
 <template>
   <div class="edge-import">
     <PageHeader title="Edge 数据导入" description="从 Edge 节点批量导入配置数据到本地数据库" />
-    <a-steps :current="currentStep" style="margin-bottom: 24px;">
+    <a-steps :current="currentStep" style="margin-bottom: 24px">
       <a-step title="选择节点" />
       <a-step title="选择配置" />
       <a-step title="预览导入" />
@@ -15,14 +15,10 @@
             <a-select
               v-model:value="selectedClusterId"
               placeholder="请选择集群..."
-              style="width: 400px;"
+              style="width: 400px"
               @change="onClusterChange"
             >
-              <a-select-option
-                v-for="cluster in clusters"
-                :key="cluster.id"
-                :value="cluster.id"
-              >
+              <a-select-option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
                 {{ cluster.display_name || cluster.name }}
               </a-select-option>
             </a-select>
@@ -32,23 +28,19 @@
             <a-select
               v-model:value="selectedNodeId"
               placeholder="请选择节点..."
-              style="width: 400px;"
+              style="width: 400px"
               :loading="loadingNodes"
               :disabled="!selectedClusterId"
             >
-              <a-select-option
-                v-for="node in nodes"
-                :key="node.id"
-                :value="node.id"
-              >
+              <a-select-option v-for="node in nodes" :key="node.id" :value="node.id">
                 {{ node.ip }}:{{ node.management_port }} ({{ node.edge_path }})
               </a-select-option>
             </a-select>
           </a-form-item>
 
           <a-form-item label="节点 Admin Key">
-            <div style="display:flex;gap:8px;">
-              <a-input-password v-model:value="adminKey" placeholder="输入节点 Admin Key..." style="max-width:300px;" />
+            <div style="display: flex; gap: 8px">
+              <a-input-password v-model:value="adminKey" placeholder="输入节点 Admin Key..." style="max-width: 300px" />
               <a-button
                 type="primary"
                 :loading="testingConnection"
@@ -61,38 +53,26 @@
           </a-form-item>
         </a-form>
 
-        <a-alert
-          v-if="connectionTested"
-          type="success"
-          show-icon
-          closable
-          style="margin-top: 8px;"
-        >
+        <a-alert v-if="connectionTested" type="success" show-icon closable style="margin-top: 8px">
           <template #message>
             <strong>连接成功</strong>
           </template>
           <template #description>
-            <div>节点: {{ connectionResult?.node || '-' }} · 版本: {{ connectionResult?.version || '-' }} · 响应时间: {{ connectionResult?.response_time_ms || '-' }}ms</div>
-            <div style="margin-top:4px;">
-              路由: {{ connectionResult?.route_count }} 条 ·
-              上游: {{ connectionResult?.upstream_count }} 个 ·
-              插件: {{ connectionResult?.plugin_count }} 个 ·
-              插件组: {{ connectionResult?.plugin_config_count }} 个 ·
-              全局规则: {{ connectionResult?.global_rule_count }} 个 ·
-              插件元数据: {{ connectionResult?.plugin_metadata_count }} 个 ·
-              四层代理: {{ connectionResult?.stream_proxy_count }} 个 ·
-               SSL 证书: {{ connectionResult?.ssl_certificate_count }} 个
+            <div>
+              节点: {{ connectionResult?.node || '-' }} · 版本: {{ connectionResult?.version || '-' }} · 响应时间:
+              {{ connectionResult?.response_time_ms || '-' }}ms
+            </div>
+            <div style="margin-top: 4px">
+              路由: {{ connectionResult?.route_count }} 条 · 上游: {{ connectionResult?.upstream_count }} 个 · 插件:
+              {{ connectionResult?.plugin_count }} 个 · 插件组: {{ connectionResult?.plugin_config_count }} 个 ·
+              全局规则: {{ connectionResult?.global_rule_count }} 个 · 插件元数据:
+              {{ connectionResult?.plugin_metadata_count }} 个 · 四层代理: {{ connectionResult?.stream_proxy_count }} 个
+              · SSL 证书: {{ connectionResult?.ssl_certificate_count }} 个
             </div>
           </template>
         </a-alert>
 
-        <a-alert
-          v-if="connectionError"
-          type="error"
-          show-icon
-          closable
-          style="margin-top: 8px;"
-        >
+        <a-alert v-if="connectionError" type="error" show-icon closable style="margin-top: 8px">
           <template #message>
             <strong>连接失败</strong>
           </template>
@@ -103,16 +83,16 @@
       </a-card>
 
       <div class="step-actions">
-        <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)">
-          下一步
-        </a-button>
+        <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)"> 下一步 </a-button>
       </div>
     </div>
 
     <!-- Step 1: 选择配置 -->
     <div v-if="currentStep === 1">
       <a-card title="选择要导入的配置类型">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">选择需要从 Edge 节点导入到管理平台的配置类型</p>
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px">
+          选择需要从 Edge 节点导入到管理平台的配置类型
+        </p>
         <div class="config-types">
           <div
             v-for="ct in configTypes"
@@ -127,11 +107,9 @@
           </div>
         </div>
       </a-card>
-      <div class="step-actions" style="justify-content:space-between;">
+      <div class="step-actions" style="justify-content: space-between">
         <a-button @click="goToStep(0)">上一步</a-button>
-        <a-button type="primary" :disabled="!hasSelection" @click="goToStep(2)">
-          下一步 — 预览
-        </a-button>
+        <a-button type="primary" :disabled="!hasSelection" @click="goToStep(2)"> 下一步 — 预览 </a-button>
       </div>
     </div>
 
@@ -143,14 +121,14 @@
         type="warning"
         show-icon
         closable
-        style="margin-bottom: 16px;"
+        style="margin-bottom: 16px"
       >
         <template #message>
           <strong>部分数据获取失败</strong>
         </template>
         <template #description>
           <div v-for="(w, i) in previewData.warnings" :key="i">{{ w }}</div>
-          <div style="margin-top:4px;font-size:12px;">失败的数据无法导入，其他数据可正常导入。</div>
+          <div style="margin-top: 4px; font-size: 12px">失败的数据无法导入，其他数据可正常导入。</div>
         </template>
       </a-alert>
 
@@ -159,7 +137,7 @@
         v-if="previewData?.plugin_summary && previewData.plugin_summary.unknown_count > 0"
         type="warning"
         show-icon
-        style="margin-bottom: 16px;"
+        style="margin-bottom: 16px"
       >
         <template #message>
           <strong>插件识别提示</strong>
@@ -177,21 +155,19 @@
         v-if="previewData?.conflicts && previewData.conflicts.length > 0"
         type="warning"
         show-icon
-        style="margin-bottom: 16px;"
+        style="margin-bottom: 16px"
       >
         <template #message>
           <strong>冲突提示</strong>
         </template>
-        <template #description>
-          发现 {{ previewData.conflicts.length }} 项冲突
-        </template>
+        <template #description> 发现 {{ previewData.conflicts.length }} 项冲突 </template>
       </a-alert>
 
       <!-- 冲突详情 -->
       <a-card
         v-if="previewData?.conflicts && previewData.conflicts.length > 0"
         size="small"
-        style="margin-bottom: 16px;"
+        style="margin-bottom: 16px"
       >
         <template #title>
           <a @click="showConflicts = !showConflicts">
@@ -251,9 +227,7 @@
                   {{ record.type || '-' }}
                 </template>
                 <template v-if="column.key === 'nodes'">
-                  <span v-if="record.nodes">
-                    {{ getNodeCount(record.nodes) }} 个节点
-                  </span>
+                  <span v-if="record.nodes"> {{ getNodeCount(record.nodes) }} 个节点 </span>
                   <span v-else>-</span>
                 </template>
               </template>
@@ -286,11 +260,7 @@
                   {{ record.uri || record.uris?.[0] || '-' }}
                 </template>
                 <template v-if="column.key === 'methods'">
-                  <a-tag
-                    v-for="m in (record.methods || [])"
-                    :key="m"
-                    color="blue"
-                  >
+                  <a-tag v-for="m in record.methods || []" :key="m" color="blue">
                     {{ m }}
                   </a-tag>
                   <span v-if="!record.methods || record.methods.length === 0">-</span>
@@ -322,15 +292,13 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'id'">
-                  <span style="font-size: 12px;">{{ record.id }}</span>
+                  <span style="font-size: 12px">{{ record.id }}</span>
                 </template>
                 <template v-if="column.key === 'desc'">
                   {{ record.desc || record.name || '-' }}
                 </template>
                 <template v-if="column.key === 'plugins'">
-                  <a-tag v-if="record.plugins">
-                    {{ Object.keys(record.plugins).length }} 个插件
-                  </a-tag>
+                  <a-tag v-if="record.plugins"> {{ Object.keys(record.plugins).length }} 个插件 </a-tag>
                   <span v-else>-</span>
                 </template>
               </template>
@@ -357,15 +325,13 @@
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'id'">
-                  <span style="font-size: 12px;">{{ record.id }}</span>
+                  <span style="font-size: 12px">{{ record.id }}</span>
                 </template>
                 <template v-if="column.key === 'desc'">
                   {{ record.desc || record.name || '-' }}
                 </template>
                 <template v-if="column.key === 'plugins'">
-                  <a-tag v-if="record.plugins">
-                    {{ Object.keys(record.plugins).length }} 个插件
-                  </a-tag>
+                  <a-tag v-if="record.plugins"> {{ Object.keys(record.plugins).length }} 个插件 </a-tag>
                   <span v-else>-</span>
                 </template>
               </template>
@@ -484,108 +450,32 @@
       <div class="step-actions">
         <a-button @click="goToStep(1)">上一步</a-button>
         <a-button @click="handleCancel">取消</a-button>
-        <a-button type="primary" :loading="importing" @click="handleImport">
-          确认导入
-        </a-button>
+        <a-button type="primary" :loading="importing" @click="handleImport"> 确认导入 </a-button>
       </div>
     </div>
-
-    <!-- 导入结果弹窗 -->
-    <a-modal
-      v-model:open="resultModalVisible"
-      title="导入结果"
-      :footer="null"
-      width="560px"
-    >
-      <div v-if="importResult">
-        <a-alert
-          v-if="importResult.success"
-          type="success"
-          show-icon
-          style="margin-bottom: 16px;"
-        >
-          <template #message>
-            <strong>导入完成</strong>
-          </template>
-          <template #description>
-            <div>上游：{{ importResult.imported_counts.upstreams }} 个</div>
-            <div>路由：{{ importResult.imported_counts.routes }} 条</div>
-            <div>插件组：{{ importResult.imported_counts.plugin_configs }} 个</div>
-            <div>全局规则：{{ importResult.imported_counts.global_rules }} 个</div>
-            <div>插件元数据：{{ importResult.imported_counts.plugin_metadata || 0 }} 个</div>
-            <div>四层代理：{{ importResult.imported_counts.stream_proxies || 0 }} 个</div>
-            <div>SSL 证书：{{ importResult.imported_counts.ssl_certificates || 0 }} 个</div>
-            <div v-if="importResult.imported_counts.skipped > 0">
-              跳过：{{ importResult.imported_counts.skipped }} 项
-            </div>
-            <div style="margin-top: 8px;">
-              <router-link :to="'/clusters'">
-                查看集群详情
-              </router-link>
-            </div>
-          </template>
-        </a-alert>
-
-        <a-alert
-          v-else
-          type="error"
-          show-icon
-          style="margin-bottom: 16px;"
-        >
-          <template #message>
-            <strong>导入失败</strong>
-          </template>
-          <template #description>
-            {{ importResult.message || '导入过程中出现错误，请重试。' }}
-          </template>
-        </a-alert>
-
-        <!-- 导入后的插件摘要 -->
-        <a-alert
-          v-if="importResult.plugin_summary && importResult.plugin_summary.unknown_count > 0"
-          type="info"
-          show-icon
-          style="margin-bottom: 16px;"
-        >
-          <template #message>
-            <strong>插件信息</strong>
-          </template>
-          <template #description>
-            新发现 {{ importResult.plugin_summary.unknown_count }} 个插件（
-            {{ importResult.plugin_summary.unknown_plugin_names.join('、') }}
-          ），已存入数据库。
-        </template>
-        </a-alert>
-      </div>
-
-      <div v-if="importError" style="margin-bottom: 16px;">
-        <a-alert type="error" show-icon :message="importError" />
-      </div>
-
-      <div style="text-align: right; margin-top: 16px;">
-        <a-button type="primary" @click="resultModalVisible = false">
-          关闭
-        </a-button>
-      </div>
-    </a-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
-import { CloudUploadOutlined, BranchesOutlined, PropertySafetyOutlined, BlockOutlined, AppstoreOutlined } from '@ant-design/icons-vue'
+import { useRouter } from 'vue-router'
+import {
+  CloudUploadOutlined,
+  BranchesOutlined,
+  PropertySafetyOutlined,
+  BlockOutlined,
+  AppstoreOutlined,
+} from '@ant-design/icons-vue'
 import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
 import PageHeader from '@/components/PageHeader.vue'
-import type {
-  TestConnectionResponse,
-  PreviewResponse,
-  ImportResponse
-} from '@/api/edgeImport'
+import { showOverlayModal } from '@/composables/useOverlayModal'
+import type { TestConnectionResponse, PreviewResponse, ImportResponse } from '@/api/edgeImport'
 
 // ---- State ----
 
+const router = useRouter()
 const currentStep = ref(0)
 const clusters = ref<any[]>([])
 const selectedClusterId = ref<number | null>(null)
@@ -640,13 +530,10 @@ function toggleConfigType(key: string) {
 }
 
 const hasSelection = computed(() => {
-  return configTypes.some(ct => selections[ct.key])
+  return configTypes.some((ct) => selections[ct.key])
 })
 
 const importing = ref(false)
-const resultModalVisible = ref(false)
-const importResult = ref<ImportResponse | null>(null)
-const importError = ref('')
 
 // ---- Columns ----
 
@@ -654,32 +541,32 @@ const conflictColumns = [
   { title: '类型', key: 'type', width: 100 },
   { title: '资源', key: 'resource', width: 160 },
   { title: '原因', key: 'reason' },
-  { title: '解决方案', key: 'resolution', width: 160 }
+  { title: '解决方案', key: 'resolution', width: 160 },
 ]
 
 const upstreamColumns = [
   { title: '名称', key: 'name' },
   { title: '类型', key: 'type', width: 120 },
-  { title: '节点数', key: 'nodes', width: 100 }
+  { title: '节点数', key: 'nodes', width: 100 },
 ]
 
 const routeColumns = [
   { title: '名称', key: 'name' },
   { title: 'URI', key: 'uri' },
   { title: '方法', key: 'methods', width: 180 },
-  { title: '上游', key: 'upstream', width: 160 }
+  { title: '上游', key: 'upstream', width: 160 },
 ]
 
 const pluginConfigColumns = [
   { title: 'ID', key: 'id', width: 100 },
   { title: '描述', key: 'desc' },
-  { title: '插件数', key: 'plugins', width: 100 }
+  { title: '插件数', key: 'plugins', width: 100 },
 ]
 
 const globalRuleColumns = [
   { title: 'ID', key: 'id', width: 100 },
   { title: '描述', key: 'desc' },
-  { title: '插件数', key: 'plugins', width: 100 }
+  { title: '插件数', key: 'plugins', width: 100 },
 ]
 
 const pluginMetadataColumns = [
@@ -827,6 +714,108 @@ const handleCancel = () => {
 
 // ---- Import ----
 
+function showImportResult(result: ImportResponse | null, error: string) {
+  const children: any[] = []
+
+  if (result) {
+    if (result.success) {
+      const counts = result.imported_counts
+      const lines: string[] = [
+        `上游：${counts.upstreams} 个`,
+        `路由：${counts.routes} 条`,
+        `插件组：${counts.plugin_configs} 个`,
+        `全局规则：${counts.global_rules} 个`,
+        `插件元数据：${counts.plugin_metadata || 0} 个`,
+        `四层代理：${counts.stream_proxies || 0} 个`,
+        `SSL 证书：${counts.ssl_certificates || 0} 个`,
+      ]
+      if (counts.skipped > 0) {
+        lines.push(`跳过：${counts.skipped} 项（冲突）`)
+      }
+      children.push(
+        h(
+          'div',
+          {
+            style:
+              'background:#f6ffed;border:1px solid #b7eb8f;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+          },
+          [
+            h('div', { style: 'font-weight:600;margin-bottom:8px;color:#52c41a;' }, '✅ 导入完成'),
+            ...lines.map((l) => h('div', { style: 'font-size:13px;line-height:1.8;' }, l)),
+          ],
+        ),
+        h('div', { style: 'margin-top:8px;' }, [
+          h(
+            'a',
+            {
+              style: 'color:var(--accent);cursor:pointer;text-decoration:underline;',
+              onClick: () => router.push('/clusters'),
+            },
+            '查看集群详情 →',
+          ),
+        ]),
+      )
+    } else {
+      children.push(
+        h(
+          'div',
+          {
+            style:
+              'background:#fff2f0;border:1px solid #ffccc7;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+          },
+          [
+            h('div', { style: 'font-weight:600;color:#ff4d4f;margin-bottom:4px;' }, '❌ 导入失败'),
+            h('div', { style: 'font-size:13px;' }, result.message || '导入过程中出现错误，请重试。'),
+          ],
+        ),
+      )
+    }
+
+    if (result.plugin_summary && result.plugin_summary.unknown_count > 0) {
+      children.push(
+        h(
+          'div',
+          {
+            style:
+              'background:#e6f7ff;border:1px solid #91d5ff;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+          },
+          [
+            h('div', { style: 'font-weight:600;color:#1890ff;margin-bottom:4px;' }, 'ℹ️ 插件信息'),
+            h(
+              'div',
+              { style: 'font-size:13px;' },
+              `新发现 ${result.plugin_summary.unknown_count} 个插件（${result.plugin_summary.unknown_plugin_names.join('、')}），已存入数据库。`,
+            ),
+          ],
+        ),
+      )
+    }
+  }
+
+  if (error) {
+    children.push(
+      h(
+        'div',
+        {
+          style: 'background:#fff2f0;border:1px solid #ffccc7;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+        },
+        [
+          h('div', { style: 'font-weight:600;color:#ff4d4f;margin-bottom:4px;' }, '❌ 导入失败'),
+          h('div', { style: 'font-size:13px;' }, error),
+        ],
+      ),
+    )
+  }
+
+  showOverlayModal({
+    title: '导入结果',
+    content: h('div', {}, children),
+    width: 500,
+    showCancel: false,
+    okText: '关闭',
+  })
+}
+
 const handleImport = async () => {
   if (!selectedClusterId.value || !selectedNodeId.value) {
     message.warning('集群或节点信息缺失，请重新选择')
@@ -834,24 +823,25 @@ const handleImport = async () => {
   }
 
   importing.value = true
-  importResult.value = null
-  importError.value = ''
 
   try {
-    const res = await executeImport(selectedClusterId.value, selectedNodeId.value, {
-      upstreams: selections.upstreams,
-      routes: selections.routes,
-      plugin_configs: selections.plugin_configs,
-      global_rules: selections.global_rules,
-      plugin_metadata: selections.plugin_metadata,
-      stream_proxy: selections.stream_proxy,
-      ssl_certificates: selections.ssl_certificates,
-    }, adminKey.value)
-    importResult.value = res.data
-    resultModalVisible.value = true
+    const res = await executeImport(
+      selectedClusterId.value,
+      selectedNodeId.value,
+      {
+        upstreams: selections.upstreams,
+        routes: selections.routes,
+        plugin_configs: selections.plugin_configs,
+        global_rules: selections.global_rules,
+        plugin_metadata: selections.plugin_metadata,
+        stream_proxy: selections.stream_proxy,
+        ssl_certificates: selections.ssl_certificates,
+      },
+      adminKey.value,
+    )
+    showImportResult(res.data, '')
   } catch (error: any) {
-    importError.value = error.response?.data?.detail || error.message || '导入失败，请重试'
-    resultModalVisible.value = true
+    showImportResult(null, error.response?.data?.detail || error.message || '导入失败，请重试')
   } finally {
     importing.value = false
   }
@@ -1001,8 +991,14 @@ onMounted(() => {
   user-select: none;
   position: relative;
 }
-.config-type-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
-.config-type-card.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
+.config-type-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.config-type-card.selected {
+  border-color: var(--accent);
+  background: oklch(56% 0.16 210 / 6%);
+}
 .config-type-card .ct-check {
   display: none;
   float: right;
@@ -1010,9 +1006,18 @@ onMounted(() => {
   font-size: 18px;
   font-weight: 700;
 }
-.config-type-card.selected .ct-check { display: inline; }
-.config-type-card .ct-icon { font-size: 24px; margin-bottom: 8px; display: block; }
-.config-type-card .ct-name { font-size: 14px; font-weight: 600; }
+.config-type-card.selected .ct-check {
+  display: inline;
+}
+.config-type-card .ct-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+  display: block;
+}
+.config-type-card .ct-name {
+  font-size: 14px;
+  font-weight: 600;
+}
 
 .loading-overlay {
   display: flex;
