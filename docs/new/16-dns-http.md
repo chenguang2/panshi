@@ -52,7 +52,7 @@
 在能连通节点、且已完成第 13 章 hosts 解析的机器上执行：
 
 ```bash
-curl -sk "https://127.0.0.1:50000/dns-query?name=test.com&type=A"
+curl -sk "https://test.com:50000/dns-query?name=test.com&type=A"
 ```
 
 预期返回 JSON 格式的解析结果（DoH 的 JSON API 形态），其中包含 `test.com` 的 A 记录——即第 12 章配置的负载均衡目标节点 IP。
@@ -60,7 +60,7 @@ curl -sk "https://127.0.0.1:50000/dns-query?name=test.com&type=A"
 也可以用 curl 的 DoH 能力做端到端验证（让 curl 自己通过我们的 DoH 服务器解析域名再发起请求）：
 
 ```bash
-curl -vk --doh-url https://test.com:5000/dns-query https://test.com:5000/api/ping
+curl -vk --doh-url https://test.com:50000/dns-query https://test.com:5000/api/ping
 ```
 
 📷 截图待补充：（DoH 查询返回 JSON）
