@@ -61,7 +61,11 @@
 | 20 | 用户管理 | [20-users.md](20-users.md) |
 | 21 | 数据库管理 | [21-database-management.md](21-database-management.md) |
 | 22 | Edge直连 / 数据导入 | [22-edge-client-import.md](22-edge-client-import.md) |
-| 23 | 工具箱 / 自启动管理 / 节点任务 | [23-tools-autostart-tasks.md](23-tools-autostart-tasks.md) |
+| 23 | 工具箱 | [23-tools.md](23-tools.md) |
+| 24 | 自启动管理 | [24-autostart.md](24-autostart.md) |
+| 25 | 节点任务 | [25-node-tasks.md](25-node-tasks.md) |
+| 26 | Ansible 主机清单 | [26-ansible-inventory.md](26-ansible-inventory.md) |
+| 27 | ClickHouse 配置 | [27-clickhouse-config.md](27-clickhouse-config.md) |
 
 ## 附录（客户端环境配置）
 

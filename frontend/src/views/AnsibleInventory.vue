@@ -660,9 +660,29 @@ function confirmBulkImport(): void {
 }
 
 function removeRow(row: InventoryHostEntry): void {
-  const idx = rows.value.indexOf(row)
-  if (idx !== -1) rows.value.splice(idx, 1)
-  markDirty()
+  // 已录入节点管理的主机不允许直接删除
+  if (row.ip && !unmanagedIps.value.includes(row.ip)) {
+    showOverlayModal({
+      title: '无法删除',
+      content: `该 IP（${row.ip}）在节点管理中存在，无法删除。请先在节点管理中删除该节点`,
+      okText: '前往节点管理',
+      cancelText: '取消',
+      onOk: () => router.push('/nodes'),
+    })
+    return
+  }
+  showOverlayModal({
+    title: '确认删除',
+    content: `确定要删除主机 ${row.ip || '（未知）'} 吗？`,
+    okText: '删除',
+    okDanger: true,
+    cancelText: '取消',
+    onOk: () => {
+      const idx = rows.value.indexOf(row)
+      if (idx !== -1) rows.value.splice(idx, 1)
+      markDirty()
+    },
+  })
 }
 
 function goNodes(): void {
