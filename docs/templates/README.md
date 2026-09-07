@@ -8,7 +8,7 @@
 
 ## 用途
 
-`md-to-word-template` skill 的转换脚本（`.opencode/skills/md-to-word-template/scripts/convert_md_to_word.py`）以此模板为基底，把 `docs/new/*.md` 手册章节转换为套用公司格式的 Word 文档。
+`md-to-word-template` skill 的转换脚本（`.opencode/skills/md-to-word-template/scripts/convert_md_to_word.py`）以此模板为基底，把 `docs/user-manual/*.md` 手册章节转换为套用公司格式的 Word 文档。
 
 脚本优先使用本目录的模板副本；`/mnt/z/Embrace文档模板-2024.docx` 仅作后备；可用环境变量 `EMBRACE_TEMPLATE` 指定其他模板。
 

@@ -9,7 +9,7 @@
 ## Goals / Non-Goals
 
 **Goals:**
-- 产出 `docs/new/` 场景式手册：0-12 章从空库到 HTTPS/TCP/UDP/DNS 全链路可用
+- 产出 `docs/user-manual/` 场景式手册：0-12 章从空库到 HTTPS/TCP/UDP/DNS 全链路可用
 - 每章解释"为什么做这一步 + 每个选项是什么"
 - 关键界面配真实截图（Playwright 自动截取），不可达画面用占位描述
 - 手册示例值全部可复现、可复制执行
@@ -24,7 +24,7 @@
 
 ### 1. 文档组织：单文件分章 vs 多文件
 
-**选择**：多文件。`docs/new/README.md` 为总目录 + `01-cluster.md` … `12-domain-verify.md` 每章一个文件。
+**选择**：多文件。`docs/user-manual/README.md` 为总目录 + `01-cluster.md` … `12-domain-verify.md` 每章一个文件。
 
 **理由**：单文件超过千行后难以维护和截图对位；多文件便于后续按章更新与评审。旧手册是单文件，本次刻意区分。
 
@@ -59,7 +59,7 @@
 
 ### 3. 截图策略
 
-**选择**：Playwright（chromium）脚本登录后逐页截取，存 `docs/new/images/<chapter>-<step>.png`；表单填写中间态尽量通过真实 UI 操作产生。无法自动到达的画面（如 SSH 密码输入后的执行日志抽屉依赖真实节点交互）用「📷 截图待补充」占位。
+**选择**：Playwright（chromium）脚本登录后逐页截取，存 `docs/user-manual/images/<chapter>-<step>.png`；表单填写中间态尽量通过真实 UI 操作产生。无法自动到达的画面（如 SSH 密码输入后的执行日志抽屉依赖真实节点交互）用「📷 截图待补充」占位。
 
 **理由**：项目已有 Playwright 基建与登录选择器约定（#username/#password）；自动截图保证与当前 UI 一致，后续 UI 变更可低成本重拍。
 

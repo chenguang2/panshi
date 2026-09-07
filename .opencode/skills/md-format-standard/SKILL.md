@@ -57,7 +57,7 @@ description: Use when markdown documents need to conform to standard authoritati
 5. **验证**：
 
 ```bash
-cd docs/new && npx --yes markdownlint-cli <file>.md
+cd docs/user-manual && npx --yes markdownlint-cli <file>.md
 ```
 
 退出码 0 = 全部通过。逐条修复报错直到通过。

@@ -102,7 +102,7 @@
 - Failed request (401) → verify no audit log
 
 ### [ ] 4.2 Update documentation
-- `docs/new/21-central-management.md` (or new audit-log chapter): document audit log page
+- `docs/user-manual/21-central-management.md` (or new audit-log chapter): document audit log page
 
 ### [ ] 4.3 Sync to main specs
 - `openspec sync-specs --change audit-log-full-coverage`

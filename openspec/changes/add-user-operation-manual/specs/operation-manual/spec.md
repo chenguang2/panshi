@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: 手册位置与格式
-操作手册 SHALL 位于 `docs/new/` 目录，使用 Markdown 格式，图片存放于 `docs/new/images/`。
+操作手册 SHALL 位于 `docs/user-manual/` 目录，使用 Markdown 格式，图片存放于 `docs/user-manual/images/`。
 
 #### Scenario: 目录结构
-- **WHEN** 查看仓库 docs/new 目录
+- **WHEN** 查看仓库 docs/user-manual 目录
 - **THEN** 存在手册主入口文件（README 或 index）
 - **AND** 各章节为独立 .md 文件或单文件分章结构，均可从目录导航跳转
 
@@ -39,7 +39,7 @@
 
 #### Scenario: 截图存在性
 - **WHEN** 章节涉及页面操作
-- **THEN** 使用相对路径引用 docs/new/images/ 下的截图
+- **THEN** 使用相对路径引用 docs/user-manual/images/ 下的截图
 - **AND** 未补图的位置使用「📷 截图待补充：<画面描述>」格式占位
 
 ### Requirement: 演示环境一致性

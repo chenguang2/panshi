@@ -1,11 +1,11 @@
 ---
 name: md-to-word-template
-description: Use when converting markdown documentation (docs/new/*.md) to Word documents following the Embrace company template (Embrace文档模板-2024.docx). Also use when the user asks to convert md to Word/docx, apply the Embrace template format, or batch-convert the manual chapters.
+description: Use when converting markdown documentation (docs/user-manual/*.md) to Word documents following the Embrace company template (Embrace文档模板-2024.docx). Also use when the user asks to convert md to Word/docx, apply the Embrace template format, or batch-convert the manual chapters.
 ---
 
 # MD 转 Word（Embrace 模板）
 
-将 `docs/new/*.md` 手册章节转换为套用 Embrace 公司模板格式的 Word 文档。
+将 `docs/user-manual/*.md` 手册章节转换为套用 Embrace 公司模板格式的 Word 文档。
 
 ## 前置条件
 
@@ -17,11 +17,11 @@ description: Use when converting markdown documentation (docs/new/*.md) to Word 
 
 ```bash
 # 默认输出到 /mnt/z/{同名}.docx（本机 Windows 查看约定）
-python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py docs/new/00-login.md
+python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py docs/user-manual/00-login.md
 
 # 指定输出路径（其他机器可用任意路径，目录自动创建）
 python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py \
-  docs/new/00-login.md ./output/00-login.docx
+  docs/user-manual/00-login.md ./output/00-login.docx
 ```
 
 可选参数：`<md文件> [输出docx] [封面标题] [封面副标题]`（输出缺省为 `/mnt/z/{同名}.docx`，封面默认"磐石 Admin" / "操作手册"）。
@@ -30,7 +30,7 @@ python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py \
 
 ```bash
 cd /home/qcg/panshi
-for f in docs/new/[0-9]*.md docs/new/附录*.md; do
+for f in docs/user-manual/[0-9]*.md docs/user-manual/附录*.md; do
   out="/mnt/z/$(basename "${f%.md}").docx"
   python3 .opencode/skills/md-to-word-template/scripts/convert_md_to_word.py "$f" "$out"
 done
