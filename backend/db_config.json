@@ -49,6 +49,18 @@
       "username": "postgres",
       "password_enc": "gAAAAABqknKcEuOu43ENR3glAOheXgiHTcGRJQjBxpWl-V3xM0lKDUYheXx0ifrtWv7qZaMwvZpS1_ldo1TMw-Rwye75UGfJ-A==",
       "ssl": false
+    },
+    {
+      "id": "conn_97987cd5",
+      "type": "sqlite",
+      "name": "测试数据库",
+      "path": "./data/test.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
     }
   ]
 }

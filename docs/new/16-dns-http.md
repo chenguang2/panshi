@@ -49,26 +49,27 @@
 
 ## 16.5 验证
 
-在能连通节点、且已完成第 13 章 hosts 解析的机器上执行：
+在能连通节点的机器上执行：
 
 ```bash
-curl -sk "https://test.com:50000/dns-query?name=test.com&type=A"
+dig @192.168.0.13 -p 50000 +https=/dns-query test.com
 ```
 
-预期返回 JSON 格式的解析结果（DoH 的 JSON API 形态），其中包含 `test.com` 的 A 记录——即第 12 章配置的负载均衡目标节点 IP。
+注意：edge 节点需要开启 http2: on 才能支持 dig 的 https 查询命令
 
-也可以用 curl 的 DoH 能力做端到端验证（让 curl 自己通过我们的 DoH 服务器解析域名再发起请求）：
+预期返回:
 
 ```bash
-curl -vk --doh-url https://test.com:50000/dns-query https://test.com:5000/api/ping
+;; ANSWER SECTION:
+test.com.               5       IN      A       192.168.0.15
 ```
 
-📷 截图待补充：（DoH 查询返回 JSON）
+![dig查询](images/15-05.png)
 
 ## 16.6 本章小结
 
 - DNS代理[HTTP] = 挂载 `dns_upstream` 插件的路由规则，走 HTTPS 七层链路
 - 与 UDP 版互补：加密场景用本页，传统内网解析用第 12 章
-- 验证方式：向 `<URI>?name=<域名>&type=A` 发起请求，或用 `curl --doh-url` 端到端测试
+- 验证方式：使用 dig 命令端到端测试，注意：edge 节点需要开启 http2: on 才能支持 dig 的 https 查询命令
 
 下一步：[第 17 章 指标总览与指标查询](17-metrics.md)

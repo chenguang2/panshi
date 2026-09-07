@@ -3756,6 +3756,7 @@ for f in docs/new/[0-9]*.md docs/new/附录*.md; do
 done
 需要我现在批量转换全部 24 章 + 3 附录吗？
 
+使用 md-to-word-template  skill 将 docs/new/ 下的 14-overview.md 到 28-node-tasks.md 转换为word 文档
 =========================================================================
 
 现在的这个 00-login.md 文档的格式也是有问题的，
@@ -3914,3 +3915,14 @@ WHERE (metric_name = 'edge_http_requests_total')
 请使用 openspec 来完成这个需求
 
 注意：目前使用不了子代理，都只使用主代理来完成
+
+=============================================
+
+使用 md-to-word-template  skill 将 docs/new/ 下的 14-overview.md 到 28-node-tasks.md 转换为一个word 文档
+
+============================================
+
+audit-log-full-coverage
+
+/brainstorming 请仔细阅读 openspec/changes/audit-log-full-coverage 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
