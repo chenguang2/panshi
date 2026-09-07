@@ -3,8 +3,8 @@
 ## 步骤一：确认当前数据库
 
 ```bash
-# 开发环境
-cd /home/qcg/panshi/backend && python3 -c "
+# 开发环境（假设项目目录为 /home/user/panshi）
+cd /home/user/panshi/backend && python3 -c "
 import json
 with open('db_config.json') as f:
     cfg = json.load(f)
@@ -15,8 +15,8 @@ for c in cfg['connections']:
         break
 "
 
-# 生产环境
-cd /home/qcg/panshi/product/linux/panshi/backend && .venv/bin/python3 -c "
+# 生产环境（假设安装目录为 /opt/panshi）
+cd /opt/panshi/backend && .venv/bin/python3 -c "
 import json
 with open('db_config.json') as f:
     cfg = json.load(f)
@@ -36,7 +36,7 @@ for c in cfg['connections']:
 
 ```bash
 # 开发环境
-cd /home/qcg/panshi/backend && uv run python3 -c "
+cd /home/user/panshi/backend && uv run python3 -c "
 import sqlite3, json
 from app.core.security import hash_password
 
@@ -56,7 +56,7 @@ print(f'admin 密码已更新为: {new_pw}')
 "
 
 # 生产环境
-cd /home/qcg/panshi/product/linux/panshi/backend && .venv/bin/python3 -c "
+cd /opt/panshi/backend && .venv/bin/python3 -c "
 import sqlite3, json
 from app.core.security import hash_password
 
@@ -80,7 +80,7 @@ print(f'admin 密码已更新为: {new_pw}')
 
 ```bash
 # 开发环境
-cd /home/qcg/panshi/backend && uv run python3 -c "
+cd /home/user/panshi/backend && uv run python3 -c "
 import json, psycopg2
 from app.core.security import hash_password
 
@@ -100,7 +100,7 @@ print(f'admin 密码已更新为: {new_pw}')
 "
 
 # 生产环境
-cd /home/qcg/panshi/product/linux/panshi/backend && .venv/bin/python3 -c "
+cd /opt/panshi/backend && .venv/bin/python3 -c "
 import json, psycopg2
 from app.core.security import hash_password
 
