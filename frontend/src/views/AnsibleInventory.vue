@@ -667,7 +667,9 @@ function removeRow(row: InventoryHostEntry): void {
       content: `该 IP（${row.ip}）在节点管理中存在，无法删除。请先在节点管理中删除该节点`,
       okText: '前往节点管理',
       cancelText: '取消',
-      onOk: () => router.push('/nodes'),
+      onOk: () => {
+        router.push('/nodes')
+      },
     })
     return
   }
