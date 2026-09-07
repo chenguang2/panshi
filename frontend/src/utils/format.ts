@@ -79,9 +79,10 @@ export function formatPublishDateTime(isoStr: string | null): string {
   }
 }
 
-/** 人类可读文件大小（B / KB / MB）。历史 useClusterStaticResources.formatFileSize 同语义。 */
+/** 人类可读文件大小（B / KB / MB / GB）。历史 useClusterStaticResources.formatFileSize 同语义。 */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }

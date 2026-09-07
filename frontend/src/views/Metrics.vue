@@ -31,7 +31,9 @@
 
     <!-- ── Current value ── -->
     <div v-if="hasChartData" class="metrics-current">
-      <div class="current-label">{{ store.selectedMetric ? (METRIC_LABELS[store.selectedMetric] || store.selectedMetric) : '' }}</div>
+      <div class="current-label">
+        {{ store.selectedMetric ? METRIC_LABELS[store.selectedMetric] || store.selectedMetric : '' }}
+      </div>
       <div class="current-value">{{ currentValue }}</div>
     </div>
 
@@ -51,7 +53,11 @@
           v-if="card.key === 'edge_nginx_http_current_connections' && hasConnectionBreakdown"
           class="summary-breakdown"
         >
-          读 {{ fmtInt(store.connectionStates.reading) }} · 写 {{ fmtInt(store.connectionStates.writing) }} · 等待 {{ fmtInt(store.connectionStates.waiting) }}<template v-if="store.connectionStates.accepted_delta !== undefined"> · 新建 +{{ Math.round(store.connectionStates.accepted_delta) }}</template>
+          读 {{ fmtInt(store.connectionStates.reading) }} · 写 {{ fmtInt(store.connectionStates.writing) }} · 等待
+          {{ fmtInt(store.connectionStates.waiting)
+          }}<template v-if="store.connectionStates.accepted_delta !== undefined">
+            · 新建 +{{ Math.round(store.connectionStates.accepted_delta) }}</template
+          >
         </div>
       </div>
     </div>
@@ -67,17 +73,14 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import VChart from 'vue-echarts'
 import PageHeader from '@/components/PageHeader.vue'
 import { useMetricsStore } from '@/stores/metrics'
+import { formatFileSize } from '@/utils/format'
 
 use([CanvasRenderer, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
 
 const store = useMetricsStore()
 
 // Business metrics to show in summary cards
-const BUSINESS_METRICS = [
-  'edge_http_requests_total',
-  'edge_nginx_http_current_connections',
-  'edge_metric_errors_total',
-]
+const BUSINESS_METRICS = ['edge_http_requests_total', 'edge_nginx_http_current_connections', 'edge_metric_errors_total']
 
 const metricOptions = computed(() =>
   store.metricNames.map((n) => ({
@@ -89,12 +92,10 @@ const metricOptions = computed(() =>
 const hasChartData = computed(() => store.chartData.length > 0)
 
 const summaryCards = computed(() =>
-  BUSINESS_METRICS
-    .filter((k) => k in store.summaryData)
-    .map((k) => ({
-      key: k,
-      label: METRIC_LABELS[k] || k,
-    })),
+  BUSINESS_METRICS.filter((k) => k in store.summaryData).map((k) => ({
+    key: k,
+    label: METRIC_LABELS[k] || k,
+  })),
 )
 
 const METRIC_LABELS: Record<string, string> = {
@@ -110,15 +111,15 @@ const METRIC_LABELS: Record<string, string> = {
   edge_qps: '每秒请求数 (QPS)',
   // Edge HTTP 指标
   edge_http_status: 'HTTP 状态码计数',
-  edge_bandwidth: '带宽 (bytes)',
+  edge_bandwidth: '带宽',
   edge_http_latency: 'HTTP 延迟 (ms)',
   edge_http_latency_avg: 'HTTP 平均延迟 (ms)',
   edge_http_latency_max: 'HTTP 最大延迟 (ms)',
   edge_http_latency_min: 'HTTP 最小延迟 (ms)',
   edge_http_latency_sum: 'HTTP 延迟总和 (ms)',
   edge_http_latency_count: 'HTTP 延迟样本数',
-  edge_http_request_size_bytes: 'HTTP 请求体大小 (字节)',
-  edge_http_response_size_bytes: 'HTTP 响应体大小 (字节)',
+  edge_http_request_size_bytes: 'HTTP 请求体大小',
+  edge_http_response_size_bytes: 'HTTP 响应体大小',
   edge_http_request_duration_seconds: 'HTTP 请求耗时 (秒)',
   // Edge Nginx 指标
   edge_nginx_http_requests_total: 'Nginx HTTP 请求总数',
@@ -132,9 +133,9 @@ const METRIC_LABELS: Record<string, string> = {
   edge_plugin_latency_count: '插件延迟样本数',
   edge_plugin_errors_total: '插件执行错误总数',
   // Edge 共享字典指标
-  edge_shared_dict_capacity_bytes: '共享字典总容量 (字节)',
-  edge_shared_dict_free_space_bytes: '共享字典剩余空间 (字节)',
-  edge_shared_dict_used_bytes: '共享字典已用空间 (字节)',
+  edge_shared_dict_capacity_bytes: '共享字典总容量',
+  edge_shared_dict_free_space_bytes: '共享字典剩余空间',
+  edge_shared_dict_used_bytes: '共享字典已用空间',
   edge_shared_dict_lookup_hits_total: '共享字典查询命中数',
   edge_shared_dict_lookup_misses_total: '共享字典查询未命中数',
   edge_shared_dict_eviction_hits_total: '共享字典淘汰命中数',
@@ -210,9 +211,7 @@ function fmtVal(v: number): string {
   return v.toFixed(3)
 }
 
-const hasMaxMin = computed(() =>
-  store.chartData.some((d) => d.max !== undefined && d.min !== undefined),
-)
+const hasMaxMin = computed(() => store.chartData.some((d) => d.max !== undefined && d.min !== undefined))
 
 const currentValue = computed(() => {
   if (!hasChartData.value) return '--'
@@ -223,6 +222,8 @@ const currentValue = computed(() => {
 })
 
 const chartOption = computed(() => {
+  const metric = store.selectedMetric
+  const isBytesMetric = metric && (metric.includes('_bytes') || metric === 'edge_bandwidth')
   const series: any[] = [
     {
       name: '平均值',
@@ -266,10 +267,12 @@ const chartOption = computed(() => {
         let html = `<div style="font-size:12px;color:#999;margin-bottom:4px">${timeStr}</div>`
         for (const item of items) {
           if (item.value[1] == null) continue
+          const val = Number(item.value[1])
+          const displayVal = isBytesMetric ? formatFileSize(val) : fmtVal(val)
           html += `<div style="display:flex;align-items:center;gap:6px;font-size:13px;line-height:1.8">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${item.color}"></span>
             <span style="color:#999">${item.seriesName}</span>
-            <span style="font-weight:600;font-family:var(--font-mono,monospace)">${fmtVal(Number(item.value[1]))}</span>
+            <span style="font-weight:600;font-family:var(--font-mono,monospace)">${displayVal}</span>
           </div>`
         }
         return html
@@ -286,7 +289,15 @@ const chartOption = computed(() => {
       type: 'time',
       axisLabel: { fontSize: 11 },
     },
-    yAxis: { type: 'value' },
+    yAxis: {
+      type: 'value',
+      axisLabel: {
+        formatter: (v: number) => {
+          if (isBytesMetric) return formatFileSize(v)
+          return String(v)
+        },
+      },
+    },
     series,
   }
 })
@@ -303,12 +314,7 @@ function formatValue(key: string): string {
 // 连接状态细分：reading/writing/waiting/accepted_delta 任一有数据即展示
 const hasConnectionBreakdown = computed(() => {
   const s = store.connectionStates
-  return (
-    s.reading !== undefined ||
-    s.writing !== undefined ||
-    s.waiting !== undefined ||
-    s.accepted_delta !== undefined
-  )
+  return s.reading !== undefined || s.writing !== undefined || s.waiting !== undefined || s.accepted_delta !== undefined
 })
 
 function fmtInt(v: number | undefined): string {
