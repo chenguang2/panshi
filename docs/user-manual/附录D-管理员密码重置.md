@@ -16,7 +16,7 @@ for c in cfg['connections']:
 "
 
 # 生产环境
-cd /home/qcg/panshi/product/linux/panshi/backend && python3 -c "
+cd /home/qcg/panshi/product/linux/panshi/backend && .venv/bin/python3 -c "
 import json
 with open('db_config.json') as f:
     cfg = json.load(f)
