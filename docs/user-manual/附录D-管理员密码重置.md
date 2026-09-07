@@ -1,34 +1,68 @@
 # 管理员密码重置
 
-## 前置：确认当前数据库
+## 前置：确认环境
 
-密码存储在活动数据库中，路径由 `backend/db_config.json` 的 `active` 字段决定：
+| 环境 | 数据库类型 | Python 路径 |
+|---|---|---|
+| 开发 | SQLite (`backend/data/`) | `uv run python3` |
+| 生产 | PostgreSQL | `/opt/panshi/backend/venv/bin/python3` |
+
+## 方案一：Python 脚本（推荐，通用）
 
 ```bash
-cd /home/qcg/panshi/backend
-python3 -c "
-import json
-with open('db_config.json') as f:
-    cfg = json.load(f)
-for c in cfg['connections']:
-    if c['id'] == cfg['active']:
-        print(f'当前数据库: {c[\"type\"]} → {c.get(\"path\") or c.get(\"database\")}')
-        break
-"
+# 开发环境
+cd /home/qcg/panshi/backend && uv run python3 reset_password.py
+
+# 生产环境
+cd /opt/panshi/backend && venv/bin/python3 reset_password.py
 ```
 
-## 通过 SQLite 直接修改
+`reset_password.py` 内容：
 
-密码使用 **bcrypt** 加密存储。
+```python
+import sys
+import getpass
+from app.core.security import hash_password
 
-### 一条命令
+# 自动检测数据库类型
+try:
+    import sqlite3
+    import json
+    with open('db_config.json') as f:
+        cfg = json.load(f)
+    for c in cfg['connections']:
+        if c['id'] == cfg['active']:
+            db_path = c.get('path', '')
+            break
+    conn = sqlite3.connect(db_path)
+    db_type = 'sqlite'
+except FileNotFoundError:
+    import os
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    db_type = 'postgresql'
+
+new_pw = getpass.getpass('输入新密码: ')
+confirm = getpass.getpass('再次输入: ')
+if new_pw != confirm:
+    print('两次密码不一致'); sys.exit(1)
+
+hashed = hash_password(new_pw)
+cur = conn.cursor()
+cur.execute('UPDATE sys_user SET password_hash = ? WHERE username = ?', (hashed, 'admin'))
+conn.commit()
+conn.close()
+print(f'admin 密码已更新')
+```
+
+## 方案二：命令行快速重置
+
+### SQLite（开发环境）
 
 ```bash
 cd /home/qcg/panshi/backend && uv run python3 -c "
 import sqlite3, json
 from app.core.security import hash_password
 
-# 读取活动数据库路径
 with open('db_config.json') as f:
     cfg = json.load(f)
 for c in cfg['connections']:
@@ -45,19 +79,22 @@ print(f'admin 密码已更新为: {new_pw}')
 "
 ```
 
-### 分步操作
+### PostgreSQL（生产环境）
 
 ```bash
-# 1. 生成新密码的 bcrypt hash
-cd /home/qcg/panshi/backend && uv run python3 -c "
+cd /opt/panshi/backend && venv/bin/python3 -c "
+import os, psycopg2
 from app.core.security import hash_password
-print(hash_password('你的新密码'))
-"
 
-# 2. 更新数据库（替换为实际数据库路径）
-sqlite3 /path/to/your/database.db "UPDATE sys_user SET password_hash='上一步得到的hash' WHERE username='admin';"
+new_pw = '你的新密码'
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+conn.cursor().execute('UPDATE sys_user SET password_hash = %s WHERE username = %s', (hash_password(new_pw), 'admin'))
+conn.commit()
+conn.close()
+print(f'admin 密码已更新为: {new_pw}')
+"
 ```
 
-### 验证
+## 验证
 
 登录页面使用新密码登录即可。
