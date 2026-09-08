@@ -765,8 +765,6 @@ class TestBuildEdgeServiceContent:
         assert "ExecReload=/data/rocks/uap-edge/bin/edge reload" in content
         assert "PIDFile=/data/rocks/uap-edge/logs/nginx.pid" in content
         assert "Type=forking" in content
-        assert "Restart=on-failure" in content
-        assert "RestartSec=5s" in content
         assert "[Install]" in content
         assert "WantedBy=multi-user.target" in content
 

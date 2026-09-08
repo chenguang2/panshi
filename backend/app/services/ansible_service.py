@@ -1125,7 +1125,6 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
     """Build the /etc/systemd/system/edge.service content.
 
     Type=forking + PIDFile because ``bin/edge start`` daemonizes (forks nginx).
-    Restart=on-failure so systemd auto-recovers on crash but not on ``systemctl stop``.
 
     ExecStop uses ``bin/edge stop`` which calls ``openresty -s stop``.  When the
     PID file is missing or stale, the fallback reads the PID from the file and
@@ -1156,8 +1155,6 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
         f'ExecStop=/bin/bash -c "{stop_cmd}"\n'
         f"ExecReload={edge_path}/bin/edge reload\n"
         f"PIDFile={pidfile}\n"
-        "Restart=on-failure\n"
-        "RestartSec=5s\n"
         "\n"
         "[Install]\n"
         "WantedBy=multi-user.target\n"
