@@ -1133,6 +1133,7 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
     """
     pidfile = f"{edge_path}/logs/nginx.pid"
     # ExecStop: try edge stop first; fallback reads PID file and kills directly.
+    # SIGTERM to master: nginx gracefully shuts down all workers before exiting.
     # Avoid pkill -f: the search string appears in the bash command line itself.
     stop_cmd = (
         f"{edge_path}/bin/edge stop 2>/dev/null; "
