@@ -761,7 +761,7 @@ class TestBuildEdgeServiceContent:
         assert "ExecStart=/data/rocks/uap-edge/bin/edge start" in content
         assert "ExecStop=" in content
         assert "/data/rocks/uap-edge/bin/edge stop" in content
-        assert "pkill" in content
+        assert "kill -TERM" in content
         assert "ExecReload=/data/rocks/uap-edge/bin/edge reload" in content
         assert "PIDFile=/data/rocks/uap-edge/logs/nginx.pid" in content
         assert "Type=forking" in content

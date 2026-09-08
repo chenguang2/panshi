@@ -1127,12 +1127,21 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
     Type=forking + PIDFile because ``bin/edge start`` daemonizes (forks nginx).
     Restart=on-failure so systemd auto-recovers on crash but not on ``systemctl stop``.
 
-    ExecStop uses a shell fallback: ``bin/edge stop`` relies on the PID file
-    (logs/nginx.pid).  If the file is missing or stale (e.g. nginx started
-    before the service was deployed), the stop silently fails and the nginx
-    process survives.  The fallback ``pkill`` finds the openresty master by
-    its command-line prefix and sends SIGTERM as a safety net.
+    ExecStop uses ``bin/edge stop`` which calls ``openresty -s stop``.  When the
+    PID file is missing or stale, the fallback reads the PID from the file and
+    kills it directly.  We avoid ``pkill -f`` because the search pattern would
+    also match the bash process running ExecStop itself.
     """
+    pidfile = f"{edge_path}/logs/nginx.pid"
+    # ExecStop: try edge stop first; fallback reads PID file and kills directly.
+    # Avoid pkill -f: the search string appears in the bash command line itself.
+    stop_cmd = (
+        f"{edge_path}/bin/edge stop 2>/dev/null; "
+        f"sleep 1; "
+        f"PID=$(cat {pidfile} 2>/dev/null); "
+        f'if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then '
+        f'kill -TERM "$PID"; fi'
+    )
     return (
         "[Unit]\n"
         "Description=Edge Gateway\n"
@@ -1144,12 +1153,9 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
         f"Group={run_user}\n"
         f"WorkingDirectory={edge_path}\n"
         f"ExecStart={edge_path}/bin/edge start\n"
-        f"ExecStop=/bin/bash -c '{edge_path}/bin/edge stop 2>/dev/null; "
-        f"sleep 1; "
-        f"if pgrep -f \"openresty -p {edge_path}\" >/dev/null 2>&1; then "
-        f"pkill -TERM -f \"openresty -p {edge_path}\"; fi'\n"
+        f'ExecStop=/bin/bash -c "{stop_cmd}"\n'
         f"ExecReload={edge_path}/bin/edge reload\n"
-        f"PIDFile={edge_path}/logs/nginx.pid\n"
+        f"PIDFile={pidfile}\n"
         "Restart=on-failure\n"
         "RestartSec=5s\n"
         "\n"
