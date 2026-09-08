@@ -1122,12 +1122,10 @@ def sanitize_command_for_store(command: str) -> str:
 
 
 def build_edge_service_content(run_user: str, edge_path: str) -> str:
-    """Build the /etc/systemd/system/edge.service content (决策 1a).
+    """Build the /etc/systemd/system/edge.service content.
 
-    Type=oneshot + RemainAfterExit=yes because ``bin/edge start`` daemonizes
-    and returns immediately. No Restart (决策 6a): with oneshot, systemd's
-    Restart tracks the start command, not the nginx process, so it would not
-    actually guard nginx crashes.
+    Type=forking + PIDFile because ``bin/edge start`` daemonizes (forks nginx).
+    Restart=on-failure so systemd auto-recovers on crash but not on ``systemctl stop``.
     """
     return (
         "[Unit]\n"
@@ -1135,12 +1133,16 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
         "After=network.target\n"
         "\n"
         "[Service]\n"
-        "Type=oneshot\n"
+        "Type=forking\n"
         f"User={run_user}\n"
         f"Group={run_user}\n"
         f"WorkingDirectory={edge_path}\n"
         f"ExecStart={edge_path}/bin/edge start\n"
-        "RemainAfterExit=yes\n"
+        f"ExecStop={edge_path}/bin/edge stop\n"
+        f"ExecReload={edge_path}/bin/edge reload\n"
+        f"PIDFile={edge_path}/logs/nginx.pid\n"
+        "Restart=on-failure\n"
+        "RestartSec=5s\n"
         "\n"
         "[Install]\n"
         "WantedBy=multi-user.target\n"

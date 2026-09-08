@@ -759,15 +759,19 @@ class TestBuildEdgeServiceContent:
         assert "Group=rocksware" in content
         assert "WorkingDirectory=/data/rocks/uap-edge" in content
         assert "ExecStart=/data/rocks/uap-edge/bin/edge start" in content
-        assert "Type=oneshot" in content
-        assert "RemainAfterExit=yes" in content
+        assert "ExecStop=/data/rocks/uap-edge/bin/edge stop" in content
+        assert "ExecReload=/data/rocks/uap-edge/bin/edge reload" in content
+        assert "PIDFile=/data/rocks/uap-edge/logs/nginx.pid" in content
+        assert "Type=forking" in content
+        assert "Restart=on-failure" in content
+        assert "RestartSec=5s" in content
         assert "[Install]" in content
         assert "WantedBy=multi-user.target" in content
 
-    def test_service_content_has_no_restart(self):
+    def test_service_content_no_remain_after_exit(self):
         from app.services.ansible_service import build_edge_service_content
         content = build_edge_service_content(run_user="qcg", edge_path="/opt/uap-edge")
-        assert "Restart=" not in content
+        assert "RemainAfterExit" not in content
 
 
 class TestParseAutostartStatus:
