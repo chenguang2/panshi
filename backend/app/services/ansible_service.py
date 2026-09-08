@@ -1126,6 +1126,12 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
 
     Type=forking + PIDFile because ``bin/edge start`` daemonizes (forks nginx).
     Restart=on-failure so systemd auto-recovers on crash but not on ``systemctl stop``.
+
+    ExecStop uses a shell fallback: ``bin/edge stop`` relies on the PID file
+    (logs/nginx.pid).  If the file is missing or stale (e.g. nginx started
+    before the service was deployed), the stop silently fails and the nginx
+    process survives.  The fallback ``pkill`` finds the openresty master by
+    its command-line prefix and sends SIGTERM as a safety net.
     """
     return (
         "[Unit]\n"
@@ -1138,7 +1144,10 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
         f"Group={run_user}\n"
         f"WorkingDirectory={edge_path}\n"
         f"ExecStart={edge_path}/bin/edge start\n"
-        f"ExecStop={edge_path}/bin/edge stop\n"
+        f"ExecStop=/bin/bash -c '{edge_path}/bin/edge stop 2>/dev/null; "
+        f"sleep 1; "
+        f"if pgrep -f \"openresty -p {edge_path}\" >/dev/null 2>&1; then "
+        f"pkill -TERM -f \"openresty -p {edge_path}\"; fi'\n"
         f"ExecReload={edge_path}/bin/edge reload\n"
         f"PIDFile={edge_path}/logs/nginx.pid\n"
         "Restart=on-failure\n"

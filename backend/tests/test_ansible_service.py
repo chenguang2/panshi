@@ -759,7 +759,9 @@ class TestBuildEdgeServiceContent:
         assert "Group=rocksware" in content
         assert "WorkingDirectory=/data/rocks/uap-edge" in content
         assert "ExecStart=/data/rocks/uap-edge/bin/edge start" in content
-        assert "ExecStop=/data/rocks/uap-edge/bin/edge stop" in content
+        assert "ExecStop=" in content
+        assert "/data/rocks/uap-edge/bin/edge stop" in content
+        assert "pkill" in content
         assert "ExecReload=/data/rocks/uap-edge/bin/edge reload" in content
         assert "PIDFile=/data/rocks/uap-edge/logs/nginx.pid" in content
         assert "Type=forking" in content
