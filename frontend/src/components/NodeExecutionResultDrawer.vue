@@ -1,148 +1,210 @@
 <template>
   <Teleport to="body">
-  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:860px;">
-      <div class="modal-header">
-        <h2>{{ title || '执行结果' }}</h2>
-        <div class="modal-header-extra">
-          <button class="btn btn-ghost btn-sm" @click="copyAll" :disabled="logs.length === 0">复制日志</button>
-          <button class="modal-close" :disabled="installing" @click="onClose">&times;</button>
-        </div>
-      </div>
-      <div class="modal-body" style="max-height:80vh;overflow-y:auto;">
-        <!-- Progress bar -->
-        <div style="margin-bottom:16px;">
-          <div class="progress-bar-wrap">
-            <div class="progress-bar" :class="'progress-' + progress.status" :style="{ width: progress.percent + '%' }"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px;">
-            <span>{{ progress.percent }}%</span>
-            <span>
-              <template v-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
-              <template v-else-if="streamStatus === 'connecting'">连接中...</template>
-              <template v-else>等待中...</template>
-            </span>
+    <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+      <div class="modal modal-wide" style="max-width: 860px">
+        <div class="modal-header">
+          <h2>{{ title || '执行结果' }}</h2>
+          <div class="modal-header-extra">
+            <button class="btn btn-ghost btn-sm" @click="copyAll" :disabled="logs.length === 0">复制日志</button>
+            <button class="modal-close" :disabled="installing" @click="onClose">&times;</button>
           </div>
         </div>
-
-        <!-- Error banner -->
-        <div v-if="streamError" style="margin-bottom:12px;padding:10px 14px;background:oklch(55% 0.18 28 / 8%);border:1px solid oklch(55% 0.18 28 / 25%);border-radius:6px;color:var(--danger);font-size:13px;">
-          ❌ {{ streamError }}
-        </div>
-
-        <!-- Tabs -->
-        <div class="ner-tabs">
-          <div class="ner-tab-headers">
-            <span class="ner-tab" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'">📋 关键信息</span>
-            <span class="ner-tab" :class="{ active: activeTab === 'stdout' }" @click="activeTab = 'stdout'">📄 stdout</span>
-            <span v-if="result && result.stderr" class="ner-tab" :class="{ active: activeTab === 'stderr' }" @click="activeTab = 'stderr'">❌ stderr</span>
-            <span class="ner-tab" :class="{ active: activeTab === 'command' }" @click="activeTab = 'command'">💻 命令</span>
+        <div class="modal-body" style="max-height: 80vh; overflow-y: auto">
+          <!-- Progress bar -->
+          <div style="margin-bottom: 16px">
+            <div class="progress-bar-wrap">
+              <div
+                class="progress-bar"
+                :class="'progress-' + progress.status"
+                :style="{ width: progress.percent + '%' }"
+              ></div>
+            </div>
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                color: var(--muted);
+                margin-top: 4px;
+              "
+            >
+              <span>{{ progress.percent }}%</span>
+              <span>
+                <template v-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
+                <template v-else-if="streamStatus === 'connecting'">连接中...</template>
+                <template v-else>等待中...</template>
+              </span>
+            </div>
           </div>
-          <div class="ner-tab-content">
-            <!-- Summary tab -->
-            <div v-show="activeTab === 'summary'" class="tab-body">
-              <!-- Install operation summary -->
-              <template v-if="title && title.startsWith('安装')">
-                <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
-                  <div v-if="result.rc === 0" class="result-badge result-success">✅ 安装成功</div>
-                  <div v-else class="result-badge result-fail">❌ 安装失败 (rc: {{ result.rc }})</div>
-                </div>
-                <div v-else style="margin-bottom:12px;">
-                  <div class="result-badge" style="background:oklch(56% 0.16 210 / 10%);color:var(--accent);">⏳ 安装中...</div>
-                </div>
-                <div style="color:var(--muted);font-size:12px;">请在「stdout」标签页查看实时安装日志。</div>
-              </template>
 
-              <!-- Nginx operation summary (start/stop/status) -->
-              <template v-else>
-                <div v-if="result && result.rc !== null" style="margin-bottom:12px;">
-                  <div v-if="result.rc === 0" class="result-badge result-success">✅ 成功</div>
-                  <div v-else class="result-badge result-fail">❌ 失败 (rc: {{ result.rc }})</div>
-                </div>
-                <div v-if="result && result.rc !== null && result.rc !== 0 && result.stderr" class="error-text">
-                  {{ result.stderr }}
-                </div>
+          <!-- Error banner -->
+          <div
+            v-if="streamError"
+            style="
+              margin-bottom: 12px;
+              padding: 10px 14px;
+              background: oklch(55% 0.18 28 / 8%);
+              border: 1px solid oklch(55% 0.18 28 / 25%);
+              border-radius: 6px;
+              color: var(--danger);
+              font-size: 13px;
+            "
+          >
+            ❌ {{ streamError }}
+          </div>
 
-                <!-- Nginx status card -->
-                <div v-if="nginxStatus.known" class="ner-card" :class="nginxStatus.running ? 'card-success' : 'card-fail'">
-                  <div class="ner-card-title">
-                    <span :style="{ color: nginxStatus.running ? 'var(--success)' : 'var(--danger)' }">
-                      {{ nginxStatus.running ? '●' : '○' }}
-                    </span>
-                    Nginx 进程: {{ nginxStatus.running ? '运行中' : '未运行' }}
+          <!-- Tabs -->
+          <div class="ner-tabs">
+            <div class="ner-tab-headers">
+              <span class="ner-tab" :class="{ active: activeTab === 'summary' }" @click="activeTab = 'summary'"
+                >📋 关键信息</span
+              >
+              <span class="ner-tab" :class="{ active: activeTab === 'stdout' }" @click="activeTab = 'stdout'"
+                >📄 stdout</span
+              >
+              <span
+                v-if="result && result.stderr"
+                class="ner-tab"
+                :class="{ active: activeTab === 'stderr' }"
+                @click="activeTab = 'stderr'"
+                >❌ stderr</span
+              >
+              <span class="ner-tab" :class="{ active: activeTab === 'command' }" @click="activeTab = 'command'"
+                >💻 命令</span
+              >
+            </div>
+            <div class="ner-tab-content">
+              <!-- Summary tab -->
+              <div v-show="activeTab === 'summary'" class="tab-body">
+                <!-- Install operation summary -->
+                <template v-if="title && title.startsWith('安装')">
+                  <div v-if="result && result.rc !== null" style="margin-bottom: 12px">
+                    <div v-if="result.rc === 0" class="result-badge result-success">✅ 安装成功</div>
+                    <div v-else class="result-badge result-fail">❌ 安装失败 (rc: {{ result.rc }})</div>
                   </div>
-                  <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
-                </div>
-                <div v-else-if="result && result.rc !== null && result.rc !== 0" class="ner-card card-warn">
-                  <div class="ner-card-title">
-                    <span style="color:var(--warning);">○</span>
-                    Nginx 进程: 未查询到（操作未成功执行）
-                  </div>
-                </div>
-
-                <!-- Highlights -->
-                <div v-if="highlights.length > 0" style="margin-bottom:12px;">
-                  <div class="section-label">关键信息</div>
-                  <div class="log-box">
-                    <div v-for="(line, i) in highlights" :key="i" style="color:var(--success);">{{ line }}</div>
-                  </div>
-                </div>
-
-                <!-- Statistics -->
-                <div v-if="statistics && Object.keys(statistics).length > 0" style="margin-bottom:12px;">
-                  <div class="section-label">节点统计信息</div>
-                  <div class="stat-grid">
-                    <div v-for="(val, key) in statistics" :key="key" class="stat-item">
-                      <span class="stat-label">{{ statLabels[key] || key }}</span>
-                      <span class="stat-value">{{ val }}</span>
+                  <div v-else style="margin-bottom: 12px">
+                    <div class="result-badge" style="background: oklch(56% 0.16 210 / 10%); color: var(--accent)">
+                      ⏳ 安装中...
                     </div>
                   </div>
+                  <div style="color: var(--muted); font-size: 12px">请在「stdout」标签页查看实时安装日志。</div>
+                </template>
+
+                <!-- Nginx operation summary (start/stop/status) -->
+                <template v-else>
+                  <div v-if="result && result.rc !== null" style="margin-bottom: 12px">
+                    <div v-if="result.rc === 0" class="result-badge result-success">✅ 成功</div>
+                    <div v-else class="result-badge result-fail">❌ 失败 (rc: {{ result.rc }})</div>
+                  </div>
+                  <div v-if="result && result.rc !== null && result.rc !== 0 && result.stderr" class="error-text">
+                    {{ result.stderr }}
+                  </div>
+
+                  <!-- Nginx status card -->
+                  <div
+                    v-if="showNginxStatus !== false && nginxStatus.known"
+                    class="ner-card"
+                    :class="nginxStatus.running ? 'card-success' : 'card-fail'"
+                  >
+                    <div class="ner-card-title">
+                      <span :style="{ color: nginxStatus.running ? 'var(--success)' : 'var(--danger)' }">
+                        {{ nginxStatus.running ? '●' : '○' }}
+                      </span>
+                      Nginx 进程: {{ nginxStatus.running ? '运行中' : '未运行' }}
+                    </div>
+                    <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
+                  </div>
+                  <div
+                    v-else-if="showNginxStatus !== false && result && result.rc !== null && result.rc !== 0"
+                    class="ner-card card-warn"
+                  >
+                    <div class="ner-card-title">
+                      <span style="color: var(--warning)">○</span>
+                      Nginx 进程: 未查询到（操作未成功执行）
+                    </div>
+                  </div>
+
+                  <!-- Highlights -->
+                  <div v-if="highlights.length > 0" style="margin-bottom: 12px">
+                    <div class="section-label">关键信息</div>
+                    <div class="log-box">
+                      <div v-for="(line, i) in highlights" :key="i" style="color: var(--success)">{{ line }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Statistics -->
+                  <div v-if="statistics && Object.keys(statistics).length > 0" style="margin-bottom: 12px">
+                    <div class="section-label">节点统计信息</div>
+                    <div class="stat-grid">
+                      <div v-for="(val, key) in statistics" :key="key" class="stat-item">
+                        <span class="stat-label">{{ statLabels[key] || key }}</span>
+                        <span class="stat-value">{{ val }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="result" style="color: var(--muted); font-size: 12px">返回码 (rc): {{ result.rc }}</div>
+                </template>
+
+                <div v-if="logs.length > 0" style="margin-top: 12px">
+                  <div class="section-label">执行日志</div>
+                  <div class="log-box">
+                    <div
+                      v-for="(line, i) in logs"
+                      :key="i"
+                      style="white-space: pre-wrap"
+                      v-html="ansiToHtml(line)"
+                    ></div>
+                  </div>
                 </div>
+              </div>
 
-                <div v-if="result" style="color:var(--muted);font-size:12px;">返回码 (rc): {{ result.rc }}</div>
-              </template>
+              <!-- stdout tab -->
+              <div v-show="activeTab === 'stdout'" class="tab-body">
+                <div
+                  v-if="logs.length > 0"
+                  ref="stdoutLogBox"
+                  class="log-box full-width"
+                  style="overflow-y: auto; max-height: 50vh"
+                >
+                  <pre
+                    style="margin: 0; white-space: pre-wrap; word-break: break-all"
+                    v-html="ansiToHtml(logs.join('\n'))"
+                  ></pre>
+                </div>
+                <div v-else-if="result && result.stdout" class="log-box full-width">
+                  <pre
+                    style="margin: 0; white-space: pre-wrap; word-break: break-all"
+                    v-html="ansiToHtml(result.stdout)"
+                  ></pre>
+                </div>
+                <div v-else style="color: var(--muted)">无输出</div>
+              </div>
 
-              <div v-if="logs.length > 0" style="margin-top:12px;">
-                <div class="section-label">执行日志</div>
-                <div class="log-box">
-                  <div v-for="(line, i) in logs" :key="i" style="white-space:pre-wrap;" v-html="ansiToHtml(line)"></div>
+              <!-- stderr tab -->
+              <div v-show="activeTab === 'stderr'" class="tab-body">
+                <div v-if="result && result.stderr" class="log-box full-width" style="border-color: var(--danger)">
+                  <pre style="margin: 0; white-space: pre-wrap; word-break: break-all; color: var(--danger)">{{
+                    result.stderr
+                  }}</pre>
                 </div>
               </div>
-            </div>
 
-            <!-- stdout tab -->
-            <div v-show="activeTab === 'stdout'" class="tab-body">
-              <div v-if="logs.length > 0" ref="stdoutLogBox" class="log-box full-width" style="overflow-y:auto;max-height:50vh;">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;" v-html="ansiToHtml(logs.join('\n'))"></pre>
-              </div>
-              <div v-else-if="result && result.stdout" class="log-box full-width">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;" v-html="ansiToHtml(result.stdout)"></pre>
-              </div>
-              <div v-else style="color:var(--muted);">无输出</div>
-            </div>
-
-            <!-- stderr tab -->
-            <div v-show="activeTab === 'stderr'" class="tab-body">
-              <div v-if="result && result.stderr" class="log-box full-width" style="border-color:var(--danger);">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;color:var(--danger);">{{ result.stderr }}</pre>
-              </div>
-            </div>
-
-            <!-- command tab -->
-            <div v-show="activeTab === 'command'" class="tab-body">
-              <div v-if="result && result.command" class="log-box full-width">
-                <pre style="margin:0;white-space:pre-wrap;word-break:break-all;">{{ result.command }}</pre>
+              <!-- command tab -->
+              <div v-show="activeTab === 'command'" class="tab-body">
+                <div v-if="result && result.command" class="log-box full-width">
+                  <pre style="margin: 0; white-space: pre-wrap; word-break: break-all">{{ result.command }}</pre>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button v-if="installing" class="btn btn-danger" @click="onCancel">取消安装</button>
-        <button v-else class="btn btn-secondary" @click="onClose">关闭</button>
+        <div class="modal-footer">
+          <button v-if="installing" class="btn btn-danger" @click="onCancel">取消安装</button>
+          <button v-else class="btn btn-secondary" @click="onClose">关闭</button>
+        </div>
       </div>
     </div>
-  </div>
   </Teleport>
 </template>
 
@@ -163,11 +225,12 @@ const props = defineProps<{
   installing?: boolean
   streamError?: string | null
   streamStatus?: string
+  showNginxStatus?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'cancel': []
+  cancel: []
 }>()
 
 const activeTab = ref('summary')
@@ -190,10 +253,10 @@ const nginxStatus = computed(() => {
     return { known: false, running: false, pid: null }
   }
   const hasRunning = (l: string) => /\b(running|started|reloaded)\b/i.test(l) && /nginx/i.test(l)
-  const hasPid = lines.some(l => /PID\s*:\s*\d+/i.test(l))
+  const hasPid = lines.some((l) => /PID\s*:\s*\d+/i.test(l))
   const running = lines.some(hasRunning) || hasPid
-  const pidLine = lines.find(l => /PID\s*:\s*\d+/i.test(l))
-  const pid = pidLine ? (pidLine.match(/PID\s*:\s*(\d+)/i)?.[1] || null) : null
+  const pidLine = lines.find((l) => /PID\s*:\s*\d+/i.test(l))
+  const pid = pidLine ? pidLine.match(/PID\s*:\s*(\d+)/i)?.[1] || null : null
   return { known: true, running, pid }
 })
 
@@ -206,19 +269,25 @@ const statLabels: Record<string, string> = {
 }
 
 // Auto-scroll stdout log box to bottom when new lines arrive
-watch(() => props.logs.length, async () => {
-  if (activeTab.value !== 'stdout') return
-  await nextTick()
-  if (stdoutLogBox.value) {
-    stdoutLogBox.value.scrollTop = stdoutLogBox.value.scrollHeight
-  }
-})
+watch(
+  () => props.logs.length,
+  async () => {
+    if (activeTab.value !== 'stdout') return
+    await nextTick()
+    if (stdoutLogBox.value) {
+      stdoutLogBox.value.scrollTop = stdoutLogBox.value.scrollHeight
+    }
+  },
+)
 
-watch(() => props.result, (r) => {
-  if (r && r.rc !== 0 && r.stderr) {
-    activeTab.value = 'stderr'
-  }
-})
+watch(
+  () => props.result,
+  (r) => {
+    if (r && r.rc !== 0 && r.stderr) {
+      activeTab.value = 'stderr'
+    }
+  },
+)
 
 function onClose() {
   emit('update:visible', false)
@@ -263,13 +332,20 @@ async function copyAll() {
   transition: width 0.3s ease;
   background: var(--accent);
 }
-.progress-bar.progress-success { background: var(--success); }
-.progress-bar.progress-exception { background: var(--danger); }
+.progress-bar.progress-success {
+  background: var(--success);
+}
+.progress-bar.progress-exception {
+  background: var(--danger);
+}
 
 /* ── Custom tabs ── */
-.ner-tabs { margin-top: 8px; }
+.ner-tabs {
+  margin-top: 8px;
+}
 .ner-tab-headers {
-  display: flex; gap: 2px;
+  display: flex;
+  gap: 2px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
   margin-bottom: 12px;
@@ -317,9 +393,16 @@ async function copyAll() {
   max-height: 400px;
   overflow-y: auto;
 }
-.log-box::-webkit-scrollbar { width: 8px; }
-.log-box::-webkit-scrollbar-thumb { background: #666; border-radius: 4px; }
-.log-box::-webkit-scrollbar-track { background: #333; }
+.log-box::-webkit-scrollbar {
+  width: 8px;
+}
+.log-box::-webkit-scrollbar-thumb {
+  background: #666;
+  border-radius: 4px;
+}
+.log-box::-webkit-scrollbar-track {
+  background: #333;
+}
 .log-box.full-width {
   max-height: calc(60vh - 20px);
 }
@@ -329,8 +412,12 @@ async function copyAll() {
   font-size: 15px;
   font-weight: 600;
 }
-.result-success { color: var(--success); }
-.result-fail { color: var(--danger); }
+.result-success {
+  color: var(--success);
+}
+.result-fail {
+  color: var(--danger);
+}
 
 /* ── Error text ── */
 .error-text {

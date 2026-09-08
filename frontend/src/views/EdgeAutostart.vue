@@ -142,6 +142,7 @@
       :installing="installing"
       :stream-status="streamStatus"
       :stream-error="streamError"
+      :show-nginx-status="false"
     />
   </div>
 </template>
