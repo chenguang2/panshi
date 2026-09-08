@@ -395,7 +395,8 @@ function parseAutostartState(logs: string[]): AutostartStatus {
   // 出现在真实结果之前——真实状态（enabled/disabled/not_configured）优先，
   // 权限错误仅在没有真实结果时作为兜底（与后端 _infer_status 语义一致）。
   let sawPermissionError = false
-  for (const line of logs) {
+  for (const raw of logs) {
+    const line = raw.replace(/^\[[\d:]+\]\s*/, '')
     if (line.startsWith('手工执行命令')) continue
     if (/No such file or directory/.test(line)) return 'not_configured'
     if (/enabled/.test(line)) return 'enabled'
