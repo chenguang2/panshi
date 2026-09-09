@@ -48,7 +48,7 @@ export function migrateDatabase(sourceId: string, targetId: string, payload?: Pa
     include_logs: payload?.include_logs ?? true,
     confirmed_clear: payload?.confirmed_clear ?? false,
   }
-  return api.post<MigrateResult>('/database/migrate', body)
+  return api.post<MigrateResult>('/database/migrate', body, { timeout: 300000 })
 }
 
 export function exportDatabase(sourceId: string) {
