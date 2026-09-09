@@ -1,6 +1,9 @@
 <template>
   <div class="database-management">
-    <PageHeader title="数据库管理" description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。">
+    <PageHeader
+      title="数据库管理"
+      description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。"
+    >
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加连接</button>
       </template>
@@ -15,7 +18,9 @@
             <span class="status-dot online"></span>
             <div class="active-info">
               <div class="active-name">
-                <a-tag :color="status.active.type === 'postgres' ? 'blue' : 'orange'">{{ status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
+                <a-tag :color="status.active.type === 'postgres' ? 'blue' : 'orange'">{{
+                  status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
+                }}</a-tag>
                 <span class="name">{{ status.active.name }}</span>
               </div>
               <div class="active-address">{{ status.active.display_address || status.active.host }}</div>
@@ -42,7 +47,9 @@
         >
           <template #bodyCell="{ record, column }">
             <template v-if="column.key === 'type'">
-              <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{ record.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</a-tag>
+              <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{
+                record.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
+              }}</a-tag>
             </template>
             <template v-else-if="column.key === 'address'">
               <span>{{ record.display_address || '-' }}</span>
@@ -62,7 +69,9 @@
                   :class="isActive(record) ? 'btn-secondary' : 'btn-primary'"
                   :disabled="isActive(record)"
                   @click="openSwitchModal(record)"
-                >设为当前</button>
+                >
+                  设为当前
+                </button>
                 <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
                 <button class="btn btn-danger btn-sm delete-conn-btn" @click="handleDelete(record)">删除</button>
               </div>
@@ -115,7 +124,14 @@
               <span>我了解将清空目标库</span>
             </label>
           </div>
-            <button class="btn btn-primary migrate-btn" :disabled="migrating || !migrateForm.confirmed_clear" :title="migrateForm.confirmed_clear ? '' : '请先勾选「我了解将清空目标库」'" @click="handleMigrate">{{ migrating ? '迁移中…' : '开始迁移' }}</button>
+          <button
+            class="btn btn-primary migrate-btn"
+            :disabled="migrating || !migrateForm.confirmed_clear"
+            :title="migrateForm.confirmed_clear ? '' : '请先勾选「我了解将清空目标库」'"
+            @click="handleMigrate"
+          >
+            {{ migrating ? '迁移中…' : '开始迁移' }}
+          </button>
         </div>
 
         <div v-if="migrating" class="migrate-progress">
@@ -123,11 +139,29 @@
           <span class="progress-text">正在迁移数据，请稍候…</span>
         </div>
         <div v-if="migrateResult" class="migrate-result">
-          <a-alert type="success" show-icon :message="migrateResult" />
+          <a-alert type="success" show-icon :message="migrateResult.message" />
+          <div v-if="migrateResult.tables?.length" class="migrate-table-detail">
+            <div class="next-steps-title">迁移详情：</div>
+            <a-table
+              :data-source="migrateResult.tables"
+              :columns="migrateTableColumns"
+              row-key="name"
+              :pagination="false"
+              size="small"
+              class="migrate-detail-table"
+            />
+          </div>
+          <div v-if="migrateResult.backup_path" class="migrate-backup-info">
+            <a-tag color="green">备份已保存</a-tag>
+            <span class="backup-path">{{ migrateResult.backup_path }}</span>
+          </div>
           <div class="next-steps">
             <div class="next-steps-title">迁移成功，按以下步骤启用新数据库：</div>
             <ol class="next-steps-list">
-              <li>在上方「连接列表」中找到 <strong>{{ migrateTargetName }}</strong>，点击「设为当前」</li>
+              <li>
+                在上方「连接列表」中找到 <strong>{{ migrateTargetName }}</strong
+                >，点击「设为当前」
+              </li>
               <li>在确认弹窗中点击「确认切换」，然后手动重启后端服务生效</li>
               <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
             </ol>
@@ -154,39 +188,52 @@
             </div>
             <div class="form-group">
               <label class="form-label">名称 <span class="required">*</span></label>
-              <input v-model="connModal.form.name" type="text" class="form-input" placeholder="连接名称">
+              <input v-model="connModal.form.name" type="text" class="form-input" placeholder="连接名称" />
             </div>
           </div>
           <template v-if="connModal.form.type === 'sqlite'">
             <div class="form-group">
               <label class="form-label">数据库文件路径</label>
-              <input v-model="connModal.form.path" type="text" class="form-input" placeholder="/path/to/panshi.db">
+              <input v-model="connModal.form.path" type="text" class="form-input" placeholder="/path/to/panshi.db" />
             </div>
           </template>
           <template v-else>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">主机 <span class="required">*</span></label>
-                <input v-model="connModal.form.host" type="text" class="form-input" placeholder="localhost">
+                <input v-model="connModal.form.host" type="text" class="form-input" placeholder="localhost" />
               </div>
               <div class="form-group">
                 <label class="form-label">端口</label>
-                <input v-model.number="connModal.form.port" type="number" class="form-input" placeholder="5432" min="1" max="65535">
+                <input
+                  v-model.number="connModal.form.port"
+                  type="number"
+                  class="form-input"
+                  placeholder="5432"
+                  min="1"
+                  max="65535"
+                />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">数据库名 <span class="required">*</span></label>
-                <input v-model="connModal.form.database" type="text" class="form-input" placeholder="panshi">
+                <input v-model="connModal.form.database" type="text" class="form-input" placeholder="panshi" />
               </div>
               <div class="form-group">
                 <label class="form-label">用户名</label>
-                <input v-model="connModal.form.username" type="text" class="form-input" placeholder="postgres">
+                <input v-model="connModal.form.username" type="text" class="form-input" placeholder="postgres" />
               </div>
             </div>
             <div class="form-group">
               <label class="form-label">密码</label>
-              <input v-model="connModal.form.password" type="password" class="form-input" placeholder="如需修改请输入" autocomplete="new-password">
+              <input
+                v-model="connModal.form.password"
+                type="password"
+                class="form-input"
+                placeholder="如需修改请输入"
+                autocomplete="new-password"
+              />
             </div>
           </template>
         </div>
@@ -200,16 +247,21 @@
 
     <!-- 切换确认 Modal（4.4） -->
     <div class="modal-overlay" :style="{ display: switchModal.open ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 480px;">
+      <div class="modal" style="max-width: 480px">
         <div class="modal-header">
           <h2>切换数据库</h2>
           <button class="modal-close" @click="switchModal.open = false">&times;</button>
         </div>
         <div class="modal-body">
           <div class="switch-body">
-            <a-alert type="warning" show-icon message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。" />
+            <a-alert
+              type="warning"
+              show-icon
+              message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。"
+            />
             <div class="switch-restart-hint">
-              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行 <code>sh stop.sh; sh start.sh</code>。
+              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行
+              <code>sh stop.sh; sh start.sh</code>。
             </div>
             <div class="switch-target">
               <span>切换至：</span>
@@ -243,12 +295,12 @@ import {
   migrateDatabase,
   getMigrationHistory,
 } from '@/api/database'
-import type { DbConnection, DbStatus } from '@/types/database'
+import type { DbConnection, DbStatus, MigrateResult } from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
 const migrating = ref(false)
-const migrateResult = ref('')
+const migrateResult = ref<MigrateResult | null>(null)
 
 const connectionColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
@@ -270,6 +322,12 @@ const migrateForm = reactive({
 const migrateTargetName = computed(
   () => connections.value.find((c) => c.id === migrateForm.targetId)?.name || '目标数据库',
 )
+
+const migrateTableColumns = [
+  { title: '表名', dataIndex: 'name', key: 'name' },
+  { title: '字段数', dataIndex: 'columns', key: 'columns' },
+  { title: '迁移行数', dataIndex: 'rows', key: 'rows' },
+]
 
 interface ConnForm {
   type: 'sqlite' | 'postgres'
@@ -302,8 +360,15 @@ const switchModal = reactive<{ open: boolean; connection: DbConnection | null }>
 
 function emptyForm(): ConnForm {
   return {
-    type: 'sqlite', name: '', path: '', host: '', port: 5432,
-    database: '', username: '', password: '', ssl: false,
+    type: 'sqlite',
+    name: '',
+    path: '',
+    host: '',
+    port: 5432,
+    database: '',
+    username: '',
+    password: '',
+    ssl: false,
   }
 }
 
@@ -443,14 +508,14 @@ async function handleMigrate() {
     return
   }
   migrating.value = true
-  migrateResult.value = ''
+  migrateResult.value = null
   try {
     const res = await migrateDatabase(migrateForm.sourceId, migrateForm.targetId, {
       mode: migrateForm.mode,
       include_logs: migrateForm.includeLogs,
       confirmed_clear: migrateForm.confirmed_clear,
     })
-    migrateResult.value = res.data.message
+    migrateResult.value = res.data
     message.success(res.data.message)
     await getMigrationHistory()
   } catch (e: any) {
@@ -630,5 +695,25 @@ defineExpose({
 }
 .switch-target .muted {
   color: var(--muted);
+}
+
+/* ── 迁移详情 ── */
+.migrate-table-detail {
+  margin-top: 12px;
+}
+.migrate-detail-table {
+  margin-top: 6px;
+}
+.migrate-backup-info {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.backup-path {
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 12px;
 }
 </style>

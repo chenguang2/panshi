@@ -58,9 +58,17 @@ export interface MigratePayload {
   confirmed_clear?: boolean
 }
 
+export interface MigrateTableDetail {
+  name: string
+  columns: number
+  rows: number
+}
+
 export interface MigrateResult {
   message: string
   tables_migrated: number
+  tables: MigrateTableDetail[]
+  backup_path: string
 }
 
 export interface ExportResult {

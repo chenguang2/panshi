@@ -7,6 +7,8 @@ Design (see openspec/changes/support-postgres-database/design.md D6):
 """
 
 import asyncio
+import logging
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -30,6 +32,8 @@ from app.schemas.database import (
 )
 from app.services import db_archive_service, db_migration_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/database", tags=["database"])
 
 
@@ -39,6 +43,17 @@ def _get_config() -> DbConfig:
 
 def _save(cfg: DbConfig) -> None:
     db_config.save_config(cfg)
+
+
+def _cleanup_old_backups(backup_dir: Path, keep: int = 10) -> None:
+    """Keep only the most recent `keep` backup files, delete older ones."""
+    try:
+        backups = sorted(backup_dir.glob("migration_*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in backups[keep:]:
+            old.unlink(missing_ok=True)
+            logger.info("Cleaned up old backup: %s", old.name)
+    except Exception as e:
+        logger.warning("Failed to clean up old backups: %s", e)
 
 
 @router.get("/status")
@@ -192,8 +207,21 @@ async def migrate_database(
         raise HTTPException(status_code=400, detail="目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
 
     maintenance.set_migration_in_progress(True)
+    backup_path = ""
     try:
-        done = db_migration_service.migrate_direct(
+        # Auto-backup before clear migration
+        if body.confirmed_clear:
+            from pathlib import Path
+            from datetime import datetime
+            backup_dir = Path("./data/backups")
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = str(backup_dir / f"migration_{body.source_id}_to_{body.target_id}_{ts}.zip")
+            db_archive_service.export_archive(source, backup_path)
+            # Retention: keep most recent 10 backups
+            _cleanup_old_backups(backup_dir)
+
+        table_details = db_migration_service.migrate_direct(
             source, target,
             include_logs=body.include_logs,
             mode=body.mode,
@@ -202,6 +230,7 @@ async def migrate_database(
     finally:
         maintenance.set_migration_in_progress(False)
 
+    tables_count = len(table_details)
     await db_migration_service.record_migration_log(
         db,
         direction=_direction_label(source, target),
@@ -210,10 +239,16 @@ async def migrate_database(
         mode=body.mode,
         status="success",
         include_logs=body.include_logs,
-        tables_count=done,
+        tables_count=tables_count,
+        backup_path=backup_path,
     )
-    log_audit(db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{done} 张表）")
-    return {"message": f"迁移完成，共迁移 {done} 张表", "tables_migrated": done}
+    log_audit(db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+    return {
+        "message": f"迁移完成，共迁移 {tables_count} 张表",
+        "tables_migrated": tables_count,
+        "tables": table_details,
+        "backup_path": backup_path,
+    }
 
 
 @router.post("/export")

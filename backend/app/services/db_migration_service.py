@@ -9,10 +9,11 @@ Design (see openspec/changes/support-postgres-database/design.md D3):
 
 import logging
 from collections.abc import Callable
+from datetime import datetime
 from inspect import signature
 from typing import Any
 
-from sqlalchemy import ColumnDefault, MetaData, Table, inspect, text
+from sqlalchemy import Boolean as SA_Boolean, ColumnDefault, DateTime as SA_DateTime, MetaData, Table, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,12 +58,12 @@ def migrate_direct(
     progress_cb=None,
     mode: str = "replace",
     confirmed_clear: bool = False,
-) -> int:
+) -> list[dict]:
     """Stream-copy all business tables from source_conn to target_conn.
 
     Replace mode: an empty target imports directly; a non-empty target requires
     confirmed_clear=True and is cleared child-first before import (G1).
-    Returns the number of tables migrated. Source is read-only.
+    Returns list of table details with {name, columns, rows}. Source is read-only.
     """
     src_engine = build_sync_engine_for(source_conn)
     dst_engine = build_sync_engine_for(target_conn)
@@ -104,11 +105,13 @@ def migrate_direct(
         tables = set(tables_for_migration(include_logs))
         total = len(tables)
         done = 0
+        table_details = []
         for batch in DEPENDENCY_ORDER:
             for table in batch:
                 if table not in tables:
                     continue
-                _copy_table(src_engine, dst_engine, table)
+                detail = _copy_table(src_engine, dst_engine, table)
+                table_details.append(detail)
                 done += 1
                 if progress_cb:
                     progress_cb(done, total)
@@ -116,7 +119,7 @@ def migrate_direct(
         synced = _sync_schema_with_models(dst_engine)
         if synced:
             logger.info("Schema sync: 补齐目标库缺失模型列 %d 个", synced)
-        return done
+        return table_details
     finally:
         src_engine.dispose()
         dst_engine.dispose()
@@ -131,7 +134,11 @@ def _clear_target(dst_engine) -> None:
         logger.info("Cleared target database")
 
 
-def _copy_table(src_engine, dst_engine, table: str) -> None:
+def _copy_table(src_engine, dst_engine, table: str) -> dict:
+    """Copy all rows from source to destination table.
+
+    Returns dict with table metadata: {name, columns, rows}
+    """
     src_meta = MetaData()
     src_table = Table(table, src_meta, autoload_with=src_engine)
     # 目标侧以物理反射为准：目标库可能是旧 schema（如 legacy SQLite 缺新列），
@@ -145,29 +152,38 @@ def _copy_table(src_engine, dst_engine, table: str) -> None:
         dst_table = dst_model  # 表尚未物化（create_all 将按模型建表），模型即物理
     else:
         logger.warning("迁移跳过 %s：目标库无此表且无模型定义", table)
-        return
+        return {"name": table, "columns": 0, "rows": 0}
     phys_cols = set(dst_table.columns.keys())
     cols = [c for c in src_table.columns.keys() if c in phys_cols]
     # 反射插入不触发模型自动默认值，需对「源缺列但物理目标有列」显式注入 Python 默认值
     defaults, default_fns = _model_python_defaults(dst_model, phys_cols, cols)
-
-    with src_engine.connect() as src_conn:
-        rows = src_conn.execute(src_table.select()).mappings().all()
+    # 收集目标列类型信息，用于类型转换
+    col_types = {c.name: c.type for c in dst_table.columns}
 
     copied = skipped = 0
-    for i in range(0, len(rows), BATCH_SIZE):
-        ok, bad = _insert_chunk(
-            dst_engine,
-            dst_table,
-            cols,
-            rows[i : i + BATCH_SIZE],
-            table,
-            defaults,
-            default_fns,
-        )
-        copied += ok
-        skipped += bad
+    with src_engine.connect() as src_conn:
+        result = src_conn.execute(src_table.select())
+        batch = []
+        for row in result.mappings():
+            batch.append(row)
+            if len(batch) >= BATCH_SIZE:
+                ok, bad = _insert_chunk(
+                    dst_engine, dst_table, cols, batch, table,
+                    defaults, default_fns, col_types,
+                )
+                copied += ok
+                skipped += bad
+                batch.clear()
+        if batch:
+            ok, bad = _insert_chunk(
+                dst_engine, dst_table, cols, batch, table,
+                defaults, default_fns, col_types,
+            )
+            copied += ok
+            skipped += bad
+
     logger.info("Migrated table %s (%d rows, %d skipped)", table, copied, skipped)
+    return {"name": table, "columns": len(cols), "rows": copied}
 
 
 def _model_python_defaults(
@@ -200,13 +216,28 @@ def _model_python_defaults(
     return scalars, callables
 
 
+def _coerce_value(value: Any, col_type: Any) -> Any:
+    """Convert SQLite return types to Python types expected by PostgreSQL."""
+    if value is None:
+        return None
+    if isinstance(col_type, SA_Boolean):
+        return bool(value)
+    if isinstance(col_type, SA_DateTime) and isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except (ValueError, TypeError):
+            return value
+    return value
+
+
 def _row_values(
     cols: list[str],
     row,
     defaults: dict[str, Any],
     default_fns: dict[str, Callable[[], Any]],
+    col_types: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    base = {c: row[c] for c in cols}
+    base = {c: _coerce_value(row[c], col_types.get(c) if col_types else None) for c in cols}
     base.update(defaults)
     base.update({k: fn() for k, fn in default_fns.items()})
     return base
@@ -220,11 +251,12 @@ def _insert_chunk(
     table,
     defaults=None,
     default_fns=None,
+    col_types=None,
 ) -> tuple[int, int]:
     """整批原子插入；遇约束冲突改为逐行插入并跳过脏行（源库可能有历史孤儿数据）。"""
     defaults = defaults or {}
     default_fns = default_fns or {}
-    values = [_row_values(cols, row, defaults, default_fns) for row in chunk]
+    values = [_row_values(cols, row, defaults, default_fns, col_types) for row in chunk]
     try:
         with dst_engine.begin() as conn:
             conn.execute(dst_table.insert(), values)
@@ -236,7 +268,7 @@ def _insert_chunk(
         try:
             with dst_engine.begin() as conn:
                 conn.execute(
-                    dst_table.insert().values(_row_values(cols, row, defaults, default_fns))
+                    dst_table.insert().values(_row_values(cols, row, defaults, default_fns, col_types))
                 )
             copied += 1
         except IntegrityError:
