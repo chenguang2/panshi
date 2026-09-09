@@ -41,6 +41,7 @@ class MigrateRequest(BaseModel):
     mode: str = Field(default="replace")
     include_logs: bool = True
     confirmed_clear: bool = False  # G1: non-empty target requires confirmation
+    timeout: int = Field(default=300, description="Migration timeout in seconds")
 
 
 class ExportRequest(BaseModel):

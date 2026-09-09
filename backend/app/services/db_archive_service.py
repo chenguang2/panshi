@@ -27,11 +27,13 @@ ARCHIVE_VERSION = 1
 APP_VERSION = "1.0.0"
 
 
-def export_archive(source_conn, output_path: str) -> None:
+def export_archive(source_conn, output_path: str, progress_cb=None) -> None:
     """Dump source_conn to a zip archive at output_path."""
     engine = build_sync_engine_for(source_conn)
     insp = inspect(engine)
     tables = tables_for_migration(True)
+    table_list = list(tables)
+    total = len(table_list)
     meta = {
         "version": ARCHIVE_VERSION,
         "app_version": APP_VERSION,
@@ -43,12 +45,17 @@ def export_archive(source_conn, output_path: str) -> None:
     data = {}
 
     with engine.connect() as conn:
-        for table in tables:
+        for done, table in enumerate(table_list, 1):
+            if not insp.has_table(table):
+                logger.debug("Export: skipping %s — not present in source", table)
+                continue
             schema[table] = insp.get_columns(table)
             ddl[table] = _get_ddl(conn, table)
             rows = conn.execute(text(f"SELECT * FROM {table}")).mappings().all()
             data[table] = [dict(r) for r in rows]
             meta["tables"][table] = len(rows)
+            if progress_cb:
+                progress_cb(done, total)
 
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("meta.json", json.dumps(meta, ensure_ascii=False))

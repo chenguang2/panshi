@@ -12,6 +12,7 @@ const mocks = {
   testConnection: vi.fn(),
   switchDatabase: vi.fn(),
   migrateDatabase: vi.fn(),
+  migrateDatabaseStream: vi.fn(),
   exportDatabase: vi.fn(),
   importDatabase: vi.fn(),
   getHistory: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/api/database', () => ({
   testConnection: (...a: any[]) => mocks.testConnection(...a),
   switchDatabase: (...a: any[]) => mocks.switchDatabase(...a),
   migrateDatabase: (...a: any[]) => mocks.migrateDatabase(...a),
+  migrateDatabaseStream: (...a: any[]) => mocks.migrateDatabaseStream(...a),
   exportDatabase: (...a: any[]) => mocks.exportDatabase(...a),
   importDatabase: (...a: any[]) => mocks.importDatabase(...a),
   getMigrationHistory: (...a: any[]) => mocks.getHistory(...a),
@@ -118,7 +120,15 @@ describe('DatabaseManagement', () => {
     mocks.listConnections.mockResolvedValue({ data: [conn()] })
     mocks.getHistory.mockResolvedValue({ data: [] })
     mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
-    mocks.migrateDatabase.mockResolvedValue({ data: { message: '迁移完成，共迁移 22 张表', tables_migrated: 22 } })
+    // Mock migrateDatabaseStream to return an AbortController and simulate success
+    mocks.migrateDatabaseStream.mockImplementation((_sourceId: string, _targetId: string, options: any) => {
+      // Simulate SSE events
+      setTimeout(() => {
+        options.onProgress?.({ table_index: 1, total_tables: 22, table_name: 'sys_user', copied_rows: 100, total_rows: 100, skipped: false })
+        options.onComplete?.({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
+      }, 10)
+      return new AbortController()
+    })
   })
 
   it('renders the current active database status card', async () => {
@@ -151,7 +161,7 @@ describe('DatabaseManagement', () => {
     expect(setCurrentBtns.some((n) => n.attributes('disabled') === undefined)).toBe(true)
   })
 
-  it('migrate button calls migrateDatabase with selected source/target', async () => {
+  it('migrate button calls migrateDatabaseStream with selected source/target', async () => {
     mocks.listConnections.mockResolvedValue({
       data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
     })
@@ -163,7 +173,7 @@ describe('DatabaseManagement', () => {
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     await flushPromises()
-    expect(mocks.migrateDatabase).toHaveBeenCalledWith('conn_1', 'conn_2', expect.objectContaining({ mode: 'replace' }))
+    expect(mocks.migrateDatabaseStream).toHaveBeenCalledWith('conn_1', 'conn_2', expect.objectContaining({ mode: 'replace' }))
   })
 
   it('shows migration result text after a successful migration', async () => {
@@ -177,8 +187,10 @@ describe('DatabaseManagement', () => {
     vm.migrateForm.confirmed_clear = true
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
+    // Wait for SSE callbacks to fire
+    await new Promise(resolve => setTimeout(resolve, 50))
     await flushPromises()
-    expect(wrapper.text()).toContain('迁移完成，共迁移 22 张表')
+    expect(wrapper.text()).toContain('迁移完成')
     expect(wrapper.text()).toContain('22')
   })
 

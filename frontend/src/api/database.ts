@@ -1,4 +1,5 @@
 import api from '@/api/index'
+import { createSSEClient } from '@/utils/sse'
 import type {
   DbConnection,
   DbConnectionCreate,
@@ -49,6 +50,62 @@ export function migrateDatabase(sourceId: string, targetId: string, payload?: Pa
     confirmed_clear: payload?.confirmed_clear ?? false,
   }
   return api.post<MigrateResult>('/database/migrate', body, { timeout: 300000 })
+}
+
+/**
+ * SSE streaming migration with real-time progress.
+ * Returns AbortController for cancellation.
+ */
+export function migrateDatabaseStream(
+  sourceId: string,
+  targetId: string,
+  options: {
+    mode?: string
+    includeLogs?: boolean
+    confirmedClear?: boolean
+    timeout?: number
+    onProgress?: (data: { table_index: number; total_tables: number; table_name?: string; copied_rows?: number; total_rows?: number; skipped?: boolean }) => void
+    onBackupProgress?: (data: { done: number; total: number }) => void
+    onBackupComplete?: (path: string) => void
+    onComplete?: (data: { tables_migrated: number; tables: Array<{ name: string; columns: number; rows: number }>; backup_path?: string }) => void
+    onError?: (message: string) => void
+  },
+) {
+  const token = localStorage.getItem('token') || ''
+  return createSSEClient({
+    url: '/api/v1/database/migrate-stream',
+    body: {
+      source_id: sourceId,
+      target_id: targetId,
+      mode: options.mode ?? 'replace',
+      include_logs: options.includeLogs ?? true,
+      confirmed_clear: options.confirmedClear ?? false,
+      timeout: options.timeout ?? 300,
+    },
+    token,
+    onEvent: (event) => {
+      switch (event.type) {
+        case 'table_progress':
+          options.onProgress?.(event as any)
+          break
+        case 'backup_progress':
+          options.onBackupProgress?.(event as any)
+          break
+        case 'backup_complete':
+          options.onBackupComplete?.(event.path as string)
+          break
+        case 'complete':
+          options.onComplete?.(event as any)
+          break
+        case 'error':
+          options.onError?.(event.message as string)
+          break
+      }
+    },
+    onError: (error) => {
+      options.onError?.(error.message)
+    },
+  })
 }
 
 export function exportDatabase(sourceId: string) {

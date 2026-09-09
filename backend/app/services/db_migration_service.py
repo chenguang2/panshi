@@ -27,6 +27,45 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 500
 
 
+class MigrationCancelled(Exception):
+    """Raised when migration is cancelled via cancel_event."""
+
+
+class MigrationProgressEvent:
+    """Structured progress event for SSE streaming."""
+
+    __slots__ = ("type", "table_index", "total_tables", "table_name", "total_rows", "copied_rows", "skipped")
+
+    def __init__(
+        self,
+        type: str,
+        table_index: int,
+        total_tables: int,
+        table_name: str,
+        total_rows: int = 0,
+        copied_rows: int = 0,
+        skipped: bool = False,
+    ):
+        self.type = type
+        self.table_index = table_index
+        self.total_tables = total_tables
+        self.table_name = table_name
+        self.total_rows = total_rows
+        self.copied_rows = copied_rows
+        self.skipped = skipped
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.type,
+            "table_index": self.table_index,
+            "total_tables": self.total_tables,
+            "table_name": self.table_name,
+            "total_rows": self.total_rows,
+            "copied_rows": self.copied_rows,
+            "skipped": self.skipped,
+        }
+
+
 def target_is_empty(target_conn) -> bool:
     """True if no business table in the target has any rows (empty target)."""
     engine = build_sync_engine_for(target_conn)
@@ -52,18 +91,19 @@ def validate_migration_direction(source_id: str, target_id: str, active_id: str)
 
 
 def migrate_direct(
-    source_conn,
-    target_conn,
+    source_conn: ConnectionConfig,
+    target_conn: ConnectionConfig,
     include_logs=True,
     progress_cb=None,
     mode: str = "replace",
     confirmed_clear: bool = False,
+    cancel_event=None,
 ) -> list[dict]:
     """Stream-copy all business tables from source_conn to target_conn.
 
     Replace mode: an empty target imports directly; a non-empty target requires
     confirmed_clear=True and is cleared child-first before import (G1).
-    Returns list of table details with {name, columns, rows}. Source is read-only.
+    Returns list of table details with {name, columns, rows, skipped}. Source is read-only.
     """
     src_engine = build_sync_engine_for(source_conn)
     dst_engine = build_sync_engine_for(target_conn)
@@ -110,11 +150,14 @@ def migrate_direct(
             for table in batch:
                 if table not in tables:
                     continue
-                detail = _copy_table(src_engine, dst_engine, table)
+                # Check cancel event at each table boundary
+                if cancel_event and cancel_event.is_set():
+                    raise MigrationCancelled("Migration cancelled by user")
+                detail = _copy_table(src_engine, dst_engine, table, progress_cb=None)
                 table_details.append(detail)
                 done += 1
                 if progress_cb:
-                    progress_cb(done, total)
+                    progress_cb(done, total, table_name=detail.get("name", table), total_rows=detail.get("rows", 0), skipped=detail.get("skipped", False))
         _reset_sequences(dst_engine, tables)
         synced = _sync_schema_with_models(dst_engine)
         if synced:
@@ -134,11 +177,14 @@ def _clear_target(dst_engine) -> None:
         logger.info("Cleared target database")
 
 
-def _copy_table(src_engine, dst_engine, table: str) -> dict:
+def _copy_table(src_engine, dst_engine, table: str, progress_cb=None) -> dict:
     """Copy all rows from source to destination table.
 
-    Returns dict with table metadata: {name, columns, rows}
+    Returns dict with table metadata: {name, columns, rows, skipped}
     """
+    if not inspect(src_engine).has_table(table):
+        logger.info("Migrate skip %s: not present in source", table)
+        return {"name": table, "columns": 0, "rows": 0, "skipped": True}
     src_meta = MetaData()
     src_table = Table(table, src_meta, autoload_with=src_engine)
     # 目标侧以物理反射为准：目标库可能是旧 schema（如 legacy SQLite 缺新列），
@@ -152,13 +198,17 @@ def _copy_table(src_engine, dst_engine, table: str) -> dict:
         dst_table = dst_model  # 表尚未物化（create_all 将按模型建表），模型即物理
     else:
         logger.warning("迁移跳过 %s：目标库无此表且无模型定义", table)
-        return {"name": table, "columns": 0, "rows": 0}
+        return {"name": table, "columns": 0, "rows": 0, "skipped": True}
     phys_cols = set(dst_table.columns.keys())
     cols = [c for c in src_table.columns.keys() if c in phys_cols]
     # 反射插入不触发模型自动默认值，需对「源缺列但物理目标有列」显式注入 Python 默认值
     defaults, default_fns = _model_python_defaults(dst_model, phys_cols, cols)
     # 收集目标列类型信息，用于类型转换
     col_types = {c.name: c.type for c in dst_table.columns}
+
+    # COUNT query for total_rows (used by progress callback)
+    with src_engine.connect() as count_conn:
+        total_rows = count_conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar() or 0
 
     copied = skipped = 0
     with src_engine.connect() as src_conn:
@@ -174,6 +224,8 @@ def _copy_table(src_engine, dst_engine, table: str) -> dict:
                 copied += ok
                 skipped += bad
                 batch.clear()
+                if progress_cb:
+                    progress_cb(copied, total_rows)
         if batch:
             ok, bad = _insert_chunk(
                 dst_engine, dst_table, cols, batch, table,
@@ -181,9 +233,11 @@ def _copy_table(src_engine, dst_engine, table: str) -> dict:
             )
             copied += ok
             skipped += bad
+            if progress_cb:
+                progress_cb(copied, total_rows)
 
     logger.info("Migrated table %s (%d rows, %d skipped)", table, copied, skipped)
-    return {"name": table, "columns": len(cols), "rows": copied}
+    return {"name": table, "columns": len(cols), "rows": copied, "skipped": False}
 
 
 def _model_python_defaults(

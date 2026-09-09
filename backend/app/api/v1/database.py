@@ -7,16 +7,21 @@ Design (see openspec/changes/support-postgres-database/design.md D6):
 """
 
 import asyncio
+import json
 import logging
+import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
+from starlette.requests import ClientDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core import db_config, maintenance
-from app.core.database import get_db, build_sync_engine_for
+from app.core.database import get_db, build_sync_engine_for, AsyncSessionLocal
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
 from app.services.audit import log_audit
 from app.core.deps import require_permission as require_db_admin
@@ -31,6 +36,7 @@ from app.schemas.database import (
     SwitchRequest,
 )
 from app.services import db_archive_service, db_migration_service
+from app.services.db_migration_service import MigrationCancelled, MigrationProgressEvent
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +255,201 @@ async def migrate_database(
         "tables": table_details,
         "backup_path": backup_path,
     }
+
+
+@router.post("/migrate-stream")
+async def migrate_database_stream(
+    body: MigrateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('database_management')),
+):
+    """SSE streaming migration endpoint with real-time progress."""
+    cfg = _get_config()
+    source = cfg.get_connection(body.source_id)
+    target = cfg.get_connection(body.target_id)
+    if not source or not target:
+        raise HTTPException(status_code=404, detail="源或目标连接不存在")
+    if body.mode != "repeat" and body.mode != "replace":
+        raise HTTPException(status_code=400, detail="不支持该迁移模式，仅支持替换模式")
+    try:
+        db_migration_service.validate_migration_direction(body.source_id, body.target_id, cfg.active)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not body.confirmed_clear and not db_migration_service.target_is_empty(target):
+        raise HTTPException(status_code=400, detail="目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
+
+    # Cooperative cancellation event
+    cancel_event = threading.Event()
+    timeout = body.timeout or 300
+
+    async def event_generator():
+        """SSE generator for streaming migration progress."""
+        # Thread-safe queue to bridge callbacks from worker thread to async generator
+        import queue
+        event_queue: queue.Queue = queue.Queue()
+
+        def on_progress(done, total, table_name="", copied_rows=0, total_rows=0, skipped=False):
+            """Table-level progress callback (called from worker thread)."""
+            event_queue.put_nowait({
+                "type": "table_progress",
+                "table_index": done,
+                "total_tables": total,
+                "table_name": table_name,
+                "copied_rows": copied_rows,
+                "total_rows": total_rows,
+                "skipped": skipped,
+            })
+
+        def on_backup_progress(done, total):
+            """Backup progress callback (called from worker thread)."""
+            event_queue.put_nowait({
+                "type": "backup_progress",
+                "done": done,
+                "total": total,
+            })
+
+        def _send_event(data):
+            """Send one SSE event to client."""
+            return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        async def _drain_queue():
+            """Yield all queued events, yield nothing if empty."""
+            while not event_queue.empty():
+                ev = event_queue.get_nowait()
+                yield _send_event(ev)
+
+        maintenance.set_migration_in_progress(True)
+        backup_path = ""
+        loop = asyncio.get_event_loop()
+        try:
+            # Auto-backup before clear migration
+            if body.confirmed_clear:
+                backup_dir = Path("./data/backups")
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = str(backup_dir / f"migration_{body.source_id}_to_{body.target_id}_{ts}.zip")
+
+                # Run backup in thread — poll queue for progress
+                def run_backup():
+                    db_archive_service.export_archive(source, backup_path, progress_cb=on_backup_progress)
+
+                backup_task = loop.run_in_executor(None, run_backup)
+                backup_deadline = asyncio.get_event_loop().time() + timeout
+
+                try:
+                    while not backup_task.done():
+                        if asyncio.get_event_loop().time() > backup_deadline:
+                            cancel_event.set()
+                            yield _send_event({"type": "error", "message": "备份超时"})
+                            return
+                        while not event_queue.empty():
+                            ev = event_queue.get_nowait()
+                            yield _send_event(ev)
+                        await asyncio.sleep(0.2)
+                    # Final drain
+                    while not event_queue.empty():
+                        ev = event_queue.get_nowait()
+                        yield _send_event(ev)
+                    backup_task.result()  # Raise if backup failed
+                except Exception as e:
+                    yield _send_event({"type": "error", "message": f"备份失败: {e}"})
+                    return
+
+                _cleanup_old_backups(backup_dir)
+                # Drain any remaining backup progress events
+                async for chunk in _drain_queue():
+                    yield chunk
+                # Send backup complete event
+                yield _send_event({"type": "backup_complete", "path": backup_path})
+
+            # Run migration in thread — poll queue for progress while thread runs
+            def run_migration():
+                return db_migration_service.migrate_direct(
+                    source, target,
+                    include_logs=body.include_logs,
+                    mode=body.mode,
+                    confirmed_clear=body.confirmed_clear,
+                    cancel_event=cancel_event,
+                    progress_cb=on_progress,
+                )
+
+            migration_task = loop.run_in_executor(None, run_migration)
+            deadline = asyncio.get_event_loop().time() + timeout
+
+            try:
+                # Poll the event queue while the migration thread runs
+                while not migration_task.done():
+                    # Check timeout
+                    if asyncio.get_event_loop().time() > deadline:
+                        cancel_event.set()
+                        yield _send_event({"type": "error", "message": "迁移超时"})
+                        return
+                    # Drain queued progress events
+                    while not event_queue.empty():
+                        ev = event_queue.get_nowait()
+                        yield _send_event(ev)
+                    # Brief sleep to yield control back to the event loop
+                    await asyncio.sleep(0.2)
+
+                # Final drain after thread finishes
+                while not event_queue.empty():
+                    ev = event_queue.get_nowait()
+                    yield _send_event(ev)
+
+                # Get result (may raise)
+                table_details = migration_task.result()
+            except MigrationCancelled:
+                yield _send_event({"type": "error", "message": "迁移已取消"})
+                return
+            except Exception as e:
+                yield _send_event({"type": "error", "message": f"迁移失败: {e}"})
+                return
+
+            # Send final success event
+            tables_count = len(table_details)
+            success_msg = f"迁移完成，共迁移 {tables_count} 张表"
+            yield _send_event({
+                "type": "complete",
+                "message": success_msg,
+                "tables_migrated": tables_count,
+                "tables": table_details,
+                "backup_path": backup_path,
+            })
+
+            # Write migration log and audit log in generator
+            async with AsyncSessionLocal() as log_db:
+                await db_migration_service.record_migration_log(
+                    log_db,
+                    direction=_direction_label(source, target),
+                    source_connection=body.source_id,
+                    target_connection=body.target_id,
+                    mode=body.mode,
+                    status="success",
+                    include_logs=body.include_logs,
+                    tables_count=tables_count,
+                    backup_path=backup_path,
+                )
+                log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+
+        except ClientDisconnect:
+            # Client disconnected, set cancel event to stop migration thread
+            cancel_event.set()
+            logger.info("Migration SSE client disconnected, cancelling migration")
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'迁移失败: {e}'})}\n\n"
+        finally:
+            maintenance.set_migration_in_progress(False)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/export")

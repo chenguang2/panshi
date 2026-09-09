@@ -77,7 +77,7 @@ describe('database api', () => {
     await db.migrateDatabase('conn_s', 'conn_t', { mode: 'replace', include_logs: false, confirmed_clear: true })
     expect(mockPost).toHaveBeenCalledWith('/database/migrate', {
       source_id: 'conn_s', target_id: 'conn_t', mode: 'replace', include_logs: false, confirmed_clear: true,
-    })
+    }, { timeout: 300000 })
   })
 
   it('exportDatabase posts source_id to /database/export', async () => {

@@ -1,5 +1,8 @@
 """Tests for app.services.db_migration_service — direct streaming migration (B1)."""
 
+import os
+import threading
+
 import pytest
 from sqlalchemy import create_engine, text, select
 from sqlalchemy.orm import Session
@@ -11,6 +14,8 @@ from app.models.system import AuditLog
 from app.models.db_migration import DbMigrationLog
 from app.core.db_config import ConnectionConfig
 from app.services import db_migration_service
+from app.services import db_archive_service
+from app.services.db_migration_service import MigrationCancelled, MigrationProgressEvent
 
 
 @pytest.fixture()
@@ -60,7 +65,7 @@ class TestDirectMigration:
         dst = ConnectionConfig(id="t", type="sqlite", name="T", path=str(target_db.url).replace("sqlite:///", ""))
 
         completed = []
-        db_migration_service.migrate_direct(src, dst, progress_cb=lambda done, total: completed.append((done, total)))
+        db_migration_service.migrate_direct(src, dst, progress_cb=lambda done, total, **kw: completed.append((done, total)))
 
         with target_db.connect() as conn:
             clusters = conn.execute(text("SELECT id, name FROM ps_cluster ORDER BY id")).fetchall()
@@ -94,7 +99,7 @@ class TestDirectMigration:
         src = ConnectionConfig(id="s", type="sqlite", name="S", path=str(source_db.url).replace("sqlite:///", ""))
         dst = ConnectionConfig(id="t", type="sqlite", name="T", path=str(target_db.url).replace("sqlite:///", ""))
         completed = []
-        db_migration_service.migrate_direct(src, dst, progress_cb=lambda done, total: completed.append((done, total)))
+        db_migration_service.migrate_direct(src, dst, progress_cb=lambda done, total, **kw: completed.append((done, total)))
         assert completed
         final_done, final_total = completed[-1]
         assert final_total == 22
@@ -238,3 +243,234 @@ class TestDirectionValidation:
 
     def test_valid_direction_allowed(self):
         assert db_migration_service.validate_migration_direction("a", "b", "active") is None
+
+
+class TestMigrationCancelled:
+    def test_is_exception(self):
+        assert issubclass(MigrationCancelled, Exception)
+
+    def test_can_be_raised_and_caught(self):
+        with pytest.raises(MigrationCancelled):
+            raise MigrationCancelled("cancelled by user")
+
+    def test_can_be_caught_as_base_exception(self):
+        with pytest.raises(Exception):
+            raise MigrationCancelled()
+
+
+class TestMigrationProgressEvent:
+    def test_table_start_event(self):
+        evt = MigrationProgressEvent(
+            type="table_start",
+            table_index=1,
+            total_tables=22,
+            table_name="sys_user",
+            total_rows=100,
+            copied_rows=0,
+            skipped=False,
+        )
+        assert evt.type == "table_start"
+        assert evt.table_index == 1
+        assert evt.table_name == "sys_user"
+        assert evt.total_rows == 100
+        assert evt.skipped is False
+
+    def test_table_progress_event(self):
+        evt = MigrationProgressEvent(
+            type="table_progress",
+            table_index=1,
+            total_tables=22,
+            table_name="sys_user",
+            total_rows=100,
+            copied_rows=50,
+            skipped=False,
+        )
+        assert evt.copied_rows == 50
+
+    def test_table_complete_event(self):
+        evt = MigrationProgressEvent(
+            type="table_complete",
+            table_index=1,
+            total_tables=22,
+            table_name="sys_user",
+            total_rows=100,
+            copied_rows=100,
+            skipped=False,
+        )
+        assert evt.copied_rows == 100
+
+    def test_skipped_table_event(self):
+        evt = MigrationProgressEvent(
+            type="table_start",
+            table_index=1,
+            total_tables=22,
+            table_name="sys_user",
+            total_rows=0,
+            copied_rows=0,
+            skipped=True,
+        )
+        assert evt.skipped is True
+
+    def test_to_dict(self):
+        evt = MigrationProgressEvent(
+            type="table_start",
+            table_index=1,
+            total_tables=22,
+            table_name="sys_user",
+            total_rows=100,
+            copied_rows=0,
+            skipped=False,
+        )
+        d = evt.to_dict()
+        assert d["type"] == "table_start"
+        assert d["table_index"] == 1
+        assert d["total_tables"] == 22
+        assert d["table_name"] == "sys_user"
+        assert d["total_rows"] == 100
+        assert d["skipped"] is False
+
+
+class TestCopyTableProgress:
+    """Tests for _copy_table with progress callback and COUNT query."""
+
+    def _conn(self, engine):
+        return ConnectionConfig(id="c", type="sqlite", name="C", path=str(engine.url).replace("sqlite:///", ""))
+
+    def test_returns_skipped_true_for_missing_source_table(self, source_db, target_db):
+        """_copy_table should return skipped=True when source table doesn't exist."""
+        result = db_migration_service._copy_table(source_db, target_db, "nonexistent_table")
+        assert result["skipped"] is True
+        assert result["rows"] == 0
+
+    def test_returns_skipped_false_for_existing_table(self, source_db, target_db):
+        """_copy_table should return skipped=False when source table exists."""
+        _seed(source_db)
+        result = db_migration_service._copy_table(source_db, target_db, "ps_cluster")
+        assert result["skipped"] is False
+        assert result["rows"] == 2
+
+    def test_progress_cb_called_with_row_counts(self, source_db, target_db):
+        """progress_cb should be called after each batch with (copied_rows, total_rows)."""
+        _seed(source_db)
+        progress_calls = []
+
+        def on_progress(copied, total):
+            progress_calls.append((copied, total))
+
+        db_migration_service._copy_table(source_db, target_db, "ps_cluster", progress_cb=on_progress)
+        assert len(progress_calls) >= 1
+        # Final call should have all rows copied
+        last_copied, last_total = progress_calls[-1]
+        assert last_copied == 2
+        assert last_total == 2
+
+    def test_total_rows_from_count_query(self, source_db, target_db):
+        """total_rows should come from COUNT(*), not from iterating rows."""
+        _seed(source_db)
+        progress_calls = []
+
+        def on_progress(copied, total):
+            progress_calls.append((copied, total))
+
+        db_migration_service._copy_table(source_db, target_db, "ps_cluster", progress_cb=on_progress)
+        # First call should have total_rows=2 (from COUNT)
+        assert progress_calls[0][1] == 2
+
+
+class TestMigrateDirectCancel:
+    """Tests for migrate_direct with cancel_event cooperative cancellation."""
+
+    def _conn(self, engine):
+        return ConnectionConfig(id="c", type="sqlite", name="C", path=str(engine.url).replace("sqlite:///", ""))
+
+    def test_cancel_event_aborts_migration(self, source_db, target_db):
+        """Setting cancel_event should raise MigrationCancelled at next table boundary."""
+        _seed(source_db)
+        cancel_event = threading.Event()
+        cancel_event.set()  # Pre-set to cancel immediately
+
+        with pytest.raises(MigrationCancelled):
+            db_migration_service.migrate_direct(
+                self._conn(source_db),
+                self._conn(target_db),
+                confirmed_clear=True,
+                cancel_event=cancel_event,
+            )
+
+    def test_cancel_event_not_set_completes_normally(self, source_db, target_db):
+        """When cancel_event is not set, migration completes normally."""
+        _seed(source_db)
+        cancel_event = threading.Event()  # Not set
+
+        result = db_migration_service.migrate_direct(
+            self._conn(source_db),
+            self._conn(target_db),
+            confirmed_clear=True,
+            cancel_event=cancel_event,
+        )
+        assert len(result) == 22  # All tables migrated
+
+    def test_cancel_event_checked_per_table(self, source_db, target_db):
+        """Cancel event should be checked at each table boundary."""
+        _seed(source_db)
+        cancel_event = threading.Event()
+
+        # Use a progress callback to set cancel_event after first table
+        def on_progress(done, total, **kwargs):
+            if done >= 1:
+                cancel_event.set()
+
+        with pytest.raises(MigrationCancelled):
+            db_migration_service.migrate_direct(
+                self._conn(source_db),
+                self._conn(target_db),
+                confirmed_clear=True,
+                cancel_event=cancel_event,
+                progress_cb=on_progress,
+            )
+
+    def test_progress_cb_passes_through_to_copy_table(self, source_db, target_db):
+        """progress_cb should be called with table-level progress."""
+        _seed(source_db)
+        progress_calls = []
+
+        def on_progress(done, total, **kwargs):
+            progress_calls.append((done, total))
+
+        db_migration_service.migrate_direct(
+            self._conn(source_db),
+            self._conn(target_db),
+            confirmed_clear=True,
+            progress_cb=on_progress,
+        )
+        assert len(progress_calls) == 22  # One call per table
+        assert progress_calls[-1] == (22, 22)  # Final call
+
+
+class TestExportArchiveProgress:
+    """Tests for export_archive with progress callback."""
+
+    def _conn(self, engine):
+        return ConnectionConfig(id="c", type="sqlite", name="C", path=str(engine.url).replace("sqlite:///", ""))
+
+    def test_progress_cb_called_per_table(self, source_db, tmp_path):
+        """export_archive should call progress_cb after each table."""
+        _seed(source_db)
+        progress_calls = []
+
+        def on_progress(done, total, **kwargs):
+            progress_calls.append((done, total))
+
+        output_path = str(tmp_path / "test.zip")
+        db_archive_service.export_archive(self._conn(source_db), output_path, progress_cb=on_progress)
+        assert len(progress_calls) >= 1
+        # Last call should have all tables
+        assert progress_calls[-1][1] >= 1
+
+    def test_creates_valid_zip(self, source_db, tmp_path):
+        """export_archive should still create a valid zip file."""
+        _seed(source_db)
+        output_path = str(tmp_path / "test.zip")
+        db_archive_service.export_archive(self._conn(source_db), output_path)
+        assert os.path.exists(output_path)
+        assert os.path.getsize(output_path) > 0

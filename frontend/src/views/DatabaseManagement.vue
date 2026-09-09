@@ -113,6 +113,16 @@
             </select>
           </div>
           <div class="form-group">
+            <label class="form-label">超时时间</label>
+            <select v-model.number="migrateForm.timeout" class="form-input">
+              <option :value="60">1 分钟</option>
+              <option :value="180">3 分钟</option>
+              <option :value="300">5 分钟（默认）</option>
+              <option :value="600">10 分钟</option>
+              <option :value="1800">30 分钟</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label class="checkbox-label">
               <input type="checkbox" v-model="migrateForm.includeLogs" />
               <span>包含日志数据</span>
@@ -135,8 +145,38 @@
         </div>
 
         <div v-if="migrating" class="migrate-progress">
-          <a-progress :percent="95" status="active" />
-          <span class="progress-text">正在迁移数据，请稍候…</span>
+          <div v-if="migrationProgress.phase === 'backup'" class="progress-section">
+            <div class="progress-header">正在备份源库…</div>
+            <a-progress :percent="migrationProgress.backupTotal > 0 ? Math.round((migrationProgress.backupDone / migrationProgress.backupTotal) * 100) : 0" status="active" />
+            <span class="progress-text">表 {{ migrationProgress.backupDone }} / {{ migrationProgress.backupTotal }}</span>
+          </div>
+          <div v-else-if="migrationProgress.phase === 'migrating'" class="progress-section">
+            <div class="progress-header">
+              正在迁移数据… 表 {{ migrationProgress.tableIndex }} / {{ migrationProgress.totalTables }}
+            </div>
+            <a-progress
+              :percent="migrationProgress.totalTables > 0 ? Math.round((migrationProgress.tableIndex / migrationProgress.totalTables) * 100) : 0"
+              status="active"
+            />
+            <div class="progress-detail">
+              <span v-if="migrationProgress.currentTable" class="progress-table">
+                当前表：<strong>{{ migrationProgress.currentTable }}</strong>
+                <template v-if="migrationProgress.skipped">（跳过：表不存在）</template>
+              </span>
+              <span v-if="migrationProgress.totalRows > 0" class="progress-rows">
+                已迁移 {{ migrationProgress.copiedRows.toLocaleString() }} / {{ migrationProgress.totalRows.toLocaleString() }} 行
+              </span>
+            </div>
+          </div>
+          <div v-else class="progress-section">
+            <a-progress :percent="0" status="active" />
+            <span class="progress-text">正在准备迁移…</span>
+          </div>
+          <div class="migrate-cancel">
+            <a-button danger size="small" @click="handleCancelMigration">
+              终止迁移
+            </a-button>
+          </div>
         </div>
         <div v-if="migrateResult" class="migrate-result">
           <a-alert type="success" show-icon :message="migrateResult.message" />
@@ -293,6 +333,7 @@ import {
   testConnection,
   switchDatabase,
   migrateDatabase,
+  migrateDatabaseStream,
   getMigrationHistory,
 } from '@/api/database'
 import type { DbConnection, DbStatus, MigrateResult } from '@/types/database'
@@ -301,6 +342,7 @@ const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
 const migrating = ref(false)
 const migrateResult = ref<MigrateResult | null>(null)
+const migrationController = ref<AbortController | null>(null)
 
 const connectionColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
@@ -317,6 +359,21 @@ const migrateForm = reactive({
   mode: 'replace',
   includeLogs: true,
   confirmed_clear: false,
+  timeout: 300,
+})
+
+// SSE progress state
+const migrationProgress = reactive({
+  active: false,
+  phase: '' as 'backup' | 'migrating' | '' ,
+  backupDone: 0,
+  backupTotal: 0,
+  tableIndex: 0,
+  totalTables: 0,
+  currentTable: '',
+  copiedRows: 0,
+  totalRows: 0,
+  skipped: false,
 })
 
 const migrateTargetName = computed(
@@ -509,20 +566,67 @@ async function handleMigrate() {
   }
   migrating.value = true
   migrateResult.value = null
-  try {
-    const res = await migrateDatabase(migrateForm.sourceId, migrateForm.targetId, {
-      mode: migrateForm.mode,
-      include_logs: migrateForm.includeLogs,
-      confirmed_clear: migrateForm.confirmed_clear,
-    })
-    migrateResult.value = res.data
-    message.success(res.data.message)
-    await getMigrationHistory()
-  } catch (e: any) {
-    message.error(e?.response?.data?.detail || '迁移失败')
-  } finally {
-    migrating.value = false
+
+  // Reset progress state
+  Object.assign(migrationProgress, {
+    active: true,
+    phase: '',
+    backupDone: 0,
+    backupTotal: 0,
+    tableIndex: 0,
+    totalTables: 0,
+    currentTable: '',
+    copiedRows: 0,
+    totalRows: 0,
+    skipped: false,
+  })
+
+  const sseController = migrateDatabaseStream(migrateForm.sourceId, migrateForm.targetId, {
+    mode: migrateForm.mode,
+    includeLogs: migrateForm.includeLogs,
+    confirmedClear: migrateForm.confirmed_clear,
+    timeout: migrateForm.timeout,
+    onBackupProgress: (data) => {
+      migrationProgress.phase = 'backup'
+      migrationProgress.backupDone = data.done
+      migrationProgress.backupTotal = data.total
+    },
+    onBackupComplete: () => {
+      migrationProgress.phase = 'migrating'
+    },
+    onProgress: (data) => {
+      migrationProgress.phase = 'migrating'
+      migrationProgress.tableIndex = data.table_index
+      migrationProgress.totalTables = data.total_tables
+      migrationProgress.currentTable = data.table_name || ''
+      migrationProgress.copiedRows = data.copied_rows || 0
+      migrationProgress.totalRows = data.total_rows || 0
+      migrationProgress.skipped = data.skipped || false
+    },
+    onComplete: (data) => {
+      migrateResult.value = data as any
+      message.success(`迁移完成，共迁移 ${data.tables_migrated} 张表`)
+      getMigrationHistory()
+      migrating.value = false
+    },
+    onError: (msg) => {
+      message.error(msg || '迁移失败')
+      migrating.value = false
+    },
+  })
+
+  // Store controller for cancellation
+  migrationController.value = sseController
+}
+
+function handleCancelMigration() {
+  if (migrationController.value) {
+    migrationController.value.abort()
+    migrationController.value = null
   }
+  migrating.value = false
+  migrationProgress.active = false
+  message.warning('迁移已终止')
 }
 
 onMounted(() => {
@@ -641,9 +745,35 @@ defineExpose({
   margin-top: 16px;
   max-width: 480px;
 }
+.migrate-cancel {
+  margin-top: 12px;
+}
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.progress-header {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
 .progress-text {
   font-size: 13px;
   color: var(--muted);
+}
+.progress-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.progress-table strong {
+  color: var(--text);
+}
+.progress-rows {
+  font-variant-numeric: tabular-nums;
 }
 .static-notice {
   margin-bottom: 16px;
