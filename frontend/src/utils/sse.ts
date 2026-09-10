@@ -7,20 +7,26 @@ export interface SSEEvent {
   [key: string]: unknown
 }
 
-export interface SSEClientOptions {
+interface SSECallbacks<T extends SSEEvent = SSEEvent> {
+  onEvent?: (event: T) => void
+  onError?: (error: Error) => void
+  onComplete?: () => void
+}
+
+export interface SSEClientOptions<T extends SSEEvent = SSEEvent> extends SSECallbacks<T> {
   url: string
   body: Record<string, unknown>
   token?: string
-  onEvent?: (event: SSEEvent) => void
-  onError?: (error: Error) => void
-  onComplete?: () => void
 }
 
 /**
  * Send POST request and read SSE stream via fetch + ReadableStream.
  * Returns an AbortController to allow cancellation.
+ *
+ * 泛型 T：传入判别联合事件类型（如 MigrationStreamEvent）后，
+ * onEvent 回调内按 event.type switch 可自然收窄，无需断言（v3 8B-2）。
  */
-export function createSSEClient(options: SSEClientOptions): AbortController {
+export function createSSEClient<T extends SSEEvent = SSEEvent>(options: SSEClientOptions<T>): AbortController {
   const { url, body, token, onEvent, onError, onComplete } = options
   const controller = new AbortController()
 

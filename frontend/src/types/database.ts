@@ -94,3 +94,48 @@ export interface MigrationHistoryItem {
   error_message?: string
   created_at?: string | null
 }
+
+// ── SSE 迁移流事件（v3 8B-2：判别联合，供 createSSEClient<T> 类型收窄，消除 as any）──
+interface SSEEventBase {
+  [key: string]: unknown
+}
+
+export interface MigrationTableProgressEvent extends SSEEventBase {
+  type: 'table_progress'
+  table_index: number
+  total_tables: number
+  table_name?: string
+  copied_rows?: number
+  total_rows?: number
+  skipped?: boolean
+}
+
+export interface MigrationBackupProgressEvent extends SSEEventBase {
+  type: 'backup_progress'
+  done: number
+  total: number
+}
+
+export interface MigrationBackupCompleteEvent extends SSEEventBase {
+  type: 'backup_complete'
+  path: string
+}
+
+export interface MigrationCompleteEvent extends SSEEventBase {
+  type: 'complete'
+  tables_migrated: number
+  tables: MigrateTableDetail[]
+  backup_path?: string
+}
+
+export interface MigrationErrorEvent extends SSEEventBase {
+  type: 'error'
+  message: string
+}
+
+export type MigrationStreamEvent =
+  | MigrationTableProgressEvent
+  | MigrationBackupProgressEvent
+  | MigrationBackupCompleteEvent
+  | MigrationCompleteEvent
+  | MigrationErrorEvent

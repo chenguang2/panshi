@@ -11,6 +11,7 @@ import type {
   MigratePayload,
   MigrateResult,
   MigrationHistoryItem,
+  MigrationStreamEvent,
 } from '@/types/database'
 
 export function getDatabaseStatus() {
@@ -72,7 +73,7 @@ export function migrateDatabaseStream(
   },
 ) {
   const token = localStorage.getItem('token') || ''
-  return createSSEClient({
+  return createSSEClient<MigrationStreamEvent>({
     url: '/api/v1/database/migrate-stream',
     body: {
       source_id: sourceId,
@@ -86,19 +87,19 @@ export function migrateDatabaseStream(
     onEvent: (event) => {
       switch (event.type) {
         case 'table_progress':
-          options.onProgress?.(event as any)
+          options.onProgress?.(event)
           break
         case 'backup_progress':
-          options.onBackupProgress?.(event as any)
+          options.onBackupProgress?.(event)
           break
         case 'backup_complete':
-          options.onBackupComplete?.(event.path as string)
+          options.onBackupComplete?.(event.path)
           break
         case 'complete':
-          options.onComplete?.(event as any)
+          options.onComplete?.(event)
           break
         case 'error':
-          options.onError?.(event.message as string)
+          options.onError?.(event.message)
           break
       }
     },
