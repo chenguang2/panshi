@@ -67,7 +67,7 @@ class RouteResponse(RouteBase):
             import json
             try:
                 return json.loads(v)
-            except:
+            except (ValueError, TypeError):
                 return None
         return v
 
@@ -80,7 +80,7 @@ class RouteResponse(RouteBase):
             import json
             try:
                 return json.loads(v)
-            except:
+            except (ValueError, TypeError):
                 return None
         return v
 

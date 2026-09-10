@@ -170,26 +170,3 @@ class ImportExecuteResponse(BaseModel):
     skipped_counts: Optional[ImportCounts] = None
     plugin_summary: Optional[PluginSummary] = None
     message: Optional[str] = None
-
-
-class ImportLogResponse(BaseModel):
-    id: int
-    cluster_id: int
-    node_ip: str
-    node_port: int
-    edge_path: Optional[str] = None
-    status: str
-    upstream_count: int
-    route_count: int
-    plugin_config_count: int
-    global_rule_count: int
-    stream_proxy_count: int = 0
-    known_plugin_count: int
-    unknown_plugin_count: int
-    unknown_plugin_names: Optional[str] = None
-    conflict_details: Optional[str] = None
-    error_message: Optional[str] = None
-    created_at: Optional[str] = None
-
-    class Config:
-        from_attributes = True

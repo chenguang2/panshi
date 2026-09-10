@@ -346,13 +346,6 @@ class NodeResponse(NodeBase):
         from_attributes = True
 
 
-class NodeListResponse(BaseModel):
-    total: int
-    page: int
-    page_size: int
-    items: List[NodeResponse]
-
-
 class ConfigVersionResponse(BaseModel):
     id: int
     cluster_id: int
