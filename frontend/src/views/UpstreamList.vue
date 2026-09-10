@@ -135,7 +135,8 @@ import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateOnly as formatDate } from '@/utils/format'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import api from '@/api'
+import { listUpstreams } from '@/api/upstreams'
+import { listClusters, getClusterNodes } from '@/api/clusters'
 import { PAGE_SIZE_TABLE } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import UpstreamFormModal from '@/components/UpstreamFormModal.vue'
@@ -236,7 +237,7 @@ async function loadUpstreams() {
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
-    const res = await api.get('/upstreams', { params })
+    const res = await listUpstreams(params)
     upstreams.value = res.data.items || []
     totalCount.value = res.data.total || 0
   } catch (error: any) {
@@ -250,7 +251,7 @@ async function loadUpstreams() {
 
 async function loadClusters() {
   try {
-    const res = await api.get('/clusters')
+    const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
   } catch { /* ignore */ }
 }
@@ -274,7 +275,7 @@ function onSaved() {
 async function deleteUpstream(record: any) {
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
-    const res = await api.get(`/clusters/${record.cluster_id}/nodes`)
+    const res = await getClusterNodes(record.cluster_id)
     nodes = res.data?.items || []
   } catch { /* ignore */ }
 

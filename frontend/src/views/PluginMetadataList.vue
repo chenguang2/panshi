@@ -133,7 +133,14 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
-import api from '@/api'
+import {
+  listGlobalPluginMetadata,
+  listBuiltinPlugins,
+  listClusterPluginMetadata,
+  addClusterPluginMetadata,
+  updateClusterPluginMetadata,
+} from '@/api/pluginMetadata'
+import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -231,7 +238,7 @@ async function loadItems() {
     const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
-    const res = await api.get('/plugin_metadata', { params })
+    const res = await listGlobalPluginMetadata(params)
     items.value = res.data.items || []
     totalCount.value = res.data.total || 0
   } catch { message.error('加载插件元数据失败') }
@@ -240,14 +247,14 @@ async function loadItems() {
 
 async function loadClusters() {
   try {
-    const res = await api.get('/clusters')
+    const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
   } catch { /* ignore */ }
 }
 
 async function loadBuiltinPlugins() {
   try {
-    const res = await api.get('/plugins/builtin')
+    const res = await listBuiltinPlugins()
     builtinPlugins.value = res.data.plugins || []
   } catch { /* ignore */ }
 }
@@ -264,7 +271,7 @@ async function onCreateClusterChange() {
   createPluginName.value = null
   if (createClusterId.value) {
     try {
-      const res = await api.get(`/clusters/${createClusterId.value}/plugin-metadata`)
+      const res = await listClusterPluginMetadata(Number(createClusterId.value))
       configuredNamesInCluster.value = new Set((res.data.items || []).map((i: any) => i.plugin_name))
     } catch {
       configuredNamesInCluster.value = new Set()
@@ -273,9 +280,9 @@ async function onCreateClusterChange() {
 }
 
 async function handleCreateDirect() {
-  if (!canCreate.value) return
+  if (!canCreate.value || !createPluginName.value) return
   try {
-    await api.post(`/clusters/${createClusterId.value}/plugin-metadata?plugin_name=${createPluginName.value}`)
+    await addClusterPluginMetadata(Number(createClusterId.value), createPluginName.value)
     message.success('已添加')
     createVisible.value = false
     loadItems()
@@ -309,7 +316,7 @@ function editItem(item: any) {
 async function handleEditorSave(config: string) {
   try {
     const metadata = typeof config === 'string' ? JSON.parse(config) : config
-    await api.put(`/clusters/${editingItemClusterId.value}/plugin-metadata/${editingPluginName.value}`, metadata)
+    await updateClusterPluginMetadata(editingItemClusterId.value, editingPluginName.value, metadata)
     message.success('保存成功')
     editorDrawerVisible.value = false
     await loadItems()
@@ -323,7 +330,7 @@ async function handleEditorSave(config: string) {
 async function deleteItem(item: any) {
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
-    const res = await api.get(`/clusters/${item.cluster_id}/nodes`)
+    const res = await getClusterNodes(item.cluster_id)
     nodes = res.data?.items || []
   } catch { /* ignore */ }
 

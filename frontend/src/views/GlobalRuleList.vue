@@ -81,7 +81,8 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 import { message, Modal } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
-import api from '@/api'
+import { listGlobalRules } from '@/api/globalRules'
+import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
@@ -148,7 +149,7 @@ async function loadRules() {
     const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
-    const res = await api.get('/global_rules', { params })
+    const res = await listGlobalRules(params)
     rules.value = res.data.items || []
     totalCount.value = res.data.total || 0
   } catch { message.error('加载全局规则失败') }
@@ -157,7 +158,7 @@ async function loadRules() {
 
 async function loadClusters() {
   try {
-    const res = await api.get('/clusters')
+    const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
   } catch { /* ignore */ }
 }
@@ -175,7 +176,7 @@ function viewRule(pc: any) {
 async function deleteRule(pc: any) {
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
-    const res = await api.get(`/clusters/${pc.cluster_id}/nodes`)
+    const res = await getClusterNodes(pc.cluster_id)
     nodes = res.data?.items || []
   } catch { /* ignore */ }
 

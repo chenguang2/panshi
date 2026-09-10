@@ -98,7 +98,7 @@ describe('UpstreamList.vue', () => {
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await new Promise(r => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
-    expect(mockApiGet).toHaveBeenCalledWith('/clusters')
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters', { params: {} })
   })
 
   it('renders upstream count', async () => {
