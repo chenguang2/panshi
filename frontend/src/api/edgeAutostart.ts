@@ -21,3 +21,17 @@ export type AutostartStatus = 'enabled' | 'disabled' | 'not_configured' | 'permi
 export function autostartUrl(nodeId: number): string {
   return `/nodes/${nodeId}/autostart`
 }
+
+import api from '@/api/index'
+
+export function listAutostartRecords() {
+  return api.get<{ items: Array<Record<string, unknown>> }>('/nodes/autostart/records')
+}
+
+export function listAutostartDefaults() {
+  return api.get<Record<string, unknown>>('/nodes/autostart/defaults')
+}
+
+export function getNodeAutostartDefaults(nodeId: number) {
+  return api.get<Record<string, unknown>>(`/nodes/${nodeId}/autostart/defaults`)
+}

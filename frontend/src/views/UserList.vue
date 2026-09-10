@@ -337,7 +337,17 @@ import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { paginationProps as buildTablePagination } from '@/composables/usePagination'
 import { formatDateOnly as formatDate } from '@/utils/format'
-import api from '@/api'
+import {
+  listUsers,
+  getMyProfile,
+  createUser,
+  updateUser,
+  updateUserPermissions,
+  updateUserClusters,
+  updateUserPassword,
+  deleteUser as deleteUserApi,
+} from '@/api/users'
+import { listClusters } from '@/api/clusters'
 import type { User } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
@@ -669,21 +679,17 @@ async function handleSave() {
   modalSubmitting.value = true
   try {
     if (editingUser.value) {
-      await api.put(`/admin/users/${editingUser.value.id}`, {
+      await updateUser(editingUser.value.id, {
         role: formState.role,
         status: formState.status ? 1 : 0,
       })
       if (formState.role !== 'admin') {
-        await api.put(`/admin/users/${editingUser.value.id}/permissions`, {
-          permissions: selectedPermKeys.value,
-        })
+        await updateUserPermissions(editingUser.value.id, selectedPermKeys.value)
       }
-      await api.put(`/admin/users/${editingUser.value.id}/clusters`, {
-        cluster_ids: selectedClusterIds.value,
-      })
+      await updateUserClusters(editingUser.value.id, selectedClusterIds.value)
       message.success('用户已更新')
     } else {
-      const res = await api.post('/admin/users', {
+      const res = await createUser({
         username: formState.username,
         password: formState.password,
         role: formState.role,
@@ -692,14 +698,10 @@ async function handleSave() {
       const newUserId = res.data?.id
       if (newUserId && formState.role !== 'admin') {
         if (selectedPermKeys.value.length > 0) {
-          await api.put(`/admin/users/${newUserId}/permissions`, {
-            permissions: selectedPermKeys.value,
-          })
+          await updateUserPermissions(newUserId, selectedPermKeys.value)
         }
         if (selectedClusterIds.value.length > 0) {
-          await api.put(`/admin/users/${newUserId}/clusters`, {
-            cluster_ids: selectedClusterIds.value,
-          })
+          await updateUserClusters(newUserId, selectedClusterIds.value)
         }
       }
       message.success('用户已创建')
@@ -787,7 +789,7 @@ async function toggleUserStatus(user: UserWithExt) {
   }
   try {
     const newStatus = user.status === 1 ? 0 : 1
-    await api.put(`/admin/users/${user.id}`, { status: newStatus })
+    await updateUser(user.id, { status: newStatus })
     message.success(newStatus === 1 ? '用户已启用' : '用户已禁用')
     loadUsers()
   } catch {
@@ -808,7 +810,7 @@ function deleteUser(user: UserWithExt) {
 async function executeDeleteUser() {
   if (!deleteConfirm.userId) return
   try {
-    await api.delete(`/admin/users/${deleteConfirm.userId}`)
+    await deleteUserApi(deleteConfirm.userId)
     message.success('用户已删除')
     deleteConfirm.visible = false
     loadUsers()
@@ -828,9 +830,7 @@ async function handleResetPassword() {
     return
   }
   try {
-    await api.put(`/admin/users/${editingUser.value.id}/password`, {
-      new_password: resetPwdValue.value,
-    })
+    await updateUserPassword(editingUser.value.id, resetPwdValue.value)
     message.success('密码重置成功')
     resetPwdValue.value = ''
   } catch {
@@ -845,10 +845,11 @@ async function loadUsers() {
   loading.value = true
   try {
     const [userRes, clusterRes] = await Promise.all([
-      isAdmin.value ? api.get('/admin/users') : api.get('/admin/users/me'),
-      api.get('/clusters').catch(() => ({ data: { items: [] } })),
+      isAdmin.value ? listUsers() : getMyProfile(),
+      listClusters().catch(() => ({ data: { items: [] } })),
     ])
-    allUsers.value = userRes.data.items || (userRes.data.items === undefined ? [userRes.data] : [])
+    const userData = userRes.data
+    allUsers.value = 'items' in userData ? userData.items || [] : [userData]
     clusters.value = clusterRes.data.items || []
   } catch {
     message.error('加载用户列表失败')
