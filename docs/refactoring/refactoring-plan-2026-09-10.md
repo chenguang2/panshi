@@ -279,3 +279,21 @@ equivalence_rules.yaml、clickhouse.yaml、db_config.json）✓；操作日志�
 R1 useClusterUtils 单文件（触发条件见 v2）；R2 集群 Tab 工具栏缓做；R3 后端列表骨架不做；R4 模板 any 增量；
 清单/自启动密码明文（用户决策，禁掩码）；JWT 维持 24h（可选生产 8h）；虚拟滚动 >2k 行再评估；
 IA 双导航 = 待产品决策（本方案新增登记）。
+
+---
+
+## 11. 执行记录（2026-09-10 当日落地）
+
+| 阶段 | 状态 | 提交 | 验证 |
+|---|---|---|---|
+| 8A S-1/S-2 鉴权 P0 | ✅ | `391fcc3` | 守卫 5 采样 RED→GREEN；匿名 curl 5 端点全 401（线上实测）；`test_localization` 一例按新语义修正 |
+| 8A S-2 admin_key 脱敏 | ✅ | 同上 | 新增响应排除测试 + update 不传密钥保持原值测试；E2E cluster 9/9 |
+| 8A S-3 AGENTS.md #19 | ✅ | 同上 | 与代码双形态对齐 |
+| 8B-1 escapeHtml 收敛 | ✅ | `6d9bebf` | utils 单测 112 通过（含新增 3 例锁 5 实体契约） |
+| 8B-2 sse.ts 泛型化 | ✅ | `417202b` | vue-tsc 0 错误；`as any` 生产代码清零复核 |
+| 8B-3 SSE 三处收敛 | ✅ | `78eaf55` | 新增 `consumeSSEDataLines`/`extractSSEErrorMessage` + 6 例单测（粘包/提前终止/错误提取） |
+| 8B-4 死模型+bare except | ✅ | `7e3d1a4` | 后端全量 1503 passed / 12 skipped |
+| 8C-1 六视图迁移 | ✅ | `2b683f9` + 2 笔 | 六视图直连 axios 清零；vitest 全量 830 passed；upstream/global-rules/user E2E 6/6 |
+| 8C-2 IA 双导航 | ⏸ | — | 产品决策项，未动代码（见 §5） |
+
+全量基线：后端 pytest 1503+2 新增全绿；前端 vitest 830/830、vue-tsc 0 错误；集群/用户/上游/全局规则 E2E 通过。
