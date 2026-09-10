@@ -24,14 +24,19 @@ export function autostartUrl(nodeId: number): string {
 
 import api from '@/api/index'
 
+export interface AutostartRecord {
+  node_id: number
+  status: AutostartStatus | string
+}
+
 export function listAutostartRecords() {
-  return api.get<{ items: Array<Record<string, unknown>> }>('/nodes/autostart/records')
+  return api.get<{ items: AutostartRecord[] }>('/nodes/autostart/records')
 }
 
 export function listAutostartDefaults() {
-  return api.get<Record<string, unknown>>('/nodes/autostart/defaults')
+  return api.get<{ default_run_user?: string }>('/nodes/autostart/defaults')
 }
 
 export function getNodeAutostartDefaults(nodeId: number) {
-  return api.get<Record<string, unknown>>(`/nodes/${nodeId}/autostart/defaults`)
+  return api.get<{ run_user?: string }>(`/nodes/${nodeId}/autostart/defaults`)
 }

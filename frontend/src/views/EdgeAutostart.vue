@@ -152,9 +152,10 @@ import { ref, reactive, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
-import api from '@/api'
 import { useInstallStream } from '@/composables/useInstallStream'
-import { autostartUrl, type AutostartStatus } from '@/api/edgeAutostart'
+import { autostartUrl, listAutostartRecords, listAutostartDefaults, getNodeAutostartDefaults, type AutostartStatus } from '@/api/edgeAutostart'
+import { listClusters } from '@/api/clusters'
+import { listNodes } from '@/api/nodes'
 
 const clusters = ref<any[]>([])
 const nodes = ref<any[]>([])
@@ -189,7 +190,7 @@ const { start, installing } = useInstallStream()
 
 async function loadClusters() {
   try {
-    const res = await api.get('/clusters')
+    const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
   } catch {
     /* ignore */
@@ -198,7 +199,7 @@ async function loadClusters() {
 
 async function loadAutostartRecords() {
   try {
-    const res = await api.get('/nodes/autostart/records')
+    const res = await listAutostartRecords()
     const records = res.data?.items || []
     const map = new Map<number, AutostartStatus>()
     for (const r of records) {
@@ -215,11 +216,9 @@ async function loadAutostartRecords() {
 async function loadNodes() {
   loading.value = true
   try {
-    const res = await api.get('/nodes', {
-      params: {
-        page_size: 500,
-        ...(clusterFilter.value ? { cluster_id: clusterFilter.value } : {}),
-      },
+    const res = await listNodes({
+      pageSize: 500,
+      ...(clusterFilter.value ? { clusterId: clusterFilter.value } : {}),
     })
     const items = res.data?.items || []
     const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))
@@ -244,7 +243,7 @@ async function openAction(node: any, act: 'enable' | 'disable' | 'status') {
   // 运行用户默认取节点 inventory 的 ansible_ssh_user（通常即 Edge 实际运行用户）
   actionForm.run_user = ''
   try {
-    const res = await api.get(`/nodes/${node.id}/autostart/defaults`)
+    const res = await getNodeAutostartDefaults(node.id)
     actionForm.run_user = res.data?.run_user || defaultRunUser.value || ''
   } catch {
     actionForm.run_user = defaultRunUser.value || ''
@@ -440,7 +439,7 @@ function resetExec() {
 
 onMounted(async () => {
   try {
-    const res = await api.get('/nodes/autostart/defaults')
+    const res = await listAutostartDefaults()
     defaultRunUser.value = res.data?.default_run_user || ''
   } catch {
     /* ignore */
