@@ -405,3 +405,67 @@ async def test_cluster_list_returns_nodes():
             pytest.fail("测试集群未找到")
 
     app.dependency_overrides.clear()
+
+async def test_cluster_response_excludes_admin_key():
+    """v3 8A 脱敏：列表/详情/创建响应一律不回传 admin_key（Edge Admin API 密钥）。
+
+    密钥只在创建/更新请求中提交；前端编辑表单留空 = 保持原值（update 走 exclude_unset）。
+    """
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+    from app.core.database import get_db, Base
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_get_db():
+        async with TestSession() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    async with TestSession() as session:
+        session.add(User(username="admin", password_hash=hash_password("panshi123"), role="admin", status=1))
+        session.add(Cluster(name="key-mask-cluster", admin_key="super-secret-key"))
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        login_resp = await ac.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
+        assert login_resp.status_code == 200
+        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+
+        resp = await ac.get("/api/v1/clusters", headers=headers)
+        assert resp.status_code == 200
+        for item in resp.json()["items"]:
+            assert "admin_key" not in item, "集群列表响应不应包含 admin_key"
+
+        resp = await ac.get("/api/v1/clusters/1", headers=headers)
+        assert resp.status_code == 200
+        assert "admin_key" not in resp.json(), "集群详情响应不应包含 admin_key"
+
+        resp = await ac.post("/api/v1/clusters", headers=headers,
+                             json={"name": "key-mask-2", "admin_key": "another-secret"})
+        assert resp.status_code == 201
+        assert "admin_key" not in resp.json(), "创建集群响应不应回显 admin_key"
+
+    app.dependency_overrides.clear()
+
+async def test_update_cluster_without_admin_key_preserves_stored_value(test_db):
+    """v3 8A：编辑表单不再回填密钥，PUT 不带 admin_key 字段时必须保持原值（exclude_unset 语义）。"""
+    import app.api.v1.clusters as clusters_module
+
+    cluster = Cluster(name="keep-key-cluster", admin_key="stored-secret")
+    test_db.add(cluster)
+    await test_db.commit()
+    await test_db.refresh(cluster)
+
+    resp = await clusters_module.update_cluster(
+        cluster.id, clusters_module.ClusterUpdate(display_name="改名不留空密钥"), db=test_db
+    )
+    assert resp.display_name == "改名不留空密钥"
+    await test_db.refresh(cluster)
+    assert cluster.admin_key == "stored-secret", "不传 admin_key 的更新不得清空已存密钥"

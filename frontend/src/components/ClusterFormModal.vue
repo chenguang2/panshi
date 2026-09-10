@@ -36,7 +36,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Admin Key</label>
-          <input type="password" class="form-input" v-model="form.admin_key" placeholder="Edge 节点 Admin API 密钥" />
+          <input type="password" class="form-input" v-model="form.admin_key" placeholder="Edge 节点 Admin API 密钥（编辑时留空 = 保持原值）" />
         </div>
         <div class="form-group">
           <label class="form-label">状态</label>
@@ -111,7 +111,8 @@ function initForm(cluster: Cluster | null) {
     form.group_name = cluster.group_name || ''
     form.description = cluster.description || ''
     form.status = String(cluster.status)
-    form.admin_key = cluster.admin_key || ''
+    // 后端响应已不回传 admin_key（脱敏）；留空提交 = update exclude_unset 保持原值
+    form.admin_key = ''
   } else {
     form.name = ''
     form.display_name = ''

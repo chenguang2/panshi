@@ -41,6 +41,13 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/clusters/99999/nodes/99999/reload"),
     ("post", "/api/v1/clusters/1/nodes/99999/install-openresty"),
     ("post", "/api/v1/clusters/1/nodes/99999/install-edge"),
+    # v3 重构（2026-09-10）：clusters.py 根路径 5 端点补鉴权的回归采样。
+    # POST 样例断言发生在鉴权依赖层，不会触达 handler 产生副作用。
+    ("get", "/api/v1/clusters"),
+    ("get", "/api/v1/clusters/1"),
+    ("get", "/api/v1/clusters/1/stats"),
+    ("post", "/api/v1/clusters/1/test"),
+    ("post", "/api/v1/clusters/1/sync"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

@@ -1,8 +1,7 @@
 import json
-import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import Optional, List
@@ -21,8 +20,6 @@ from app.schemas.cluster import (
 from app.services import edge_sync
 from app.services.audit import enrich_audit
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/clusters", tags=["clusters"])
 
@@ -72,28 +69,15 @@ async def list_clusters(
     page: int = 1,
     page_size: int = 200,
     db: AsyncSession = Depends(get_db),
-    authorization: Optional[str] = Header(None),
+    current_user: User = Depends(require_permission('clusters')),
 ):
     query = select(Cluster)
 
-    # If user is authenticated and not admin, filter by assigned clusters
-    if authorization:
-        try:
-            from app.core.security import decode_access_token
-            if authorization.startswith("Bearer "):
-                token = authorization[7:]
-            else:
-                token = authorization
-            payload = decode_access_token(token)
-            if payload:
-                user_id = int(payload.get("sub"))
-                user_result = await db.execute(select(User).where(User.id == user_id))
-                user = user_result.scalar_one_or_none()
-                if user and user.role != "admin":
-                    assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == user.id)
-                    query = query.where(Cluster.id.in_(assigned_ids))
-        except Exception:
-            logger.warning("list_clusters: failed to decode token for permission filter", exc_info=True)
+    # 非管理员仅见被分配集群（sys_user_cluster）；此前为无鉴权 + 手工解码 token 的软化实现，
+    # 匿名请求会看到全量集群（v3 8A 修复，守卫测试 test_security_guard.py 采样防回归）
+    if current_user.role != "admin":
+        assigned_ids = select(UserCluster.cluster_id).where(UserCluster.user_id == current_user.id)
+        query = query.where(Cluster.id.in_(assigned_ids))
 
     if keyword:
         query = query.where(Cluster.name.contains(keyword) | Cluster.display_name.contains(keyword))
@@ -162,7 +146,11 @@ async def create_cluster(
 
 
 @router.get("/{cluster_id}", response_model=ClusterResponse)
-async def get_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def get_cluster(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters')),
+):
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
     return ClusterResponse.model_validate(cluster)
 
@@ -183,7 +171,7 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, request
     for key, value in changes.items():
         setattr(cluster, key, value)
 
-    audit = getattr(request.state, "audit", None)
+    audit = getattr(request.state, "audit", None) if request is not None else None
     if audit is not None:
         audit.resource_id = cluster.id
         diff = ", ".join(f"{k} 从 '{old_values.get(k)}' 变更为 '{v}'" for k, v in changes.items() if old_values.get(k) != v)
@@ -195,7 +183,11 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, request
 
 
 @router.get("/{cluster_id}/stats")
-async def get_cluster_stats(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def get_cluster_stats(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters')),
+):
     result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="集群不存在")
@@ -362,7 +354,12 @@ class TestConnectionRequest(BaseModel):
 
 
 @router.post("/{cluster_id}/test")
-async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def test_connection(
+    cluster_id: int,
+    req: TestConnectionRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters')),
+):
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     results: list[dict] = []
@@ -404,7 +401,11 @@ async def test_connection(cluster_id: int, req: TestConnectionRequest = Body(...
 
 
 @router.post("/{cluster_id}/sync")
-async def sync_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
+async def sync_cluster(
+    cluster_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission('clusters')),
+):
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     return {"status": "ok", "message": "同步成功"}

@@ -58,7 +58,8 @@ class ClusterResponse(BaseModel):
     name: str
     display_name: Optional[str] = None
     description: Optional[str] = None
-    admin_key: Optional[str] = None
+    # admin_key 有意不在响应中返回（v3 8A 脱敏）：Edge Admin API 密钥只在创建/更新请求提交，
+    # 更新走 exclude_unset 语义（留空 = 保持原值）。备份导出同样排除（cluster_backup._serialize_without）。
     status: int = 1
     group_name: Optional[str] = None
     created_at: Optional[str] = None

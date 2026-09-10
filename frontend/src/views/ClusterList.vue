@@ -94,7 +94,6 @@
                   <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
                 </td>
               </tr>
-              <tr><td class="dt-label">Admin Key</td><td class="dt-value">{{ detailCluster.admin_key || '-' }}</td></tr>
               <tr><td class="dt-label">创建时间</td><td class="dt-value">{{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}</td></tr>
             </table>
             <h3 class="detail-section-title">资源统计</h3>
