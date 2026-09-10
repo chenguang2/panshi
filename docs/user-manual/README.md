@@ -67,6 +67,7 @@
 | 26 | 自启动管理 | [26-autostart.md](26-autostart.md) |
 | 27 | Ansible 主机清单 | [27-ansible-inventory.md](27-ansible-inventory.md) |
 | 28 | 节点任务 | [28-node-tasks.md](28-node-tasks.md) |
+| 29 | 审计日志 | [29-audit-log.md](29-audit-log.md) |
 
 ## 附录（客户端环境配置）
 

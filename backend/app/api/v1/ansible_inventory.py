@@ -12,14 +12,14 @@ import logging
 from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 from app.models.cluster import Node
 from app.models.node_task import NodeTask
 from app.models.user import User
@@ -102,6 +102,7 @@ async def put_inventory(
     payload: PutPayload,
     current_user: User = Depends(require_permission('ansible_inventory')),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> dict[str, Any]:
     if payload.raw_text is None and payload.hosts is None:
         raise HTTPException(status_code=400, detail="载荷必须为 raw_text 或 hosts+vars 二选一")
@@ -127,7 +128,8 @@ async def put_inventory(
 
     # save_inventory 内部持有 _inventory_lock（与运行时注入互斥），此处勿重复加锁
     inventory_service.save_inventory(new_text)
-    log_audit(db, user=current_user, action="save_inventory", resource="ansible_inventory", detail="更新 Ansible 主机清单")
+    enrich_audit(request, detail="更新 Ansible 主机清单")
+    await db.commit()
     logger.info("Inventory updated by admin user %s", current_user.username)
     return {"ok": True}
 

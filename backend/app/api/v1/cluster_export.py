@@ -373,8 +373,6 @@ async def export_cluster_data(
     cluster_name = data["cluster"].name
     filename = f"{sanitize_filename(cluster_name, extra_unsafe='#')}_配置导出.xlsx"
 
-    log_audit(db, user=current_user, action="export_cluster", resource="cluster", resource_id=cluster_id, detail=f"导出集群 {cluster_name} Excel 配置")
-
     from urllib.parse import quote
 
     encoded = quote(filename, safe="")

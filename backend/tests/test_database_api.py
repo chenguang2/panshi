@@ -273,3 +273,79 @@ class TestMigrationEndpoints:
                 "target_id": conn_id,
             })
             assert resp.status_code == 400
+
+
+class TestMigrateResultAndBackup:
+    """任务 3.6/4.5/5.2：迁移返回每表明细 + 清空前自动备份与保留策略。"""
+
+    async def _login(self, client, username="admin", password="panshi123"):
+        resp = await client.post("/api/v1/auth/login",
+            json={"username": username, "password": password})
+        assert resp.status_code == 200
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    async def _add_sqlite(self, client, headers, name, path):
+        resp = await client.post("/api/v1/database/connections", headers=headers, json={
+            "type": "sqlite", "name": name, "path": path,
+        })
+        return resp.json()["id"]
+
+    def _seed_source(self, path):
+        """源库建表并写入一行，迁移才有明细可报。"""
+        import os
+        from sqlalchemy import create_engine, text
+        from app.core.database import Base
+        engine = create_engine(f"sqlite:///{path}")
+        Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO sys_user (id, username, password_hash, role, status) "
+                "VALUES (1, 'admin', 'hash', 'admin', 1)"
+            ))
+        engine.dispose()
+        assert os.path.exists(path)
+
+    async def test_migrate_returns_table_details_and_creates_backup(self, tmp_path, monkeypatch):
+        import os
+        from pathlib import Path
+        monkeypatch.chdir(tmp_path)  # 备份落到 tmp/data/backups，不污染运行目录
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers = await self._login(client)
+            src = os.path.join(tmp_path, "src.db")
+            self._seed_source(src)
+            src_id = await self._add_sqlite(client, headers, "源", src)
+            dst_id = await self._add_sqlite(client, headers, "目标", os.path.join(tmp_path, "dst.db"))
+
+            resp = await client.post("/api/v1/database/migrate", headers=headers, json={
+                "source_id": src_id, "target_id": dst_id,
+                "mode": "replace", "include_logs": True, "confirmed_clear": True,
+            })
+        assert resp.status_code == 200
+        data = resp.json()
+        # 4.5/5.2：返回结构含每表明细（name/columns/rows）与备份路径
+        assert data["tables_migrated"] >= 1
+        assert isinstance(data["tables"], list) and data["tables"]
+        for t in data["tables"]:
+            assert set(t) >= {"name", "columns", "rows"}
+        user_row = next(t for t in data["tables"] if t["name"] == "sys_user")
+        assert user_row["rows"] == 1
+        assert data["backup_path"], "confirmed_clear 迁移必须返回备份路径"
+        assert Path(data["backup_path"]).exists()
+        assert "migration_" in Path(data["backup_path"]).name
+
+    async def test_backup_retention_keeps_recent_ten(self, tmp_path):
+        """3.6 保留策略：超过 10 份时删除最旧的备份。"""
+        from app.api.v1.database import _cleanup_old_backups
+        backup_dir = tmp_path / "data" / "backups"
+        backup_dir.mkdir(parents=True)
+        import os
+        for i in range(12):
+            p = backup_dir / f"migration_a_to_b_2026010{i % 10}{i // 10}0000_{i}.zip"
+            p.write_bytes(b"x")
+            os.utime(p, (1_000_000 + i, 1_000_000 + i))  # 递增 mtime
+        _cleanup_old_backups(backup_dir, keep=10)
+        remaining = sorted(p.name for p in backup_dir.glob("migration_*.zip"))
+        assert len(remaining) == 10
+        assert "migration_a_to_b_2026010100000_1.zip" not in remaining  # 最旧的 0、1 已删
+        assert "migration_a_to_b_2026010110000_11.zip" in remaining  # 最新的保留

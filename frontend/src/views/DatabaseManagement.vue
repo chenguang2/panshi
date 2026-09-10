@@ -114,7 +114,7 @@
           </div>
           <div class="form-group">
             <label class="form-label">超时时间</label>
-            <select v-model.number="migrateForm.timeout" class="form-input">
+            <select v-model.number="migrateForm.timeout" class="form-input" :disabled="migrating">
               <option :value="60">1 分钟</option>
               <option :value="180">3 分钟</option>
               <option :value="300">5 分钟（默认）</option>
@@ -147,15 +147,28 @@
         <div v-if="migrating" class="migrate-progress">
           <div v-if="migrationProgress.phase === 'backup'" class="progress-section">
             <div class="progress-header">正在备份源库…</div>
-            <a-progress :percent="migrationProgress.backupTotal > 0 ? Math.round((migrationProgress.backupDone / migrationProgress.backupTotal) * 100) : 0" status="active" />
-            <span class="progress-text">表 {{ migrationProgress.backupDone }} / {{ migrationProgress.backupTotal }}</span>
+            <a-progress
+              :percent="
+                migrationProgress.backupTotal > 0
+                  ? Math.round((migrationProgress.backupDone / migrationProgress.backupTotal) * 100)
+                  : 0
+              "
+              status="active"
+            />
+            <span class="progress-text"
+              >表 {{ migrationProgress.backupDone }} / {{ migrationProgress.backupTotal }}</span
+            >
           </div>
           <div v-else-if="migrationProgress.phase === 'migrating'" class="progress-section">
             <div class="progress-header">
               正在迁移数据… 表 {{ migrationProgress.tableIndex }} / {{ migrationProgress.totalTables }}
             </div>
             <a-progress
-              :percent="migrationProgress.totalTables > 0 ? Math.round((migrationProgress.tableIndex / migrationProgress.totalTables) * 100) : 0"
+              :percent="
+                migrationProgress.totalTables > 0
+                  ? Math.round((migrationProgress.tableIndex / migrationProgress.totalTables) * 100)
+                  : 0
+              "
               status="active"
             />
             <div class="progress-detail">
@@ -164,7 +177,8 @@
                 <template v-if="migrationProgress.skipped">（跳过：表不存在）</template>
               </span>
               <span v-if="migrationProgress.totalRows > 0" class="progress-rows">
-                已迁移 {{ migrationProgress.copiedRows.toLocaleString() }} / {{ migrationProgress.totalRows.toLocaleString() }} 行
+                已迁移 {{ migrationProgress.copiedRows.toLocaleString() }} /
+                {{ migrationProgress.totalRows.toLocaleString() }} 行
               </span>
             </div>
           </div>
@@ -173,9 +187,7 @@
             <span class="progress-text">正在准备迁移…</span>
           </div>
           <div class="migrate-cancel">
-            <a-button danger size="small" @click="handleCancelMigration">
-              终止迁移
-            </a-button>
+            <a-button danger size="small" @click="handleCancelMigration"> 终止迁移 </a-button>
           </div>
         </div>
         <div v-if="migrateResult" class="migrate-result">
@@ -365,7 +377,7 @@ const migrateForm = reactive({
 // SSE progress state
 const migrationProgress = reactive({
   active: false,
-  phase: '' as 'backup' | 'migrating' | '' ,
+  phase: '' as 'backup' | 'migrating' | '',
   backupDone: 0,
   backupTotal: 0,
   tableIndex: 0,

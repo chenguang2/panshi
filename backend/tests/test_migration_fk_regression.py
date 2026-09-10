@@ -89,7 +89,7 @@ class TestMigrationFkRegression:
             mode="replace",
             confirmed_clear=True,
         )
-        assert done > 0
+        assert len(done) > 0
 
         # 4. 验证目标库已修复：sys_user 有 id 列，且能建 FK 表
         tgt_engine = create_engine(self.target_url)

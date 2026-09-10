@@ -77,6 +77,7 @@ const sectionMap: Record<string, string> = {
   EdgeAutostart: '运维管理',
   AnsibleInventory: '运维管理',
   NodeTaskCenter: '运维管理',
+  AuditLog: '系统管理',
 }
 
 const pageNameMap: Record<string, string> = {
@@ -107,6 +108,7 @@ const pageNameMap: Record<string, string> = {
   EdgeAutostart: '自启动管理',
   AnsibleInventory: 'Ansible 主机清单',
   NodeTaskCenter: '节点任务',
+  AuditLog: '审计日志',
 }
 
 const currentSection = computed(() => {

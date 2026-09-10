@@ -319,7 +319,8 @@ const navSections = computed<NavSection[]>(() => {
       visible:
         authStore.user?.role === 'admin' ||
         authStore.hasPermission('database_management') ||
-        authStore.hasPermission('clickhouse_config'),
+        authStore.hasPermission('clickhouse_config') ||
+        (featuresStore.has('audit_log') && authStore.hasPermission('audit_logs')),
       items: [
         {
           label: '插件开关',
@@ -334,6 +335,13 @@ const navSections = computed<NavSection[]>(() => {
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>',
           permission: 'database_management',
           feature: 'database_management',
+        },
+        {
+          label: '审计日志',
+          route: '/audit-log',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5l6 3v4c0 4-2.5 6.8-6 8-3.5-1.2-6-4-6-8v-4l6-3z"/><path d="M6.5 9l1.8 1.8L12 7.2"/></svg>',
+          permission: 'audit_logs',
+          feature: 'audit_log',
         },
         {
           label: 'ClickHouse 配置',

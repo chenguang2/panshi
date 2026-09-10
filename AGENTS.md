@@ -145,6 +145,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 25. **弹窗三层制** — 普通确认/信息 → `useOverlayModal`（showOverlayModal，手写 modal-overlay，全站 Modal.confirm 已清零）；删除/发布进度等共享流程 → AppModal（`components/AppModal.vue` + useClusterUtils 的 5 个共享弹窗）；视图级内联弹窗保持手写 modal-overlay。例外：EdgeImport/UserList/AnsibleInventory 三页保留 a-modal（品牌色头部）。教训：Vue 属性内多语句 `a; b` 会被 prettier 重排破坏编译——须提取为函数调用。
 26. **日期/文件大小格式化只用 `utils/format.ts`** — formatDate（dash）/formatDateTime（slash 含秒）/formatMonthDayTime/formatDateOnly/formatPublishDateTime(Asia/Shanghai)/formatFileSize；禁止视图内再写本地 formatDate（Phase 1 已消除 12 处重复）。模板内需要全角空格 U+3000 时写实体 `&#x3000;`（prettier 会破坏裸字符及注释位置）。
 27. **前端工程化管线** — ESLint 10 flat config（vue3-essential + typescript-eslint；`no-explicit-any`/`no-unused-vars` 为 warn 级）、Prettier（无分号/单引号/120 宽）、husky 9 + lint-staged（`.husky` 在 frontend/，已配 `core.hooksPath`；pre-commit 自动 fix 暂存文件）。`types/index.ts` 中动态 JSON 的 `Record<string, any>` 为有意豁免（带 eslint-disable 注释）；`.vue` 模板层 ~474 处存量 any warn 走增量治理，**不开专项清理**（全量回归 UI 的 ROI 为负）。
+28. **数据库归档/导出代码必须双方言感知（SQLite/PostgreSQL）** — `db_archive_service` 归档的 `ddl/` 成件是 best-effort 元数据（仅 SQLite 源提取 sqlite_master DDL，非 SQLite 源返回空串，全仓库无消费方，导入不依赖）；PG 源经 psycopg2 裸 `text()` 查询返回 `datetime`/`Decimal` **对象**（SQLite 返回字符串，测试因此测不出），行序列化必须走 `_serialize_row`（`default=str`）。守卫测试 `backend/tests/test_db_archive_service.py`（TestGetDdlDialectGate/TestSerializeRow）；真 PG 回归用 `PG_DSN` 环境变量 opt-in（`test_sqlite_to_pg_migration.py` 同款模式）。2026-09 教训：PG 源导出曾在第一张表即报 `relation "sqlite_master" does not exist`。
 
 ## 新增功能步骤
 

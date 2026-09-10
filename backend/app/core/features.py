@@ -35,6 +35,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "edge_autostart",
     "ansible_inventory",
     "clickhouse_config",
+    "audit_log",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.
@@ -64,7 +65,9 @@ def get_features() -> dict:
         current_mtime = 0.0
     if _features is None or current_mtime != _features_mtime:
         _features = None  # force reload
-        return load_features()
+        # 注意：必须显式传 p——load_features 的默认参数在定义时绑定，
+        # 与 _FEATURES_PATH 脱节会导致"stat 一个文件、重载另一个文件"
+        return load_features(str(p))
     return _features
 
 

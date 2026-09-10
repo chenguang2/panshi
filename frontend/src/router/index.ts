@@ -101,6 +101,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/DatabaseManagement.vue'),
     meta: { permission: 'database_management' },
   },
+  audit_log: {
+    path: 'audit-log',
+    name: 'AuditLog',
+    component: () => import('@/views/AuditLog.vue'),
+    meta: { permission: 'audit_logs' },
+  },
   clickhouse_config: {
     path: 'clickhouse-config',
     name: 'ClickHouseConfig',

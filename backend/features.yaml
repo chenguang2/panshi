@@ -16,6 +16,7 @@ features:
   edge_autostart: true
   ansible_inventory: true
   clickhouse_config: true
+  audit_log: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

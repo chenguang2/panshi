@@ -5,7 +5,7 @@
 """
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,9 +14,24 @@ from app.core.security import decode_access_token
 from app.models.user import User, UserPermission
 
 
+def _backfill_audit_user(request: Request | None, user: User) -> None:
+    """鉴权通过后，把用户回填到审计骨架（audit_hook 预创建的 request.state.audit）。
+
+    单一回填点：require_any_permission / get_current_user 解析出用户后调用；
+    审计骨架由 audit_start 依赖更早创建，同一事务内补全 user 字段。
+    """
+    if request is None:
+        return
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.user_id = user.id
+        audit.username = user.username
+
+
 async def get_current_user(
     authorization: Optional[str] = Header(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> User:
     if not authorization:
         raise HTTPException(status_code=401, detail="未认证")
@@ -43,6 +58,7 @@ async def get_current_user(
         if user.status != 1:
             raise HTTPException(status_code=401, detail="用户已禁用")
 
+        _backfill_audit_user(request, user)
         return user
     except HTTPException:
         raise
@@ -93,7 +109,9 @@ def require_any_permission(*resources: str):
     async def _dependency(
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),
+        request: Request = None,
     ) -> User:
+
         if current_user.role == "admin":
             return current_user
         result = await db.execute(

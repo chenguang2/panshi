@@ -115,6 +115,43 @@ class TestDirectMigration:
         assert before == after
 
 
+class TestRowLevelProgressWiring:
+    """行级批次进度必须从 _copy_table 真实传到 migrate_direct 的 progress_cb。
+
+    2026-09 核对发现：migrate_direct 曾硬编码 progress_cb=None 调 _copy_table，
+    行级进度在真实迁移流中不可见（前端「已迁移 X/Y 行」恒为 0）。
+    """
+
+    def _conn(self, engine):
+        return ConnectionConfig(id="c", type="sqlite", name="C", path=str(engine.url).replace("sqlite:///", ""))
+
+    def test_migrate_direct_forwards_row_batch_progress(self, source_db, target_db):
+        _seed(source_db)
+        # 追加 600 行 → 超过 BATCH_SIZE=500，ps_cluster 至少产生 2 个批次回调
+        with source_db.begin() as conn:
+            for i in range(600):
+                conn.execute(
+                    text("INSERT INTO ps_cluster (name, group_name, status) VALUES (:n, '', 1)"),
+                    {"n": f"bulk-{i}"},
+                )
+
+        calls = []
+        db_migration_service.migrate_direct(
+            self._conn(source_db),
+            self._conn(target_db),
+            confirmed_clear=True,
+            progress_cb=lambda done, total, **kw: calls.append(dict(kw)),
+        )
+
+        ps_calls = [c for c in calls if c.get("table_name") == "ps_cluster"]
+        assert len(ps_calls) >= 2, "ps_cluster 应产生多个进度回调（每批次一次 + 完成一次）"
+        intermediates = [c for c in ps_calls if 0 < (c.get("copied_rows") or 0) < 602]
+        assert intermediates, "应存在 copied_rows 未达总数的中间批次回调（行级进度）"
+        # 完成回调带 skipped 标记与最终行数
+        assert ps_calls[-1]["copied_rows"] == 602
+        assert ps_calls[-1]["skipped"] is False
+
+
 class TestReplaceMode:
     def _conn(self, engine):
         return ConnectionConfig(id="c", type="sqlite", name="C", path=str(engine.url).replace("sqlite:///", ""))
@@ -330,6 +367,69 @@ class TestMigrationProgressEvent:
         assert d["skipped"] is False
 
 
+class TestTypeCoercion:
+    """任务 1.4/1.5：_coerce_value 跨方言类型协同（db-migration-type-coercion 契约）。"""
+
+    def test_boolean_int_coerced_to_bool(self):
+        from sqlalchemy import Boolean as SA_Boolean
+
+        from app.services.db_migration_service import _coerce_value
+
+        assert _coerce_value(1, SA_Boolean()) is True
+        assert _coerce_value(0, SA_Boolean()) is False
+        assert _coerce_value(True, SA_Boolean()) is True
+        assert _coerce_value(None, SA_Boolean()) is None
+
+    def test_datetime_string_coerced_to_datetime(self):
+        from datetime import datetime as dt
+
+        from sqlalchemy import DateTime as SA_DateTime
+
+        from app.services.db_migration_service import _coerce_value
+
+        v = _coerce_value("2026-09-08 12:00:00", SA_DateTime())
+        assert isinstance(v, dt)
+        assert (v.year, v.month, v.day, v.hour, v.minute) == (2026, 9, 8, 12, 0)
+        # 非法字符串原样透传，不抛错
+        assert _coerce_value("not-a-date", SA_DateTime()) == "not-a-date"
+
+    def test_non_matching_types_pass_through(self):
+        from sqlalchemy import String
+
+        from app.services.db_migration_service import _coerce_value
+
+        assert _coerce_value("plain-text", String()) == "plain-text"
+        assert _coerce_value(42, String()) == 42
+
+
+class TestLargeAndEmptyTableMigration:
+    """任务 2.4/2.5：大表分批迁移与空表迁移（db-migration-streaming 契约）。"""
+
+    def test_large_table_migrates_in_batches(self, source_db, target_db):
+        """1200 行（BATCH_SIZE=500 的 3 个批次）全部迁入，分批回调可见。"""
+        with source_db.begin() as conn:
+            for i in range(1200):
+                conn.execute(
+                    text("INSERT INTO ps_cluster (name, group_name, status) VALUES (:n, '', 1)"),
+                    {"n": f"bulk-{i}"},
+                )
+        batches = []
+        result = db_migration_service._copy_table(
+            source_db, target_db, "ps_cluster", progress_cb=lambda c, t: batches.append((c, t))
+        )
+        assert result["rows"] == 1200
+        assert len(batches) >= 3, "1200 行应产生至少 3 个批次回调"
+        assert batches[-1] == (1200, 1200)
+        with target_db.connect() as conn:
+            assert conn.execute(text("SELECT COUNT(*) FROM ps_cluster")).scalar() == 1200
+
+    def test_empty_table_migrates_without_error(self, source_db, target_db):
+        """空表（0 行）迁移不报错：rows=0 且 skipped=False。"""
+        result = db_migration_service._copy_table(source_db, target_db, "ps_cluster")
+        assert result["skipped"] is False
+        assert result["rows"] == 0
+
+
 class TestCopyTableProgress:
     """Tests for _copy_table with progress callback and COUNT query."""
 
@@ -348,6 +448,19 @@ class TestCopyTableProgress:
         result = db_migration_service._copy_table(source_db, target_db, "ps_cluster")
         assert result["skipped"] is False
         assert result["rows"] == 2
+
+    def test_columns_count_reports_source_definition(self, source_db, target_db):
+        """columns 计数 SHALL 反映源表列定义（db-migration-detail-result 契约）：
+        源表含目标缺失的历史列时，报告源列数而非源∩目标交集数。"""
+        _seed(source_db)
+        # 源库 ps_cluster 带一列当前模型/目标库不存在的历史列（legacy schema 场景）
+        with source_db.begin() as conn:
+            conn.execute(text("ALTER TABLE ps_cluster ADD COLUMN legacy_note TEXT"))
+        result = db_migration_service._copy_table(source_db, target_db, "ps_cluster")
+        model_cols = len(Base.metadata.tables["ps_cluster"].columns)
+        assert result["columns"] == model_cols + 1, (
+            "应报告源表列数（含目标缺失列），而非可插入的交集列数"
+        )
 
     def test_progress_cb_called_with_row_counts(self, source_db, target_db):
         """progress_cb should be called after each batch with (copied_rows, total_rows)."""
@@ -430,7 +543,12 @@ class TestMigrateDirectCancel:
             )
 
     def test_progress_cb_passes_through_to_copy_table(self, source_db, target_db):
-        """progress_cb should be called with table-level progress."""
+        """progress_cb should be called with table-level progress.
+
+        2026-09 起行级批次回调也透传到外层 progress_cb（见
+        TestRowLevelProgressWiring），调用次数可多于表数，但 22 个表序号
+        都必须出现，且最终调用为 (22, 22)。
+        """
         _seed(source_db)
         progress_calls = []
 
@@ -443,8 +561,8 @@ class TestMigrateDirectCancel:
             confirmed_clear=True,
             progress_cb=on_progress,
         )
-        assert len(progress_calls) == 22  # One call per table
         assert progress_calls[-1] == (22, 22)  # Final call
+        assert {d for d, _ in progress_calls} == set(range(1, 23))  # 每张表都有回调
 
 
 class TestExportArchiveProgress:

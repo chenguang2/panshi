@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from typing import Optional, List
@@ -19,7 +19,7 @@ from app.schemas.cluster import (
     DeleteClusterRequest,
 )
 from app.services import edge_sync
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 logger = logging.getLogger(__name__)
@@ -130,6 +130,7 @@ async def list_clusters(
 @router.post("", response_model=ClusterResponse, status_code=status.HTTP_201_CREATED)
 async def create_cluster(
     cluster: ClusterCreate,
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission('clusters'))
 ):
@@ -139,9 +140,13 @@ async def create_cluster(
 
     db_cluster = Cluster(**cluster.model_dump(), creator_id=current_user.id)
     db.add(db_cluster)
+    await db.flush()  # 先拿 id；审计增强须在首次 flush 前写入骨架
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_cluster.id
+        audit.detail = f"创建集群 {db_cluster.name}"
     await db.commit()
     await db.refresh(db_cluster)
-    log_audit(db, user=current_user, action="create_cluster", resource="cluster", resource_id=db_cluster.id, detail=f"创建集群 {db_cluster.name}")
 
     existing = await db.execute(
         select(UserCluster).where(
@@ -163,7 +168,8 @@ async def get_cluster(cluster_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{cluster_id}", response_model=ClusterResponse)
-async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: AsyncSession = Depends(get_db),
+async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, request: Request = None,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission('clusters'))):
     cluster = await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
@@ -172,12 +178,19 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, db: Asy
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="集群名称已存在")
 
-    for key, value in cluster_update.model_dump(exclude_unset=True).items():
+    changes = {k: v for k, v in cluster_update.model_dump(exclude_unset=True).items()}
+    old_values = {k: getattr(cluster, k, None) for k in changes}
+    for key, value in changes.items():
         setattr(cluster, key, value)
+
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = cluster.id
+        diff = ", ".join(f"{k} 从 '{old_values.get(k)}' 变更为 '{v}'" for k, v in changes.items() if old_values.get(k) != v)
+        audit.detail = f"更新集群 {cluster.name}: {diff}" if diff else f"更新集群 {cluster.name}（无字段变化）"
 
     await db.commit()
     await db.refresh(cluster)
-    log_audit(db, user=current_user, action="update_cluster", resource="cluster", resource_id=cluster.id, detail=f"更新集群 {cluster.name}")
     return ClusterResponse.model_validate(cluster)
 
 
@@ -214,6 +227,7 @@ async def delete_cluster(
     body: Optional[DeleteClusterRequest] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission('clusters')),
+    request: Request = None,
 ):
 
     if body is None:
@@ -333,9 +347,9 @@ async def delete_cluster(
         db_details["nodes"] = node_result.scalar() or 0
         await db.execute(Node.__table__.delete().where(Node.cluster_id == cluster_id))
 
+        enrich_audit(request, detail=f"删除集群 {cluster_id}（数据库+Edge）")
         await db.delete(cluster)
         await db.commit()
-        log_audit(db, user=current_user, action="delete_cluster", resource="cluster", resource_id=cluster_id, detail=f"删除集群（数据库+Edge）")
 
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除", "details": db_details})
         return {"message": "集群已删除", "results": results}

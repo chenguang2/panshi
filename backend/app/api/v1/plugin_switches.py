@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
@@ -9,7 +9,7 @@ from app.schemas.plugin_switch import PluginSwitchItem
 
 from app.core.deps import require_permission
 from app.models.user import User
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 
 router = APIRouter(prefix="/plugin-switches", tags=["plugin-switches"], dependencies=[Depends(require_permission('plugin_management'))])
 
@@ -77,6 +77,7 @@ async def _detect_plugin_refs(disabled_names: set[str], db: AsyncSession) -> dic
 @router.put("")
 async def update_plugin_switches(
     switches: list[PluginSwitchItem],
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission('plugin_management')),
 ):
@@ -91,8 +92,8 @@ async def update_plugin_switches(
                 enabled=1 if sw.enabled else 0,
             )
             db.add(db_item)
+        enrich_audit(request, detail="更新插件开关")
         await db.commit()
-        log_audit(db, user=current_user, action="update_plugin_switches", resource="plugin_switches", detail="更新插件开关")
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=500, detail="保存插件开关失败")

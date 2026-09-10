@@ -15,6 +15,14 @@ export function formatDate(dateStr: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** dash 格式 `YYYY-MM-DD HH:mm:ss`（含秒）。审计日志等需要秒级 dash 时间戳的场景。 */
+export function formatDateTimeDash(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 /** 斜杠格式 `YYYY/MM/DD HH:mm:ss`（含秒，zh-CN 2 位零填充）。 */
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'

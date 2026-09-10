@@ -458,6 +458,7 @@ const permissionKeyToLabel: Record<string, string> = {
   task_center: '节点任务',
   database_management: '数据库管理',
   clickhouse_config: 'ClickHouse 配置',
+  audit_logs: '审计日志',
 }
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
@@ -512,6 +513,7 @@ const permissionFeatureMap: Record<string, string> = {
   edge_env: 'edge_env',
   metrics: 'metrics',
   task_center: 'task_center',
+  audit_logs: 'audit_log',
 }
 
 interface PermItem {
@@ -557,6 +559,7 @@ const permissionGroups = computed(() => {
       items: [
         { key: 'database_management', label: '数据库管理' },
         { key: 'clickhouse_config', label: 'ClickHouse 配置' },
+        { key: 'audit_logs', label: '审计日志' },
       ],
     },
     {

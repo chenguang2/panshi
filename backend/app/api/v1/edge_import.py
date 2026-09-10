@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,7 +13,7 @@ from app.schemas.edge_import import (
 )
 
 from app.core.deps import require_permission
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 
 router = APIRouter(prefix="/edge-import", tags=["edge-import"], dependencies=[Depends(require_permission('edge_import'))])
 
@@ -51,6 +51,7 @@ async def preview_import(
 @router.post("/execute", response_model=ImportExecuteResponse)
 async def execute_import(
     body: ImportExecuteRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     service = await EdgeImportService.create(
@@ -63,5 +64,6 @@ async def execute_import(
         selections=body.selections,
         session=db,
     )
-    log_audit(db, user=None, action="edge_import_execute", resource="edge_import", detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
+    enrich_audit(request, detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
+    await db.commit()  # 持久化审计骨架
     return result

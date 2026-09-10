@@ -117,3 +117,80 @@ class TestArchiveImport:
     def test_missing_archive_rejected(self, target_db, tmp_path):
         with pytest.raises(ValueError):
             db_archive_service.import_archive(str(tmp_path / "missing.zip"), _conn(target_db), confirmed_clear=False)
+
+
+class TestGetDdlDialectGate:
+    """_get_ddl 只对 SQLite 执行 sqlite_master 查询（PG 源库导出回归）。
+
+    背景：export_archive 曾无条件执行 SQLite 专有的 sqlite_master 查询，
+    PG 源库导出在第一张表即报 UndefinedTable（relation "sqlite_master" does not exist）。
+    """
+
+    def test_get_ddl_skips_non_sqlite_dialect(self):
+        pg_engine = create_engine("postgresql+psycopg2://user:pass@127.0.0.1:1/db")
+
+        class _NoQueryConn:
+            def execute(self, *args, **kwargs):
+                raise AssertionError("sqlite_master SQL must not run on non-SQLite dialects")
+
+        assert db_archive_service._get_ddl(pg_engine, _NoQueryConn(), "sys_user") == ""
+        pg_engine.dispose()
+
+    def test_get_ddl_returns_ddl_for_sqlite(self, source_db):
+        Base.metadata.create_all(source_db)
+        with source_db.connect() as conn:
+            ddl = db_archive_service._get_ddl(source_db, conn, "ps_cluster")
+        assert "CREATE TABLE" in ddl
+        assert "ps_cluster" in ddl
+
+
+class TestSerializeRow:
+    """PG 源库经 psycopg2 返回 datetime/Decimal 对象，行序列化不得崩溃。"""
+
+    def test_serialize_row_handles_datetime(self):
+        from datetime import datetime
+
+        payload = db_archive_service._serialize_row(
+            {"id": 1, "created_at": datetime(2026, 1, 2, 3, 4, 5)}
+        )
+        assert json.loads(payload) == {"id": 1, "created_at": "2026-01-02 03:04:05"}
+
+    def test_serialize_row_handles_decimal(self):
+        from decimal import Decimal
+
+        payload = db_archive_service._serialize_row({"id": 1, "ratio": Decimal("1.5")})
+        assert json.loads(payload) == {"id": 1, "ratio": "1.5"}
+
+
+@pytest.mark.skipif(not os.getenv("PG_DSN"), reason="PG_DSN not set; skipping PG export test")
+class TestPostgresSourceExport:
+    """真 PG 源库导出回归（需 PG_DSN，opt-in；对源库只读）。"""
+
+    def test_export_from_pg_succeeds(self, tmp_path):
+        from app.core.database import build_sync_engine_for
+        from app.core.db_config import encrypt_password
+
+        dsn = os.getenv("PG_DSN")
+        assert dsn, "PG_DSN must be set"
+        host, port, dbname = _parse_pg_dsn(dsn)
+        conn = ConnectionConfig(
+            id="pg_src", type="postgresql", name="PG", host=host, port=port,
+            database=dbname, username="postgres",
+            password_enc=encrypt_password("postgres"),
+        )
+        out = str(tmp_path / "pg_backup.zip")
+        db_archive_service.export_archive(conn, out)
+        with zipfile.ZipFile(out) as z:
+            assert "meta.json" in z.namelist()
+            assert "data/ps_cluster.jsonl" in z.namelist()
+            # ddl/ 是 best-effort：非 SQLite 源允许为空，但导出必须完整成功
+            tables = json.loads(z.read("meta.json"))["tables"]
+            assert isinstance(tables, dict)
+        build_sync_engine_for(conn).dispose()
+
+
+def _parse_pg_dsn(dsn: str) -> tuple[str, int, str]:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(dsn)
+    return parsed.hostname or "localhost", parsed.port or 5432, (parsed.path or "/").lstrip("/")

@@ -68,14 +68,34 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Always-on routes ────────────────────────────────────────────────
-app.include_router(api_router, prefix="/api/v1")
+# audit_start 依赖先于路由自身鉴权依赖执行：创建审计骨架（同事务），
+# 鉴权成功后由 deps 回填用户；鉴权失败/异常随事务回滚自然丢弃
+from fastapi import Depends
+
+from app.core.audit_hook import audit_start, validate_route_map
+
+app.include_router(api_router, prefix="/api/v1", dependencies=[Depends(audit_start)])
 
 # ── Feature-gated routes ────────────────────────────────────────────
 # Each router is only registered if the corresponding feature is enabled
 # in the deployment's features.yaml configuration.
 for feature_name, router in feature_routers.items():
     if feature_enabled(feature_name):
-        app.include_router(router, prefix="/api/v1")
+        app.include_router(router, prefix="/api/v1", dependencies=[Depends(audit_start)])
+
+
+# 启动校验：mutating 路由既无显式映射也无法推断时告警（audit-log-full-coverage 1.3）
+def _validate_audit_route_map():
+    missing = validate_route_map(app)
+    for method, path in missing:
+        logging.getLogger("app.audit").warning(
+            "审计路由映射缺失（将不被审计）: %s %s", method, path
+        )
+    if missing:
+        logging.getLogger("app.audit").warning("共 %d 条路由缺少审计映射", len(missing))
+
+
+_validate_audit_route_map()
 
 
 @app.get("/health")

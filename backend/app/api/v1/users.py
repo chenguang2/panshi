@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from typing import Optional
@@ -10,7 +10,7 @@ from app.models.user import User, UserPermission, UserCluster
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserListResponse, PasswordResetRequest, ClusterAssignRequest
 from app.schemas.auth import PermissionRequest
 from app.services import edge_sync
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -81,7 +81,8 @@ async def list_users(
 async def create_user(
     user: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
 ):
     existing = await db.execute(select(User).where(User.username == user.username))
     if existing.scalar_one_or_none():
@@ -94,8 +95,9 @@ async def create_user(
         status=user.status
     )
     db.add(db_user)
+    await db.flush()  # 先拿 id；审计增强须在 commit 前写入骨架
+    enrich_audit(request, resource_id=db_user.id, detail=f"创建用户 {db_user.username}（role={db_user.role}）")
     await db.commit()
-    log_audit(db, user=current_user, action="create_user", resource="user", resource_id=db_user.id, detail=f"创建用户 {db_user.username}（role={db_user.role}）")
     await db.refresh(db_user)
     return UserResponse.model_validate(db_user)
 
@@ -115,7 +117,8 @@ async def update_user(
     user_id: int,
     user_update: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
 ):
     user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
@@ -124,9 +127,9 @@ async def update_user(
     if user_update.status is not None:
         user.status = user_update.status
 
+    enrich_audit(request, resource_id=user.id, detail=f"更新用户 {user.username}")
     await db.commit()
     await db.refresh(user)
-    log_audit(db, user=current_user, action="update_user", resource="user", resource_id=user.id, detail=f"更新用户 {user.username}")
     return UserResponse.model_validate(user)
 
 
@@ -134,7 +137,8 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user),
+    request: Request = None,
 ):
     user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
@@ -146,9 +150,9 @@ async def delete_user(
     await db.execute(delete(UserPermission).where(UserPermission.user_id == user_id))
     await db.execute(delete(UserCluster).where(UserCluster.user_id == user_id))
 
+    enrich_audit(request, resource_id=user_id, detail=f"删除用户 {user.username}")
     await db.delete(user)
     await db.commit()
-    log_audit(db, user=current_user, action="delete_user", resource="user", resource_id=user_id, detail=f"删除用户 {user.username}")
     return {"message": "用户已删除"}
 
 
@@ -162,8 +166,8 @@ async def reset_password(
     user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     user.password_hash = hash_password(request.new_password)
+    enrich_audit(request, resource_id=user_id, detail=f"重置用户 {user.username} 密码")
     await db.commit()
-    log_audit(db, user=current_user, action="reset_password", resource="user", resource_id=user_id, detail=f"重置用户 {user.username} 密码")
     return {"message": "密码重置成功"}
 
 
@@ -192,8 +196,8 @@ async def assign_clusters(
     for cluster_id in request.cluster_ids:
         db.add(UserCluster(user_id=user_id, cluster_id=cluster_id))
 
+    enrich_audit(request, resource_id=user_id, detail="分配集群权限")
     await db.commit()
-    log_audit(db, user=current_user, action="assign_clusters", resource="user", resource_id=user_id, detail=f"分配集群权限")
     return {"message": "Clusters assigned"}
 
 
@@ -222,6 +226,6 @@ async def update_user_permissions(
     for perm in request.permissions:
         db.add(UserPermission(user_id=user_id, resource_type=perm, enabled=1))
 
+    enrich_audit(request, resource_id=user_id, detail="更新用户权限")
     await db.commit()
-    log_audit(db, user=current_user, action="update_permissions", resource="user", resource_id=user_id, detail="更新用户权限")
     return {"message": "Permissions updated", "permissions": request.permissions}

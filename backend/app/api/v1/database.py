@@ -23,7 +23,7 @@ from sqlalchemy import select
 from app.core import db_config, maintenance
 from app.core.database import get_db, build_sync_engine_for, AsyncSessionLocal
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit, log_audit
 from app.core.deps import require_permission as require_db_admin
 from app.models.user import User
 from app.models.db_migration import DbMigrationLog
@@ -60,6 +60,31 @@ def _cleanup_old_backups(backup_dir: Path, keep: int = 10) -> None:
             logger.info("Cleaned up old backup: %s", old.name)
     except Exception as e:
         logger.warning("Failed to clean up old backups: %s", e)
+
+
+async def _write_failed_migration_log(source, target, body, user, error_message: str) -> None:
+    """迁移失败/超时/断连时写入 status=failed 迁移记录与审计日志（任务 2.5）。
+
+    SSE generator 生命周期超出请求依赖注入，与成功路径一致使用独立
+    AsyncSessionLocal。写日志自身失败只记日志，不影响主流程收尾。
+    """
+    try:
+        async with AsyncSessionLocal() as log_db:
+            await db_migration_service.record_migration_log(
+                log_db,
+                direction=_direction_label(source, target),
+                source_connection=body.source_id,
+                target_connection=body.target_id,
+                mode=body.mode,
+                status="failed",
+                include_logs=body.include_logs,
+                tables_count=0,
+                error_message=error_message,
+            )
+            log_audit(log_db, user=user, action="migrate_database", resource="database",
+                      detail=f"迁移失败 {body.source_id} → {body.target_id}：{error_message}")
+    except Exception as e:
+        logger.exception("写入失败迁移记录时出错: %s", e)
 
 
 @router.get("/status")
@@ -181,18 +206,20 @@ async def _do_test(conn: ConnectionConfig):
 @router.post("/switch")
 async def switch_database(
     body: SwitchRequest,
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_db_admin('database_management')),
 ):
     from app.services import db_switch_service
+    enrich_audit(request, resource_id=body.connection_id, detail=f"切换数据库连接 {body.connection_id}")
     result = await db_switch_service.perform_switch(body.connection_id, db)
-    log_audit(db, user=current_user, action="switch_database", resource="database", detail=f"切换数据库连接 {body.connection_id}")
     return result
 
 
 @router.post("/migrate")
 async def migrate_database(
     body: MigrateRequest,
+    request: Request = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_db_admin('database_management')),
 ):
@@ -248,7 +275,8 @@ async def migrate_database(
         tables_count=tables_count,
         backup_path=backup_path,
     )
-    log_audit(db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+    enrich_audit(request, detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+    await db.commit()  # 持久化审计骨架
     return {
         "message": f"迁移完成，共迁移 {tables_count} 张表",
         "tables_migrated": tables_count,
@@ -341,6 +369,7 @@ async def migrate_database_stream(
                     while not backup_task.done():
                         if asyncio.get_event_loop().time() > backup_deadline:
                             cancel_event.set()
+                            await _write_failed_migration_log(source, target, body, current_user, "备份超时")
                             yield _send_event({"type": "error", "message": "备份超时"})
                             return
                         while not event_queue.empty():
@@ -353,6 +382,7 @@ async def migrate_database_stream(
                         yield _send_event(ev)
                     backup_task.result()  # Raise if backup failed
                 except Exception as e:
+                    await _write_failed_migration_log(source, target, body, current_user, f"备份失败: {e}")
                     yield _send_event({"type": "error", "message": f"备份失败: {e}"})
                     return
 
@@ -383,6 +413,7 @@ async def migrate_database_stream(
                     # Check timeout
                     if asyncio.get_event_loop().time() > deadline:
                         cancel_event.set()
+                        await _write_failed_migration_log(source, target, body, current_user, "迁移超时")
                         yield _send_event({"type": "error", "message": "迁移超时"})
                         return
                     # Drain queued progress events
@@ -400,9 +431,11 @@ async def migrate_database_stream(
                 # Get result (may raise)
                 table_details = migration_task.result()
             except MigrationCancelled:
+                await _write_failed_migration_log(source, target, body, current_user, "迁移已取消")
                 yield _send_event({"type": "error", "message": "迁移已取消"})
                 return
             except Exception as e:
+                await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
                 yield _send_event({"type": "error", "message": f"迁移失败: {e}"})
                 return
 
@@ -436,7 +469,9 @@ async def migrate_database_stream(
             # Client disconnected, set cancel event to stop migration thread
             cancel_event.set()
             logger.info("Migration SSE client disconnected, cancelling migration")
+            await _write_failed_migration_log(source, target, body, current_user, "客户端断开连接，迁移已中止")
         except Exception as e:
+            await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': f'迁移失败: {e}'})}\n\n"
         finally:
             maintenance.set_migration_in_progress(False)
@@ -457,6 +492,7 @@ async def export_archive(
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_db_admin('database_management')),
+    request: Request = None,
 ):
     cfg = _get_config()
     source = cfg.get_connection(body.source_id)
@@ -467,7 +503,8 @@ async def export_archive(
         db_archive_service.export_archive(source, path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"导出失败: {e}")
-    log_audit(db, user=current_user, action="export_database", resource="database", detail=f"导出数据库 {body.source_id} → {path}")
+    enrich_audit(request, detail=f"导出数据库 {body.source_id} → {path}")
+    await db.commit()
     return {"message": "导出完成", "archive_path": path}
 
 
@@ -476,6 +513,7 @@ async def import_archive(
     body: ImportRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_db_admin('database_management')),
+    request: Request = None,
 ):
     cfg = _get_config()
     target = cfg.get_connection(body.target_id)
@@ -497,7 +535,8 @@ async def import_archive(
         mode="replace",
         status="success",
     )
-    log_audit(db, user=current_user, action="import_database", resource="database", detail=f"导入归档 {body.archive_path} → {body.target_id}")
+    enrich_audit(request, detail=f"导入归档 {body.archive_path} → {body.target_id}")
+    await db.commit()
     return {"message": "归档导入完成"}
 
 

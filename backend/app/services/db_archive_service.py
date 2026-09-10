@@ -17,7 +17,7 @@ from sqlalchemy import Boolean as SA_Boolean
 from sqlalchemy import DateTime as SA_DateTime
 from sqlalchemy import MetaData, Table, inspect, text
 
-from app.core.database import Base, build_sync_engine_for
+from app.core.database import Base, build_sync_engine_for, is_sqlite
 from app.core.db_migration import tables_for_migration
 from app.services.db_migration_service import _clear_target, _reset_sequences, target_is_empty
 
@@ -50,7 +50,7 @@ def export_archive(source_conn, output_path: str, progress_cb=None) -> None:
                 logger.debug("Export: skipping %s — not present in source", table)
                 continue
             schema[table] = insp.get_columns(table)
-            ddl[table] = _get_ddl(conn, table)
+            ddl[table] = _get_ddl(engine, conn, table)
             rows = conn.execute(text(f"SELECT * FROM {table}")).mappings().all()
             data[table] = [dict(r) for r in rows]
             meta["tables"][table] = len(rows)
@@ -63,13 +63,23 @@ def export_archive(source_conn, output_path: str, progress_cb=None) -> None:
         for table, d in ddl.items():
             z.writestr(f"ddl/{table}.sql", d or "")
         for table, rows in data.items():
-            payload = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+            payload = "\n".join(_serialize_row(r) for r in rows)
             z.writestr(f"data/{table}.jsonl", payload)
     engine.dispose()
     logger.info("Exported archive with %d tables", len(tables))
 
 
-def _get_ddl(conn, table: str) -> str:
+def _serialize_row(row: dict) -> str:
+    """One JSONL row；default=str 兜底 psycopg2 返回的 datetime/Decimal 等对象
+    （SQLite 裸 text 查询返回字符串不会触发，PG 源库导出必需）。"""
+    return json.dumps(row, ensure_ascii=False, default=str)
+
+
+def _get_ddl(engine, conn, table: str) -> str:
+    """Best-effort CREATE TABLE DDL。sqlite_master 仅存在于 SQLite；
+    其他方言（如 PostgreSQL）返回空串（归档成件为可选元数据，导入不依赖）。"""
+    if not is_sqlite(str(engine.url)):
+        return ""
     row = conn.execute(
         text("SELECT sql FROM sqlite_master WHERE type='table' AND name=:n"),
         {"n": table},

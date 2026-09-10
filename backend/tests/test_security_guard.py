@@ -211,8 +211,15 @@ def test_cluster_resource_requires_clusters_permission():
         asyncio.run(engine.dispose())
 
 
-def test_operations_endpoint_admin_only():
+def test_operations_endpoint_admin_only(monkeypatch):
     """/system/operations 仅管理员可访问（M1 操作审计查询）。"""
+    # 与仓库 features.yaml 当前值解耦：本测试显式启用 audit_log
+    import app.core.features as features_mod
+
+    monkeypatch.setattr(
+        features_mod, "get_features",
+        lambda: {"features": {"audit_log": True}, "enabled_plugins": [], "concurrency": {}},
+    )
     app, S, headers, engine = _make_db_with_users([
         {"id": 1, "username": "admin_user", "role": "admin"},
         {"id": 2, "username": "plain_user", "role": "user"},
@@ -221,7 +228,7 @@ def test_operations_endpoint_admin_only():
         with TestClient(app) as c:
             resp_admin = c.get("/api/v1/system/operations", headers=headers[1])
             assert resp_admin.status_code == 200
-            assert isinstance(resp_admin.json(), list)
+            assert isinstance(resp_admin.json(), dict) and "items" in resp_admin.json()  # 审计查询已升级为分页结构
             resp_user = c.get("/api/v1/system/operations", headers=headers[2])
             assert resp_user.status_code == 403
     finally:

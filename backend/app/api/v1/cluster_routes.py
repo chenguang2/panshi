@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from typing import List, Optional
@@ -8,7 +8,6 @@ import uuid
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
-from app.models.system import AuditLog
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
 from app.services import edge_sync
@@ -140,7 +139,7 @@ async def list_routes(
 
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
-async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = Depends(get_db)):
+async def create_route(cluster_id: int, route: RouteCreate, request: Request = None, db: AsyncSession = Depends(get_db)):
     route_data = route.model_dump()
     if route_data.get('vars') is not None:
         route_data['vars'] = json.dumps(route_data['vars'])
@@ -148,19 +147,13 @@ async def create_route(cluster_id: int, route: RouteCreate, db: AsyncSession = D
         route_data['plugin_config_ids'] = json.dumps(route_data['plugin_config_ids'])
     db_route = Route(cluster_id=cluster_id, **route_data)
     db.add(db_route)
+    await db.flush()  # 先拿 id，审计增强必须在首次 flush/commit 前写入骨架
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_route.id
+        audit.detail = f"新增路由 {db_route.name} ({db_route.uri})"
     await db.commit()
     await db.refresh(db_route)
-
-    audit = AuditLog(
-        user_id=None,
-        username="system",
-        action="create_route",
-        resource="route",
-        resource_id=db_route.id,
-        detail=f"Created route {db_route.name}"
-    )
-    db.add(audit)
-    await db.commit()
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
@@ -217,10 +210,11 @@ async def get_route(cluster_id: int, route_id: int, db: AsyncSession = Depends(g
 
 
 @router.put("/{route_id}", response_model=RouteResponse)
-async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate, db: AsyncSession = Depends(get_db)):
+async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate, request: Request = None, db: AsyncSession = Depends(get_db)):
     route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
     update_data = route_update.model_dump(exclude_unset=True)
+    old_values = {k: getattr(route, k, None) for k in update_data}
     if 'vars' in update_data:
         if update_data['vars'] is not None:
             update_data['vars'] = json.dumps(update_data['vars'])
@@ -235,20 +229,22 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
     for key, value in update_data.items():
         setattr(route, key, value)
-    
+
+    # 审计增强必须在 flush/commit 前（同事务骨架）
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = route.id
+        changes = ", ".join(
+            f"{k} 从 '{old_values.get(k)}' 变更为 '{v}'"
+            for k, v in update_data.items()
+            if old_values.get(k) != v
+        )
+        audit.detail = (
+            f"更新路由 {route.name}: {changes}" if changes else f"更新路由 {route.name}（无字段变化）"
+        )
+
     await db.commit()
     await db.refresh(route)
-
-    audit = AuditLog(
-        user_id=None,
-        username="system",
-        action="update_route",
-        resource="route",
-        resource_id=route.id,
-        detail=f"Updated route {route.name}"
-    )
-    db.add(audit)
-    await db.commit()
 
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     cluster = cluster_result.scalar_one_or_none()
@@ -276,12 +272,16 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
 
 @router.delete("/{route_id}")
-async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterRequest = Body(...), request: Request = None, db: AsyncSession = Depends(get_db)):
 
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
+
+    audit = getattr(request.state, "audit", None) if request else None
+    if audit is not None:
+        audit.detail = f"删除路由 {route.name} ({route.uri})"
 
     node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
     if body.node_ids:
@@ -309,7 +309,7 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 
 
 @router.delete("")
-async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     """批量删除同一集群内的多条路由。
 
     每条路由独立处理：单条失败（路由不存在 / Edge 同步失败 / 其他异常）
@@ -321,6 +321,11 @@ async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = 
 
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
+
+    audit = getattr(request.state, "audit", None) if hasattr(request, "state") else None
+    if audit is not None:
+        ids = sorted(body.route_ids)
+        audit.detail = f"批量删除路由: {ids} 共 {len(ids)} 条"
 
     node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
     if body.node_ids:

@@ -208,7 +208,9 @@ def validate_backup_document(doc: dict, expected_checksum: str | None = None) ->
 import os
 
 _BASE_STORAGE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    # services/ 在 backend/app/services/，向上 3 级即 backend/；
+    # 不能照搬 api/v1/ 的 4 级写法（会退到仓库根，见 test_cluster_backup_static_path.py）
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
     "data", "static",
 )
 

@@ -153,11 +153,20 @@ def migrate_direct(
                 # Check cancel event at each table boundary
                 if cancel_event and cancel_event.is_set():
                     raise MigrationCancelled("Migration cancelled by user")
-                detail = _copy_table(src_engine, dst_engine, table, progress_cb=None)
+                # 行级批次进度透传：把外层 progress_cb 包装成 _copy_table 的
+                # (copied_rows, total_rows) 签名，让 SSE 层能收到每批次进度。
+                # _done 捕获当前值：批次回调发生在该表复制期间，表序号 = done+1
+                if progress_cb:
+                    def batch_cb(copied, total_rows, _table=table, _done=done):
+                        progress_cb(_done + 1, total, table_name=_table,
+                                    copied_rows=copied, total_rows=total_rows, skipped=False)
+                else:
+                    batch_cb = None
+                detail = _copy_table(src_engine, dst_engine, table, progress_cb=batch_cb)
                 table_details.append(detail)
                 done += 1
                 if progress_cb:
-                    progress_cb(done, total, table_name=detail.get("name", table), total_rows=detail.get("rows", 0), skipped=detail.get("skipped", False))
+                    progress_cb(done, total, table_name=detail.get("name", table), copied_rows=detail.get("rows", 0), total_rows=detail.get("rows", 0), skipped=detail.get("skipped", False))
         _reset_sequences(dst_engine, tables)
         synced = _sync_schema_with_models(dst_engine)
         if synced:
@@ -237,7 +246,9 @@ def _copy_table(src_engine, dst_engine, table: str, progress_cb=None) -> dict:
                 progress_cb(copied, total_rows)
 
     logger.info("Migrated table %s (%d rows, %d skipped)", table, copied, skipped)
-    return {"name": table, "columns": len(cols), "rows": copied, "skipped": False}
+    # columns 按契约报告源表列定义数（含目标缺失的历史列），而非可插入交集数；
+    # 见 db-migration-detail-result spec 与 test_columns_count_reports_source_definition
+    return {"name": table, "columns": len(src_table.columns.keys()), "rows": copied, "skipped": False}
 
 
 def _model_python_defaults(

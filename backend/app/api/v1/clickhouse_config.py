@@ -12,7 +12,7 @@ from typing import Optional
 
 import yaml
 from clickhouse_driver import Client
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from app.core.db_config import decrypt_password, encrypt_password
 from app.core.deps import get_current_user, require_permission
 from app.models.user import User
 from app.services import clickhouse_client as ch
-from app.services.audit import log_audit
+from app.services.audit import enrich_audit
 
 router = APIRouter(
     prefix="/clickhouse",
@@ -155,6 +155,7 @@ async def list_connections():
 @router.post("/connections")
 async def create_connection(
     body: ConnIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -168,9 +169,8 @@ async def create_connection(
         struct["active"] = cid  # 首条自动激活
     _write_struct(struct)
     ch.invalidate()
-    log_audit(db, user=current_user, action="update_clickhouse_config",
-              resource="clickhouse_config", resource_id=cid,
-              detail=f"新建 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
+    enrich_audit(request, resource_id=cid, detail=f"新建 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
+    await db.commit()
     await db.commit()
     return _public(conn, struct["active"])
 
@@ -192,6 +192,7 @@ async def test_connection_form(body: ConnIn):
 async def update_connection(
     conn_id: str,
     body: ConnIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -203,9 +204,8 @@ async def update_connection(
         conn["password_enc"] = encrypt_password(body.password)
     _write_struct(struct)
     ch.invalidate()
-    log_audit(db, user=current_user, action="update_clickhouse_config",
-              resource="clickhouse_config", resource_id=conn_id,
-              detail=f"更新 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
+    enrich_audit(request, resource_id=conn_id, detail=f"更新 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
+    await db.commit()
     await db.commit()
     return _public(conn, struct["active"])
 
@@ -213,6 +213,7 @@ async def update_connection(
 @router.delete("/connections/{conn_id}")
 async def delete_connection(
     conn_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -223,9 +224,8 @@ async def delete_connection(
     struct["connections"].remove(conn)
     _write_struct(struct)
     ch.invalidate()
-    log_audit(db, user=current_user, action="update_clickhouse_config",
-              resource="clickhouse_config", resource_id=conn_id,
-              detail=f"删除 ClickHouse 连接「{conn.get('name')}」")
+    enrich_audit(request, resource_id=conn_id, detail=f"删除 ClickHouse 连接「{conn.get('name')}」")
+    await db.commit()
     await db.commit()
     return {"ok": True}
 
@@ -233,6 +233,7 @@ async def delete_connection(
 @router.post("/activate")
 async def activate_connection(
     body: ActivateIn,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -241,9 +242,8 @@ async def activate_connection(
     struct["active"] = body.id
     _write_struct(struct)
     ch.invalidate()
-    log_audit(db, user=current_user, action="update_clickhouse_config",
-              resource="clickhouse_config", resource_id=body.id,
-              detail=f"激活 ClickHouse 连接「{conn.get('name')}」{conn.get('host')}:{conn.get('port')}")
+    enrich_audit(request, resource_id=body.id,
+                 detail=f"激活 ClickHouse 连接「{conn.get('name')}」{conn.get('host')}:{conn.get('port')}")
     await db.commit()
     return {"ok": True, "active": body.id}
 

@@ -2,6 +2,7 @@
 
 import importlib
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 
@@ -17,9 +18,11 @@ class TestFeatureGating:
     """When a feature is disabled, its routes should not be registered."""
 
     @pytest.fixture(autouse=True)
-    def configure_features(self):
+    def configure_features(self, tmp_path, monkeypatch):
+        """用临时 features.yaml 隔离（get_features 有 mtime 热重载，直接改 _features 会被真实配置覆盖）。"""
         import app.core.features as fmod
-        fmod._features = {
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({
             "features": {
                 "edge_client": False,
                 "edge_import": True,
@@ -28,9 +31,13 @@ class TestFeatureGating:
                 "plugin_switches": True,
             },
             "enabled_plugins": [],
-        }
+        }))
+        fmod._features = None
+        fmod._features_mtime = 0.0
+        monkeypatch.setattr(fmod, "_FEATURES_PATH", cfg)
         yield
         fmod._features = None
+        fmod._features_mtime = 0.0
 
     @pytest.fixture
     def client(self):

@@ -73,10 +73,17 @@ const antStubs = {
   'a-modal': { template: '<div class="ant-modal" v-if="open !== false"><slot /></div>' },
   'a-form': { template: '<form><slot /></form>' },
   'a-form-item': { template: '<div class="ant-form-item"><slot /></div>' },
-  'a-input': { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  'a-input': {
+    props: ['modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   'a-input-password': { template: '<input type="password" />' },
   'a-input-number': { template: '<input type="number" />' },
-  'a-select': { props: ['modelValue'], template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>' },
+  'a-select': {
+    props: ['modelValue'],
+    template:
+      '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
+  },
   'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
   'a-tag': { template: '<span class="ant-tag"><slot /></span>' },
   'a-progress': { props: ['percent'], template: '<div class="ant-progress">{{ percent }}%</div>' },
@@ -124,7 +131,14 @@ describe('DatabaseManagement', () => {
     mocks.migrateDatabaseStream.mockImplementation((_sourceId: string, _targetId: string, options: any) => {
       // Simulate SSE events
       setTimeout(() => {
-        options.onProgress?.({ table_index: 1, total_tables: 22, table_name: 'sys_user', copied_rows: 100, total_rows: 100, skipped: false })
+        options.onProgress?.({
+          table_index: 1,
+          total_tables: 22,
+          table_name: 'sys_user',
+          copied_rows: 100,
+          total_rows: 100,
+          skipped: false,
+        })
         options.onComplete?.({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
       }, 10)
       return new AbortController()
@@ -173,7 +187,33 @@ describe('DatabaseManagement', () => {
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     await flushPromises()
-    expect(mocks.migrateDatabaseStream).toHaveBeenCalledWith('conn_1', 'conn_2', expect.objectContaining({ mode: 'replace' }))
+    expect(mocks.migrateDatabaseStream).toHaveBeenCalledWith(
+      'conn_1',
+      'conn_2',
+      expect.objectContaining({ mode: 'replace' }),
+    )
+  })
+
+  it('disables the timeout select while migrating and re-enables after completion', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.migrateForm.sourceId = 'conn_1'
+    vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    await nextTick()
+    await wrapper.find('.migrate-btn').trigger('click')
+    await nextTick()
+    // 超时下拉框以默认值 300 唯一标识（源/目标/模式下拉的值均不是 300）
+    const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
+    expect(timeoutSelect).toBeDefined()
+    expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(true)
+    // SSE 完成后恢复可用
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
+    expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(false)
   })
 
   it('shows migration result text after a successful migration', async () => {
@@ -188,7 +228,7 @@ describe('DatabaseManagement', () => {
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     // Wait for SSE callbacks to fire
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
     expect(wrapper.text()).toContain('迁移完成')
     expect(wrapper.text()).toContain('22')
