@@ -348,7 +348,7 @@ import {
   migrateDatabaseStream,
   getMigrationHistory,
 } from '@/api/database'
-import type { DbConnection, DbStatus, MigrateResult } from '@/types/database'
+import type { DbConnection, DbStatus, MigrateResult, MigrationCompleteEvent } from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
@@ -615,8 +615,13 @@ async function handleMigrate() {
       migrationProgress.totalRows = data.total_rows || 0
       migrationProgress.skipped = data.skipped || false
     },
-    onComplete: (data) => {
-      migrateResult.value = data as any
+    onComplete: (data: MigrationCompleteEvent) => {
+      migrateResult.value = {
+        message: data.message,
+        tables_migrated: data.tables_migrated,
+        tables: data.tables,
+        backup_path: data.backup_path ?? '',
+      }
       message.success(`迁移完成，共迁移 ${data.tables_migrated} 张表`)
       getMigrationHistory()
       migrating.value = false

@@ -10,8 +10,11 @@ import type {
   ImportPayload,
   MigratePayload,
   MigrateResult,
+  MigrationBackupProgressEvent,
+  MigrationCompleteEvent,
   MigrationHistoryItem,
   MigrationStreamEvent,
+  MigrationTableProgressEvent,
 } from '@/types/database'
 
 export function getDatabaseStatus() {
@@ -65,10 +68,10 @@ export function migrateDatabaseStream(
     includeLogs?: boolean
     confirmedClear?: boolean
     timeout?: number
-    onProgress?: (data: { table_index: number; total_tables: number; table_name?: string; copied_rows?: number; total_rows?: number; skipped?: boolean }) => void
-    onBackupProgress?: (data: { done: number; total: number }) => void
+    onProgress?: (data: MigrationTableProgressEvent) => void
+    onBackupProgress?: (data: MigrationBackupProgressEvent) => void
     onBackupComplete?: (path: string) => void
-    onComplete?: (data: { tables_migrated: number; tables: Array<{ name: string; columns: number; rows: number }>; backup_path?: string }) => void
+    onComplete?: (data: MigrationCompleteEvent) => void
     onError?: (message: string) => void
   },
 ) {

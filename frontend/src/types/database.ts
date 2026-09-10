@@ -123,6 +123,7 @@ export interface MigrationBackupCompleteEvent extends SSEEventBase {
 
 export interface MigrationCompleteEvent extends SSEEventBase {
   type: 'complete'
+  message: string
   tables_migrated: number
   tables: MigrateTableDetail[]
   backup_path?: string

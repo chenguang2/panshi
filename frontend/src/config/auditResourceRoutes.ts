@@ -4,7 +4,7 @@
  */
 
 /** 资源类型 → 中文名 */
-export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
+const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   cluster: '集群',
   route: '路由',
   route_plugins: '路由插件组',
@@ -41,7 +41,7 @@ export const AUDIT_RESOURCE_LABELS: Record<string, string> = {
 }
 
 /** 动作词 → 中文（action = f"{resource}_{verb}" 的 verb 部分） */
-export const AUDIT_VERB_LABELS: Record<string, string> = {
+const AUDIT_VERB_LABELS: Record<string, string> = {
   create: '创建',
   update: '更新',
   patch: '部分更新',
@@ -139,7 +139,7 @@ export function auditResourceLabel(resource: string | null | undefined): string 
 }
 
 /** 资源 → 前端路由映射（可点击跳转；无映射返回 null） */
-export const AUDIT_RESOURCE_ROUTES: Record<string, (id: number) => string> = {
+const AUDIT_RESOURCE_ROUTES: Record<string, (id: number) => string> = {
   cluster: (id) => `/clusters/${id}`,
 }
 
