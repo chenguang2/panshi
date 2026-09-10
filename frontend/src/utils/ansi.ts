@@ -39,17 +39,9 @@ const FULL_ANSI_RE = /\x1b\[([\d;]*)m/g
 // 普通方括号内容（如 [192.168.100.42]、[edge : run]）不以 m 结尾，不会被误伤。
 const VISIBLE_ANSI_RE = /\[(\d+(?:;\d+)*)m/g
 
-/**
- * HTML 转义特殊字符，防止 XSS
- */
-export function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
+// escapeHtml 已收敛到 utils/html.ts（v3 8B-1）；本模块 ansiToHtml 内部也复用同一实现
+import { escapeHtml } from './html'
+export { escapeHtml }
 
 /**
  * 将包含 ANSI 转义序列的文本转换为彩色 HTML。

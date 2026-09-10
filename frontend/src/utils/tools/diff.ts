@@ -162,14 +162,9 @@ function computeArrayDiffByKey(arrA: unknown[], arrB: unknown[], keyField: strin
 }
 
 // ── HTML 工具 ──────────────────────────────────────
-
-export function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
+// escapeHtml 已收敛到 utils/html.ts（v3 8B-1，补齐单引号转义）；本模块内部渲染也复用同一实现
+import { escapeHtml } from '../html'
+export { escapeHtml }
 
 // ── 渲染输出 ───────────────────────────────────────
 
