@@ -1,4 +1,5 @@
 import api from '@/api/index'
+import { consumeSSEDataLines, extractSSEErrorMessage } from '@/utils/sse'
 
 export interface EdgeEnvReadResponse {
   node_id: number
@@ -75,7 +76,7 @@ export function getVersionDetail(clusterId: number, versionId: number) {
 export function readEdgeEnvStream(
   clusterId: number,
   nodeId: number,
-  onEvent: (data: string) => void,
+  onEvent: (data: Record<string, unknown>) => void,
   onError?: (err: string) => void,
 ): AbortController {
   const controller = new AbortController()
@@ -83,51 +84,29 @@ export function readEdgeEnvStream(
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  fetch(`/api/v1/clusters/${clusterId}/edge-env/read-stream?node_id=${nodeId}`, {
-    headers,
-    signal: controller.signal,
-  })
-    .then(async (response) => {
+  // v3 8B-3：SSE 行解析收敛到 utils/sse.ts（原手写 fetch+getReader 循环已删除）
+  void (async () => {
+    try {
+      const response = await fetch(
+        `/api/v1/clusters/${clusterId}/edge-env/read-stream?node_id=${nodeId}`,
+        { headers, signal: controller.signal },
+      )
       if (!response.ok) {
-        const errText = await response.text().catch(() => '')
-        let errMsg = `请求失败 (${response.status})`
+        onError?.(await extractSSEErrorMessage(response))
+        return
+      }
+      await consumeSSEDataLines(response, (raw) => {
         try {
-          const j = JSON.parse(errText)
-          errMsg = j.detail || errMsg
+          onEvent(JSON.parse(raw))
         } catch {
-          /* */
+          /* 忽略非法 JSON 事件 */
         }
-        onError?.(errMsg)
-        return
-      }
-      const reader = response.body?.getReader()
-      if (!reader) {
-        onError?.('浏览器不支持流式读取')
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-        for (const raw of lines) {
-          const trimmed = raw.trim()
-          if (!trimmed || !trimmed.startsWith('data: ')) continue
-          try {
-            onEvent(JSON.parse(trimmed.slice(6)))
-          } catch {
-            /* */
-          }
-        }
-      }
-    })
-    .catch((e) => {
-      if (e.name !== 'AbortError') onError?.(e.message || '读取失败')
-    })
+      })
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+      onError?.((e as Error)?.message || '读取失败')
+    }
+  })()
 
   return controller
 }

@@ -315,6 +315,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import NodeTaskLogViewer from '@/components/NodeTaskLogViewer.vue'
 import { listNodeTasks, getNodeTask, cancelNodeTask, retryNodeTask, createNodeTask, fetchTaskItemLog, deleteNodeTask, batchDeleteNodeTasks, parseTaskEvent, type NodeTaskData, type NodeTaskItemData, type TaskStreamEvent } from '@/composables/useNodeTasks'
 import { paginationProps } from '@/composables/usePagination'
+import { consumeSSEDataLines } from '@/utils/sse'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])
@@ -636,45 +637,26 @@ function startStream(taskId: number) {
   const token = localStorage.getItem('token')
 
   // 原生 EventSource 无法携带 Authorization 头（任务流接口现已要求认证），
-  // 改用 fetch 流式读取，与 useInstallStream 保持同一模式。
+  // 改用 fetch 流式读取（v3 8B-3：行解析收敛到 utils/sse.ts，onData 返回 false 提前终止）。
   fetch(`/api/v1/node-tasks/${taskId}/stream`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     signal: streamAbort.signal,
   })
-    .then((res) => {
+    .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const reader = res.body?.getReader()
-      if (!reader) throw new Error('no reader')
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      // for(;;) 单 promise 链：读流/解析错误沿链传到下方 .catch，避免游离拒绝
-      const pump = async (): Promise<void> => {
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) {
-            stopStream()
-            return
-          }
-          buffer += decoder.decode(value, { stream: true })
-          const events = buffer.split('\n\n')
-          buffer = events.pop() || ''
-          for (const evt of events) {
-            for (const raw of evt.split('\n')) {
-              if (!raw.startsWith('data: ')) continue
-              const ev = parseTaskEvent(raw.slice(6))
-              if (!ev) continue
-              applyStreamEvent(ev)
-              if (ev.type === 'done') {
-                stopStream()
-                getNodeTask(taskId).then((fresh) => { detail.value = fresh })
-                return
-              }
-            }
-          }
+      let finishedByEvent = false
+      await consumeSSEDataLines(res, (raw) => {
+        const ev = parseTaskEvent(raw)
+        if (!ev) return
+        applyStreamEvent(ev)
+        if (ev.type === 'done') {
+          finishedByEvent = true
+          stopStream()
+          getNodeTask(taskId).then((fresh) => { detail.value = fresh })
+          return false
         }
-      }
-      return pump()
+      })
+      if (!finishedByEvent) stopStream() // 流自然读完（对应原 pump 的 reader done 分支）
     })
     .catch((err: unknown) => {
       // 主动 abort（stopStream/卸载）不触发轮询回退

@@ -1,6 +1,5 @@
 import { ref, reactive, onUnmounted } from 'vue'
-
-const API_BASE = '/api/v1'
+import { consumeSSEDataLines, extractSSEErrorMessage } from '@/utils/sse'
 
 export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'error'
 
@@ -29,7 +28,7 @@ export function useInstallStream() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_BASE}${url}`, {
+      const response = await fetch(`/api/v1${url}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -40,14 +39,7 @@ export function useInstallStream() {
       })
 
       if (!response.ok) {
-        const errText = await response.text().catch(() => '')
-        let errMsg = `请求失败 (${response.status})`
-        try {
-          const j = JSON.parse(errText)
-          errMsg = j.detail || errMsg
-        } catch {
-          /* ignore */
-        }
+        const errMsg = await extractSSEErrorMessage(response)
         options.onError?.(errMsg)
         error.value = errMsg
         status.value = 'error'
@@ -55,54 +47,31 @@ export function useInstallStream() {
         return
       }
 
-      const reader = response.body?.getReader()
-      if (!reader) {
-        options.onError?.('浏览器不支持流式读取')
-        error.value = '浏览器不支持流式读取'
-        status.value = 'error'
-        installing.value = false
-        return
-      }
-
       status.value = 'streaming'
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        for (const raw of lines) {
-          const trimmed = raw.trim()
-          if (!trimmed || !trimmed.startsWith('data: ')) continue
-
-          try {
-            const data = JSON.parse(trimmed.slice(6))
-            if (data.line) {
-              logs.value.push(data.line)
-              options.onLine(data.line)
-            } else if (data.type) {
-              // 结构化事件（node_start/node_done/complete 等）可能无 line 字段，
-              // 仍需转发给 onLine 让业务层处理（如 complete 决定整体状态）
-              options.onLine(JSON.stringify(data))
-            }
-            if (data.percent !== undefined) {
-              progress.percent = data.percent
-              options.onProgress?.(data.percent)
-            }
-            if (data.rc !== undefined) {
-              options.onComplete?.(data.rc, data.status || 'success')
-              progress.percent = 100
-            }
-          } catch {
-            // Ignore malformed SSE events
+      // v3 8B-3：SSE 行解析收敛到 utils/sse.ts（原手写 fetch+getReader 循环已删除）
+      await consumeSSEDataLines(response, (raw) => {
+        try {
+          const data = JSON.parse(raw) as { line?: string; type?: string; percent?: number; rc?: number; status?: string }
+          if (data.line) {
+            logs.value.push(data.line)
+            options.onLine(data.line)
+          } else if (data.type) {
+            // 结构化事件（node_start/node_done/complete 等）可能无 line 字段，
+            // 仍需转发给 onLine 让业务层处理（如 complete 决定整体状态）
+            options.onLine(JSON.stringify(data))
           }
+          if (data.percent !== undefined) {
+            progress.percent = data.percent
+            options.onProgress?.(data.percent)
+          }
+          if (data.rc !== undefined) {
+            options.onComplete?.(data.rc, data.status || 'success')
+            progress.percent = 100
+          }
+        } catch {
+          // Ignore malformed SSE events
         }
-      }
+      })
     } catch (e: unknown) {
       const err = e as { name?: string; message?: string }
       if (err.name === 'AbortError') return

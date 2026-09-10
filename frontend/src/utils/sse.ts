@@ -92,3 +92,54 @@ export function createSSEClient<T extends SSEEvent = SSEEvent>(options: SSEClien
   run()
   return controller
 }
+
+/**
+ * 逐行消费 SSE 流的 `data: ` 行（v3 8B-3 收敛 edgeEnv / useInstallStream / NodeTaskCenter
+ * 三处手写 fetch+getReader 实现）。按 `\n` 切行、容忍行首空白；`data:` 前缀后的原始字符串
+ * 原样交给 onData（是否 JSON.parse 由调用方决定）。onData 返回 false 可提前终止读取。
+ * 读取/解析错误向上抛出，由调用方决定错误处理（提示 / 回退轮询等）。
+ */
+export async function consumeSSEDataLines(
+  response: Response,
+  onData: (raw: string) => void | false,
+): Promise<void> {
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('No response body')
+  }
+  const decoder = new TextDecoder()
+  let buffer = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const raw of lines) {
+      const trimmed = raw.trim()
+      if (!trimmed.startsWith('data: ')) continue
+      if (onData(trimmed.slice(6)) === false) {
+        reader.cancel().catch(() => {})
+        return
+      }
+    }
+  }
+}
+
+/**
+ * 从非 2xx 响应体提取中文 detail（与既有实现的共同语义一致）：
+ * 优先 JSON `detail` 字段，否则返回 `请求失败 (status)`。
+ */
+export async function extractSSEErrorMessage(response: Response): Promise<string> {
+  const text = await response.text().catch(() => '')
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && 'detail' in parsed) {
+      const detail = (parsed as { detail?: unknown }).detail
+      if (typeof detail === 'string' && detail) return detail
+    }
+  } catch {
+    /* 非 JSON 响应体 */
+  }
+  return `请求失败 (${response.status})`
+}
