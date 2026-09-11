@@ -8,24 +8,46 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" ref="navRef">
       <div
         v-for="section in navSections"
         :key="section.title"
         class="sidebar-section"
-        v-show="section.visible !== false"
+        v-show="section.visible !== false && section.items.length > 0"
       >
-        <div v-show="!collapsed" class="sidebar-section-title">{{ section.title }}</div>
-        <router-link
-          v-for="item in section.items"
-          :key="item.route"
-          :to="item.route!"
-          class="nav-item"
-          :class="{ active: isActive(item) }"
+        <div
+          v-show="!collapsed"
+          class="sidebar-section-title"
+          role="button"
+          :aria-expanded="isExpanded(section.title)"
+          @click="toggleSection(section.title)"
         >
-          <span class="nav-icon" v-html="item.icon"></span>
-          <span v-show="!collapsed" class="nav-label">{{ item.label }}</span>
-        </router-link>
+          <span>{{ section.title }}</span>
+          <svg
+            class="section-chevron"
+            :class="{ open: isExpanded(section.title) }"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M2.5 4.5l3.5 3.5 3.5-3.5" />
+          </svg>
+        </div>
+        <div v-show="collapsed || isExpanded(section.title)" class="section-items">
+          <router-link
+            v-for="item in section.items"
+            :key="item.route"
+            :to="item.route!"
+            class="nav-item"
+            :class="{ active: isActive(item) }"
+          >
+            <span class="nav-icon" v-html="item.icon"></span>
+            <span v-show="!collapsed" class="nav-label">{{ item.label }}</span>
+          </router-link>
+        </div>
       </div>
     </nav>
 
@@ -55,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
@@ -97,6 +119,10 @@ onMounted(async () => {
   } catch {
     // 非管理员或接口不可用时隐藏状态行
   }
+})
+
+onMounted(() => {
+  nextTick(scrollActiveIntoView)
 })
 
 const userInitial = computed(() => {
@@ -371,6 +397,81 @@ const navSections = computed<NavSection[]>(() => {
   ]
 })
 
+// ── 分组折叠：状态持久化，活动项所在分组始终展开 ─────────────────────
+// 首次访问（无持久化记录）默认仅展开当前路由所在分组，缩短长列表；
+// 路由切换到折叠分组时自动展开，保证高亮菜单永远可见（配合 scrollIntoView 定位）。
+const EXPANDED_KEY = 'sidebar.expandedSections'
+
+function activeSectionTitle(): string | null {
+  for (const section of navSections.value) {
+    if (section.visible === false || section.items.length === 0) continue
+    if (section.items.some((item) => isActive(item))) return section.title
+  }
+  return null
+}
+
+function initExpandedSections(): string[] {
+  try {
+    const raw = localStorage.getItem(EXPANDED_KEY)
+    if (raw !== null) {
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((t): t is string => typeof t === 'string')
+      }
+    }
+  } catch {
+    // 存储损坏时回退默认
+  }
+  const active = activeSectionTitle()
+  return active ? [active] : []
+}
+
+const expandedSections = ref<string[]>(initExpandedSections())
+const navRef = ref<HTMLElement | null>(null)
+
+function isExpanded(title: string): boolean {
+  return expandedSections.value.includes(title)
+}
+
+function persistExpanded() {
+  try {
+    localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedSections.value))
+  } catch {
+    // 隐私模式等场景下静默失败
+  }
+}
+
+function toggleSection(title: string) {
+  if (isExpanded(title)) {
+    expandedSections.value = expandedSections.value.filter((t) => t !== title)
+  } else {
+    expandedSections.value = [...expandedSections.value, title]
+  }
+  persistExpanded()
+}
+
+function scrollActiveIntoView() {
+  const el = navRef.value?.querySelector('.nav-item.active')
+  el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+}
+
+// 监听 route + navSections 两个源：整页加载时 features/permissions 异步就绪，
+// navSections 重算时（活动项此时才真正出现）也要补展开与定位；幂等。
+// immediate：mount 前初始导航已完成、stores 已就绪时（无任何后续变化）也要先对齐一次，
+// 否则整页直达深层路由（如 /tools）时活动分组不会自动展开。
+watch(
+  [() => route.name, navSections],
+  () => {
+    const title = activeSectionTitle()
+    if (title && !isExpanded(title)) {
+      expandedSections.value = [...expandedSections.value, title]
+      persistExpanded()
+    }
+    nextTick(scrollActiveIntoView)
+  },
+  { immediate: true },
+)
+
 function isActive(item: NavItem): boolean {
   const name = route.name as string
   if (item.route === '/') return name === 'Dashboard' || !name
@@ -405,7 +506,11 @@ function isActive(item: NavItem): boolean {
 <style scoped>
 .sidebar {
   width: 240px;
-  min-height: 100vh;
+  /* sticky 固定：侧边栏不随主内容滚动（flex stretch 会把它拉到文档高度），
+     保证 nav 内部滚动 + 活动项定位始终在视口内生效 */
+  position: sticky;
+  top: 0;
+  height: 100vh;
   background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
@@ -453,7 +558,39 @@ function isActive(item: NavItem): boolean {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: 8px 0 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  /* 顶部/底部渐隐提示可滚动：local 层用背景色做遮罩，scroll 层画阴影（--sidebar-bg 为实色） */
+  background:
+    linear-gradient(var(--sidebar-bg) 25%, transparent) center top,
+    linear-gradient(transparent, var(--sidebar-bg) 75%) center bottom,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.3), transparent) center top,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.3), transparent) center bottom;
+  background-repeat: no-repeat;
+  background-size:
+    100% 28px,
+    100% 28px,
+    100% 8px,
+    100% 8px;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .sidebar-section {
@@ -468,6 +605,27 @@ function isActive(item: NavItem): boolean {
   letter-spacing: 0.05em;
   color: var(--sidebar-fg);
   opacity: 0.5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sidebar-section-title:hover {
+  opacity: 0.85;
+}
+
+.section-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+  transition: transform 0.15s;
+}
+
+.section-chevron.open {
+  transform: rotate(0deg);
 }
 
 .nav-item {
