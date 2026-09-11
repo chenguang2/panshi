@@ -434,6 +434,49 @@ class NodeTaskService:
             return await self._software_check_node(node, cmd_str, on_log)
 
         if task_type == "cmd_exec":
+            script_file = params.get("script_file")
+            script_content_raw = params.get("script_content")
+            if script_file or script_content_raw:
+                # Script mode: content from inline param or migrated file
+                if script_content_raw:
+                    script_content = script_content_raw
+                else:
+                    from app.config.script_upload import TASK_SCRIPTS_DIR
+                    script_path = TASK_SCRIPTS_DIR / str(item.task_id) / f"{script_file}.sh"
+                    if not script_path.exists():
+                        return {"rc": -1, "status": "failed", "stderr": f"脚本文件不存在: {script_file}"}
+                    script_content = script_path.read_text(encoding="utf-8")
+                if not script_content.strip():
+                    return {"rc": -1, "status": "failed", "stderr": "脚本内容为空"}
+                try:
+                    timeout = int(params.get("timeout") or 30)
+                except (TypeError, ValueError):
+                    timeout = 30
+                # Execute via SSH + base64 pipeline (no file on disk)
+                from app.services.ansible_service import (
+                    get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port,
+                )
+                ssh_user = get_ssh_user(node.ip)
+                ssh_port = resolve_ssh_port(node)
+                import base64
+                b64 = base64.b64encode(script_content.encode("utf-8")).decode()
+                ssh_cmd = f"echo '{b64}' | base64 -d | bash"
+                on_log({"stdout": f"$ [script] bash -c '<base64_encoded_script>'"})
+                try:
+                    rc, stdout, stderr = await asyncio.wait_for(
+                        _run_ssh_with_fallback(
+                            node.ip, ssh_user, ssh_cmd,
+                            on_line=on_log, port=ssh_port,
+                        ),
+                        timeout=timeout,
+                    )
+                except asyncio.TimeoutError:
+                    return {"rc": -1, "status": "failed", "stderr": f"脚本执行超时（{timeout}s）"}
+                return {
+                    "rc": rc, "status": "success" if rc == 0 else "failed",
+                    "stdout": stdout, "stderr": stderr,
+                }
+            # Normal cmd mode
             cmd = params.get("cmd") or ""
             if not cmd.strip():
                 return {"rc": -1, "status": "failed", "stderr": "缺少 cmd 参数"}
@@ -604,6 +647,37 @@ def _build_cmd_exec_whitelist(custom: list[str]) -> str:
             seen.add(name)
             merged.append(name)
     return ",".join(merged)
+
+
+def _validate_script_security(script_content: str, security: str, whitelist: str = "") -> str | None:
+    """Validate script content line-by-line against security policy.
+
+    Returns error message string on block, None if allowed.
+    Known limitation: variable assignment + indirect execution (e.g., `cmd="rm"; $cmd`)
+    passes line-by-line checks. Documented in design.md D4.
+    """
+    if security == "none":
+        return None
+
+    blacklist_commands = {"rm", "mkfs", "dd", "shutdown", "reboot", "init", "halt", "poweroff"}
+    whitelist_set = {w.strip() for w in whitelist.split(",") if w.strip()} if whitelist else set()
+
+    for line in script_content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # Extract the command name (first word)
+        parts = stripped.split()
+        if not parts:
+            continue
+        cmd_name = parts[0].split("/")[-1]  # Handle paths like /bin/rm
+        if security in ("blacklist", "all"):
+            if cmd_name in blacklist_commands:
+                return f"脚本包含黑名单命令: {cmd_name}"
+        if security == "whitelist":
+            if cmd_name not in whitelist_set:
+                return f"脚本包含不在白名单中的命令: {cmd_name}"
+    return None
 
 
 def _cmd_exec_result_from_playbook(result: dict) -> dict:

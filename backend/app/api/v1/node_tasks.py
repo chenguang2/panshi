@@ -6,10 +6,13 @@ adds the task-based channel with a global task center view.
 """
 
 import json
+import os
 import queue as _queue
+import uuid
+from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +27,143 @@ router = APIRouter(prefix="/clusters", tags=["node-tasks"], dependencies=[Depend
 
 # Global task center router (cross-cluster).
 global_router = APIRouter(prefix="/node-tasks", tags=["node-tasks"], dependencies=[Depends(require_permission('task_center'))])
+
+
+# ── Script upload helpers ──────────────────────────────────────────────
+
+def _detect_and_convert_encoding(raw_bytes: bytes) -> str:
+    """Detect encoding and convert to UTF-8. Raises ValueError on failure."""
+    import charset_normalizer
+    result = charset_normalizer.from_bytes(raw_bytes).best()
+    if result is None:
+        raise ValueError("无法检测文件编码，请确保文件为 UTF-8 编码")
+    encoding = result.encoding
+    if encoding is None:
+        raise ValueError("无法检测文件编码")
+    try:
+        return raw_bytes.decode(encoding)
+    except (UnicodeDecodeError, LookupError) as e:
+        raise ValueError(f"文件编码转换失败: {e}")
+
+
+@global_router.post("/upload-script")
+async def upload_script(file: UploadFile = File(...)):
+    """Upload a script file for later execution on nodes.
+
+    Returns upload_id (UUID) and original filename.
+    """
+    from app.config.script_upload import (
+        SCRIPT_MAX_SIZE_BYTES, SCRIPT_ALLOWED_EXTENSIONS,
+        get_upload_temp_path, TEMP_DIR,
+    )
+
+    # Validate filename
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名为空")
+
+    # Validate extension
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in SCRIPT_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型: {ext}，仅支持 {', '.join(SCRIPT_ALLOWED_EXTENSIONS)}",
+        )
+
+    # Read file content
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    # Validate size
+    if len(content) > SCRIPT_MAX_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件大小超过限制: {len(content)} bytes（最大 {SCRIPT_MAX_SIZE_BYTES} bytes）",
+        )
+
+    # Detect encoding and convert to UTF-8
+    try:
+        utf8_content = _detect_and_convert_encoding(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Generate UUID and save
+    upload_id = str(uuid.uuid4())
+    temp_path = get_upload_temp_path(upload_id)
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path.write_text(utf8_content, encoding="utf-8")
+
+    # Store metadata (filename) alongside the file
+    meta_path = temp_path.with_suffix(".meta")
+    meta_path.write_text(file.filename, encoding="utf-8")
+
+    return {
+        "upload_id": upload_id,
+        "filename": file.filename,
+        "size": len(content),
+    }
+
+
+@global_router.get("/script-preview/{upload_id}")
+async def preview_script(upload_id: str):
+    """Preview an uploaded script file's content."""
+    from app.config.script_upload import get_upload_temp_path
+
+    temp_path = get_upload_temp_path(upload_id)
+    if not temp_path.exists():
+        raise HTTPException(status_code=404, detail="脚本文件不存在或已过期")
+
+    content = temp_path.read_text(encoding="utf-8")
+    # Read original filename from meta file
+    meta_path = temp_path.with_suffix(".meta")
+    filename = meta_path.read_text(encoding="utf-8") if meta_path.exists() else "script.sh"
+    return {
+        "upload_id": upload_id,
+        "content": content,
+        "filename": filename,
+    }
+
+
+@global_router.get("/uploaded-scripts")
+async def list_uploaded_scripts():
+    """List all uploaded script files in the temp directory."""
+    from app.config.script_upload import TEMP_DIR
+
+    if not TEMP_DIR.exists():
+        return []
+
+    results = []
+    for p in sorted(TEMP_DIR.iterdir()):
+        if p.suffix == ".meta":
+            continue
+        if not p.is_file():
+            continue
+        # Read filename from meta file
+        meta_path = p.with_suffix(".meta")
+        filename = meta_path.read_text(encoding="utf-8") if meta_path.exists() else p.name
+        results.append({
+            "upload_id": p.stem,
+            "filename": filename,
+            "size": p.stat().st_size,
+        })
+    return results
+
+
+@global_router.delete("/uploaded-scripts/{upload_id}")
+async def delete_uploaded_script(upload_id: str):
+    """Delete an uploaded script file."""
+    from app.config.script_upload import get_upload_temp_path
+
+    temp_path = get_upload_temp_path(upload_id)
+    if not temp_path.exists():
+        raise HTTPException(status_code=404, detail="脚本文件不存在")
+
+    temp_path.unlink(missing_ok=True)
+    meta_path = temp_path.with_suffix(".meta")
+    meta_path.unlink(missing_ok=True)
+
+    return {"detail": "脚本文件已删除"}
+
 
 TaskType = Literal[
     "install_openresty",
@@ -115,6 +255,17 @@ async def create_node_task(
     """Create a persistent node-operation task."""
     from app.models.cluster import Node
 
+    # cmd_exec: mutual exclusion of cmd / script_file / script_content (before node check)
+    if body.task_type == "cmd_exec":
+        has_cmd = bool(body.params.get("cmd", "").strip())
+        has_script_file = bool(body.params.get("script_file"))
+        has_script_content = bool(body.params.get("script_content"))
+        script_count = sum([has_cmd, has_script_file, has_script_content])
+        if script_count > 1:
+            raise HTTPException(status_code=400, detail="cmd、script_file、script_content 互斥，只能指定一个")
+        if script_count == 0:
+            raise HTTPException(status_code=400, detail="cmd_exec 必须指定 cmd、script_file 或 script_content")
+
     nodes = (
         await db.execute(
             select(Node).where(Node.cluster_id == cluster_id, Node.id.in_(body.node_ids))
@@ -127,6 +278,9 @@ async def create_node_task(
 
     snapshots = {n.id: (n.ip, n.edge_path) for n in nodes}
     svc = get_node_task_service()
+
+    # Migrate script_file from temp to task-scripts/{task_id}/
+    script_upload_id = body.params.get("script_file")
     try:
         task = await svc.create_task(
             db=db,
@@ -138,6 +292,21 @@ async def create_node_task(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Migrate script file after task creation (we need task.id) — only for script_file mode
+    if script_upload_id:
+        from app.config.script_upload import get_upload_temp_path, TASK_SCRIPTS_DIR
+        temp_path = get_upload_temp_path(script_upload_id)
+        if not temp_path.exists():
+            raise HTTPException(status_code=400, detail="脚本文件不存在或已过期")
+        task_dir = TASK_SCRIPTS_DIR / str(task.id)
+        task_dir.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.move(str(temp_path), str(task_dir / f"{script_upload_id}.sh"))
+        meta_path = temp_path.with_suffix(".meta")
+        if meta_path.exists():
+            meta_path.unlink()
+
     return _to_task_dict(task)
 
 
@@ -242,12 +411,20 @@ async def delete_node_task(
     task_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Hard-delete a terminal task (cascades items + removes log files)."""
+    """Hard-delete a terminal task (cascades items + removes log files + cleans script files)."""
     task = await db.get(NodeTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     if task.status not in TERMINAL_STATUSES:
         raise HTTPException(status_code=409, detail="任务执行中，请先取消")
+
+    # Clean up task-scripts directory if it exists
+    from app.config.script_upload import TASK_SCRIPTS_DIR
+    import shutil
+    task_script_dir = TASK_SCRIPTS_DIR / str(task_id)
+    if task_script_dir.exists():
+        shutil.rmtree(task_script_dir, ignore_errors=True)
+
     await _delete_task_row(db, task)
     return {"deleted": [task_id]}
 
