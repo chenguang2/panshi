@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.database import Base, get_db
 from app.models.cluster import Cluster, Route
+from app.models.ssl import SslCertificate
 from app.models.system import AuditLog
 from app.models.user import User
 from app.core.security import hash_password
@@ -137,3 +138,56 @@ async def test_legacy_explicit_audit_dedupes_with_skeleton(env):
     assert "new-cluster" in logs[0].detail
     assert logs[0].ip_address  # IP 记录在案
     assert logs[0].username == "admin"
+
+
+@pytest.mark.anyio
+async def test_upstream_crud_enrich_detail(env):
+    """上游 CRUD 审计详情带业务名（全面治理：实体 CRUD 不再落兜底模板）。"""
+    c, app = await _client(env)
+    try:
+        r = await c.post("/api/v1/clusters/1/upstreams", json={"name": "demo-upstream"})
+        assert r.status_code == 201, r.text
+        uid = r.json()["id"]
+        r2 = await c.put(f"/api/v1/clusters/1/upstreams/{uid}", json={"name": "renamed-upstream"})
+        assert r2.status_code == 200, r2.text
+        r3 = await c.request(
+            "DELETE", f"/api/v1/clusters/1/upstreams/{uid}",
+            json={"delete_db": True, "delete_edge": False},
+        )
+        assert r3.status_code in (200, 204), r3.text
+    finally:
+        await c.aclose()
+        app.dependency_overrides.clear()
+
+    logs = await _logs(env)
+    created = [x for x in logs if x.action == "upstream_create"]
+    updated = [x for x in logs if x.action == "upstream_update"]
+    deleted = [x for x in logs if x.action == "upstream_delete"]
+    assert len(created) == 1 and len(updated) == 1 and len(deleted) == 1
+    assert "demo-upstream" in (created[0].detail or "")
+    assert "renamed-upstream" in (updated[0].detail or "")
+    assert "renamed-upstream" in (deleted[0].detail or "")
+    assert deleted[0].resource_id == uid
+
+
+@pytest.mark.anyio
+async def test_ssl_delete_enrich_detail(env):
+    """SSL 证书删除审计详情带证书名。"""
+    async with env() as s:
+        s.add(SslCertificate(id=9, cluster_id=1, name="demo-cert", sni="a.com", cert="C", private_key="K"))
+        await s.commit()
+    c, app = await _client(env)
+    try:
+        r = await c.request(
+            "DELETE", "/api/v1/clusters/1/ssl/9",
+            json={"delete_db": True, "delete_edge": False},
+        )
+        assert r.status_code in (200, 204), r.text
+    finally:
+        await c.aclose()
+        app.dependency_overrides.clear()
+
+    logs = await _logs(env)
+    deleted = [x for x in logs if x.action == "ssl_cert_delete"]
+    assert len(deleted) == 1
+    assert "demo-cert" in (deleted[0].detail or "")

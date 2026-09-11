@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
@@ -15,6 +15,7 @@ from app.schemas.cluster import (
     DeleteClusterRequest, PublishRequest, BatchDeleteUpstreamsRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services.audit import enrich_audit
 from app.services import edge_sync
 from app.core.deps import require_permission
 
@@ -106,7 +107,7 @@ async def list_upstreams(
 
 
 @router.post("/{cluster_id}/upstreams", response_model=UpstreamWithTargets, status_code=status.HTTP_201_CREATED)
-async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSession = Depends(get_db)):
+async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSession = Depends(get_db), request: Request = None):
     upstream_data = upstream.model_dump(exclude={"targets"})
     if upstream_data.get("checks"):
         upstream_data["checks"] = json.dumps(upstream_data["checks"])
@@ -116,6 +117,11 @@ async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSe
         upstream_data["keepalive_pool"] = json.dumps(upstream_data["keepalive_pool"])
     db_upstream = Upstream(cluster_id=cluster_id, **upstream_data)
     db.add(db_upstream)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_upstream.id
+        audit.detail = f"创建上游 {db_upstream.name}"
     await db.commit()
     await db.refresh(db_upstream)
 
@@ -148,7 +154,7 @@ async def get_upstream(cluster_id: int, upstream_id: int, db: AsyncSession = Dep
 
 
 @router.put("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
-async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: UpstreamUpdate, db: AsyncSession = Depends(get_db)):
+async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: UpstreamUpdate, db: AsyncSession = Depends(get_db), request: Request = None):
     upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
     update_data = upstream_update.model_dump(exclude_unset=True, exclude={"targets"})
@@ -167,6 +173,9 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
             db_target = UpstreamTarget(upstream_id=upstream_id, **target_data.model_dump())
             db.add(db_target)
 
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新上游 {upstream.name}"
     await db.commit()
     await db.refresh(upstream)
 
@@ -178,11 +187,12 @@ async def update_upstream(cluster_id: int, upstream_id: int, upstream_update: Up
 
 
 @router.delete("/{cluster_id}/upstreams/{upstream_id}")
-async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_upstream(cluster_id: int, upstream_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
+    enrich_audit(request, detail=f"删除上游 {upstream.name}")
 
     results = []
 

@@ -38,6 +38,7 @@ const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   autostart: '自启动',
   plugin_switch: '插件开关',
   edge_import: 'Edge 导入',
+  audit_logs: '审计日志',
 }
 
 /** 动作词 → 中文（action = f"{resource}_{verb}" 的 verb 部分） */
@@ -92,6 +93,7 @@ const AUDIT_VERB_LABELS: Record<string, string> = {
 
 /** 旧命名全量中文表（历史存量行：verb_resource 动词在前，如 create_route） */
 const LEGACY_ACTION_LABELS: Record<string, string> = {
+  archive: '归档清理',
   create_route: '路由 创建',
   update_route: '路由 更新',
   delete_route: '路由 删除',

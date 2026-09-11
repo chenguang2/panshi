@@ -7,7 +7,7 @@ independent feature gating via dns_proxy_udf in features.yaml.
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
@@ -92,6 +92,7 @@ async def create_dns_proxy(
     cluster_id: int,
     data: StreamProxyCreate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     existing = await db.execute(
         select(StreamProxy).where(
@@ -114,6 +115,11 @@ async def create_dns_proxy(
 
     proxy = StreamProxy(cluster_id=cluster_id, **proxy_data)
     db.add(proxy)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = proxy.id
+        audit.detail = f"创建DNS代理 {proxy.name}"
     await db.commit()
     await db.refresh(proxy)
     return await _proxy_response_with_cluster_name(proxy, cluster_id, db)
@@ -135,6 +141,7 @@ async def update_dns_proxy(
     proxy_id: int,
     data: StreamProxyUpdate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     proxy = await _get_proxy_or_404(db, proxy_id, cluster_id, "DNS 代理不存在")
 
@@ -152,6 +159,9 @@ async def update_dns_proxy(
 
     proxy.scheme = "udp"  # DNS 代理固定 UDP 协议，忽略客户端传入的 scheme
 
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新DNS代理 {proxy.name}"
     await db.commit()
     await db.refresh(proxy)
     return await _proxy_response_with_cluster_name(proxy, cluster_id, db)
@@ -163,11 +173,15 @@ async def delete_dns_proxy(
     proxy_id: int,
     body: DeleteClusterRequest,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     proxy = await _get_proxy_or_404(db, proxy_id, cluster_id, "DNS 代理不存在")
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除DNS代理 {proxy.name}"
     results = []
 
     if body.delete_edge:

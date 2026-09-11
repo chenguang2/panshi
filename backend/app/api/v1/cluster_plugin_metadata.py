@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional, Dict, Any
@@ -42,7 +42,8 @@ async def create_plugin_metadata(
     cluster_id: int,
     plugin_name: str,
     config_data: Optional[Dict[str, Any]] = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     existing = await db.execute(
         select(PluginMetadata).where(
@@ -60,6 +61,11 @@ async def create_plugin_metadata(
         current_version=None
     )
     db.add(db_item)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_item.id
+        audit.detail = f"创建插件元数据 {db_item.plugin_name}"
     await db.commit()
     await db.refresh(db_item)
 
@@ -93,11 +99,15 @@ async def update_plugin_metadata(
     cluster_id: int,
     plugin_name: str,
     metadata: Dict[str, Any],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
     item.config_data = json.dumps(metadata)
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新插件元数据 {item.plugin_name}"
     await db.commit()
     await db.refresh(item)
 
@@ -112,12 +122,15 @@ async def update_plugin_metadata(
 
 # ─── 删除（级联 ConfigVersion） ─────────────────────
 @router.delete("/{plugin_name}")
-async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
 
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除插件元数据 {item.plugin_name}"
 
     node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
     if body.node_ids:

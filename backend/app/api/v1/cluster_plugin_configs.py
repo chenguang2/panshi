@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -42,12 +42,17 @@ async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db
 
 
 @router.post("/{cluster_id}/plugin_configs", response_model=PluginConfigResponse)
-async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: AsyncSession = Depends(get_db)):
+async def create_plugin_config(cluster_id: int, data: PluginConfigCreate, db: AsyncSession = Depends(get_db), request: Request = None):
     config_data = data.model_dump()
     if config_data.get("plugins") is not None:
         config_data["plugins"] = json.dumps(config_data["plugins"])
     db_config = PluginConfig(cluster_id=cluster_id, **config_data)
     db.add(db_config)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_config.id
+        audit.detail = f"创建插件配置 {db_config.name}"
     await db.commit()
     await db.refresh(db_config)
     return PluginConfigResponse.model_validate(db_config)
@@ -60,24 +65,30 @@ async def get_plugin_config(cluster_id: int, config_id: int, db: AsyncSession = 
 
 
 @router.put("/{cluster_id}/plugin_configs/{config_id}", response_model=PluginConfigResponse)
-async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConfigUpdate, db: AsyncSession = Depends(get_db)):
+async def update_plugin_config(cluster_id: int, config_id: int, data: PluginConfigUpdate, db: AsyncSession = Depends(get_db), request: Request = None):
     config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if key == "plugins" and value is not None:
             value = json.dumps(value)
         setattr(config, key, value)
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新插件配置 {config.name}"
     await db.commit()
     await db.refresh(config)
     return PluginConfigResponse.model_validate(config)
 
 
 @router.delete("/{cluster_id}/plugin_configs/{config_id}")
-async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除插件配置 {config.name}"
 
     results = []
 

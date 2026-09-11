@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Any
 from enum import Enum
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -17,6 +17,7 @@ from app.schemas.cluster import (
     DeleteClusterRequest, BatchCreateNodesRequest, BatchDeleteNodesRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services.audit import enrich_audit
 from app.services.config_diff import EquivalenceRules
 from app.services import edge_sync
 from app.services.ansible_service import (
@@ -216,11 +217,16 @@ async def list_nodes(
 
 
 @router.post("/{cluster_id}/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
-async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depends(get_db)):
+async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depends(get_db), request: Request = None):
     await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
 
     db_node = Node(cluster_id=cluster_id, **node.model_dump(exclude={"cluster_id"}))
     db.add(db_node)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_node.id
+        audit.detail = f"创建节点 {db_node.ip}:{db_node.service_port}"
     await db.commit()
     await db.refresh(db_node)
     return NodeResponse.model_validate(db_node)
@@ -284,6 +290,10 @@ async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db
     for key, value in node_update.model_dump(exclude_unset=True).items():
         setattr(node, key, value)
 
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新节点 {node.ip}:{node.service_port}"
+
     await db.commit()
     await db.refresh(node)
     return NodeResponse.model_validate(node)
@@ -298,6 +308,10 @@ async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest 
     node = result.scalar_one_or_none()
     if not node:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
+
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除节点 {node.ip}:{node.service_port}"
 
     results = []
 
@@ -314,7 +328,7 @@ async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest 
 
 
 @router.delete("/{cluster_id}/nodes")
-async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     """批量删除同一集群内的多个节点。
 
     每条节点独立处理：单条失败（节点不存在 / 数据错误 / 其他异常）不阻塞其余节点。
@@ -358,6 +372,10 @@ async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Bo
             node_result["error"] = str(e)
         results.append(node_result)
 
+    names = [str(r.get("node_ip") or "") for r in results if r.get("node_ip")]
+    summary = "、".join(n for n in names[:5] if n) + ("…" if len(names) > 5 else "")
+    enrich_audit(request, detail=f"批量删除节点 {len(names)} 个：{summary}")
+    await db.commit()
     return {"message": f"批量删除完成: {len(results)} 条节点", "results": results}
 
 

@@ -57,7 +57,12 @@ describe('auditResourceLabel / auditResourceLink', () => {
   it('资源中文标签', () => {
     expect(auditResourceLabel('route')).toBe('路由')
     expect(auditResourceLabel('cluster')).toBe('集群')
+    expect(auditResourceLabel('audit_logs')).toBe('审计日志')
     expect(auditResourceLabel('unknown_x')).toBe('unknown_x')
+  })
+
+  it('归档清理动作（tombstone 裸词 archive）', () => {
+    expect(auditActionLabel('archive')).toBe('归档清理')
   })
 
   it('有映射的资源生成链接', () => {

@@ -5,7 +5,7 @@ import io
 import zipfile
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query, UploadFile, File, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -139,6 +139,7 @@ async def create_static_resource(
     cluster_id: int,
     body: StaticResourceCreate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     cluster_result = await db.execute(select(Cluster).where(Cluster.id == cluster_id))
     if not cluster_result.scalar_one_or_none():
@@ -164,6 +165,11 @@ async def create_static_resource(
         description=body.description,
     )
     db.add(resource)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = resource.id
+        audit.detail = f"创建静态资源 {resource.name}"
     await db.commit()
     await db.refresh(resource)
     return resource_to_response(resource)
@@ -241,6 +247,7 @@ async def update_static_resource(
     resource_id: int,
     body: StaticResourceUpdate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     result = await db.execute(
         select(StaticResource).where(
@@ -255,6 +262,9 @@ async def update_static_resource(
     if body.description is not None:
         resource.description = body.description
 
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新静态资源 {resource.name}"
     await db.commit()
     await db.refresh(resource)
     return resource_to_response(resource)
@@ -266,6 +276,7 @@ async def delete_static_resource(
     resource_id: int,
     body: DeleteClusterRequest = Body(...),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
@@ -277,6 +288,9 @@ async def delete_static_resource(
         )
     )
     resource = result.scalar_one_or_none()
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除静态资源 {resource.name}"
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 

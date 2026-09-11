@@ -48,6 +48,9 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/clusters/1/stats"),
     ("post", "/api/v1/clusters/1/test"),
     ("post", "/api/v1/clusters/1/sync"),
+    # 审计归档清理（admin + audit_logs）：误开放即为审计链漏洞，须匿名拒绝
+    ("post", "/api/v1/system/operations/archive/preview"),
+    ("post", "/api/v1/system/operations/archive"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

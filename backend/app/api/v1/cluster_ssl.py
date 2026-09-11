@@ -5,11 +5,12 @@ import uuid
 from typing import Optional
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
+from app.services.audit import enrich_audit
 from app.models.ssl import SslCertificate
 from app.schemas.ssl import (
     SslCertificateCreate, SslCertificateUpdate, SslCertificateResponse,
@@ -58,6 +59,7 @@ async def create_ca_certificate(
     cluster_id: int,
     data: CaCertificateGenerateRequest,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Generate an SM2 CA root certificate for a cluster."""
     cluster = await db.get(Cluster, cluster_id)
@@ -132,6 +134,8 @@ async def create_ca_certificate(
         ),
     )
     db.add(cert)
+    await db.flush()  # 审计增强前先拿 id
+    enrich_audit(request, resource_id=cert.id, detail=f"创建CA证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -212,12 +216,15 @@ async def create_ssl_certificate(
     cluster_id: int,
     data: SslCertificateCreate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     cert_data = data.model_dump()
     cert_data["edge_uuid"] = str(uuid.uuid4())
     cert_data["cluster_id"] = cluster_id
     cert = SslCertificate(**cert_data)
     db.add(cert)
+    await db.flush()  # 审计增强前先拿 id
+    enrich_audit(request, resource_id=cert.id, detail=f"创建SSL证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -239,6 +246,7 @@ async def update_ssl_certificate(
     cert_id: int,
     data: SslCertificateUpdate,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
     update_data = data.model_dump(exclude_unset=True)
@@ -253,6 +261,7 @@ async def update_ssl_certificate(
         cert.skip_mtls_uri_regex = None
     if "sni" in update_data and cert.cert_type == "server" and not cert.is_ca:
         cert.sni = merge_reserved_into_sni_str(cert.sni)
+    enrich_audit(request, detail=f"更新SSL证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
     return SslCertificateResponse.model_validate(cert)
@@ -264,8 +273,10 @@ async def delete_ssl_certificate(
     cert_id: int,
     body: Optional[DeleteClusterRequest] = None,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
+    enrich_audit(request, detail=f"删除SSL证书 {cert.name}")
 
     if cert.is_ca:
         dependent = await db.execute(

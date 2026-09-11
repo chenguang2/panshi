@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -42,12 +42,17 @@ async def list_global_rules(cluster_id: int, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/{cluster_id}/global_rules", response_model=GlobalRuleResponse)
-async def create_global_rule(cluster_id: int, data: GlobalRuleCreate, db: AsyncSession = Depends(get_db)):
+async def create_global_rule(cluster_id: int, data: GlobalRuleCreate, db: AsyncSession = Depends(get_db), request: Request = None):
     rule_data = data.model_dump()
     if rule_data.get("plugins") is not None:
         rule_data["plugins"] = json.dumps(rule_data["plugins"])
     db_rule = GlobalRule(cluster_id=cluster_id, **rule_data)
     db.add(db_rule)
+    await db.flush()  # 审计增强前先拿 id
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.resource_id = db_rule.id
+        audit.detail = f"创建全局规则 {db_rule.name}"
     await db.commit()
     await db.refresh(db_rule)
     return GlobalRuleResponse.model_validate(db_rule)
@@ -60,24 +65,30 @@ async def get_global_rule(cluster_id: int, rule_id: int, db: AsyncSession = Depe
 
 
 @router.put("/{cluster_id}/global_rules/{rule_id}", response_model=GlobalRuleResponse)
-async def update_global_rule(cluster_id: int, rule_id: int, data: GlobalRuleUpdate, db: AsyncSession = Depends(get_db)):
+async def update_global_rule(cluster_id: int, rule_id: int, data: GlobalRuleUpdate, db: AsyncSession = Depends(get_db), request: Request = None):
     rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         if key == "plugins" and value is not None:
             value = json.dumps(value)
         setattr(rule, key, value)
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"更新全局规则 {rule.name}"
     await db.commit()
     await db.refresh(rule)
     return GlobalRuleResponse.model_validate(rule)
 
 
 @router.delete("/{cluster_id}/global_rules/{rule_id}")
-async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
     rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
+    audit = getattr(request.state, "audit", None)
+    if audit is not None:
+        audit.detail = f"删除全局规则 {rule.name}"
 
     results = []
 
