@@ -111,6 +111,21 @@ body {
   cursor: not-allowed;
   background: var(--danger);
 }
+.btn-danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger-outline:hover {
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--danger);
+}
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -2,9 +2,10 @@
   <div class="audit-log">
     <PageHeader title="审计日志" description="记录全部增删改操作的审计轨迹，支持筛选、追溯与导出">
       <template #actions>
-        <button class="btn btn-ghost" style="color: var(--danger)" @click="archiveOpen = true">归档清理</button>
         <button class="btn btn-primary" :disabled="exporting" @click="handleExport('csv')">导出 CSV</button>
         <button class="btn btn-primary" :disabled="exporting" @click="handleExport('xlsx')">导出 Excel</button>
+        <span class="action-sep" aria-hidden="true" />
+        <button class="btn btn-danger-outline" @click="archiveOpen = true">归档清理</button>
       </template>
     </PageHeader>
 
@@ -550,5 +551,13 @@ onMounted(async () => {
 .archive-hint {
   font-size: 12px;
   color: var(--danger);
+}
+
+/* 操作区分隔线：常规导出组与破坏性归档清理分区 */
+.action-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  align-self: center;
 }
 </style>
