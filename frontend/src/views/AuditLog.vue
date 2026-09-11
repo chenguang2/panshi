@@ -42,6 +42,7 @@
         :row-key="(record: AuditLogItem) => record.id"
         :pagination="paginationProps({ page, pageSize, total }, '条记录')"
         :loading="loading"
+        :custom-row="rowProps"
         size="middle"
         class="audit-table"
         @change="handleTableChange"
@@ -328,6 +329,18 @@ async function reload(targetPage = page.value): Promise<void> {
 
 function onFilterChange(): void {
   reload(1)
+}
+
+/** 点击行打开详情抽屉；行内链接（资源跳转）不触发行打开 */
+function rowProps(record: AuditLogItem) {
+  return {
+    style: 'cursor: pointer',
+    onClick: (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest('a')) return
+      current.value = record
+      drawerOpen.value = true
+    },
+  }
 }
 
 function handleTableChange(pagination: TablePaginationConfig): void {
