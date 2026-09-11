@@ -123,6 +123,7 @@
 - **WHEN** 用户 DELETE `/node-tasks/{task_id}`，且任务状态为终态（success/failed/partial/cancelled）
 - **THEN** 系统 SHALL 删除该任务及其全部子任务记录（FK CASCADE）
 - **AND** 系统 SHALL 清理 `task-logs/{task_id}/` 日志文件目录
+- **AND** 系统 SHALL 清理 `task-scripts/{task_id}/` 脚本文件目录（若有）
 - **AND** 返回 `{"deleted": [task_id]}`
 - **WHEN** 任务不存在
 - **THEN** 系统 SHALL 返回 404
@@ -198,6 +199,62 @@
 - **WHEN** 命令含被安全策略拦截的字符/命令，或超时，或执行失败
 - **THEN** 脚本 SHALL 输出对应错误并标记节点失败（不执行命令/超时终止）
 
+#### Scenario: 脚本执行操作任务化
+
+- **WHEN** 用户创建 task_type 为 `cmd_exec` 的任务，params 含 `script_content`（用户编辑后的脚本文本）
+- **THEN** 每个节点子任务 SHALL 通过 SSH + base64 管道直接执行脚本（`echo {base64} | base64 -d | bash`）
+- **AND** 节点上 SHALL NOT 产生临时脚本文件（管道直执行，不落盘）
+- **AND** 脚本模式 SHALL NOT 使用安全策略校验（安全策略仅适用于命令行模式）
+- **AND** 执行结果（stdout/stderr/exit code）SHALL 与现有命令执行保持一致的日志格式
+- **WHEN** SSH 传输失败（节点不可达、权限不足等）
+- **THEN** 系统 SHALL 输出传输错误信息
+- **AND** 节点子任务状态 SHALL 标记为 failed
+
+#### Scenario: 脚本执行超时
+
+- **WHEN** 脚本执行时间超过 `timeout` 参数（默认 30s）
+- **THEN** 系统 SHALL 终止脚本执行（SSH timeout）
+- **AND** 系统 SHALL 输出「脚本执行超时（超过 N 秒）」错误信息
+- **AND** 节点子任务状态 SHALL 标记为 failed
+
+#### Scenario: 脚本执行成功
+
+- **WHEN** 脚本执行返回零 exit code
+- **THEN** 系统 SHALL 记录 stdout 到任务日志
+- **AND** 节点子任务状态 SHALL 标记为 success
+
+#### Scenario: 脚本执行失败
+
+- **WHEN** 脚本执行返回非零 exit code
+- **THEN** 系统 SHALL 记录 stdout/stderr 到任务日志
+- **AND** 节点子任务状态 SHALL 标记为 failed
+- **AND** stdout_tail SHALL 包含脚本输出摘要
+
+#### Scenario: 取消执行中的脚本任务
+
+- **WHEN** 用户取消正在执行脚本的任务
+- **THEN** 系统 SHALL 终止 SSH 连接（发送 SIGTERM 到 ssh 进程）
+- **AND** 节点子任务状态 SHALL 标记为 cancelled
+- **AND** 节点上 SHALL NOT 有残留临时文件（管道直执行，不落盘）
+
+#### Scenario: 创建任务窗口命令/脚本互斥
+
+- **WHEN** 用户在节点任务创建窗口选择「命令执行」类型
+- **THEN** 窗口 SHALL 提供「命令」和「脚本」两个子选项卡
+- **AND** 「命令」选项卡 SHALL 显示命令输入框和安全策略选择（与现有一致）
+- **AND** 「脚本」选项卡 SHALL 显示文件上传区域（支持拖拽和点击选择）
+- **AND** 上传成功后 SHALL 自动加载内容到可编辑区域
+- **AND** 「转换为命令」按钮 SHALL 将脚本内容生成 `echo '{base64}' | base64 -d | bash` 格式并复制到剪贴板
+- **AND** 「命令」和「脚本」SHALL 互斥：选择一个后另一个 SHALL 被禁用
+- **AND** 脚本模式 SHALL NOT 显示安全策略选项（安全策略仅适用于命令行）
+
+#### Scenario: 脚本文件与命令互斥校验
+
+- **WHEN** 用户同时提供 `cmd` 和 `script_content` 参数
+- **THEN** 系统 SHALL 返回 400，detail 提示「cmd、script_file、script_content 互斥，只能指定一个」
+- **WHEN** 用户既不提供 `cmd`、也不提供 `script_file`、也不提供 `script_content`
+- **THEN** 系统 SHALL 返回 400，detail 提示「cmd_exec 必须指定 cmd、script_file 或 script_content」
+
 #### Scenario: 环境类操作任务化
 - **WHEN** 用户创建 task_type 为 `edge_env_deploy` 的任务
 - **THEN** 每个节点子任务 SHALL 调用 `edge_init_env` 部署 edge.env（params 含 env_content）
@@ -235,3 +292,5 @@
 | start / stop / reload / check | `nginx_cmd_run` | nginx_cmd, prefix, ports | .../start 等 |
 | statistic | `edge_statistic` | prefix, ports | .../statistic |
 | edge_env_deploy | `edge_init_env` | env_content, destpath | edge-env/deploy |
+| cmd_exec (命令) | `cmd_exec_run` ansible tag | cmd, security, timeout, whitelist | — |
+| cmd_exec (脚本) | SSH + base64 管道直执行 | script_content, timeout | — |
