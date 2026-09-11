@@ -7,27 +7,56 @@
  * 各函数与迁移前的历史输出保持同语义（统一 2 位零填充）。
  */
 
-/** dash 格式 `YYYY-MM-DD HH:mm`（分钟精度）。历史 useClusterUtils.formatDate 同语义。 */
+/** dash 格式 `YYYY-MM-DD HH:mm`（分钟精度，Asia/Shanghai 时区）。历史 useClusterUtils.formatDate 同语义。 */
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  try {
+    const d = new Date(dateStr)
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(d)
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00'
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`
+  } catch {
+    return dateStr
+  }
 }
 
-/** dash 格式 `YYYY-MM-DD HH:mm:ss`（含秒）。审计日志等需要秒级 dash 时间戳的场景。 */
+/** dash 格式 `YYYY-MM-DD HH:mm:ss`（含秒，Asia/Shanghai 时区）。审计日志等需要秒级 dash 时间戳的场景。 */
 export function formatDateTimeDash(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
-  const d = new Date(dateStr)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  try {
+    const d = new Date(dateStr)
+    // 显式指定 Asia/Shanghai 时区，避免浏览器/OS 时区差异
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(d)
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00'
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+  } catch {
+    return dateStr
+  }
 }
 
-/** 斜杠格式 `YYYY/MM/DD HH:mm:ss`（含秒，zh-CN 2 位零填充）。 */
+/** 斜杠格式 `YYYY/MM/DD HH:mm:ss`（含秒，zh-CN 2 位零填充，Asia/Shanghai 时区）。 */
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
     return new Date(dateStr).toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -40,11 +69,12 @@ export function formatDateTime(dateStr: string | null | undefined): string {
   }
 }
 
-/** 斜杠格式 `MM/DD HH:mm`（无年份，zh-CN 2 位零填充）。 */
+/** 斜杠格式 `MM/DD HH:mm`（无年份，zh-CN 2 位零填充，Asia/Shanghai 时区）。 */
 export function formatMonthDayTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
     return new Date(dateStr).toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai',
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',

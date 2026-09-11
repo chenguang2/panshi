@@ -60,6 +60,11 @@ def _parse_before(body: dict) -> datetime:
         raise HTTPException(status_code=400, detail="before 格式应为 YYYY-MM-DD")
 
 
+def _iso_z(dt: datetime | None) -> str | None:
+    """datetime → ISO 8601 + 'Z'（UTC 标记），确保前端正确解析时区。"""
+    return dt.isoformat() + "Z" if dt else None
+
+
 def _audit_csv(rows: list[AuditLog]) -> str:
     """审计记录序列化为 CSV（与 /operations/export 同列头）。"""
     buf = io.StringIO()
@@ -69,7 +74,7 @@ def _audit_csv(rows: list[AuditLog]) -> str:
         writer.writerow(
             [
                 log.id,
-                log.created_at.isoformat() if log.created_at else "",
+                log.created_at.isoformat() + "Z" if log.created_at else "",
                 log.username or "",
                 log.action or "",
                 log.resource or "",
@@ -92,7 +97,7 @@ def _audit_xlsx(rows: list[AuditLog]) -> bytes:
         ws.append(
             [
                 log.id,
-                log.created_at.isoformat() if log.created_at else "",
+                log.created_at.isoformat() + "Z" if log.created_at else "",
                 log.username or "",
                 log.action or "",
                 log.resource or "",
@@ -164,7 +169,7 @@ async def list_recent_operations(
                 "resource_id": log.resource_id,
                 "detail": log.detail,
                 "ip_address": log.ip_address,
-                "created_at": log.created_at.isoformat() if log.created_at else None,
+                "created_at": _iso_z(log.created_at),
             }
             for log in rows
         ],
@@ -188,7 +193,7 @@ async def operations_meta(
         "actions": sorted(a for a in actions if a),
         "resources": sorted(r for r in resources if r),
         "total": total,
-        "oldest": oldest.isoformat() if oldest else None,
+        "oldest": _iso_z(oldest),
     }
 
 
@@ -233,8 +238,8 @@ async def archive_preview(
     newest = (await db.execute(select(func.max(AuditLog.created_at)).where(cond))).scalar()
     return {
         "count": count,
-        "oldest": oldest.isoformat() if oldest else None,
-        "newest": newest.isoformat() if newest else None,
+        "oldest": _iso_z(oldest),
+        "newest": _iso_z(newest),
     }
 
 
