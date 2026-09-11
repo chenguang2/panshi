@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node_task import NodeTask, NodeTaskItem
 from app.services import task_log_store
+from app.config.script_upload import TASK_SCRIPTS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,21 @@ class NodeTaskService:
                 pending_items = [i for i in items if i.status == "pending"]
 
                 if not pending_items:
+                    await self._finalize_task(db, task, [i.status for i in items])
+                    return
+
+                # Batch execution for distribute_file: run_playbook once with all IPs
+                if task.task_type == "distribute_file":
+                    await self._execute_distribute_batch(db, task, pending_items, params, cancel_flag)
+                    db.expire_all()
+                    items = (
+                        await db.execute(
+                            select(NodeTaskItem)
+                            .where(NodeTaskItem.task_id == task_id)
+                            .order_by(NodeTaskItem.id)
+                            .execution_options(populate_existing=True)
+                        )
+                    ).scalars().all()
                     await self._finalize_task(db, task, [i.status for i in items])
                     return
 
@@ -570,6 +586,85 @@ class NodeTaskService:
 
         raise ValueError(f"unknown task type: {task_type}")
 
+    async def _execute_distribute_batch(
+        self,
+        db: AsyncSession,
+        task: NodeTask,
+        items: list,
+        params: dict,
+        cancel_flag: asyncio.Event | None,
+    ) -> None:
+        """Execute distribute_file: run_playbook once with all IPs, then map results to items."""
+        srcpath = params.get("srcpath", "")
+        destpath = params.get("destpath", "")
+        if not srcpath or not destpath:
+            for item in items:
+                item.status = "failed"
+                item.rc = -1
+                item.stderr = "缺少 srcpath 或 destpath 参数"
+                item.finished_at = datetime.utcnow()
+            await db.commit()
+            return
+
+        # Resolve the actual file path from srcpath (format: "temp/{upload_id}" → "task-scripts/{task_id}/{upload_id}")
+        task_script_dir = TASK_SCRIPTS_DIR / str(task.id)
+        file_name = srcpath.split("/")[-1]
+        actual_src = task_script_dir / file_name
+        if not actual_src.exists():
+            for item in items:
+                item.status = "failed"
+                item.rc = -1
+                item.stderr = f"文件不存在: {file_name}"
+                item.finished_at = datetime.utcnow()
+            await db.commit()
+            return
+
+        # Build comma-separated IPs
+        ips = ",".join(item.ip for item in items)
+        ev = {"ips": ips, "srcpath": str(actual_src), "destpath": destpath}
+
+        def _on_log(event: dict) -> None:
+            line = event.get("stdout", "") if isinstance(event, dict) else str(event)
+            if not line:
+                return
+            for item in items:
+                task_log_store.append_line(task.id, item.node_id, line)
+                self._broadcast(task.id, {
+                    "type": "log_line", "task_id": task.id,
+                    "node_id": item.node_id, "line": line,
+                })
+
+        if self._ansible is None:
+            raise ValueError("NodeTaskService has no ansible instance")
+
+        try:
+            timeout = int(params.get("timeout") or 600)
+        except (TypeError, ValueError):
+            timeout = 600
+
+        result = await self._ansible.run_playbook(
+            "", "edge_master_copy_to_slaves", ev,
+            cancel_event=cancel_flag, on_progress=_on_log,
+            job_timeout=timeout,
+        )
+
+        rc = result.get("rc", -1)
+        stderr = result.get("stderr", "")
+        stdout = result.get("stdout", "")
+
+        # Parse per-node results from ansible output
+        # ansible with_together gives per-node output lines prefixed with [ip]
+        node_results = _parse_distribute_results(stdout, stderr, items, rc)
+
+        for item in items:
+            nr = node_results.get(item.ip, {"rc": rc, "success": rc == 0})
+            item.rc = nr.get("rc", rc)
+            item.status = "success" if nr.get("success", False) else "failed"
+            item.stdout = nr.get("stdout", stdout)
+            item.stderr = nr.get("stderr", stderr if not nr.get("success", False) else "")
+            item.finished_at = datetime.utcnow()
+        await db.commit()
+
     async def _software_check_node(self, node, cmd_str: str, on_log) -> dict:
         """Run software_check via ansible, falling back to direct SSH on failure."""
         from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, PRIVATE_DATA_DIR
@@ -824,3 +919,54 @@ async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], Non
         node.ip, ssh_user, build_cmd, on_line=on_log, port=ssh_port,
     )
     return {"rc": rc, "status": "success" if rc == 0 else "failed", "stdout": stdout, "stderr": stderr, "command": build_cmd}
+
+
+def _parse_distribute_results(stdout: str, stderr: str, items: list, overall_rc: int) -> dict:
+    """Parse ansible distribute_file output to determine per-node success/failure.
+
+    Ansible ``with_together`` output lines are prefixed with ``[ip]``.
+    Returns ``{ip: {"rc": int, "success": bool, "stdout": str, "stderr": str}}``.
+    """
+    results: dict = {}
+    # Initialize all items as failed (worst case)
+    for item in items:
+        results[item.ip] = {"rc": overall_rc, "success": False, "stdout": "", "stderr": stderr}
+
+    if not stdout:
+        return results
+
+    current_ip = None
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Check for [ip] prefix
+        if stripped.startswith("[") and "]" in stripped:
+            bracket_end = stripped.index("]")
+            candidate_ip = stripped[1:bracket_end]
+            # Validate it looks like an IP
+            if any(c.isdigit() for c in candidate_ip) and len(candidate_ip) < 20:
+                current_ip = candidate_ip
+                remaining = stripped[bracket_end + 1:].strip()
+                if current_ip in results:
+                    results[current_ip]["stdout"] += remaining + "\n"
+                continue
+        if current_ip and current_ip in results:
+            results[current_ip]["stdout"] += stripped + "\n"
+
+    # If overall rc is 0, assume success for nodes that didn't show errors
+    if overall_rc == 0:
+        for ip, nr in results.items():
+            nr["success"] = True
+            nr["rc"] = 0
+
+    # Check for UNREACHABLE or failed messages per node
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if "UNREACHABLE" in stripped or "Failed to connect" in stripped:
+            for ip, nr in results.items():
+                if ip in stripped:
+                    nr["success"] = False
+                    nr["rc"] = -1
+
+    return results

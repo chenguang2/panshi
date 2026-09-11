@@ -284,7 +284,63 @@ class TestCreateTaskWithScriptFile:
             node_task_service.NodeTaskService._execute_node = original_execute
 
 
-class TestScriptSecurity:
+class TestUploadDistributeFile:
+    """Tests for POST /node-tasks/upload-distribute-file (byte-perfect, no encoding)."""
+
+    def _upload_file(self, client, filename="server.crt", content=b"\x00\x01\x02binary"):
+        return client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": (filename, io.BytesIO(content), "application/octet-stream")},
+        )
+
+    def test_upload_any_file_type(self, client):
+        """Accept any file extension (.sh, .conf, .pem, .crt, no ext, etc.)."""
+        for ext, name in [(".conf", "nginx.conf"), (".pem", "cert.pem"), ("", "Makefile")]:
+            content = b"some content for " + name.encode()
+            resp = self._upload_file(client, filename=name, content=content)
+            assert resp.status_code == 200, f"Failed for {name}: {resp.text}"
+            assert resp.json()["filename"] == name
+
+    def test_upload_binary_file(self, client):
+        """Binary content stored byte-perfectly (no encoding conversion)."""
+        binary = bytes(range(256))
+        resp = self._upload_file(client, filename="data.bin", content=binary)
+        assert resp.status_code == 200
+        upload_id = resp.json()["upload_id"]
+        from app.config.script_upload import get_distribute_upload_temp_path
+        stored = get_distribute_upload_temp_path(upload_id).read_bytes()
+        assert stored == binary, "Binary content was modified during storage"
+
+    def test_upload_rejects_empty_file(self, client):
+        resp = self._upload_file(client, content=b"")
+        assert resp.status_code == 400
+        assert "空" in resp.json()["detail"]
+
+    def test_upload_rejects_oversized_file(self, client):
+        """Default 10MB limit."""
+        content = b"x" * (10 * 1024 * 1024 + 1)
+        resp = self._upload_file(client, content=content)
+        assert resp.status_code == 400
+        assert "大小" in resp.json()["detail"]
+
+    def test_upload_no_encoding_detection(self, client):
+        """File with mixed encoding bytes stored as-is, no UTF-8 conversion."""
+        raw = b"\x80\x81\xff\xfe" + "hello".encode("utf-8")
+        resp = self._upload_file(client, filename="mixed.dat", content=raw)
+        assert resp.status_code == 200
+        upload_id = resp.json()["upload_id"]
+        from app.config.script_upload import get_distribute_upload_temp_path
+        stored = get_distribute_upload_temp_path(upload_id).read_bytes()
+        assert stored == raw, "File content was modified — encoding detection should not run"
+
+    def test_upload_returns_metadata(self, client):
+        content = b"nginx config content"
+        resp = self._upload_file(client, filename="nginx.conf", content=content)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "upload_id" in data
+        assert data["filename"] == "nginx.conf"
+        assert data["size"] == len(content)
     """Test _validate_script_security function."""
 
     def test_security_none_allows_everything(self):
@@ -339,3 +395,165 @@ class TestScriptSecurity:
         result = _validate_script_security(script, "blacklist")
         assert result is not None
         assert "rm" in result
+
+
+class TestDistributeFileCreateTask:
+    """Tests for creating distribute_file tasks."""
+
+    def test_create_distribute_file_task(self, client):
+        """POST /clusters/1/node-tasks with distribute_file should create task."""
+        # Upload a file first
+        binary = b"nginx config content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("nginx.conf", io.BytesIO(binary), "text/plain")},
+        )
+        assert resp.status_code == 200
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                    "destpath": "/etc/nginx/conf.d/",
+                },
+            },
+        )
+        assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert data["task_type"] == "distribute_file"
+        assert "srcpath" in data["params"]
+        assert "destpath" in data["params"]
+
+        # Cancel the background task immediately to avoid real ansible execution
+        from app.services.node_task_service import get_node_task_service
+        svc = get_node_task_service()
+        svc.shutdown_sync()
+
+    def test_create_distribute_file_migrates_file(self, client):
+        """distribute_file should migrate file from temp to task-scripts/{task_id}/."""
+        binary = b"server { listen 443; }"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("site.conf", io.BytesIO(binary), "text/plain")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                    "destpath": "/etc/nginx/conf.d/",
+                },
+            },
+        )
+        assert resp.status_code == 201
+        task_id = resp.json()["id"]
+
+        # Verify file migrated to task-scripts/{task_id}/
+        from app.config.script_upload import TASK_SCRIPTS_DIR
+        task_dir = TASK_SCRIPTS_DIR / str(task_id)
+        assert task_dir.exists()
+        # Should have the file (without .sh extension)
+        files = [f for f in task_dir.iterdir() if not f.name.endswith(".meta")]
+        assert len(files) == 1
+
+        # Cancel background task
+        from app.services.node_task_service import get_node_task_service
+        svc = get_node_task_service()
+        svc.shutdown_sync()
+
+    def test_create_distribute_file_validates_destpath(self, client):
+        """distribute_file without destpath should fail."""
+        binary = b"test content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("test.conf", io.BytesIO(binary), "text/plain")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                },
+            },
+        )
+        assert resp.status_code == 400
+        assert "destpath" in resp.json()["detail"]
+
+    def test_destpath_auto_append_slash(self, client):
+        """destpath without trailing / should get it auto-appended."""
+        binary = b"test content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("test.conf", io.BytesIO(binary), "text/plain")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                    "destpath": "/etc/nginx/conf.d",
+                },
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["params"]["destpath"] == "/etc/nginx/conf.d/"
+
+        # Cancel background task
+        from app.services.node_task_service import get_node_task_service
+        svc = get_node_task_service()
+        svc.shutdown_sync()
+
+
+class TestDistributeBatchExecution:
+    """Tests for distribute_file batch execution engine."""
+
+    def test_parse_distribute_results_success(self):
+        """When overall rc=0, all nodes should be marked success."""
+        from app.services.node_task_service import _parse_distribute_results
+        from types import SimpleNamespace
+        items = [
+            SimpleNamespace(ip="10.0.0.1", node_id=1),
+            SimpleNamespace(ip="10.0.0.2", node_id=2),
+        ]
+        stdout = "[10.0.0.1] changed=1\n[10.0.0.2] changed=1"
+        results = _parse_distribute_results(stdout, "", items, 0)
+        assert results["10.0.0.1"]["success"] is True
+        assert results["10.0.0.2"]["success"] is True
+
+    def test_parse_distribute_results_failure(self):
+        """When overall rc!=0, nodes should be marked failed."""
+        from app.services.node_task_service import _parse_distribute_results
+        from types import SimpleNamespace
+        items = [
+            SimpleNamespace(ip="10.0.0.1", node_id=1),
+            SimpleNamespace(ip="10.0.0.2", node_id=2),
+        ]
+        stdout = "[10.0.0.1] FAILED: connection refused"
+        results = _parse_distribute_results(stdout, "connection error", items, 2)
+        assert results["10.0.0.1"]["success"] is False
+        assert results["10.0.0.2"]["success"] is False
+
+    def test_parse_distribute_results_empty(self):
+        """Empty stdout should mark all as failed."""
+        from app.services.node_task_service import _parse_distribute_results
+        from types import SimpleNamespace
+        items = [SimpleNamespace(ip="10.0.0.1", node_id=1)]
+        results = _parse_distribute_results("", "timeout", items, -1)
+        assert results["10.0.0.1"]["success"] is False

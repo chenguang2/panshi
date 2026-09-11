@@ -165,6 +165,79 @@ async def delete_uploaded_script(upload_id: str):
     return {"detail": "脚本文件已删除"}
 
 
+# ── Distribute file upload (byte-perfect, no encoding) ──────────────
+
+@global_router.post("/upload-distribute-file")
+async def upload_distribute_file(file: UploadFile = File(...)):
+    """Upload a file for distribution to nodes.
+
+    No encoding detection — stores raw bytes byte-perfectly.
+    """
+    from app.config.script_upload import (
+        DISTRIBUTE_MAX_SIZE_BYTES,
+        get_distribute_upload_temp_path, TEMP_DIR,
+    )
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名为空")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    if len(content) > DISTRIBUTE_MAX_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件大小超过限制: {len(content)} bytes（最大 {DISTRIBUTE_MAX_SIZE_BYTES} bytes）",
+        )
+
+    upload_id = str(uuid.uuid4())
+    temp_path = get_distribute_upload_temp_path(upload_id)
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path.write_bytes(content)
+
+    # Store metadata alongside the file
+    meta_path = temp_path.with_suffix(".meta")
+    meta_path.write_text(file.filename, encoding="utf-8")
+
+    return {
+        "upload_id": upload_id,
+        "filename": file.filename,
+        "size": len(content),
+    }
+
+
+# ── Distribute file preview ─────────────────────────────────────────
+
+@global_router.get("/distribute-preview/{upload_id}")
+async def preview_distribute_file(upload_id: str):
+    """Preview an uploaded distribute file's content."""
+    from app.config.script_upload import get_distribute_upload_temp_path
+
+    temp_path = get_distribute_upload_temp_path(upload_id)
+    if not temp_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在或已过期")
+
+    meta_path = temp_path.with_suffix(".meta")
+    filename = meta_path.read_text(encoding="utf-8") if meta_path.exists() else "unknown"
+    content_bytes = temp_path.read_bytes()
+
+    # Try UTF-8 decode for preview
+    try:
+        content = content_bytes.decode("utf-8")
+        preview_available = True
+    except (UnicodeDecodeError, ValueError):
+        content = None
+        preview_available = False
+
+    return {
+        "upload_id": upload_id,
+        "filename": filename,
+        "content": content,
+        "preview_available": preview_available,
+    }
+
+
 TaskType = Literal[
     "install_openresty",
     "install_edge",
@@ -179,6 +252,7 @@ TaskType = Literal[
     "edge_env_deploy",
     "software_check",
     "cmd_exec",
+    "distribute_file",
 ]
 
 
@@ -266,6 +340,21 @@ async def create_node_task(
         if script_count == 0:
             raise HTTPException(status_code=400, detail="cmd_exec 必须指定 cmd、script_file 或 script_content")
 
+    # distribute_file: validate destpath, auto-append trailing /
+    distribute_upload_id = None
+    if body.task_type == "distribute_file":
+        destpath = body.params.get("destpath", "")
+        if not destpath or not destpath.strip():
+            raise HTTPException(status_code=400, detail="distribute_file 必须指定 destpath（目标目录路径）")
+        if not destpath.endswith("/"):
+            destpath = destpath + "/"
+            body.params["destpath"] = destpath
+        srcpath = body.params.get("srcpath", "")
+        if not srcpath or not srcpath.strip():
+            raise HTTPException(status_code=400, detail="distribute_file 必须指定 srcpath")
+        # Extract upload_id from srcpath (format: "temp/{upload_id}")
+        distribute_upload_id = srcpath.split("/")[-1]
+
     nodes = (
         await db.execute(
             select(Node).where(Node.cluster_id == cluster_id, Node.id.in_(body.node_ids))
@@ -306,6 +395,21 @@ async def create_node_task(
         meta_path = temp_path.with_suffix(".meta")
         if meta_path.exists():
             meta_path.unlink()
+
+    # Migrate distribute_file after task creation — only for distribute_file mode
+    if distribute_upload_id:
+        from app.config.script_upload import get_distribute_upload_temp_path, TASK_SCRIPTS_DIR
+        temp_path = get_distribute_upload_temp_path(distribute_upload_id)
+        if not temp_path.exists():
+            raise HTTPException(status_code=400, detail="分发文件不存在或已过期")
+        task_dir = TASK_SCRIPTS_DIR / str(task.id)
+        task_dir.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.move(str(temp_path), str(task_dir / distribute_upload_id))
+        # Move meta file too
+        meta_path = temp_path.with_suffix(".meta")
+        if meta_path.exists():
+            shutil.move(str(meta_path), str(task_dir / f"{distribute_upload_id}.meta"))
 
     return _to_task_dict(task)
 

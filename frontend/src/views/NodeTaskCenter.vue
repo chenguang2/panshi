@@ -662,6 +662,72 @@
                 </div>
               </template>
             </div>
+            <!-- 分发文件表单 -->
+            <div v-if="createTaskType === 'distribute_file'" style="margin-bottom: 12px">
+              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
+                >选择文件</label
+              >
+              <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                <button class="btn btn-secondary btn-sm" @click="triggerDistributeUpload">选择文件</button>
+                <span v-if="distributeFile" style="font-size: 12px; color: var(--muted, #888); line-height: 28px">
+                  {{ distributeFile.name }} ({{ formatFileSize(distributeFile.size) }})
+                  <a
+                    style="color: var(--danger, #e5484d); margin-left: 4px; cursor: pointer"
+                    @click="clearDistributeFile"
+                    >×</a
+                  >
+                </span>
+              </div>
+              <div
+                v-if="!distributeFile"
+                :class="{ 'upload-dragover': distributeDragOver }"
+                :style="
+                  distributeDragOver
+                    ? { borderColor: 'var(--accent,#4096ff)', background: 'var(--bg-secondary,#f5f5f5)' }
+                    : undefined
+                "
+                style="
+                  border: 2px dashed var(--border, #e5e5e5);
+                  border-radius: 8px;
+                  padding: 24px;
+                  text-align: center;
+                  color: var(--muted, #999);
+                  font-size: 13px;
+                  cursor: pointer;
+                  transition: border-color 0.2s;
+                "
+                @click="triggerDistributeUpload"
+                @dragover.prevent="distributeDragOver = true"
+                @dragleave="distributeDragOver = false"
+                @drop.prevent="onDistributeDrop"
+              >
+                <div style="margin-bottom: 4px">点击或拖拽文件到此处</div>
+                <div style="font-size: 11px">支持任意文件类型，最大 10MB</div>
+              </div>
+              <div v-if="distributeUploadError" style="margin-top: 8px; color: var(--danger, #e5484d); font-size: 12px">
+                {{ distributeUploadError }}
+              </div>
+              <label
+                style="font-size: 13px; color: var(--muted, #888); display: block; margin-top: 12px; margin-bottom: 4px"
+                >目标目录路径</label
+              >
+              <input
+                v-model="distributeDestpath"
+                type="text"
+                data-test="distribute-destpath"
+                placeholder="例如: /etc/nginx/conf.d/"
+                style="
+                  width: 100%;
+                  padding: 6px 10px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border, #e5e5e5);
+                  font-size: 13px;
+                "
+              />
+              <div style="color: var(--muted, #999); font-size: 11px; margin-top: 4px">
+                文件将以原始文件名存入此目录
+              </div>
+            </div>
             <div style="color: var(--muted, #999); font-size: 12px; line-height: 1.6">
               任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
             </div>
@@ -683,7 +749,9 @@
                 (createTaskType === 'cmd_exec' && cmdExecMode === 'command' && !cmdCommand.trim()) ||
                 (createTaskType === 'cmd_exec' &&
                   cmdExecMode === 'script' &&
-                  (!scriptFile || !scriptPreviewContent || !scriptPreviewContent.trim()))
+                  (!scriptFile || !scriptPreviewContent || !scriptPreviewContent.trim())) ||
+                (createTaskType === 'distribute_file' &&
+                  (!distributeFile || !distributeUploadId || !distributeDestpath.trim()))
               "
               @click="submitCreateTask"
             >
@@ -718,7 +786,7 @@ import {
 import { paginationProps } from '@/composables/usePagination'
 import { consumeSSEDataLines } from '@/utils/sse'
 import { formatFileSize } from '@/utils/format'
-import { uploadScript, previewScript, deleteUploadedScript } from '@/api/scriptUpload'
+import { uploadScript, previewScript, deleteUploadedScript, uploadDistributeFile } from '@/api/scriptUpload'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])
@@ -827,6 +895,13 @@ const scriptDragOver = ref(false)
 const scriptUploadId = ref<string | null>(null)
 const scriptPreviewContent = ref<string | null>(null)
 const scriptUploadError = ref<string | null>(null)
+
+// ── distribute file state ──
+const distributeFile = ref<File | null>(null)
+const distributeUploadId = ref<string | null>(null)
+const distributeUploadError = ref<string | null>(null)
+const distributeDestpath = ref('')
+const distributeDragOver = ref(false)
 
 function addCmdWhitelist() {
   const name = cmdWhitelistInput.value.trim()
@@ -946,6 +1021,53 @@ function convertScriptToCommand() {
   )
 }
 
+// ── distribute file handlers ──
+
+function triggerDistributeUpload() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.onchange = async (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (file) await handleDistributeFile(file)
+  }
+  input.click()
+}
+
+function onDistributeDrop(e: DragEvent) {
+  distributeDragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file) handleDistributeFile(file)
+}
+
+async function handleDistributeFile(file: File) {
+  distributeUploadError.value = null
+
+  // 校验大小（默认 10MB，可调整）
+  if (file.size > 10 * 1024 * 1024) {
+    distributeUploadError.value = '文件大小不能超过 10MB'
+    return
+  }
+
+  distributeFile.value = file
+
+  // 上传到服务端
+  try {
+    const result = await uploadDistributeFile(file)
+    distributeUploadId.value = result.upload_id
+  } catch (err: any) {
+    distributeUploadError.value = err?.response?.data?.detail || '上传失败'
+    distributeFile.value = null
+  }
+}
+
+function clearDistributeFile() {
+  if (distributeUploadId.value) {
+    deleteUploadedScript(distributeUploadId.value).catch(() => {})
+  }
+  distributeFile.value = null
+  distributeUploadId.value = null
+}
+
 const taskTypes = [
   { value: 'install_openresty', label: '安装 OpenResty' },
   { value: 'install_edge', label: '安装 Edge' },
@@ -958,6 +1080,7 @@ const taskTypes = [
   { value: 'statistic', label: '状态查询' },
   { value: 'software_check', label: '软件查询' },
   { value: 'cmd_exec', label: '命令执行' },
+  { value: 'distribute_file', label: '分发文件' },
 ]
 
 const columns = [
@@ -1440,6 +1563,10 @@ async function openCreateModal() {
   selectedPackVersion.value = ''
   createNodes.value = []
   resetCmdExecForm()
+  distributeFile.value = null
+  distributeUploadId.value = null
+  distributeUploadError.value = null
+  distributeDestpath.value = ''
   if (clusters.value.length === 0) {
     const res = await api.get('/clusters', { params: { page_size: 100 } })
     clusters.value = res.data.items || res.data || []
@@ -1544,6 +1671,19 @@ async function submitCreateTask() {
       }
     }
     params.timeout = cmdTimeout.value
+  }
+  if (createTaskType.value === 'distribute_file') {
+    if (!distributeUploadId.value || !distributeFile.value) {
+      message.warning('请先上传要分发的文件')
+      return
+    }
+    if (!distributeDestpath.value.trim()) {
+      message.warning('请输入目标目录路径')
+      return
+    }
+    params.srcpath = distributeUploadId.value
+    params.destpath = distributeDestpath.value.trim()
+    params.srcfilename = distributeFile.value.name
   }
   try {
     await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params)
