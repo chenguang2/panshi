@@ -745,7 +745,12 @@ class AnsibleRunnerService:
             _inventory_inject_port(ip, inject_port)
 
         ev = dict(extravars or {})
-        ev["ips"] = ip  # playbook reads this to scope to a specific host
+        # playbook reads this to scope to a specific host. Only set when ip is
+        # non-empty: distribute_file batch passes ip="" and supplies a
+        # comma-separated multi-IP list via extravars["ips"] — overwriting it
+        # with "" makes edge.yml hosts resolve empty → "cannot have empty values".
+        if ip:
+            ev["ips"] = ip
 
         logger.info(
             "Running ansible playbook tag=%s ip=%s extravars=%s",

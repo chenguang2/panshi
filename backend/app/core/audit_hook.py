@@ -157,6 +157,7 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("POST", "/api/v1/node-tasks/{task_id}/cancel"): ("node_task", "cancel", False),
     ("POST", "/api/v1/node-tasks/{task_id}/retry"): ("node_task", "retry", False),
     ("POST", "/api/v1/node-tasks/batch-delete"): ("node_task", "batch_delete", True),
+    ("DELETE", "/api/v1/node-tasks/task-files/{task_id}/{name}"): ("node_task", "delete_file", False),
     ("POST", "/api/v1/nodes/{node_id}/autostart"): ("autostart", "set", False),
     ("PUT", "/api/v1/plugin-switches"): ("plugin_switch", "update", False),
     # Edge 导入 / 全局四层代理

@@ -4,6 +4,10 @@ export interface UploadedScript {
   upload_id: string
   filename: string
   size: number
+  /** 存储形态类型：脚本 = .sh 后缀，分发文件 = 无后缀 */
+  kind: 'script' | 'distribute'
+  /** 上传时间（ISO 字符串，取自文件 mtime） */
+  uploaded_at: string
 }
 
 export interface ScriptPreview {
@@ -45,6 +49,36 @@ export async function listUploadedScripts(): Promise<UploadedScript[]> {
  */
 export async function deleteUploadedScript(uploadId: string): Promise<void> {
   await api.delete(`/node-tasks/uploaded-scripts/${uploadId}`)
+}
+
+export interface TaskFile {
+  task_id: number
+  /** 任务目录中的存储名（删除时回传） */
+  name: string
+  /** 展示名：分发文件为原始文件名，脚本为存储名 */
+  filename: string
+  size: number
+  kind: 'script' | 'distribute'
+  /** 任务类型（如 distribute_file、cmd_exec 等） */
+  task_type: string
+  /** 任务创建时间（ISO 字符串） */
+  created_at: string | null
+}
+
+/**
+ * List archived files across task directories (controller copies only).
+ */
+export async function listTaskFiles(): Promise<TaskFile[]> {
+  const resp = await api.get('/node-tasks/task-files')
+  return resp.data
+}
+
+/**
+ * Delete a task's archived source file (controller copy only —
+ * files already distributed to nodes and the task itself are untouched).
+ */
+export async function deleteTaskFile(taskId: number, name: string): Promise<void> {
+  await api.delete(`/node-tasks/task-files/${taskId}/${encodeURIComponent(name)}`)
 }
 
 /**

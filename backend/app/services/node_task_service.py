@@ -149,12 +149,17 @@ class NodeTaskService:
         if flag is not None:
             flag.set()
 
-    async def retry_task(self, task_id: int, node_ids: list[int] | None = None) -> None:
-        """Reset failed/cancelled items to pending and re-execute them."""
+    async def retry_task(self, task_id: int, node_ids: list[int] | None = None, db: Any = None) -> None:
+        """Reset failed/cancelled items to pending and re-execute them.
+
+        ``db``: 请求作用域会话（端点注入）。必须贯穿使用——audit 骨架已在该
+        会话上 flush 并持有 SQLite 写锁，reset 若走第二个会话会被阻塞至
+        busy_timeout 超时（"database is locked" → 500）。
+        """
         if node_ids is None:
-            await self._reset_failed_items(task_id, None)
+            await self._reset_failed_items(task_id, None, db=db)
         else:
-            await self._reset_failed_items(task_id, node_ids)
+            await self._reset_failed_items(task_id, node_ids, db=db)
         flag = self._cancel_flags.get(task_id)
         if flag is not None:
             flag.clear()
@@ -378,28 +383,34 @@ class NodeTaskService:
         })
         self._broadcast(task.id, {"type": "done", "task_id": task.id})
 
-    async def _reset_failed_items(self, task_id: int, node_ids: list[int] | None) -> None:
+    async def _reset_failed_items(self, task_id: int, node_ids: list[int] | None, db: Any = None) -> None:
         session_factory = self._db_factory or self._default_session_factory
+        # db 贯穿（见 retry_task docstring）：仅在未提供请求会话时才自建
+        if db is not None:
+            await self._reset_failed_items_on(task_id, node_ids, db)
+            return
+        async with session_factory() as owned_db:
+            await self._reset_failed_items_on(task_id, node_ids, owned_db)
 
-        async with session_factory() as db:
-            stmt = select(NodeTaskItem).where(NodeTaskItem.task_id == task_id)
-            items = (await db.execute(stmt)).scalars().all()
-            for item in items:
-                if node_ids is None or item.node_id in node_ids:
-                    if item.status in ("failed", "cancelled", "skipped"):
-                        item.status = "pending"
-                        item.rc = None
-                        item.stdout = None
-                        item.stderr = None
-                        item.command = None
-                        item.started_at = None
-                        item.finished_at = None
-                        item.set_logs([])
-                        task_log_store.reset_log(task_id, item.node_id)
-                        item.log_file = None
-                        item.log_line_count = 0
-                        item.stdout_tail = None
-            await db.commit()
+    async def _reset_failed_items_on(self, task_id: int, node_ids: list[int] | None, db: Any) -> None:
+        stmt = select(NodeTaskItem).where(NodeTaskItem.task_id == task_id)
+        items = (await db.execute(stmt)).scalars().all()
+        for item in items:
+            if node_ids is None or item.node_id in node_ids:
+                if item.status in ("failed", "cancelled", "skipped"):
+                    item.status = "pending"
+                    item.rc = None
+                    item.stdout = None
+                    item.stderr = None
+                    item.command = None
+                    item.started_at = None
+                    item.finished_at = None
+                    item.set_logs([])
+                    task_log_store.reset_log(task_id, item.node_id)
+                    item.log_file = None
+                    item.log_line_count = 0
+                    item.stdout_tail = None
+        await db.commit()
 
     @staticmethod
     def _default_session_factory():
@@ -619,9 +630,25 @@ class NodeTaskService:
             await db.commit()
             return
 
-        # Build comma-separated IPs
+        # Build comma-separated IPs. srcpath/destpath repeat per node: the edge
+        # role zips ips/src/dest with with_together (zip truncates to the
+        # shortest list) and matches each host via
+        # when: inventory_hostname == item.0 — single-element src/dest would
+        # deliver the file to the first node only.
         ips = ",".join(item.ip for item in items)
-        ev = {"ips": ips, "srcpath": str(actual_src), "destpath": destpath}
+        src_per_node = ",".join([str(actual_src)] * len(items))
+        # 落地名：优先原始文件名（srcfilename，用户上传时的名字），只取 basename
+        # 杜绝目标端路径穿越；缺失/净化为空时回退存储名（UUID，兼容旧任务）。
+        # dest 精确到文件路径（而非目录），使节点上文件名 = 原始文件名。
+        raw_name = str(params.get("srcfilename") or "").replace("\\", "/")
+        landing_name = Path(raw_name).name
+        if not landing_name or landing_name in (".", ".."):
+            landing_name = file_name
+        if not destpath.endswith("/"):
+            destpath += "/"
+        dest_full = f"{destpath}{landing_name}"
+        dest_per_node = ",".join([dest_full] * len(items))
+        ev = {"ips": ips, "srcpath": src_per_node, "destpath": dest_per_node}
 
         def _on_log(event: dict) -> None:
             line = event.get("stdout", "") if isinstance(event, dict) else str(event)

@@ -262,6 +262,155 @@ class TestConcurrency:
         assert max_active >= 2, "expected parallelism across distinct nodes"
 
 
+class TestDistributeBatch:
+    """distribute_file 批量分发：run_playbook 的 extravars 必须覆盖全部节点。
+
+    edge 角色 master_copy_to_slaves 用 with_together 对
+    ips.split(',') / srcpath.split(',') / destpath.split(',') 按位 zip，
+    并以 when: inventory_hostname == item.0 匹配节点 —— 任一列表偏短都会
+    截断（zip 语义），导致只有第一个节点收到文件。
+    """
+
+    @pytest.fixture
+    def batch_env(self, test_db, tmp_path, monkeypatch):
+        import asyncio
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+
+        from app.services import node_task_service as nts_mod
+
+        monkeypatch.setattr(nts_mod, "TASK_SCRIPTS_DIR", tmp_path)
+
+        def _make(task_type, items_spec, params):
+            mock_ansible = SimpleNamespace(
+                run_playbook=AsyncMock(return_value={
+                    "rc": 0, "status": "successful",
+                    "stdout": "ok: [10.0.0.10]\nok: [10.0.0.20]",
+                    "stderr": "",
+                }),
+            )
+            svc = nts_mod.NodeTaskService(
+                _ansible=mock_ansible,
+                db_factory=lambda: _session_factory(test_db)(),
+            )
+            return svc, mock_ansible
+
+        return _make
+
+    async def _seed_task(self, test_db, items_spec, params):
+        import json
+
+        task = NodeTask(
+            cluster_id=1, task_type="distribute_file", status="pending",
+            params=json.dumps(params, ensure_ascii=False), total_nodes=len(items_spec),
+        )
+        test_db.add(task)
+        await test_db.flush()
+        items = []
+        for node_id, ip in items_spec:
+            item = NodeTaskItem(task_id=task.id, node_id=node_id, ip=ip, status="pending")
+            test_db.add(item)
+            items.append(item)
+        await test_db.commit()
+        return task, items
+
+    @pytest.mark.asyncio
+    async def test_batch_extravars_cover_every_node(self, test_db, batch_env, tmp_path):
+        """ips 为全部节点；srcpath/destpath 必须按节点数重复，避免 with_together 截断。
+
+        dest 落地为「destpath + 原始文件名」（srcfilename 优先，缺省回退存储名）。
+        """
+        items_spec = [(10, "10.0.0.10"), (20, "10.0.0.20")]
+        params = {"srcpath": "temp/abc-uuid", "destpath": "/tmp/", "srcfilename": "3.csv"}
+        task, items = await self._seed_task(test_db, items_spec, params)
+
+        # 预置已迁移的分发文件：TASK_SCRIPTS_DIR/{task_id}/{file_name}
+        src_file = tmp_path / str(task.id) / "abc-uuid"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("hello", encoding="utf-8")
+
+        svc, mock_ansible = batch_env("distribute_file", items_spec, params)
+        await svc._execute_distribute_batch(test_db, task, items, params, None)
+
+        mock_ansible.run_playbook.assert_called_once()
+        args, kwargs = mock_ansible.run_playbook.call_args
+        ip_arg, tag, ev = args[0], args[1], args[2]
+
+        assert ip_arg == ""
+        assert tag == "edge_master_copy_to_slaves"
+        assert ev["ips"] == "10.0.0.10,10.0.0.20"
+
+        src_parts = ev["srcpath"].split(",")
+        dest_parts = ev["destpath"].split(",")
+        assert src_parts == [str(src_file)] * 2, (
+            f"srcpath 必须按节点数重复（with_together 截断防护），got {src_parts!r}"
+        )
+        assert dest_parts == ["/tmp/3.csv"] * 2, (
+            f"dest 必须按节点数重复且以原始文件名落地，got {dest_parts!r}"
+        )
+
+        # 执行后全部节点标记成功（rc=0）
+        for item in items:
+            assert item.status == "success"
+
+    @pytest.mark.asyncio
+    async def test_batch_dest_falls_back_to_stored_name_without_srcfilename(self, test_db, batch_env, tmp_path):
+        """params 无 srcfilename 时（旧任务兼容），dest 回退为存储名（UUID）。"""
+        items_spec = [(10, "10.0.0.10")]
+        params = {"srcpath": "temp/abc-uuid", "destpath": "/tmp/"}
+        task, items = await self._seed_task(test_db, items_spec, params)
+
+        src_file = tmp_path / str(task.id) / "abc-uuid"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("hello", encoding="utf-8")
+
+        svc, mock_ansible = batch_env("distribute_file", items_spec, params)
+        await svc._execute_distribute_batch(test_db, task, items, params, None)
+
+        ev = mock_ansible.run_playbook.call_args.args[2]
+        assert ev["destpath"].split(",") == ["/tmp/abc-uuid"]
+
+    @pytest.mark.asyncio
+    async def test_batch_dest_sanitizes_srcfilename_path_traversal(self, test_db, batch_env, tmp_path):
+        """srcfilename 只取 basename：任何路径成分被剥掉，杜绝目标端路径穿越。"""
+        items_spec = [(10, "10.0.0.10")]
+        params = {
+            "srcpath": "temp/abc-uuid", "destpath": "/tmp/",
+            "srcfilename": "../../etc/hosts",
+        }
+        task, items = await self._seed_task(test_db, items_spec, params)
+
+        src_file = tmp_path / str(task.id) / "abc-uuid"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("hello", encoding="utf-8")
+
+        svc, mock_ansible = batch_env("distribute_file", items_spec, params)
+        await svc._execute_distribute_batch(test_db, task, items, params, None)
+
+        ev = mock_ansible.run_playbook.call_args.args[2]
+        assert ev["destpath"].split(",") == ["/tmp/hosts"]
+
+    @pytest.mark.asyncio
+    async def test_batch_dest_falls_back_when_srcfilename_is_dotlike(self, test_db, batch_env, tmp_path):
+        """srcfilename 净化为空（如 '..' 或 '.'）时回退存储名。"""
+        items_spec = [(10, "10.0.0.10")]
+        params = {
+            "srcpath": "temp/abc-uuid", "destpath": "/tmp/",
+            "srcfilename": "..",
+        }
+        task, items = await self._seed_task(test_db, items_spec, params)
+
+        src_file = tmp_path / str(task.id) / "abc-uuid"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("hello", encoding="utf-8")
+
+        svc, mock_ansible = batch_env("distribute_file", items_spec, params)
+        await svc._execute_distribute_batch(test_db, task, items, params, None)
+
+        ev = mock_ansible.run_playbook.call_args.args[2]
+        assert ev["destpath"].split(",") == ["/tmp/abc-uuid"]
+
+
 class TestDuplicatePrevention:
     """B2: create_task must reject duplicate in-flight tasks with same params."""
 

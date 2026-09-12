@@ -44,6 +44,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# 单用例 90s 护栏：防止 TestClient teardown join 后台线程导致全量挂死
+# （2026-09-12 实证 test_script_upload teardown 曾无限等待，见
+#  docs/refactoring/test-suite-consolidation-2026-09-12.md §2）
+timeout = 90
 
 [dependency-groups]
 dev = [

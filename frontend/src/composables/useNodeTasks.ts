@@ -70,11 +70,13 @@ export async function createNodeTask(
   taskType: string,
   nodeIds: number[],
   params: Record<string, unknown> = {},
+  archiveUploadId?: string,
 ): Promise<NodeTaskData> {
   const res = await api.post(`/clusters/${clusterId}/node-tasks`, {
     task_type: taskType,
     node_ids: nodeIds,
     params,
+    ...(archiveUploadId ? { archive_upload_id: archiveUploadId } : {}),
   })
   return res.data
 }

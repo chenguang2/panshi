@@ -2,6 +2,12 @@
   <div class="node-task-list">
     <PageHeader title="节点任务" description="查看和管理节点运维操作任务（安装/升级/启动/停止等），支持取消与重试">
       <template #actions>
+        <button class="btn btn-secondary" data-test="uploaded-files-entry" @click="openPendingFilesModal">
+          待用上传（{{ uploadedFiles.length }}）
+        </button>
+        <button class="btn btn-secondary" data-test="task-files-entry" @click="openTaskFilesModal">
+          任务留档（{{ taskFiles.length }}）
+        </button>
         <button class="btn btn-primary" @click="openCreateModal">＋ 新建任务</button>
       </template>
     </PageHeader>
@@ -114,6 +120,24 @@
               <div><strong>节点:</strong> {{ detail.success_nodes }}/{{ detail.total_nodes }} 成功</div>
               <div>
                 <strong>失败:</strong> {{ detail.failed_nodes }}，<strong>取消:</strong> {{ detail.cancelled_nodes }}
+              </div>
+              <div
+                v-if="detail.task_type === 'distribute_file' && detail.params?.srcfilename"
+                style="grid-column: 1/-1"
+              >
+                <strong>分发文件:</strong>
+                {{ detail.params.srcfilename }}
+                <span style="color: var(--muted, #999)">→ 目标目录 {{ detail.params.destpath }}</span>
+                <span v-if="detail.status === 'success'" style="color: var(--muted, #999)">
+                  （节点落地：{{ detail.params.destpath }}{{ detail.params.srcfilename }}）
+                </span>
+              </div>
+              <div
+                v-if="detail.task_type === 'cmd_exec' && detail.params?.script_content && detail.params?.script_file"
+                style="grid-column: 1/-1"
+              >
+                <strong>执行脚本:</strong>
+                {{ detail.params.script_filename || '（上传脚本）' }}
               </div>
               <div v-if="detail.params && Object.keys(detail.params).length > 0" style="grid-column: 1/-1">
                 <strong>参数:</strong>
@@ -239,6 +263,223 @@
 
     <!-- Create task modal -->
     <Teleport to="body">
+      <!-- 待用上传（全局入口）：仅管理 temp/ 待用上传 -->
+      <div
+        class="modal-overlay"
+        :style="{
+          display: pendingFilesModalVisible ? 'flex' : 'none',
+          zIndex: pendingFilesSelectMode ? 1100 : undefined,
+        }"
+      >
+        <div class="modal modal-wide" style="max-width: 680px">
+          <div class="modal-header">
+            <h2>{{ pendingFilesSelectMode ? '选择已上传文件' : '待用上传' }}</h2>
+            <button class="modal-close" @click="pendingFilesModalVisible = false">&times;</button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
+            <div style="color: var(--muted, #999); font-size: 12px; margin-bottom: 10px">
+              上传后尚未用于创建任务的临时文件；创建任务时会自动迁入对应任务目录并从此处消失。
+            </div>
+            <div
+              v-if="pendingFilesFiltered.length === 0"
+              style="font-size: 13px; color: var(--muted, #999); padding: 4px 0"
+            >
+              <template v-if="pendingFilesSelectMode && createTaskType === 'cmd_exec'">
+                暂无脚本类上传文件，请先通过「选择脚本文件」上传 .sh 文件
+              </template>
+              <template v-else-if="pendingFilesSelectMode && createTaskType === 'distribute_file'">
+                暂无分发类上传文件，请先通过「选择文件」上传需要分发的文件
+              </template>
+              <template v-else>暂无待用上传文件</template>
+            </div>
+            <div
+              v-for="item in pendingFilesPageItems"
+              :key="item.upload_id"
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 0;
+                font-size: 13px;
+                border-bottom: 1px dashed var(--border, #f0f0f0);
+              "
+            >
+              <span
+                style="
+                  flex: none;
+                  padding: 1px 8px;
+                  border-radius: 4px;
+                  font-size: 11px;
+                  line-height: 20px;
+                  background: var(--bg-secondary, #f5f5f5);
+                  color: var(--muted, #888);
+                "
+                >{{ item.kind === 'script' ? '脚本' : '分发' }}</span
+              >
+              <span
+                style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
+                :title="item.filename"
+              >
+                {{ item.filename }}
+              </span>
+              <span style="flex: none; color: var(--muted, #999)">{{ formatFileSize(item.size) }}</span>
+              <span style="flex: none; color: var(--muted, #999)">{{ formatDateTime(item.uploaded_at) }}</span>
+              <span
+                v-if="pendingFilesSelectMode && isFileSelected(item)"
+                style="
+                  flex: none;
+                  padding: 1px 8px;
+                  border-radius: 4px;
+                  font-size: 11px;
+                  line-height: 20px;
+                  background: var(--accent-soft, #e8f4fd);
+                  color: var(--accent, #1677ff);
+                  font-weight: 500;
+                "
+                >已选用</span
+              >
+              <a
+                v-if="pendingFilesSelectMode"
+                style="flex: none; color: var(--primary, #0099ff); cursor: pointer; font-weight: 500"
+                @click="selectPendingFile(item)"
+                >{{ isFileSelected(item) ? '切换' : '选用' }}</a
+              >
+              <a
+                v-else
+                style="flex: none; color: var(--danger, #e5484d); cursor: pointer"
+                @click="removeUploadedFile(item)"
+                >删除</a
+              >
+            </div>
+            <div
+              v-if="uploadedFiles.length > FILE_PAGE_SIZE"
+              style="
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 8px;
+                margin-top: 10px;
+                font-size: 12px;
+                color: var(--muted, #888);
+              "
+            >
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="pendingFilesPage <= 1"
+                style="padding: 2px 10px"
+                @click="setPendingFilesPage(pendingFilesPage - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ pendingFilesPage }} / {{ pendingFilesTotalPages }} 页</span>
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="pendingFilesPage >= pendingFilesTotalPages"
+                style="padding: 2px 10px"
+                @click="setPendingFilesPage(pendingFilesPage + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button v-if="pendingFilesSelectMode" class="btn btn-primary" @click="pendingFilesModalVisible = false">
+              确定
+            </button>
+            <button class="btn btn-secondary" @click="pendingFilesModalVisible = false">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 任务留档（全局入口）：各任务迁入任务目录的控制端源文件副本 -->
+      <div class="modal-overlay" :style="{ display: taskFilesModalVisible ? 'flex' : 'none' }">
+        <div class="modal modal-wide" style="max-width: 680px">
+          <div class="modal-header">
+            <h2>任务留档</h2>
+            <button class="modal-close" @click="taskFilesModalVisible = false">&times;</button>
+          </div>
+          <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
+            <div style="color: var(--muted, #999); font-size: 12px; margin-bottom: 10px">
+              各任务创建时迁入任务目录的源文件副本。删除仅移除控制端留档，不影响已分发到节点上的文件，也不删除任务本身。
+            </div>
+            <div v-if="taskFiles.length === 0" style="font-size: 13px; color: var(--muted, #999); padding: 4px 0">
+              暂无任务留档文件
+            </div>
+            <div
+              v-for="item in taskFilesPageItems"
+              :key="`${item.task_id}-${item.name}`"
+              style="
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 0;
+                font-size: 13px;
+                border-bottom: 1px dashed var(--border, #f0f0f0);
+              "
+            >
+              <span
+                style="
+                  flex: none;
+                  padding: 1px 8px;
+                  border-radius: 4px;
+                  font-size: 11px;
+                  line-height: 20px;
+                  background: var(--bg-secondary, #f5f5f5);
+                  color: var(--muted, #888);
+                "
+                >任务 #{{ item.task_id }} · {{ taskTypeLabel(item.task_type) }}</span
+              >
+              <span
+                style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
+                :title="item.filename"
+              >
+                {{ item.filename }}
+              </span>
+              <span style="flex: none; color: var(--muted, #999)">{{ formatFileSize(item.size) }}</span>
+              <span v-if="item.created_at" style="flex: none; color: var(--muted, #999)">{{
+                formatDateTime(item.created_at)
+              }}</span>
+              <a style="flex: none; color: var(--danger, #e5484d); cursor: pointer" @click="removeTaskFile(item)"
+                >删除</a
+              >
+            </div>
+            <div
+              v-if="taskFiles.length > FILE_PAGE_SIZE"
+              style="
+                display: flex;
+                justify-content: flex-end;
+                align-items: center;
+                gap: 8px;
+                margin-top: 10px;
+                font-size: 12px;
+                color: var(--muted, #888);
+              "
+            >
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="taskFilesPage <= 1"
+                style="padding: 2px 10px"
+                @click="setTaskFilesPage(taskFilesPage - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ taskFilesPage }} / {{ taskFilesTotalPages }} 页</span>
+              <button
+                class="btn btn-secondary btn-sm"
+                :disabled="taskFilesPage >= taskFilesTotalPages"
+                style="padding: 2px 10px"
+                @click="setTaskFilesPage(taskFilesPage + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="taskFilesModalVisible = false">关闭</button>
+          </div>
+        </div>
+      </div>
+
       <div class="modal-overlay" :style="{ display: createVisible ? 'flex' : 'none' }">
         <div class="modal modal-wide" style="max-width: 640px">
           <div class="modal-header">
@@ -557,8 +798,13 @@
               </template>
               <template v-else>
                 <div style="margin-bottom: 8px">
-                  <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                  <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center">
                     <button class="btn btn-secondary btn-sm" @click="triggerScriptUpload">选择脚本文件</button>
+                    <a
+                      style="font-size: 12px; color: var(--primary, #0099ff); cursor: pointer"
+                      @click="openPendingFilesSelect"
+                      >从已上传中选择</a
+                    >
                     <span v-if="scriptFile" style="font-size: 12px; color: var(--muted, #888); line-height: 28px">
                       {{ scriptFile.name }} ({{ formatFileSize(scriptFile.size) }})
                       <a
@@ -667,8 +913,13 @@
               <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
                 >选择文件</label
               >
-              <div style="display: flex; gap: 8px; margin-bottom: 8px">
+              <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center">
                 <button class="btn btn-secondary btn-sm" @click="triggerDistributeUpload">选择文件</button>
+                <a
+                  style="font-size: 12px; color: var(--primary, #0099ff); cursor: pointer"
+                  @click="openPendingFilesSelect"
+                  >从已上传中选择</a
+                >
                 <span v-if="distributeFile" style="font-size: 12px; color: var(--muted, #888); line-height: 28px">
                   {{ distributeFile.name }} ({{ formatFileSize(distributeFile.size) }})
                   <a
@@ -785,8 +1036,19 @@ import {
 } from '@/composables/useNodeTasks'
 import { paginationProps } from '@/composables/usePagination'
 import { consumeSSEDataLines } from '@/utils/sse'
-import { formatFileSize } from '@/utils/format'
-import { uploadScript, previewScript, deleteUploadedScript, uploadDistributeFile } from '@/api/scriptUpload'
+import { formatFileSize, formatDateTime } from '@/utils/format'
+import {
+  listUploadedScripts,
+  deleteUploadedScript,
+  uploadScript,
+  previewScript,
+  uploadDistributeFile,
+  listTaskFiles,
+  deleteTaskFile,
+  type UploadedScript,
+  type TaskFile,
+} from '@/api/scriptUpload'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])
@@ -893,12 +1155,14 @@ const cmdExecMode = ref<'command' | 'script'>('command')
 const scriptFile = ref<File | null>(null)
 const scriptDragOver = ref(false)
 const scriptUploadId = ref<string | null>(null)
+const scriptFromPending = ref(false)
 const scriptPreviewContent = ref<string | null>(null)
 const scriptUploadError = ref<string | null>(null)
 
 // ── distribute file state ──
 const distributeFile = ref<File | null>(null)
 const distributeUploadId = ref<string | null>(null)
+const distributeFromPending = ref(false)
 const distributeUploadError = ref<string | null>(null)
 const distributeDestpath = ref('')
 const distributeDragOver = ref(false)
@@ -955,6 +1219,8 @@ async function handleScriptFile(file: File) {
   try {
     const result = await uploadScript(file)
     scriptUploadId.value = result.upload_id
+    scriptFromPending.value = false
+    void loadUploadedFiles()
     // 上传成功后自动加载内容
     try {
       const preview = await previewScript(result.upload_id)
@@ -969,12 +1235,14 @@ async function handleScriptFile(file: File) {
 }
 
 function clearScriptFile() {
-  if (scriptUploadId.value) {
+  // 仅删除新上传的临时文件；从待用列表选用的文件不应删除（属于已有文件，非本次上传）
+  if (scriptUploadId.value && !scriptFromPending.value) {
     deleteUploadedScript(scriptUploadId.value).catch(() => {})
   }
   scriptFile.value = null
   scriptUploadId.value = null
   scriptPreviewContent.value = null
+  scriptFromPending.value = false
 }
 
 async function previewUploadedScript() {
@@ -1054,6 +1322,8 @@ async function handleDistributeFile(file: File) {
   try {
     const result = await uploadDistributeFile(file)
     distributeUploadId.value = result.upload_id
+    distributeFromPending.value = false
+    void loadUploadedFiles()
   } catch (err: any) {
     distributeUploadError.value = err?.response?.data?.detail || '上传失败'
     distributeFile.value = null
@@ -1061,11 +1331,158 @@ async function handleDistributeFile(file: File) {
 }
 
 function clearDistributeFile() {
-  if (distributeUploadId.value) {
+  // 仅删除新上传的临时文件；从待用列表选用的文件不应删除
+  if (distributeUploadId.value && !distributeFromPending.value) {
     deleteUploadedScript(distributeUploadId.value).catch(() => {})
   }
   distributeFile.value = null
   distributeUploadId.value = null
+  distributeFromPending.value = false
+}
+
+// ── 已上传文件管理（全局入口；脚本/分发共用，openspec node-task-distribute-file 5.7） ──
+
+const uploadedFiles = ref<UploadedScript[]>([])
+const taskFiles = ref<TaskFile[]>([])
+const pendingFilesModalVisible = ref(false)
+const pendingFilesSelectMode = ref(false)
+const taskFilesModalVisible = ref(false)
+
+// 文件列表客户端分页（量级到数千再考虑服务端分页）
+const FILE_PAGE_SIZE = 10
+const pendingFilesPage = ref(1)
+const taskFilesPage = ref(1)
+
+/** 选择模式下按当前任务类型过滤：cmd_exec 只显示脚本，distribute_file 只显示分发文件 */
+const pendingFilesFiltered = computed(() => {
+  if (!pendingFilesSelectMode.value) return uploadedFiles.value
+  if (createTaskType.value === 'cmd_exec') return uploadedFiles.value.filter((f) => f.kind === 'script')
+  if (createTaskType.value === 'distribute_file') return uploadedFiles.value.filter((f) => f.kind === 'distribute')
+  return uploadedFiles.value
+})
+
+const pendingFilesTotalPages = computed(() =>
+  Math.max(1, Math.ceil(pendingFilesFiltered.value.length / FILE_PAGE_SIZE)),
+)
+const taskFilesTotalPages = computed(() => Math.max(1, Math.ceil(taskFiles.value.length / FILE_PAGE_SIZE)))
+
+const pendingFilesPageItems = computed(() => {
+  const page = Math.min(pendingFilesPage.value, pendingFilesTotalPages.value)
+  return pendingFilesFiltered.value.slice((page - 1) * FILE_PAGE_SIZE, page * FILE_PAGE_SIZE)
+})
+const taskFilesPageItems = computed(() => {
+  const page = Math.min(taskFilesPage.value, taskFilesTotalPages.value)
+  return taskFiles.value.slice((page - 1) * FILE_PAGE_SIZE, page * FILE_PAGE_SIZE)
+})
+
+function setPendingFilesPage(p: number) {
+  pendingFilesPage.value = Math.min(Math.max(1, p), pendingFilesTotalPages.value)
+}
+function setTaskFilesPage(p: number) {
+  taskFilesPage.value = Math.min(Math.max(1, p), taskFilesTotalPages.value)
+}
+
+async function loadUploadedFiles() {
+  // 两个列表独立加载：listTaskFiles 需要数据库，失败不影响待用上传展示
+  const pendingResult = listUploadedScripts().catch(() => [])
+  const archivedResult = listTaskFiles().catch(() => [])
+  const [pending, archived] = await Promise.all([pendingResult, archivedResult])
+  uploadedFiles.value = Array.isArray(pending) ? pending : []
+  taskFiles.value = Array.isArray(archived) ? archived : []
+}
+
+function openPendingFilesModal() {
+  pendingFilesSelectMode.value = false
+  pendingFilesModalVisible.value = true
+  pendingFilesPage.value = 1
+  void loadUploadedFiles()
+}
+
+function openPendingFilesSelect() {
+  pendingFilesSelectMode.value = true
+  pendingFilesModalVisible.value = true
+  pendingFilesPage.value = 1
+  void loadUploadedFiles()
+}
+
+/** 判断待用上传列表中的文件是否正被表单选中 */
+function isFileSelected(item: UploadedScript): boolean {
+  if (item.kind === 'script') return scriptUploadId.value === item.upload_id
+  return distributeUploadId.value === item.upload_id
+}
+
+/** 从待用上传弹窗选用一个文件，填入创建表单对应字段 */
+async function selectPendingFile(item: UploadedScript) {
+  if (item.kind === 'script') {
+    // 填入脚本字段 + 自动加载内容到编辑区
+    scriptFile.value = new File([''], item.filename)
+    scriptUploadId.value = item.upload_id
+    scriptFromPending.value = true
+    try {
+      const preview = await previewScript(item.upload_id)
+      scriptPreviewContent.value = preview.content
+    } catch {
+      scriptPreviewContent.value = null
+    }
+  } else {
+    // 填入分发文件字段
+    distributeFile.value = new File([''], item.filename)
+    distributeUploadId.value = item.upload_id
+    distributeFromPending.value = true
+  }
+  // 留在选择模式让用户看到"已选用"标记；再次点击可切换选中文件
+}
+
+function openTaskFilesModal() {
+  taskFilesModalVisible.value = true
+  taskFilesPage.value = 1
+  void loadUploadedFiles()
+}
+
+function removeUploadedFile(item: UploadedScript) {
+  showOverlayModal({
+    title: '删除已上传文件',
+    content: `确定删除「${item.filename}」？删除后无法再用于创建任务。`,
+    okText: '删除',
+    okDanger: true,
+    onOk: async () => {
+      try {
+        await deleteUploadedScript(item.upload_id)
+        // 若正被当前表单引用，同步清空选择
+        if (scriptUploadId.value === item.upload_id) {
+          scriptUploadId.value = null
+          scriptFile.value = null
+          scriptPreviewContent.value = null
+        }
+        if (distributeUploadId.value === item.upload_id) {
+          distributeUploadId.value = null
+          distributeFile.value = null
+        }
+        message.success('已删除')
+        await loadUploadedFiles()
+      } catch (err: any) {
+        message.error(err?.response?.data?.detail || '删除失败')
+      }
+    },
+  })
+}
+
+function removeTaskFile(item: TaskFile) {
+  showOverlayModal({
+    title: '删除任务留档文件',
+    content: `确定删除任务 #${item.task_id} 的留档文件「${item.filename}」？仅删除控制端留档副本，不影响已分发到节点上的文件，也不删除任务本身。`,
+    okText: '删除',
+    okDanger: true,
+    onOk: async () => {
+      try {
+        await deleteTaskFile(item.task_id, item.name)
+        message.success('已删除')
+        await loadUploadedFiles()
+      } catch (err: any) {
+        message.error(err?.response?.data?.detail || '删除失败')
+      }
+    },
+  })
 }
 
 const taskTypes = [
@@ -1095,6 +1512,10 @@ const columns = [
 
 function typeLabel(t: string): string {
   return taskTypes.find((x) => x.value === t)?.label || t
+}
+
+function taskTypeLabel(t: string): string {
+  return typeLabel(t)
 }
 
 // ── software_check matrix ──
@@ -1369,7 +1790,10 @@ function isLiveTask(): boolean {
   return !!detail.value && ['pending', 'running'].includes(detail.value.status)
 }
 
-onMounted(() => loadTasks(1))
+onMounted(() => {
+  loadTasks(1)
+  void loadUploadedFiles()
+})
 onBeforeUnmount(() => {
   stopStream()
   if (listPollTimer) {
@@ -1565,6 +1989,7 @@ async function openCreateModal() {
   resetCmdExecForm()
   distributeFile.value = null
   distributeUploadId.value = null
+  distributeFromPending.value = false
   distributeUploadError.value = null
   distributeDestpath.value = ''
   if (clusters.value.length === 0) {
@@ -1685,11 +2110,20 @@ async function submitCreateTask() {
     params.destpath = distributeDestpath.value.trim()
     params.srcfilename = distributeFile.value.name
   }
+  // cmd_exec 脚本模式：传 script_filename 供详情展示
+  if (createTaskType.value === 'cmd_exec' && cmdExecMode.value === 'script' && scriptFile.value) {
+    params.script_filename = scriptFile.value.name
+  }
+  const archiveId =
+    createTaskType.value === 'cmd_exec' && cmdExecMode.value === 'script' && scriptUploadId.value
+      ? scriptUploadId.value
+      : undefined
   try {
-    await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params)
+    await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params, archiveId)
     message.success('任务已创建')
     createVisible.value = false
     loadTasks(1)
+    void loadUploadedFiles()
   } catch (e: any) {
     message.error(e?.response?.data?.detail || '创建任务失败')
   }

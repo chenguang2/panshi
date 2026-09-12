@@ -127,6 +127,8 @@ async def preview_script(upload_id: str):
 @global_router.get("/uploaded-scripts")
 async def list_uploaded_scripts():
     """List all uploaded script files in the temp directory."""
+    from datetime import datetime
+
     from app.config.script_upload import TEMP_DIR
 
     if not TEMP_DIR.exists():
@@ -145,6 +147,9 @@ async def list_uploaded_scripts():
             "upload_id": p.stem,
             "filename": filename,
             "size": p.stat().st_size,
+            # 存储形态区分类型：脚本 = {id}.sh，分发文件 = {id}（无后缀）
+            "kind": "script" if p.suffix == ".sh" else "distribute",
+            "uploaded_at": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds"),
         })
     return results
 
@@ -152,9 +157,13 @@ async def list_uploaded_scripts():
 @global_router.delete("/uploaded-scripts/{upload_id}")
 async def delete_uploaded_script(upload_id: str):
     """Delete an uploaded script file."""
-    from app.config.script_upload import get_upload_temp_path
+    from app.config.script_upload import get_distribute_upload_temp_path, get_upload_temp_path
 
+    # 兼容两种存储形态：脚本 = temp/{id}.sh，分发文件 = temp/{id}（无后缀）。
+    # 历史 bug：只找 .sh 路径导致分发文件删除 404（被前端 catch 静默吞掉）→ 永久泄漏。
     temp_path = get_upload_temp_path(upload_id)
+    if not temp_path.exists():
+        temp_path = get_distribute_upload_temp_path(upload_id)
     if not temp_path.exists():
         raise HTTPException(status_code=404, detail="脚本文件不存在")
 
@@ -163,6 +172,91 @@ async def delete_uploaded_script(upload_id: str):
     meta_path.unlink(missing_ok=True)
 
     return {"detail": "脚本文件已删除"}
+
+
+# ── Task archived files (task-scripts/{task_id}/) ────────────────────
+
+def _read_meta_name(file_path, meta_path):
+    """任务目录留档的原始文件名：优先 .meta，退化用存储名。"""
+    for candidate in (meta_path, file_path.with_suffix(".meta")):
+        if candidate.exists():
+            try:
+                return candidate.read_text(encoding="utf-8")
+            except OSError:
+                break
+    return file_path.name
+
+
+@global_router.get("/task-files")
+async def list_task_files(db: AsyncSession = Depends(get_db)):
+    """List archived files across task directories (task-scripts/{task_id}/)."""
+    from app.config.script_upload import TASK_SCRIPTS_DIR
+
+    results = []
+    if not TASK_SCRIPTS_DIR.exists():
+        return results
+
+    task_ids: list[int] = []
+    for d in sorted(
+        (x for x in TASK_SCRIPTS_DIR.iterdir() if x.is_dir() and x.name.isdigit()),
+        key=lambda x: int(x.name),
+        reverse=True,
+    ):
+        for p in sorted(d.iterdir()):
+            if not p.is_file() or p.name.endswith(".meta"):
+                continue
+            is_script = p.name.endswith(".sh")
+            tid = int(d.name)
+            task_ids.append(tid)
+            results.append({
+                "task_id": tid,
+                "name": p.name,
+                # 优先 .meta 里的原始文件名（脚本/分发一致）；无 meta 退化存储名
+                "filename": _read_meta_name(p, Path(str(p) + ".meta")),
+                "size": p.stat().st_size,
+                "kind": "script" if is_script else "distribute",
+            })
+
+    # 批量查询任务元数据（task_type + created_at），一次 IO
+    task_meta: dict[int, dict] = {}
+    if task_ids:
+        rows = (
+            await db.execute(
+                select(NodeTask.id, NodeTask.task_type, NodeTask.created_at).where(
+                    NodeTask.id.in_(task_ids)
+                )
+            )
+        ).all()
+        task_meta = {r[0]: {"task_type": r[1], "created_at": r[2].isoformat() if r[2] else None} for r in rows}
+
+    for item in results:
+        meta = task_meta.get(item["task_id"], {})
+        item["task_type"] = meta.get("task_type", "")
+        item["created_at"] = meta.get("created_at")
+
+    return results
+
+
+@global_router.delete("/task-files/{task_id}/{name}")
+async def delete_task_file(task_id: int, name: str):
+    """Delete a task's archived source file (controller copy only).
+
+    不影响已分发到节点上的文件，也不删除任务本身。
+    """
+    from app.config.script_upload import TASK_SCRIPTS_DIR
+
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        raise HTTPException(status_code=400, detail="非法文件名")
+
+    file_path = TASK_SCRIPTS_DIR / str(task_id) / name
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    file_path.unlink(missing_ok=True)
+    for meta_candidate in (file_path.with_suffix(".meta"), Path(str(file_path) + ".meta")):
+        meta_candidate.unlink(missing_ok=True)
+
+    return {"detail": "文件已删除"}
 
 
 # ── Distribute file upload (byte-perfect, no encoding) ──────────────
@@ -260,6 +354,8 @@ class CreateTaskRequest(BaseModel):
     task_type: TaskType
     node_ids: list[int] = Field(min_length=1)
     params: dict = Field(default_factory=dict)
+    # 留档用：将此 upload_id 对应的临时文件迁入任务目录（不参与执行逻辑）
+    archive_upload_id: Optional[str] = None
 
 
 class RetryTaskRequest(BaseModel):
@@ -354,6 +450,14 @@ async def create_node_task(
             raise HTTPException(status_code=400, detail="distribute_file 必须指定 srcpath")
         # Extract upload_id from srcpath (format: "temp/{upload_id}")
         distribute_upload_id = srcpath.split("/")[-1]
+        # srcfilename（原始文件名）将作为节点上的落地名：只允许纯文件名，
+        # 双层校验之 API 层（service 层 _execute_distribute_batch 还会取 basename 兜底）
+        srcfilename = str(body.params.get("srcfilename") or "")
+        if srcfilename and ("/" in srcfilename or "\\" in srcfilename):
+            raise HTTPException(
+                status_code=400,
+                detail="srcfilename 只能是纯文件名，不能包含路径分隔符",
+            )
 
     nodes = (
         await db.execute(
@@ -392,9 +496,23 @@ async def create_node_task(
         task_dir.mkdir(parents=True, exist_ok=True)
         import shutil
         shutil.move(str(temp_path), str(task_dir / f"{script_upload_id}.sh"))
+        # 保留 meta（原始文件名），任务留档列表需要展示
         meta_path = temp_path.with_suffix(".meta")
         if meta_path.exists():
-            meta_path.unlink()
+            shutil.move(str(meta_path), str(task_dir / f"{script_upload_id}.meta"))
+
+    # archive_upload_id: 将上传文件迁入任务目录仅供留档（不参与执行）
+    if body.archive_upload_id:
+        from app.config.script_upload import get_upload_temp_path, TASK_SCRIPTS_DIR
+        temp_path = get_upload_temp_path(body.archive_upload_id)
+        if temp_path.exists():
+            import shutil
+            task_dir = TASK_SCRIPTS_DIR / str(task.id)
+            task_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(temp_path), str(task_dir / f"{body.archive_upload_id}.sh"))
+            meta_path = temp_path.with_suffix(".meta")
+            if meta_path.exists():
+                shutil.move(str(meta_path), str(task_dir / f"{body.archive_upload_id}.meta"))
 
     # Migrate distribute_file after task creation — only for distribute_file mode
     if distribute_upload_id:
@@ -487,9 +605,12 @@ async def cancel_node_task(task_id: int):
 async def retry_node_task(
     task_id: int,
     body: RetryTaskRequest | None = None,
+    db: AsyncSession = Depends(get_db),
 ):
     svc = get_node_task_service()
-    await svc.retry_task(task_id, node_ids=body.node_ids if body else None)
+    # db 必须贯穿到 service：audit 骨架已在该会话 flush 并持 SQLite 写锁，
+    # reset 走第二会话会自锁超时（"database is locked" → 500）
+    await svc.retry_task(task_id, node_ids=body.node_ids if body else None, db=db)
     return {"status": "retrying", "task_id": task_id}
 
 
