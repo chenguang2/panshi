@@ -3,7 +3,6 @@ and accessible via the plugins API when whitelisted."""
 
 import pytest
 import yaml
-from fastapi.testclient import TestClient
 
 from app.config.plugin_definitions import BUILTIN_PLUGINS
 
@@ -45,27 +44,17 @@ class TestDnsUpstreamPluginAPI:
         fmod._features = None
         fmod._features_mtime = 0.0
 
-    @pytest.fixture
-    def client(self):
-        import app.main
-        import importlib
-        importlib.reload(app.main)
-        from app.main import app
-        from tests.api_helpers import AuthedTestClient
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_builtin_all_returns_dns_upstream(self, client):
+    def test_builtin_all_returns_dns_upstream(self, isolated_app):
         """all=1 should return dns_upstream since it's whitelisted."""
-        resp = client.get("/api/v1/plugins/builtin?all=1")
+        resp = isolated_app.get("/api/v1/plugins/builtin?all=1")
         assert resp.status_code == 200
         data = resp.json()
         names = {p["name"] for p in data["plugins"]}
         assert "dns_upstream" in names
 
-    def test_builtin_without_all_returns_dns_upstream(self, client):
+    def test_builtin_without_all_returns_dns_upstream(self, isolated_app):
         """Without all=1, dns_upstream should also be present (whitelisted + no DB filter)."""
-        resp = client.get("/api/v1/plugins/builtin")
+        resp = isolated_app.get("/api/v1/plugins/builtin")
         assert resp.status_code == 200
         data = resp.json()
         names = {p["name"] for p in data["plugins"]}

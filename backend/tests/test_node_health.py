@@ -1,32 +1,27 @@
 """Tests for node health API endpoint."""
 import pytest
 from unittest.mock import patch
-from tests.api_helpers import AuthedTestClient
-from app.main import app
-
-
-client = AuthedTestClient(app)
 
 
 class TestNodeHealthEndpoint:
     """Tests for GET /api/v1/metrics/node-health endpoint."""
 
-    def test_node_health_returns_200(self):
+    def test_node_health_returns_200(self, isolated_app):
         with patch("app.api.v1.metrics.query_node_health") as mock_query:
             mock_query.return_value = []
-            response = client.get("/api/v1/metrics/node-health")
+            response = isolated_app.get("/api/v1/metrics/node-health")
             assert response.status_code == 200
 
-    def test_node_health_returns_data_array(self):
+    def test_node_health_returns_data_array(self, isolated_app):
         with patch("app.api.v1.metrics.query_node_health") as mock_query:
             mock_query.return_value = []
-            response = client.get("/api/v1/metrics/node-health")
+            response = isolated_app.get("/api/v1/metrics/node-health")
             assert "data" in response.json()
 
-    def test_node_health_default_type(self):
+    def test_node_health_default_type(self, isolated_app):
         with patch("app.api.v1.metrics.query_node_health") as mock_query:
             mock_query.return_value = []
-            client.get("/api/v1/metrics/node-health")
+            isolated_app.get("/api/v1/metrics/node-health")
             call_kwargs = mock_query.call_args[1]
             assert call_kwargs.get("health_type") == "status"
 
@@ -34,12 +29,12 @@ class TestNodeHealthEndpoint:
 class TestNodeHealthData:
     """Tests for node health data structure."""
 
-    def test_health_status_returns_correct_structure(self):
+    def test_health_status_returns_correct_structure(self, isolated_app):
         with patch("app.services.metrics_service.execute_query") as mock_exec:
             mock_exec.return_value = [
                 ("192.168.100.42", 1.0, "2026-08-21 10:47:42"),
             ]
-            response = client.get("/api/v1/metrics/node-health?health_type=status")
+            response = isolated_app.get("/api/v1/metrics/node-health?health_type=status")
             assert response.status_code == 200
             data = response.json()["data"]
             assert len(data) == 1
@@ -47,12 +42,12 @@ class TestNodeHealthData:
             assert data[0]["status"] == 1
             assert "last_seen" in data[0]
 
-    def test_resource_usage_returns_correct_structure(self):
+    def test_resource_usage_returns_correct_structure(self, isolated_app):
         with patch("app.services.metrics_service.execute_query") as mock_exec:
             mock_exec.return_value = [
                 ("shared_dict", "192.168.100.42", 104857600, 52428800, 50.0),
             ]
-            response = client.get("/api/v1/metrics/node-health?health_type=resource")
+            response = isolated_app.get("/api/v1/metrics/node-health?health_type=resource")
             assert response.status_code == 200
             data = response.json()["data"]
             assert len(data) == 1

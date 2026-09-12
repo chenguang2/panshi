@@ -483,19 +483,14 @@ class TestStreamProxyAPI:
 class TestProxyTypeFilter:
     """API proxy_type query parameter filter."""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        from tests.api_helpers import AuthedTestClient
-        with AuthedTestClient(app) as c:
-            yield c
+    # client fixture: use isolated_app from conftest
 
-    def test_global_list_accepts_proxy_type_param(self, client):
-        resp = client.get("/api/v1/stream-proxies?proxy_type=normal")
+    def test_global_list_accepts_proxy_type_param(self, isolated_app):
+        resp = isolated_app.get("/api/v1/stream-proxies?proxy_type=normal")
         assert resp.status_code in (200, 422)
 
-    def test_global_list_rejects_invalid_proxy_type(self, client):
-        resp = client.get("/api/v1/stream-proxies?proxy_type=invalid")
+    def test_global_list_rejects_invalid_proxy_type(self, isolated_app):
+        resp = isolated_app.get("/api/v1/stream-proxies?proxy_type=invalid")
         assert resp.status_code == 422
 
 

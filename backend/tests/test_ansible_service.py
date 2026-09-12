@@ -361,6 +361,63 @@ class TestAnsibleRunnerService:
         assert cc() is True
         assert result["rc"] == 0
 
+    async def test_run_playbook_preserves_caller_ips_when_ip_empty(self, service):
+        """run_playbook with ip="" must NOT overwrite a caller-supplied multi-IP `ips`.
+
+        distribute_file 批量分发以 ip="" 调用 run_playbook、把逗号拼接的 IP 列表放在
+        extravars["ips"] 中（edge.yml hosts 依赖它）。若被无条件覆盖为 ""，
+        hosts 解析为空 → "Keyword 'hosts' is required, and cannot have empty values" (rc=4)。
+        """
+        captured = {}
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        def fake_ansible_run(**kwargs):
+            captured["kwargs"] = kwargs
+            return fake_runner
+
+        with patch("ansible_runner.run", side_effect=fake_ansible_run):
+            await service.run_playbook(
+                ip="",
+                tag="edge_master_copy_to_slaves",
+                extravars={"ips": "10.0.0.1,10.0.0.2", "srcpath": "/tmp/a", "destpath": "/tmp/"},
+            )
+
+        ev = captured["kwargs"]["extravars"]
+        assert ev["ips"] == "10.0.0.1,10.0.0.2", (
+            f"caller-supplied ips must be preserved when ip='', got {ev['ips']!r}"
+        )
+
+    async def test_run_playbook_still_sets_ips_from_ip_when_provided(self, service):
+        """Normal single-node calls keep existing behavior: extravars['ips'] = ip."""
+        captured = {}
+        fake_runner = type("R", (), {})()
+        fake_runner.rc = 0
+        fake_runner.status = "successful"
+        fake_runner.stdout = ""
+        fake_runner.stderr = ""
+        fake_runner.events = []
+        fake_runner.config = type("C", (), {"command": ["ansible-playbook"]})()
+
+        def fake_ansible_run(**kwargs):
+            captured["kwargs"] = kwargs
+            return fake_runner
+
+        with patch("ansible_runner.run", side_effect=fake_ansible_run):
+            await service.run_playbook(
+                ip="10.0.0.9",
+                tag="nginx_cmd_run",
+                extravars={"nginx_cmd": "nginx_start"},
+            )
+
+        ev = captured["kwargs"]["extravars"]
+        assert ev["ips"] == "10.0.0.9"
+
     async def test_run_playbook_on_progress_receives_events(self, service):
         """run_playbook should forward ansible events to on_progress callback."""
         captured = {}

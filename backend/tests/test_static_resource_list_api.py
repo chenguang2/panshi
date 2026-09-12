@@ -1,41 +1,24 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from app.main import app
 
 
 class TestStaticResourceListAPI:
 
-    async def _login(self, client):
-        resp = await client.post("/api/v1/auth/login",
-            json={"username": "admin", "password": "panshi123"})
-        return resp.json()["access_token"]
+    async def test_list_all_returns_data(self, async_authed_client):
+        response = await async_authed_client.get("/api/v1/static_resources")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "items" in data
 
-    async def test_list_all_returns_data(self):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            token = await self._login(client)
-            headers = {"Authorization": f"Bearer {token}"}
-            response = await client.get("/api/v1/static_resources", headers=headers)
-            assert response.status_code == 200
-            data = response.json()
-            assert "total" in data
-            assert "items" in data
+    async def test_list_contains_cluster_name(self, async_authed_client):
+        response = await async_authed_client.get("/api/v1/static_resources")
+        data = response.json()
+        if data["items"]:
+            assert "cluster_name" in data["items"][0]
 
-    async def test_list_contains_cluster_name(self):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            token = await self._login(client)
-            headers = {"Authorization": f"Bearer {token}"}
-            response = await client.get("/api/v1/static_resources", headers=headers)
-            data = response.json()
-            if data["items"]:
-                assert "cluster_name" in data["items"][0]
-
-    async def test_list_static_resources_group_filter_works(self):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            token = await self._login(client)
-            headers = {"Authorization": f"Bearer {token}"}
-            response = await client.get("/api/v1/static_resources", headers=headers,
-                params={"group_name": "机电-路局-成都局", "page_size": 200})
-            assert response.status_code == 200
+    async def test_list_static_resources_group_filter_works(self, async_authed_client):
+        response = await async_authed_client.get(
+            "/api/v1/static_resources",
+            params={"group_name": "机电-路局-成都局", "page_size": 200}
+        )
+        assert response.status_code == 200

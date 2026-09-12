@@ -2,7 +2,7 @@
 
 import pytest
 import yaml
-from tests.api_helpers import AuthedTestClient
+from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base, get_db
 
@@ -57,7 +57,7 @@ class TestPluginWhitelist:
 
         app.dependency_overrides[get_db] = override_get_db
         try:
-            with AuthedTestClient(app) as c:
+            with isolated_app_lifespan(), AuthedTestClient(app) as c:
                 yield c
         finally:
             app.dependency_overrides.clear()

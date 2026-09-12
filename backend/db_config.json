@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active": "conn_16fcf5a4",
+  "active": "conn_97987cd5",
   "connections": [
     {
       "id": "local_sqlite",
@@ -55,6 +55,18 @@
       "type": "sqlite",
       "name": "测试数据库",
       "path": "./data/test.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
+    },
+    {
+      "id": "conn_b3908275",
+      "type": "sqlite",
+      "name": "导出测试库",
+      "path": "./data/daochu.db",
       "host": null,
       "port": 5432,
       "database": null,

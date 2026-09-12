@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import app
-from tests.api_helpers import admin_auth_headers, AuthedTestClient
+from tests.api_helpers import admin_auth_headers, AuthedTestClient, isolated_app_lifespan
 
 # (方法, 路径) —— 每个未鉴权路由文件取 1-2 个代表端点（路径须为真实注册路由）
 UNAUTHENTICATED_SAMPLES = [
@@ -34,6 +34,7 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/plugins/builtin"),
     ("get", "/api/v1/metrics/route-stats"),
     ("get", "/api/v1/node-tasks"),
+    ("get", "/api/v1/node-tasks/task-files"),
     ("get", "/api/v1/edge-client/nodes"),
     ("get", "/api/v1/nodes/autostart/records"),
     ("get", "/api/v1/plugin-switches"),
@@ -51,6 +52,8 @@ UNAUTHENTICATED_SAMPLES = [
     # 审计归档清理（admin + audit_logs）：误开放即为审计链漏洞，须匿名拒绝
     ("post", "/api/v1/system/operations/archive/preview"),
     ("post", "/api/v1/system/operations/archive"),
+    # 任务留档文件删除（2026-09-12 task-files 端点）
+    ("delete", "/api/v1/node-tasks/task-files/1/some-file"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）
@@ -62,26 +65,23 @@ PUBLIC_SAMPLES = [
 
 
 @pytest.mark.parametrize("method,path", UNAUTHENTICATED_SAMPLES)
-def test_secured_endpoints_reject_without_token(method, path):
-    with TestClient(app) as c:
-        resp = getattr(c, method)(path)
-        assert resp.status_code == 401, f"{method.upper()} {path} 应返回 401，实际 {resp.status_code}"
+def test_secured_endpoints_reject_without_token(method, path, unauthenticated_app):
+    resp = getattr(unauthenticated_app, method)(path)
+    assert resp.status_code == 401, f"{method.upper()} {path} 应返回 401，实际 {resp.status_code}"
 
 
 @pytest.mark.parametrize("method,path", PUBLIC_SAMPLES)
-def test_public_endpoints_stay_open(method, path):
-    with TestClient(app) as c:
-        kwargs = {"json": {}} if method == "post" else {}
-        resp = getattr(c, method)(path, **kwargs)
-        assert resp.status_code != 401, f"{method.upper()} {path} 应保持公开"
+def test_public_endpoints_stay_open(method, path, isolated_app):
+    kwargs = {"json": {}} if method == "post" else {}
+    resp = getattr(isolated_app, method)(path, **kwargs)
+    assert resp.status_code != 401, f"{method.upper()} {path} 应保持公开"
 
 
-def test_secured_endpoint_passes_with_valid_token():
+def test_secured_endpoint_passes_with_valid_token(isolated_app):
     """带有效 token 应放行到业务层（此处期望 404 路由不存在，而非 401）。"""
-    with AuthedTestClient(app) as c:
-        resp = c.get("/api/v1/clusters/1/routes/99999")
-        assert resp.status_code in (200, 404)
-        assert resp.status_code != 401
+    resp = isolated_app.get("/api/v1/clusters/1/routes/99999")
+    assert resp.status_code in (200, 404)
+    assert resp.status_code != 401
 
 
 def test_disabled_user_token_rejected():
@@ -114,7 +114,7 @@ def test_disabled_user_token_rejected():
     app.dependency_overrides[get_db] = override_get_db
     try:
         token = create_access_token({"sub": "1"})
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/clusters/1/routes",
                          headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 401
@@ -164,7 +164,7 @@ def test_non_admin_without_permission_gets_403():
         {"id": 1, "username": "plain_user", "role": "user", "permissions": []},
     ])
     try:
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/routes", headers=headers[1])
             assert resp.status_code == 403
             assert "没有权限" in resp.json()["detail"]
@@ -180,7 +180,7 @@ def test_non_admin_with_permission_passes():
         {"id": 1, "username": "routes_user", "role": "user", "permissions": ["routes"]},
     ])
     try:
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/routes", headers=headers[1])
             assert resp.status_code != 403
             assert resp.status_code in (200, 404, 422)
@@ -196,7 +196,7 @@ def test_require_any_permission_stream_proxy():
         {"id": 1, "username": "dns_only_user", "role": "user", "permissions": ["dns_proxy_udp"]},
     ])
     try:
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/stream-proxies?proxy_type=dns", headers=headers[1])
             assert resp.status_code != 403
             assert resp.status_code in (200, 404, 422)
@@ -212,7 +212,7 @@ def test_cluster_resource_requires_clusters_permission():
         {"id": 1, "username": "route_only_user", "role": "user", "permissions": ["routes"]},
     ])
     try:
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/clusters/1/routes", headers=headers[1])
             assert resp.status_code == 403
     finally:
@@ -235,7 +235,7 @@ def test_operations_endpoint_admin_only(monkeypatch):
         {"id": 2, "username": "plain_user", "role": "user"},
     ])
     try:
-        with TestClient(app) as c:
+        with isolated_app_lifespan(), TestClient(app) as c:
             resp_admin = c.get("/api/v1/system/operations", headers=headers[1])
             assert resp_admin.status_code == 200
             assert isinstance(resp_admin.json(), dict) and "items" in resp_admin.json()  # 审计查询已升级为分页结构

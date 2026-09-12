@@ -279,10 +279,6 @@ class TestSelfSignWithHashAlg:
 # ===== generate_standard_certificate() =====
 
 class TestGenerateStandardCertificate:
-    def test_function_exists(self):
-        from app.services.cert_generator import generate_standard_certificate
-        assert callable(generate_standard_certificate)
-
     def test_rsa_returns_single_cert(self):
         from app.services.cert_generator import (
             generate_standard_certificate, detect_openssl,
@@ -415,10 +411,6 @@ class TestDetectCertAlgorithm:
         from app.services.cert_generator import detect_openssl
         return detect_openssl()
 
-    def test_function_exists(self):
-        from app.services.cert_generator import detect_cert_algorithm
-        assert callable(detect_cert_algorithm)
-
     def test_detects_rsa(self):
         from app.services.cert_generator import detect_cert_algorithm
         info = self._get_openssl()
@@ -459,10 +451,6 @@ class TestDetectCertAlgorithm:
 # ===== generate_rsa_keypair() =====
 
 class TestGenerateRsaKeypair:
-    def test_function_exists(self):
-        from app.services.cert_generator import generate_rsa_keypair
-        assert callable(generate_rsa_keypair)
-
     def test_returns_pem_private_key(self):
         from app.services.cert_generator import generate_rsa_keypair, detect_openssl
         openssl = detect_openssl()
@@ -496,10 +484,6 @@ class TestGenerateRsaKeypair:
 # ===== generate_ecdsa_keypair() =====
 
 class TestGenerateEcdsaKeypair:
-    def test_function_exists(self):
-        from app.services.cert_generator import generate_ecdsa_keypair
-        assert callable(generate_ecdsa_keypair)
-
     def test_returns_pem_private_key(self):
         from app.services.cert_generator import generate_ecdsa_keypair, detect_openssl
         openssl = detect_openssl()
@@ -997,10 +981,6 @@ class TestCaSignCsr:
         csr, _ = generate_csr(openssl_path, key, "test.panshi.com", [], [], flavor)
         return ca["ca_cert"], ca["ca_key"], csr
 
-    def test_function_exists(self):
-        from app.services.cert_generator import ca_sign_csr
-        assert callable(ca_sign_csr)
-
     def test_signs_csr_and_returns_pem(self):
         from app.services.cert_generator import ca_sign_csr, detect_openssl
         openssl = detect_openssl()
@@ -1109,10 +1089,6 @@ class TestCaSignCsr:
 class TestGetCertExpiry:
     """Tests for certificate expiry date extraction."""
 
-    def test_function_exists(self):
-        from app.services.cert_generator import get_cert_expiry
-        assert callable(get_cert_expiry)
-
     def test_returns_date_object(self):
         from app.services.cert_generator import (
             get_cert_expiry, generate_ca_certificate, detect_openssl,
@@ -1159,10 +1135,6 @@ class TestGetCertExpiry:
 
 class TestGenerateCaCertificate:
     """Tests for CA certificate generation."""
-
-    def test_function_exists(self):
-        from app.services.cert_generator import generate_ca_certificate
-        assert callable(generate_ca_certificate)
 
     def test_returns_ca_cert_and_key(self):
         from app.services.cert_generator import generate_ca_certificate, detect_openssl

@@ -4,7 +4,7 @@ import asyncio
 import io
 import pytest
 from unittest.mock import patch
-from tests.api_helpers import AuthedTestClient
+from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
@@ -14,11 +14,24 @@ from app.core.security import hash_password
 
 
 @pytest.fixture
-def client(test_db):
-    """Override get_db to use test_db session and seed api user."""
+def client(test_db, tmp_path, monkeypatch):
+    """Override get_db to use test_db session and seed api user.
+
+    存储目录整体隔离到 tmp_path：历史上本夹具曾 rmtree 真实的
+    backend/data/task-scripts/，把用户任务留档一并清掉（2026-09-12 事故）。
+    端点/handler 均在调用时读取模块属性，monkeypatch 全程生效。
+    """
     import asyncio, shutil
+    from pathlib import Path
+
+    from app.config import script_upload as script_upload_mod
     from app.models.cluster import Cluster, Node
-    from app.config.script_upload import TEMP_DIR
+
+    storage = tmp_path / "task-scripts"
+    storage.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(script_upload_mod, "TASK_SCRIPTS_DIR", storage)
+    monkeypatch.setattr(script_upload_mod, "TEMP_DIR", storage / "temp")
+    TEMP_DIR = script_upload_mod.TEMP_DIR
 
     async def override_get_db():
         yield test_db
@@ -41,17 +54,12 @@ def client(test_db):
 
     asyncio.run(_seed())
 
-    # Clean temp dir before each test
+    # 每个测试前清空隔离的 temp 目录（绝不触碰真实目录）
     if TEMP_DIR.exists():
         shutil.rmtree(TEMP_DIR)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    # Also clean task-scripts dir
-    from app.config.script_upload import TASK_SCRIPTS_DIR
-    if TASK_SCRIPTS_DIR.exists():
-        shutil.rmtree(TASK_SCRIPTS_DIR)
-    TASK_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    with AuthedTestClient(app) as c:
+    with isolated_app_lifespan(), AuthedTestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -189,6 +197,164 @@ class TestDeleteUploadedScript:
         resp = client.delete("/api/v1/node-tasks/uploaded-scripts/nonexistent-id")
         assert resp.status_code == 404
         assert "不存在" in resp.json()["detail"]
+
+    def test_delete_distribute_file_without_suffix(self, client):
+        """分发文件临时存储无 .sh 后缀，删除端点必须同样能删（5.7 连带修复）。
+
+        历史 bug：delete 只找 temp/{id}.sh，分发文件（temp/{id}）404 且被前端
+        .catch 静默吞掉 → 分发上传永久泄漏。
+        """
+        binary = b"csv,content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("data.csv", io.BytesIO(binary), "text/csv")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.delete(f"/api/v1/node-tasks/uploaded-scripts/{upload_id}")
+        assert resp.status_code == 200
+        assert "已删除" in resp.json()["detail"]
+
+        # 列表中不再出现
+        resp = client.get("/api/v1/node-tasks/uploaded-scripts")
+        assert all(item["upload_id"] != upload_id for item in resp.json())
+
+
+class TestUploadedFilesListFields:
+    def test_list_includes_kind_and_uploaded_at(self, client):
+        """列表须区分脚本/分发文件（kind）并带上传时间（uploaded_at）——列表 UI 依赖。"""
+        resp = _upload_script(client, filename="s.sh", content=b"#!/bin/bash\necho x")
+        assert resp.status_code == 200
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("d.csv", io.BytesIO(b"a,b"), "text/csv")},
+        )
+        assert resp.status_code == 200
+
+        items = client.get("/api/v1/node-tasks/uploaded-scripts").json()
+        assert len(items) == 2
+        kinds = {item["kind"] for item in items}
+        assert kinds == {"script", "distribute"}
+        for item in items:
+            assert item.get("uploaded_at"), item
+
+
+class TestTaskFiles:
+    """任务留档文件（task-scripts/{task_id}/）列表与删除。
+
+    文件创建任务时从 temp/ 迁入任务目录；用户需要跨任务查看与清理控制端留档
+    （不动节点上的文件、不删任务本身）。
+    """
+
+    def _create_distribute_task(self, client, filename="data.csv"):
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": (filename, io.BytesIO(b"a,b\n1,2"), "text/csv")},
+        )
+        upload_id = resp.json()["upload_id"]
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {"srcpath": f"temp/{upload_id}", "destpath": "/tmp/"},
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()["id"]
+
+    def test_list_task_files_shows_distribute_entry(self, client):
+        """建任务后 GET /node-tasks/task-files 须列出任务目录留档（含原始文件名、task_type、created_at）。"""
+        task_id = self._create_distribute_task(client, filename="data.csv")
+
+        items = client.get("/api/v1/node-tasks/task-files").json()
+        entry = next((i for i in items if i["task_id"] == task_id), None)
+        assert entry is not None, items
+        assert entry["filename"] == "data.csv"
+        assert entry["kind"] == "distribute"
+        assert entry["task_type"] == "distribute_file"
+        assert entry["created_at"] is not None
+
+    def test_list_task_files_sorted_newest_task_first(self, client):
+        """任务留档按任务号倒序（最新任务在前），列表 UI 直接分页可用。"""
+        first_id = self._create_distribute_task(client, filename="first.csv")
+        second_id = self._create_distribute_task(client, filename="second.csv")
+        assert second_id > first_id
+
+        items = client.get("/api/v1/node-tasks/task-files").json()
+        task_ids = [i["task_id"] for i in items]
+        assert task_ids == sorted(task_ids, reverse=True)
+        assert task_ids[0] == second_id
+
+    def test_list_task_files_shows_script_entry(self, client):
+        """cmd_exec script_file 任务的留档（{upload_id}.sh）也要列出，且显示原始文件名。"""
+        resp = _upload_script(client, filename="my-check.sh", content=b"#!/bin/bash\necho tf")
+        upload_id = resp.json()["upload_id"]
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "cmd_exec",
+                "node_ids": [1],
+                "params": {"script_file": upload_id, "script_filename": "my-check.sh"},
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        task_id = resp.json()["id"]
+
+        items = client.get("/api/v1/node-tasks/task-files").json()
+        entry = next((i for i in items if i["task_id"] == task_id), None)
+        assert entry is not None, items
+        assert entry["kind"] == "script"
+        # 原始文件名经 meta 保留（迁移不再删除 meta）
+        assert entry["filename"] == "my-check.sh"
+
+    def test_archive_upload_id_migrates_script_for_display(self, client):
+        """archive_upload_id 将上传文件迁入任务目录仅供留档，不触发 script_file 互斥校验。"""
+        resp = _upload_script(client, filename="deploy.sh", content=b"#!/bin/bash\necho ok")
+        upload_id = resp.json()["upload_id"]
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "cmd_exec",
+                "node_ids": [1],
+                "params": {"script_content": "#!/bin/bash\necho ok", "script_filename": "deploy.sh"},
+                "archive_upload_id": upload_id,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        task_id = resp.json()["id"]
+        # 留档列表可见
+        items = client.get("/api/v1/node-tasks/task-files").json()
+        entry = next((i for i in items if i["task_id"] == task_id), None)
+        assert entry is not None, items
+        assert entry["kind"] == "script"
+        assert entry["filename"] == "deploy.sh"
+        # 互斥校验不受影响：同时传 cmd + script_content 应 400
+        bad = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={"task_type": "cmd_exec", "node_ids": [1], "params": {"cmd": "ls", "script_content": "echo"}},
+        )
+        assert bad.status_code == 400
+
+    def test_delete_task_file_removes_archive_only(self, client):
+        """DELETE /node-tasks/task-files/{task_id}/{name} 移除留档；任务本身不受影响。"""
+        task_id = self._create_distribute_task(client)
+        items = client.get("/api/v1/node-tasks/task-files").json()
+        entry = next(i for i in items if i["task_id"] == task_id)
+
+        resp = client.delete(f"/api/v1/node-tasks/task-files/{task_id}/{entry['name']}")
+        assert resp.status_code == 200
+
+        remaining = client.get("/api/v1/node-tasks/task-files").json()
+        assert all(i["task_id"] != task_id for i in remaining)
+        # 任务本身仍在
+        resp = client.get(f"/api/v1/node-tasks/{task_id}")
+        assert resp.status_code == 200
+
+    def test_delete_task_file_missing_returns_404(self, client):
+        task_id = self._create_distribute_task(client)
+        resp = client.delete(f"/api/v1/node-tasks/task-files/{task_id}/nonexistent-file")
+        assert resp.status_code == 404
 
 
 class TestCreateTaskWithScriptFile:
@@ -490,6 +656,55 @@ class TestDistributeFileCreateTask:
         )
         assert resp.status_code == 400
         assert "destpath" in resp.json()["detail"]
+
+    def test_create_distribute_file_rejects_srcfilename_with_path(self, client):
+        """srcfilename 带路径成分（/ 或 \\）应 400：落地名只允许纯文件名。"""
+        binary = b"test content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("test.conf", io.BytesIO(binary), "text/plain")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                    "destpath": "/tmp/",
+                    "srcfilename": "../../etc/hosts",
+                },
+            },
+        )
+        assert resp.status_code == 400
+        assert "srcfilename" in resp.json()["detail"]
+
+    def test_create_distribute_file_rejects_srcfilename_backslash(self, client):
+        """srcfilename 含反斜杠同样拒绝（Windows 风格路径成分）。"""
+        binary = b"test content"
+        resp = client.post(
+            "/api/v1/node-tasks/upload-distribute-file",
+            files={"file": ("test.conf", io.BytesIO(binary), "text/plain")},
+        )
+        upload_id = resp.json()["upload_id"]
+
+        resp = client.post(
+            "/api/v1/clusters/1/node-tasks",
+            json={
+                "task_type": "distribute_file",
+                "node_ids": [1],
+                "params": {
+                    "srcpath": f"temp/{upload_id}",
+                    "destpath": "/tmp/",
+                    "srcfilename": "dir\\file.csv",
+                },
+            },
+        )
+        assert resp.status_code == 400
+        assert "srcfilename" in resp.json()["detail"]
+
 
     def test_destpath_auto_append_slash(self, client):
         """destpath without trailing / should get it auto-appended."""

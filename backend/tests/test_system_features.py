@@ -30,37 +30,29 @@ class TestSystemFeaturesEndpoint:
         fmod.load_features = self._orig_load
         fmod._features = None
 
-    @pytest.fixture
-    def client(self):
-        """Create a test client for the FastAPI app."""
-        from app.main import app
-        from fastapi.testclient import TestClient
-        with TestClient(app) as c:
-            yield c
-
-    def test_system_features_returns_200(self, client):
+    def test_system_features_returns_200(self, isolated_app):
         """GET /api/v1/system/features should return 200."""
-        resp = client.get("/api/v1/system/features")
+        resp = isolated_app.get("/api/v1/system/features")
         assert resp.status_code == 200
 
-    def test_system_features_returns_features_and_plugins(self, client):
+    def test_system_features_returns_features_and_plugins(self, isolated_app):
         """Response should contain features mapping and enabled_plugins list."""
-        resp = client.get("/api/v1/system/features")
+        resp = isolated_app.get("/api/v1/system/features")
         data = resp.json()
         assert "features" in data
         assert "enabled_plugins" in data
 
-    def test_system_features_values_match_yaml(self, client):
+    def test_system_features_values_match_yaml(self, isolated_app):
         """Returned values should match the features.yaml content."""
-        resp = client.get("/api/v1/system/features")
+        resp = isolated_app.get("/api/v1/system/features")
         data = resp.json()
         assert data["features"]["edge_client"] is False
         assert data["features"]["tools"] is True
         assert data["enabled_plugins"] == ["proxy_rewrite"]
 
-    def test_system_features_no_auth_required(self, client):
+    def test_system_features_no_auth_required(self, isolated_app):
         """Endpoint should be accessible without authentication."""
-        resp = client.get("/api/v1/system/features")
+        resp = isolated_app.get("/api/v1/system/features")
         assert resp.status_code == 200
         # Verify it's the real endpoint, not a redirect to login
         assert "/api/v1/system/features" in str(resp.url)

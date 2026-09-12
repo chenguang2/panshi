@@ -5,7 +5,6 @@ import stat
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tests.api_helpers import AuthedTestClient
 import pytest
 from pydantic import ValidationError
 from unittest.mock import AsyncMock, patch
@@ -71,22 +70,12 @@ class TestListOpenrestyFiles:
 class TestOpenrestyFilesEndpoint:
     """GET /clusters/{id}/nodes/openresty-files endpoint."""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_endpoint_returns_200(self, client, tmp_path, monkeypatch):
+    def test_endpoint_returns_200(self, isolated_app, tmp_path, monkeypatch):
         """GET openresty-files should return 200 with file list."""
-        from app.api.v1.cluster_install import list_openresty_files
-        f = tmp_path / "openresty-edge-test.tar.gz"
-        f.write_bytes(b"test")
-
         monkeypatch.setattr("app.api.v1.cluster_install.list_openresty_files",
                             lambda _: [{"name": "openresty-edge-test.tar.gz", "size": 4, "size_display": "4 B", "mtime": "2026-01-01T00:00:00Z"}])
 
-        resp = client.get("/api/v1/clusters/1/nodes/openresty-files")
+        resp = isolated_app.get("/api/v1/clusters/1/nodes/openresty-files")
         assert resp.status_code == 200
         data = resp.json()
         assert "files" in data
@@ -150,76 +139,48 @@ class TestInstallOpenrestyStreamExtravars:
 class TestInstallOpenrestyRouter:
     """install_openresty_router should exist with correct endpoints."""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_install_openresty_endpoint_returns_404(self, client):
+    def test_install_openresty_endpoint_returns_404(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/install-openresty should exist."""
-        # A non-existent cluster/node should give 404 (not found)
-        # rather than 405 (method not allowed) or 404 at router level.
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/install-openresty",
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/install-openresty",
                           json={"prefix": "/test", "openresty_file": "f.tar.gz"})
         assert resp.status_code == 404
 
-    def test_cancel_install_endpoint_exists(self, client):
+    def test_cancel_install_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/cancel-install should exist."""
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/cancel-install")
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/cancel-install")
         assert resp.status_code in (404, 422)
 
-    def test_install_openresty_without_body_returns_422(self, client):
+    def test_install_openresty_without_body_returns_422(self, isolated_app):
         """Missing required body should return 422 validation error."""
-        resp = client.post("/api/v1/clusters/1/nodes/1/install-openresty")
-        # If router is registered, FastAPI validates the body → 422
-        # If router is NOT registered → 404
+        resp = isolated_app.post("/api/v1/clusters/1/nodes/1/install-openresty")
         assert resp.status_code in (404, 422)
 
 
 class TestInstallEdgeRouter:
     """install_edge_router should exist with correct endpoints."""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_install_edge_endpoint_exists(self, client):
+    def test_install_edge_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/install-edge should exist."""
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/install-edge", json={"prefix": "/test"})
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/install-edge", json={"prefix": "/test"})
 
 
 class TestEdgePackListEndpoint:
     """GET /clusters/{id}/nodes/{nid}/edge-pack-list"""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_endpoint_exists(self, client):
-        resp = client.get("/api/v1/clusters/99999/nodes/99999/edge-pack-list")
+    def test_endpoint_exists(self, isolated_app):
+        resp = isolated_app.get("/api/v1/clusters/99999/nodes/99999/edge-pack-list")
         assert resp.status_code in (404, 422)
 
-    def test_edge_pack_files_endpoint_exists(self, client):
-        resp = client.get("/api/v1/clusters/1/nodes/edge-pack-files")
+    def test_edge_pack_files_endpoint_exists(self, isolated_app):
+        resp = isolated_app.get("/api/v1/clusters/1/nodes/edge-pack-files")
         assert resp.status_code in (200, 404)
 
 
 class TestEdgePackAddEndpoint:
     """POST /clusters/{id}/nodes/{nid}/edge-pack-add"""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_endpoint_exists(self, client):
-        resp = client.post(
+    def test_endpoint_exists(self, isolated_app):
+        resp = isolated_app.post(
             "/api/v1/clusters/99999/nodes/99999/edge-pack-add",
             json={"pack_file": "edge-pack-test.tgz"},
         )
@@ -229,14 +190,8 @@ class TestEdgePackAddEndpoint:
 class TestEdgePackRebaseEndpoint:
     """POST /clusters/{id}/nodes/{nid}/edge-pack-rebase"""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_endpoint_exists(self, client):
-        resp = client.post(
+    def test_endpoint_exists(self, isolated_app):
+        resp = isolated_app.post(
             "/api/v1/clusters/99999/nodes/99999/edge-pack-rebase",
             json={"version": "2.7.6.26020421"},
         )
@@ -246,27 +201,17 @@ class TestEdgePackRebaseEndpoint:
 class TestAssociateNewOpenrestyRouter:
     """associate-new-openresty endpoint should exist."""
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_endpoint_exists(self, client):
+    def test_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/associate-new-openresty should exist."""
-        resp = client.post(
+        resp = isolated_app.post(
             "/api/v1/clusters/99999/nodes/99999/associate-new-openresty",
             json={"prefix": "/test"},
         )
-        assert resp.status_code in (404, 422)  # 404=cluster not found, 422=validation
+        assert resp.status_code in (404, 422)
 
-    def test_endpoint_rejects_without_body(self, client):
-        """POST associate-new-openresty without body to a non-existent node returns 404.
-
-        The handler takes no request body (cluster_id/node_id are path params),
-        so a body-less POST to a nonexistent node must yield 404, not 422.
-        """
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/associate-new-openresty")
+    def test_endpoint_rejects_without_body(self, isolated_app):
+        """POST associate-new-openresty without body to a non-existent node returns 404."""
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/associate-new-openresty")
         assert resp.status_code in (404, 422)
 
 
@@ -287,7 +232,6 @@ class TestInstallOpenrestyStreamSshPort:
             yield "data: {\"rc\": 0}\n\n"
 
         monkeypatch.setattr("app.api.v1.cluster_install._run_ansible_stream", mock_gen)
-        # _install_openresty_stream 内部定义 _stream_ssh 闭包，绕过真实 subprocess
         monkeypatch.setattr("app.api.v1.cluster_install.get_ssh_user", lambda ip: "jboss")
         monkeypatch.setattr("app.api.v1.cluster_install.get_ssh_password", lambda ip: None)
         monkeypatch.setattr("app.api.v1.cluster_install.resolve_ssh_port", lambda node: 1122)
@@ -297,7 +241,6 @@ class TestInstallOpenrestyStreamSshPort:
             ip = "192.168.1.1"
             ssh_port = 1122
 
-        # 直接替换模块内闭包定义不易，改用 patch 子进程创建
         import asyncio
         real_create_subprocess = asyncio.create_subprocess_exec
 

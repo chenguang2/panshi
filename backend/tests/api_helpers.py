@@ -5,7 +5,12 @@ Phase 0 安全加固后，绝大多数 API 路由要求 Bearer token。本模块
   适用于直连 app.main.app（真实开发库，含种子用户）的测试。
 - auth_headers_for(user_id)：指定用户 id 的请求头（自建 in-memory 库测试用）。
 - AuthedTestClient：自动附加 Authorization 头的 TestClient 封装。
+- isolated_app_lifespan()：将 app.main lifespan 的协作方替换为 no-op，
+  使 TestClient(app) 不触碰 db_config active 真实库、不启动后台服务
+  （init_db/seed_data/recover_interrupted_tasks/节点任务引擎全部短路）；
+  请求级 DB 仍由调用方的 get_db 依赖覆盖决定。配合 AuthedTestClient 使用。
 """
+from contextlib import contextmanager
 from fastapi.testclient import TestClient
 
 from app.core.security import create_access_token
@@ -50,3 +55,43 @@ class AuthedTestClient(TestClient):
 
     def patch(self, *args, **kwargs):
         return super().patch(*args, **self._with_auth(kwargs))
+
+
+class _NoopTaskService:
+    """lifespan shutdown 时的占位服务：shutdown_sync 立即返回，不 join 线程。"""
+
+    def shutdown_sync(self) -> None:
+        pass
+
+
+@contextmanager
+def isolated_app_lifespan():
+    """隔离 app.main lifespan 与真实环境的一切交互。
+
+    背景（docs/refactoring/test-suite-consolidation-2026-09-12.md §3.3）：
+    lifespan 会 init_db() 连接 db_config active 真实库、seed_data、恢复任务、
+    shutdown 时 join 节点任务引擎线程（曾致测试挂死 90s+）。
+    """
+    import contextlib
+    from unittest.mock import patch
+
+    async def _noop_async(*args, **kwargs):
+        pass
+
+    patches = [
+        patch("app.main.init_db", _noop_async),
+        patch("app.main.close_db", _noop_async),
+        patch("app.main.seed_data", _noop_async),
+        # lifespan: async with AsyncSessionLocal() as session: await seed_data(session)
+        patch("app.main.AsyncSessionLocal", lambda: contextlib.nullcontext(object())),
+        # lifespan 函数体内延迟 import，patch 源模块属性
+        patch("app.services.node_task_service.recover_interrupted_tasks", _noop_async),
+        patch("app.services.node_task_service.get_node_task_service", lambda: _NoopTaskService()),
+    ]
+    for p in patches:
+        p.start()
+    try:
+        yield
+    finally:
+        for p in patches:
+            p.stop()

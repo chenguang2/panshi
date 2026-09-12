@@ -294,30 +294,9 @@ class TestClusterStats:
 
 
 @pytest.mark.asyncio
-async def test_cluster_list_returns_plugin_metadata_count():
+async def test_cluster_list_returns_plugin_metadata_count(async_authed_client, isolated_session):
     """集群列表 API 返回 plugin_metadata_count 字段"""
-    from httpx import ASGITransport, AsyncClient
-    from app.main import app
-    from app.core.database import get_db, Base
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    TEST_URL = "sqlite+aiosqlite:///:memory:"
-    engine = create_async_engine(TEST_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async def override_get_db():
-        async with TestSession() as session:
-            yield session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    # 初始化数据
-    async with TestSession() as session:
-        from app.models.user import User
-        from app.core.security import hash_password
-        session.add(User(username="admin", password_hash=hash_password("panshi123"), role="admin", status=1))
+    async with isolated_session() as session:
         cluster = Cluster(name="pm-count-cluster", display_name="PM Count Test")
         session.add(cluster)
         await session.commit()
@@ -325,52 +304,25 @@ async def test_cluster_list_returns_plugin_metadata_count():
         session.add_all([PluginMetadata(cluster_id=cluster.id, plugin_name=f"pm-{i}") for i in range(3)])
         await session.commit()
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        login_resp = await ac.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
-        assert login_resp.status_code == 200
-        token = login_resp.json()["access_token"]
+    ac = async_authed_client
+    resp = await ac.get("/api/v1/clusters")
+    assert resp.status_code == 200
+    data = resp.json()
 
-        resp = await ac.get("/api/v1/clusters", headers={"Authorization": f"Bearer {token}"})
-        assert resp.status_code == 200
-        data = resp.json()
-
-        assert "items" in data
-        for item in data["items"]:
-            assert "plugin_metadata_count" in item
-            if item["name"] == "pm-count-cluster":
-                assert item["plugin_metadata_count"] == 3
-                break
-        else:
-            pytest.fail("测试集群未在返回列表中找到")
-
-    app.dependency_overrides.clear()
+    assert "items" in data
+    for item in data["items"]:
+        assert "plugin_metadata_count" in item
+        if item["name"] == "pm-count-cluster":
+            assert item["plugin_metadata_count"] == 3
+            break
+    else:
+        pytest.fail("测试集群未在返回列表中找到")
 
 
 @pytest.mark.asyncio
-async def test_cluster_list_returns_nodes():
+async def test_cluster_list_returns_nodes(async_authed_client, isolated_session):
     """集群列表 API 返回节点列表"""
-    from httpx import ASGITransport, AsyncClient
-    from app.main import app
-    from app.core.database import get_db, Base
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-    from app.models.user import User
-    from app.core.security import hash_password
-
-    TEST_URL = "sqlite+aiosqlite:///:memory:"
-    engine = create_async_engine(TEST_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async def override_get_db():
-        async with TestSession() as session:
-            yield session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    async with TestSession() as session:
-        session.add(User(username="admin", password_hash=hash_password("panshi123"), role="admin", status=1))
+    async with isolated_session() as session:
         cluster = Cluster(name="nodes-test-cluster", display_name="Nodes Test")
         session.add(cluster)
         await session.commit()
@@ -382,77 +334,47 @@ async def test_cluster_list_returns_nodes():
         ])
         await session.commit()
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        login_resp = await ac.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
-        assert login_resp.status_code == 200
-        token = login_resp.json()["access_token"]
+    ac = async_authed_client
+    resp = await ac.get("/api/v1/clusters")
+    assert resp.status_code == 200
+    data = resp.json()
 
-        resp = await ac.get("/api/v1/clusters", headers={"Authorization": f"Bearer {token}"})
-        assert resp.status_code == 200
-        data = resp.json()
+    assert "items" in data
+    for item in data["items"]:
+        if item["name"] == "nodes-test-cluster":
+            assert "nodes" in item
+            assert len(item["nodes"]) == 3
+            assert item["nodes"][0]["ip"] == "10.0.0.1"
+            assert item["nodes"][0]["service_port"] == 80
+            assert item["nodes"][0]["status"] == 1
+            break
+    else:
+        pytest.fail("测试集群未找到")
 
-        assert "items" in data
-        for item in data["items"]:
-            if item["name"] == "nodes-test-cluster":
-                assert "nodes" in item
-                assert len(item["nodes"]) == 3
-                assert item["nodes"][0]["ip"] == "10.0.0.1"
-                assert item["nodes"][0]["service_port"] == 80
-                assert item["nodes"][0]["status"] == 1
-                break
-        else:
-            pytest.fail("测试集群未找到")
 
-    app.dependency_overrides.clear()
-
-async def test_cluster_response_excludes_admin_key():
+async def test_cluster_response_excludes_admin_key(async_authed_client, isolated_session):
     """v3 8A 脱敏：列表/详情/创建响应一律不回传 admin_key（Edge Admin API 密钥）。
 
     密钥只在创建/更新请求中提交；前端编辑表单留空 = 保持原值（update 走 exclude_unset）。
     """
-    from httpx import ASGITransport, AsyncClient
-    from app.main import app
-    from app.core.database import get_db, Base
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async def override_get_db():
-        async with TestSession() as session:
-            yield session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    async with TestSession() as session:
-        session.add(User(username="admin", password_hash=hash_password("panshi123"), role="admin", status=1))
+    async with isolated_session() as session:
         session.add(Cluster(name="key-mask-cluster", admin_key="super-secret-key"))
         await session.commit()
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        login_resp = await ac.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
-        assert login_resp.status_code == 200
-        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    ac = async_authed_client
+    resp = await ac.get("/api/v1/clusters")
+    assert resp.status_code == 200
+    for item in resp.json()["items"]:
+        assert "admin_key" not in item, "集群列表响应不应包含 admin_key"
 
-        resp = await ac.get("/api/v1/clusters", headers=headers)
-        assert resp.status_code == 200
-        for item in resp.json()["items"]:
-            assert "admin_key" not in item, "集群列表响应不应包含 admin_key"
+    resp = await ac.get("/api/v1/clusters/1")
+    assert resp.status_code == 200
+    assert "admin_key" not in resp.json(), "集群详情响应不应包含 admin_key"
 
-        resp = await ac.get("/api/v1/clusters/1", headers=headers)
-        assert resp.status_code == 200
-        assert "admin_key" not in resp.json(), "集群详情响应不应包含 admin_key"
-
-        resp = await ac.post("/api/v1/clusters", headers=headers,
-                             json={"name": "key-mask-2", "admin_key": "another-secret"})
-        assert resp.status_code == 201
-        assert "admin_key" not in resp.json(), "创建集群响应不应回显 admin_key"
-
-    app.dependency_overrides.clear()
+    resp = await ac.post("/api/v1/clusters",
+                         json={"name": "key-mask-2", "admin_key": "another-secret"})
+    assert resp.status_code == 201
+    assert "admin_key" not in resp.json(), "创建集群响应不应回显 admin_key"
 
 async def test_update_cluster_without_admin_key_preserves_stored_value(test_db):
     """v3 8A：编辑表单不再回填密钥，PUT 不带 admin_key 字段时必须保持原值（exclude_unset 语义）。"""

@@ -340,3 +340,64 @@ class TestRouteWebsocketRoundTrip:
                 headers=headers
             )
             assert get_response.json()["enable_websocket"] is False
+
+
+class TestRouteVarsLifecycle:
+    """vars 空数组/值/null 的生命周期往返（合并自 test_route_switch_toggle.py）。
+
+    共性夹具逻辑：登录 + 建路由，返回 (headers, route_id)。
+    """
+
+    async def _login_and_create(self, client, payload):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "panshi123"},
+        )
+        assert response.status_code == 200
+        headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+        response = await client.post(
+            "/api/v1/clusters/1/routes", headers=headers, json=payload
+        )
+        assert response.status_code == 201
+        return headers, response.json()["id"]
+
+    async def test_vars_round_trip_array_value_null(self):
+        """[] → 条件值 → [] → None 全链路往返，每步回显正确。"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers, route_id = await self._login_and_create(
+                client,
+                {"name": "vars-round-trip", "uri": "/vars-round-trip/*", "vars": []},
+            )
+            base = f"/api/v1/clusters/1/routes/{route_id}"
+
+            response = await client.put(
+                base, headers=headers,
+                json={"vars": [["http_host", "==", "test.com"]]},
+            )
+            assert response.status_code == 200
+            assert response.json()["vars"] == [["http_host", "==", "test.com"]]
+
+            response = await client.put(base, headers=headers, json={"vars": []})
+            assert response.status_code == 200
+            assert response.json()["vars"] == []
+
+            response = await client.put(base, headers=headers, json={"vars": None})
+            assert response.status_code == 200
+            assert response.json()["vars"] is None
+
+    async def test_priority_preserved_when_updating_vars_only(self):
+        """仅更新 vars 时 priority 不得被重置。"""
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers, route_id = await self._login_and_create(
+                client,
+                {"name": "vars-only-priority", "uri": "/vars-only/*", "priority": 777},
+            )
+            response = await client.put(
+                f"/api/v1/clusters/1/routes/{route_id}",
+                headers=headers,
+                json={"vars": [["arg_page", "==", "1"]]},
+            )
+            assert response.status_code == 200
+            assert response.json()["priority"] == 777

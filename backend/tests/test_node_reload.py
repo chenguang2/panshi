@@ -1,22 +1,15 @@
 """Tests for the reload endpoint (renamed from restart)."""
 import pytest
-from tests.api_helpers import AuthedTestClient
 
 
 class TestNodeReloadEndpoint:
 
-    @pytest.fixture
-    def client(self):
-        from app.main import app
-        with AuthedTestClient(app) as c:
-            yield c
-
-    def test_reload_endpoint_exists(self, client):
+    def test_reload_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/reload should exist."""
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/reload")
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/reload")
         assert resp.status_code in (404, 422)
 
-    def test_restart_endpoint_not_found(self, client):
+    def test_restart_endpoint_not_found(self, isolated_app):
         """Old /restart endpoint should no longer be available."""
-        resp = client.post("/api/v1/clusters/99999/nodes/99999/restart")
+        resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/restart")
         assert resp.status_code in (404, 405)

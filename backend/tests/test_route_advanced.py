@@ -310,3 +310,57 @@ class TestRouteAdvancedMatchAPI:
                 headers=headers
             )
             assert get_resp.json()["plugins"] == []
+
+
+class TestAdvancedMatchToggleDirections:
+    """advanced_match_enabled 双向开关（合并自 test_advanced_match_enabled.py）。
+
+    true→false 时 vars 清空；false→true 时 vars 保留既有条件。
+    """
+
+    async def _login_and_create(self, client, payload):
+        response = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "panshi123"},
+        )
+        assert response.status_code == 200
+        headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+        response = await client.post(
+            "/api/v1/clusters/1/routes", headers=headers, json=payload
+        )
+        assert response.status_code == 201
+        return headers, response.json()["id"]
+
+    async def test_toggle_off_clears_vars_and_toggle_on_keeps_vars(self):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers, route_id = await self._login_and_create(
+                client,
+                {"name": "ame-toggle-off", "uri": "/ame-toggle-off/*",
+                 "advanced_match_enabled": True, "vars": []},
+            )
+            base = f"/api/v1/clusters/1/routes/{route_id}"
+
+            # true → false：vars 清空
+            response = await client.put(
+                base, headers=headers,
+                json={"advanced_match_enabled": False},
+            )
+            assert response.status_code == 200
+            assert response.json()["advanced_match_enabled"] is False
+            assert response.json()["vars"] == []
+
+            # false → true：既有 vars（新写入）保留
+            response = await client.put(
+                base, headers=headers,
+                json={"advanced_match_enabled": True,
+                      "vars": [["http_host", "==", "enabled.com"]]},
+            )
+            assert response.status_code == 200
+            assert response.json()["advanced_match_enabled"] is True
+            assert response.json()["vars"] == [["http_host", "==", "enabled.com"]]
+
+            # GET 回读字段持久化
+            response = await client.get(base, headers=headers)
+            assert response.status_code == 200
+            assert response.json()["advanced_match_enabled"] is True

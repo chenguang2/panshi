@@ -5,24 +5,6 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 from app.services.edge_logger import EdgeLogger, reset_edge_logger
 
 
-class TestEdgeClientRouteMethods:
-    """Test EdgeClient route-related methods"""
-
-    def test_update_route_method_exists(self):
-        """Test that update_route method exists on EdgeClient"""
-        client = object.__new__(EdgeClient)
-        assert hasattr(client, 'update_route')
-
-    def test_delete_route_method_exists(self):
-        """Test that delete_route method exists on EdgeClient"""
-        client = object.__new__(EdgeClient)
-        assert hasattr(client, 'delete_route')
-
-    def test_convert_route_to_edge_format_method_exists(self):
-        """Test that convert_route_to_edge_format method exists on EdgeClient"""
-        assert hasattr(EdgeClient, 'convert_route_to_edge_format')
-
-
 class TestConvertRouteToEdgeFormat:
     """Test convert_route_to_edge_format static method"""
 
@@ -47,203 +29,50 @@ class TestConvertRouteToEdgeFormat:
         assert "upstream_id" not in result
         assert "priority" not in result
 
-    def test_convert_route_with_methods_string(self):
-        """Test route conversion with methods as comma-separated string"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-456",
-            name="method-route",
-            uri="/api/method",
-            methods="GET,POST",
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
+    _ABSENT = object()
 
-        assert result["methods"] == ["GET", "POST"]
-
-    def test_convert_route_with_methods_list(self):
-        """Test route conversion with methods as list"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-789",
-            name="method-route",
-            uri="/api/method",
-            methods=["GET", "POST", "DELETE"],
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["methods"] == ["GET", "POST", "DELETE"]
-
-    def test_convert_route_with_hosts_string(self):
-        """Test route conversion with hosts as comma-separated string"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-host",
-            name="host-route",
-            uri="/api/host",
-            methods=None,
-            hosts="example.com,www.example.com",
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["hosts"] == ["example.com", "www.example.com"]
-
-    def test_convert_route_with_hosts_list(self):
-        """Test route conversion with hosts as list"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-host-list",
-            name="host-route",
-            uri="/api/host",
-            methods=None,
-            hosts=["example.com", "www.example.com"],
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["hosts"] == ["example.com", "www.example.com"]
-
-    def test_convert_route_with_upstream(self):
-        """Test route conversion with upstream_edge_uuid"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-upstream",
-            name="upstream-route",
-            uri="/api/upstream",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid="upstream-uuid-123",
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["upstream_id"] == "upstream-uuid-123"
-
-    def test_convert_route_with_priority(self):
-        """Test route conversion with priority"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-priority",
-            name="priority-route",
-            uri="/api/priority",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=100,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["priority"] == 100
-
-    def test_convert_route_with_vars_json(self):
-        """Test route conversion with vars JSON string"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-vars",
-            name="vars-route",
-            uri="/api/vars",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json='[["var_name","==","test_value"]]',
-            plugins=None
-        )
-
-        assert result["vars"] == [["var_name", "==", "test_value"]]
-
-    def test_convert_route_with_invalid_vars_json(self):
-        """Test route conversion with invalid vars JSON"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-invalid-vars",
-            name="invalid-vars-route",
-            uri="/api/invalid-vars",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json='not valid json',
-            plugins=None
-        )
-
-        assert "vars" not in result
-
-    def test_convert_route_with_plugins_list(self):
-        """Test route conversion with plugins as list of dicts"""
-        plugins = [
-            {"plugin_name": "rate-limit", "config": '{"rejected_code": 429}'},
-            {"plugin_name": "cors", "config": '{"allow_origins": "*"}'}
-        ]
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-plugins",
-            name="plugins-route",
-            uri="/api/plugins",
+    @pytest.mark.parametrize(
+        ("overrides", "expect_key", "expected"),
+        [
+            ({"methods": "GET,POST"}, "methods", ["GET", "POST"]),
+            ({"methods": ["GET", "POST", "DELETE"]}, "methods", ["GET", "POST", "DELETE"]),
+            ({"hosts": "example.com,www.example.com"}, "hosts", ["example.com", "www.example.com"]),
+            ({"hosts": ["example.com", "www.example.com"]}, "hosts", ["example.com", "www.example.com"]),
+            ({"upstream_edge_uuid": "upstream-uuid-123"}, "upstream_id", "upstream-uuid-123"),
+            ({"priority": 100}, "priority", 100),
+            ({"priority": 1}, "priority", 1),
+            ({"priority": 0}, "priority", _ABSENT),
+            ({"vars_json": '[["var_name","==","test_value"]]'}, "vars", [["var_name", "==", "test_value"]]),
+            ({"vars_json": "not valid json"}, "vars", _ABSENT),
+            ({"plugins": [
+                {"plugin_name": "rate-limit", "config": '{"rejected_code": 429}'},
+                {"plugin_name": "cors", "config": '{"allow_origins": "*"}'},
+            ]}, "plugins", {"rate-limit": {"rejected_code": 429}, "cors": {"allow_origins": "*"}}),
+            ({"plugins": []}, "plugins", _ABSENT),
+        ],
+        ids=["methods-str", "methods-list", "hosts-str", "hosts-list", "upstream",
+             "priority-nonzero", "priority-one", "priority-zero-omitted",
+             "vars-json", "vars-invalid-omitted", "plugins-list", "plugins-empty-omitted"],
+    )
+    def test_convert_route_field_variants(self, overrides, expect_key, expected):
+        """单字段变体（合并 12 个逐字段用例）：字段按类型解析，空值/零值不输出。"""
+        kwargs = dict(
+            edge_uuid="route-uuid-x",
+            name="route",
+            uri="/api/x",
             methods=None,
             hosts=None,
             upstream_edge_uuid=None,
             priority=0,
             vars_json=None,
-            plugins=plugins
+            plugins=None,
         )
-
-        assert "plugins" in result
-        assert result["plugins"]["rate-limit"] == {"rejected_code": 429}
-        assert result["plugins"]["cors"] == {"allow_origins": "*"}
-
-    def test_convert_route_with_empty_plugins(self):
-        """Test route conversion with empty plugins list"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-empty-plugins",
-            name="empty-plugins-route",
-            uri="/api/empty-plugins",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=[]
-        )
-
-        assert "plugins" not in result
-
-    def test_convert_route_priority_zero_not_included(self):
-        """Test that priority 0 is not included in output"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-zero",
-            name="zero-priority-route",
-            uri="/api/zero",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=0,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert "priority" not in result
-
-    def test_convert_route_priority_non_zero_included(self):
-        """Test that non-zero priority is included in output"""
-        result = EdgeClient.convert_route_to_edge_format(
-            edge_uuid="route-uuid-nonzero",
-            name="nonzero-priority-route",
-            uri="/api/nonzero",
-            methods=None,
-            hosts=None,
-            upstream_edge_uuid=None,
-            priority=1,
-            vars_json=None,
-            plugins=None
-        )
-
-        assert result["priority"] == 1
+        kwargs.update(overrides)
+        result = EdgeClient.convert_route_to_edge_format(**kwargs)
+        if expected is self._ABSENT:
+            assert expect_key not in result
+        else:
+            assert result[expect_key] == expected
 
 
 class TestEdgeLoggerRouteOperation:
