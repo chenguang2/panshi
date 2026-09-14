@@ -94,41 +94,4 @@ test.describe('Database Management', () => {
     await expect(page.locator('.ant-message')).toContainText('连接已删除')
     await expect(row).toHaveCount(0)
   })
-
-  test('当前任务卡片：空状态显示', async ({ page }) => {
-    await gotoDatabasePage(page)
-    // 当前任务卡片可见
-    const card = page.locator('.card').filter({ hasText: '当前任务' })
-    await expect(card).toBeVisible()
-    // 刷新按钮可见
-    await expect(card.locator('button:has-text("刷新")')).toBeVisible()
-    // 空状态提示
-    await expect(card.locator('.ant-empty-description')).toContainText('当前没有正在执行的任务')
-  })
-
-  test('当前任务卡片：刷新按钮可点击', async ({ page }) => {
-    await gotoDatabasePage(page)
-    const card = page.locator('.card').filter({ hasText: '当前任务' })
-    const refreshBtn = card.locator('button:has-text("刷新")')
-    await expect(refreshBtn).toBeVisible()
-    await refreshBtn.click()
-    // 刷新后仍显示空状态（无运行中任务）
-    await expect(card.locator('.ant-empty-description')).toContainText('当前没有正在执行的任务')
-  })
-
-  test('页面布局：当前任务卡片位于当前数据库和连接列表之间', async ({ page }) => {
-    await gotoDatabasePage(page)
-    // 获取所有卡片标题
-    const cardHeaders = page.locator('.card-header h3')
-    const headers = await cardHeaders.allTextContents()
-    // 验证顺序：当前数据库 → 当前任务 → 连接列表
-    const dbIndex = headers.findIndex((h) => h.includes('当前数据库'))
-    const tasksIndex = headers.findIndex((h) => h.includes('当前任务'))
-    const connIndex = headers.findIndex((h) => h.includes('连接列表'))
-    expect(dbIndex).toBeGreaterThanOrEqual(0)
-    expect(tasksIndex).toBeGreaterThanOrEqual(0)
-    expect(connIndex).toBeGreaterThanOrEqual(0)
-    expect(tasksIndex).toBeGreaterThan(dbIndex)
-    expect(connIndex).toBeGreaterThan(tasksIndex)
-  })
 })

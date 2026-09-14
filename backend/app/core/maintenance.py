@@ -12,11 +12,26 @@ from typing import Optional
 
 
 @dataclass
+class MigrationProgress:
+    """Detailed progress snapshot for an in-flight migration."""
+    phase: str = ""              # "backup" | "migrating" | ""
+    backup_done: int = 0
+    backup_total: int = 0
+    table_index: int = 0
+    total_tables: int = 0
+    current_table: str = ""
+    copied_rows: int = 0
+    total_rows: int = 0
+    skipped: bool = False
+
+
+@dataclass
 class MigrationState:
     in_progress: bool = False
     source_id: Optional[str] = None
     target_id: Optional[str] = None
     started_at: Optional[datetime] = None
+    progress: MigrationProgress = field(default_factory=MigrationProgress)
 
 
 _migration_lock = threading.Event()
@@ -38,6 +53,16 @@ def set_migration_in_progress(on: bool, source_id: Optional[str] = None, target_
     else:
         _migration_lock.clear()
         _state = MigrationState()
+
+
+def update_migration_progress(**kwargs) -> None:
+    """Update progress fields of the current migration state (called from SSE endpoint)."""
+    global _state
+    if not _state.in_progress:
+        return
+    for k, v in kwargs.items():
+        if hasattr(_state.progress, k):
+            setattr(_state.progress, k, v)
 
 
 def get_migration_state() -> MigrationState:

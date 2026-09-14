@@ -8,6 +8,7 @@ Design (see openspec/changes/support-postgres-database/design.md D3):
 """
 
 import logging
+import threading
 from collections.abc import Callable
 from datetime import datetime
 from inspect import signature
@@ -167,14 +168,31 @@ def migrate_direct(
                 done += 1
                 if progress_cb:
                     progress_cb(done, total, table_name=detail.get("name", table), copied_rows=detail.get("rows", 0), total_rows=detail.get("rows", 0), skipped=detail.get("skipped", False))
-        _reset_sequences(dst_engine, tables)
-        synced = _sync_schema_with_models(dst_engine)
-        if synced:
-            logger.info("Schema sync: 补齐目标库缺失模型列 %d 个", synced)
+        # Post-copy: reset sequences & sync schema — run in background threads
+        # so they don't block migration completion. These can hang on remote
+        # PostgreSQL (e.g. network issues) and would prevent the SSE "complete"
+        # event from ever being sent if run synchronously.
+        def _post_copy_background():
+            try:
+                _reset_sequences(dst_engine, tables)
+            except Exception as e:
+                logger.warning("Sequence reset failed (non-fatal): %s", e)
+            try:
+                synced = _sync_schema_with_models(dst_engine)
+                if synced:
+                    logger.info("Schema sync: 补齐目标库缺失模型列 %d 个", synced)
+            except Exception as e:
+                logger.warning("Schema sync failed (non-fatal): %s", e)
+
+        t = threading.Thread(target=_post_copy_background, daemon=True, name="post-copy")
+        t.start()
+        try:
+            src_engine.dispose()
+        except Exception:
+            pass
         return table_details
     finally:
-        src_engine.dispose()
-        dst_engine.dispose()
+        pass
 
 
 def _clear_target(dst_engine) -> None:

@@ -31,61 +31,6 @@
       </div>
     </div>
 
-    <!-- 当前任务卡片（4.1） -->
-    <div class="card">
-      <div class="card-header">
-        <h3>当前任务</h3>
-        <button class="btn btn-secondary btn-sm" @click="loadRunningTasks" :disabled="runningTasksLoading">
-          {{ runningTasksLoading ? '刷新中…' : '刷新' }}
-        </button>
-      </div>
-      <div class="card-body">
-        <!-- 迁移锁激活时显示警告 -->
-        <a-alert
-          v-if="runningTasksData.migration?.in_progress"
-          type="warning"
-          show-icon
-          class="migration-lock-alert"
-          :message="`数据库迁移进行中，写操作已锁定${runningTasksData.migration.source_id && runningTasksData.migration.target_id ? '：' + getConnectionName(runningTasksData.migration.source_id) + ' → ' + getConnectionName(runningTasksData.migration.target_id) : ''}`"
-          :description="
-            runningTasksData.migration.started_at
-              ? '开始时间：' + formatTime(runningTasksData.migration.started_at)
-              : ''
-          "
-        />
-        <!-- 节点任务列表 -->
-        <template v-if="runningTasksData.tasks.length > 0">
-          <a-table
-            :data-source="runningTasksData.tasks"
-            :columns="runningTaskColumns"
-            row-key="id"
-            :pagination="false"
-            size="small"
-            class="running-tasks-table"
-          >
-            <template #bodyCell="{ record, column }">
-              <template v-if="column.key === 'task_type'">
-                {{ taskTypeLabel(record.task_type) }}
-              </template>
-              <template v-else-if="column.key === 'cluster_name'">
-                {{ record.cluster_name || '已删除' }}
-              </template>
-              <template v-else-if="column.key === 'progress'">
-                {{ record.success_nodes }}/{{ record.total_nodes }}
-              </template>
-              <template v-else-if="column.key === 'status'">
-                <a-tag :color="record.status === 'running' ? 'blue' : 'default'">
-                  {{ record.status === 'running' ? '运行中' : '排队中' }}
-                </a-tag>
-              </template>
-            </template>
-          </a-table>
-        </template>
-        <!-- 空状态 -->
-        <a-empty v-else-if="!runningTasksLoading" description="当前没有正在执行的任务" />
-      </div>
-    </div>
-
     <!-- 连接列表 -->
     <div class="card">
       <div class="card-header">
@@ -154,6 +99,48 @@
           :message="`数据库迁移进行中${runningMigration.source_id && runningMigration.target_id ? '：' + getConnectionName(runningMigration.source_id) + ' → ' + getConnectionName(runningMigration.target_id) : ''}`"
           :description="runningMigration.started_at ? '开始时间：' + formatTime(runningMigration.started_at) : ''"
         />
+        <!-- 迁移进度（从 API 恢复，非 SSE 实时） -->
+        <div
+          v-if="runningMigration.in_progress && !migrating && runningMigration.progress"
+          class="migration-progress-detail"
+        >
+          <div v-if="runningMigration.progress.phase === 'backup'" class="progress-phase">
+            <span class="phase-label">📦 备份中</span>
+            <a-progress
+              :percent="
+                runningMigration.progress.backup_total > 0
+                  ? Math.round((runningMigration.progress.backup_done / runningMigration.progress.backup_total) * 100)
+                  : 0
+              "
+              :stroke-color="'#1890ff'"
+            />
+            <span class="progress-text"
+              >{{ runningMigration.progress.backup_done }} / {{ runningMigration.progress.backup_total }} 张表</span
+            >
+          </div>
+          <div v-else-if="runningMigration.progress.phase === 'migrating'" class="progress-phase">
+            <span class="phase-label">🔄 迁移中</span>
+            <a-progress
+              :percent="
+                runningMigration.progress.total_tables > 0
+                  ? Math.round((runningMigration.progress.table_index / runningMigration.progress.total_tables) * 100)
+                  : 0
+              "
+              :stroke-color="'#52c41a'"
+            />
+            <span class="progress-text">
+              表 {{ runningMigration.progress.table_index }} / {{ runningMigration.progress.total_tables }}
+              <span v-if="runningMigration.progress.current_table"
+                >：{{ runningMigration.progress.current_table }}</span
+              >
+              <span v-if="runningMigration.progress.total_rows > 0"
+                >（{{ runningMigration.progress.copied_rows?.toLocaleString() }} /
+                {{ runningMigration.progress.total_rows?.toLocaleString() }} 行）</span
+              >
+              <a-tag v-if="runningMigration.progress.skipped" color="orange" style="margin-left: 4px">已跳过</a-tag>
+            </span>
+          </div>
+        </div>
         <a-alert
           class="static-notice"
           type="info"
@@ -503,7 +490,6 @@ import type {
   MigrationCompleteEvent,
   MigrationHistoryItem,
   MigrationState,
-  RunningTask,
 } from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
@@ -513,37 +499,14 @@ const migrateResult = ref<MigrateResult | null>(null)
 const migrationController = ref<AbortController | null>(null)
 
 // Running migration state
-const runningMigration = ref<MigrationState>({ in_progress: false, source_id: null, target_id: null, started_at: null })
-const migrationStateLoading = ref(false)
-
-// Running tasks (node tasks + migration lock)
-const runningTasksData = ref<{ migration: MigrationState; tasks: RunningTask[] }>({
-  migration: { in_progress: false, source_id: null, target_id: null, started_at: null },
-  tasks: [],
+const runningMigration = ref<MigrationState>({
+  in_progress: false,
+  source_id: null,
+  target_id: null,
+  started_at: null,
+  progress: null,
 })
-const runningTasksLoading = ref(false)
-
-const runningTaskColumns = [
-  { title: '任务类型', key: 'task_type' },
-  { title: '集群', key: 'cluster_name' },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '进度', key: 'progress', width: 100 },
-  { title: '开始时间', key: 'started_at', width: 160 },
-]
-
-function taskTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    cmd_exec: '命令执行',
-    distribute_file: '文件分发',
-    install_edge: '安装 Edge',
-    upgrade_edge: '升级 Edge',
-    reload_edge: '重载 Edge',
-    check_software: '软件检查',
-    edit_edge_env: '编辑 Edge 环境',
-    sync_edge_env: '同步 Edge 环境',
-  }
-  return labels[type] || type
-}
+const migrationStateLoading = ref(false)
 
 // Migration history
 const migrationHistory = ref<MigrationHistoryItem[]>([])
@@ -708,23 +671,17 @@ async function loadData() {
 }
 
 async function loadMigrationState() {
+  const wasInProgress = runningMigration.value.in_progress
   migrationStateLoading.value = true
   try {
     const res = await getRunningTasks()
     runningMigration.value = res.data.migration
+    // 迁移刚结束时自动刷新历史记录
+    if (wasInProgress && !res.data.migration.in_progress) {
+      loadMigrationHistory()
+    }
   } finally {
     migrationStateLoading.value = false
-  }
-}
-
-async function loadRunningTasks() {
-  runningTasksLoading.value = true
-  try {
-    const res = await getRunningTasks()
-    runningTasksData.value = res.data
-    runningMigration.value = res.data.migration
-  } finally {
-    runningTasksLoading.value = false
   }
 }
 
@@ -856,8 +813,13 @@ async function handleMigrate() {
     message.error('请先勾选「我了解将清空目标库」')
     return
   }
+  if (runningMigration.value.in_progress || migrating.value) {
+    message.warning('数据库迁移正在进行中，请等待当前迁移完成后再试')
+    return
+  }
   migrating.value = true
   migrateResult.value = null
+  loadMigrationState()
 
   // Reset progress state
   Object.assign(migrationProgress, {
@@ -927,14 +889,14 @@ function handleCancelMigration() {
   message.warning('迁移已终止')
 }
 
-// Auto-refresh polling for running tasks (every 5 seconds)
+// Auto-refresh polling for migration state (every 5 seconds)
 let _migrationPollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   loadData()
-  loadRunningTasks()
+  loadMigrationState()
   loadMigrationHistory()
-  _migrationPollTimer = setInterval(loadRunningTasks, 5000)
+  _migrationPollTimer = setInterval(loadMigrationState, 5000)
 })
 
 onUnmounted(() => {
@@ -1224,34 +1186,31 @@ defineExpose({
   font-size: 12px;
 }
 
-/* ── 当前任务卡片 ── */
+/* ── 迁移锁警告 ── */
 .migration-lock-alert {
   margin-bottom: 12px;
 }
-.running-tasks-table :deep(.ant-table) {
-  background: transparent;
+
+/* ── 迁移进度详情（API 恢复） ── */
+.migration-progress-detail {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
 }
-.running-tasks-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 11px;
+.progress-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.phase-label {
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 8px 14px;
-}
-.running-tasks-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-.running-tasks-table :deep(.ant-table-tbody > tr > td) {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
   font-size: 13px;
 }
-.running-tasks-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none;
+.migration-progress-detail .progress-text {
+  font-size: 12px;
+  color: #666;
 }
 
 /* ── 迁移历史 ── */

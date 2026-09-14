@@ -143,12 +143,24 @@ async def get_running_tasks(
             "started_at": t.started_at.isoformat() if t.started_at else None,
         })
 
+    progress = state.progress
     return {
         "migration": {
             "in_progress": state.in_progress,
             "source_id": state.source_id,
             "target_id": state.target_id,
             "started_at": state.started_at.isoformat() if state.started_at else None,
+            "progress": {
+                "phase": progress.phase,
+                "backup_done": progress.backup_done,
+                "backup_total": progress.backup_total,
+                "table_index": progress.table_index,
+                "total_tables": progress.total_tables,
+                "current_table": progress.current_table,
+                "copied_rows": progress.copied_rows,
+                "total_rows": progress.total_rows,
+                "skipped": progress.skipped,
+            } if state.in_progress else None,
         },
         "tasks": tasks,
     }
@@ -378,6 +390,15 @@ async def migrate_database_stream(
 
         def on_progress(done, total, table_name="", copied_rows=0, total_rows=0, skipped=False):
             """Table-level progress callback (called from worker thread)."""
+            maintenance.update_migration_progress(
+                phase="migrating",
+                table_index=done,
+                total_tables=total,
+                current_table=table_name,
+                copied_rows=copied_rows,
+                total_rows=total_rows,
+                skipped=skipped,
+            )
             event_queue.put_nowait({
                 "type": "table_progress",
                 "table_index": done,
@@ -390,6 +411,11 @@ async def migrate_database_stream(
 
         def on_backup_progress(done, total):
             """Backup progress callback (called from worker thread)."""
+            maintenance.update_migration_progress(
+                phase="backup",
+                backup_done=done,
+                backup_total=total,
+            )
             event_queue.put_nowait({
                 "type": "backup_progress",
                 "done": done,
@@ -411,6 +437,8 @@ async def migrate_database_stream(
         t0 = time.monotonic()
         started_at = datetime.utcnow()
         loop = asyncio.get_event_loop()
+        migration_finished = threading.Event()
+        migration_result: dict = {}
         try:
             # Auto-backup before clear migration
             if body.confirmed_clear:
@@ -432,6 +460,7 @@ async def migrate_database_stream(
                             cancel_event.set()
                             await _write_failed_migration_log(source, target, body, current_user, "备份超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                             yield _send_event({"type": "error", "message": "备份超时"})
+                            maintenance.set_migration_in_progress(False)
                             return
                         while not event_queue.empty():
                             ev = event_queue.get_nowait()
@@ -445,6 +474,7 @@ async def migrate_database_stream(
                 except Exception as e:
                     await _write_failed_migration_log(source, target, body, current_user, f"备份失败: {e}", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                     yield _send_event({"type": "error", "message": f"备份失败: {e}"})
+                    maintenance.set_migration_in_progress(False)
                     return
 
                 _cleanup_old_backups(backup_dir)
@@ -456,19 +486,34 @@ async def migrate_database_stream(
 
             # Run migration in thread — poll queue for progress while thread runs
             def run_migration():
-                return db_migration_service.migrate_direct(
-                    source, target,
-                    include_logs=body.include_logs,
-                    mode=body.mode,
-                    confirmed_clear=body.confirmed_clear,
-                    cancel_event=cancel_event,
-                    progress_cb=on_progress,
-                )
+                try:
+                    result = db_migration_service.migrate_direct(
+                        source, target,
+                        include_logs=body.include_logs,
+                        mode=body.mode,
+                        confirmed_clear=body.confirmed_clear,
+                        cancel_event=cancel_event,
+                        progress_cb=on_progress,
+                    )
+                    migration_result["tables"] = result
+                    migration_result["success"] = True
+                    return result
+                except MigrationCancelled:
+                    migration_result["error"] = "迁移已取消"
+                    migration_result["success"] = False
+                    raise
+                except Exception as e:
+                    migration_result["error"] = str(e)
+                    migration_result["success"] = False
+                    raise
+                finally:
+                    migration_finished.set()
 
             migration_task = loop.run_in_executor(None, run_migration)
             deadline = asyncio.get_event_loop().time() + timeout
 
             try:
+                table_details = None
                 # Poll the event queue while the migration thread runs
                 while not migration_task.done():
                     # Check timeout
@@ -476,6 +521,7 @@ async def migrate_database_stream(
                         cancel_event.set()
                         await _write_failed_migration_log(source, target, body, current_user, "迁移超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                         yield _send_event({"type": "error", "message": "迁移超时"})
+                        maintenance.set_migration_in_progress(False)
                         return
                     # Drain queued progress events
                     while not event_queue.empty():
@@ -492,52 +538,63 @@ async def migrate_database_stream(
                 # Get result (may raise)
                 table_details = migration_task.result()
             except MigrationCancelled:
-                await _write_failed_migration_log(source, target, body, current_user, "迁移已取消", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                 yield _send_event({"type": "error", "message": "迁移已取消"})
-                return
+                table_details = None
             except Exception as e:
-                await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                 yield _send_event({"type": "error", "message": f"迁移失败: {e}"})
-                return
+                table_details = None
 
-            # Send final success event
-            tables_count = len(table_details)
-            success_msg = f"迁移完成，共迁移 {tables_count} 张表"
-            yield _send_event({
-                "type": "complete",
-                "message": success_msg,
-                "tables_migrated": tables_count,
-                "tables": table_details,
-                "backup_path": backup_path,
-            })
-
-            # Write migration log and audit log in generator
-            async with AsyncSessionLocal() as log_db:
-                await db_migration_service.record_migration_log(
-                    log_db,
-                    direction=_direction_label(source, target),
-                    source_connection=body.source_id,
-                    target_connection=body.target_id,
-                    mode=body.mode,
-                    status="success",
-                    include_logs=body.include_logs,
-                    tables_count=tables_count,
-                    backup_path=backup_path,
-                    duration_seconds=round(time.monotonic() - t0, 1),
-                    started_at=started_at,
-                )
-                log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+            # Send final success event (only if migration actually succeeded)
+            if table_details is not None:
+                tables_count = len(table_details)
+                success_msg = f"迁移完成，共迁移 {tables_count} 张表"
+                yield _send_event({
+                    "type": "complete",
+                    "message": success_msg,
+                    "tables_migrated": tables_count,
+                    "tables": table_details,
+                    "backup_path": backup_path,
+                })
 
         except ClientDisconnect:
-            # Client disconnected, set cancel event to stop migration thread
-            cancel_event.set()
-            logger.info("Migration SSE client disconnected, cancelling migration")
-            await _write_failed_migration_log(source, target, body, current_user, "客户端断开连接，迁移已中止", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
+            # Client disconnected but migration thread continues in background.
+            # Do NOT cancel — refresh/navigation should not kill a running migration.
+            logger.info("Migration SSE client disconnected, migration continues in background")
         except Exception as e:
             await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': f'迁移失败: {e}'})}\n\n"
-        finally:
-            maintenance.set_migration_in_progress(False)
+
+        # Wait for migration thread to finish if client disconnected early,
+        # so logs are always written regardless of SSE connection state.
+        if not migration_finished.is_set():
+            await asyncio.get_event_loop().run_in_executor(None, migration_finished.wait)
+
+        # ALWAYS clear migration lock first — regardless of log-writing success
+        maintenance.set_migration_in_progress(False)
+
+        # Write migration log & audit — runs after thread finishes, whether client is connected or not
+        duration = round(time.monotonic() - t0, 1)
+        try:
+            if migration_result.get("success"):
+                tables_count = len(migration_result.get("tables", []) or [])
+                async with AsyncSessionLocal() as log_db:
+                    await db_migration_service.record_migration_log(
+                        log_db,
+                        direction=_direction_label(source, target),
+                        source_connection=body.source_id,
+                        target_connection=body.target_id,
+                        mode=body.mode,
+                        status="success",
+                        include_logs=body.include_logs,
+                        tables_count=tables_count,
+                        backup_path=backup_path,
+                        duration_seconds=duration,
+                        started_at=started_at,
+                    )
+                    log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+            elif migration_result.get("error"):
+                await _write_failed_migration_log(source, target, body, current_user, migration_result["error"], duration_seconds=duration, started_at=started_at)
+        except Exception as log_err:
+            logger.error("Failed to write migration log: %s", log_err)
 
     return StreamingResponse(
         event_generator(),

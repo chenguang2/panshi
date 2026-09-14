@@ -32,6 +32,7 @@
 #### Scenario: 全部迁移完成
 - **WHEN** 所有表迁移完成
 - **THEN** 系统 SHALL 发送 `type=complete` 事件，包含 `message`、`tables_migrated`、`tables`（详情数组）、`backup_path`
+- **IMPLEMENTATION NOTE**: `run_migration()` 线程函数必须显式 `return result`（`migrate_direct` 的返回值）。SSE generator 通过 `migration_task.result()` 获取 `table_details`；若线程函数无 return，`result()` 返回 `None`，`complete` 事件不会发送，UI 将永远卡在"迁移中"。
 
 #### Scenario: 迁移失败或超时
 - **WHEN** 迁移过程中发生错误或超时

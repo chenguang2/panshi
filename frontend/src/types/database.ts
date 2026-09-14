@@ -145,11 +145,24 @@ export type MigrationStreamEvent =
 
 // ── Running tasks（Task 3.1: GET /database/running-tasks 响应类型）──
 
+export interface MigrationProgress {
+  phase: string // "backup" | "migrating" | ""
+  backup_done: number
+  backup_total: number
+  table_index: number
+  total_tables: number
+  current_table: string
+  copied_rows: number
+  total_rows: number
+  skipped: boolean
+}
+
 export interface MigrationState {
   in_progress: boolean
   source_id: string | null
   target_id: string | null
   started_at: string | null
+  progress: MigrationProgress | null
 }
 
 export interface RunningTask {
