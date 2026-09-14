@@ -41,6 +41,60 @@ def _app():
     return app
 
 
+class TestMigrationState:
+    """Task 1.1-1.4: MigrationState dataclass replaces bare threading.Event."""
+
+    def test_initial_state_is_not_in_progress(self):
+        state = maintenance.get_migration_state()
+        assert state.in_progress is False
+        assert state.source_id is None
+        assert state.target_id is None
+        assert state.started_at is None
+
+    def test_set_migration_in_progress_true_records_metadata(self):
+        maintenance.set_migration_in_progress(True, source_id="src_1", target_id="tgt_2")
+        state = maintenance.get_migration_state()
+        assert state.in_progress is True
+        assert state.source_id == "src_1"
+        assert state.target_id == "tgt_2"
+        assert state.started_at is not None
+
+    def test_set_migration_in_progress_false_clears_everything(self):
+        maintenance.set_migration_in_progress(True, source_id="src_1", target_id="tgt_2")
+        maintenance.set_migration_in_progress(False)
+        state = maintenance.get_migration_state()
+        assert state.in_progress is False
+        assert state.source_id is None
+        assert state.target_id is None
+        assert state.started_at is None
+
+    def test_migration_in_progress_backward_compat(self):
+        """migration_in_progress() reads .in_progress for backward compat."""
+        assert maintenance.migration_in_progress() is False
+        maintenance.set_migration_in_progress(True, source_id="s", target_id="t")
+        assert maintenance.migration_in_progress() is True
+        maintenance.set_migration_in_progress(False)
+        assert maintenance.migration_in_progress() is False
+
+    def test_set_true_without_metadata_defaults_none(self):
+        maintenance.set_migration_in_progress(True)
+        state = maintenance.get_migration_state()
+        assert state.in_progress is True
+        assert state.source_id is None
+        assert state.target_id is None
+
+    def test_middleware_still_blocks_writes(self):
+        """Middleware integration unchanged by MigrationState refactor."""
+        maintenance.set_migration_in_progress(True, source_id="s", target_id="t")
+        client = TestClient(_app())
+        assert client.post("/write").status_code == 503
+
+    def test_middleware_allows_reads_with_metadata(self):
+        maintenance.set_migration_in_progress(True, source_id="s", target_id="t")
+        client = TestClient(_app())
+        assert client.get("/read").status_code == 200
+
+
 class TestMaintenanceFlag:
     def test_flag_toggle(self):
         assert maintenance.migration_in_progress() is False

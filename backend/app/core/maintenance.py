@@ -6,17 +6,42 @@ Reads stay available.
 """
 
 import threading
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
+
+
+@dataclass
+class MigrationState:
+    in_progress: bool = False
+    source_id: Optional[str] = None
+    target_id: Optional[str] = None
+    started_at: Optional[datetime] = None
+
 
 _migration_lock = threading.Event()
+_state = MigrationState()
 
 WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
 
-def set_migration_in_progress(on: bool) -> None:
+def set_migration_in_progress(on: bool, source_id: Optional[str] = None, target_id: Optional[str] = None) -> None:
+    global _state
     if on:
         _migration_lock.set()
+        _state = MigrationState(
+            in_progress=True,
+            source_id=source_id,
+            target_id=target_id,
+            started_at=datetime.now(),
+        )
     else:
         _migration_lock.clear()
+        _state = MigrationState()
+
+
+def get_migration_state() -> MigrationState:
+    return _state
 
 
 def migration_in_progress() -> bool:

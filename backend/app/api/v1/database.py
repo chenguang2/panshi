@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -62,7 +63,9 @@ def _cleanup_old_backups(backup_dir: Path, keep: int = 10) -> None:
         logger.warning("Failed to clean up old backups: %s", e)
 
 
-async def _write_failed_migration_log(source, target, body, user, error_message: str) -> None:
+async def _write_failed_migration_log(
+    source, target, body, user, error_message: str, duration_seconds: float | None = None, started_at=None
+) -> None:
     """迁移失败/超时/断连时写入 status=failed 迁移记录与审计日志（任务 2.5）。
 
     SSE generator 生命周期超出请求依赖注入，与成功路径一致使用独立
@@ -80,6 +83,8 @@ async def _write_failed_migration_log(source, target, body, user, error_message:
                 include_logs=body.include_logs,
                 tables_count=0,
                 error_message=error_message,
+                duration_seconds=duration_seconds,
+                started_at=started_at,
             )
             log_audit(log_db, user=user, action="migrate_database", resource="database",
                       detail=f"迁移失败 {body.source_id} → {body.target_id}：{error_message}")
@@ -95,6 +100,57 @@ async def get_status(current_user: User = Depends(require_db_admin('database_man
         "active": active.public_dict() if active else None,
         "connections_count": len(cfg.connections),
         "version": cfg.version,
+    }
+
+
+@router.get("/running-tasks")
+async def get_running_tasks(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('database_management')),
+):
+    """聚合返回迁移锁状态 + 进行中的节点任务列表。"""
+    from app.models.node_task import NodeTask
+    from app.models.cluster import Cluster
+
+    state = maintenance.get_migration_state()
+
+    result = await db.execute(
+        select(NodeTask).where(NodeTask.status.in_(["running", "pending", "interrupted"]))
+    )
+    node_tasks = result.scalars().all()
+
+    # Batch-fetch cluster names
+    cluster_ids = {t.cluster_id for t in node_tasks}
+    cluster_map = {}
+    if cluster_ids:
+        clusters_result = await db.execute(
+            select(Cluster.id, Cluster.name).where(Cluster.id.in_(cluster_ids))
+        )
+        cluster_map = {row[0]: row[1] for row in clusters_result.all()}
+
+    tasks = []
+    for t in node_tasks:
+        tasks.append({
+            "id": t.id,
+            "cluster_id": t.cluster_id,
+            "cluster_name": cluster_map.get(t.cluster_id, f"集群#{t.cluster_id}"),
+            "task_type": t.task_type,
+            "status": t.status,
+            "total_nodes": t.total_nodes,
+            "success_nodes": t.success_nodes,
+            "failed_nodes": t.failed_nodes,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "started_at": t.started_at.isoformat() if t.started_at else None,
+        })
+
+    return {
+        "migration": {
+            "in_progress": state.in_progress,
+            "source_id": state.source_id,
+            "target_id": state.target_id,
+            "started_at": state.started_at.isoformat() if state.started_at else None,
+        },
+        "tasks": tasks,
     }
 
 
@@ -239,13 +295,14 @@ async def migrate_database(
     if not body.confirmed_clear and not db_migration_service.target_is_empty(target):
         raise HTTPException(status_code=400, detail="目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
 
-    maintenance.set_migration_in_progress(True)
+    maintenance.set_migration_in_progress(True, source_id=body.source_id, target_id=body.target_id)
     backup_path = ""
+    t0 = time.monotonic()
+    started_at = datetime.utcnow()
     try:
         # Auto-backup before clear migration
         if body.confirmed_clear:
             from pathlib import Path
-            from datetime import datetime
             backup_dir = Path("./data/backups")
             backup_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -274,6 +331,8 @@ async def migrate_database(
         include_logs=body.include_logs,
         tables_count=tables_count,
         backup_path=backup_path,
+        duration_seconds=round(time.monotonic() - t0, 1),
+        started_at=started_at,
     )
     enrich_audit(request, detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
     await db.commit()  # 持久化审计骨架
@@ -347,8 +406,10 @@ async def migrate_database_stream(
                 ev = event_queue.get_nowait()
                 yield _send_event(ev)
 
-        maintenance.set_migration_in_progress(True)
+        maintenance.set_migration_in_progress(True, source_id=body.source_id, target_id=body.target_id)
         backup_path = ""
+        t0 = time.monotonic()
+        started_at = datetime.utcnow()
         loop = asyncio.get_event_loop()
         try:
             # Auto-backup before clear migration
@@ -369,7 +430,7 @@ async def migrate_database_stream(
                     while not backup_task.done():
                         if asyncio.get_event_loop().time() > backup_deadline:
                             cancel_event.set()
-                            await _write_failed_migration_log(source, target, body, current_user, "备份超时")
+                            await _write_failed_migration_log(source, target, body, current_user, "备份超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                             yield _send_event({"type": "error", "message": "备份超时"})
                             return
                         while not event_queue.empty():
@@ -382,7 +443,7 @@ async def migrate_database_stream(
                         yield _send_event(ev)
                     backup_task.result()  # Raise if backup failed
                 except Exception as e:
-                    await _write_failed_migration_log(source, target, body, current_user, f"备份失败: {e}")
+                    await _write_failed_migration_log(source, target, body, current_user, f"备份失败: {e}", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                     yield _send_event({"type": "error", "message": f"备份失败: {e}"})
                     return
 
@@ -413,7 +474,7 @@ async def migrate_database_stream(
                     # Check timeout
                     if asyncio.get_event_loop().time() > deadline:
                         cancel_event.set()
-                        await _write_failed_migration_log(source, target, body, current_user, "迁移超时")
+                        await _write_failed_migration_log(source, target, body, current_user, "迁移超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                         yield _send_event({"type": "error", "message": "迁移超时"})
                         return
                     # Drain queued progress events
@@ -431,11 +492,11 @@ async def migrate_database_stream(
                 # Get result (may raise)
                 table_details = migration_task.result()
             except MigrationCancelled:
-                await _write_failed_migration_log(source, target, body, current_user, "迁移已取消")
+                await _write_failed_migration_log(source, target, body, current_user, "迁移已取消", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                 yield _send_event({"type": "error", "message": "迁移已取消"})
                 return
             except Exception as e:
-                await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
+                await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
                 yield _send_event({"type": "error", "message": f"迁移失败: {e}"})
                 return
 
@@ -462,6 +523,8 @@ async def migrate_database_stream(
                     include_logs=body.include_logs,
                     tables_count=tables_count,
                     backup_path=backup_path,
+                    duration_seconds=round(time.monotonic() - t0, 1),
+                    started_at=started_at,
                 )
                 log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
 
@@ -469,7 +532,7 @@ async def migrate_database_stream(
             # Client disconnected, set cancel event to stop migration thread
             cancel_event.set()
             logger.info("Migration SSE client disconnected, cancelling migration")
-            await _write_failed_migration_log(source, target, body, current_user, "客户端断开连接，迁移已中止")
+            await _write_failed_migration_log(source, target, body, current_user, "客户端断开连接，迁移已中止", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
         except Exception as e:
             await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': f'迁移失败: {e}'})}\n\n"
@@ -523,6 +586,8 @@ async def import_archive(
         db_migration_service.validate_migration_direction("__archive__", body.target_id, cfg.active)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    t0 = time.monotonic()
+    started_at = datetime.utcnow()
     try:
         db_archive_service.import_archive(body.archive_path, target, confirmed_clear=body.confirmed_clear)
     except ValueError as e:
@@ -534,6 +599,8 @@ async def import_archive(
         target_connection=body.target_id,
         mode="replace",
         status="success",
+        duration_seconds=round(time.monotonic() - t0, 1),
+        started_at=started_at,
     )
     enrich_audit(request, detail=f"导入归档 {body.archive_path} → {body.target_id}")
     await db.commit()
@@ -560,6 +627,8 @@ async def migration_history(
             "tables_count": log.tables_count,
             "backup_path": log.backup_path,
             "error_message": log.error_message,
+            "duration_seconds": log.duration_seconds,
+            "started_at": log.started_at.isoformat() if log.started_at else None,
             "created_at": log.created_at.isoformat() if log.created_at else None,
         }
         for log in logs

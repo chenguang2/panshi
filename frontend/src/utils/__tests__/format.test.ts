@@ -11,7 +11,7 @@ import {
 describe('utils/format', () => {
   describe('formatDate（dash YYYY-MM-DD HH:mm）', () => {
     it('格式化为分钟精度 dash 格式', () => {
-      expect(formatDate('2026-08-29T14:30:45')).toBe('2026-08-29 14:30')
+      expect(formatDate('2026-08-29T14:30:45')).toBe('2026-08-29 22:30')
     })
     it('空值返回 -', () => {
       expect(formatDate(null)).toBe('-')
@@ -22,7 +22,14 @@ describe('utils/format', () => {
 
   describe('formatDateTime（slash YYYY/MM/DD HH:mm:ss）', () => {
     it('格式化为带秒斜杠格式', () => {
-      expect(formatDateTime('2026-08-29T14:30:45')).toBe('2026/08/29 14:30:45')
+      expect(formatDateTime('2026-08-29T14:30:45')).toBe('2026/08/29 22:30:45')
+    })
+    it('无时区后缀的 UTC 串按 UTC 解析转东 8 区', () => {
+      // 后端 datetime.utcnow().isoformat() 无 Z 后缀：02:00 UTC == 10:00 北京
+      expect(formatDateTime('2026-08-02T02:00:00')).toBe('2026/08/02 10:00:00')
+    })
+    it('带 Z 后缀的 UTC 串按 UTC 解析转东 8 区', () => {
+      expect(formatDateTime('2026-08-02T02:00:00Z')).toBe('2026/08/02 10:00:00')
     })
     it('空值返回 -，非法值输出 Invalid Date（与历史行为一致）', () => {
       expect(formatDateTime(null)).toBe('-')
@@ -32,7 +39,7 @@ describe('utils/format', () => {
 
   describe('formatMonthDayTime（slash MM/DD HH:mm）', () => {
     it('格式化为无年份格式', () => {
-      expect(formatMonthDayTime('2026-08-29T14:30:45')).toBe('08/29 14:30')
+      expect(formatMonthDayTime('2026-08-29T14:30:45')).toBe('08/29 22:30')
     })
     it('空值返回 -', () => {
       expect(formatMonthDayTime(null)).toBe('-')

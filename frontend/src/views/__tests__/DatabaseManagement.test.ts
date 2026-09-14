@@ -16,6 +16,7 @@ const mocks = {
   exportDatabase: vi.fn(),
   importDatabase: vi.fn(),
   getHistory: vi.fn(),
+  getRunningTasks: vi.fn(),
 }
 
 vi.mock('@/api/database', () => ({
@@ -31,6 +32,7 @@ vi.mock('@/api/database', () => ({
   exportDatabase: (...a: any[]) => mocks.exportDatabase(...a),
   importDatabase: (...a: any[]) => mocks.importDatabase(...a),
   getMigrationHistory: (...a: any[]) => mocks.getHistory(...a),
+  getRunningTasks: (...a: any[]) => mocks.getRunningTasks(...a),
 }))
 
 vi.mock('ant-design-vue', async (importOriginal) => {
@@ -125,6 +127,12 @@ describe('DatabaseManagement', () => {
     vi.clearAllMocks()
     mocks.getStatus.mockResolvedValue({ data: { active: conn(), connections_count: 1, version: 1 } })
     mocks.listConnections.mockResolvedValue({ data: [conn()] })
+    mocks.getRunningTasks.mockResolvedValue({
+      data: {
+        migration: { in_progress: false, source_id: null, target_id: null, started_at: null },
+        tasks: [],
+      },
+    })
     mocks.getHistory.mockResolvedValue({ data: [] })
     mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
     // Mock migrateDatabaseStream to return an AbortController and simulate success

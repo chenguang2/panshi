@@ -155,6 +155,8 @@ COLUMN_MIGRATIONS = [
     ("install_task_node", "log_file", "VARCHAR(255)"),
     ("install_task_node", "log_line_count", "INTEGER DEFAULT 0"),
     ("install_task_node", "stdout_tail", "TEXT"),
+    ("ps_db_migration_log", "duration_seconds", "FLOAT"),
+    ("ps_db_migration_log", "started_at", "DATETIME"),
 ]
 
 

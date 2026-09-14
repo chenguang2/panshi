@@ -3,9 +3,13 @@ import { createPinia } from 'pinia'
 import router, { setupDynamicRoutes } from './router'
 import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
 import App from './App.vue'
 import './style.css'
 import './styles/theme.css'
+
+dayjs.locale('zh-cn')
 
 async function bootstrap() {
   const app = createApp(App)

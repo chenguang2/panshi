@@ -80,6 +80,25 @@ def test_migration_is_idempotent(legacy_db):
     assert "edge_install_path" not in cols
 
 
+def test_migration_log_duration_column_added(tmp_path):
+    """Legacy ps_db_migration_log (pre-duration) gains duration_seconds via run_migrations."""
+    engine = _create_engine(tmp_path / "migration_log.db")
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE ps_db_migration_log (id INTEGER PRIMARY KEY, "
+            "direction VARCHAR(50), source_connection VARCHAR(100), "
+            "target_connection VARCHAR(100), mode VARCHAR(20), status VARCHAR(20), "
+            "include_logs INTEGER, tables_count INTEGER, backup_path VARCHAR(500), "
+            "error_message TEXT, created_at DATETIME)"
+        )
+        conn.commit()
+    try:
+        run_migrations(engine)
+        assert "duration_seconds" in _columns(engine, "ps_db_migration_log")
+    finally:
+        engine.dispose()
+
+
 def test_both_columns_backfills_openresty_path_and_drops_legacy(tmp_path):
     """When openresty_path already exists (added empty by an earlier buggy
     migration), its data must be backfilled from edge_install_path and the

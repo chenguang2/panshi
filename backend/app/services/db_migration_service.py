@@ -400,6 +400,8 @@ async def record_migration_log(
     tables_count: int = 0,
     backup_path: str = "",
     error_message: str = "",
+    duration_seconds: float | None = None,
+    started_at: datetime | None = None,
 ) -> None:
     """Persist a migration operation record to the active database."""
     db.add(
@@ -413,6 +415,8 @@ async def record_migration_log(
             tables_count=tables_count,
             backup_path=backup_path or None,
             error_message=error_message or None,
+            duration_seconds=duration_seconds,
+            started_at=started_at,
         )
     )
     await db.commit()

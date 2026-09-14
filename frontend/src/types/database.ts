@@ -92,6 +92,8 @@ export interface MigrationHistoryItem {
   tables_count?: number
   backup_path?: string
   error_message?: string
+  duration_seconds?: number | null
+  started_at?: string | null
   created_at?: string | null
 }
 
@@ -140,3 +142,30 @@ export type MigrationStreamEvent =
   | MigrationBackupCompleteEvent
   | MigrationCompleteEvent
   | MigrationErrorEvent
+
+// ── Running tasks（Task 3.1: GET /database/running-tasks 响应类型）──
+
+export interface MigrationState {
+  in_progress: boolean
+  source_id: string | null
+  target_id: string | null
+  started_at: string | null
+}
+
+export interface RunningTask {
+  id: number
+  cluster_id: number
+  cluster_name: string
+  task_type: string
+  status: string
+  total_nodes: number
+  success_nodes: number
+  failed_nodes: number
+  created_at: string | null
+  started_at: string | null
+}
+
+export interface RunningTasksResponse {
+  migration: MigrationState
+  tasks: RunningTask[]
+}

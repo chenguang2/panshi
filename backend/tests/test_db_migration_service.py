@@ -266,6 +266,64 @@ class TestMigrationLog:
         assert row.status == "failed"
         assert row.error_message == "connection refused"
 
+    @pytest.mark.asyncio
+    async def test_record_migration_log_duration(self, test_db):
+        await db_migration_service.record_migration_log(
+            test_db,
+            direction="sqlite_to_postgres",
+            source_connection="local_sqlite",
+            target_connection="prod_pg",
+            mode="replace",
+            status="success",
+            tables_count=5,
+            duration_seconds=12.5,
+        )
+        result = await test_db.execute(select(DbMigrationLog))
+        row = result.scalar_one()
+        assert row.duration_seconds == 12.5
+
+    @pytest.mark.asyncio
+    async def test_record_migration_log_duration_default_none(self, test_db):
+        await db_migration_service.record_migration_log(
+            test_db,
+            direction="sqlite_to_postgres",
+            source_connection="a",
+            target_connection="b",
+        )
+        result = await test_db.execute(select(DbMigrationLog))
+        row = result.scalar_one()
+        assert row.duration_seconds is None
+
+    @pytest.mark.asyncio
+    async def test_record_migration_log_started_at(self, test_db):
+        from datetime import datetime, timezone
+
+        started = datetime(2026, 9, 14, 8, 0, 0)
+        await db_migration_service.record_migration_log(
+            test_db,
+            direction="sqlite_to_postgres",
+            source_connection="local_sqlite",
+            target_connection="prod_pg",
+            mode="replace",
+            status="success",
+            started_at=started,
+        )
+        result = await test_db.execute(select(DbMigrationLog))
+        row = result.scalar_one()
+        assert row.started_at == started
+
+    @pytest.mark.asyncio
+    async def test_record_migration_log_started_at_default_none(self, test_db):
+        await db_migration_service.record_migration_log(
+            test_db,
+            direction="sqlite_to_postgres",
+            source_connection="a",
+            target_connection="b",
+        )
+        result = await test_db.execute(select(DbMigrationLog))
+        row = result.scalar_one()
+        assert row.started_at is None
+
 
 class TestDirectionValidation:
     def test_same_source_target_rejected(self):

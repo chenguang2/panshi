@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ConfigProvider } from 'ant-design-vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
 
 const themeConfig = {
   token: {
@@ -17,7 +18,7 @@ const themeConfig = {
 </script>
 
 <template>
-  <ConfigProvider :theme="themeConfig">
+  <ConfigProvider :theme="themeConfig" :locale="zhCN">
     <router-view />
   </ConfigProvider>
 </template>

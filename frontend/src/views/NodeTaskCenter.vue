@@ -66,6 +66,12 @@
           <template v-else-if="column.key === 'created_at'">
             {{ formatTime(record.created_at) }}
           </template>
+          <template v-else-if="column.key === 'finished_at'">
+            {{ formatTime(record.finished_at) }}
+          </template>
+          <template v-else-if="column.key === 'duration'">
+            {{ durationText(record) }}
+          </template>
           <template v-else-if="column.key === 'actions'">
             <a-dropdown :trigger="['click']">
               <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
@@ -978,6 +984,28 @@
               <div style="color: var(--muted, #999); font-size: 11px; margin-top: 4px">
                 文件将以原始文件名存入此目录
               </div>
+              <label
+                style="font-size: 13px; color: var(--muted, #888); display: block; margin-top: 12px; margin-bottom: 4px"
+                >超时时间</label
+              >
+              <select
+                v-model.number="distributeTimeout"
+                data-test="distribute-timeout"
+                style="
+                  width: 100%;
+                  padding: 6px 10px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border, #e5e5e5);
+                  font-size: 13px;
+                  background: var(--bg, #fff);
+                "
+              >
+                <option :value="60">60 秒</option>
+                <option :value="300">5 分钟</option>
+                <option :value="600">10 分钟（默认）</option>
+                <option :value="1800">30 分钟</option>
+                <option :value="3600">1 小时</option>
+              </select>
             </div>
             <div style="color: var(--muted, #999); font-size: 12px; line-height: 1.6">
               任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
@@ -1165,6 +1193,7 @@ const distributeUploadId = ref<string | null>(null)
 const distributeFromPending = ref(false)
 const distributeUploadError = ref<string | null>(null)
 const distributeDestpath = ref('')
+const distributeTimeout = ref(600)
 const distributeDragOver = ref(false)
 
 function addCmdWhitelist() {
@@ -1507,6 +1536,8 @@ const columns = [
   { title: '节点', key: 'nodes' },
   { title: '进度', key: 'progress' },
   { title: '创建时间', key: 'created_at' },
+  { title: '结束时间', key: 'finished_at' },
+  { title: '耗时', key: 'duration' },
   { title: '操作', key: 'actions', width: 180 },
 ]
 
@@ -1583,11 +1614,10 @@ function progressPercent(record: NodeTaskData): number {
 }
 
 function formatTime(t?: string | null): string {
-  if (!t) return '-'
-  return new Date(t).toLocaleString()
+  return formatDateTime(t)
 }
 
-function durationText(item: NodeTaskItemData): string {
+function durationText(item: { started_at?: string | null; finished_at?: string | null }): string {
   if (!item.started_at || !item.finished_at) return '-'
   const ms = new Date(item.finished_at).getTime() - new Date(item.started_at).getTime()
   return `${Math.max(0, Math.round(ms / 1000))}s`
@@ -1992,6 +2022,7 @@ async function openCreateModal() {
   distributeFromPending.value = false
   distributeUploadError.value = null
   distributeDestpath.value = ''
+  distributeTimeout.value = 600
   if (clusters.value.length === 0) {
     const res = await api.get('/clusters', { params: { page_size: 100 } })
     clusters.value = res.data.items || res.data || []
@@ -2109,6 +2140,7 @@ async function submitCreateTask() {
     params.srcpath = distributeUploadId.value
     params.destpath = distributeDestpath.value.trim()
     params.srcfilename = distributeFile.value.name
+    params.timeout = distributeTimeout.value
   }
   // cmd_exec 脚本模式：传 script_filename 供详情展示
   if (createTaskType.value === 'cmd_exec' && cmdExecMode.value === 'script' && scriptFile.value) {

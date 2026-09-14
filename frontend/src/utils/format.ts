@@ -7,11 +7,20 @@
  * 各函数与迁移前的历史输出保持同语义（统一 2 位零填充）。
  */
 
+/**
+ * 后端时间解析：所有模型时间列均为 datetime.utcnow()（naive UTC），
+ * isoformat() 输出无时区后缀（如 2026-09-14T08:00:00）。
+ * 无后缀视为 UTC；带 Z / ±hh:mm 后缀的原样解析。
+ */
+export function parseBackendDate(s: string): Date {
+  return /[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? new Date(s) : new Date(s + 'Z')
+}
+
 /** dash 格式 `YYYY-MM-DD HH:mm`（分钟精度，Asia/Shanghai 时区）。历史 useClusterUtils.formatDate 同语义。 */
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
-    const d = new Date(dateStr)
+    const d = parseBackendDate(dateStr)
     const parts = new Intl.DateTimeFormat('zh-CN', {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
@@ -32,7 +41,7 @@ export function formatDate(dateStr: string | null | undefined): string {
 export function formatDateTimeDash(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
-    const d = new Date(dateStr)
+    const d = parseBackendDate(dateStr)
     // 显式指定 Asia/Shanghai 时区，避免浏览器/OS 时区差异
     const parts = new Intl.DateTimeFormat('zh-CN', {
       timeZone: 'Asia/Shanghai',
@@ -55,7 +64,7 @@ export function formatDateTimeDash(dateStr: string | null | undefined): string {
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
-    return new Date(dateStr).toLocaleString('zh-CN', {
+    return parseBackendDate(dateStr).toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
       month: '2-digit',
@@ -73,7 +82,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
 export function formatMonthDayTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
-    return new Date(dateStr).toLocaleString('zh-CN', {
+    return parseBackendDate(dateStr).toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       month: '2-digit',
       day: '2-digit',
@@ -89,7 +98,7 @@ export function formatMonthDayTime(dateStr: string | null | undefined): string {
 export function formatDateOnly(dateStr: string | null | undefined): string {
   if (!dateStr) return '-'
   try {
-    return new Date(dateStr).toLocaleDateString('zh-CN', {
+    return parseBackendDate(dateStr).toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -103,7 +112,7 @@ export function formatDateOnly(dateStr: string | null | undefined): string {
 export function formatPublishDateTime(isoStr: string | null): string {
   if (!isoStr) return ''
   try {
-    return new Date(isoStr).toLocaleString('zh-CN', {
+    return parseBackendDate(isoStr).toLocaleString('zh-CN', {
       timeZone: 'Asia/Shanghai',
       year: 'numeric',
       month: '2-digit',

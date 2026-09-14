@@ -15,6 +15,7 @@ import type {
   MigrationHistoryItem,
   MigrationStreamEvent,
   MigrationTableProgressEvent,
+  RunningTasksResponse,
 } from '@/types/database'
 
 export function getDatabaseStatus() {
@@ -122,4 +123,8 @@ export function importDatabase(payload: ImportPayload) {
 
 export function getMigrationHistory() {
   return api.get<MigrationHistoryItem[]>('/database/history')
+}
+
+export function getRunningTasks() {
+  return api.get<RunningTasksResponse>('/database/running-tasks')
 }

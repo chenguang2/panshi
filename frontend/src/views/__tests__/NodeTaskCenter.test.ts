@@ -85,7 +85,7 @@ describe('NodeTaskCenter', () => {
     vi.mocked(api.get).mockResolvedValue({
       data: {
         total: 1,
-        items: [makeTask()],
+        items: [makeTask({ started_at: '2026-08-02T10:00:00', finished_at: '2026-08-02T10:00:45' })],
       },
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
@@ -97,6 +97,10 @@ describe('NodeTaskCenter', () => {
     expect(text).toContain('执行中')
     expect(text).toContain('1/2 成功')
     expect(text).toContain('详情')
+    // 开始时间/结束时间/耗时列：stub 环境无表头，用行数据断言接线
+    // fixture started/finished 为 naive UTC，东 8 区显示 +8h → 18:00:45
+    expect(text).toContain('18:00:45')
+    expect(text).toContain('45s')
     expect(wrapper.find('.status-running').exists()).toBe(true)
     wrapper.unmount()
   })
@@ -1102,6 +1106,29 @@ describe('NodeTaskCenter cmd_exec flow', () => {
 
     const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
     expect((createBtn as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('distribute_file form shows timeout select with default 600', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'distribute_file')
+    await checkFirstNode()
+
+    const timeoutSelect = document.querySelector('select[data-test="distribute-timeout"]') as HTMLSelectElement
+    expect(timeoutSelect).toBeTruthy()
+    expect(timeoutSelect.value).toBe('600')
+    expect(timeoutSelect.options.length).toBe(5)
     wrapper.unmount()
   })
 })

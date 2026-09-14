@@ -31,6 +31,61 @@
       </div>
     </div>
 
+    <!-- 当前任务卡片（4.1） -->
+    <div class="card">
+      <div class="card-header">
+        <h3>当前任务</h3>
+        <button class="btn btn-secondary btn-sm" @click="loadRunningTasks" :disabled="runningTasksLoading">
+          {{ runningTasksLoading ? '刷新中…' : '刷新' }}
+        </button>
+      </div>
+      <div class="card-body">
+        <!-- 迁移锁激活时显示警告 -->
+        <a-alert
+          v-if="runningTasksData.migration?.in_progress"
+          type="warning"
+          show-icon
+          class="migration-lock-alert"
+          :message="`数据库迁移进行中，写操作已锁定${runningTasksData.migration.source_id && runningTasksData.migration.target_id ? '：' + getConnectionName(runningTasksData.migration.source_id) + ' → ' + getConnectionName(runningTasksData.migration.target_id) : ''}`"
+          :description="
+            runningTasksData.migration.started_at
+              ? '开始时间：' + formatTime(runningTasksData.migration.started_at)
+              : ''
+          "
+        />
+        <!-- 节点任务列表 -->
+        <template v-if="runningTasksData.tasks.length > 0">
+          <a-table
+            :data-source="runningTasksData.tasks"
+            :columns="runningTaskColumns"
+            row-key="id"
+            :pagination="false"
+            size="small"
+            class="running-tasks-table"
+          >
+            <template #bodyCell="{ record, column }">
+              <template v-if="column.key === 'task_type'">
+                {{ taskTypeLabel(record.task_type) }}
+              </template>
+              <template v-else-if="column.key === 'cluster_name'">
+                {{ record.cluster_name || '已删除' }}
+              </template>
+              <template v-else-if="column.key === 'progress'">
+                {{ record.success_nodes }}/{{ record.total_nodes }}
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <a-tag :color="record.status === 'running' ? 'blue' : 'default'">
+                  {{ record.status === 'running' ? '运行中' : '排队中' }}
+                </a-tag>
+              </template>
+            </template>
+          </a-table>
+        </template>
+        <!-- 空状态 -->
+        <a-empty v-else-if="!runningTasksLoading" description="当前没有正在执行的任务" />
+      </div>
+    </div>
+
     <!-- 连接列表 -->
     <div class="card">
       <div class="card-header">
@@ -83,65 +138,101 @@
 
     <!-- 数据迁移 -->
     <div class="card">
-      <div class="card-header"><h3>数据迁移</h3></div>
+      <div class="card-header">
+        <h3>数据迁移</h3>
+        <button class="btn btn-secondary btn-sm" @click="loadMigrationState" :disabled="migrationStateLoading">
+          {{ migrationStateLoading ? '刷新中…' : '刷新' }}
+        </button>
+      </div>
       <div class="card-body">
+        <!-- 迁移进行中 -->
+        <a-alert
+          v-if="runningMigration.in_progress"
+          type="warning"
+          show-icon
+          class="migration-lock-alert"
+          :message="`数据库迁移进行中${runningMigration.source_id && runningMigration.target_id ? '：' + getConnectionName(runningMigration.source_id) + ' → ' + getConnectionName(runningMigration.target_id) : ''}`"
+          :description="runningMigration.started_at ? '开始时间：' + formatTime(runningMigration.started_at) : ''"
+        />
         <a-alert
           class="static-notice"
           type="info"
           show-icon
           message="静态资源文件存储于服务器磁盘，仅部署该文件的本机可访问；迁移/切换数据库不影响静态资源文件。"
         />
-        <div class="migrate-form">
-          <div class="form-group">
-            <label class="form-label">源数据库</label>
-            <select v-model="migrateForm.sourceId" class="form-input">
-              <option value="" disabled>选择源数据库</option>
-              <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+        <div class="migrate-flow">
+          <div class="flow-main">
+            <!-- 源 → 目标 可视化流转 -->
+            <div class="flow-cards">
+              <div class="flow-card">
+                <div class="flow-card-label">源数据库</div>
+                <select v-model="migrateForm.sourceId" class="form-input flow-select">
+                  <option value="" disabled>选择源数据库</option>
+                  <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+              </div>
+              <div class="flow-arrow">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </div>
+              <div class="flow-card">
+                <div class="flow-card-label">目标数据库</div>
+                <select v-model="migrateForm.targetId" class="form-input flow-select">
+                  <option value="" disabled>选择目标数据库</option>
+                  <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 选项卡片区（流向卡片右侧） -->
+            <div class="flow-opts-cards">
+              <div class="flow-card">
+                <div class="flow-card-label">迁移模式</div>
+                <select v-model="migrateForm.mode" class="form-input flow-select">
+                  <option value="replace">替换（清空目标库）</option>
+                </select>
+              </div>
+              <div class="flow-card">
+                <div class="flow-card-label">超时时间</div>
+                <select v-model.number="migrateForm.timeout" class="form-input flow-select" :disabled="migrating">
+                  <option :value="60">1 分钟</option>
+                  <option :value="180">3 分钟</option>
+                  <option :value="300">5 分钟（默认）</option>
+                  <option :value="600">10 分钟</option>
+                  <option :value="1800">30 分钟</option>
+                </select>
+              </div>
+              <div class="flow-card flow-card-checks">
+                <label class="checkbox-label flow-checkbox">
+                  <input type="checkbox" v-model="migrateForm.includeLogs" />
+                  <span>包含日志数据</span>
+                </label>
+                <label class="checkbox-label confirm-check">
+                  <input type="checkbox" v-model="migrateForm.confirmed_clear" />
+                  <span>我了解将清空目标库</span>
+                </label>
+              </div>
+              <button
+                class="btn btn-primary migrate-btn"
+                :disabled="migrating || !migrateForm.confirmed_clear"
+                :title="migrateForm.confirmed_clear ? '' : '请先勾选「我了解将清空目标库」'"
+                @click="handleMigrate"
+              >
+                {{ migrating ? '迁移中…' : '开始迁移' }}
+              </button>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">目标数据库</label>
-            <select v-model="migrateForm.targetId" class="form-input">
-              <option value="" disabled>选择目标数据库</option>
-              <option v-for="c in connections" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">模式</label>
-            <select v-model="migrateForm.mode" class="form-input">
-              <option value="replace">替换（清空目标库）</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">超时时间</label>
-            <select v-model.number="migrateForm.timeout" class="form-input" :disabled="migrating">
-              <option :value="60">1 分钟</option>
-              <option :value="180">3 分钟</option>
-              <option :value="300">5 分钟（默认）</option>
-              <option :value="600">10 分钟</option>
-              <option :value="1800">30 分钟</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="migrateForm.includeLogs" />
-              <span>包含日志数据</span>
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="migrateForm.confirmed_clear" />
-              <span>我了解将清空目标库</span>
-            </label>
-          </div>
-          <button
-            class="btn btn-primary migrate-btn"
-            :disabled="migrating || !migrateForm.confirmed_clear"
-            :title="migrateForm.confirmed_clear ? '' : '请先勾选「我了解将清空目标库」'"
-            @click="handleMigrate"
-          >
-            {{ migrating ? '迁移中…' : '开始迁移' }}
-          </button>
         </div>
 
         <div v-if="migrating" class="migrate-progress">
@@ -218,6 +309,61 @@
               <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
             </ol>
           </div>
+        </div>
+        <!-- 迁移历史 -->
+        <div v-if="migrationHistory.length > 0" class="migration-history-section">
+          <div class="history-header">
+            <h4>历史迁移记录</h4>
+            <span class="history-count">{{ migrationHistory.length }} 条</span>
+          </div>
+          <a-table
+            :data-source="migrationHistory"
+            :columns="historyColumns"
+            row-key="id"
+            :pagination="{
+              total: migrationHistory.length,
+              showTotal: (total: number) => `共 ${total} 条记录`,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50'],
+              showQuickJumper: true,
+            }"
+            size="middle"
+            class="migration-history-table"
+          >
+            <template #bodyCell="{ record, column }">
+              <template v-if="column.key === 'direction'">
+                <span class="history-flow">
+                  <span class="flow-node flow-source" :title="connLabel(record.source_connection)">{{
+                    connLabel(record.source_connection)
+                  }}</span>
+                  <span class="flow-arrow">→</span>
+                  <span class="flow-node flow-target" :title="connLabel(record.target_connection)">{{
+                    connLabel(record.target_connection)
+                  }}</span>
+                </span>
+              </template>
+              <template v-else-if="column.key === 'mode'">
+                <span class="history-mode">{{ record.mode === 'replace' ? '替换' : record.mode }}</span>
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <a-tag :color="record.status === 'success' ? 'green' : record.status === 'failed' ? 'red' : 'default'">
+                  {{ historyStatusLabel(record.status) }}
+                </a-tag>
+              </template>
+              <template v-else-if="column.key === 'tables_count'">
+                <span class="history-tables">{{ record.tables_count ?? '-' }}</span>
+              </template>
+              <template v-else-if="column.key === 'duration'">
+                <span class="history-time">{{ formatDuration(record.duration_seconds) }}</span>
+              </template>
+              <template v-else-if="column.key === 'started_at'">
+                <span class="history-time">{{ formatStartTime(record) }}</span>
+              </template>
+              <template v-else-if="column.key === 'created_at'">
+                <span class="history-time">{{ record.created_at ? formatDateTime(record.created_at) : '-' }}</span>
+              </template>
+            </template>
+          </a-table>
         </div>
       </div>
     </div>
@@ -332,10 +478,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { formatDateTime, parseBackendDate } from '@/utils/format'
 import {
   getDatabaseStatus,
   listConnections,
@@ -347,14 +494,60 @@ import {
   migrateDatabase,
   migrateDatabaseStream,
   getMigrationHistory,
+  getRunningTasks,
 } from '@/api/database'
-import type { DbConnection, DbStatus, MigrateResult, MigrationCompleteEvent } from '@/types/database'
+import type {
+  DbConnection,
+  DbStatus,
+  MigrateResult,
+  MigrationCompleteEvent,
+  MigrationHistoryItem,
+  MigrationState,
+  RunningTask,
+} from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
 const migrating = ref(false)
 const migrateResult = ref<MigrateResult | null>(null)
 const migrationController = ref<AbortController | null>(null)
+
+// Running migration state
+const runningMigration = ref<MigrationState>({ in_progress: false, source_id: null, target_id: null, started_at: null })
+const migrationStateLoading = ref(false)
+
+// Running tasks (node tasks + migration lock)
+const runningTasksData = ref<{ migration: MigrationState; tasks: RunningTask[] }>({
+  migration: { in_progress: false, source_id: null, target_id: null, started_at: null },
+  tasks: [],
+})
+const runningTasksLoading = ref(false)
+
+const runningTaskColumns = [
+  { title: '任务类型', key: 'task_type' },
+  { title: '集群', key: 'cluster_name' },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '进度', key: 'progress', width: 100 },
+  { title: '开始时间', key: 'started_at', width: 160 },
+]
+
+function taskTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    cmd_exec: '命令执行',
+    distribute_file: '文件分发',
+    install_edge: '安装 Edge',
+    upgrade_edge: '升级 Edge',
+    reload_edge: '重载 Edge',
+    check_software: '软件检查',
+    edit_edge_env: '编辑 Edge 环境',
+    sync_edge_env: '同步 Edge 环境',
+  }
+  return labels[type] || type
+}
+
+// Migration history
+const migrationHistory = ref<MigrationHistoryItem[]>([])
+const historyLoading = ref(false)
 
 const connectionColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
@@ -364,6 +557,62 @@ const connectionColumns = [
   { title: '当前', key: 'current' },
   { title: '操作', key: 'actions' },
 ]
+
+function getConnectionName(connId: string): string {
+  return connections.value.find((c) => c.id === connId)?.name || connId
+}
+
+// 迁移历史用友好标签：连接名（SQLite 文件名 / PG 地址），连接已删除时回退原始 ID
+function connLabel(connId: string): string {
+  const c = connections.value.find((x) => x.id === connId)
+  if (!c) return connId
+  const detail =
+    c.type === 'sqlite'
+      ? (c.path || '').split('/').pop() || ''
+      : c.display_address || (c.host ? `${c.host}${c.port ? ':' + c.port : ''}` : '')
+  return detail ? `${c.name}（${detail}）` : c.name
+}
+
+const historyColumns = [
+  { title: '迁移方向', key: 'direction' },
+  { title: '模式', key: 'mode', width: 90 },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '表数量', key: 'tables_count', width: 90, align: 'right' as const },
+  { title: '时长', key: 'duration', width: 100, align: 'right' as const },
+  { title: '开始时间', key: 'started_at', width: 160 },
+  { title: '完成时间', key: 'created_at', width: 160 },
+]
+
+function historyStatusLabel(status: string): string {
+  const labels: Record<string, string> = { success: '成功', failed: '失败', cancelled: '已取消' }
+  return labels[status] || status
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return '-'
+  if (seconds < 60) return `${seconds} 秒`
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  if (m < 60) return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分`
+  const h = Math.floor(m / 60)
+  return `${h} 时 ${m % 60} 分`
+}
+
+// 开始时间：优先后端记录值；旧记录无 started_at 时回退「完成时间 − 时长」推导，均无则 '-'
+function formatStartTime(record: MigrationHistoryItem): string {
+  if (record.started_at) return formatDateTime(record.started_at)
+  if (record.created_at && record.duration_seconds != null) {
+    const end = parseBackendDate(record.created_at).getTime()
+    if (!Number.isNaN(end)) {
+      return formatDateTime(new Date(end - record.duration_seconds * 1000).toISOString())
+    }
+  }
+  return '-'
+}
+
+function formatTime(iso: string): string {
+  return formatDateTime(iso)
+}
 
 const migrateForm = reactive({
   sourceId: '',
@@ -456,6 +705,37 @@ async function loadData() {
   const [s, cs] = await Promise.all([getDatabaseStatus(), listConnections()])
   status.value = s.data
   connections.value = cs.data
+}
+
+async function loadMigrationState() {
+  migrationStateLoading.value = true
+  try {
+    const res = await getRunningTasks()
+    runningMigration.value = res.data.migration
+  } finally {
+    migrationStateLoading.value = false
+  }
+}
+
+async function loadRunningTasks() {
+  runningTasksLoading.value = true
+  try {
+    const res = await getRunningTasks()
+    runningTasksData.value = res.data
+    runningMigration.value = res.data.migration
+  } finally {
+    runningTasksLoading.value = false
+  }
+}
+
+async function loadMigrationHistory() {
+  historyLoading.value = true
+  try {
+    const res = await getMigrationHistory()
+    migrationHistory.value = res.data
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 function openCreateModal() {
@@ -624,6 +904,7 @@ async function handleMigrate() {
       }
       message.success(`迁移完成，共迁移 ${data.tables_migrated} 张表`)
       getMigrationHistory()
+      loadMigrationHistory()
       migrating.value = false
     },
     onError: (msg) => {
@@ -646,8 +927,21 @@ function handleCancelMigration() {
   message.warning('迁移已终止')
 }
 
+// Auto-refresh polling for running tasks (every 5 seconds)
+let _migrationPollTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   loadData()
+  loadRunningTasks()
+  loadMigrationHistory()
+  _migrationPollTimer = setInterval(loadRunningTasks, 5000)
+})
+
+onUnmounted(() => {
+  if (_migrationPollTimer) {
+    clearInterval(_migrationPollTimer)
+    _migrationPollTimer = null
+  }
 })
 
 defineExpose({
@@ -663,6 +957,8 @@ defineExpose({
   handleTest,
   handleSwitch,
   handleDelete,
+  loadMigrationState,
+  runningMigration,
 })
 </script>
 
@@ -738,14 +1034,78 @@ defineExpose({
   gap: 6px;
 }
 
-/* ── 数据迁移 ── */
-.migrate-form {
+/* ── 数据迁移 · 可视化流转 ── */
+.migrate-flow {
   display: flex;
   flex-direction: column;
-  max-width: 480px;
+  gap: 20px;
+  min-height: 160px;
+  padding-bottom: 8px;
 }
-.migrate-form .form-group {
-  margin-bottom: 12px;
+.flow-main {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+}
+.flow-cards {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.flow-opts-cards {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: 20px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+}
+.flow-card {
+  min-width: 160px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 8px);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flow-card-checks {
+  min-width: auto;
+  gap: 10px;
+}
+.flow-card-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.flow-select {
+  width: 100%;
+}
+.flow-arrow {
+  color: var(--muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flow-checkbox {
+  padding-bottom: 0;
+}
+.flow-actions {
+  display: none;
+}
+.migrate-btn {
+  align-self: center;
+  white-space: nowrap;
+}
+.confirm-check {
+  font-size: 13px;
+  color: var(--danger, #ff4d4f);
 }
 .checkbox-label {
   display: inline-flex;
@@ -760,7 +1120,7 @@ defineExpose({
 }
 .migrate-progress {
   margin-top: 16px;
-  max-width: 480px;
+  max-width: 640px;
 }
 .migrate-cancel {
   margin-top: 12px;
@@ -797,7 +1157,7 @@ defineExpose({
 }
 .migrate-result {
   margin-top: 16px;
-  max-width: 480px;
+  max-width: 640px;
 }
 .next-steps {
   margin-top: 12px;
@@ -862,5 +1222,137 @@ defineExpose({
   color: var(--muted);
   font-family: monospace;
   font-size: 12px;
+}
+
+/* ── 当前任务卡片 ── */
+.migration-lock-alert {
+  margin-bottom: 12px;
+}
+.running-tasks-table :deep(.ant-table) {
+  background: transparent;
+}
+.running-tasks-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 8px 14px;
+}
+.running-tasks-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.running-tasks-table :deep(.ant-table-tbody > tr > td) {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+.running-tasks-table :deep(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none;
+}
+
+/* ── 迁移历史 ── */
+.migration-history-section {
+  margin-top: 24px;
+}
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-left: 10px;
+  border-left: 3px solid oklch(56% 0.16 210);
+}
+.history-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.history-count {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  background: oklch(56% 0.16 210 / 8%);
+  border: 1px solid oklch(56% 0.16 210 / 18%);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.history-flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-node {
+  font-family: monospace;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.flow-source {
+  background: oklch(55% 0.01 250 / 8%);
+  color: var(--muted);
+}
+.flow-target {
+  background: oklch(56% 0.16 210 / 12%);
+  color: oklch(45% 0.13 210);
+  font-weight: 600;
+}
+.flow-arrow {
+  color: var(--muted);
+  font-size: 12px;
+}
+.history-mode {
+  font-size: 12px;
+  color: var(--muted);
+  background: oklch(55% 0.01 250 / 8%);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.history-tables {
+  font-family: monospace;
+  font-weight: 600;
+}
+.history-time {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.migration-history-table :deep(.ant-table) {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.migration-history-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 8px 14px;
+}
+.migration-history-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.migration-history-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.migration-history-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
+}
+.migration-history-table :deep(.ant-table-pagination) {
+  background: var(--bg) !important;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-top: 1px solid var(--border) !important;
 }
 </style>

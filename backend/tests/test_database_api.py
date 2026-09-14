@@ -273,3 +273,113 @@ class TestMigrateResultAndBackup:
         assert len(remaining) == 10
         assert "migration_a_to_b_2026010100000_1.zip" not in remaining  # 最旧的 0、1 已删
         assert "migration_a_to_b_2026010110000_11.zip" in remaining  # 最新的保留
+
+
+class TestRunningTasksEndpoint:
+    """Task 2.1-2.3: GET /database/running-tasks aggregates MigrationState + NodeTasks."""
+
+    async def test_empty_tasks_returns_empty_list(self, async_authed_client):
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "migration" in data
+        assert data["migration"]["in_progress"] is False
+        assert data["tasks"] == []
+
+    async def test_migration_lock_returns_state_with_metadata(self, async_authed_client):
+        from app.core import maintenance
+        maintenance.set_migration_in_progress(True, source_id="src_abc", target_id="tgt_xyz")
+        try:
+            resp = await async_authed_client.get("/api/v1/database/running-tasks")
+            assert resp.status_code == 200
+            data = resp.json()
+            mig = data["migration"]
+            assert mig["in_progress"] is True
+            assert mig["source_id"] == "src_abc"
+            assert mig["target_id"] == "tgt_xyz"
+            assert mig["started_at"] is not None
+        finally:
+            maintenance.set_migration_in_progress(False)
+
+    async def test_running_node_tasks_returned(self, async_authed_client, isolated_session):
+        from app.models.node_task import NodeTask
+        async with isolated_session() as s:
+            task = NodeTask(
+                cluster_id=1, task_type="cmd_exec", status="running",
+                total_nodes=3, success_nodes=1, failed_nodes=0,
+            )
+            s.add(task)
+            await s.commit()
+            task_id = task.id
+
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["tasks"]) >= 1
+        t = next(t for t in data["tasks"] if t["id"] == task_id)
+        assert t["task_type"] == "cmd_exec"
+        assert t["status"] == "running"
+        assert t["cluster_name"] == "test-cluster"
+
+    async def test_pending_node_tasks_returned(self, async_authed_client, isolated_session):
+        from app.models.node_task import NodeTask
+        async with isolated_session() as s:
+            task = NodeTask(
+                cluster_id=1, task_type="distribute_file", status="pending",
+                total_nodes=2, success_nodes=0, failed_nodes=0,
+            )
+            s.add(task)
+            await s.commit()
+
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        tasks = resp.json()["tasks"]
+        assert any(t["status"] == "pending" for t in tasks)
+
+    async def test_interrupted_node_tasks_returned(self, async_authed_client, isolated_session):
+        from app.models.node_task import NodeTask
+        async with isolated_session() as s:
+            task = NodeTask(
+                cluster_id=1, task_type="cmd_exec", status="interrupted",
+                total_nodes=2, success_nodes=1, failed_nodes=0,
+            )
+            s.add(task)
+            await s.commit()
+
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        tasks = resp.json()["tasks"]
+        assert any(t["status"] == "interrupted" for t in tasks)
+
+    async def test_completed_tasks_excluded(self, async_authed_client, isolated_session):
+        from app.models.node_task import NodeTask
+        async with isolated_session() as s:
+            s.add(NodeTask(
+                cluster_id=1, task_type="cmd_exec", status="success",
+                total_nodes=3, success_nodes=3,
+            ))
+            await s.commit()
+
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        tasks = resp.json()["tasks"]
+        assert all(t["status"] not in ("success", "failed") for t in tasks)
+
+    async def test_unauthenticated_returns_401(self, async_isolated_client):
+        resp = await async_isolated_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 401
+
+    async def test_non_admin_forbidden(self, async_authed_client):
+        import uuid
+        username = f"db_rt_noadmin_{uuid.uuid4().hex[:6]}"
+        created = await async_authed_client.post("/api/v1/admin/users", json={
+            "username": username, "password": "pass123", "role": "user", "status": 1,
+        })
+        assert created.status_code in (200, 201), created.text
+        login = await async_authed_client.post("/api/v1/auth/login",
+            json={"username": username, "password": "pass123"})
+        user_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        resp = await async_authed_client.get("/api/v1/database/running-tasks", headers=user_headers)
+        assert resp.status_code == 403
+        uid = created.json()["id"]
+        await async_authed_client.delete(f"/api/v1/admin/users/{uid}")

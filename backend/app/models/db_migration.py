@@ -8,7 +8,7 @@ Design (see openspec/changes/support-postgres-database/design.md):
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 
 from app.core.database import Base
 
@@ -26,4 +26,6 @@ class DbMigrationLog(Base):
     tables_count = Column(Integer, nullable=True)
     backup_path = Column(String(500), nullable=True)
     error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)  # 迁移开始时间，旧记录为 NULL
+    duration_seconds = Column(Float, nullable=True)  # 迁移耗时（秒），旧记录为 NULL
     created_at = Column(DateTime, default=datetime.utcnow)
