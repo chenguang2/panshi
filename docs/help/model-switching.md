@@ -98,6 +98,272 @@ alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
 └── command/               # 项目级 command
 ```
 
+### 各配置文件完整内容
+
+以下是所有需要迁移的配置文件的完整内容。新机器上可直接按路径创建并粘贴内容，API Key 处用 `YOUR_*_KEY` 占位。
+
+#### `~/.config/opencode/opencode.json` — Provider API Key + MCP 服务
+
+```json
+{
+    "$schema": "https://opencode.ai/config.json",
+    "provider": {
+        "zhipuai-coding-plan": {
+            "options": {
+                "apiKey": "YOUR_ZHIPUAI_API_KEY"
+            }
+        }
+    },
+    "model": "zhipuai-coding-plan/glm-5.3-flash",
+    "small_model": "zhipuai-coding-plan/glm-5.3-flash",
+    "mcp": {
+        "zai-mcp-server": {
+            "type": "local",
+            "command": ["npx", "-y", "@z_ai/mcp-server"],
+            "environment": {
+                "Z_AI_MODE": "ZHIPU",
+                "Z_AI_API_KEY": "YOUR_ZHIPUAI_API_KEY"
+            }
+        },
+        "web-search-prime": {
+            "type": "remote",
+            "url": "https://open.bigmodel.cn/api/mcp/web_search_prime/mcp",
+            "headers": {
+                "Authorization": "Bearer YOUR_ZHIPUAI_API_KEY"
+            }
+        },
+        "web-reader": {
+            "type": "remote",
+            "url": "https://open.bigmodel.cn/api/mcp/web_reader/mcp",
+            "headers": {
+                "Authorization": "Bearer YOUR_ZHIPUAI_API_KEY"
+            }
+        },
+        "zread": {
+            "type": "remote",
+            "url": "https://open.bigmodel.cn/api/mcp/zread/mcp",
+            "headers": {
+                "Authorization": "Bearer YOUR_ZHIPUAI_API_KEY"
+            }
+        }
+    }
+}
+```
+
+#### `~/.config/opencode/opencode.jsonc` — 插件 + Agent 开关 + codebase-memory
+
+```jsonc
+{
+  "plugin": [
+    "oh-my-opencode-slim@latest",
+    "@cortexkit/opencode-magic-context@latest"
+  ],
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "explore": { "disable": true },
+    "general": { "disable": true }
+  },
+  "lsp": true,
+  "mcp": {
+    "codebase-memory-mcp": {
+      "command": ["/home/YOUR_USER/.local/bin/codebase-memory-mcp"],
+      "type": "local"
+    }
+  },
+  "compaction": { "auto": false, "prune": false }
+}
+```
+
+#### `~/.config/opencode/oh-my-opencode-slim.json` — 模型 Preset 定义
+
+```json
+{
+  "$schema": "https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json",
+  "preset": "openai",
+  "presets": {
+    "openai": {
+      "orchestrator": { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
+      "oracle":      { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["simplify"], "mcps": [] },
+      "librarian":   { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": ["context7", "gh_grep"] },
+      "explorer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
+      "designer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
+      "fixer":       { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] }
+    },
+    "glm": {
+      "orchestrator": { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
+      "oracle":      { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["simplify"], "mcps": [] },
+      "librarian":   { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": ["context7", "gh_grep"] },
+      "explorer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
+      "designer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
+      "fixer":       { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] }
+    },
+    "mimo": {
+      "orchestrator": { "model": "opencode/mimo-v2.5-free", "skills": ["*"], "mcps": ["*", "!context7"] },
+      "oracle":      { "model": "opencode/mimo-v2.5-free", "skills": ["simplify"], "mcps": [] },
+      "librarian":   { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": ["context7", "gh_grep"] },
+      "explorer":    { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] },
+      "designer":    { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] },
+      "fixer":       { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] }
+    },
+    "deepseek": {
+      "orchestrator": { "model": "deepseek/deepseek-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
+      "oracle":      { "model": "deepseek/deepseek-flash", "skills": ["simplify"], "mcps": [] },
+      "librarian":   { "model": "deepseek/deepseek-flash", "skills": [], "mcps": ["context7", "gh_grep"] },
+      "explorer":    { "model": "deepseek/deepseek-flash", "skills": [], "mcps": [] },
+      "designer":    { "model": "deepseek/deepseek-flash", "skills": [], "mcps": [] },
+      "fixer":       { "model": "deepseek/deepseek-flash", "skills": [], "mcps": [] }
+    }
+  }
+}
+```
+
+#### `~/.config/opencode/tui.json` — TUI 插件声明
+
+```json
+{
+  "plugin": [
+    "oh-my-opencode-slim",
+    "@cortexkit/opencode-magic-context@latest"
+  ]
+}
+```
+
+#### `~/.config/opencode/tui-preferences.jsonc` — TUI 偏好
+
+```jsonc
+{
+  "magic-context": {
+    "collapsed": false
+  }
+}
+```
+
+#### `~/.config/opencode/AGENTS.md` — 全局 Agent 指令
+
+```markdown
+<!-- codebase-memory-mcp:start -->
+# Codebase Memory
+
+## Codebase Knowledge Graph (codebase-memory-mcp)
+
+This project uses codebase-memory-mcp to maintain a knowledge graph of the codebase.
+ALWAYS prefer MCP graph tools over grep/glob/file-search for code discovery.
+
+### Priority Order
+1. `search_graph` — find functions, classes, routes, variables by pattern
+2. `trace_path` — trace who calls a function or what it calls
+3. `get_code_snippet` — read specific function/class source code
+4. `check_index_coverage` — validate candidate paths and missed ranges before claims
+5. `query_graph` — run Cypher queries for complex patterns
+6. `get_architecture` — high-level project summary
+
+### Evidence tiers
+- **Scout (Tier 1):** quick positive lookup with few calls and targeted source checks.
+- **Verify (Tier 2, default):** task-directed graph evidence, relevant trace directions, exact snippets.
+- **Auditor (Tier 3):** bounded-scope full verification with complete pagination.
+<!-- codebase-memory-mcp:end -->
+```
+
+#### `~/.config/opencode/agents/codebase-memory.md`
+
+```markdown
+---
+description: Default task-directed graph verification with check_index_coverage and source read/grep fallback.
+mode: subagent
+permission:
+  "*": deny
+  read: allow
+  grep: allow
+  glob: allow
+  "codebase-memory-mcp_search_graph": allow
+  "codebase-memory-mcp_trace_path": allow
+  "codebase-memory-mcp_get_code_snippet": allow
+  "codebase-memory-mcp_query_graph": allow
+  "codebase-memory-mcp_get_architecture": allow
+  "codebase-memory-mcp_search_code": allow
+  "codebase-memory-mcp_get_graph_schema": allow
+  "codebase-memory-mcp_list_projects": allow
+  "codebase-memory-mcp_index_status": allow
+  "codebase-memory-mcp_detect_changes": allow
+  "codebase-memory-mcp_check_index_coverage": allow
+---
+Tier 2 — Verify. Gather task-directed evidence with narrow search, task-relevant trace directions,
+exact snippets for material claims, and relevant pagination. Require path coverage for every cited
+file and scope coverage before negative claims. Never edit files or perform state-changing actions.
+```
+
+#### `~/.config/opencode/agents/codebase-memory-auditor.md`
+
+```markdown
+---
+description: Bounded-scope graph audit with check_index_coverage and source read/grep fallback.
+mode: subagent
+permission:
+  "*": deny
+  read: allow
+  grep: allow
+  glob: allow
+  "codebase-memory-mcp_search_graph": allow
+  "codebase-memory-mcp_trace_path": allow
+  "codebase-memory-mcp_get_code_snippet": allow
+  "codebase-memory-mcp_query_graph": allow
+  "codebase-memory-mcp_get_architecture": allow
+  "codebase-memory-mcp_search_code": allow
+  "codebase-memory-mcp_get_graph_schema": allow
+  "codebase-memory-mcp_list_projects": allow
+  "codebase-memory-mcp_index_status": allow
+  "codebase-memory-mcp_detect_changes": allow
+  "codebase-memory-mcp_check_index_coverage": allow
+---
+Tier 3 — Auditor. Bounded scope, current graph generation, complete relevant pagination.
+Inspect both call directions and broader relationships when material. Disclose every limitation.
+Never edit files or perform state-changing actions.
+```
+
+#### `~/.config/opencode/agents/codebase-memory-scout.md`
+
+```markdown
+---
+description: Fast positive, provisional graph lookup with check_index_coverage and source read/grep fallback.
+mode: subagent
+permission:
+  "*": deny
+  read: allow
+  grep: allow
+  glob: allow
+  "codebase-memory-mcp_search_graph": allow
+  "codebase-memory-mcp_trace_path": allow
+  "codebase-memory-mcp_get_code_snippet": allow
+  "codebase-memory-mcp_get_architecture": allow
+  "codebase-memory-mcp_list_projects": allow
+  "codebase-memory-mcp_index_status": allow
+  "codebase-memory-mcp_check_index_coverage": allow
+---
+Tier 1 — Scout. Quick positive lookup, about 3-4 narrow graph calls, small result limits.
+Label findings provisional. Do not make all/none or absence claims.
+Never edit files or perform state-changing actions.
+```
+
+#### `<project>/.opencode/opencode.json` — 项目级插件配置
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "superpowers@git+https://github.com/obra/superpowers.git"
+  ],
+  "compaction": { "auto": false, "prune": false }
+}
+```
+
+#### `~/.bashrc` 别名追加内容
+
+```bash
+alias oc-mimo='OH_MY_OPENCODE_SLIM_PRESET=mimo opencode'
+alias oc-deepseek='OH_MY_OPENCODE_SLIM_PRESET=deepseek opencode'
+alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
+```
+
 ### 一键迁移脚本
 
 ```bash
