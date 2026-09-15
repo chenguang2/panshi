@@ -92,6 +92,24 @@ async def _write_failed_migration_log(
         logger.exception("写入失败迁移记录时出错: %s", e)
 
 
+# 迁移收尾后台任务的强引用集合：asyncio 只持调度弱引用，不存强引用会被 GC 中途回收
+_migration_bg_tasks: set = set()
+
+
+def _spawn_migration_bg_task(coro) -> asyncio.Task:
+    """Spawn a fire-and-forget task that survives SSE client cancellation.
+
+    Starlette StreamingResponse 在客户端断开时通过 anyio cancel scope 取消
+    stream_response 任务，CancelledError（BaseException）会直接击穿生成器的
+    except ClientDisconnect / except Exception。任何与 SSE 生命周期绑定（而非
+    随请求结束）的清理都必须放进本函数创建的独立任务中。
+    """
+    task = asyncio.create_task(coro)
+    _migration_bg_tasks.add(task)
+    task.add_done_callback(_migration_bg_tasks.discard)
+    return task
+
+
 @router.get("/status")
 async def get_status(current_user: User = Depends(require_db_admin('database_management'))):
     cfg = _get_config()
@@ -439,6 +457,64 @@ async def migrate_database_stream(
         loop = asyncio.get_event_loop()
         migration_finished = threading.Event()
         migration_result: dict = {}
+        # 迁移线程是否已启动（同步置位，生成器退出后其值即为最终值，无竞态）
+        migration_thread_started = False
+        # 生成器结束信号：无论正常返回、报错还是被客户端断连取消，finally 都会置位
+        generator_done = asyncio.Event()
+
+        async def _finalize_migration():
+            """迁移收尾：等线程结束 → 清锁 → 写历史/审计日志。
+
+            以独立 asyncio 任务运行，不随 SSE 客户端断连被取消 —— 这是客户端
+            刷新页面后锁卡死、历史记录丢失问题的修复（CancelledError 会击穿
+            生成器的 except 链，收尾逻辑不能放在生成器体内）。
+            """
+            try:
+                await generator_done.wait()
+                if migration_thread_started:
+                    # 有界等待：线程 finally 必然置位 migration_finished；
+                    # 若线程卡死（如 PG socket 挂起）则 grace 后放弃并记录失败
+                    grace = float(timeout) + 300
+                    finished = await loop.run_in_executor(
+                        None, lambda: migration_finished.wait(grace)
+                    )
+                    if not finished:
+                        cancel_event.set()
+                        migration_result.setdefault("error", "迁移线程超时未结束")
+                maintenance.set_migration_in_progress(False)
+                duration = round(time.monotonic() - t0, 1)
+                terminal_error = migration_result.get("terminal_error")
+                if terminal_error:
+                    # 生成器终态裁决（超时等）优先于线程结果
+                    await _write_failed_migration_log(source, target, body, current_user, terminal_error, duration_seconds=duration, started_at=started_at)
+                elif migration_result.get("success"):
+                    tables_count = len(migration_result.get("tables", []) or [])
+                    async with AsyncSessionLocal() as log_db:
+                        await db_migration_service.record_migration_log(
+                            log_db,
+                            direction=_direction_label(source, target),
+                            source_connection=body.source_id,
+                            target_connection=body.target_id,
+                            mode=body.mode,
+                            status="success",
+                            include_logs=body.include_logs,
+                            tables_count=tables_count,
+                            backup_path=backup_path,
+                            duration_seconds=duration,
+                            started_at=started_at,
+                        )
+                        log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
+                else:
+                    error_message = migration_result.get("error") or "迁移中断（SSE 会话结束）"
+                    await _write_failed_migration_log(source, target, body, current_user, error_message, duration_seconds=duration, started_at=started_at)
+            except Exception as fin_err:
+                logger.error("Migration finalizer failed: %s", fin_err)
+                try:
+                    maintenance.set_migration_in_progress(False)
+                except Exception:
+                    pass
+
+        _spawn_migration_bg_task(_finalize_migration())
         try:
             # Auto-backup before clear migration
             if body.confirmed_clear:
@@ -458,7 +534,7 @@ async def migrate_database_stream(
                     while not backup_task.done():
                         if asyncio.get_event_loop().time() > backup_deadline:
                             cancel_event.set()
-                            await _write_failed_migration_log(source, target, body, current_user, "备份超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
+                            migration_result.setdefault("error", "备份超时")
                             yield _send_event({"type": "error", "message": "备份超时"})
                             maintenance.set_migration_in_progress(False)
                             return
@@ -472,7 +548,7 @@ async def migrate_database_stream(
                         yield _send_event(ev)
                     backup_task.result()  # Raise if backup failed
                 except Exception as e:
-                    await _write_failed_migration_log(source, target, body, current_user, f"备份失败: {e}", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
+                    migration_result.setdefault("error", f"备份失败: {e}")
                     yield _send_event({"type": "error", "message": f"备份失败: {e}"})
                     maintenance.set_migration_in_progress(False)
                     return
@@ -509,6 +585,7 @@ async def migrate_database_stream(
                 finally:
                     migration_finished.set()
 
+            migration_thread_started = True
             migration_task = loop.run_in_executor(None, run_migration)
             deadline = asyncio.get_event_loop().time() + timeout
 
@@ -519,7 +596,9 @@ async def migrate_database_stream(
                     # Check timeout
                     if asyncio.get_event_loop().time() > deadline:
                         cancel_event.set()
-                        await _write_failed_migration_log(source, target, body, current_user, "迁移超时", duration_seconds=round(time.monotonic() - t0, 1), started_at=started_at)
+                        # terminal_error 是生成器级终态裁决，线程内的 MigrationCancelled
+                        # 只写 error 键，不会覆盖它（超时必须以「超时」入账）
+                        migration_result["terminal_error"] = "迁移超时"
                         yield _send_event({"type": "error", "message": "迁移超时"})
                         maintenance.set_migration_in_progress(False)
                         return
@@ -559,42 +638,15 @@ async def migrate_database_stream(
         except ClientDisconnect:
             # Client disconnected but migration thread continues in background.
             # Do NOT cancel — refresh/navigation should not kill a running migration.
+            # 注意：starlette 任务组取消注入的是 CancelledError（BaseException），
+            # 此 handler 仅兜底 spec>=2.4 的 OSError→ClientDisconnect 路径。
             logger.info("Migration SSE client disconnected, migration continues in background")
         except Exception as e:
-            await _write_failed_migration_log(source, target, body, current_user, f"迁移失败: {e}")
-
-        # Wait for migration thread to finish if client disconnected early,
-        # so logs are always written regardless of SSE connection state.
-        if not migration_finished.is_set():
-            await asyncio.get_event_loop().run_in_executor(None, migration_finished.wait)
-
-        # ALWAYS clear migration lock first — regardless of log-writing success
-        maintenance.set_migration_in_progress(False)
-
-        # Write migration log & audit — runs after thread finishes, whether client is connected or not
-        duration = round(time.monotonic() - t0, 1)
-        try:
-            if migration_result.get("success"):
-                tables_count = len(migration_result.get("tables", []) or [])
-                async with AsyncSessionLocal() as log_db:
-                    await db_migration_service.record_migration_log(
-                        log_db,
-                        direction=_direction_label(source, target),
-                        source_connection=body.source_id,
-                        target_connection=body.target_id,
-                        mode=body.mode,
-                        status="success",
-                        include_logs=body.include_logs,
-                        tables_count=tables_count,
-                        backup_path=backup_path,
-                        duration_seconds=duration,
-                        started_at=started_at,
-                    )
-                    log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
-            elif migration_result.get("error"):
-                await _write_failed_migration_log(source, target, body, current_user, migration_result["error"], duration_seconds=duration, started_at=started_at)
-        except Exception as log_err:
-            logger.error("Failed to write migration log: %s", log_err)
+            migration_result.setdefault("error", f"迁移失败: {e}")
+        finally:
+            # 通知独立收尾任务：生成器流程已结束（正常/报错/被取消均会执行）。
+            # 等线程、清锁、写日志全部由 _finalize_migration 负责。
+            generator_done.set()
 
     return StreamingResponse(
         event_generator(),
