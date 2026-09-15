@@ -28,7 +28,7 @@ def test_isolated_app_has_admin(isolated_app):
 
     # The fixture's engine is internal; verify via the API (admin auth works)
     # admin_auth_headers uses token for user id=1, which exists in memory DB
-    resp = isolated_app.get("/api/v1/users")
+    resp = isolated_app.get("/api/v1/admin/users")
     assert resp.status_code == 200
 
 
@@ -74,7 +74,30 @@ async def test_async_isolated_client_basic(async_isolated_client):
 
 
 @pytest.mark.asyncio
-async def test_async_isolated_client_independence(async_isolated_client):
-    """AsyncClient uses the same in-memory DB seeded with admin."""
-    resp = await async_isolated_client.get("/api/v1/users")
+async def test_async_isolated_client_independence(async_authed_client):
+    """AsyncClient uses the same in-memory DB seeded with admin.
+
+    必须用 async_authed_client：/api/v1/admin/users 受鉴权保护，而无鉴权的
+    async_isolated_client 会得到 401（原用例写的是不存在的 /api/v1/users，
+    靠 SPA 静态兜底返回 200 + index.html 假通过）。
+    """
+    resp = await async_authed_client.get("/api/v1/admin/users")
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_unknown_api_path_returns_json_404(async_isolated_client):
+    """未知 /api 路径必须返回 JSON 404，而非 SPA 页面或 405。
+
+    回归守卫：SPA 静态挂载挂在 "/" 上会吞掉未匹配的 API 路径 —— GET 曾返回
+    200 + index.html（不校验 content-type 的调用方会误判为成功），非 GET 曾返回
+    405 Method Not Allowed。真实 API 路由必须仍优先匹配（上面的用例已覆盖）。
+    """
+    resp = await async_isolated_client.get("/api/v1/this-route-does-not-exist")
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["detail"] == "Not Found"
+
+    resp = await async_isolated_client.post("/api/v1/this-route-does-not-exist", json={})
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")

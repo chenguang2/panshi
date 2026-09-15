@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 
 _log_dir = Path(__file__).resolve().parent.parent / "logs"
 _log_dir.mkdir(exist_ok=True)
@@ -101,6 +101,20 @@ _validate_audit_route_map()
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+
+# ── 未匹配 API 路径兜底 ──────────────────────────────────────────────
+# 文末的 SPA 静态挂载挂在 "/" 上，会吞掉所有未匹配路径：GET 返回 200 + index.html
+# （不校验 content-type 的调用方会误判为成功），非 GET 返回 405 Method Not Allowed。
+# 此处为未匹配的 /api 路径返回统一 JSON 404。必须注册在全部 API 路由之后、
+# 静态挂载之前（FastAPI 按注册顺序匹配，API 路由优先级因此更高）。
+@app.api_route(
+    "/api/{rest:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def api_not_found(rest: str):
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 # ── 部署模式：后端托管前端静态文件 ──
