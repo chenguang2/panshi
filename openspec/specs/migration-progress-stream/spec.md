@@ -33,6 +33,7 @@
 - **WHEN** 所有表迁移完成
 - **THEN** 系统 SHALL 发送 `type=complete` 事件，包含 `message`、`tables_migrated`、`tables`（详情数组）、`backup_path`
 - **IMPLEMENTATION NOTE**: `run_migration()` 线程函数必须显式 `return result`（`migrate_direct` 的返回值）。SSE generator 通过 `migration_task.result()` 获取 `table_details`；若线程函数无 return，`result()` 返回 `None`，`complete` 事件不会发送，UI 将永远卡在"迁移中"。
+- **IMPLEMENTATION NOTE**（2026-09-16）: 迁移收尾（等线程结束、清迁移锁、写历史/审计日志）由独立 asyncio 任务 `_finalize_migration` 执行，**不得放回 SSE generator 体内**。原因：客户端断开时 starlette 任务组向 generator 注入 `CancelledError`（BaseException），会击穿 `except ClientDisconnect`/`except Exception`，generator 体内的收尾代码全部跳过（2026-09-15 实测：刷新页面后锁永久卡死、历史记录丢失）。generator 仅在 `finally` 中同步置位 `generator_done` 信号；finalizer 有界等待线程（grace=timeout+300s）后先清锁再写日志；超时终态用线程不可写的 `migration_result["terminal_error"]` 键裁决，避免与线程内 `MigrationCancelled` 写入的 `error` 键竞争覆盖。
 
 #### Scenario: 迁移失败或超时
 - **WHEN** 迁移过程中发生错误或超时
