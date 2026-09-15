@@ -8,8 +8,6 @@ import type {
   DbTestResult,
   ExportResult,
   ImportPayload,
-  MigratePayload,
-  MigrateResult,
   MigrationBackupProgressEvent,
   MigrationCompleteEvent,
   MigrationHistoryItem,
@@ -44,17 +42,6 @@ export function testConnection(connId: string) {
 
 export function switchDatabase(connectionId: string) {
   return api.post('/database/switch', { connection_id: connectionId })
-}
-
-export function migrateDatabase(sourceId: string, targetId: string, payload?: Partial<MigratePayload>) {
-  const body: MigratePayload = {
-    source_id: sourceId,
-    target_id: targetId,
-    mode: payload?.mode ?? 'replace',
-    include_logs: payload?.include_logs ?? true,
-    confirmed_clear: payload?.confirmed_clear ?? false,
-  }
-  return api.post<MigrateResult>('/database/migrate', body, { timeout: 300000 })
 }
 
 /**

@@ -50,14 +50,6 @@ export interface DbTestResult {
   detail: string
 }
 
-export interface MigratePayload {
-  source_id: string
-  target_id: string
-  mode?: string
-  include_logs?: boolean
-  confirmed_clear?: boolean
-}
-
 export interface MigrateTableDetail {
   name: string
   columns: number

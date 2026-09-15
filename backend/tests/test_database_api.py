@@ -151,14 +151,14 @@ class TestMigrationEndpoints:
     async def test_migrate_same_source_target_400(self, async_authed_client):
         import tempfile, os
         conn_id = await self._add_sqlite(async_authed_client, "X", os.path.join(tempfile.gettempdir(), "mig1.db"))
-        resp = await async_authed_client.post("/api/v1/database/migrate", json={
+        resp = await async_authed_client.post("/api/v1/database/migrate-stream", json={
             "source_id": conn_id, "target_id": conn_id, "mode": "replace",
         })
         assert resp.status_code == 400
         assert "相同" in resp.json()["detail"]
 
     async def test_migrate_to_active_400(self, async_authed_client):
-        resp = await async_authed_client.post("/api/v1/database/migrate", json={
+        resp = await async_authed_client.post("/api/v1/database/migrate-stream", json={
             "source_id": "local_sqlite", "target_id": "local_sqlite", "mode": "replace",
         })
         assert resp.status_code == 400
@@ -166,7 +166,7 @@ class TestMigrationEndpoints:
     async def test_migrate_unsupported_mode_400(self, async_authed_client):
         import tempfile, os
         conn_id = await self._add_sqlite(async_authed_client, "T", os.path.join(tempfile.gettempdir(), "mode_t.db"))
-        resp = await async_authed_client.post("/api/v1/database/migrate", json={
+        resp = await async_authed_client.post("/api/v1/database/migrate-stream", json={
             "source_id": "local_sqlite", "target_id": conn_id, "mode": "merge",
         })
         assert resp.status_code == 400
@@ -216,47 +216,6 @@ class TestMigrateResultAndBackup:
             "type": "sqlite", "name": name, "path": path,
         })
         return resp.json()["id"]
-
-    def _seed_source(self, path):
-        """源库建表并写入一行，迁移才有明细可报。"""
-        import os
-        from sqlalchemy import create_engine, text
-        from app.core.database import Base
-        engine = create_engine(f"sqlite:///{path}")
-        Base.metadata.create_all(engine)
-        with engine.begin() as conn:
-            conn.execute(text(
-                "INSERT INTO sys_user (id, username, password_hash, role, status) "
-                "VALUES (1, 'admin', 'hash', 'admin', 1)"
-            ))
-        engine.dispose()
-        assert os.path.exists(path)
-
-    async def test_migrate_returns_table_details_and_creates_backup(self, async_authed_client, tmp_path, monkeypatch):
-        import os
-        from pathlib import Path
-        monkeypatch.chdir(tmp_path)  # 备份落到 tmp/data/backups，不污染运行目录
-        src = os.path.join(tmp_path, "src.db")
-        self._seed_source(src)
-        src_id = await self._add_sqlite(async_authed_client, "源", src)
-        dst_id = await self._add_sqlite(async_authed_client, "目标", os.path.join(tmp_path, "dst.db"))
-
-        resp = await async_authed_client.post("/api/v1/database/migrate", json={
-            "source_id": src_id, "target_id": dst_id,
-            "mode": "replace", "include_logs": True, "confirmed_clear": True,
-        })
-        assert resp.status_code == 200
-        data = resp.json()
-        # 4.5/5.2：返回结构含每表明细（name/columns/rows）与备份路径
-        assert data["tables_migrated"] >= 1
-        assert isinstance(data["tables"], list) and data["tables"]
-        for t in data["tables"]:
-            assert set(t) >= {"name", "columns", "rows"}
-        user_row = next(t for t in data["tables"] if t["name"] == "sys_user")
-        assert user_row["rows"] == 1
-        assert data["backup_path"], "confirmed_clear 迁移必须返回备份路径"
-        assert Path(data["backup_path"]).exists()
-        assert "migration_" in Path(data["backup_path"]).name
 
     async def test_backup_retention_keeps_recent_ten(self, tmp_path):
         """3.6 保留策略：超过 10 份时删除最旧的备份。"""

@@ -302,76 +302,9 @@ async def switch_database(
     return result
 
 
-@router.post("/migrate")
-async def migrate_database(
-    body: MigrateRequest,
-    request: Request = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
-):
-    cfg = _get_config()
-    source = cfg.get_connection(body.source_id)
-    target = cfg.get_connection(body.target_id)
-    if not source or not target:
-        raise HTTPException(status_code=404, detail="源或目标连接不存在")
-    # 主规格（database-management）：迁移为单向快照语义，仅支持替换模式
-    if body.mode != "replace":
-        raise HTTPException(status_code=400, detail="不支持该迁移模式，仅支持替换模式")
-    try:
-        db_migration_service.validate_migration_direction(body.source_id, body.target_id, cfg.active)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    # confirmed_clear=True 时跳过 target_is_empty（其内部 create_all 会创建残缺表）
-    if not body.confirmed_clear and not db_migration_service.target_is_empty(target):
-        raise HTTPException(status_code=400, detail="目标数据库非空，需要勾选「我了解将清空目标库」确认后替换")
-
-    maintenance.set_migration_in_progress(True, source_id=body.source_id, target_id=body.target_id)
-    backup_path = ""
-    t0 = time.monotonic()
-    started_at = datetime.utcnow()
-    try:
-        # Auto-backup before clear migration
-        if body.confirmed_clear:
-            from pathlib import Path
-            backup_dir = Path("./data/backups")
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = str(backup_dir / f"migration_{body.source_id}_to_{body.target_id}_{ts}.zip")
-            db_archive_service.export_archive(source, backup_path)
-            # Retention: keep most recent 10 backups
-            _cleanup_old_backups(backup_dir)
-
-        table_details = db_migration_service.migrate_direct(
-            source, target,
-            include_logs=body.include_logs,
-            mode=body.mode,
-            confirmed_clear=body.confirmed_clear,
-        )
-    finally:
-        maintenance.set_migration_in_progress(False)
-
-    tables_count = len(table_details)
-    await db_migration_service.record_migration_log(
-        db,
-        direction=_direction_label(source, target),
-        source_connection=body.source_id,
-        target_connection=body.target_id,
-        mode=body.mode,
-        status="success",
-        include_logs=body.include_logs,
-        tables_count=tables_count,
-        backup_path=backup_path,
-        duration_seconds=round(time.monotonic() - t0, 1),
-        started_at=started_at,
-    )
-    enrich_audit(request, detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
-    await db.commit()  # 持久化审计骨架
-    return {
-        "message": f"迁移完成，共迁移 {tables_count} 张表",
-        "tables_migrated": tables_count,
-        "tables": table_details,
-        "backup_path": backup_path,
-    }
+# 注：原同步 POST /migrate 端点已于 2026-09-16 下线。它在事件循环主线程上直接执行
+# migrate_direct，一次迁移期间整个后端无响应（连健康检查/登录都被堵死，信号也处理不了）。
+# 前端早已只用 /migrate-stream（SSE），该端点的校验逻辑是本端点的子集，无独有功能。
 
 
 @router.post("/migrate-stream")

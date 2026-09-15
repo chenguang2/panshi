@@ -478,7 +478,6 @@ import {
   deleteConnection,
   testConnection,
   switchDatabase,
-  migrateDatabase,
   migrateDatabaseStream,
   getMigrationHistory,
   getRunningTasks,

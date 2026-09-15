@@ -6,9 +6,13 @@
 - 日志库通过替换 database.AsyncSessionLocal 隔离到 tmp sqlite
 """
 
+import asyncio
+import json
+from pathlib import Path
+
 import pytest
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.v1 import database as database_api
@@ -100,3 +104,51 @@ async def test_timeout_cancels_migration_releases_lock_and_logs(log_db_factory, 
     assert len(logs) == 1
     assert logs[0].status == "failed"
     assert "超时" in (logs[0].error_message or "")
+
+
+async def test_success_emits_complete_event_with_tables_and_backup(log_db_factory, tmp_path, monkeypatch):
+    """成功迁移 → complete 事件含表详情与备份路径；finalizer 清锁并在隔离日志库写 success 记录。
+
+    原同步 POST /migrate 端点的成功契约（该端点 2026-09-16 下线，契约迁到 SSE 端点）。
+    """
+    monkeypatch.chdir(tmp_path)  # 备份落到 tmp/data/backups，不污染运行目录
+    engine = create_engine(f"sqlite:///{tmp_path / 'src.db'}")
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO sys_user (id, username, password_hash, role, status) "
+            "VALUES (1, 'admin', 'hash', 'admin', 1)"
+        ))
+    engine.dispose()
+
+    resp = await _post_stream({
+        "source_id": "src", "target_id": "dst",
+        "mode": "replace", "include_logs": True, "confirmed_clear": True, "timeout": 60,
+    })
+    events = [json.loads(line[5:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    complete = next(e for e in events if e.get("type") == "complete")
+    # 4.5/5.2：complete 事件含每表明细（name/columns/rows）与备份路径
+    assert complete["tables_migrated"] >= 1
+    assert complete["tables"] and all({"name", "columns", "rows"} <= set(t) for t in complete["tables"])
+    assert next(t for t in complete["tables"] if t["name"] == "sys_user")["rows"] == 1
+    assert complete["backup_path"], "confirmed_clear 迁移必须返回备份路径"
+    assert Path(complete["backup_path"]).exists()
+    assert "migration_" in Path(complete["backup_path"]).name
+
+    # finalizer 是独立 asyncio 任务：有界等待其完成清锁与写成功日志
+    for _ in range(100):
+        if not maintenance.migration_in_progress():
+            break
+        await asyncio.sleep(0.05)
+    assert maintenance.migration_in_progress() is False, "迁移完成后必须释放迁移锁"
+
+    logs = []
+    for _ in range(100):
+        async with log_db_factory() as s:
+            logs = (await s.execute(select(DbMigrationLog).order_by(DbMigrationLog.id))).scalars().all()
+        if logs:
+            break
+        await asyncio.sleep(0.05)
+    assert len(logs) == 1
+    assert logs[0].status == "success"
+    assert logs[0].tables_count >= 1

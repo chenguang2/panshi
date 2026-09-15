@@ -43,7 +43,10 @@ describe('database api', () => {
   it('createConnection posts type/name to /database/connections', async () => {
     const db = await loadModule()
     await db.createConnection({ type: 'postgres', name: 'pg', host: 'localhost', port: 5432 })
-    expect(mockPost).toHaveBeenCalledWith('/database/connections', expect.objectContaining({ type: 'postgres', name: 'pg' }))
+    expect(mockPost).toHaveBeenCalledWith(
+      '/database/connections',
+      expect.objectContaining({ type: 'postgres', name: 'pg' }),
+    )
   })
 
   it('updateConnection puts to /database/connections/{id}', async () => {
@@ -72,14 +75,6 @@ describe('database api', () => {
     expect(mockPost).toHaveBeenCalledWith('/database/switch', { connection_id: 'conn_2' })
   })
 
-  it('migrateDatabase posts source/target/mode/include_logs/confirmed_clear', async () => {
-    const db = await loadModule()
-    await db.migrateDatabase('conn_s', 'conn_t', { mode: 'replace', include_logs: false, confirmed_clear: true })
-    expect(mockPost).toHaveBeenCalledWith('/database/migrate', {
-      source_id: 'conn_s', target_id: 'conn_t', mode: 'replace', include_logs: false, confirmed_clear: true,
-    }, { timeout: 300000 })
-  })
-
   it('exportDatabase posts source_id to /database/export', async () => {
     const db = await loadModule()
     await db.exportDatabase('conn_1')
@@ -90,7 +85,9 @@ describe('database api', () => {
     const db = await loadModule()
     await db.importDatabase({ archive_path: '/data/archives/x.zip', target_id: 'conn_t', confirmed_clear: true })
     expect(mockPost).toHaveBeenCalledWith('/database/import', {
-      archive_path: '/data/archives/x.zip', target_id: 'conn_t', confirmed_clear: true,
+      archive_path: '/data/archives/x.zip',
+      target_id: 'conn_t',
+      confirmed_clear: true,
     })
   })
 
