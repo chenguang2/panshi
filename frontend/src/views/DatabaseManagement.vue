@@ -302,16 +302,37 @@
           </a-descriptions>
 
           <div v-if="migrateResult?.tables?.length" class="migrate-table-detail">
-            <div class="next-steps-title">表明细（{{ migrateResult.tables.length }} 张，列表内滚动查看）</div>
-            <a-table
-              :data-source="migrateResult.tables"
-              :columns="migrateTableColumns"
-              row-key="name"
-              :pagination="false"
-              :scroll="{ y: 320 }"
-              size="small"
-              class="migrate-detail-table"
-            />
+            <div class="next-steps-title">
+              表明细（共 {{ migrateResult.tables.length }} 张：业务表 {{ businessTables.length }} · 日志表
+              {{ logTables.length }}）
+            </div>
+            <div class="migrate-table-group">
+              <div class="group-label">业务表（{{ businessTables.length }}）</div>
+              <a-table
+                :data-source="businessTables"
+                :columns="migrateTableColumns"
+                row-key="name"
+                :pagination="false"
+                :scroll="{ y: 320 }"
+                size="small"
+                class="migrate-detail-table"
+              />
+            </div>
+            <div v-if="logTables.length" class="migrate-table-group">
+              <div class="group-label">日志表（{{ logTables.length }}）</div>
+              <a-table
+                :data-source="logTables"
+                :columns="migrateTableColumns"
+                row-key="name"
+                :pagination="false"
+                :scroll="{ y: 200 }"
+                size="small"
+                class="migrate-detail-table"
+              />
+            </div>
+            <div v-else class="migrate-log-hint">
+              本次迁移未包含日志表（如需一并迁移日志数据，请勾选「包含日志数据」后重新执行）
+            </div>
           </div>
 
           <div class="next-steps">
@@ -650,6 +671,10 @@ const migrateTableColumns = [
   { title: '字段数', dataIndex: 'columns', key: 'columns' },
   { title: '迁移行数', dataIndex: 'rows', key: 'rows' },
 ]
+
+/** 迁移明细按日志表分组（is_log 由后端标记），让用户一眼看出哪些是日志表 */
+const businessTables = computed(() => (migrateResult.value?.tables || []).filter((t) => !t.is_log))
+const logTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.is_log))
 
 interface ConnForm {
   type: 'sqlite' | 'postgres'
@@ -1259,6 +1284,24 @@ defineExpose({
 /* ── 迁移详情 ── */
 .migrate-table-detail {
   margin-top: 12px;
+}
+.migrate-table-group {
+  margin-top: 12px;
+}
+.group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.migrate-log-hint {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  font-size: 12px;
+  color: var(--muted);
 }
 .migrate-detail-table {
   margin-top: 6px;

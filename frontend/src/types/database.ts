@@ -54,6 +54,8 @@ export interface MigrateTableDetail {
   name: string
   columns: number
   rows: number
+  /** 是否为日志表（sys_audit_log/ps_import_log/install_task/install_task_node），由后端标记 */
+  is_log?: boolean
 }
 
 export interface MigrateResult {

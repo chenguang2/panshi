@@ -294,6 +294,84 @@ describe('DatabaseManagement', () => {
     expect(vm.switchModal.connection?.id).toBe('conn_2')
   })
 
+  it('迁移详情把日志表与非日志表分开显示（用户能看出哪些是日志表）', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
+      setTimeout(() => {
+        options.onComplete?.({
+          message: '迁移完成，共迁移 22 张表',
+          tables_migrated: 22,
+          tables: [
+            { name: 'sys_user', columns: 5, rows: 1, is_log: false },
+            { name: 'ps_route', columns: 6, rows: 3, is_log: false },
+            { name: 'sys_audit_log', columns: 8, rows: 120, is_log: true },
+            { name: 'install_task', columns: 7, rows: 4, is_log: true },
+          ],
+          backup_path: '/tmp/migration_backup.zip',
+        })
+      }, 10)
+      return new AbortController()
+    })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.migrateForm.sourceId = 'conn_1'
+    vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    await nextTick()
+    await wrapper.find('.migrate-btn').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
+
+    // 分组数据来源：后端的 is_log 标记
+    expect(vm.businessTables.map((t: any) => t.name)).toEqual(['sys_user', 'ps_route'])
+    expect(vm.logTables.map((t: any) => t.name)).toEqual(['sys_audit_log', 'install_task'])
+
+    // 抽屉里两个分组各自成表
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
+    await detailBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('业务表（2）')
+    expect(wrapper.text()).toContain('日志表（2）')
+    expect(wrapper.findAll('.migrate-detail-table').length).toBe(2)
+  })
+
+  it('未勾选「包含日志数据」时不显示日志表分组，并给出提示', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
+      setTimeout(() => {
+        options.onComplete?.({
+          message: '迁移完成，共迁移 18 张表',
+          tables_migrated: 18,
+          tables: [{ name: 'sys_user', columns: 5, rows: 1, is_log: false }],
+          backup_path: '',
+        })
+      }, 10)
+      return new AbortController()
+    })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.migrateForm.sourceId = 'conn_1'
+    vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    vm.migrateForm.includeLogs = false
+    await nextTick()
+    await wrapper.find('.migrate-btn').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
+
+    expect(vm.logTables.length).toBe(0)
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
+    await detailBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('业务表（1）')
+    expect(wrapper.text()).not.toContain('日志表（0）')
+    expect(wrapper.text()).toContain('本次迁移未包含日志表')
+  })
+
   it('add connection form validation requires a name', async () => {
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
