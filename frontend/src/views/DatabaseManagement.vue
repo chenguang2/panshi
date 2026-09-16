@@ -364,6 +364,8 @@
           <div class="history-header">
             <h4>历史迁移记录</h4>
             <span class="history-count">{{ migrationHistory.length }} 条</span>
+            <span v-if="historyCapped" class="history-cap-hint">仅显示最近 {{ HISTORY_PAGE_LIMIT }} 条</span>
+            <button class="btn btn-secondary btn-sm history-cleanup-btn" @click="openCleanupModal">清理历史</button>
           </div>
           <a-table
             :data-source="migrationHistory"
@@ -523,6 +525,58 @@
         </div>
       </div>
     </div>
+
+    <!-- 迁移历史清理 Modal：保留最近 N 条，其余删除（预览数字来自服务端真实总数） -->
+    <div class="modal-overlay" :style="{ display: cleanupModal.open ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 520px">
+        <div class="modal-header">
+          <h2>清理迁移历史</h2>
+          <button class="modal-close" @click="closeCleanupModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="cleanup-form">
+            <span>保留最近</span>
+            <a-input-number
+              v-model:value="cleanupModal.keepLast"
+              :min="1"
+              :max="cleanupKeepMax"
+              :disabled="cleanupModal.submitting"
+              style="width: 120px"
+              @change="refreshCleanupPreview"
+            />
+            <span>条记录，其余全部删除</span>
+          </div>
+          <div class="cleanup-preview">
+            <span v-if="cleanupModal.previewing">正在计算影响范围…</span>
+            <template v-else-if="cleanupModal.preview">
+              <template v-if="cleanupModal.preview.will_delete > 0">
+                库内共 <b>{{ cleanupModal.preview.total }}</b> 条，将删除
+                <b class="cleanup-danger">{{ cleanupModal.preview.will_delete }}</b> 条，保留
+                <b>{{ cleanupModal.preview.will_keep }}</b> 条
+              </template>
+              <template v-else> 库内共 {{ cleanupModal.preview.total }} 条，按当前保留条数无需清理 </template>
+            </template>
+            <span v-else class="text-muted">—</span>
+          </div>
+          <a-alert
+            type="warning"
+            show-icon
+            message="删除不可撤销"
+            :description="`仅影响当前活动库（${activeDbName}）的迁移历史，不影响业务数据、审计日志与已生成的备份文件。`"
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" :disabled="cleanupModal.submitting" @click="closeCleanupModal">取消</button>
+          <button
+            class="btn btn-danger cleanup-confirm-btn"
+            :disabled="cleanupModal.submitting || !cleanupModal.preview || cleanupModal.preview.will_delete === 0"
+            @click="handleCleanup"
+          >
+            {{ cleanupModal.submitting ? '清理中…' : '确认清理' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -541,7 +595,9 @@ import {
   testConnection,
   switchDatabase,
   migrateDatabaseStream,
+  cleanupMigrationHistory,
   getMigrationHistory,
+  getMigrationHistoryCleanupPreview,
   getRunningTasks,
 } from '@/api/database'
 import type {
@@ -549,6 +605,7 @@ import type {
   DbStatus,
   MigrateResult,
   MigrationCompleteEvent,
+  MigrationHistoryCleanupPreview,
   MigrationHistoryItem,
   MigrationState,
 } from '@/types/database'
@@ -577,6 +634,78 @@ const migrationStateLoading = ref(false)
 // Migration history
 const migrationHistory = ref<MigrationHistoryItem[]>([])
 const historyLoading = ref(false)
+/** 后端列表单页上限（GET /database/history 固定 limit=100）：达上限时提示"仅显示最近 100 条" */
+const HISTORY_PAGE_LIMIT = 100
+const historyCapped = computed(() => migrationHistory.value.length >= HISTORY_PAGE_LIMIT)
+
+/** 清理弹窗：保留最近 N 条，其余删除（预览数字由服务端按库内真实总数计算） */
+const CLEANUP_DEFAULT_KEEP = 10
+const cleanupModal = reactive<{
+  open: boolean
+  keepLast: number
+  preview: MigrationHistoryCleanupPreview | null
+  previewing: boolean
+  submitting: boolean
+}>({
+  open: false,
+  keepLast: CLEANUP_DEFAULT_KEEP,
+  preview: null,
+  previewing: false,
+  submitting: false,
+})
+
+const cleanupKeepMax = computed(() => Math.max(cleanupModal.preview?.total ?? 1, 1))
+const activeDbName = computed(() => status.value?.active?.name || '未配置')
+
+/** 取后端 detail（如迁移期间的 503 写锁提示），取不到时用 fallback。 */
+function errDetail(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  return typeof detail === 'string' && detail.trim() ? detail : fallback
+}
+
+function openCleanupModal(): void {
+  cleanupModal.keepLast = CLEANUP_DEFAULT_KEEP
+  cleanupModal.preview = null
+  cleanupModal.open = true
+  void refreshCleanupPreview()
+}
+
+function closeCleanupModal(): void {
+  if (cleanupModal.submitting) return
+  cleanupModal.open = false
+}
+
+async function refreshCleanupPreview(): Promise<void> {
+  if (!Number.isFinite(cleanupModal.keepLast) || cleanupModal.keepLast < 1) {
+    cleanupModal.preview = null
+    return
+  }
+  cleanupModal.previewing = true
+  try {
+    const res = await getMigrationHistoryCleanupPreview(cleanupModal.keepLast)
+    cleanupModal.preview = res.data
+  } catch (err: unknown) {
+    cleanupModal.preview = null
+    message.error(errDetail(err, '计算清理影响失败'))
+  } finally {
+    cleanupModal.previewing = false
+  }
+}
+
+async function handleCleanup(): Promise<void> {
+  if (!cleanupModal.preview || cleanupModal.preview.will_delete === 0) return
+  cleanupModal.submitting = true
+  try {
+    const res = await cleanupMigrationHistory(cleanupModal.keepLast)
+    message.success(`已清理 ${res.data.deleted} 条迁移历史`)
+    cleanupModal.open = false
+    await loadMigrationHistory()
+  } catch (err: unknown) {
+    message.error(errDetail(err, '清理失败，请稍后重试'))
+  } finally {
+    cleanupModal.submitting = false
+  }
+}
 
 const connectionColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
@@ -1382,6 +1511,34 @@ defineExpose({
   border: 1px solid oklch(56% 0.16 210 / 18%);
   border-radius: 999px;
   padding: 3px 9px;
+}
+.history-cap-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.history-cleanup-btn {
+  margin-left: auto;
+}
+
+/* ── 迁移历史清理弹窗 ── */
+.cleanup-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+}
+.cleanup-preview {
+  margin: 12px 0;
+  font-size: 13px;
+  color: var(--muted);
+  min-height: 20px;
+}
+.cleanup-preview b {
+  color: var(--fg);
+}
+.cleanup-preview .cleanup-danger {
+  color: var(--danger, #ff4d4f);
 }
 .history-flow {
   display: inline-flex;

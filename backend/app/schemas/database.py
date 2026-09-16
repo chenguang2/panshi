@@ -52,3 +52,9 @@ class ImportRequest(BaseModel):
     archive_path: str = Field(...)
     target_id: str = Field(...)
     confirmed_clear: bool = False
+
+
+class HistoryCleanupRequest(BaseModel):
+    """迁移历史清理：保留最新 N 条，其余删除（running 记录受保护）。"""
+
+    keep_last: int = Field(..., ge=1, le=100000, description="保留最新 N 条迁移历史记录")

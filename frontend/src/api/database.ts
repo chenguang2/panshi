@@ -10,6 +10,7 @@ import type {
   ImportPayload,
   MigrationBackupProgressEvent,
   MigrationCompleteEvent,
+  MigrationHistoryCleanupPreview,
   MigrationHistoryItem,
   MigrationStreamEvent,
   MigrationTableProgressEvent,
@@ -110,6 +111,20 @@ export function importDatabase(payload: ImportPayload) {
 
 export function getMigrationHistory() {
   return api.get<MigrationHistoryItem[]>('/database/history')
+}
+
+/** 清理影响预览（只读）：库内总数 / 将删除 / 将保留（按库内真实总数计算，不受列表 100 条上限影响）。 */
+export function getMigrationHistoryCleanupPreview(keepLast: number) {
+  return api.get<MigrationHistoryCleanupPreview>('/database/history/cleanup-preview', {
+    params: { keep_last: keepLast },
+  })
+}
+
+/** 按「保留最近 keepLast 条」清理当前活动库的迁移历史（running 记录受保护）。 */
+export function cleanupMigrationHistory(keepLast: number) {
+  return api.post<{ deleted: number; remaining: number }>('/database/history/cleanup', {
+    keep_last: keepLast,
+  })
 }
 
 export function getRunningTasks() {

@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,7 @@ from app.schemas.database import (
     ConnectionCreate,
     ConnectionUpdate,
     ExportRequest,
+    HistoryCleanupRequest,
     ImportRequest,
     MigrateRequest,
     SwitchRequest,
@@ -675,6 +676,69 @@ async def migration_history(
         }
         for log in logs
     ]
+
+
+@router.get("/history/cleanup-preview")
+async def cleanup_migration_history_preview(
+    keep_last: int = Query(..., ge=1, le=100000, description="保留最新 N 条"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('database_management')),
+) -> dict[str, int]:
+    """清理影响预览（只读）：库内总数、将删除、将保留。
+
+    列表接口只返回最近 100 条，条数上限内无法推出真实总数，故由服务端按真实判据计算。
+    """
+    total, will_delete, will_keep = await db_migration_service.preview_cleanup(db, keep_last)
+    return {"total": total, "will_delete": will_delete, "will_keep": will_keep}
+
+
+@router.post("/history/cleanup")
+async def cleanup_migration_history(
+    body: HistoryCleanupRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('database_management')),
+    request: Request = None,
+) -> dict[str, int]:
+    """按「保留最近 keep_last 条」清理**当前活动库**的迁移历史（running 记录不删）。
+
+    大表清理不需要分页：`ps_db_migration_log` 为操作元数据，行数在千级以内。
+    """
+    deleted, remaining = await db_migration_service.cleanup_migration_logs(db, body.keep_last)
+    # service 有意不 commit：审计骨架与本操作须同事务，否则 detail 合并失败
+    enrich_audit(
+        request,
+        detail=f"清理迁移历史：删除 {deleted} 条，保留最近 {body.keep_last} 条（剩余 {remaining} 条）",
+    )
+    await db.commit()
+    logger.info(
+        "迁移历史已清理 by %s: deleted=%s remaining=%s", current_user.username, deleted, remaining
+    )
+    return {"deleted": deleted, "remaining": remaining}
+
+
+@router.delete("/history/{log_id}")
+async def delete_migration_history(
+    log_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('database_management')),
+    request: Request = None,
+) -> dict[str, int]:
+    """删除单条迁移历史记录（running 记录受保护）。前端暂未暴露入口。"""
+    # 只读状态列，避免把 ORM 实体放进 identity map 后再被 Core DELETE 变更
+    row_status = (
+        await db.execute(select(DbMigrationLog.status).where(DbMigrationLog.id == log_id))
+    ).scalar_one_or_none()
+    if row_status is None:
+        raise HTTPException(status_code=404, detail="迁移历史记录不存在")
+    if row_status == "running":
+        raise HTTPException(status_code=409, detail="该记录对应的迁移正在执行中，不能删除")
+
+    await db_migration_service.delete_migration_log(db, log_id)
+    enrich_audit(request, resource_id=log_id, detail=f"删除迁移历史 #{log_id}")
+    remaining = await db_migration_service.count_migration_logs(db)
+    await db.commit()
+    logger.info("迁移历史 #%s 已删除 by %s", log_id, current_user.username)
+    return {"deleted": 1, "remaining": remaining}
 
 
 def _direction_label(source, target) -> str:

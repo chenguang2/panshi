@@ -325,6 +325,87 @@ class TestMigrationLog:
         assert row.started_at is None
 
 
+class TestMigrationLogCleanup:
+    """迁移历史清理（openspec/changes/add-migration-history-cleanup）。
+
+    service 层不 commit（由端点在同一事务内补审计 detail 后统一提交），
+    故此处每步显式 commit。
+    """
+
+    async def _seed(self, db, count: int, *, running: int = 0) -> None:
+        for i in range(count):
+            await db_migration_service.record_migration_log(
+                db,
+                direction="sqlite_to_postgres",
+                source_connection=f"src{i}",
+                target_connection="dst",
+                status="running" if i < running else "success",
+            )
+
+    async def _rows(self, db):
+        result = await db.execute(select(DbMigrationLog).order_by(DbMigrationLog.id))
+        return result.scalars().all()
+
+    @pytest.mark.asyncio
+    async def test_keeps_newest_n(self, test_db):
+        await self._seed(test_db, 5)
+
+        deleted, remaining = await db_migration_service.cleanup_migration_logs(test_db, keep_last=2)
+        await test_db.commit()
+
+        assert (deleted, remaining) == (3, 2)
+        rows = await self._rows(test_db)
+        assert [r.source_connection for r in rows] == ["src3", "src4"]
+
+    @pytest.mark.asyncio
+    async def test_running_rows_never_deleted(self, test_db):
+        await self._seed(test_db, 5, running=1)  # 最旧一条为 running
+
+        deleted, remaining = await db_migration_service.cleanup_migration_logs(test_db, keep_last=1)
+        await test_db.commit()
+
+        rows = await self._rows(test_db)
+        assert (deleted, remaining) == (3, 2)
+        assert [r.status for r in rows] == ["running", "success"]
+        assert rows[-1].source_connection == "src4"
+
+    @pytest.mark.asyncio
+    async def test_noop_when_keep_last_exceeds_count(self, test_db):
+        await self._seed(test_db, 2)
+
+        deleted, remaining = await db_migration_service.cleanup_migration_logs(test_db, keep_last=10)
+        await test_db.commit()
+
+        assert (deleted, remaining) == (0, 2)
+        assert len(await self._rows(test_db)) == 2
+
+    @pytest.mark.asyncio
+    async def test_delete_single_row(self, test_db):
+        await self._seed(test_db, 3)
+        oldest = (await self._rows(test_db))[0]
+
+        assert await db_migration_service.delete_migration_log(test_db, oldest.id) is True
+        await test_db.commit()
+
+        ids = [r.id for r in await self._rows(test_db)]
+        assert oldest.id not in ids and len(ids) == 2
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_row_returns_false(self, test_db):
+        assert await db_migration_service.delete_migration_log(test_db, 999999) is False
+
+    @pytest.mark.asyncio
+    async def test_delete_running_row_protected(self, test_db):
+        await self._seed(test_db, 2, running=1)
+        running_row = (await self._rows(test_db))[0]
+        assert running_row.status == "running"
+
+        assert await db_migration_service.delete_migration_log(test_db, running_row.id) is False
+        await test_db.commit()
+
+        assert len(await self._rows(test_db)) == 2
+
+
 class TestDirectionValidation:
     def test_same_source_target_rejected(self):
         with pytest.raises(ValueError) as exc:

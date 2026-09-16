@@ -342,3 +342,137 @@ class TestRunningTasksEndpoint:
         assert resp.status_code == 403
         uid = created.json()["id"]
         await async_authed_client.delete(f"/api/v1/admin/users/{uid}")
+
+
+class TestMigrationHistoryCleanup:
+    """迁移历史清理（openspec/changes/add-migration-history-cleanup）。"""
+
+    @staticmethod
+    async def _seed(session_factory, count: int, *, running: int = 0):
+        from app.models.db_migration import DbMigrationLog
+
+        async with session_factory() as s:
+            for i in range(count):
+                s.add(
+                    DbMigrationLog(
+                        direction="sqlite_to_postgres",
+                        source_connection=f"src{i}",
+                        target_connection="prod_pg",
+                        mode="replace",
+                        status="running" if i < running else "success",
+                    )
+                )
+            await s.commit()
+
+    @staticmethod
+    async def _logs(session_factory):
+        from sqlalchemy import select
+        from app.models.db_migration import DbMigrationLog
+
+        async with session_factory() as s:
+            return (await s.execute(select(DbMigrationLog).order_by(DbMigrationLog.id))).scalars().all()
+
+    @staticmethod
+    async def _audit(session_factory, action: str):
+        from sqlalchemy import select
+        from app.models.system import AuditLog
+
+        async with session_factory() as s:
+            rows = (await s.execute(select(AuditLog).order_by(AuditLog.id))).scalars().all()
+        return [r for r in rows if r.action == action]
+
+    async def test_keep_last_must_be_positive(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 3)
+        resp = await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 0})
+        assert resp.status_code in (400, 422)
+        assert len(await self._logs(isolated_session)) == 3
+
+    async def test_cleanup_keeps_newest_n(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 6)
+
+        resp = await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 2})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"deleted": 4, "remaining": 2}
+        rows = await self._logs(isolated_session)
+        assert [r.source_connection for r in rows] == ["src4", "src5"]
+
+    async def test_cleanup_never_deletes_running(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 5, running=1)  # 最旧一条 running
+
+        resp = await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 1})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"deleted": 3, "remaining": 2}
+        rows = await self._logs(isolated_session)
+        assert [r.status for r in rows] == ["running", "success"]
+
+    async def test_cleanup_noop_when_keep_last_exceeds_count(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 2)
+
+        resp = await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 10})
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"deleted": 0, "remaining": 2}
+        assert len(await self._logs(isolated_session)) == 2
+
+    async def test_cleanup_writes_audit_detail(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 4)
+
+        await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 1})
+
+        logs = await self._audit(isolated_session, "db_migration_log_cleanup")
+        assert len(logs) == 1
+        assert "删除 3 条" in logs[0].detail and "保留最近 1 条" in logs[0].detail
+        assert logs[0].username == "admin"
+
+    async def test_delete_single_row(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 3)
+        target = (await self._logs(isolated_session))[0]
+
+        resp = await async_authed_client.delete(f"/api/v1/database/history/{target.id}")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"deleted": 1, "remaining": 2}
+        ids = [r.id for r in await self._logs(isolated_session)]
+        assert target.id not in ids
+        logs = await self._audit(isolated_session, "db_migration_log_delete")
+        assert len(logs) == 1 and logs[0].resource_id == target.id
+
+    async def test_delete_missing_row_404(self, async_authed_client):
+        resp = await async_authed_client.delete("/api/v1/database/history/999999")
+        assert resp.status_code == 404
+        # 必须由本端点返回，而非 main.py 的未知 /api 兜底路由（两者都是 404，detail 不同）
+        assert resp.json()["detail"] == "迁移历史记录不存在"
+
+    async def test_delete_running_row_409(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 2, running=1)
+        running_row = (await self._logs(isolated_session))[0]
+        assert running_row.status == "running"
+
+        resp = await async_authed_client.delete(f"/api/v1/database/history/{running_row.id}")
+
+        assert resp.status_code == 409
+        assert len(await self._logs(isolated_session)) == 2
+
+    async def test_cleanup_preview_reports_exact_counts(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 6)
+
+        resp = await async_authed_client.get("/api/v1/database/history/cleanup-preview?keep_last=2")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"total": 6, "will_delete": 4, "will_keep": 2}
+        # 预览必须只读：不得动数据
+        assert len(await self._logs(isolated_session)) == 6
+
+    async def test_cleanup_preview_excludes_running(self, async_authed_client, isolated_session):
+        await self._seed(isolated_session, 5, running=1)
+
+        resp = await async_authed_client.get("/api/v1/database/history/cleanup-preview?keep_last=1")
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"total": 5, "will_delete": 3, "will_keep": 2}
+
+    async def test_cleanup_preview_keep_last_must_be_positive(self, async_authed_client):
+        resp = await async_authed_client.get("/api/v1/database/history/cleanup-preview?keep_last=0")
+        assert resp.status_code in (400, 422)

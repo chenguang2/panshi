@@ -31,6 +31,7 @@ const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   user_clusters: '用户集群分配',
   db_connection: '数据库连接',
   db_migration: '数据库迁移',
+  db_migration_log: '数据库迁移历史',
   db_archive: '数据库归档',
   clickhouse_config: 'ClickHouse 配置',
   ansible_inventory: 'Ansible 主机清单',
@@ -89,6 +90,7 @@ const AUDIT_VERB_LABELS: Record<string, string> = {
   detect_ports: '端口探测',
   test: '测试',
   query: '查询',
+  cleanup: '清理',
 }
 
 /** 旧命名全量中文表（历史存量行：verb_resource 动词在前，如 create_route） */

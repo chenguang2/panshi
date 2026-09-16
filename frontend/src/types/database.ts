@@ -91,6 +91,13 @@ export interface MigrationHistoryItem {
   created_at?: string | null
 }
 
+/** 迁移历史清理预览：按库内真实总数计算（列表接口只返回最近 100 条）。 */
+export interface MigrationHistoryCleanupPreview {
+  total: number
+  will_delete: number
+  will_keep: number
+}
+
 // ── SSE 迁移流事件（v3 8B-2：判别联合，供 createSSEClient<T> 类型收窄，消除 as any）──
 interface SSEEventBase {
   [key: string]: unknown

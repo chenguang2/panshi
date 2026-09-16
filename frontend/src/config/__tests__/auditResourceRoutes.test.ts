@@ -17,6 +17,14 @@ describe('auditActionLabel 新命名（resource_verb）', () => {
   it('db_migration_migrate → 数据库迁移 迁移', () => {
     expect(auditActionLabel('db_migration_migrate')).toBe('数据库迁移 迁移')
   })
+
+  it('db_migration_log_cleanup → 数据库迁移历史 清理', () => {
+    expect(auditActionLabel('db_migration_log_cleanup')).toBe('数据库迁移历史 清理')
+  })
+
+  it('db_migration_log_delete → 数据库迁移历史 删除', () => {
+    expect(auditActionLabel('db_migration_log_delete')).toBe('数据库迁移历史 删除')
+  })
 })
 
 describe('auditActionLabel 旧命名（verb_resource，历史存量行）', () => {

@@ -97,4 +97,20 @@ describe('database api', () => {
     await db.getMigrationHistory()
     expect(mockGet).toHaveBeenCalledWith('/database/history')
   })
+
+  it('getMigrationHistoryCleanupPreview calls GET cleanup-preview with keep_last', async () => {
+    const db = await loadModule()
+    mockGet.mockResolvedValue({ data: { total: 96, will_delete: 86, will_keep: 10 } })
+    await db.getMigrationHistoryCleanupPreview(10)
+    expect(mockGet).toHaveBeenCalledWith('/database/history/cleanup-preview', {
+      params: { keep_last: 10 },
+    })
+  })
+
+  it('cleanupMigrationHistory calls POST cleanup with keep_last', async () => {
+    const db = await loadModule()
+    mockPost.mockResolvedValue({ data: { deleted: 86, remaining: 10 } })
+    await db.cleanupMigrationHistory(10)
+    expect(mockPost).toHaveBeenCalledWith('/database/history/cleanup', { keep_last: 10 })
+  })
 })

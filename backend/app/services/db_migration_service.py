@@ -14,7 +14,18 @@ from datetime import datetime
 from inspect import signature
 from typing import Any
 
-from sqlalchemy import Boolean as SA_Boolean, ColumnDefault, DateTime as SA_DateTime, MetaData, Table, inspect, text
+from sqlalchemy import (
+    Boolean as SA_Boolean,
+    ColumnDefault,
+    DateTime as SA_DateTime,
+    MetaData,
+    Table,
+    delete,
+    func,
+    inspect,
+    select,
+    text,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -446,6 +457,61 @@ async def record_migration_log(
         )
     )
     await db.commit()
+
+
+# 迁移历史清理：`running` 记录永不删除（在途迁移的记录必须存活）
+_RUNNING_STATUS = "running"
+
+
+async def count_migration_logs(db: AsyncSession) -> int:
+    """当前活动库的迁移历史条数。"""
+    return (await db.execute(select(func.count()).select_from(DbMigrationLog))).scalar_one()
+
+
+def _cleanup_scope(keep_last: int):
+    """清理判据：非最新 ``keep_last`` 条 **且** 状态不为 ``running``。
+
+    preview 与 cleanup 共用，避免"预览说会删 N 条、实际删 M 条"的两处漂移。
+    """
+    keep_ids = select(DbMigrationLog.id).order_by(DbMigrationLog.id.desc()).limit(keep_last).scalar_subquery()
+    return (DbMigrationLog.id.notin_(keep_ids), DbMigrationLog.status != _RUNNING_STATUS)
+
+
+async def preview_cleanup(db: AsyncSession, keep_last: int) -> tuple[int, int, int]:
+    """只读预览 ``(总数, 将删除, 将保留)`` —— 与 ``cleanup_migration_logs`` 同一判据。"""
+    total = await count_migration_logs(db)
+    will_delete = (
+        await db.execute(
+            select(func.count()).select_from(DbMigrationLog).where(*_cleanup_scope(keep_last))
+        )
+    ).scalar_one()
+    return total, will_delete, total - will_delete
+
+
+async def cleanup_migration_logs(db: AsyncSession, keep_last: int) -> tuple[int, int]:
+    """删除除最新 ``keep_last`` 条与全部 ``running`` 记录之外的历史记录。
+
+    返回 ``(删除条数, 剩余条数)``。**不提交事务**：调用方（端点）需在同一事务内
+    补全审计骨架 detail 后统一提交，否则审计会落到另一个事务。
+    """
+    result = await db.execute(delete(DbMigrationLog).where(*_cleanup_scope(keep_last)))
+    deleted = result.rowcount or 0
+    return deleted, await count_migration_logs(db)
+
+
+async def delete_migration_log(db: AsyncSession, log_id: int) -> bool:
+    """删除单条历史记录；``running`` 记录受保护。
+
+    删除成功返回 True；记录不存在或被保护返回 False。**不提交事务**（同
+    ``cleanup_migration_logs``）。
+    """
+    result = await db.execute(
+        delete(DbMigrationLog).where(
+            DbMigrationLog.id == log_id,
+            DbMigrationLog.status != _RUNNING_STATUS,
+        )
+    )
+    return bool(result.rowcount)
 
 
 def _reset_sequences(dst_engine, tables) -> None:

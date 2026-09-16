@@ -15,6 +15,8 @@ const mocks = {
   exportDatabase: vi.fn(),
   importDatabase: vi.fn(),
   getHistory: vi.fn(),
+  getCleanupPreview: vi.fn(),
+  cleanupHistory: vi.fn(),
   getRunningTasks: vi.fn(),
 }
 
@@ -30,6 +32,8 @@ vi.mock('@/api/database', () => ({
   exportDatabase: (...a: any[]) => mocks.exportDatabase(...a),
   importDatabase: (...a: any[]) => mocks.importDatabase(...a),
   getMigrationHistory: (...a: any[]) => mocks.getHistory(...a),
+  getMigrationHistoryCleanupPreview: (...a: any[]) => mocks.getCleanupPreview(...a),
+  cleanupMigrationHistory: (...a: any[]) => mocks.cleanupHistory(...a),
   getRunningTasks: (...a: any[]) => mocks.getRunningTasks(...a),
 }))
 
@@ -404,5 +408,69 @@ describe('DatabaseManagement', () => {
   it('shows static resource file location notice', async () => {
     const wrapper = await mountPage()
     expect(wrapper.text()).toContain('静态资源文件存储于服务器磁盘')
+  })
+
+  describe('迁移历史清理', () => {
+    function historyRows(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        direction: 'sqlite_to_postgres',
+        source_connection: 'local_sqlite',
+        target_connection: 'prod_pg',
+        mode: 'replace',
+        status: 'success',
+        tables_count: 22,
+        created_at: '2026-09-16T02:00:00',
+      }))
+    }
+
+    it('弹窗按服务端真实总数预览，确认后调用清理并刷新历史', async () => {
+      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
+      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 96, will_delete: 86, will_keep: 10 } })
+      mocks.cleanupHistory.mockResolvedValue({ data: { deleted: 86, remaining: 10 } })
+      const wrapper = await mountPage()
+
+      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
+      expect(openBtn).toBeTruthy()
+      await openBtn!.trigger('click')
+      await flushPromises()
+
+      // 预览按服务端总数（96）而非已加载条数（3）计算
+      expect(mocks.getCleanupPreview).toHaveBeenCalledWith(10)
+      const preview = wrapper.find('.cleanup-preview').text()
+      expect(preview).toContain('96')
+      expect(preview).toContain('将删除')
+      expect(preview).toContain('86')
+
+      const confirm = wrapper.find('.cleanup-confirm-btn')
+      expect(confirm.attributes('disabled')).toBeUndefined()
+      await confirm.trigger('click')
+      await flushPromises()
+
+      expect(mocks.cleanupHistory).toHaveBeenCalledWith(10)
+      expect(mocks.getHistory).toHaveBeenCalledTimes(2) // 初次加载 + 清理后刷新
+      expect((wrapper.vm as any).cleanupModal.open).toBe(false)
+    })
+
+    it('无需清理时禁用确认按钮', async () => {
+      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
+      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 3, will_delete: 0, will_keep: 3 } })
+      const wrapper = await mountPage()
+
+      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
+      await openBtn!.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.cleanup-preview').text()).toContain('无需清理')
+      expect(wrapper.find('.cleanup-confirm-btn').attributes('disabled')).toBe('')
+    })
+
+    it('历史条数达后端单页上限时提示仅显示最近 100 条', async () => {
+      mocks.getHistory.mockResolvedValue({ data: historyRows(100) })
+      const wrapper = await mountPage()
+
+      expect(wrapper.find('.history-cap-hint').exists()).toBe(true)
+      expect(wrapper.find('.history-cap-hint').text()).toContain('100')
+    })
   })
 })

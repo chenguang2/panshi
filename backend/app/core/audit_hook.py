@@ -137,6 +137,8 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("POST", "/api/v1/database/migrate-stream"): ("db_migration", "migrate", False),
     ("POST", "/api/v1/database/export"): ("db_archive", "export", False),
     ("POST", "/api/v1/database/import"): ("db_archive", "import", False),
+    ("POST", "/api/v1/database/history/cleanup"): ("db_migration_log", "cleanup", True),
+    ("DELETE", "/api/v1/database/history/{log_id}"): ("db_migration_log", "delete", False),
     # 用户
     ("POST", "/api/v1/admin/users"): ("user", "create", False),
     ("PUT", "/api/v1/admin/users/{user_id}"): ("user", "update", False),

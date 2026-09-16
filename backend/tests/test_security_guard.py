@@ -54,6 +54,10 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/system/operations/archive"),
     # 任务留档文件删除（2026-09-12 task-files 端点）
     ("delete", "/api/v1/node-tasks/task-files/1/some-file"),
+    # 迁移历史清理（2026-09-16，database_management 权限）
+    ("get", "/api/v1/database/history/cleanup-preview?keep_last=10"),
+    ("post", "/api/v1/database/history/cleanup"),
+    ("delete", "/api/v1/database/history/1"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）
