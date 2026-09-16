@@ -10,7 +10,7 @@ export interface UploadedScript {
   uploaded_at: string
 }
 
-export interface ScriptPreview {
+interface ScriptPreview {
   upload_id: string
   content: string
   filename: string
@@ -90,15 +90,5 @@ export async function uploadDistributeFile(file: File): Promise<{ upload_id: str
   const resp = await api.post('/node-tasks/upload-distribute-file', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
-  return resp.data
-}
-
-/**
- * Preview uploaded distribute file content (returns preview_available: false for binary).
- */
-export async function previewDistributeFile(
-  uploadId: string,
-): Promise<{ upload_id: string; content?: string; preview_available: boolean; filename: string }> {
-  const resp = await api.get(`/node-tasks/script-preview/${uploadId}`)
   return resp.data
 }

@@ -27,7 +27,6 @@ from app.services.ansible_service import (
     NGINX_CMD_MAP,
     ip_sort_key,
 )
-from app.services.ansible_service import MAX_LOG_LINES
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(require_permission('clusters'))])
@@ -994,8 +993,13 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
 
         return {"name": db_cert.name, "id": db_cert.edge_uuid, "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
-    def _find_only_in_edge(edge_dict, db_items, id_attr="id"):
-        """找出仅在 Edge 上存在、DB 中没有的项"""
+    def _find_only_in_edge(edge_dict, db_items):
+        """找出仅在 Edge 上存在、DB 中没有的项。
+
+        身份键固定为 ``edge_uuid``，缺失该属性的模型回退 ``plugin_name``
+        （PluginMetadata 只有 plugin_name）；原先的 ``id_attr`` 形参从未被函数体
+        使用，属误导性空参数，2026-09-16 静态分析后移除。
+        """
         db_ids = {getattr(d, "edge_uuid", getattr(d, "plugin_name", "")) for d in db_items}
         result = []
         for eid, edata in edge_dict.items():
@@ -1039,7 +1043,7 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
 
     # 插件元数据
     pm_items = [_compare_plugin_metadata(p, edge_plugin_metadatas.get(p.plugin_name)) for p in db_plugin_metadatas]
-    pm_items += _find_only_in_edge(edge_plugin_metadatas, db_plugin_metadatas, id_attr="name")
+    pm_items += _find_only_in_edge(edge_plugin_metadatas, db_plugin_metadatas)
     _add_group("插件元数据", "plugin_metadata", pm_items)
 
     # 四层代理

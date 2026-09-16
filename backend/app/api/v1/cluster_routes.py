@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import select, func, or_
 from typing import List, Optional
 import json
 import uuid

@@ -14,26 +14,66 @@ export interface GroupColorScheme {
 }
 
 const COLOR_PALETTE: GroupColorScheme[] = [
-  { leftBorder: 'oklch(55% 0.18 180)', badgeBg: 'oklch(55% 0.18 180 / 18%)', badgeFg: 'oklch(36% 0.18 180)', badgeBorder: 'oklch(55% 0.18 180 / 30%)' },
-  { leftBorder: 'oklch(55% 0.18 140)', badgeBg: 'oklch(55% 0.18 140 / 18%)', badgeFg: 'oklch(36% 0.18 140)', badgeBorder: 'oklch(55% 0.18 140 / 30%)' },
-  { leftBorder: 'oklch(55% 0.18 90)',  badgeBg: 'oklch(55% 0.18 90 / 18%)',  badgeFg: 'oklch(36% 0.18 90)',  badgeBorder: 'oklch(55% 0.18 90 / 30%)'  },
-  { leftBorder: 'oklch(55% 0.18 50)',  badgeBg: 'oklch(55% 0.18 50 / 18%)',  badgeFg: 'oklch(36% 0.18 50)',  badgeBorder: 'oklch(55% 0.18 50 / 30%)'  },
-  { leftBorder: 'oklch(55% 0.18 20)',  badgeBg: 'oklch(55% 0.18 20 / 18%)',  badgeFg: 'oklch(36% 0.18 20)',  badgeBorder: 'oklch(55% 0.18 20 / 30%)'  },
-  { leftBorder: 'oklch(55% 0.18 320)', badgeBg: 'oklch(55% 0.18 320 / 18%)', badgeFg: 'oklch(36% 0.18 320)', badgeBorder: 'oklch(55% 0.18 320 / 30%)' },
-  { leftBorder: 'oklch(55% 0.18 280)', badgeBg: 'oklch(55% 0.18 280 / 18%)', badgeFg: 'oklch(36% 0.18 280)', badgeBorder: 'oklch(55% 0.18 280 / 30%)' },
-  { leftBorder: 'oklch(55% 0.18 220)', badgeBg: 'oklch(55% 0.18 220 / 18%)', badgeFg: 'oklch(36% 0.18 220)', badgeBorder: 'oklch(55% 0.18 220 / 30%)' },
+  {
+    leftBorder: 'oklch(55% 0.18 180)',
+    badgeBg: 'oklch(55% 0.18 180 / 18%)',
+    badgeFg: 'oklch(36% 0.18 180)',
+    badgeBorder: 'oklch(55% 0.18 180 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 140)',
+    badgeBg: 'oklch(55% 0.18 140 / 18%)',
+    badgeFg: 'oklch(36% 0.18 140)',
+    badgeBorder: 'oklch(55% 0.18 140 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 90)',
+    badgeBg: 'oklch(55% 0.18 90 / 18%)',
+    badgeFg: 'oklch(36% 0.18 90)',
+    badgeBorder: 'oklch(55% 0.18 90 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 50)',
+    badgeBg: 'oklch(55% 0.18 50 / 18%)',
+    badgeFg: 'oklch(36% 0.18 50)',
+    badgeBorder: 'oklch(55% 0.18 50 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 20)',
+    badgeBg: 'oklch(55% 0.18 20 / 18%)',
+    badgeFg: 'oklch(36% 0.18 20)',
+    badgeBorder: 'oklch(55% 0.18 20 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 320)',
+    badgeBg: 'oklch(55% 0.18 320 / 18%)',
+    badgeFg: 'oklch(36% 0.18 320)',
+    badgeBorder: 'oklch(55% 0.18 320 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 280)',
+    badgeBg: 'oklch(55% 0.18 280 / 18%)',
+    badgeFg: 'oklch(36% 0.18 280)',
+    badgeBorder: 'oklch(55% 0.18 280 / 30%)',
+  },
+  {
+    leftBorder: 'oklch(55% 0.18 220)',
+    badgeBg: 'oklch(55% 0.18 220 / 18%)',
+    badgeFg: 'oklch(36% 0.18 220)',
+    badgeBorder: 'oklch(55% 0.18 220 / 30%)',
+  },
 ]
 
 function hashString(str: string): number {
   let hash = 0
   for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i)
+    hash = (hash << 5) - hash + str.charCodeAt(i)
     hash |= 0
   }
   return Math.abs(hash)
 }
 
-export function getGroupColor(groupName: string | null | undefined): GroupColorScheme | null {
+function getGroupColor(groupName: string | null | undefined): GroupColorScheme | null {
   if (!groupName) return null
   const idx = hashString(groupName) % COLOR_PALETTE.length
   return COLOR_PALETTE[idx]

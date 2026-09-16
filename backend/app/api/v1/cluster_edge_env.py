@@ -13,7 +13,6 @@ from app.models.cluster import Cluster, Node, ConfigVersion
 from app.schemas.edge_env import (
     EdgeEnvReadResponse,
     EdgeEnvDeployRequest,
-    NodeResultItem,
 )
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream

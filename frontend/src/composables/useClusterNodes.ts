@@ -27,9 +27,9 @@ import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImp
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
-export const BATCH_ACTION_CONCURRENCY = 5
+const BATCH_ACTION_CONCURRENCY = 5
 
-export async function runWithConcurrency<T>(
+async function runWithConcurrency<T>(
   items: T[],
   limit: number,
   task: (item: T, index: number) => Promise<void>,

@@ -106,8 +106,3 @@ export interface SslCertificateUpdate {
   client_depth?: number
   skip_mtls_uri_regex?: string
 }
-
-export interface SslListResponse {
-  total: number
-  items: SslCertificate[]
-}

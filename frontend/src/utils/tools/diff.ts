@@ -19,11 +19,13 @@ export function sortValue(val: unknown): unknown {
   if (Array.isArray(val)) {
     if (val.length === 0) return val
     if (typeof val[0] === 'object') {
-      return val.map(item => sortValue(item)).sort((a, b) => {
-        const aKey = Object.keys(a as Record<string, unknown>)[0] || ''
-        const bKey = Object.keys(b as Record<string, unknown>)[0] || ''
-        return aKey.localeCompare(bKey)
-      })
+      return val
+        .map((item) => sortValue(item))
+        .sort((a, b) => {
+          const aKey = Object.keys(a as Record<string, unknown>)[0] || ''
+          const bKey = Object.keys(b as Record<string, unknown>)[0] || ''
+          return aKey.localeCompare(bKey)
+        })
     }
     return [...val].sort((a, b) => {
       if (typeof a === 'number' && typeof b === 'number') return a - b
@@ -45,14 +47,14 @@ export function sortValue(val: unknown): unknown {
 /** 检测数组项中可用作唯一标识的字段名 */
 function detectArrayKey(arrA: unknown[], arrB: unknown[]): string | null {
   for (const key of ['id', 'key', 'name', 'uuid']) {
-    const allA = arrA.every(item => item && typeof item === 'object' && key in item)
-    const allB = arrB.every(item => item && typeof item === 'object' && key in item)
+    const allA = arrA.every((item) => item && typeof item === 'object' && key in item)
+    const allB = arrB.every((item) => item && typeof item === 'object' && key in item)
     if (allA && allB) return key
   }
   return null
 }
 
-export function computeDiff(objA: unknown, objB: unknown): DiffResult {
+function computeDiff(objA: unknown, objB: unknown): DiffResult {
   if (objA === objB) {
     return { status: 'same', valueA: objA, valueB: objB }
   }
@@ -99,7 +101,7 @@ export function computeDiff(objA: unknown, objB: unknown): DiffResult {
     }
   }
 
-  const hasChange = Object.values(children).some(c => c.status !== 'same')
+  const hasChange = Object.values(children).some((c) => c.status !== 'same')
   if (hasChange) {
     return { status: 'changed', children }
   }
@@ -140,11 +142,17 @@ function computeArrayDiffByKey(arrA: unknown[], arrB: unknown[], keyField: strin
   const seen = new Set<string>()
   for (const item of arrA) {
     const k = String((item as Record<string, unknown>)[keyField])
-    if (!seen.has(k)) { orderedKeys.push(k); seen.add(k) }
+    if (!seen.has(k)) {
+      orderedKeys.push(k)
+      seen.add(k)
+    }
   }
   for (const item of arrB) {
     const k = String((item as Record<string, unknown>)[keyField])
-    if (!seen.has(k)) { orderedKeys.push(k); seen.add(k) }
+    if (!seen.has(k)) {
+      orderedKeys.push(k)
+      seen.add(k)
+    }
   }
 
   const children: Record<string, DiffResult> = {}
@@ -164,7 +172,6 @@ function computeArrayDiffByKey(arrA: unknown[], arrB: unknown[], keyField: strin
 // ── HTML 工具 ──────────────────────────────────────
 // escapeHtml 已收敛到 utils/html.ts（v3 8B-1，补齐单引号转义）；本模块内部渲染也复用同一实现
 import { escapeHtml } from '../html'
-export { escapeHtml }
 
 // ── 渲染输出 ───────────────────────────────────────
 
@@ -263,7 +270,12 @@ function renderDiffNode(diff: DiffResult, lines: string[], indent: string, comma
         }
       } else {
         // 对象字段
-        const isLeaf = !child.children && (child.status === 'same' || child.status === 'added' || child.status === 'removed' || child.status === 'changed')
+        const isLeaf =
+          !child.children &&
+          (child.status === 'same' ||
+            child.status === 'added' ||
+            child.status === 'removed' ||
+            child.status === 'changed')
 
         if (isLeaf) {
           if (child.status === 'same') {
@@ -304,7 +316,9 @@ export function renderLineDiff(jsonA: string, jsonB: string): LineDiffResult {
   const diff = computeDiff(objA, objB)
 
   const lines: string[] = []
-  let added = 0, removed = 0, changed = 0
+  let added = 0,
+    removed = 0,
+    changed = 0
 
   function countStats(d: DiffResult): void {
     if (d.status === 'added') added++
@@ -319,7 +333,9 @@ export function renderLineDiff(jsonA: string, jsonB: string): LineDiffResult {
   renderDiffNode(diff, lines, '', '')
   return {
     html: lines.join('\n'),
-    added, removed, changed,
+    added,
+    removed,
+    changed,
     totalA: JSON.stringify(objA, null, 2).split('\n').length,
     totalB: JSON.stringify(objB, null, 2).split('\n').length,
   }

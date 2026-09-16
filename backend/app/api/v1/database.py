@@ -37,7 +37,7 @@ from app.schemas.database import (
     SwitchRequest,
 )
 from app.services import db_archive_service, db_migration_service
-from app.services.db_migration_service import MigrationCancelled, MigrationProgressEvent
+from app.services.db_migration_service import MigrationCancelled
 
 logger = logging.getLogger(__name__)
 
