@@ -14,7 +14,7 @@
 |---|---|---|---|
 | **A 中性表头**（多数派） | 6 | 11px / 大写 / 字距 .55px / 背景 `oklch(97% 0.005 250)` / nowrap / 12-8 内边距 | `.table-container` |
 | **B 品牌色表头** | 3 | 11px / 大写 / 字距 .33px / 背景 `oklch(56% 0.16 210 / 10%)`（accent 10%）/ 不 nowrap / 8-14 内边距 | 无统一外壳（仪表盘用 `.table-card`） |
-| **C 未定制**（AntDV 默认） | 2 | **14px / 无大写 / 默认 `rgb(250,250,250)`** | 无 |
+| **C 未定制**（AntDV 默认） | 2 → **0** | 14px / 无大写 / 默认 `rgb(250,250,250)` | 无 ✅ 2026-09-16 已并入 A 派（见 §6） |
 | A 的近亲变体 | 1 | 同 A 的表头，但内边距 10-16、td 有下边框、筛选条会换行 | `.table-container` |
 
 ---
@@ -32,8 +32,8 @@
 | 数据库管理 | `/database-management` | **B** | 无 | 无 | — | 11px/大写/**.33** | **accent 10%** | 8-14 | ✗ | 13px | **1px** |
 | ClickHouse 配置 | `/clickhouse-config` | **B** | 无 | 无 | — | 11px/大写/.33 | accent 10% | 8-14 | ✗ | 13px | 1px |
 | 仪表盘 | `/` | **B** | table-card | 无 | — | 11px/大写/.33 | accent 10% | 8-14 | ✗ | 13px | 1px |
-| 自启动管理 | `/edge-autostart` | **C** | 无 | toolbar | nowrap | **14px/无/—** | **`rgb(250,250,250)`** | 12-8 | ✗ | **14px** | 无 |
-| Ansible 清单 | `/ansible-inventory` | **C** | 无 | card-title-row | **wrap** | **14px/无/—** | `rgb(250,250,250)` | 12-8 | ✗ | **14px** | 无 |
+| 自启动管理 | `/edge-autostart` | **C → A ✅** | 无 | toolbar | nowrap | 11px/大写/.55 | `oklch(.97 .005 250)` | 12-8 | ✗ | 13px | 无 |
+| Ansible 清单 | `/ansible-inventory` | **C → A ✅** | 无 | card-title-row¹ | **wrap** | 11px/大写/.55 | `oklch(.97 .005 250)` | 12-8 | ✗ | 13px | 无 |
 | 边缘客户端 | `/edge-client` | A 变体 | table-container | edge-filter-bar | **wrap** | 11px/大写/.55 | `oklch(.97 .005 250)` | **10-16** | ✓ | 13px | **1px** |
 | Edge 数据导入 | `/edge-import` | 未取到 | — | — | — | 表格位于折叠区（`v-if="showConflicts"`），探针未展开 | | | | | |
 | 集群统管 | `/central-management` | 未取到 | — | — | — | 表格需先选集群卡片的 Tab（nodes/upstreams/routes/…） | | | | | |
@@ -53,8 +53,10 @@
 
 ## 3. 连带发现
 
-1. **筛选条命名分裂（6 种）**：`*-filter-bar`（A 派 6 页）、`toolbar`、`card-title-row`、`edge-filter-bar`、`sp-header-actions`/`pc-header-actions`（四层代理/插件组，属卡片列表非表格页）、无（B 派 3 页）。命名不统一使"全局调整筛选条"无法一次生效。
+1. **筛选条命名分裂（多种）**：`*-filter-bar`（A 派 6 页）、`toolbar`（自启动管理）、`edge-filter-bar`（边缘客户端）、`sp-header-actions`/`pc-header-actions`（四层代理/插件组，属卡片列表非表格页）、无（B 派 3 页）。命名不统一使"全局调整筛选条"无法一次生效。
+   - ¹ 修正：本表最初把 Ansible 清单的 `card-title-row` 记为筛选条，实际它是**卡片标题行**（标题 + 副标题 + 批量导入按钮），`flex-wrap: wrap` 对标题行是合理的，不构成样式分裂；该项已从"命名分裂"中剔除。
 2. **A 派 `th` 的 `padding: 10px 16px` 实际不生效**：被 AntDV `size="middle"` 的 12-8 覆盖（6 页一致，因此无视觉差异）；只有未设 `middle` 的边缘客户端取到了 10-16 —— 属既有无常行为，不是本次引入。
+   - **同类层叠现象（本次新发现）**：`td` 的 `padding`/`border-bottom` 在不同页面归属不同 —— A 派内部实测存在两种变体：**12-8 + 无行分隔线**（审计/上游/路由/用户）与 **12-16 + 无分隔线**（节点管理/节点任务），边缘客户端为 **12-16 + 有分隔线**。原因是 AntDV CSS-in-JS 注入与 `<style scoped>` 的层叠顺序逐页不同。**实践结论：给新页面写样式时应写"目标实际渲染值"，而不是照抄 A 派 CSS 里写的 10-16/12-16+1px** —— 后者可能被 AntDV 覆盖，写实际值则无论层叠顺序如何都得到同一结果（本次 Ansible 清单即按此法对齐）。
 3. **`oklch(56% 0.16 210 / 10%)` 在 38 个文件出现**，但多数用于标签/徽章而非表头 → **不能靠 grep 判定派系**，必须实测（本文件的实测矩阵即为此）。
 
 ## 4. 统一建议（待决策）
@@ -73,3 +75,20 @@
 读取首个 `th`/`td` 的 `getComputedStyle` 与外壳/筛选条类名。条件渲染页面（EdgeImport、CentralList）需先展开折叠区或选中集群 Tab。
 
 另外可用 `frontend/scripts/manual-screenshots.mjs`（现行手册截图产线）产出整页截图做人工比对。
+
+---
+
+## 6. 执行记录（2026-09-16，按方案②先统一 C 派 2 页）
+
+| 页面 | 改动 | 验证结果 |
+|---|---|---|
+| 自启动管理 `EdgeAutostart.vue` | `<a-table>` 加 `class="autostart-table"`；新增表头/行样式（A 派值） | 与上游管理基准**逐字段完全一致 ✓** |
+| Ansible 清单 `AnsibleInventory.vue` | `<a-table>` 加 `class="inventory-table"`；新增表头/行样式；展开行用 `:not(.ant-table-expanded-row)` 排除 `nowrap` 以保护高级字段网格 | 表头一致 ✓；`td` 初版照抄 A 派**源码值**（12-16 + 1px 边框）实测与基准不符 → 改为"**实际渲染值**"（12-8 + 无边框）后**完全一致 ✓** |
+
+**验证方式**：Playwright 采集 `/upstreams`（基准）与两个改动页的 `th`/`td` 计算样式，逐字段比对（非目测）。
+
+**回归**：`vue-tsc -b` 通过；全量 844 项（8 个 `renders page header` 类并行抖动，隔离复跑 **76/76 通过**）；`npm run build` ✓。两页无单测（CSS/类名改动，无逻辑变更）。
+
+**已知未覆盖**：Ansible 清单的**展开行**样式——当前数据无高级字段（可展开行数 0），其 `nowrap` 排除规则未能运行时验证，仅由选择器静态保证；有待有数据的清单时补验。
+
+**后续可选**：B 派 3 页（数据库管理 / ClickHouse 配置 / 仪表盘）的品牌色表头是否并派，需产品确认；若并派，建议**同时把这段表头/行样式抽到共享位置**——目前它已被复制 **8 份**（静态分析记录的 CSS 重复率 10.21% 与此直接相关）。

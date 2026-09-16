@@ -22,7 +22,14 @@
         <a-button @click="loadNodes">刷新</a-button>
       </div>
 
-      <a-table :data-source="nodes" :loading="loading" :pagination="false" row-key="id" size="middle">
+      <a-table
+        :data-source="nodes"
+        :loading="loading"
+        :pagination="false"
+        row-key="id"
+        size="middle"
+        class="autostart-table"
+      >
         <a-table-column title="集群" data-index="cluster_name" key="cluster_name" />
         <a-table-column title="节点 IP" data-index="ip" key="ip" />
         <a-table-column title="Edge 目录" data-index="edge_path" key="edge_path" />
@@ -153,7 +160,13 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
-import { autostartUrl, listAutostartRecords, listAutostartDefaults, getNodeAutostartDefaults, type AutostartStatus } from '@/api/edgeAutostart'
+import {
+  autostartUrl,
+  listAutostartRecords,
+  listAutostartDefaults,
+  getNodeAutostartDefaults,
+  type AutostartStatus,
+} from '@/api/edgeAutostart'
 import { listClusters } from '@/api/clusters'
 import { listNodes } from '@/api/nodes'
 
@@ -464,6 +477,33 @@ onMounted(async () => {
   gap: 12px;
   margin-bottom: 16px;
   align-items: center;
+}
+
+/* ── 表头/行样式：对齐上游管理、节点任务等列表页的统一风格 ── */
+.autostart-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(97% 0.005 250);
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+  border-bottom: 1px solid var(--border) !important;
+}
+.autostart-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.autostart-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border);
+}
+.autostart-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: oklch(97% 0.005 250 / 60%) !important;
 }
 
 /* 参考路由插件编辑抽屉（PluginEditorDrawer）的 field-block 风格 */
