@@ -64,30 +64,38 @@
             </template>
           </a-alert>
 
-          <div class="card group-card">
-            <div class="card-title-row">
-              <span class="card-title">组级默认凭据</span>
-              <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
-            </div>
-            <div class="group-form">
-              <div class="group-field">
-                <label>SSH 用户</label>
-                <a-input
-                  v-model:value="groupUser"
-                  placeholder="例如 root（留空则主机需自带凭据）"
-                  allow-clear
-                  @change="markDirty"
-                />
-              </div>
-              <div class="group-field">
-                <label>SSH 密码（明文）</label>
-                <a-input v-model:value="groupPass" placeholder="留空则主机需自带凭据" allow-clear @change="markDirty" />
-              </div>
-            </div>
-            <div v-if="extraVars.length" class="group-extra-vars">
-              vars 还包含其他键：<span class="mono">{{ extraVars.join('、') }}</span
-              >（仅源码模式可维护，保存时原样保留）
-            </div>
+          <div class="card-title-row group-toolbar">
+            <span class="card-title">组级默认凭据</span>
+            <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
+          </div>
+          <div class="table-container">
+            <a-table :data-source="groupCredRows" :pagination="false" size="middle" row-key="group">
+              <a-table-column title="组" data-index="group" key="group" width="200" />
+              <a-table-column title="SSH 用户" key="user" width="320">
+                <template #default>
+                  <a-input
+                    v-model:value="groupUser"
+                    placeholder="例如 root（留空则主机需自带凭据）"
+                    allow-clear
+                    @change="markDirty"
+                  />
+                </template>
+              </a-table-column>
+              <a-table-column title="SSH 密码（明文）" key="pass" width="320">
+                <template #default>
+                  <a-input
+                    v-model:value="groupPass"
+                    placeholder="留空则主机需自带凭据"
+                    allow-clear
+                    @change="markDirty"
+                  />
+                </template>
+              </a-table-column>
+            </a-table>
+          </div>
+          <div v-if="extraVars.length" class="group-extra-vars">
+            vars 还包含其他键：<span class="mono">{{ extraVars.join('、') }}</span
+            >（仅源码模式可维护，保存时原样保留）
           </div>
 
           <div class="card-title-row table-toolbar">
@@ -321,6 +329,8 @@ const rows = ref<InventoryHostEntry[]>([])
 const baseVars = ref<Record<string, unknown>>({})
 const groupUser = ref('')
 const groupPass = ref('')
+/** 组级默认凭据以表格呈现（与下方主机列表同款外壳），组名固定为 edge_cluster */
+const groupCredRows = [{ group: 'edge_cluster' }]
 const sourceDraft = ref('')
 const sourceSynced = ref('') // 最近一次程序化写入编辑器的文本，用于区分用户输入
 const unknownKeys = ref<string[]>([])
@@ -803,23 +813,6 @@ onUnmounted(() => {
 }
 
 /* 组级默认凭据表单 */
-.group-form {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.group-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 260px;
-  flex: 1;
-  max-width: 360px;
-}
-.group-field label {
-  font-size: 12px;
-  color: var(--muted);
-}
 .group-extra-vars {
   margin-top: 10px;
   font-size: 12px;
