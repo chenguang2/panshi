@@ -90,20 +90,19 @@
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-title-row table-toolbar">
-              <span class="card-title"
-                >主机列表<span class="count-pill">{{ rows.length }}</span></span
-              >
-              <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
-            </div>
+          <div class="card-title-row table-toolbar">
+            <span class="card-title"
+              >主机列表<span class="count-pill">{{ rows.length }}</span></span
+            >
+            <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
+          </div>
+          <div class="table-container">
             <a-table
               :data-source="rows"
               :row-key="rowKeyOf"
               :row-class-name="rowClassName"
               :pagination="false"
               size="middle"
-              class="inventory-table"
               :expanded-row-keys="expandedKeys"
               @expanded-rows-change="onExpandedChange"
               :expand-icon="renderExpandIcon"
@@ -763,14 +762,6 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
 .card-title-row {
   display: flex;
   align-items: baseline;
@@ -782,36 +773,7 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-/* ── 表头/行样式：对齐上游管理、节点任务等列表页的统一风格 ── */
-.inventory-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
-}
-.inventory-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-/* 展开行（高级字段网格）保持可换行，避免被 nowrap 挤压 */
-.inventory-table :deep(.ant-table-tbody > tr:not(.ant-table-expanded-row) > td) {
-  /* 取上游管理等 A 派页面"实际渲染值"（AntDV middle 尺寸 12px/8px、无行分隔线），
-     而非 A 派 CSS 里写的 12px/16px+1px 边框——后者在部分页面被 AntDV 样式覆盖，
-     写实际值可保证无论层叠顺序如何都渲染一致 */
-  padding: 12px 8px;
-  font-size: 13px;
-  white-space: nowrap;
-  background: transparent !important;
-  border-bottom: none;
-}
-.inventory-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
+/* 表格样式改由全局 .table-container 提供（见 src/style.css，含展开行 nowrap 排除） */
 
 .card-title {
   font-size: 15px;

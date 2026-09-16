@@ -213,6 +213,52 @@ body {
 }
 
 /* ===========================
+   Table Shell（列表页表格外壳与表头/行样式）
+   ===========================
+   用法：把 <a-table> 包进 <div class="table-container"> 即可获得与上游管理/路由管理
+   等列表页一致的表格外观（外壳圆角/描边/阴影 + 大写小号表头 + 行样式）。
+   页面级若定义了更具体的同名规则（如 `.upstream-table :deep(...)`），会覆盖本处。
+   注意：内边距取"实际渲染值"（12px 8px）而非部分页面源码里写的 10px/16px ——
+   后者会被 AntDV `size="middle"` 的样式覆盖，写实际值可保证层叠顺序无关。 */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.table-container .ant-table {
+  background: transparent !important;
+  border: none !important;
+}
+.table-container .ant-table-thead > tr > th {
+  background: oklch(97% 0.005 250);
+  padding: 12px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+  border-bottom: 1px solid var(--border) !important;
+}
+.table-container .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+/* 展开行保持可换行（如 Ansible 清单的高级字段网格），不套用 nowrap */
+.table-container .ant-table-tbody > tr:not(.ant-table-expanded-row) > td {
+  padding: 12px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: transparent !important;
+  border-bottom: none;
+}
+.table-container .ant-table-tbody > tr:hover > td {
+  background: oklch(97% 0.005 250 / 60%) !important;
+}
+
+/* ===========================
    Forms
    =========================== */
 .form-group {

@@ -6,30 +6,23 @@
     >
     </PageHeader>
 
-    <div class="card">
-      <div class="toolbar">
-        <a-select
-          v-model:value="clusterFilter"
-          placeholder="全部集群"
-          style="width: 220px"
-          allow-clear
-          @change="loadNodes"
-        >
-          <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">
-            {{ c.display_name || c.name }}
-          </a-select-option>
-        </a-select>
-        <a-button @click="loadNodes">刷新</a-button>
-      </div>
-
-      <a-table
-        :data-source="nodes"
-        :loading="loading"
-        :pagination="false"
-        row-key="id"
-        size="middle"
-        class="autostart-table"
+    <div class="toolbar">
+      <a-select
+        v-model:value="clusterFilter"
+        placeholder="全部集群"
+        style="width: 220px"
+        allow-clear
+        @change="loadNodes"
       >
+        <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">
+          {{ c.display_name || c.name }}
+        </a-select-option>
+      </a-select>
+      <a-button @click="loadNodes">刷新</a-button>
+    </div>
+
+    <div class="table-container">
+      <a-table :data-source="nodes" :loading="loading" :pagination="false" row-key="id" size="middle">
         <a-table-column title="集群" data-index="cluster_name" key="cluster_name" />
         <a-table-column title="节点 IP" data-index="ip" key="ip" />
         <a-table-column title="Edge 目录" data-index="edge_path" key="edge_path" />
@@ -466,45 +459,14 @@ onMounted(async () => {
 .autostart-page {
   padding: 20px 24px;
 }
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 16px;
-}
 .toolbar {
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   align-items: center;
 }
 
-/* ── 表头/行样式：对齐上游管理、节点任务等列表页的统一风格 ── */
-.autostart-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
-}
-.autostart-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-.autostart-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px;
-  font-size: 13px;
-  white-space: nowrap;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
-}
-.autostart-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
+/* 表格样式改由全局 .table-container 提供（见 src/style.css） */
 
 /* 参考路由插件编辑抽屉（PluginEditorDrawer）的 field-block 风格 */
 .field-block {
