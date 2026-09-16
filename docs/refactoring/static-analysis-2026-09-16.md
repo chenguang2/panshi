@@ -86,9 +86,9 @@ knip「Unlisted dependencies」报 4 个包**被源码直接 import 却未在 `p
 
 | 项 | 数据 | 建议 |
 |---|---|---|
-| 未使用导出**类型**收窄 | knip 报 35 条（`api/*`、`composables/*`、`types/*`） | 逐项 `export` 关键字移除即可，零运行时风险；但收益限于"收窄公共面"，建议随相关文件下次改动时顺手处理，不单独立项 |
+| 未使用导出**类型**收窄 | knip 报 33 行 / 74 个名字 | ✅ 已完成（用户选择保守范围）：63 处去 `export`、7 个零引用整块删除、4 个 knip 误报保留 → 33 行降至 4 行，见 §F |
 | 重复代码块 | jscpd：TS **3.18%**（56 克隆）、CSS **10.21%**（37）、Python **1.97%**（23）、markup 3.47%，合计 122 克隆 / 3409 行 | CSS 重复率最高（表格/弹窗/按钮样式在多视图重复 scoped 定义），可作为独立"样式收敛"专项；后端典型样本为 `models/cluster.py` 14 行重复（`194 tokens`） |
-| 无效动态导入 | 构建警告：`stores/features.ts` 被 `main.ts` 动态导入、同时被 router/组件静态导入 → 拆分无效 | 改为静态导入可消除警告（bootstrap 文件，建议单独验证） |
+| 无效动态导入 | 构建警告：`stores/features.ts` 被 `main.ts` 动态导入、同时被 router/组件静态导入 → 拆分无效 | ✅ 已完成：改顶部静态导入，`INEFFECTIVE_DYNAMIC_IMPORT` 告警 1 → 0（见 §F） |
 | `e2e-manual/` 未接入任何 npm script | 33 个 spec + 独立 config | 若仍需使用，补一条 `test:e2e-manual` 脚本；否则评估归档 |
 
 ---
@@ -103,7 +103,26 @@ knip「Unlisted dependencies」报 4 个包**被源码直接 import 却未在 `p
 
 ---
 
-## F. 验证
+## F. 执行记录：D 表第 1 项（类型导出收窄）与动态导入项已于同日完成
+
+用户选择"只做 ①③（最保守）"后执行：
+
+| 项 | 结果 |
+|---|---|
+| ① 未使用导出类型 | 核验 74 个名字（knip 报 33 **行**）：**63 处**仅去 `export`（文件内仍在用，如 `SSEEvent` 7 处、`ChartDefinition` 6 处、`BulkHostEntry` 5 处）；**7 个**全仓零引用整块删除（`AutostartRequest`/`EdgeEnvDeployRequest`/`ResourceVersionModalState`/`MetricsApiResponse`/`MetricNamesResponse`/`MetricSummaryResponse`/`CaCertificateGenerateRequest`）；**4 个保留**为 knip 误报（`DayOverDayData`、`NodeListResponse`、`VersionModalState`（外部引用 17 处）、`DiffResult`）。knip `Unused exported types` **33 行 → 4 行**（剩余 4 条即上述误报） |
+| ③ `stores/features.ts` 无效动态导入 | 改顶部静态导入；`INEFFECTIVE_DYNAMIC_IMPORT` 告警 **1 → 0**（`npm run build` 实测） |
+
+**执行事故与恢复（记录以备后续避坑）**：批量脚本有两处缺陷——
+1. 正则捕获组把行首空白并入，63 行留下前导空格 → 用 `npx prettier --write` 规范化；
+2. **本仓库无分号**，脚本按 `;` 判定类型别名结尾的启发式失效 → 删除 `ResourceVersionModalState`（无花括号的别名）时把紧随其后的 `ResourceStateKeys` interface 一并删掉。**被 `npx vue-tsc -b` 捕获**（`Cannot find name 'ResourceStateKeys'`），而 `vue-tsc --noEmit` 同一时刻报 0 错误 —— 已恢复为文件内私有 interface 并重新全量验证。教训已写入 AGENTS.md #27。
+
+**验证**：`vue-tsc -b` 通过 · `vue-tsc --noEmit` 0 错误 · 前端 841 项（并行跑 3 项 `renders page header` 类抖动，隔离复跑 17/17 通过）· `npm run build` ✓ · 工作区干净。
+
+---
+
+## G. 验证
+
+（以下为 §A–§E 清理当时与本文件编写时的验证证据）
 
 | 项 | 命令 | 结果 |
 |---|---|---|
