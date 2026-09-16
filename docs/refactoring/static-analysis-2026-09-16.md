@@ -75,7 +75,7 @@ knip「Unlisted dependencies」报 4 个包**被源码直接 import 却未在 `p
 | 误报 | 数量 | 原因 |
 |---|---|---|
 | vulture 报 `flush_context`/`instances`（`audit_hook.py:305`）、`connection_record`（`core/database.py:27`） | 3 | **事件钩子签名参数**（`before_flush(session, flush_context, instances)`、连接事件回调），按约定必须存在，函数体不使用是正常形态 |
-| knip「Unused files」 | 39 | 33 个 `e2e-manual/*.spec.ts` + `playwright.manual.config.ts`（手工测试套件，非 CI 入口）、4 个 `scripts/*.mjs`（一次性脚本）、`src/env.d.ts`（类型声明，由 tsconfig 消费） |
+| knip「Unused files」 | 39 → **5** | 原 33 个 `e2e-manual/*.spec.ts` + `playwright.manual.config.ts` **已于同日删除**（见 §H）；剩余 4 个 `scripts/*.mjs`（CLI 脚本，其中 `manual-screenshots.mjs` 是现行手册截图产线）+ `src/env.d.ts`（类型声明，由 tsconfig 消费） |
 | knip 报 `utils/tools/{base64,diff,json,sm4,url}.ts` 导出未用 | 5 文件 | `Tools.vue` 用 `import * as toolsJson` **命名空间导入**，knip 未把模板层用法连上（人工核验：`toolsJson.format` 等实际被调用） |
 | knip 报 `getClusterNodes`（9 处引用）、`resourceLabels`（4）、`KNOWN_HOST_KEYS`（1） | 3 | 双导出/再导出场景误判 |
 | knip「Unused devDependencies」：`@vue/runtime-dom`、`playwright` | 2 | 均为间接使用（vue 运行时、`@playwright/test`），非直接导入 |
@@ -89,7 +89,7 @@ knip「Unlisted dependencies」报 4 个包**被源码直接 import 却未在 `p
 | 未使用导出**类型**收窄 | knip 报 33 行 / 74 个名字 | ✅ 已完成（用户选择保守范围）：63 处去 `export`、7 个零引用整块删除、4 个 knip 误报保留 → 33 行降至 4 行，见 §F |
 | 重复代码块 | jscpd：TS **3.18%**（56 克隆）、CSS **10.21%**（37）、Python **1.97%**（23）、markup 3.47%，合计 122 克隆 / 3409 行 | CSS 重复率最高（表格/弹窗/按钮样式在多视图重复 scoped 定义），可作为独立"样式收敛"专项；后端典型样本为 `models/cluster.py` 14 行重复（`194 tokens`） |
 | 无效动态导入 | 构建警告：`stores/features.ts` 被 `main.ts` 动态导入、同时被 router/组件静态导入 → 拆分无效 | ✅ 已完成：改顶部静态导入，`INEFFECTIVE_DYNAMIC_IMPORT` 告警 1 → 0（见 §F） |
-| `e2e-manual/` 未接入任何 npm script | 33 个 spec + 独立 config | 若仍需使用，补一条 `test:e2e-manual` 脚本；否则评估归档 |
+| ~~`e2e-manual/` 未接入任何 npm script~~ | ~~33 个 spec + 独立 config~~ | ✅ 已删除（见 §H）：原判断"补脚本接线"经复核为误判——它已被 `scripts/manual-screenshots.mjs` 取代 |
 
 ---
 
@@ -131,3 +131,25 @@ knip「Unlisted dependencies」报 4 个包**被源码直接 import 却未在 `p
 | 后端全量 | `uv run pytest` | **1579 passed / 1 failed**（`test_route_list_api` 数据依赖，已用干净树对照确认预存在） |
 | 抖动核验 | 干净树 vs 带改动各跑全量 | `test_stream_proxy::test_create_duplicate_port_rejected` 在干净树全量也非稳定通过（带改动第 2 次全量即通过）→ 真实库绑定型抖动，与本次改动无关 |
 | 构建 | `npm run build` | ✓ built |
+
+---
+
+## H. 废弃产线清理：`e2e-manual/` + `playwright.manual.config.ts`（2026-09-16 已删除）
+
+**结论：职责已被取代的手册截图产线，整体删除（38 个文件）。** 此前 §D 建议的"补 `test:e2e-manual` 脚本接线"经复核**属误判**（当时误以为它是手工回归测试套件）。
+
+判断依据（全部可复核）：
+
+| 证据 | 结果 |
+|---|---|
+| 引用面 | 全仓仅 `playwright.manual.config.ts` 指向它；无 npm script / CI / 文档引用；vitest `include` 为 `src/**`、`exclude` 为 `e2e/**`，本就不会误捞 |
+| 职责重复 | `frontend/scripts/manual-screenshots.mjs` 是同一职责（手册截图）的**现行实现**，header 明示"输出 `docs/user-manual/images/`" |
+| 产物落点 | e2e-manual 写 `/tmp/opencode/shots/`（临时目录）；现行脚本**直接写仓库目标目录** |
+| 登录态 | e2e-manual 依赖 `storageState: /tmp/opencode/panshi-state.json`（重启即失效，现已无法直接运行）；现行脚本用 `node_modules/.manual-auth-state.json` |
+| 活跃度 | e2e-manual 最后改动 **2026-08-23**；现行脚本 **2026-09-10**（且与 UI 改动同步维护） |
+| 产线血缘 | spec 中 97 个截图名与仓库手册图 **69 个同名**（8/22–8/23 那批确为它产出）；此后新增的 97 张（含 09-14 的 `18-new-*` / `28-*`）它一张也产不出 |
+| 服务对象 | 旧手册体系 `docs/new/03..11-*.md`；现行手册为 `docs/user-manual/2X-*.md` |
+
+**删除安全性**：现行手册引用的图片**已提交在仓库内**（删除前校验：`docs/user-manual/*.md` 的图片引用缺失数 = **0**），删 spec 不影响任何手册图；spec 独有的 28 个截图名从未入库。全部内容可经 git 历史恢复。
+
+**顺带更新**：`AGENTS.md`「常用命令」补入现行手册截图命令；约定 #46 的 knip 误报名单移除已删条目（并标注 `manual-screenshots.mjs` 为现行产线）。

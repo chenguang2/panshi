@@ -45,6 +45,9 @@ cd frontend && npx vitest run
 # 前端构建
 cd frontend && npm run build
 
+# 手册截图（Playwright 直连，直接写入 docs/user-manual/images/）
+cd frontend && node scripts/manual-screenshots.mjs [--only 00-01-login] [--out /tmp/shots]
+
 # 默认登录
 # admin / panshi123 访问 http://localhost:12345
 ```
@@ -163,7 +166,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 43. **测试 mock / patch 规则** — 组件测试 mock 必须 URL 感知兜底，不得用 `mockResolvedValueOnce` 调用顺序链，更不得为迁就 mock 删除用户可见功能（如计数徽章）；函数体内 import 的依赖（如 lifespan 内 import 的 `recover_interrupted_tasks`）必须 patch 其**源模块**，patch 导入方命名空间无效。GBK 测试夹具须用较长的真实内容（`charset_normalizer` 会把短 GBK 串误判为 cp949）。
 44. **安全策略已知局限（已接受残余风险）** — 命令逐行校验无法拦截 shell 间接执行（变量赋值 + `$cmd`、`eval`、`source`、函数定义）；由运维负责，文档已标注，勿当漏洞重复上报。
 45. **SSE 事件格式规格与实现待收敛** — 生产代码发 `data: {type: ...}` 单流事件，主规格 `openspec/specs/migration-progress-stream/spec.md` 描述 `event: progress/complete/error` 命名事件；分歧未收敛，改 SSE 前先确认是以实现为准还是同步修规格。
-46. **静态分析清理：工具只出候选，删除须逐项核验** — 工具链 `vulture app`（Python）/ `npx knip`（TS·Vue 未用文件与导出）/ `npx jscpd src ../backend/app`（重复块），均装自国内镜像。**已知系统性误报**（禁止据此删除）：vulture 对事件钩子签名参数（`before_flush(session, flush_context, instances)` 等）；knip 对 `e2e-manual/*`、`playwright.manual.config.ts`、`scripts/*.mjs`、`src/env.d.ts`、`import * as ns` 命名空间导入的模板层消费、双导出/再导出、间接 devDependencies。判定死代码的唯一依据 = **排除定义文件后全仓（含 `.vue` 模板与测试）引用数 0**；报告格式见 `docs/refactoring/static-analysis-2026-09-16.md`。
+46. **静态分析清理：工具只出候选，删除须逐项核验** — 工具链 `vulture app`（Python）/ `npx knip`（TS·Vue 未用文件与导出）/ `npx jscpd src ../backend/app`（重复块），均装自国内镜像。**已知系统性误报**（禁止据此删除）：vulture 对事件钩子签名参数（`before_flush(session, flush_context, instances)` 等）；knip 对 `scripts/*.mjs`（CLI 脚本，其中 `manual-screenshots.mjs` 是**现行手册截图产线**，直接写 `docs/user-manual/images/`）、`src/env.d.ts`、`import * as ns` 命名空间导入的模板层消费、双导出/再导出、间接 devDependencies。判定死代码的唯一依据 = **排除定义文件后全仓（含 `.vue` 模板与测试）引用数 0**；报告格式见 `docs/refactoring/static-analysis-2026-09-16.md`。
 
 ## 新增功能步骤
 
