@@ -1,4 +1,4 @@
-# 模型切换指南
+# OpenCode 配置与模型切换指南
 
 ## 配置原理
 
@@ -445,6 +445,35 @@ echo "部署完成，记得替换 opencode.json 中的 API Key"
 | `~/.config/opencode/.oh-my-opencode-slim/` | 运行时自动缓存 |
 | `<project>/.opencode/node_modules/` | 项目级 `npm install` 重新生成 |
 | `~/.local/bin/codebase-memory-mcp` | 需要单独安装（非 npm 配置） |
+
+### 跨会话记忆库（magic-context，本机）
+
+`@cortexkit/opencode-magic-context` 插件的全部跨会话状态（记忆 `memories`、笔记 `notes`、会话压缩历史 `compartments`、git 提交索引等）都在**一个本机 SQLite 库**里，**不在 git 中**，换机器需单独搬运：
+
+| 项 | 值 |
+|---|---|
+| 库文件 | `~/.local/share/cortexkit/magic-context/context.db`（同目录还有 `context.db-wal` / `-shm`） |
+| 记忆表 | `memories`（列含 `id, project_path, category, content, scope, status, importance, superseded_by_memory_id, ...`） |
+| 项目作用域 | `project_path = git:<sha1>`，按 git 身份哈希绑定，同一仓库的所有会话共享 |
+| 权限 | `0600` |
+| 体量参考 | 库约 23 MB + WAL 4.5 MB（2026-09 实测） |
+
+**备份**（不要直接 `cp`：库处于 WAL 模式且插件正在使用，直接复制可能丢 WAL 中未落盘的数据）：
+
+```bash
+# 一致性备份（SQLite backup API）
+python3 -c "import sqlite3,os; s=sqlite3.connect(os.path.expanduser('~/.local/share/cortexkit/magic-context/context.db')); d=sqlite3.connect('/tmp/context-backup.db'); s.backup(d); d.close(); print('备份完成: /tmp/context-backup.db')"
+
+# 新机器上还原（先关闭 opencode）
+mkdir -p ~/.local/share/cortexkit/magic-context
+cp /tmp/context-backup.db ~/.local/share/cortexkit/magic-context/context.db
+```
+
+**注意**：
+
+- 记忆按 git 身份哈希分域。该哈希的输入**未确证**（实测与 remote URL、仓库根路径的 sha1 均不匹配），跨机器复用前先在新机器上确认 key 一致，否则记忆不会自动生效。
+- **能随仓库走的规则不要只写在记忆里**：正式的"防未来会话犯错"规则写进仓库内 `AGENTS.md`（见其约定 #13），记忆库只作本机补充。
+- 删除 `context.db` = 丢失全部跨会话记忆（不可从仓库恢复）。
 
 ### 新机器前置条件
 
