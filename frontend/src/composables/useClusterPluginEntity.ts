@@ -12,7 +12,7 @@ type PluginEntityItem = (GlobalRule | PluginConfig) & { plugins: Record<string, 
 
 export { type VersionModalState } from './useClusterResourceCore'
 
-export interface PluginEntityConfig {
+interface PluginEntityConfig {
   /** API endpoint path segment, e.g. 'plugin_configs' or 'global_rules' */
   apiEndpoint: string
   /** Display name in Chinese, e.g. '插件组' or '全局规则' */

@@ -13,12 +13,12 @@ import { h, render, type VNode } from 'vue'
  *   modal.close()
  */
 
-export interface OverlayModalHandle {
+interface OverlayModalHandle {
   close: () => void
   update: (patch: { content?: VNode | string; okDisabled?: boolean }) => void
 }
 
-export interface OverlayModalOptions {
+interface OverlayModalOptions {
   title: string
   content?: VNode | string
   width?: number

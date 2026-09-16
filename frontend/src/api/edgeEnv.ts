@@ -1,24 +1,20 @@
 import api from '@/api/index'
 import { consumeSSEDataLines, extractSSEErrorMessage } from '@/utils/sse'
 
-export interface EdgeEnvDeployRequest {
-  content: string
-}
-
-export interface NodeResultItem {
+interface NodeResultItem {
   ip: string
   status: string
   error?: string
   steps?: Record<string, unknown>[]
 }
 
-export interface EdgeEnvDeployResponse {
+interface EdgeEnvDeployResponse {
   version_id: number
   status: string
   node_results: NodeResultItem[]
 }
 
-export interface EdgeEnvVersionDetail {
+interface EdgeEnvVersionDetail {
   id: number
   cluster_id: number
   content: string

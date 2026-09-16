@@ -2,20 +2,20 @@ import api from '@/api/index'
 
 // ---- Request Types ----
 
-export interface TestConnectionRequest {
+interface TestConnectionRequest {
   cluster_id: number
   node_id: number
   admin_key?: string
 }
 
-export interface ImportRequest {
+interface ImportRequest {
   cluster_id: number
   node_id: number
   admin_key?: string
   selections: ImportSelections
 }
 
-export interface ImportSelections {
+interface ImportSelections {
   upstreams: boolean
   routes: boolean
   plugin_configs: boolean

@@ -6,7 +6,7 @@
  * 无分组时不返回颜色（使用默认样式）。
  */
 
-export interface GroupColorScheme {
+interface GroupColorScheme {
   leftBorder: string
   badgeBg: string
   badgeFg: string

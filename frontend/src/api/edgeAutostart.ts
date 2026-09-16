@@ -5,15 +5,7 @@
  * 消费，这里仅提供请求体类型与 URL 构建。
  */
 
-export type AutostartAction = 'enable' | 'disable' | 'status'
-
-export interface AutostartRequest {
-  action: AutostartAction
-  edge_path?: string
-  run_user?: string
-  root_user?: string
-  root_password?: string
-}
+type AutostartAction = 'enable' | 'disable' | 'status'
 
 export type AutostartStatus = 'enabled' | 'disabled' | 'not_configured' | 'permission_denied' | 'unknown'
 
@@ -24,7 +16,7 @@ export function autostartUrl(nodeId: number): string {
 
 import api from '@/api/index'
 
-export interface AutostartRecord {
+interface AutostartRecord {
   node_id: number
   status: AutostartStatus | string
 }

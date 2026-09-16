@@ -25,7 +25,7 @@ export interface ClickhouseConnectionPublic {
   is_active: boolean
 }
 
-export interface ClickhouseListResult {
+interface ClickhouseListResult {
   active: string | null
   items: ClickhouseConnectionPublic[]
 }
@@ -41,7 +41,7 @@ export interface ClickhouseConnectionPayload {
   id?: string
 }
 
-export interface ClickhouseTestResult {
+interface ClickhouseTestResult {
   ok: boolean
   error: string | null
 }

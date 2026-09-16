@@ -4,7 +4,7 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 const TABLE_PAGE_SIZE_OPTIONS = ['10', '20', '50', '100']
 
 /** 分页状态：与各视图/composable 维护的 pagination 对象字段对齐 */
-export interface PaginationState {
+interface PaginationState {
   page: number
   pageSize: number
   total: number

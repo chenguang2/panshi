@@ -57,12 +57,6 @@ export interface SslCertificateGenerateRequest {
   skip_mtls_uri_regex?: string
 }
 
-export interface CaCertificateGenerateRequest {
-  name: string
-  common_name?: string
-  validity_days?: number
-}
-
 export interface SslCertificateGenerateResponse {
   server: SslCertificate
   client?: SslCertificate | null

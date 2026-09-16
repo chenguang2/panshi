@@ -1,7 +1,7 @@
 import api from '@/api'
 import type { Node } from '@/types'
 
-export interface NodeListParams {
+interface NodeListParams {
   page?: number
   pageSize?: number
   groupName?: string
@@ -10,7 +10,7 @@ export interface NodeListParams {
   status?: number
 }
 
-export interface NodeCreatePayload {
+interface NodeCreatePayload {
   ip: string
   service_port: number
   management_port: number
@@ -21,7 +21,7 @@ export interface NodeCreatePayload {
   cluster_id?: number
 }
 
-export interface NodeUpdatePayload {
+interface NodeUpdatePayload {
   ip?: string
   service_port?: number
   management_port?: number
@@ -31,7 +31,7 @@ export interface NodeUpdatePayload {
   status?: number
 }
 
-export interface NodeDeletePayload {
+interface NodeDeletePayload {
   delete_db: boolean
   delete_edge: boolean
 }

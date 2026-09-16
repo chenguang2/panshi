@@ -29,7 +29,7 @@ export interface ResourceCoreDeps {
   versionModal: VersionModalState
 }
 
-export interface ResourceCoreConfig<T extends { id: number; name: string; edge_uuid?: string }> {
+interface ResourceCoreConfig<T extends { id: number; name: string; edge_uuid?: string }> {
   /** 资源中文名，如 '路由' / '上游' / '插件组'（用于所有提示与确认文案） */
   noun: string
   /** API 端点段，如 'routes' / 'plugin_configs' */

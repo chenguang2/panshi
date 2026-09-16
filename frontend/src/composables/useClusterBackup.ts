@@ -2,18 +2,18 @@ import { ref } from 'vue'
 import api from '@/api'
 import { downloadBlob } from '@/utils/download'
 
-export interface BackupDownloadOptions {
+interface BackupDownloadOptions {
   include_secrets: boolean
   include_files: boolean
 }
 
-export interface BackupWarning {
+interface BackupWarning {
   name: string
   type: string
   reason: string
 }
 
-export interface ImportBackupResult {
+interface ImportBackupResult {
   cluster_id: number
   warnings: string[]
   pending_items: BackupWarning[]

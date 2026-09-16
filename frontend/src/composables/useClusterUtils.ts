@@ -327,7 +327,7 @@ export function showBatchResultModal(title: string, items: BatchResultItem[]) {
   renderModal()
 }
 
-export interface BatchStatusItem {
+interface BatchStatusItem {
   ip: string
   status: string
   version?: string
@@ -453,7 +453,7 @@ export function showBatchStatusModal(title: string, items: BatchStatusItem[]) {
   renderModal()
 }
 
-export interface PublishResultData {
+interface PublishResultData {
   status?: string
   message?: string
   version?: number
@@ -471,7 +471,7 @@ export interface PublishResultData {
   [key: string]: unknown
 }
 
-export interface PublishOptions {
+interface PublishOptions {
   title: string
   apiEndpoint: string
   nodeIds: number[]
@@ -557,7 +557,7 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
   }
 }
 
-export interface ResourceKey {
+interface ResourceKey {
   /** 请求体字段名（如 'route_ids' / 'upstream_ids'） */
   field: string
   /** 日志文案资源名（如 '路由' / '上游'） */
@@ -585,7 +585,7 @@ interface DeleteResponseData {
   [key: string]: unknown
 }
 
-export interface DeleteProgressOptions {
+interface DeleteProgressOptions {
   title: string
   apiEndpoint: string
   /** 兼容保留：批量删除（resourceKey 模式）无需 cluster */

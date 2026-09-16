@@ -2,7 +2,7 @@ import { h } from 'vue'
 import { Progress } from 'ant-design-vue'
 import { showOverlayModal } from './useOverlayModal'
 
-export interface ProgressState {
+interface ProgressState {
   percent: number
   status: 'active' | 'success' | 'exception'
 }

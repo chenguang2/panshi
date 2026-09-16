@@ -9,10 +9,8 @@ import {
 } from './useClusterResourceCore'
 
 /** 版本弹窗状态（兼容旧导出名，与 useClusterPluginEntity.VersionModalState 同构） */
-export type ResourceVersionModalState = VersionModalState
-
 /** 资源在 Cluster 对象上的状态键名 */
-export interface ResourceStateKeys {
+interface ResourceStateKeys {
   items: string
   pagination: string
   loading: string
@@ -25,7 +23,7 @@ export interface ResourceStateKeys {
   count?: string
 }
 
-export interface ClusterResourceConfig<T extends { id: number; name: string }> {
+interface ClusterResourceConfig<T extends { id: number; name: string }> {
   /** 资源中文名，如 '路由' / '上游'（用于所有提示与确认文案） */
   noun: string
   /** API 端点段，如 'routes' / 'upstreams' */
@@ -52,7 +50,7 @@ export interface ClusterResourceConfig<T extends { id: number; name: string }> {
   batchResourceKey: { field: string; label: string; nameField: string }
 }
 
-export type ClusterResourceDeps = ResourceCoreDeps
+type ClusterResourceDeps = ResourceCoreDeps
 
 // Cluster 状态键为动态名，通过受控访问器读写（避免散落的类型断言）
 function getState<T>(c: Cluster, key: string): T | undefined {

@@ -10,7 +10,7 @@ const intervalMap: Record<string, string> = {
   '7d': '1h',
 }
 
-export interface ChartDefinition {
+interface ChartDefinition {
   key: string
   label: string
   metricName: string
@@ -19,7 +19,7 @@ export interface ChartDefinition {
 }
 
 // 「Nginx 连接状态」图的 4 条序列（active/reading/writing/waiting）
-export interface ConnectionSeriesDef {
+interface ConnectionSeriesDef {
   key: string
   state: string
   label: string
@@ -74,12 +74,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   async function loadSingleChart(cd: ChartDefinition): Promise<void> {
     try {
-      const data = await getMetricTimeSeries(
-        cd.metricName,
-        timeRange.value,
-        intervalForRange(),
-        cd.labelFilter,
-      )
+      const data = await getMetricTimeSeries(cd.metricName, timeRange.value, intervalForRange(), cd.labelFilter)
       chartDataMap.value[cd.key] = data
       errorMap.value[cd.key] = null
     } catch {
@@ -90,10 +85,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   // 业务图加载目标：普通业务图 + 连接状态 4 序列（跳过 connections 占位定义）
   function businessLoadTargets(): ChartDefinition[] {
-    return [
-      ...BUSINESS_CHARTS.filter((cd) => cd.key !== 'connections'),
-      ...CONNECTION_CHART_DEFS,
-    ]
+    return [...BUSINESS_CHARTS.filter((cd) => cd.key !== 'connections'), ...CONNECTION_CHART_DEFS]
   }
 
   let chartsInFlight = false
@@ -105,9 +97,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     loading.value = true
     try {
       const targets = businessLoadTargets()
-      const results = await Promise.allSettled(
-        targets.map((cd) => loadSingleChart(cd)),
-      )
+      const results = await Promise.allSettled(targets.map((cd) => loadSingleChart(cd)))
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === 'rejected' && !errorMap.value[targets[i].key]) {
           errorMap.value[targets[i].key] = '数据加载失败'
@@ -125,9 +115,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     if (infraInFlight) return
     infraInFlight = true
     try {
-      const results = await Promise.allSettled(
-        INFRA_CHARTS.map((cd) => loadSingleChart(cd)),
-      )
+      const results = await Promise.allSettled(INFRA_CHARTS.map((cd) => loadSingleChart(cd)))
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === 'rejected' && !errorMap.value[INFRA_CHARTS[i].key]) {
           errorMap.value[INFRA_CHARTS[i].key] = '数据加载失败'

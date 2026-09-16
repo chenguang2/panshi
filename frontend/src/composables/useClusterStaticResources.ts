@@ -13,7 +13,7 @@ import { formatFileSize } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
 import { showOverlayModal } from './useOverlayModal'
 
-export interface StaticResourceDeps {
+interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
   versionModal: VersionModalState
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>

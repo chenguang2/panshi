@@ -1,9 +1,9 @@
 import { ref, reactive, onUnmounted } from 'vue'
 import { consumeSSEDataLines, extractSSEErrorMessage } from '@/utils/sse'
 
-export type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'error'
+type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'completed' | 'error'
 
-export interface InstallStreamOptions {
+interface InstallStreamOptions {
   onLine: (line: string) => void
   onProgress?: (percent: number) => void
   onComplete?: (rc: number, status: string) => void
@@ -51,7 +51,13 @@ export function useInstallStream() {
       // v3 8B-3：SSE 行解析收敛到 utils/sse.ts（原手写 fetch+getReader 循环已删除）
       await consumeSSEDataLines(response, (raw) => {
         try {
-          const data = JSON.parse(raw) as { line?: string; type?: string; percent?: number; rc?: number; status?: string }
+          const data = JSON.parse(raw) as {
+            line?: string
+            type?: string
+            percent?: number
+            rc?: number
+            status?: string
+          }
           if (data.line) {
             logs.value.push(data.line)
             options.onLine(data.line)

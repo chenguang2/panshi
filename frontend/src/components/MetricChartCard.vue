@@ -24,7 +24,7 @@ import type { MetricDataPoint } from '@/types/metrics'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
 
-export interface ChartSeriesInput {
+interface ChartSeriesInput {
   name: string
   color: string
   data: MetricDataPoint[]
@@ -39,9 +39,7 @@ const props = defineProps<{
   series?: ChartSeriesInput[]
 }>()
 
-const hasData = computed(() =>
-  props.series ? props.series.length > 0 : props.data.length > 0,
-)
+const hasData = computed(() => (props.series ? props.series.length > 0 : props.data.length > 0))
 
 const latestValue = computed<number | null>(() => {
   if (!hasData.value) return null

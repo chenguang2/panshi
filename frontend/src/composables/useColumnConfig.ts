@@ -1,7 +1,7 @@
 import { ref, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
-export interface ColumnConfigOptions {
+interface ColumnConfigOptions {
   /** Unique key for this config (e.g. 'route', 'upstream', 'node') */
   key: string
   /** Default column keys */
@@ -32,17 +32,24 @@ export function useColumnConfig(options: ColumnConfigOptions) {
         if (cfg.searchVisible !== undefined) searchVisible.value = cfg.searchVisible
         if (cfg.actions) actionsSelected.value = cfg.actions
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   function saveConfig() {
     try {
-      localStorage.setItem(CFG_KEY(), JSON.stringify({
-        columns: columnsSelected.value,
-        searchVisible: searchVisible.value,
-        actions: actionsSelected.value,
-      }))
-    } catch { /* ignore */ }
+      localStorage.setItem(
+        CFG_KEY(),
+        JSON.stringify({
+          columns: columnsSelected.value,
+          searchVisible: searchVisible.value,
+          actions: actionsSelected.value,
+        }),
+      )
+    } catch {
+      /* ignore */
+    }
   }
 
   const popoverVisible = ref(false)

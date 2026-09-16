@@ -2,7 +2,7 @@
  * SSE (Server-Sent Events) client utility for streaming migration progress.
  */
 
-export interface SSEEvent {
+interface SSEEvent {
   type: string
   [key: string]: unknown
 }
@@ -13,7 +13,7 @@ interface SSECallbacks<T extends SSEEvent = SSEEvent> {
   onComplete?: () => void
 }
 
-export interface SSEClientOptions<T extends SSEEvent = SSEEvent> extends SSECallbacks<T> {
+interface SSEClientOptions<T extends SSEEvent = SSEEvent> extends SSECallbacks<T> {
   url: string
   body: Record<string, unknown>
   token?: string
@@ -99,10 +99,7 @@ export function createSSEClient<T extends SSEEvent = SSEEvent>(options: SSEClien
  * 原样交给 onData（是否 JSON.parse 由调用方决定）。onData 返回 false 可提前终止读取。
  * 读取/解析错误向上抛出，由调用方决定错误处理（提示 / 回退轮询等）。
  */
-export async function consumeSSEDataLines(
-  response: Response,
-  onData: (raw: string) => void | false,
-): Promise<void> {
+export async function consumeSSEDataLines(response: Response, onData: (raw: string) => void | false): Promise<void> {
   const reader = response.body?.getReader()
   if (!reader) {
     throw new Error('No response body')

@@ -56,7 +56,7 @@ const allActionButtons = [
 
 // ── external dependency types ──────────────────────────────────────────
 
-export interface RouteComposableDeps {
+interface RouteComposableDeps {
   clusters: Ref<Cluster[]>
   currentClusterId: Ref<number | null>
 

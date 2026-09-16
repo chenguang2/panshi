@@ -5,12 +5,12 @@
 import api from '@/api/index'
 import type { User } from '@/types'
 
-export interface UserUpdatePayload {
+interface UserUpdatePayload {
   role?: string
   status?: number
 }
 
-export interface UserCreatePayload {
+interface UserCreatePayload {
   username: string
   password: string
   role: string

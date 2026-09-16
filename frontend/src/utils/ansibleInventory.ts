@@ -29,7 +29,7 @@ export const KNOWN_HOST_KEYS = [
 ] as const
 
 /** 高级设置字段定义（行展开表单渲染依据）。 */
-export interface AdvancedFieldDef {
+interface AdvancedFieldDef {
   key: string
   label: string
   type: 'text' | 'number' | 'select' | 'switch' | 'password'
@@ -188,7 +188,7 @@ export function credString(value: unknown): string {
   return typeof value === 'string' ? value : String(value)
 }
 
-export interface AssembleResult {
+interface AssembleResult {
   hosts: InventoryHostEntry[]
   error: string | null
 }
@@ -228,11 +228,7 @@ export function assembleHosts(rows: InventoryHostEntry[]): AssembleResult {
  * 组级默认凭据写入 vars 副本：有值则覆盖、留空则删除（主机回退到自带凭据语义）。
  * 其余 vars 键原样保留。
  */
-export function applyGroupCreds(
-  vars: Record<string, unknown>,
-  user: string,
-  pass: string,
-): Record<string, unknown> {
+export function applyGroupCreds(vars: Record<string, unknown>, user: string, pass: string): Record<string, unknown> {
   const next = { ...vars }
   const setOrRemove = (key: (typeof CRED_KEYS)[number], value: string) => {
     if (value) next[key] = value
@@ -254,19 +250,19 @@ export function apiDetail(err: unknown, fallback: string): string {
 // ── 批量粘贴导入（纯函数，供批量导入弹窗使用） ────────────────────────
 
 /** 单条解析错误：line 为文本中的物理行号（1 起）。 */
-export interface BulkParseError {
+interface BulkParseError {
   line: number
   reason: string
 }
 
 /** 解析出的主机条目：仅携带粘贴中提供的字段（未提及的键不存在）。 */
-export interface BulkHostEntry {
+interface BulkHostEntry {
   ip: string
   ansible_ssh_user?: string
   ansible_ssh_pass?: string
 }
 
-export interface BulkParseResult {
+interface BulkParseResult {
   entries: BulkHostEntry[]
   /** 文本内部重复 IP 的合并次数（后者覆盖前者）。 */
   duplicatesInText: number
@@ -307,16 +303,13 @@ export function parseBulkHosts(text: string): BulkParseResult {
 
 /* ── 批量导入合并 ─────────────────────────────────────── */
 
-export interface BulkMergeResult {
+interface BulkMergeResult {
   rows: InventoryHostEntry[]
   overwrittenCount: number
 }
 
 /** 将批量解析条目合并入主机表格行；新 IP 追加、同 IP 仅覆盖提供的字段。 */
-export function mergeBulkEntries(
-  rows: InventoryHostEntry[],
-  entries: BulkHostEntry[],
-): BulkMergeResult {
+export function mergeBulkEntries(rows: InventoryHostEntry[], entries: BulkHostEntry[]): BulkMergeResult {
   const indexByIp = new Map<string, number>()
   rows.forEach((r, i) => indexByIp.set(r.ip, i))
   const next = rows.map((r) => ({ ...r }))

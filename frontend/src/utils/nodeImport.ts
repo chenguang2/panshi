@@ -2,13 +2,13 @@ export const EXPANSION_LIMIT = 1000
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
-export interface IpParseRow {
+interface IpParseRow {
   ip: string
   valid: boolean
   error?: string
 }
 
-export interface NodeImportRow {
+interface NodeImportRow {
   ip: string
   service_port: number
   management_port: number
@@ -99,13 +99,13 @@ export function parseIpList(text: string): IpParseRow[] {
 
 const HEADER_ALIASES: Record<string, string> = {
   ip: 'ip',
-  '服务端口': 'service_port',
-  '管理端口': 'management_port',
+  服务端口: 'service_port',
+  管理端口: 'management_port',
   edge_path: 'edge_path',
-  'edge路径': 'edge_path',
-  '安装路径': 'openresty_path',
+  edge路径: 'edge_path',
+  安装路径: 'openresty_path',
   status: 'status',
-  '状态': 'status',
+  状态: 'status',
 }
 
 function parseCsvLine(line: string): string[] {
@@ -207,10 +207,10 @@ export function parseNodeCsv(csvText: string): NodeImportRow[] {
 }
 
 export function buildNodeCsvTemplate(): string {
-  return '\uFEFF' + [
-    'ip,service_port,management_port,edge_path,openresty_path,status',
-    '10.0.0.1,80,9180,/edge/node1,,1',
-  ].join('\n')
+  return (
+    '\uFEFF' +
+    ['ip,service_port,management_port,edge_path,openresty_path,status', '10.0.0.1,80,9180,/edge/node1,,1'].join('\n')
+  )
 }
 
 export function isDuplicateIp<T extends { ip: string; valid: boolean }>(rows: T[], row: T, index: number): boolean {

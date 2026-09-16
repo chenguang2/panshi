@@ -16,7 +16,7 @@ export interface InventoryHostEntry {
   [key: string]: unknown
 }
 
-export interface InventoryData {
+interface InventoryData {
   raw_text: string
   hosts: InventoryHostEntry[]
   vars: Record<string, unknown>
@@ -33,7 +33,7 @@ export interface InventorySavePayload {
   vars?: Record<string, unknown>
 }
 
-export interface InventoryParseResult {
+interface InventoryParseResult {
   hosts: InventoryHostEntry[]
   vars: Record<string, unknown>
   unknown_keys: string[]

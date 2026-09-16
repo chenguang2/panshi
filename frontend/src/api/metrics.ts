@@ -18,7 +18,7 @@ export async function getMetricTimeSeries(
   return res.data.data as MetricDataPoint[]
 }
 
-export interface MetricSummaryResult {
+interface MetricSummaryResult {
   summary: MetricSummary
   connectionStates: ConnectionStates
 }
@@ -68,7 +68,7 @@ export async function getRouteStats(
 }
 
 // ── Status Analysis ──
-export interface StatusAnalysisItem {
+interface StatusAnalysisItem {
   status_class: string
   request_count: number
   percentage: number
@@ -87,7 +87,7 @@ export interface DayOverDayData {
   data_quality: string
 }
 
-export interface HourlyDistributionItem {
+interface HourlyDistributionItem {
   hour_of_day: number
   day_of_week: number
   request_count: number
@@ -104,7 +104,7 @@ export async function getTimeComparison(
 }
 
 // ── Node Health ──
-export interface NodeHealthItem {
+interface NodeHealthItem {
   node_ip: string
   status?: number
   last_seen?: string
@@ -114,10 +114,7 @@ export interface NodeHealthItem {
   usage_percent?: number
 }
 
-export async function getNodeHealth(
-  healthType: string,
-  statusFilter?: string,
-): Promise<NodeHealthItem[]> {
+export async function getNodeHealth(healthType: string, statusFilter?: string): Promise<NodeHealthItem[]> {
   const params: Record<string, string> = { health_type: healthType }
   if (statusFilter) params.status = statusFilter
   const res = await api.get('/metrics/node-health', { params })

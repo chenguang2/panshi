@@ -1,6 +1,6 @@
 import api from '@/api'
 
-export interface NodeTaskListParams {
+interface NodeTaskListParams {
   status?: string
   task_type?: string
   page?: number
@@ -41,7 +41,7 @@ export interface NodeTaskData {
   items?: NodeTaskItemData[]
 }
 
-export interface TaskListResponse {
+interface TaskListResponse {
   total: number
   items: NodeTaskData[]
 }
