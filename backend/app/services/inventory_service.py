@@ -27,8 +27,6 @@ KNOWN_HOST_KEYS = (
     "ansible_ssh_private_key_file", "ansible_ssh_common_args",
 )
 
-_CRED_KEYS = ("ansible_ssh_user", "ansible_ssh_pass")
-
 _EDGE_PATH = ["all", "children", "edge_cluster"]
 
 # IPv4 / 主机名的宽松字符集校验（字母数字点横线下划线）
