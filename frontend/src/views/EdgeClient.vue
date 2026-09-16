@@ -1932,55 +1932,6 @@ watch(selectedNode, async (_newNode) => {
   font-size: 12px;
 }
 
-/* ── 表格外框 ── */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.table-container :deep(.ant-table) {
-  background: transparent !important;
-  border: none !important;
-}
-
-/* ── 表头 ── */
-:deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250) !important;
-  padding: 10px 16px !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  color: var(--muted) !important;
-  white-space: nowrap !important;
-  user-select: none !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-:deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-
-/* ── 行分割线 ── */
-:deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px !important;
-  font-size: 13px !important;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
-}
-:deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
-
-/* ── 分页脚注 ── */
-:deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
-}
-
 /* ── Table toolbar per tab ── */
 .table-toolbar {
   display: flex;

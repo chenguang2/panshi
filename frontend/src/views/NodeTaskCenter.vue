@@ -2175,56 +2175,6 @@ async function submitCreateTask() {
   flex-wrap: nowrap;
 }
 
-/* ── 表格外框 ── */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.table-container :deep(.ant-table) {
-  background: transparent !important;
-  border: none !important;
-}
-
-/* ── 表头 ── */
-.node-task-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
-}
-.node-task-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-
-/* ── 行分割线 ── */
-.node-task-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px !important;
-  font-size: 13px !important;
-  white-space: nowrap !important;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
-}
-.node-task-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
-
-/* ── 分页脚注 ── */
-.node-task-table :deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
-}
-
 .action-trigger-btn {
   border: none !important;
   background: transparent !important;

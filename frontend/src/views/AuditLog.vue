@@ -450,54 +450,9 @@ onMounted(async () => {
   cursor: default;
 }
 
-/* 分页脚注（对齐路由管理页） */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-
 .audit-table :deep(.ant-table) {
   background: transparent !important;
   border: none !important;
-}
-
-/* ── 表头（对齐上游管理/节点任务等列表页的统一风格） ── */
-.audit-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
-}
-.audit-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-
-/* ── 行分割线 ── */
-.audit-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px;
-  font-size: 13px;
-  white-space: nowrap;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
-}
-.audit-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
-
-.audit-table :deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
 }
 
 .drawer-row {

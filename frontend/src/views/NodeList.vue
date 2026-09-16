@@ -8,24 +8,32 @@
 
     <div class="node-filter-bar">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索 IP 或名称..." class="form-input" @input="onSearchInput">
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="搜索 IP 或名称..."
+          class="form-input"
+          @input="onSearchInput"
+        />
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width:140px;" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="onFilterChange">
+      <select v-model="clusterFilter" class="form-input" style="width: 160px" @change="onFilterChange">
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="statusFilter" class="form-input" style="width:130px;" @change="onFilterChange">
+      <select v-model="statusFilter" class="form-input" style="width: 130px" @change="onFilterChange">
         <option value="">全部状态</option>
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm">共 {{ statusFilter !== '' && statusFilter !== undefined ? displayedNodes.length : totalCount }} 个节点</span>
+      <span class="text-muted text-sm"
+        >共 {{ statusFilter !== '' && statusFilter !== undefined ? displayedNodes.length : totalCount }} 个节点</span
+      >
     </div>
 
     <div class="table-container">
@@ -64,7 +72,9 @@
           </template>
 
           <template v-if="column.key === 'status'">
-            <span v-if="nginxRunning(record)" class="badge badge-success"><span class="status-dot online"></span>运行中</span>
+            <span v-if="nginxRunning(record)" class="badge badge-success"
+              ><span class="status-dot online"></span>运行中</span
+            >
             <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
           </template>
 
@@ -86,16 +96,30 @@
                     <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
                     <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
                     <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
-                    <a-menu-divider v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" />
-                    <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty(record)">安装 OpenResty</a-menu-item>
-                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge(record)">安装 Edge</a-menu-item>
-                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleAssociateNewOpenresty(record)">关联新OpenResty</a-menu-item>
-                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleEdgePackManagement(record)">升级Edge小版本</a-menu-item>
+                    <a-menu-divider
+                      v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')"
+                    />
+                    <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty(record)"
+                      >安装 OpenResty</a-menu-item
+                    >
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge(record)"
+                      >安装 Edge</a-menu-item
+                    >
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleAssociateNewOpenresty(record)"
+                      >关联新OpenResty</a-menu-item
+                    >
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleEdgePackManagement(record)"
+                      >升级Edge小版本</a-menu-item
+                    >
                   </a-menu>
                 </template>
               </a-dropdown>
             </div>
-            <div class="operation-log" :class="{ visible: opLogVisible === record.id }" :id="'opLog-' + record.id"></div>
+            <div
+              class="operation-log"
+              :class="{ visible: opLogVisible === record.id }"
+              :id="'opLog-' + record.id"
+            ></div>
           </template>
         </template>
 
@@ -119,7 +143,12 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select v-model="formData.cluster_id" class="form-input" :class="{ 'has-error': formErrors.cluster_id }" :disabled="!!editingNode">
+              <select
+                v-model="formData.cluster_id"
+                class="form-input"
+                :class="{ 'has-error': formErrors.cluster_id }"
+                :disabled="!!editingNode"
+              >
                 <option value="">请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
@@ -127,45 +156,87 @@
             </div>
             <div class="form-group">
               <label class="form-label">IP 地址 <span class="required">*</span></label>
-              <input v-model="formData.ip" type="text" class="form-input" :class="{ 'has-error': formErrors.ip }" placeholder="10.0.0.1">
+              <input
+                v-model="formData.ip"
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': formErrors.ip }"
+                placeholder="10.0.0.1"
+              />
               <span class="form-error" v-if="formErrors.ip">{{ formErrors.ip }}</span>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">服务端口 <span class="required">*</span></label>
-              <input v-model.number="formData.service_port" type="number" class="form-input" :class="{ 'has-error': formErrors.service_port }" min="1" max="65535">
+              <input
+                v-model.number="formData.service_port"
+                type="number"
+                class="form-input"
+                :class="{ 'has-error': formErrors.service_port }"
+                min="1"
+                max="65535"
+              />
               <span class="form-error" v-if="formErrors.service_port">{{ formErrors.service_port }}</span>
             </div>
             <div class="form-group">
               <label class="form-label">管理端口 <span class="required">*</span></label>
-              <input v-model.number="formData.management_port" type="number" class="form-input" :class="{ 'has-error': formErrors.management_port }" min="1" max="65535">
+              <input
+                v-model.number="formData.management_port"
+                type="number"
+                class="form-input"
+                :class="{ 'has-error': formErrors.management_port }"
+                min="1"
+                max="65535"
+              />
               <span class="form-error" v-if="formErrors.management_port">{{ formErrors.management_port }}</span>
             </div>
             <div class="form-group">
               <label class="form-label">SSH端口</label>
-              <input v-model.number="formData.ssh_port" type="number" class="form-input" min="1" max="65535" placeholder="默认 22">
+              <input
+                v-model.number="formData.ssh_port"
+                type="number"
+                class="form-input"
+                min="1"
+                max="65535"
+                placeholder="默认 22"
+              />
             </div>
           </div>
           <div class="form-group">
             <label class="form-label">OpenResty安装路径 <span class="required">*</span></label>
-            <input v-model="formData.openresty_path" type="text" class="form-input" :class="{ 'has-error': formErrors.openresty_path }" placeholder="/usr/local/nginx">
+            <input
+              v-model="formData.openresty_path"
+              type="text"
+              class="form-input"
+              :class="{ 'has-error': formErrors.openresty_path }"
+              placeholder="/usr/local/nginx"
+            />
             <span class="form-error" v-if="formErrors.openresty_path">{{ formErrors.openresty_path }}</span>
           </div>
           <div class="form-group">
             <label class="form-label">Edge安装路径 <span class="required">*</span></label>
-            <input v-model="formData.edge_path" type="text" class="form-input" :class="{ 'has-error': formErrors.edge_path }" placeholder="/usr/local/edge">
+            <input
+              v-model="formData.edge_path"
+              type="text"
+              class="form-input"
+              :class="{ 'has-error': formErrors.edge_path }"
+              placeholder="/usr/local/edge"
+            />
             <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
           </div>
           <div class="form-group">
             <label class="checkbox-label">
-              <input type="checkbox" v-model="formData.statusCheck"> <span>{{ formData.statusCheck ? '启用' : '停用' }}</span>
+              <input type="checkbox" v-model="formData.statusCheck" />
+              <span>{{ formData.statusCheck ? '启用' : '停用' }}</span>
             </label>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeFormModal">取消</button>
-          <button class="btn btn-primary" @click="handleFormSubmit" :disabled="formSubmitting">{{ formSubmitting ? '提交中...' : '保存' }}</button>
+          <button class="btn btn-primary" @click="handleFormSubmit" :disabled="formSubmitting">
+            {{ formSubmitting ? '提交中...' : '保存' }}
+          </button>
         </div>
       </div>
     </div>
@@ -179,26 +250,51 @@
         </div>
         <div class="modal-body" v-if="detailNode">
           <div class="node-detail-grid">
-            <div class="nd-label">IP 地址</div><div class="nd-value">{{ detailNode.ip }}</div>
-            <div class="nd-label">所属集群</div><div class="nd-value">{{ detailNode.cluster_name || '-' }}</div>
-            <div class="nd-label">服务端口</div><div class="nd-value">{{ detailNode.service_port }}</div>
-            <div class="nd-label">管理端口</div><div class="nd-value">{{ detailNode.management_port }}</div>
-            <div class="nd-label">Edge安装路径</div><div class="nd-value">{{ detailNode.edge_path }}</div>
-          <div class="nd-label">OpenResty安装路径</div><div class="nd-value">{{ detailNode.openresty_path || '（同Edge安装路径）' }}</div>
+            <div class="nd-label">IP 地址</div>
+            <div class="nd-value">{{ detailNode.ip }}</div>
+            <div class="nd-label">所属集群</div>
+            <div class="nd-value">{{ detailNode.cluster_name || '-' }}</div>
+            <div class="nd-label">服务端口</div>
+            <div class="nd-value">{{ detailNode.service_port }}</div>
+            <div class="nd-label">管理端口</div>
+            <div class="nd-value">{{ detailNode.management_port }}</div>
+            <div class="nd-label">Edge安装路径</div>
+            <div class="nd-value">{{ detailNode.edge_path }}</div>
+            <div class="nd-label">OpenResty安装路径</div>
+            <div class="nd-value">{{ detailNode.openresty_path || '（同Edge安装路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
               <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
               <span v-else class="badge badge-danger">已停止</span>
             </div>
-            <div class="nd-label">创建时间</div><div class="nd-value">{{ formatDate(detailNode.created_at) }}</div>
+            <div class="nd-label">创建时间</div>
+            <div class="nd-value">{{ formatDate(detailNode.created_at) }}</div>
           </div>
           <div v-if="clusterStats" class="node-stats">
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.routes || 0 }}</div><div class="ns-label">路由</div></div>
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.upstreams || 0 }}</div><div class="ns-label">上游</div></div>
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.plugin_configs || 0 }}</div><div class="ns-label">插件组</div></div>
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.global_rules || 0 }}</div><div class="ns-label">全局规则</div></div>
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.plugin_metadata || 0 }}</div><div class="ns-label">插件元数据</div></div>
-            <div class="node-stat-card"><div class="ns-value">{{ clusterStats.static_resources || 0 }}</div><div class="ns-label">静态资源</div></div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.routes || 0 }}</div>
+              <div class="ns-label">路由</div>
+            </div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.upstreams || 0 }}</div>
+              <div class="ns-label">上游</div>
+            </div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.plugin_configs || 0 }}</div>
+              <div class="ns-label">插件组</div>
+            </div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.global_rules || 0 }}</div>
+              <div class="ns-label">全局规则</div>
+            </div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.plugin_metadata || 0 }}</div>
+              <div class="ns-label">插件元数据</div>
+            </div>
+            <div class="node-stat-card">
+              <div class="ns-value">{{ clusterStats.static_resources || 0 }}</div>
+              <div class="ns-label">静态资源</div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -208,11 +304,7 @@
     </div>
 
     <!-- Config Diff Drawer -->
-    <ConfigDiff
-      v-model:visible="diffDrawerVisible"
-      :cluster-id="diffClusterId"
-      :initial-node-id="diffNodeId"
-    />
+    <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
 
     <!-- Execution Result Drawer -->
     <NodeExecutionResultDrawer
@@ -233,23 +325,23 @@
 
     <!-- Custom Confirm Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
-      <div class="modal" style="max-width: 420px;">
-        <div class="modal-header">
-          <h2>{{ confirmState.title }}</h2>
-          <button class="modal-close" @click="confirmState.visible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">{{ confirmState.content }}</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
-          <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
-            {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
-          </button>
+      <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
+        <div class="modal" style="max-width: 420px">
+          <div class="modal-header">
+            <h2>{{ confirmState.title }}</h2>
+            <button class="modal-close" @click="confirmState.visible = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmState.content }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
+            <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
+              {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
     <InstallOpenrestyDialog
@@ -304,14 +396,14 @@ const groupFilter = ref('__all__')
 const statusFilter = ref<string | number>('')
 
 const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  const names = new Set(clusters.value.map((c) => c.group_name || ''))
   return Array.from(names).filter(Boolean).sort()
 })
 
 const filteredClusters = computed(() => {
   if (groupFilter.value === '__all__') return clusters.value
-  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
-  return clusters.value.filter(c => c.group_name === groupFilter.value)
+  if (groupFilter.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
+  return clusters.value.filter((c) => c.group_name === groupFilter.value)
 })
 
 function onGroupChange() {
@@ -323,7 +415,7 @@ const displayedNodes = computed(() => {
   let list = nodes.value
   if (statusFilter.value !== '' && statusFilter.value !== undefined) {
     const wantRunning = Number(statusFilter.value) === 1
-    list = list.filter(n => nginxRunning(n) === wantRunning)
+    list = list.filter((n) => nginxRunning(n) === wantRunning)
   }
   return list
 })
@@ -352,9 +444,7 @@ const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]
 const detailModalVisible = ref(false)
 const detailNode = ref<any | null>(null)
 const clusterStats = ref<any | null>(null)
-const detailTitle = computed(() =>
-  detailNode.value ? `节点详情 — ${detailNode.value.ip}` : '节点详情'
-)
+const detailTitle = computed(() => (detailNode.value ? `节点详情 — ${detailNode.value.ip}` : '节点详情'))
 
 // Execution drawer
 const execDrawerVisible = ref(false)
@@ -386,13 +476,35 @@ const diffNodeId = ref(0)
 const columns = [
   { title: '#', key: 'index', width: 45 },
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: (a: any, b: any) => a.ip?.localeCompare(b.ip) },
-  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
+  {
+    title: '所属集群',
+    dataIndex: 'cluster_name',
+    key: 'cluster_name',
+    sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || ''),
+  },
   { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
-  { title: '管理端口', key: 'management_port', sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0) },
-  { title: 'Edge安装路径', key: 'edge_path', sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || '') },
-  { title: 'OpenResty安装路径', key: 'openresty_path', sorter: (a: any, b: any) => (a.openresty_path || '').localeCompare(b.openresty_path || '') },
+  {
+    title: '管理端口',
+    key: 'management_port',
+    sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0),
+  },
+  {
+    title: 'Edge安装路径',
+    key: 'edge_path',
+    sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || ''),
+  },
+  {
+    title: 'OpenResty安装路径',
+    key: 'openresty_path',
+    sorter: (a: any, b: any) => (a.openresty_path || '').localeCompare(b.openresty_path || ''),
+  },
   { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
-  { title: 'Edge 版本', key: 'edge_version', sorter: (a: any, b: any) => ((a.status_detail?.statistic?.edge_version) || '').localeCompare((b.status_detail?.statistic?.edge_version) || '') },
+  {
+    title: 'Edge 版本',
+    key: 'edge_version',
+    sorter: (a: any, b: any) =>
+      (a.status_detail?.statistic?.edge_version || '').localeCompare(b.status_detail?.statistic?.edge_version || ''),
+  },
   { title: '操作', key: 'actions', width: 320 },
 ]
 
@@ -402,20 +514,20 @@ async function loadNodes() {
   loading.value = true
   try {
     const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
-    const loadAll = hasStatus  // 仅 statusFilter 触发客户端过滤，group 过滤走服务端
+    const loadAll = hasStatus // 仅 statusFilter 触发客户端过滤，group 过滤走服务端
     const res = await listNodes({
       groupName: groupFilter.value,
       page: loadAll ? 1 : page.value,
       pageSize: loadAll ? PAGE_SIZE_DROPDOWN : pageSize.value,
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
-      status: undefined,  // 全部通过 nginxRunning() 客户端过滤
+      status: undefined, // 全部通过 nginxRunning() 客户端过滤
     })
     nodes.value = res.data.items || []
-    totalCount.value = loadAll ? nodes.value.length : (res.data.total || 0)
+    totalCount.value = loadAll ? nodes.value.length : res.data.total || 0
   } catch (error: any) {
     const detail = error.response?.data?.detail
-    const msg = typeof detail === 'string' ? detail : (detail?.msg || error.message || '未知错误')
+    const msg = typeof detail === 'string' ? detail : detail?.msg || error.message || '未知错误'
     message.error('加载节点列表失败: ' + msg)
   } finally {
     loading.value = false
@@ -426,7 +538,9 @@ async function loadClusters() {
   try {
     const res = await api.get('/clusters')
     clusters.value = res.data?.items || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 async function loadClusterStats(clusterId: number) {
@@ -452,7 +566,10 @@ function onFilterChange() {
 }
 
 function onSearchInput() {
-  onDebouncedSearch(() => { page.value = 1; loadNodes() })
+  onDebouncedSearch(() => {
+    page.value = 1
+    loadNodes()
+  })
 }
 
 // ── Form Modal ──
@@ -595,12 +712,15 @@ function startElapsedTimer() {
   if (_elapsedTimer) clearInterval(_elapsedTimer)
   _elapsedTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 }
 
 function stopElapsedTimer() {
-  if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null }
+  if (_elapsedTimer) {
+    clearInterval(_elapsedTimer)
+    _elapsedTimer = null
+  }
 }
 
 async function executeAction(record: any, action: string, actionLabel: string) {
@@ -616,7 +736,12 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   execDrawerVisible.value = true
 
   // Build pending command for display even on failure
-  const nginxCmdMap: Record<string, string> = { start: 'nginx_start', stop: 'nginx_stop', reload: 'nginx_reload', status: 'edge_statistic' }
+  const nginxCmdMap: Record<string, string> = {
+    start: 'nginx_start',
+    stop: 'nginx_stop',
+    reload: 'nginx_reload',
+    status: 'edge_statistic',
+  }
   const nginxCmd = nginxCmdMap[action] || action
   const tag = nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'
   const ev = JSON.stringify({ prefix: record.edge_path || '', ports: String(record.management_port), ips: record.ip })
@@ -641,7 +766,9 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     } else if (action === 'reload') {
       res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/reload`)
     } else if (action === 'status') {
-      res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/statistic`, { ports: String(record.management_port) })
+      res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/statistic`, {
+        ports: String(record.management_port),
+      })
     }
 
     const data = res?.data || {}
@@ -650,9 +777,21 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     const finalCommand = data.command || pendingCommand
 
     addLog(`返回码 (rc): ${data.rc}`)
-    if (finalCommand) { addLog(''); addLog(`--- 执行命令 ---`); addLog(finalCommand) }
-    if (data.stdout) { addLog(''); addLog('--- 输出 (stdout) ---'); addLog(data.stdout) }
-    if (data.stderr) { addLog(''); addLog('--- 错误输出 (stderr) ---'); addLog(data.stderr) }
+    if (finalCommand) {
+      addLog('')
+      addLog(`--- 执行命令 ---`)
+      addLog(finalCommand)
+    }
+    if (data.stdout) {
+      addLog('')
+      addLog('--- 输出 (stdout) ---')
+      addLog(data.stdout)
+    }
+    if (data.stderr) {
+      addLog('')
+      addLog('--- 错误输出 (stderr) ---')
+      addLog(data.stderr)
+    }
     addLog('')
     if (data.rc === 0) {
       execProgress.status = 'success'
@@ -679,12 +818,9 @@ async function executeAction(record: any, action: string, actionLabel: string) {
 }
 
 function handleStart(record: any) {
-  showConfirm(
-    '确认启动节点',
-    `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
-    '确认启动',
-    async () => { await executeAction(record, 'start', '启动') },
-  )
+  showConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', async () => {
+    await executeAction(record, 'start', '启动')
+  })
 }
 
 function handleStop(record: any) {
@@ -692,7 +828,9 @@ function handleStop(record: any) {
     '确认停止节点',
     `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
-    async () => { await executeAction(record, 'stop', '停止') },
+    async () => {
+      await executeAction(record, 'stop', '停止')
+    },
   )
 }
 
@@ -701,7 +839,9 @@ function handleReload(record: any) {
     '确认重新加载节点',
     `即将对节点 ${record.ip} 执行"reload"操作，重新加载配置，确认继续？`,
     '确认reload',
-    async () => { await executeAction(record, 'reload', 'reload') },
+    async () => {
+      await executeAction(record, 'reload', 'reload')
+    },
   )
 }
 
@@ -728,11 +868,16 @@ function buildInstallCommand(record: any, tag: string, extravars: Record<string,
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
   const sshCmd = [
     'ssh',
-    '-i', '~/.ssh/id_rsa',
-    '-o', 'BatchMode=yes',
-    '-o', 'ConnectTimeout=30',
-    '-o', 'StrictHostKeyChecking=no',
-    '-o', 'UserKnownHostsFile=/dev/null',
+    '-i',
+    '~/.ssh/id_rsa',
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=30',
+    '-o',
+    'StrictHostKeyChecking=no',
+    '-o',
+    'UserKnownHostsFile=/dev/null',
     `jboss@${record.ip}`,
     `"source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`,
   ].join(' ')
@@ -766,8 +911,12 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
     `/clusters/${record.cluster_id}/nodes/${record.id}/install-openresty`,
     { prefix, openresty_file: payload.openrestyFile },
     {
-      onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-      onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+      onLine: (line: string) => {
+        execLogs.value = [...execLogs.value, line]
+      },
+      onProgress: (percent: number) => {
+        if (percent > execProgress.percent) execProgress.percent = percent
+      },
       onComplete: (rc: number, _status: string) => {
         stopElapsedTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -803,8 +952,12 @@ function handleInstallEdge(record: any) {
         `/clusters/${record.cluster_id}/nodes/${record.id}/install-edge`,
         { prefix },
         {
-          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onLine: (line: string) => {
+            execLogs.value = [...execLogs.value, line]
+          },
+          onProgress: (percent: number) => {
+            if (percent > execProgress.percent) execProgress.percent = percent
+          },
           onComplete: (rc: number, _status: string) => {
             stopElapsedTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -842,8 +995,12 @@ function handleAssociateNewOpenresty(record: any) {
         `/clusters/${record.cluster_id}/nodes/${record.id}/associate-new-openresty`,
         {},
         {
-          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onLine: (line: string) => {
+            execLogs.value = [...execLogs.value, line]
+          },
+          onProgress: (percent: number) => {
+            if (percent > execProgress.percent) execProgress.percent = percent
+          },
           onComplete: (rc: number, _status: string) => {
             stopElapsedTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -908,11 +1065,7 @@ function handleCancelInstall() {
         execLogs.value.push('')
         execLogs.value.push('═══════════════════════════════════════════')
         execLogs.value.push(
-          data.status === 'skipped'
-            ? '⚠️ 没有运行中的安装进程'
-            : allOk
-              ? '✅ 安装已取消'
-              : '⚠️ 取消过程部分异常'
+          data.status === 'skipped' ? '⚠️ 没有运行中的安装进程' : allOk ? '✅ 安装已取消' : '⚠️ 取消过程部分异常',
         )
 
         execProgress.percent = 100
@@ -963,16 +1116,11 @@ async function executeConfirm() {
 // ── Delete ──
 
 function handleDelete(record: any) {
-  showConfirm(
-    '确认删除',
-    `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`,
-    '确认删除',
-    async () => {
-      await deleteNode(record.cluster_id, record.id, { delete_db: true, delete_edge: false })
-      message.success('节点已删除')
-      loadNodes()
-    }
-  )
+  showConfirm('确认删除', `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`, '确认删除', async () => {
+    await deleteNode(record.cluster_id, record.id, { delete_db: true, delete_edge: false })
+    message.success('节点已删除')
+    loadNodes()
+  })
 }
 
 // ── Diff ──
@@ -1020,8 +1168,12 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
   startElapsedTimer()
 
   installStream.start(url, body, {
-    onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-    onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+    onLine: (line: string) => {
+      execLogs.value = [...execLogs.value, line]
+    },
+    onProgress: (percent: number) => {
+      if (percent > execProgress.percent) execProgress.percent = percent
+    },
     onComplete: (rc: number, _status: string) => {
       stopElapsedTimer()
       execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -1062,7 +1214,9 @@ function onEdgePackRebase(e: Event) {
 </script>
 
 <style scoped>
-.node-list { padding: 20px 24px; }
+.node-list {
+  padding: 20px 24px;
+}
 
 .node-filter-bar {
   display: flex;
@@ -1072,58 +1226,14 @@ function onEdgePackRebase(e: Event) {
   flex-wrap: nowrap;
 }
 
-.text-mono { font-family: var(--font-mono); }
-.text-sm { font-size: 12px; }
-.text-muted { color: var(--muted); }
-
-/* ── 表格外框 ── */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
+.text-mono {
+  font-family: var(--font-mono);
 }
-.table-container :deep(.ant-table) {
-  background: transparent !important;
-  border: none !important;
+.text-sm {
+  font-size: 12px;
 }
-
-/* ── 表头 ── */
-.node-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.text-muted {
   color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
-}
-.node-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-
-/* ── 行分割线 ── */
-.node-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px !important;
-  font-size: 13px !important;
-  white-space: nowrap !important;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
-}
-.node-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
-
-/* ── 分页脚注 ── */
-.node-table :deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
 }
 
 .node-actions-wrap {
@@ -1140,8 +1250,14 @@ function onEdgePackRebase(e: Event) {
   color: var(--muted) !important;
 }
 
-.empty-state { text-align: center; color: var(--muted); }
-.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+}
+.empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
 
 .operation-log {
   background: var(--bg);
@@ -1155,35 +1271,110 @@ function onEdgePackRebase(e: Event) {
   display: none;
 }
 
-.operation-log.visible { display: block; }
+.operation-log.visible {
+  display: block;
+}
 
 /* ── Modal ── */
 .modal-overlay {
-  position: fixed; inset: 0; background: oklch(0% 0 0 / 40%);
-  z-index: 1000; display: flex; align-items: center; justify-content: center;
+  position: fixed;
+  inset: 0;
+  background: oklch(0% 0 0 / 40%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .modal {
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-  width: 100%; max-width: 600px; max-height: 80vh;
-  display: flex; flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
-.modal-wide { max-width: 700px; }
+.modal-wide {
+  max-width: 700px;
+}
 
-.form-row { display: flex; gap: 16px; }
-.form-group { flex: 1; margin-bottom: 16px; }
-.form-label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
-.required { color: var(--danger); }
-.checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
-.form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+.form-group {
+  flex: 1;
+  margin-bottom: 16px;
+}
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.required {
+  color: var(--danger);
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.checkbox-label input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.form-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
 
 /* Detail */
-.node-detail-grid { display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; font-size: 13px; margin-bottom: 16px; }
-.node-detail-grid .nd-label { color: var(--muted); font-weight: 500; }
-.node-detail-grid .nd-value { font-family: var(--font-mono); word-break: break-all; }
-.node-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.node-stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; text-align: center; }
-.node-stat-card .ns-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; }
-.node-stat-card .ns-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.node-detail-grid .nd-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+.node-detail-grid .nd-value {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+.node-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.node-stat-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  text-align: center;
+}
+.node-stat-card .ns-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+.node-stat-card .ns-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
 </style>

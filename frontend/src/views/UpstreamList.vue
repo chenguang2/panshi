@@ -8,19 +8,19 @@
 
     <div class="upstream-filter-bar">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索名称或描述..." class="form-input" @input="onSearch">
+        <input v-model="searchText" type="text" placeholder="搜索名称或描述..." class="form-input" @input="onSearch" />
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width:140px;" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;" @change="onFilterChange">
+      <select v-model="clusterFilter" class="form-input" style="width: 160px" @change="onFilterChange">
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <select v-model="lbFilter" class="form-input" style="width:140px;" @change="onFilterChange">
+      <select v-model="lbFilter" class="form-input" style="width: 140px" @change="onFilterChange">
         <option value="">全部算法</option>
         <option value="weighted_roundrobin">加权轮询</option>
         <option value="chash">一致性哈希</option>
@@ -31,73 +31,73 @@
     </div>
 
     <div class="table-container">
-    <a-table
-      :data-source="displayedUpstreams"
-      :columns="columns"
-      :row-key="(record: any) => record.id"
-      :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
-      :loading="loading"
-      size="middle"
-      class="upstream-table"
-      @change="handleTableChange"
-    >
-      <template #bodyCell="{ column, record, index }">
-        <template v-if="column.key === 'index'">
-          <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
-        </template>
-        <template v-if="column.key === 'name'">
-          <div class="cell-primary">{{ record.name }}</div>
-          <div class="cell-secondary">{{ record.description || '-' }}</div>
+      <a-table
+        :data-source="displayedUpstreams"
+        :columns="columns"
+        :row-key="(record: any) => record.id"
+        :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
+        :loading="loading"
+        size="middle"
+        class="upstream-table"
+        @change="handleTableChange"
+      >
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+          </template>
+          <template v-if="column.key === 'name'">
+            <div class="cell-primary">{{ record.name }}</div>
+            <div class="cell-secondary">{{ record.description || '-' }}</div>
+          </template>
+
+          <template v-if="column.key === 'load_balance'">
+            <span class="lb-badge">{{ lbLabels[record.load_balance] || record.load_balance }}</span>
+          </template>
+
+          <template v-if="column.key === 'targets'">
+            <div class="target-list" v-if="record.targets?.length">
+              <span v-for="t in record.targets" :key="t.target" class="target-tag">
+                {{ t.target }} <span class="weight">({{ t.weight }})</span>
+              </span>
+            </div>
+            <span v-else class="text-muted text-sm">—</span>
+          </template>
+
+          <template v-if="column.key === 'scheme'">
+            <span class="text-mono text-sm">{{ record.scheme || 'http' }}</span>
+          </template>
+
+          <template v-if="column.key === 'version'">
+            <span class="text-mono text-sm">v{{ record.current_version || '-' }}</span>
+          </template>
+
+          <template v-if="column.key === 'created_at'">
+            <span class="cell-secondary">{{ formatDate(record.created_at) }}</span>
+          </template>
+
+          <template v-if="column.key === 'actions'">
+            <a-dropdown :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+              <template #overlay>
+                <a-menu>
+                  <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
+                  <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
+                  <a-menu-item @click="handleAction('publish', record)">发布</a-menu-item>
+                  <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
+                  <a-menu-item danger @click="handleAction('delete', record)">删除</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </template>
         </template>
 
-        <template v-if="column.key === 'load_balance'">
-          <span class="lb-badge">{{ lbLabels[record.load_balance] || record.load_balance }}</span>
-        </template>
-
-        <template v-if="column.key === 'targets'">
-          <div class="target-list" v-if="record.targets?.length">
-            <span v-for="t in record.targets" :key="t.target" class="target-tag">
-              {{ t.target }} <span class="weight">({{ t.weight }})</span>
-            </span>
+        <template #empty>
+          <div class="empty-state">
+            <div class="empty-state-icon">◎</div>
+            <p>暂无上游服务</p>
           </div>
-          <span v-else class="text-muted text-sm">—</span>
         </template>
-
-        <template v-if="column.key === 'scheme'">
-          <span class="text-mono text-sm">{{ record.scheme || 'http' }}</span>
-        </template>
-
-        <template v-if="column.key === 'version'">
-          <span class="text-mono text-sm">v{{ record.current_version || '-' }}</span>
-        </template>
-
-        <template v-if="column.key === 'created_at'">
-          <span class="cell-secondary">{{ formatDate(record.created_at) }}</span>
-        </template>
-
-        <template v-if="column.key === 'actions'">
-          <a-dropdown :trigger="['click']">
-            <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
-                <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
-                <a-menu-item @click="handleAction('publish', record)">发布</a-menu-item>
-                <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
-                <a-menu-item danger @click="handleAction('delete', record)">删除</a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </template>
-      </template>
-
-      <template #empty>
-        <div class="empty-state">
-          <div class="empty-state-icon">◎</div>
-          <p>暂无上游服务</p>
-        </div>
-      </template>
-    </a-table>
+      </a-table>
     </div>
 
     <UpstreamFormModal
@@ -160,14 +160,14 @@ const groupFilter = ref('__all__')
 const lbFilter = ref('')
 
 const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  const names = new Set(clusters.value.map((c) => c.group_name || ''))
   return Array.from(names).filter(Boolean).sort()
 })
 
 const filteredClusters = computed(() => {
   if (groupFilter.value === '__all__') return clusters.value
-  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
-  return clusters.value.filter(c => c.group_name === groupFilter.value)
+  if (groupFilter.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
+  return clusters.value.filter((c) => c.group_name === groupFilter.value)
 })
 
 function onGroupChange() {
@@ -187,16 +187,37 @@ const publishModalVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-
 const columns = [
   { title: '#', key: 'index', width: 45 },
   { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || '') },
-  { title: '负载均衡', key: 'load_balance', sorter: (a: any, b: any) => (a.load_balance || '').localeCompare(b.load_balance || '') },
-  { title: '目标节点', key: 'targets', sorter: (a: any, b: any) => ((a.targets?.[0]?.target) || '').localeCompare((b.targets?.[0]?.target) || '') },
+  {
+    title: '集群',
+    dataIndex: 'cluster_name',
+    key: 'cluster_name',
+    sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || ''),
+  },
+  {
+    title: '负载均衡',
+    key: 'load_balance',
+    sorter: (a: any, b: any) => (a.load_balance || '').localeCompare(b.load_balance || ''),
+  },
+  {
+    title: '目标节点',
+    key: 'targets',
+    sorter: (a: any, b: any) => (a.targets?.[0]?.target || '').localeCompare(b.targets?.[0]?.target || ''),
+  },
   { title: '协议', key: 'scheme' },
-  { title: '版本', key: 'version', sorter: (a: any, b: any) => ((a.current_version || '')+'').localeCompare((b.current_version || '')+'') },
-  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || '') },
+  {
+    title: '版本',
+    key: 'version',
+    sorter: (a: any, b: any) => ((a.current_version || '') + '').localeCompare((b.current_version || '') + ''),
+  },
+  {
+    title: '创建时间',
+    dataIndex: 'created_at',
+    key: 'created_at',
+    sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''),
+  },
   { title: '操作', key: 'actions', width: 80 },
 ]
 
@@ -208,11 +229,24 @@ const lbLabels: Record<string, string> = {
 }
 
 function handleAction(action: string, record: any) {
-  if (action === 'copy') { editingUpstream.value = record; copyingUpstream.value = true; formModalVisible.value = true }
-  else if (action === 'edit') { editingUpstream.value = record; copyingUpstream.value = false; formModalVisible.value = true }
-  else if (action === 'publish') { publishingRecord.value = record; publishClusterId.value = record.cluster_id; publishModalVisible.value = true }
-  else if (action === 'version') { vmResourceId.value = record.id; vmClusterId.value = record.cluster_id; vmResourceName.value = record.name; vmModalVisible.value = true }
-  else if (action === 'delete') deleteUpstream(record)
+  if (action === 'copy') {
+    editingUpstream.value = record
+    copyingUpstream.value = true
+    formModalVisible.value = true
+  } else if (action === 'edit') {
+    editingUpstream.value = record
+    copyingUpstream.value = false
+    formModalVisible.value = true
+  } else if (action === 'publish') {
+    publishingRecord.value = record
+    publishClusterId.value = record.cluster_id
+    publishModalVisible.value = true
+  } else if (action === 'version') {
+    vmResourceId.value = record.id
+    vmClusterId.value = record.cluster_id
+    vmResourceName.value = record.name
+    vmModalVisible.value = true
+  } else if (action === 'delete') deleteUpstream(record)
 }
 
 function onFilterChange() {
@@ -221,7 +255,10 @@ function onFilterChange() {
 }
 
 function onSearch() {
-  onDebouncedSearch(() => { page.value = 1; loadUpstreams() })
+  onDebouncedSearch(() => {
+    page.value = 1
+    loadUpstreams()
+  })
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
@@ -242,7 +279,7 @@ async function loadUpstreams() {
     totalCount.value = res.data.total || 0
   } catch (error: any) {
     const detail = error?.response?.data?.detail
-    const msg = typeof detail === 'string' ? detail : (detail?.msg || error?.message || '未知错误')
+    const msg = typeof detail === 'string' ? detail : detail?.msg || error?.message || '未知错误'
     message.error('加载上游列表失败: ' + msg)
   } finally {
     loading.value = false
@@ -253,7 +290,9 @@ async function loadClusters() {
   try {
     const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function openCreateModal() {
@@ -277,7 +316,9 @@ async function deleteUpstream(record: any) {
   try {
     const res = await getClusterNodes(record.cluster_id)
     nodes = res.data?.items || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   showDeleteConfirm({
     title: `确定要删除上游 "${record.name}" 吗？`,
@@ -327,74 +368,61 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.upstream-list { padding: 20px 24px; }
-.upstream-filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
-.text-muted { color: var(--muted); }
-.text-sm { font-size: 12px; }
-.text-mono { font-family: var(--font-mono); }
-.cell-primary { font-weight: 600; color: var(--fg); }
-.cell-secondary { font-size: 12px; color: var(--muted); }
-
-.target-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.target-tag {
-  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px;
-  border-radius: 10px; font-size: 11px; background: var(--bg);
-  border: 1px solid var(--border); font-family: var(--font-mono);
+.upstream-list {
+  padding: 20px 24px;
 }
-.target-tag .weight { color: var(--muted); font-size: 10px; }
-.lb-badge {
-  font-size: 11px; padding: 1px 7px; border-radius: 10px; font-family: var(--font-mono);
-  background: oklch(56% 0.16 210 / 8%); color: var(--accent);
+.upstream-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: nowrap;
 }
-
-/* ── 表格外框 ── */
-.table-container {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
-.table-container :deep(.ant-table) {
-  background: transparent !important;
-  border: none !important;
-}
-
-/* ── 表头 ── */
-.upstream-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(97% 0.005 250);
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.text-muted {
   color: var(--muted);
-  white-space: nowrap;
-  user-select: none;
-  border-bottom: 1px solid var(--border) !important;
 }
-.upstream-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
+.text-sm {
+  font-size: 12px;
 }
-
-/* ── 行分割线 ── */
-.upstream-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px;
-  font-size: 13px;
-  white-space: nowrap;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border);
+.text-mono {
+  font-family: var(--font-mono);
 }
-.upstream-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
+.cell-primary {
+  font-weight: 600;
+  color: var(--fg);
+}
+.cell-secondary {
+  font-size: 12px;
+  color: var(--muted);
 }
 
-/* ── 分页脚注 ── */
-.upstream-table :deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
+.target-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.target-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+.target-tag .weight {
+  color: var(--muted);
+  font-size: 10px;
+}
+.lb-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  background: oklch(56% 0.16 210 / 8%);
+  color: var(--accent);
 }
 
 .action-trigger-btn {
@@ -404,7 +432,13 @@ onUnmounted(() => {
   color: var(--muted) !important;
 }
 
-.empty-state { text-align: center; color: var(--muted); padding: 32px; }
-.empty-state-icon { font-size: 32px; margin-bottom: 8px; }
-
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 32px;
+}
+.empty-state-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
 </style>
