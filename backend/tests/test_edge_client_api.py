@@ -158,3 +158,119 @@ class TestEdgeClientCRUD:
             json={}
         )
         assert response.status_code in [200, 400, 404, 500, 503]
+
+
+class TestStreamRouteWriteValidation:
+    """四层代理写载荷校验（openspec/changes/add-edge-stream-route-create-edit）。
+
+    实测：Edge 的 `POST /stream/edge/admin/routes` 对空载荷 `{}` 也返回 200 并在节点上
+    创建一条既无 server_port 也无 upstream 的路由。故校验必须在平台侧完成，
+    非法载荷不得触达 Edge（用例用 mock 断言"未被调用"，不依赖节点可达性）。
+    """
+
+    BASE = "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes"
+    VALID_UPSTREAM = {"nodes": {"127.0.0.1:9001": 100}, "type": "roundrobin", "scheme": "tcp"}
+
+    @staticmethod
+    def _patch(monkeypatch, method: str):
+        from unittest.mock import MagicMock
+
+        from app.services.edge_client import EdgeClient
+
+        mock = MagicMock(return_value={"action": "create", "node": {"value": {"id": "edge-assigned-id"}}})
+        monkeypatch.setattr(EdgeClient, method, mock)
+        return mock
+
+    async def test_missing_server_port_rejected_without_calling_edge(self, async_authed_client, monkeypatch):
+        mock = self._patch(monkeypatch, "create_stream_route")
+
+        resp = await async_authed_client.post(self.BASE, json={"upstream": self.VALID_UPSTREAM})
+
+        assert resp.status_code == 422, resp.text
+        mock.assert_not_called()
+
+    async def test_server_port_out_of_range_rejected(self, async_authed_client, monkeypatch):
+        mock = self._patch(monkeypatch, "create_stream_route")
+
+        for bad in (0, 65536):
+            resp = await async_authed_client.post(
+                self.BASE, json={"server_port": bad, "upstream": self.VALID_UPSTREAM}
+            )
+            assert resp.status_code == 422, f"server_port={bad} 应被拒"
+
+        mock.assert_not_called()
+
+    async def test_missing_or_empty_upstream_rejected(self, async_authed_client, monkeypatch):
+        mock = self._patch(monkeypatch, "create_stream_route")
+
+        for payload in (
+            {"server_port": 9999},
+            {"server_port": 9999, "upstream": {}},
+            {"server_port": 9999, "upstream": {"nodes": {}}},
+        ):
+            resp = await async_authed_client.post(self.BASE, json=payload)
+            assert resp.status_code == 422, f"{payload} 应被拒"
+
+        mock.assert_not_called()
+
+    async def test_valid_payload_calls_edge_create_with_fields(self, async_authed_client, monkeypatch):
+        mock = self._patch(monkeypatch, "create_stream_route")
+
+        resp = await async_authed_client.post(
+            self.BASE,
+            json={
+                "server_port": 9999,
+                "name": "e2e-测试",
+                "protocol": "TCP",
+                "sni": "ssl.example.com",
+                "remote_addr": "10.0.0.0/8",
+                "upstream": self.VALID_UPSTREAM,
+            },
+        )
+
+        assert resp.status_code == 200, resp.text
+        mock.assert_called_once()
+        sent = mock.call_args.args[0]
+        assert sent["server_port"] == 9999
+        assert sent["name"] == "e2e-测试"
+        assert sent["protocol"] == "TCP"
+        assert sent["sni"] == "ssl.example.com"
+        assert sent["remote_addr"] == "10.0.0.0/8"
+        assert sent["upstream"]["nodes"] == {"127.0.0.1:9001": 100}
+        assert resp.json()["node"]["value"]["id"] == "edge-assigned-id"
+
+    async def test_unknown_fields_forwarded_untouched(self, async_authed_client, monkeypatch):
+        """编辑保全契约的边界守卫：后端不得吞掉 plugins / upstream.checks 等未知字段。"""
+        mock = self._patch(monkeypatch, "create_stream_route")
+        payload = {
+            "server_port": 9999,
+            "upstream": {
+                "nodes": {"127.0.0.1:9001": 100},
+                "type": "roundrobin",
+                "scheme": "tcp",
+                "pass_host": "node",
+                "checks": {"active": {"unhealthy": {}}, "passive": {}},
+            },
+            "plugins": {"log_syslog": {"disable": False}},
+        }
+
+        resp = await async_authed_client.post(self.BASE, json=payload)
+
+        assert resp.status_code == 200, resp.text
+        sent = mock.call_args.args[0]
+        assert set(sent.keys()) == set(payload.keys())
+        assert sent["plugins"] == {"log_syslog": {"disable": False}}
+        assert sent["upstream"]["checks"] == {"active": {"unhealthy": {}}, "passive": {}}
+        assert sent["upstream"]["pass_host"] == "node"
+
+    async def test_update_uses_path_id(self, async_authed_client, monkeypatch):
+        mock = self._patch(monkeypatch, "update_stream_route")
+
+        resp = await async_authed_client.put(
+            f"{self.BASE}/route-xyz", json={"server_port": 9999, "upstream": self.VALID_UPSTREAM}
+        )
+
+        assert resp.status_code == 200, resp.text
+        mock.assert_called_once()
+        assert mock.call_args.args[0] == "route-xyz"
+        assert mock.call_args.args[1]["server_port"] == 9999

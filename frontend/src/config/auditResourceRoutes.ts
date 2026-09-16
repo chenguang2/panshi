@@ -39,6 +39,7 @@ const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   autostart: '自启动',
   plugin_switch: '插件开关',
   edge_import: 'Edge 导入',
+  edge_stream_route: 'Edge 四层代理',
   audit_logs: '审计日志',
 }
 

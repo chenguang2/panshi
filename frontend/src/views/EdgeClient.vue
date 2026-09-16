@@ -353,6 +353,9 @@
       </a-tab-pane>
       <a-tab-pane key="streamRoutes" tab="四层代理">
         <div class="table-toolbar">
+          <button class="btn btn-primary stream-route-add-btn" @click="showStreamRouteModal('create')">
+            <PlusOutlined /> 添加四层代理
+          </button>
           <div class="search-input-wrap">
             <input v-model="streamRouteSearch" class="form-input" placeholder="搜索四层代理..." style="width: 200px" />
             <span class="search-icon">🔍</span>
@@ -408,6 +411,12 @@
               <template v-if="column.key === 'actions'">
                 <div class="node-actions-wrap">
                   <button class="btn btn-ghost btn-sm" @click="showStreamRouteJson(record)">JSON</button>
+                  <button
+                    class="btn btn-ghost btn-sm stream-route-edit-btn"
+                    @click="showStreamRouteModal('edit', record)"
+                  >
+                    编辑
+                  </button>
                   <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteStreamRoute(record)">
                     删除
                   </button>
@@ -703,6 +712,120 @@
       </div>
     </div>
 
+    <!-- 四层代理 添加/编辑 Modal（直连写节点：PUT 为全量替换，故编辑以原对象为基底合并） -->
+    <div class="modal-overlay" :style="{ display: streamRouteModalVisible ? 'flex' : 'none' }">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ streamRouteTitle }}</h2>
+          <button class="modal-close" @click="streamRouteModalVisible = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="stream-route-hint">
+            直连写入 Edge 节点，绕过平台同步流程；如需纳入平台管理，请在集群侧创建后发布。
+          </div>
+          <div class="form-group">
+            <label class="form-label">监听端口 *</label>
+            <input
+              v-model.number="streamRouteForm.server_port"
+              type="number"
+              class="form-input"
+              placeholder="如 8880"
+              style="width: 200px"
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">名称</label>
+            <input v-model="streamRouteForm.name" class="form-input" placeholder="四层代理名称（可留空）" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">协议</label>
+            <select v-model="streamRouteForm.protocol" class="form-input" style="width: 200px">
+              <option value="TCP">TCP</option>
+              <option value="UDP">UDP</option>
+            </select>
+            <div class="form-hint">TLS 由上游协议 tls 表达，不在此处选择</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">上游类型</label>
+            <select v-model="streamRouteForm.upstream.type" class="form-input" style="width: 200px">
+              <option value="roundrobin">roundrobin</option>
+              <option value="chash">chash</option>
+              <option value="ewma">ewma</option>
+              <option value="least_conn">least_conn</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">上游协议</label>
+            <select v-model="streamRouteForm.upstream.scheme" class="form-input" style="width: 200px">
+              <option value="tcp">tcp</option>
+              <option value="tls">tls</option>
+              <option value="udp">udp</option>
+            </select>
+          </div>
+          <template v-if="streamRouteIsChash">
+            <div class="form-group">
+              <label class="form-label">哈希位置</label>
+              <select v-model="streamRouteForm.upstream.hash_on" class="form-input" style="width: 200px">
+                <option value="vars">内置变量</option>
+                <option value="header">HTTP 请求头</option>
+                <option value="cookie">Cookie</option>
+                <option value="vars_combinations">自定义变量</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Key</label>
+              <input v-model="streamRouteForm.upstream.key" class="form-input" placeholder="remote_addr" />
+            </div>
+          </template>
+          <div class="form-group">
+            <label class="form-label">上游节点 *</label>
+            <div
+              v-for="(nodeItem, index) in streamRouteForm.upstream.nodes"
+              :key="index"
+              style="display: flex; gap: 8px; margin-bottom: 8px"
+            >
+              <input v-model="nodeItem.host" class="form-input" placeholder="127.0.0.1:8111" style="width: 220px" />
+              <input
+                v-model.number="nodeItem.weight"
+                type="number"
+                class="form-input"
+                placeholder="权重"
+                style="width: 100px"
+              />
+              <button class="btn btn-sm" style="color: var(--danger)" @click="removeStreamRouteNode(index)">
+                删除
+              </button>
+            </div>
+            <button class="btn btn-ghost" @click="addStreamRouteNode">+ 添加节点</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label">SNI</label>
+            <input v-model="streamRouteForm.sni" class="form-input" placeholder="TLS SNI（可留空）" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">remote_addr</label>
+            <input
+              v-model="streamRouteForm.remote_addr"
+              class="form-input"
+              placeholder="CIDR，如 10.0.0.0/8（可留空）"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" :disabled="streamRouteSubmitting" @click="streamRouteModalVisible = false">
+            取消
+          </button>
+          <button
+            class="btn btn-primary stream-route-submit-btn"
+            :disabled="streamRouteSubmitting"
+            @click="handleStreamRouteSubmit"
+          >
+            {{ streamRouteSubmitting ? '保存中…' : streamRouteModalMode === 'create' ? '创建' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 全局规则 Modal -->
     <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
@@ -840,6 +963,13 @@ import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import { useProgressModal } from '@/composables/useProgressModal'
 import {
+  buildStreamRoutePayload,
+  emptyStreamRouteForm,
+  formFromStreamRoute,
+  validateStreamRouteForm,
+  type StreamRouteForm,
+} from '@/utils/edgeStreamRoute'
+import {
   upstreamColumns,
   routeColumns,
   pluginMetadataColumns,
@@ -885,6 +1015,16 @@ const pluginMetadataList = ref<any[]>([])
 const pluginList = ref<any[]>([])
 const streamRoutes = ref<any[]>([])
 const reloadingPlugins = ref(false)
+
+/** 四层代理添加/编辑弹窗。Edge 的写入是全量替换，故编辑态保留原对象作为合并基底。 */
+const streamRouteModalVisible = ref(false)
+const streamRouteModalMode = ref<'create' | 'edit'>('create')
+const streamRouteEditingId = ref('')
+const streamRouteEditingBase = ref<unknown>(null)
+const streamRouteForm = reactive<StreamRouteForm>(emptyStreamRouteForm())
+const streamRouteSubmitting = ref(false)
+const streamRouteIsChash = computed(() => streamRouteForm.upstream.type === 'chash')
+const streamRouteTitle = computed(() => (streamRouteModalMode.value === 'create' ? '添加四层代理' : '编辑四层代理'))
 
 const upstreamSearch = ref('')
 const routeSearch = ref('')
@@ -1803,6 +1943,75 @@ const showStreamRouteJson = (record: any) => {
   jsonModalVisible.value = true
 }
 
+/** 后端 detail 可能是字符串或 FastAPI 校验错误数组 */
+function edgeErrText(error: unknown): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map((item) => (item as { msg?: string })?.msg || JSON.stringify(item)).join('；')
+  }
+  return (error as { message?: string })?.message || '未知错误'
+}
+
+const showStreamRouteModal = (mode: 'create' | 'edit', record?: any) => {
+  streamRouteModalMode.value = mode
+  if (mode === 'edit' && record?.value) {
+    streamRouteEditingId.value = record.value.id || record.key || ''
+    streamRouteEditingBase.value = record.value
+    Object.assign(streamRouteForm, formFromStreamRoute(record.value))
+  } else {
+    streamRouteEditingId.value = ''
+    streamRouteEditingBase.value = null
+    Object.assign(streamRouteForm, emptyStreamRouteForm())
+  }
+  streamRouteModalVisible.value = true
+}
+
+const addStreamRouteNode = () => {
+  streamRouteForm.upstream.nodes.push({ host: '', weight: 100 })
+}
+
+const removeStreamRouteNode = (index: number) => {
+  streamRouteForm.upstream.nodes.splice(index, 1)
+}
+
+const handleStreamRouteSubmit = async () => {
+  const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
+  if (!node) {
+    message.warning('请先选择或输入节点')
+    return
+  }
+  const [ip, port] = node.split(':')
+
+  const errors = validateStreamRouteForm(
+    streamRouteForm,
+    streamRoutes.value,
+    streamRouteModalMode.value === 'edit' ? streamRouteEditingId.value : undefined,
+  )
+  if (errors.length) {
+    message.warning(errors.join('；'))
+    return
+  }
+
+  streamRouteSubmitting.value = true
+  try {
+    const payload = buildStreamRoutePayload(streamRouteForm, streamRouteEditingBase.value ?? undefined)
+    if (streamRouteModalMode.value === 'create') {
+      await api.post(`/edge-client/nodes/${ip}/${port}/stream-routes`, payload)
+      message.success('四层代理创建成功')
+    } else {
+      await api.put(`/edge-client/nodes/${ip}/${port}/stream-routes/${streamRouteEditingId.value}`, payload)
+      message.success('四层代理已更新')
+    }
+    streamRouteModalVisible.value = false
+    await loadData()
+  } catch (error: any) {
+    message.error('保存失败: ' + edgeErrText(error))
+  } finally {
+    streamRouteSubmitting.value = false
+  }
+}
+
 const deleteStreamRoute = (record: any) => {
   const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
   if (!node) return
@@ -1914,6 +2123,18 @@ watch(selectedNode, async (_newNode) => {
 <style scoped>
 .edge-client {
   padding: 20px 24px;
+}
+
+/* ── 四层代理添加/编辑弹窗的作用域提示 ── */
+.stream-route-hint {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: oklch(56% 0.16 210 / 6%);
+  border-left: 3px solid oklch(56% 0.16 210 / 45%);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Filter bar (节点选择器) ── */

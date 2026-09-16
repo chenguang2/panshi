@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, Query
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Any
 
 from app.core.database import get_db
@@ -42,6 +42,41 @@ class UpstreamUpdate(BaseModel):
     key: str | None = None
     pass_host: str | None = None
     scheme: str | None = None
+
+
+class StreamRouteCreate(BaseModel):
+    """四层代理写载荷（Edge 直连）。
+
+    两个刻意的设计：
+
+    1. `extra="allow"`：Edge 侧写入是全量替换，载荷里会带表单不覆盖的字段
+       （`plugins`、`upstream.checks`、`upstream.pass_host` 等），模型不得吞掉它们；
+       配合 `model_dump(exclude_unset=True)` 可做到"校验必填项 + 其余原样透传"。
+    2. 必填项只有 `server_port` 与 `upstream.nodes`：实测 Edge 的创建接口**不做任何校验**
+       （空载荷 `{}` 也返回 200 并生成一条无端口、无上游的路由），所以平台侧必须立住
+       这两条底线，否则会往节点里塞无效路由。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    server_port: int = Field(ge=1, le=65535)
+    upstream: dict[str, Any] = Field(...)
+    name: str | None = None
+    protocol: str | None = None
+    sni: str | None = None
+    remote_addr: str | None = None
+
+    @field_validator("upstream")
+    @classmethod
+    def _require_nodes(cls, v: dict[str, Any]) -> dict[str, Any]:
+        nodes = v.get("nodes")
+        if not isinstance(nodes, dict) or not nodes:
+            raise ValueError("upstream.nodes 至少需要一个节点")
+        return v
+
+
+class StreamRouteUpdate(StreamRouteCreate):
+    """更新载荷：Edge 的 PUT 为全量替换，故必填项与创建一致。"""
 
 
 class RouteCreate(BaseModel):
@@ -519,10 +554,14 @@ async def get_stream_route(ip: str, port: int, route_id: str, db: AsyncSession =
 
 
 @router.post("/nodes/{ip}/{port}/stream-routes")
-async def create_stream_route(ip: str, port: int, data: dict, db: AsyncSession = Depends(get_db)):
+async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: AsyncSession = Depends(get_db)):
+    """在 Edge 节点上创建 Stream 路由（集合创建，id 由 Edge 分配）。
+
+    `StreamRouteCreate` 负责把无效载荷挡在平台侧——Edge 不做校验（见模型 docstring）。
+    """
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.create_stream_route(data)
+        result = client.create_stream_route(data.model_dump(exclude_unset=True))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -531,10 +570,11 @@ async def create_stream_route(ip: str, port: int, data: dict, db: AsyncSession =
 
 
 @router.put("/nodes/{ip}/{port}/stream-routes/{route_id}")
-async def update_stream_route(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRouteUpdate, db: AsyncSession = Depends(get_db)):
+    """更新 Edge 节点上的 Stream 路由（PUT 全量替换，路径 id 为准）。"""
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.update_stream_route(route_id, data)
+        result = client.update_stream_route(route_id, data.model_dump(exclude_unset=True))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")

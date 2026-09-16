@@ -58,6 +58,10 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/database/history/cleanup-preview?keep_last=10"),
     ("post", "/api/v1/database/history/cleanup"),
     ("delete", "/api/v1/database/history/1"),
+    # Edge 直连四层代理写入（2026-09-16，edge_nodes 权限）
+    ("post", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes"),
+    ("put", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes/some-id"),
+    ("delete", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes/some-id"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

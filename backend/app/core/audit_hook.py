@@ -165,6 +165,10 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     # Edge 导入 / 全局四层代理
     ("POST", "/api/v1/edge-import/execute"): ("edge_import", "execute", False),
     ("DELETE", "/api/v1/stream-proxies"): ("stream_proxy", "batch_delete", True),
+    # Edge 直连：四层代理写操作（词汇推断会落到 edge_node_*，语义错误，故显式映射）
+    ("POST", "/api/v1/edge-client/nodes/{ip}/{port}/stream-routes"): ("edge_stream_route", "create", False),
+    ("PUT", "/api/v1/edge-client/nodes/{ip}/{port}/stream-routes/{route_id}"): ("edge_stream_route", "update", False),
+    ("DELETE", "/api/v1/edge-client/nodes/{ip}/{port}/stream-routes/{route_id}"): ("edge_stream_route", "delete", False),
     # 集群发布（全量）
     ("POST", "/api/v1/clusters/{cluster_id}/dns-proxies/{proxy_id}/publish"): ("dns_proxy", "publish", False),
 }

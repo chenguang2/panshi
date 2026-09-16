@@ -25,6 +25,14 @@ describe('auditActionLabel 新命名（resource_verb）', () => {
   it('db_migration_log_delete → 数据库迁移历史 删除', () => {
     expect(auditActionLabel('db_migration_log_delete')).toBe('数据库迁移历史 删除')
   })
+
+  it('edge_stream_route_create → Edge 四层代理 创建', () => {
+    expect(auditActionLabel('edge_stream_route_create')).toBe('Edge 四层代理 创建')
+  })
+
+  it('edge_stream_route_delete → Edge 四层代理 删除', () => {
+    expect(auditActionLabel('edge_stream_route_delete')).toBe('Edge 四层代理 删除')
+  })
 })
 
 describe('auditActionLabel 旧命名（verb_resource，历史存量行）', () => {
