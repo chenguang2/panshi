@@ -140,3 +140,27 @@
 > 差异成因：那 3 页因本地 `padding` 带 `!important` 保留了源码里写的 16px，其余 4 页被 AntDV `middle` 覆盖为 8px；收敛后 7 页统一为 **8px**（多数派实际渲染值）。若偏好更宽松的单元格，把全局值改成 `12px 16px` 即可（一行）。
 
 **回归**：`vue-tsc -b` 通过；全量 844 项（4 个并行抖动：RouteList/StreamProxyList/UpstreamList/ClusterRoutes，隔离复跑 **32/32 通过**）；`npm run build` ✓。
+
+### 6.3 分隔线统一 + Ansible 清单改用 B 派风格（2026-09-16 第二轮）
+
+用户决策：① 行分隔线两派不一致（A 无 / B 有）→ 统一；② Ansible 主机清单采用 **B 派风格**。
+
+**① 分隔线统一为「有」**（方向依据：A 派**源码本来就在每页写了** `td { border-bottom: 1px solid var(--border) }`，只是被 AntDV 覆盖成无；B 派一直有 → 取"有"）
+- 全局 `style.css`：`td` 增 `border-bottom: 1px solid var(--border) !important`，并加 `tr:last-child > td { border-bottom: none !important }` 避免末行与外壳边框叠成双线
+- B 派 5 处（数据库管理 · 连接列表/迁移历史、ClickHouse 配置、Edge 数据导入、集群统管）同步为 1px 分隔 + 恢复末行例外
+
+**② Ansible 清单 → B 派风格**：全局新增变体类 `.table-container-brand`（品牌底色 + 2px 主色下框），Ansible 的两个表格外壳追加该类即可，**无需复制样式**。
+
+**③ 顺带统一 B 派内部**：其表头下框此前 3 处 `1px var(--border)`、2 处 `2px accent` 混用 → 全部统一为 **2px 主色**（与品牌标识定义一致）。
+
+**验证（Playwright 实测）**
+
+| 页面 | 表头底色 | 表头下框 | 中间行 | 末行 |
+|---|---|---|---|---|
+| A·上游管理 / A·路由管理 | 近白 `oklch(97% .005 250)` | 1px `var(--border)` | **1px** | **0px** |
+| B·数据库管理 / B·ClickHouse / B·仪表盘 | 品牌 `oklch(56% .16 210 / 10%)` | **2px 主色** | **1px** | **0px** |
+| Ansible 清单 | 品牌 | **2px 主色** | **1px** | **0px** |
+
+**回归**：`npm run build` ✓（构建是唯一能捕获模板表达式错误的闸门）；`vue-tsc -b` 通过；全量 844 项（2 个并行抖动：useClusterUtils/ClusterRoutes，隔离复跑 **18/18 通过**）。
+
+> 本轮同时修复了一处**已推送的构建破坏**：commit `9f194dd` 的 pre-commit prettier 把 `RouteList.vue` 内联多语句处理器重排成无分号多行，导致 rolldown 解析失败（`vue-tsc` 不报）。已按约定 #25 抽成 `selectMethod()` 函数（commit `103ce11`）。

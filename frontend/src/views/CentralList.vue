@@ -2037,23 +2037,34 @@ onMounted(async () => {
 :deep(.node-table) .ant-table {
   background: transparent !important;
 }
+/* 表头：保留品牌色底 + 主色下框（页面标识，沿用 --p-* 令牌），其余机械属性对齐列表页契约 */
 :deep(.node-table) .ant-table-thead > tr > th {
   background: var(--p-color-primary-bg) !important;
   border-bottom: 2px solid var(--p-color-primary) !important;
   color: var(--p-text-primary) !important;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+:deep(.node-table) .ant-table-thead > tr > th::before {
+  display: none !important;
 }
 :deep(.node-table) .ant-table-tbody > tr > td {
   background: transparent !important;
-  border-bottom: 1px solid var(--p-border-divider) !important;
+  border-bottom: 1px solid var(--border) !important;
   color: var(--p-text-secondary);
-}
-:deep(.node-table) .ant-table-tbody > tr:hover > td {
-  background: var(--p-bg-hover) !important;
+  font-size: 13px;
+  padding: 12px 8px;
+  white-space: nowrap;
 }
 :deep(.node-table) .ant-table-tbody > tr:last-child > td {
   border-bottom: none !important;
+}
+:deep(.node-table) .ant-table-tbody > tr:hover > td {
+  background: var(--p-bg-hover) !important;
 }
 :deep(.node-table) .ant-empty-description {
   color: var(--p-text-disabled) !important;

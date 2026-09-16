@@ -1052,27 +1052,30 @@ defineExpose({
 .connection-table :deep(.ant-table) {
   background: transparent;
 }
+/* 表头/行：保留品牌色底（配置类页面标识），其余机械属性对齐列表页契约（style.css） */
 .connection-table :deep(.ant-table-thead > tr > th) {
   background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--accent);
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 8px 14px;
+  letter-spacing: 0.05em;
+  padding: 12px 8px;
+  white-space: nowrap;
 }
 .connection-table :deep(.ant-table-thead > tr > th::before) {
   display: none !important;
 }
 .connection-table :deep(.ant-table-tbody > tr > td) {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border) !important;
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
 }
 .connection-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none;
+  border-bottom: none !important;
 }
 .connection-table :deep(.ant-table-tbody > tr:hover > td) {
   background: var(--bg);
@@ -1428,23 +1431,27 @@ defineExpose({
 }
 .migration-history-table :deep(.ant-table-thead > tr > th) {
   background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--accent);
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 8px 14px;
+  letter-spacing: 0.05em;
+  padding: 12px 8px;
+  white-space: nowrap;
 }
 .migration-history-table :deep(.ant-table-thead > tr > th::before) {
   display: none !important;
 }
 .migration-history-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px;
+  padding: 12px 8px;
   font-size: 13px;
   white-space: nowrap;
   background: transparent !important;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border) !important;
+}
+.migration-history-table :deep(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none !important;
 }
 .migration-history-table :deep(.ant-table-tbody > tr:hover > td) {
   background: oklch(97% 0.005 250 / 60%) !important;

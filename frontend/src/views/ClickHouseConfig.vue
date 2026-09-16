@@ -1,6 +1,9 @@
 <template>
   <div class="clickhouse-config">
-    <PageHeader title="ClickHouse 配置" description="管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。">
+    <PageHeader
+      title="ClickHouse 配置"
+      description="管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。"
+    >
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 新建连接</button>
       </template>
@@ -18,7 +21,9 @@
                 <a-tag color="blue">ClickHouse</a-tag>
                 <span class="name">{{ activeConnection.name }}</span>
               </div>
-              <div class="active-address">{{ activeConnection.host }}:{{ activeConnection.port }}/{{ activeConnection.database }}</div>
+              <div class="active-address">
+                {{ activeConnection.host }}:{{ activeConnection.port }}/{{ activeConnection.database }}
+              </div>
             </div>
           </template>
           <a-empty v-else description="未配置活动连接" />
@@ -63,7 +68,9 @@
                   :class="record.is_active ? 'btn-secondary' : 'btn-primary'"
                   :disabled="record.is_active"
                   @click="handleActivate(record)"
-                >设为当前</button>
+                >
+                  设为当前
+                </button>
                 <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
                 <button
                   class="btn btn-danger btn-sm"
@@ -423,25 +430,27 @@ onMounted(load)
 }
 .connection-table :deep(.ant-table-thead > tr > th) {
   background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 2px solid var(--accent);
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 8px 14px;
+  letter-spacing: 0.05em;
+  padding: 12px 8px;
+  white-space: nowrap;
 }
 .connection-table :deep(.ant-table-thead > tr > th::before) {
   display: none !important;
 }
 .connection-table :deep(.ant-table-tbody > tr > td) {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border) !important;
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
 }
 .connection-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none;
+  border-bottom: none !important;
 }
 .connection-table :deep(.ant-table-tbody > tr:hover > td) {
   background: var(--bg);

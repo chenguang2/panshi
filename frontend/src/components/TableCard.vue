@@ -61,15 +61,17 @@ defineOptions({ inheritAttrs: false })
   background: transparent !important;
 }
 
+/* 表头：保留品牌色底（仪表盘/配置类标识），其余机械属性对齐列表页契约（style.css） */
 :deep(.ant-table-thead > tr > th) {
   background: oklch(56% 0.16 210 / 10%) !important;
-  border-bottom: 1px solid var(--border) !important;
+  border-bottom: 2px solid var(--accent) !important;
   color: var(--muted) !important;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 8px 14px !important;
+  letter-spacing: 0.05em;
+  padding: 12px 8px !important;
+  white-space: nowrap;
 }
 
 :deep(.ant-table-thead > tr > th::before) {
@@ -77,12 +79,12 @@ defineOptions({ inheritAttrs: false })
 }
 
 :deep(.ant-table-tbody > tr > td) {
-  padding: 10px 14px !important;
+  padding: 12px 8px !important;
   border-bottom: 1px solid var(--border) !important;
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
 }
-
 :deep(.ant-table-tbody > tr:last-child > td) {
   border-bottom: none !important;
 }

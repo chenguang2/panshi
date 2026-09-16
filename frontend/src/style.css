@@ -252,10 +252,21 @@ body {
   font-size: 13px;
   white-space: nowrap;
   background: transparent !important;
-  border-bottom: none;
+  /* 行分隔线：全站统一为"有分隔线"。A 派源码本来就这么写（此前被 AntDV 覆盖成无），
+     B 派一直有；2026-09-16 统一为有，末行由下一条规则去掉以免与外壳边框叠成双线。 */
+  border-bottom: 1px solid var(--border) !important;
+}
+.table-container .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
 }
 .table-container .ant-table-tbody > tr:hover > td {
   background: oklch(97% 0.005 250 / 60%) !important;
+}
+/* 品牌色表头变体：配置类 / 仪表盘 / Ansible 清单等页面的既定标识。
+    用法：在 .table-container 上追加 table-container-brand 类。 */
+.table-container.table-container-brand .ant-table-thead > tr > th {
+  background: oklch(56% 0.16 210 / 10%) !important;
+  border-bottom: 2px solid var(--accent) !important;
 }
 /* 分页脚注：与表格外壳连成一体（原先在 7 个页面里各复制了一份，2026-09-16 收敛） */
 .table-container .ant-table-pagination {

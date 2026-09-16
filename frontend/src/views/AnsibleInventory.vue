@@ -69,7 +69,7 @@
               <span class="card-title">组级默认凭据</span>
               <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
             </div>
-            <div class="table-container">
+            <div class="table-container table-container-brand">
               <a-table :data-source="groupCredRows" :pagination="false" size="middle" row-key="group">
                 <a-table-column title="组" data-index="group" key="group" width="200" />
                 <a-table-column title="SSH 用户" key="user" width="320">
@@ -106,7 +106,7 @@
             >
             <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
           </div>
-          <div class="table-container">
+          <div class="table-container table-container-brand">
             <a-table
               :data-source="rows"
               :row-key="rowKeyOf"
