@@ -119,6 +119,15 @@ class TestRenderInventory:
         assert "        172.31.46.178:\n" in text
         assert ": null" not in text
 
+    def test_empty_vars_omits_vars_section(self):
+        """空 vars 不渲染 vars: 段——前端「删除组级 vars」依赖此语义。"""
+        from app.services.inventory_service import parse_inventory, render_inventory
+
+        text = render_inventory([{"ip": "10.0.0.1"}], {})
+
+        assert "vars:" not in text
+        assert parse_inventory(text)["vars"] == {}
+
 
 class TestValidateStructure:
     def test_valid_document_passes(self):

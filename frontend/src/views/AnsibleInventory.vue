@@ -90,8 +90,23 @@
                 <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
               </div>
             </div>
-            <a-table :data-source="groupCredRows" :pagination="false" size="middle" row-key="group">
-              <a-table-column title="组" data-index="group" key="group" width="200" />
+            <a-table
+              :data-source="groupCredRows"
+              :pagination="false"
+              size="middle"
+              row-key="node"
+              :expanded-row-keys="groupExpandedKeys"
+              @expanded-rows-change="onGroupExpandedChange"
+              :expand-icon="renderGroupExpandIcon"
+            >
+              <template #expandedRowRender>
+                <AnsibleAdvancedFields :values="baseVars" @change="setGroupAdvanced" />
+              </template>
+              <a-table-column title="字段" key="node" width="200">
+                <template #default="{ record }">
+                  <span class="mono">{{ record.node }}</span>
+                </template>
+              </a-table-column>
               <a-table-column title="SSH 用户" key="user" width="320">
                 <template #default>
                   <a-input
@@ -110,6 +125,21 @@
                     allow-clear
                     @change="markDirty"
                   />
+                </template>
+              </a-table-column>
+              <a-table-column title="操作" key="action" width="130" align="right">
+                <template #default>
+                  <a-space :size="2">
+                    <a-tooltip :title="groupAdvancedHint">
+                      <a-button type="text" size="small" @click="toggleGroupExpand">
+                        高级
+                        <span v-if="groupAdvancedMarked" class="orange-dot" />
+                      </a-button>
+                    </a-tooltip>
+                    <a-button type="text" danger size="small" :disabled="groupVarsEmpty" @click="deleteGroupVars">
+                      删除
+                    </a-button>
+                  </a-space>
                 </template>
               </a-table-column>
             </a-table>
@@ -137,74 +167,7 @@
               :expand-icon="renderExpandIcon"
             >
               <template #expandedRowRender="{ record }">
-                <div class="advanced-grid">
-                  <div v-for="def in ADVANCED_FIELDS" :key="def.key" class="advanced-field">
-                    <label class="advanced-label">
-                      {{ def.label }}
-                      <a-tooltip v-if="def.hint" :title="def.hint"><span class="hint-mark">?</span></a-tooltip>
-                      <a-popover v-if="def.helpRef" trigger="click" placement="bottom" overlay-class="ssh-help-popover">
-                        <template #content>
-                          <div style="max-height: 360px; overflow: auto; min-width: 360px">
-                            <div style="font-weight: 600; margin-bottom: 8px">常用参数速查</div>
-                            <table style="width: 100%; font-size: 12px; border-collapse: collapse">
-                              <tr style="background: #fafafa">
-                                <td style="padding: 4px 8px; font-weight: 600">参数</td>
-                                <td style="padding: 4px 8px">含义</td>
-                              </tr>
-                              <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom: 1px solid #f0f0f0">
-                                <td
-                                  style="padding: 4px 8px; font-family: monospace; white-space: nowrap; cursor: pointer"
-                                  :title="'点击复制：' + r.param"
-                                  @click="copyText(r.param)"
-                                >
-                                  {{ r.param }}
-                                </td>
-                                <td style="padding: 4px 8px">{{ r.desc }}</td>
-                              </tr>
-                            </table>
-                          </div>
-                        </template>
-                        <span class="hint-mark" style="cursor: pointer">📋</span>
-                      </a-popover>
-                    </label>
-                    <a-input-number
-                      v-if="def.type === 'number'"
-                      v-model:value="record[def.key]"
-                      style="width: 100%"
-                      :min="1"
-                      :max="65535"
-                      placeholder="未设置"
-                      @change="markDirty"
-                    />
-                    <a-switch v-else-if="def.type === 'switch'" v-model:checked="record[def.key]" @change="markDirty" />
-                    <a-auto-complete
-                      v-else-if="def.type === 'select'"
-                      :value="asString(record[def.key])"
-                      :options="def.options?.map((o) => ({ value: o }))"
-                      style="width: 100%"
-                      placeholder="留空继承默认"
-                      allow-clear
-                      @change="(v: string) => setAdvanced(record, def.key, v)"
-                    />
-                    <a-input-password
-                      v-else-if="def.type === 'password'"
-                      :value="asString(record[def.key])"
-                      :placeholder="def.placeholder || '未设置'"
-                      :disabled="def.key === 'ansible_become_pass' && !record.ansible_become"
-                      allow-clear
-                      autocomplete="new-password"
-                      @change="(e: Event) => setAdvanced(record, def.key, (e.target as HTMLInputElement).value)"
-                    />
-                    <a-input
-                      v-else
-                      :value="asString(record[def.key])"
-                      :placeholder="def.placeholder || '未设置'"
-                      :disabled="def.key === 'ansible_become_user' && !record.ansible_become"
-                      allow-clear
-                      @change="(e: Event) => setAdvanced(record, def.key, (e.target as HTMLInputElement).value)"
-                    />
-                  </div>
-                </div>
+                <AnsibleAdvancedFields :values="record" @change="(key, value) => setAdvanced(record, key, value)" />
               </template>
               <a-table-column title="IP" key="ip" width="230">
                 <template #default="{ record, index }">
@@ -332,6 +295,7 @@ import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import AnsibleAdvancedFields from '@/components/AnsibleAdvancedFields.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import { getInventory, parseInventory, renderInventory, saveInventory } from '@/api/ansibleInventory'
 import type { InventoryHostEntry, InventorySavePayload } from '@/api/ansibleInventory'
@@ -359,8 +323,11 @@ const rows = ref<InventoryHostEntry[]>([])
 const baseVars = ref<Record<string, unknown>>({})
 const groupUser = ref('')
 const groupPass = ref('')
-/** 组级默认凭据以表格呈现（与下方主机列表同款外壳），组名固定为 edge_cluster */
-const groupCredRows = [{ group: 'edge_cluster' }]
+/**
+ * 组级默认凭据以表格呈现（与下方主机列表同款外壳）。
+ * 该行代表 all.children.edge_cluster.vars 段本身（组固定为 edge_cluster，故行内容即 vars）。
+ */
+const groupCredRows = [{ node: 'vars' }]
 const sourceDraft = ref('')
 const sourceSynced = ref('') // 最近一次程序化写入编辑器的文本，用于区分用户输入
 const unknownKeys = ref<string[]>([])
@@ -403,10 +370,9 @@ function toggleExpand(record: object): void {
 
 /**
  * 展开列自定义图标：设置图标 ⚙（替代易误读为"新增 IP"的默认 + 号）。
- * 常显品牌色 + Tooltip 提示 + hover 高亮；展开时旋转。
+ * 常显品牌色 + Tooltip 提示 + hover 高亮；展开时旋转。主机行与组级行共用。
  */
-function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
-  const hasAdvanced = rowHasAdvanced(props.record as InventoryHostEntry)
+function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => void): VNode {
   return h(
     Tooltip,
     {
@@ -417,18 +383,18 @@ function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
         h(
           'span',
           {
-            class: 'adv-expand-icon' + (props.expanded ? ' expanded' : ''),
+            class: 'adv-expand-icon' + (expanded ? ' expanded' : ''),
             role: 'button',
             tabindex: 0,
             'aria-label': '高级连接变量',
             onClick: (e: Event) => {
               e.stopPropagation()
-              toggleExpand(props.record)
+              toggle()
             },
             onKeydown: (e: KeyboardEvent) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                toggleExpand(props.record)
+                toggle()
               }
             },
           },
@@ -438,23 +404,84 @@ function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
   )
 }
 
+function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
+  return buildExpandIcon(props.expanded, rowHasAdvanced(props.record as InventoryHostEntry), () =>
+    toggleExpand(props.record),
+  )
+}
+
 function onExpandedChange(keys: (number | string)[]): void {
   expandedKeys.value = keys.map(Number)
 }
 
-function asString(value: unknown): string {
-  if (value === undefined || value === null) return ''
-  return typeof value === 'string' ? value : String(value)
-}
-
+/** 主机行高级字段写回：清空即删除该键（与后端"空串=删除键"口径一致，避免落库 null 被拒）。 */
 function setAdvanced(record: InventoryHostEntry, key: string, value: unknown): void {
-  record[key] = value
+  if (value === '' || value === undefined || value === null) delete record[key]
+  else record[key] = value
   markDirty()
 }
 
-/** 复制参数到剪贴板（浏览器 API）。 */
-function copyText(text: string): void {
-  navigator.clipboard?.writeText(text).then(() => message.success('已复制'))
+// ── 组级行（edge_cluster.vars）展开的高级连接变量 ────────────────────
+/** 组级行键：该表恒为一行，行内容即 vars 段本身 */
+const GROUP_ROW_KEY = 'vars'
+const groupExpandedKeys = ref<string[]>([])
+
+function groupHasAdvanced(): boolean {
+  return ADVANCED_FIELDS.some((f) => {
+    const v = baseVars.value[f.key]
+    return v !== undefined && v !== null && v !== ''
+  })
+}
+
+/** 组级高级字段写回（同主机行为：清空即删除键，其余键原样保留）。 */
+function setGroupAdvanced(key: string, value: unknown): void {
+  if (value === '' || value === undefined || value === null) delete baseVars.value[key]
+  else baseVars.value[key] = value
+  markDirty()
+}
+
+function toggleGroupExpand(): void {
+  groupExpandedKeys.value = groupExpandedKeys.value.includes(GROUP_ROW_KEY) ? [] : [GROUP_ROW_KEY]
+}
+
+function onGroupExpandedChange(keys: (number | string)[]): void {
+  groupExpandedKeys.value = keys.map(String)
+}
+
+function renderGroupExpandIcon(props: { expanded: boolean }): VNode {
+  return buildExpandIcon(props.expanded, groupHasAdvanced(), toggleGroupExpand)
+}
+
+/** 高级按钮提示：已配置 > 仅源码可维护的其余 vars 键 > 未配置 */
+const groupAdvancedHint = computed(() => {
+  if (groupHasAdvanced()) return '已配置组级高级连接变量'
+  if (extraVars.value.length) return '仅源码模式可维护：' + extraVars.value.join('、')
+  return '组级高级连接变量'
+})
+
+/** 高级按钮橙色角标：有高级变量或有仅源码可维护的键时提示 */
+const groupAdvancedMarked = computed(() => groupHasAdvanced() || extraVars.value.length > 0)
+
+/** vars 是否已空（凭据与高级变量都无值）——空时「删除」无对象可删 */
+const groupVarsEmpty = computed(() => Object.keys(buildVars()).length === 0)
+
+/** 删除组级 vars 段：清空凭据与高级变量，保存后 YAML 中不再有 vars: 段 */
+function deleteGroupVars(): void {
+  showOverlayModal({
+    title: '删除组级 vars？',
+    content:
+      '将清空 edge_cluster.vars（组级默认凭据与组级高级连接变量）。保存后清单中不再有 vars 段，各主机需自带凭据，未配置凭据的主机将无法被连接。',
+    okText: '删除',
+    okDanger: true,
+    cancelText: '取消',
+    onOk: () => {
+      baseVars.value = {}
+      groupUser.value = ''
+      groupPass.value = ''
+      groupExpandedKeys.value = []
+      markDirty()
+    },
+  })
 }
 
 /** 保存前逐行校验高级字段，返回错误信息列表（空数组=通过）。 */
@@ -466,6 +493,16 @@ function validateRowsAdvanced(): string[] {
       if (err) errors.push(`第 ${idx + 1} 行（${row.ip || '未填 IP'}）：${err}`)
     }
   })
+  return errors
+}
+
+/** 保存前校验组级高级字段（与主机行同口径）。 */
+function validateGroupAdvanced(): string[] {
+  const errors: string[] = []
+  for (const def of ADVANCED_FIELDS) {
+    const err = validateAdvancedField(def.key, baseVars.value[def.key])
+    if (err) errors.push(`组级变量 ${def.key}：${err}`)
+  }
   return errors
 }
 
@@ -608,6 +645,11 @@ async function save(): Promise<void> {
     const advancedErrors = validateRowsAdvanced()
     if (advancedErrors.length) {
       message.warning(advancedErrors.join('；'))
+      return
+    }
+    const groupErrors = validateGroupAdvanced()
+    if (groupErrors.length) {
+      message.warning(groupErrors.join('；'))
       return
     }
     const assembled = assembleHosts(rows.value)
@@ -888,33 +930,7 @@ onUnmounted(() => {
   color: #1677ff;
 }
 
-.advanced-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px 16px;
-  padding: 4px 8px;
-}
-.advanced-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.advanced-label {
-  font-size: 12px;
-  color: var(--text-secondary, #888);
-}
-.hint-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: 4px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  font-size: 10px;
-  cursor: help;
-}
+/* 高级连接变量栅格样式随组件迁至 components/AnsibleAdvancedFields.vue */
 
 .error-pre {
   margin: 0;

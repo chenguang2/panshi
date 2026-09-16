@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ADVANCED_FIELDS,
   apiDetail,
   applyGroupCreds,
   assembleHosts,
@@ -69,15 +70,17 @@ describe('unknownKeysOf / extraVarKeys', () => {
     expect(extraVarKeys({ ansible_ssh_user: 'u', ansible_ssh_pass: 'p', http_proxy: 'x' })).toEqual(['http_proxy'])
     expect(extraVarKeys({})).toEqual([])
   })
+
+  it('extraVarKeys 不再列出表格视图可维护的高级连接变量键', () => {
+    // 组级行展开的「高级」现在可编辑 ADVANCED_FIELDS 全部字段，脚注不应再声称只能在源码模式维护
+    expect(ADVANCED_FIELDS.every((f) => extraVarKeys({ [f.key]: 'v' }).length === 0)).toBe(true)
+    expect(extraVarKeys({ ansible_port: 22, ansible_become: true, http_proxy: 'x' })).toEqual(['http_proxy'])
+  })
 })
 
 describe('applyGroupCreds', () => {
   it('有值覆盖、留空删除、其余键原样保留', () => {
-    const next = applyGroupCreds(
-      { ansible_ssh_user: 'old', ansible_ssh_pass: 'old', http_proxy: 'keep' },
-      'root',
-      '',
-    )
+    const next = applyGroupCreds({ ansible_ssh_user: 'old', ansible_ssh_pass: 'old', http_proxy: 'keep' }, 'root', '')
     expect(next).toEqual({ ansible_ssh_user: 'root', http_proxy: 'keep' })
   })
 
@@ -109,7 +112,6 @@ describe('apiDetail', () => {
     expect(apiDetail(null, '加载失败')).toBe('加载失败')
   })
 })
-
 
 describe('KNOWN_HOST_KEYS / unknownKeysOf（高级字段升级）', () => {
   it('常用连接变量不再视为未知键', () => {
@@ -187,10 +189,7 @@ describe('parseBulkHosts（批量导入解析）', () => {
   it('跳过空行与 # 整行注释（含缩进）', () => {
     const res = parseBulkHosts('\n10.0.0.1 root\n   # 这是注释\n#全角顶格注释\n   \n10.0.0.2\n')
     expect(res.errors).toEqual([])
-    expect(res.entries).toEqual([
-      { ip: '10.0.0.1', ansible_ssh_user: 'root' },
-      { ip: '10.0.0.2' },
-    ])
+    expect(res.entries).toEqual([{ ip: '10.0.0.1', ansible_ssh_user: 'root' }, { ip: '10.0.0.2' }])
   })
 
   it('行尾 # 注释：丢弃其后内容', () => {
@@ -220,10 +219,7 @@ describe('parseBulkHosts（批量导入解析）', () => {
   it('IP 不符合主机键口径的行报错（与后端一致的宽松形态校验）', () => {
     const res = parseBulkHosts('10.0.0.1 root\n-bad ip! x\n999.999.999.999')
     expect(res.errors).toEqual([{ line: 2, reason: expect.stringContaining('IP') }])
-    expect(res.entries).toEqual([
-      { ip: '10.0.0.1', ansible_ssh_user: 'root' },
-      { ip: '999.999.999.999' },
-    ])
+    expect(res.entries).toEqual([{ ip: '10.0.0.1', ansible_ssh_user: 'root' }, { ip: '999.999.999.999' }])
   })
 
   it('文本内部重复 IP：后者整体覆盖前者并计数', () => {
@@ -236,16 +232,9 @@ describe('parseBulkHosts（批量导入解析）', () => {
 describe('mergeBulkEntries（批量导入合并）', () => {
   it('新 IP 追加到末尾，保持条目出现顺序', () => {
     const rows: InventoryHostEntry[] = [{ ip: '10.0.0.1' }]
-    const res = mergeBulkEntries(rows, [
-      { ip: '10.0.0.2', ansible_ssh_user: 'root' },
-      { ip: '10.0.0.3' },
-    ])
+    const res = mergeBulkEntries(rows, [{ ip: '10.0.0.2', ansible_ssh_user: 'root' }, { ip: '10.0.0.3' }])
     expect(res.overwrittenCount).toBe(0)
-    expect(res.rows).toEqual([
-      { ip: '10.0.0.1' },
-      { ip: '10.0.0.2', ansible_ssh_user: 'root' },
-      { ip: '10.0.0.3' },
-    ])
+    expect(res.rows).toEqual([{ ip: '10.0.0.1' }, { ip: '10.0.0.2', ansible_ssh_user: 'root' }, { ip: '10.0.0.3' }])
   })
 
   it('同 IP 仅覆盖粘贴中提供的字段，保留未提及凭据与高级/未知键', () => {
@@ -253,9 +242,7 @@ describe('mergeBulkEntries（批量导入合并）', () => {
       { ip: '10.0.0.1', ansible_ssh_user: 'old', ansible_ssh_pass: 'oldpass', become: true, custom_key: 'val' },
     ]
     // 仅提供 user，不提供 pass → pass 应保留
-    const res = mergeBulkEntries(rows, [
-      { ip: '10.0.0.1', ansible_ssh_user: 'new' },
-    ])
+    const res = mergeBulkEntries(rows, [{ ip: '10.0.0.1', ansible_ssh_user: 'new' }])
     expect(res.overwrittenCount).toBe(1)
     expect(res.rows[0]).toEqual({
       ip: '10.0.0.1',

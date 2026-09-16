@@ -177,9 +177,14 @@ export function unknownKeysOf(entry: InventoryHostEntry): string[] {
   return Object.keys(entry).filter((k) => !(KNOWN_HOST_KEYS as readonly string[]).includes(k))
 }
 
-/** vars 中除组级默认凭据外的其他键（仅源码模式可维护）。 */
+/**
+ * vars 中表格视图维护不到的其余键（仅源码模式可维护）。
+ *
+ * 排除两组已可维护的键：组级默认凭据（专属列）与高级连接变量（组级行展开的「高级」）。
+ */
 export function extraVarKeys(vars: Record<string, unknown>): string[] {
-  return Object.keys(vars).filter((k) => !(CRED_KEYS as readonly string[]).includes(k))
+  const tableEditable = new Set<string>([...CRED_KEYS, ...ADVANCED_FIELDS.map((f) => f.key)])
+  return Object.keys(vars).filter((k) => !tableEditable.has(k))
 }
 
 /** 凭据字段安全转字符串用于输入框展示（null/undefined → 空串）。 */
