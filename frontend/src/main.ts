@@ -6,6 +6,7 @@ import 'ant-design-vue/dist/reset.css'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import App from './App.vue'
+import { useFeaturesStore } from './stores/features'
 import './style.css'
 import './styles/theme.css'
 
@@ -24,7 +25,9 @@ async function bootstrap() {
 
   // Load feature configuration with retry — never guess defaults.
   // The /login route is always available regardless.
-  const { useFeaturesStore } = await import('@/stores/features')
+  // 静态导入（而非 await import）：router/AppSidebar 等已静态导入该 store，
+  // 动态导入无法分包（rolldown INEFFECTIVE_DYNAMIC_IMPORT 告警），且会掩盖
+  // 真实的模块求值顺序。
   const featuresStore = useFeaturesStore()
   while (true) {
     try {
