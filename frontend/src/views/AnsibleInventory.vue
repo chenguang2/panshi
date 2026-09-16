@@ -1,28 +1,47 @@
 <template>
-  <div class="ai-page">
+  <div class="inventory-page">
     <PageHeader
       title="Ansible 主机清单"
       description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启"
     >
       <template #actions>
         <a-tag v-if="dirty" color="warning" class="dirty-tag">有未保存修改</a-tag>
-        <a-radio-group :value="viewMode" button-style="solid" size="small" :disabled="loading" @change="onViewChange">
-          <a-radio-button value="table">表格视图</a-radio-button>
-          <a-radio-button value="source">源码视图</a-radio-button>
-        </a-radio-group>
-        <a-tooltip title="放弃本地修改，重新从服务器加载">
-          <a-button :loading="loading" :disabled="switching || saving" @click="reloadClicked">刷新</a-button>
-        </a-tooltip>
-        <a-button type="primary" :loading="saving" :disabled="!dirty || loading || switching" @click="save">
-          保存生效
-        </a-button>
+        <div class="view-toggle">
+          <button
+            class="btn btn-sm"
+            :class="viewMode === 'table' ? 'btn-primary' : 'btn-secondary'"
+            :disabled="loading || switching"
+            @click="setView('table')"
+          >
+            表格视图
+          </button>
+          <button
+            class="btn btn-sm"
+            :class="viewMode === 'source' ? 'btn-primary' : 'btn-secondary'"
+            :disabled="loading || switching"
+            @click="setView('source')"
+          >
+            源码视图
+          </button>
+        </div>
+        <button
+          class="btn btn-secondary"
+          title="放弃本地修改，重新从服务器加载"
+          :disabled="loading || switching || saving"
+          @click="reloadClicked"
+        >
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
+        <button class="btn btn-primary" :disabled="!dirty || loading || switching" @click="save">
+          {{ saving ? '保存中…' : '保存生效' }}
+        </button>
       </template>
     </PageHeader>
 
     <a-spin :spinning="loading || switching" tip="正在与服务器同步...">
-      <div class="ai-body">
+      <div class="inventory-body">
         <!-- 清单文件解析失败提示（文件存在但无法解析时展示真实原因） -->
-        <a-alert v-if="loadErrors.length" type="error" show-icon class="stack-alert">
+        <a-alert v-if="loadErrors.length" type="error" show-icon>
           <template #message>清单文件解析失败，主机列表无法加载</template>
           <template #description>
             <pre class="error-pre">{{ loadErrors.join('\n') }}</pre>
@@ -33,7 +52,7 @@
         </a-alert>
 
         <!-- 未录入平台的 IP 联动提醒条 -->
-        <a-alert v-if="unmanagedIps.length" type="warning" show-icon class="stack-alert">
+        <a-alert v-if="unmanagedIps.length" type="warning" show-icon>
           <template #message> 以下 {{ unmanagedIps.length }} 个 IP 存在于主机清单，但尚未录入节点管理 </template>
           <template #description>
             <div class="alert-desc-row">
@@ -53,7 +72,6 @@
             type="info"
             show-icon
             closable
-            class="stack-alert"
             @close="showUnknownHint = false"
           >
             <template #message>
@@ -64,49 +82,50 @@
             </template>
           </a-alert>
 
-          <div class="group-section">
-            <div class="card-title-row group-toolbar">
-              <span class="card-title">组级默认凭据</span>
-              <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
+          <!-- 卡片外壳：card-header（全局）+ 全局 table-container 表格，与数据库管理页同款 -->
+          <div class="table-container table-container-brand">
+            <div class="card-header">
+              <div class="card-heading">
+                <h3>组级默认凭据</h3>
+                <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
+              </div>
             </div>
-            <div class="table-container table-container-brand">
-              <a-table :data-source="groupCredRows" :pagination="false" size="middle" row-key="group">
-                <a-table-column title="组" data-index="group" key="group" width="200" />
-                <a-table-column title="SSH 用户" key="user" width="320">
-                  <template #default>
-                    <a-input
-                      v-model:value="groupUser"
-                      placeholder="例如 root（留空则主机需自带凭据）"
-                      allow-clear
-                      @change="markDirty"
-                    />
-                  </template>
-                </a-table-column>
-                <a-table-column title="SSH 密码（明文）" key="pass" width="320">
-                  <template #default>
-                    <a-input
-                      v-model:value="groupPass"
-                      placeholder="留空则主机需自带凭据"
-                      allow-clear
-                      @change="markDirty"
-                    />
-                  </template>
-                </a-table-column>
-              </a-table>
-            </div>
+            <a-table :data-source="groupCredRows" :pagination="false" size="middle" row-key="group">
+              <a-table-column title="组" data-index="group" key="group" width="200" />
+              <a-table-column title="SSH 用户" key="user" width="320">
+                <template #default>
+                  <a-input
+                    v-model:value="groupUser"
+                    placeholder="例如 root（留空则主机需自带凭据）"
+                    allow-clear
+                    @change="markDirty"
+                  />
+                </template>
+              </a-table-column>
+              <a-table-column title="SSH 密码（明文）" key="pass" width="320">
+                <template #default>
+                  <a-input
+                    v-model:value="groupPass"
+                    placeholder="留空则主机需自带凭据"
+                    allow-clear
+                    @change="markDirty"
+                  />
+                </template>
+              </a-table-column>
+            </a-table>
             <div v-if="extraVars.length" class="group-extra-vars">
               vars 还包含其他键：<span class="mono">{{ extraVars.join('、') }}</span
               >（仅源码模式可维护，保存时原样保留）
             </div>
           </div>
 
-          <div class="card-title-row table-toolbar">
-            <span class="card-title"
-              >主机列表<span class="count-pill">{{ rows.length }}</span></span
-            >
-            <a-button v-if="viewMode === 'table'" size="small" @click="openBulkImport">批量导入</a-button>
-          </div>
           <div class="table-container table-container-brand">
+            <div class="card-header">
+              <h3>
+                主机列表<span class="count-pill">{{ rows.length }}</span>
+              </h3>
+              <button class="btn btn-secondary btn-sm" @click="openBulkImport">批量导入</button>
+            </div>
             <a-table
               :data-source="rows"
               :row-key="rowKeyOf"
@@ -245,21 +264,31 @@
 
         <!-- ── 源码视图 ── -->
         <template v-else>
-          <a-alert v-if="sourceErrors.length" type="error" show-icon class="stack-alert">
+          <a-alert v-if="sourceErrors.length" type="error" show-icon>
             <template #message>源码无法解析，已阻止切换到表格视图，请先修正以下错误</template>
             <template #description>
               <pre class="error-pre">{{ sourceErrors.join('\n') }}</pre>
             </template>
           </a-alert>
-          <div class="source-hint">
-            源码为 inventory 文件原文（保留注释与全部自定义字段）；YAML 校验由服务端完成，保存前自动备份当前文件。
+          <div class="card">
+            <div class="card-header">
+              <div class="card-heading">
+                <h3>清单源码</h3>
+                <span class="card-subtitle"
+                  >源码为 inventory 文件原文（保留注释与全部自定义字段）；YAML
+                  校验由服务端完成，保存前自动备份当前文件。</span
+                >
+              </div>
+            </div>
+            <div class="card-body">
+              <MonacoEditor
+                :model-value="sourceDraft"
+                language="yaml"
+                height="calc(100vh - 440px)"
+                @update:model-value="onEditorInput"
+              />
+            </div>
           </div>
-          <MonacoEditor
-            :model-value="sourceDraft"
-            language="yaml"
-            height="calc(100vh - 380px)"
-            @update:model-value="onEditorInput"
-          />
         </template>
       </div>
     </a-spin>
@@ -302,7 +331,6 @@ import { SettingOutlined } from '@ant-design/icons-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
 import { onBeforeRouteLeave } from 'vue-router'
-import type { RadioChangeEvent } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import { getInventory, parseInventory, renderInventory, saveInventory } from '@/api/ansibleInventory'
@@ -522,9 +550,9 @@ function reloadClicked(): void {
 
 // ── 双模式切换（表格 ⇄ 源码，转换由服务端承担） ──────────────────────
 
-function onViewChange(e: RadioChangeEvent): void {
-  const target = e.target.value
-  if (target === 'table' || target === 'source') void switchTo(target)
+/** 页头视图切换按钮（原生 .btn，与数据库管理页按钮语言一致） */
+function setView(target: ViewMode): void {
+  void switchTo(target)
 }
 
 async function switchTo(target: ViewMode): Promise<void> {
@@ -746,21 +774,27 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.ai-page {
-  padding: 20px 24px;
+/* 页面骨架与数据库管理页一致：外层由 .app-content 提供 20/24 内边距，此处只负责纵向节奏 */
+.inventory-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.ai-body {
+.inventory-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   min-height: 320px;
 }
 
-.dirty-tag {
-  margin-right: 4px;
-  cursor: default;
+.view-toggle {
+  display: flex;
+  gap: 6px;
 }
 
-.stack-alert {
-  margin-bottom: 16px;
+.dirty-tag {
+  cursor: default;
 }
 
 .alert-desc-row {
@@ -774,53 +808,42 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.card-title-row {
+/* 卡片标题行（.card-header 由全局提供；本页仅需在标题右侧挂说明文字） */
+.card-heading {
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.table-toolbar {
-  margin-bottom: 12px;
-}
-
-/* 表格样式改由全局 .table-container 提供（见 src/style.css，含展开行 nowrap 排除） */
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
+  min-width: 0;
 }
 
 .card-subtitle {
   font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
 }
 
+/* 计数徽标：口径对齐数据库管理页「历史迁移记录」的条数徽标 */
 .count-pill {
   display: inline-block;
-  min-width: 20px;
-  text-align: center;
   margin-left: 8px;
-  padding: 0 6px;
+  padding: 3px 9px;
   font-size: 11px;
   font-weight: 600;
-  line-height: 18px;
-  border-radius: 9px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  line-height: 1;
+  border-radius: 999px;
   color: var(--muted);
+  background: oklch(56% 0.16 210 / 8%);
+  border: 1px solid oklch(56% 0.16 210 / 18%);
   vertical-align: 1px;
 }
 
-/* 组级默认凭据表单 */
-/* 组级凭据区块：与下方主机列表拉开间距（此前表格底部到下一个标题的间隙为 0） */
-.group-section {
-  margin-bottom: 28px;
-}
+/* 表格与表头样式由全局 .table-container / .card-header 提供（见 src/style.css，
+   含展开行 nowrap 排除），本页不再复制一份。 */
+
 .group-extra-vars {
-  margin-top: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--muted);
 }
@@ -891,12 +914,6 @@ onUnmounted(() => {
   border: 1px solid currentColor;
   font-size: 10px;
   cursor: help;
-}
-
-.source-hint {
-  font-size: 12px;
-  color: var(--muted);
-  margin-bottom: 8px;
 }
 
 .error-pre {
