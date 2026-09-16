@@ -13,10 +13,7 @@
         :key="m.value"
         class="filter-chip"
         :class="{ active: activeMethod === m.value }"
-        @click="
-          activeMethod = m.value
-          loadRoutes()
-        "
+        @click="selectMethod(m.value)"
         >{{ m.label }}</span
       >
     </div>
@@ -219,6 +216,14 @@ function onGroupChange() {
 
 const displayedRoutes = computed(() => routes.value)
 const activeMethod = ref('')
+
+/** 切换 Method 过滤并重新加载。
+ *  必须抽为函数：多语句写在模板内联属性里会被 prettier 重排成无分号的多行，
+ *  导致 rolldown/vite:vue 解析失败（构建红、vue-tsc 不报）——见约定 #25。 */
+function selectMethod(value: string) {
+  activeMethod.value = value
+  loadRoutes()
+}
 const publishFilter = ref('')
 const pluginFilter = ref('')
 const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
