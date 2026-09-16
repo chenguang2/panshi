@@ -31,19 +31,19 @@ const VIEWPORT = { width: 1600, height: 900 } // 统一视口
 const SHOTS = [
   { name: '00-01-login', path: '/login', preLogin: true },
   { name: '00-02-dashboard-empty', path: '/' },
-  { name: '00-03-db-management', path: '/database' },
+  { name: '00-03-db-management', path: '/database-management' },
   // 按章节补充：{ name: '02-01-cluster-list', path: '/clusters' },
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
 const browser = await chromium.launch()
-const context = await browser.newContext({ viewport: VIEWPORT })
-
-// 登录态复用：已有 storage state 则直接注入，否则登录一次并保存
-if (existsSync(STATE_FILE)) {
-  await context.addStorageState({ file: STATE_FILE })
-  console.log('已复用登录态:', STATE_FILE)
-}
+// 登录态复用：Playwright 只支持在 newContext 时注入 storageState
+const hasState = existsSync(STATE_FILE)
+const context = await browser.newContext({
+  viewport: VIEWPORT,
+  ...(hasState ? { storageState: STATE_FILE } : {}),
+})
+if (hasState) console.log('已复用登录态:', STATE_FILE)
 
 const page = await context.newPage()
 const needLogin = async () => {
