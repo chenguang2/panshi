@@ -268,35 +268,64 @@
             <a-button danger size="small" @click="handleCancelMigration"> 终止迁移 </a-button>
           </div>
         </div>
-        <div v-if="migrateResult" class="migrate-result">
-          <a-alert type="success" show-icon :message="migrateResult.message" />
-          <div v-if="migrateResult.tables?.length" class="migrate-table-detail">
-            <div class="next-steps-title">迁移详情：</div>
+        <!-- 迁移结果摘要条：完成后只占一行，明细收进抽屉（避免 22+ 张表明细把页面撑长） -->
+        <div v-if="migrateResult" class="migrate-result-bar">
+          <div class="result-main">
+            <span class="result-badge">✓</span>
+            <span class="result-text">{{ migrateResult.message }}</span>
+            <span class="result-meta">
+              {{ migrateResult.tables_migrated }} 张表<template v-if="migrateElapsed !== null">
+                · 耗时 {{ migrateElapsed }} 秒</template
+              ><template v-if="migrateResult.backup_path"> · 备份已保存</template>
+            </span>
+          </div>
+          <div class="result-actions">
+            <button class="btn btn-secondary btn-sm" @click="migrateDetailOpen = true">查看迁移详情</button>
+            <button v-if="migrateTargetConnection" class="btn btn-primary btn-sm" @click="openSwitchForMigrateTarget">
+              去切换数据库
+            </button>
+          </div>
+        </div>
+
+        <!-- 迁移详情抽屉：表明细在抽屉内滚动，不再撑长主页面 -->
+        <a-drawer v-model:open="migrateDetailOpen" title="迁移详情" placement="right" :width="760">
+          <a-descriptions :column="2" size="small" bordered class="migrate-desc">
+            <a-descriptions-item label="源数据库">{{ getConnectionName(migrateForm.sourceId) }}</a-descriptions-item>
+            <a-descriptions-item label="目标数据库">{{ migrateTargetName }}</a-descriptions-item>
+            <a-descriptions-item label="迁移表数">{{ migrateResult?.tables_migrated ?? '-' }}</a-descriptions-item>
+            <a-descriptions-item label="耗时">{{
+              migrateElapsed !== null ? migrateElapsed + ' 秒' : '-'
+            }}</a-descriptions-item>
+            <a-descriptions-item label="备份路径" :span="2">
+              <span class="backup-path">{{ migrateResult?.backup_path || '未生成备份' }}</span>
+            </a-descriptions-item>
+          </a-descriptions>
+
+          <div v-if="migrateResult?.tables?.length" class="migrate-table-detail">
+            <div class="next-steps-title">表明细（{{ migrateResult.tables.length }} 张，列表内滚动查看）</div>
             <a-table
               :data-source="migrateResult.tables"
               :columns="migrateTableColumns"
               row-key="name"
               :pagination="false"
+              :scroll="{ y: 320 }"
               size="small"
               class="migrate-detail-table"
             />
           </div>
-          <div v-if="migrateResult.backup_path" class="migrate-backup-info">
-            <a-tag color="green">备份已保存</a-tag>
-            <span class="backup-path">{{ migrateResult.backup_path }}</span>
-          </div>
+
           <div class="next-steps">
             <div class="next-steps-title">迁移成功，按以下步骤启用新数据库：</div>
             <ol class="next-steps-list">
               <li>
-                在上方「连接列表」中找到 <strong>{{ migrateTargetName }}</strong
+                在「连接列表」中找到 <strong>{{ migrateTargetName }}</strong
                 >，点击「设为当前」
               </li>
               <li>在确认弹窗中点击「确认切换」，然后手动重启后端服务生效</li>
               <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
             </ol>
           </div>
-        </div>
+        </a-drawer>
         <!-- 迁移历史 -->
         <div v-if="migrationHistory.length > 0" class="migration-history-section">
           <div class="history-header">
@@ -495,6 +524,11 @@ const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
 const migrating = ref(false)
 const migrateResult = ref<MigrateResult | null>(null)
+/** 迁移详情抽屉开关（完成后默认收起，避免页面被明细撑长） */
+const migrateDetailOpen = ref(false)
+/** 本次迁移的起始时间与耗时（仅前端计时；完成事件本身不含 duration） */
+const migrateStartedAt = ref<number | null>(null)
+const migrateElapsed = ref<number | null>(null)
 const migrationController = ref<AbortController | null>(null)
 
 // Running migration state
@@ -602,6 +636,14 @@ const migrationProgress = reactive({
 const migrateTargetName = computed(
   () => connections.value.find((c) => c.id === migrateForm.targetId)?.name || '目标数据库',
 )
+
+/** 本次迁移的目标连接对象（用于结果条上的「去切换数据库」一键操作） */
+const migrateTargetConnection = computed(() => connections.value.find((c) => c.id === migrateForm.targetId) || null)
+
+/** 直接复用既有切换确认弹窗，省掉"去连接列表里找目标 → 点设为当前"两步 */
+function openSwitchForMigrateTarget() {
+  if (migrateTargetConnection.value) openSwitchModal(migrateTargetConnection.value)
+}
 
 const migrateTableColumns = [
   { title: '表名', dataIndex: 'name', key: 'name' },
@@ -818,6 +860,9 @@ async function handleMigrate() {
   }
   migrating.value = true
   migrateResult.value = null
+  migrateDetailOpen.value = false
+  migrateStartedAt.value = Date.now()
+  migrateElapsed.value = null
   loadMigrationState()
 
   // Reset progress state
@@ -863,6 +908,9 @@ async function handleMigrate() {
         tables: data.tables,
         backup_path: data.backup_path ?? '',
       }
+      // 耗时仅用于摘要条/详情展示；后端完成事件不含 duration，故前端计时
+      migrateElapsed.value =
+        migrateStartedAt.value === null ? null : Math.round((Date.now() - migrateStartedAt.value) / 1000)
       message.success(`迁移完成，共迁移 ${data.tables_migrated} 张表`)
       getMigrationHistory()
       loadMigrationHistory()
@@ -1116,9 +1164,52 @@ defineExpose({
 .static-notice {
   margin-bottom: 16px;
 }
-.migrate-result {
+/* 迁移结果摘要条：完成后只占一行，明细在抽屉里 */
+.migrate-result-bar {
   margin-top: 16px;
-  max-width: 640px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid #b7eb8f;
+  border-radius: 6px;
+  background: #f6ffed;
+}
+.result-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #52c41a;
+  color: #fff;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.result-text {
+  font-size: 13px;
+  font-weight: 600;
+}
+.result-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.result-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.migrate-desc {
+  margin-bottom: 16px;
 }
 .next-steps {
   margin-top: 12px;
@@ -1171,13 +1262,6 @@ defineExpose({
 }
 .migrate-detail-table {
   margin-top: 6px;
-}
-.migrate-backup-info {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
 }
 .backup-path {
   color: var(--muted);

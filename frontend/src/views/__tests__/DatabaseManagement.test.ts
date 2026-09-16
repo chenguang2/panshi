@@ -92,6 +92,10 @@ const antStubs = {
   'a-popconfirm': { template: '<div class="ant-popconfirm"><slot /></div>' },
   'a-tooltip': { template: '<div class="ant-tooltip"><slot /></div>' },
   'a-empty': { template: '<div class="ant-empty"><slot /></div>' },
+  // 抽屉按 AntDV 语义惰性渲染：关闭时不渲染内容（保证"明细不默认铺在页面上"可被断言）
+  'a-drawer': { props: ['open'], template: '<div class="ant-drawer" v-if="open"><slot /></div>' },
+  'a-descriptions': { template: '<div class="ant-descriptions"><slot /></div>' },
+  'a-descriptions-item': { props: ['label'], template: '<div class="ant-desc-item"><slot /></div>' },
 }
 
 function conn(overrides: Record<string, any> = {}) {
@@ -238,6 +242,56 @@ describe('DatabaseManagement', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('迁移完成')
     expect(wrapper.text()).toContain('22')
+  })
+
+  it('迁移完成后只渲染紧凑结果条，明细按需在抽屉展开（页面不被撑长）', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
+      setTimeout(() => {
+        options.onComplete?.({
+          message: '迁移完成，共迁移 22 张表',
+          tables_migrated: 22,
+          tables: [
+            { name: 'sys_user', columns: 5, rows: 1 },
+            { name: 'sys_audit_log', columns: 8, rows: 120 },
+          ],
+          backup_path: '/tmp/migration_backup.zip',
+        })
+      }, 10)
+      return new AbortController()
+    })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.migrateForm.sourceId = 'conn_1'
+    vm.migrateForm.targetId = 'conn_2'
+    vm.migrateForm.confirmed_clear = true
+    await nextTick()
+    await wrapper.find('.migrate-btn').trigger('click')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await flushPromises()
+
+    // 结果以一行摘要条呈现（含表数与耗时）
+    expect(wrapper.find('.migrate-result-bar').exists()).toBe(true)
+    expect(wrapper.text()).toContain('22 张表')
+    expect(wrapper.text()).toContain('耗时')
+    // 明细不默认铺在主页面（这正是原先页面过长的原因）
+    expect(vm.migrateDetailOpen).toBe(false)
+    expect(wrapper.find('.migrate-detail-table').exists()).toBe(false)
+
+    // 点「查看迁移详情」才打开抽屉
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
+    expect(detailBtn).toBeTruthy()
+    await detailBtn!.trigger('click')
+    expect(vm.migrateDetailOpen).toBe(true)
+
+    // 「去切换数据库」复用既有切换确认弹窗（省掉去连接列表找目标的两步）
+    const switchBtn = wrapper.findAll('button').find((b) => b.text().includes('去切换数据库'))
+    expect(switchBtn).toBeTruthy()
+    await switchBtn!.trigger('click')
+    expect(vm.switchModal.open).toBe(true)
+    expect(vm.switchModal.connection?.id).toBe('conn_2')
   })
 
   it('add connection form validation requires a name', async () => {
