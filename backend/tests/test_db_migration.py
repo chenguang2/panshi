@@ -36,6 +36,31 @@ class TestDependencyOrder:
         assert "ps_cluster" not in db_migration.LOG_TABLES
 
 
+class TestTableKind:
+    """表类型判定：业务表 / 审计与导入日志 / 任务日志（前端据此分组展示）。"""
+
+    def test_audit_log_tables(self):
+        assert db_migration.table_kind("sys_audit_log") == "audit_log"
+        assert db_migration.table_kind("ps_import_log") == "audit_log"
+
+    def test_task_log_tables(self):
+        assert db_migration.table_kind("install_task") == "task_log"
+        assert db_migration.table_kind("install_task_node") == "task_log"
+
+    def test_business_tables(self):
+        assert db_migration.table_kind("sys_user") == "business"
+        assert db_migration.table_kind("ps_route") == "business"
+
+    def test_log_tables_is_union_of_both_log_kinds(self):
+        assert db_migration.LOG_TABLES == db_migration.AUDIT_LOG_TABLES | db_migration.TASK_LOG_TABLES
+        assert db_migration.AUDIT_LOG_TABLES.isdisjoint(db_migration.TASK_LOG_TABLES)
+
+    def test_every_migratable_table_has_a_kind(self):
+        kinds = {db_migration.table_kind(t) for t in db_migration.ALL_BUSINESS_TABLES}
+        assert kinds <= {"business", "audit_log", "task_log"}
+        assert kinds == {"business", "audit_log", "task_log"}
+
+
 class TestStateMachine:
     def test_valid_transitions(self):
         t = MigrationTask()

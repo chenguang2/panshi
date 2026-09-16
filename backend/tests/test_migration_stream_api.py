@@ -135,14 +135,16 @@ async def test_success_emits_complete_event_with_tables_and_backup(log_db_factor
     assert Path(complete["backup_path"]).exists()
     assert "migration_" in Path(complete["backup_path"]).name
 
-    # 日志表/非日志表须在明细中可区分（前端据此分组展示，让用户知道哪些是日志表）
-    assert all("is_log" in t for t in complete["tables"]), "每条表明细都必须带 is_log 标记"
+    # 表类型须在明细中可区分（前端据此分三组：业务表/审计与导入日志/任务日志）
+    assert all("kind" in t for t in complete["tables"]), "每条表明细都必须带 kind"
     by_name = {t["name"]: t for t in complete["tables"]}
-    assert by_name["sys_audit_log"]["is_log"] is True
-    assert by_name["ps_import_log"]["is_log"] is True
-    assert by_name["install_task"]["is_log"] is True
-    assert by_name["sys_user"]["is_log"] is False
-    assert by_name["ps_route"]["is_log"] is False
+    assert by_name["sys_user"]["kind"] == "business"
+    assert by_name["ps_route"]["kind"] == "business"
+    assert by_name["sys_audit_log"]["kind"] == "audit_log"
+    assert by_name["ps_import_log"]["kind"] == "audit_log"
+    assert by_name["install_task"]["kind"] == "task_log"
+    assert by_name["install_task_node"]["kind"] == "task_log"
+    assert all("is_log" not in t for t in complete["tables"]), "is_log 已由 kind 取代，不应留双字段"
 
     # finalizer 是独立 asyncio 任务：有界等待其完成清锁与写成功日志
     for _ in range(100):

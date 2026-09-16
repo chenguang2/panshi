@@ -304,10 +304,11 @@ describe('DatabaseManagement', () => {
           message: '迁移完成，共迁移 22 张表',
           tables_migrated: 22,
           tables: [
-            { name: 'sys_user', columns: 5, rows: 1, is_log: false },
-            { name: 'ps_route', columns: 6, rows: 3, is_log: false },
-            { name: 'sys_audit_log', columns: 8, rows: 120, is_log: true },
-            { name: 'install_task', columns: 7, rows: 4, is_log: true },
+            { name: 'sys_user', columns: 5, rows: 1, kind: 'business' },
+            { name: 'ps_route', columns: 6, rows: 3, kind: 'business' },
+            { name: 'sys_audit_log', columns: 8, rows: 120, kind: 'audit_log' },
+            { name: 'ps_import_log', columns: 3, rows: 5, kind: 'audit_log' },
+            { name: 'install_task', columns: 7, rows: 4, kind: 'task_log' },
           ],
           backup_path: '/tmp/migration_backup.zip',
         })
@@ -324,17 +325,19 @@ describe('DatabaseManagement', () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
-    // 分组数据来源：后端的 is_log 标记
+    // 分组数据来源：后端的 kind 标记（business / audit_log / task_log）
     expect(vm.businessTables.map((t: any) => t.name)).toEqual(['sys_user', 'ps_route'])
-    expect(vm.logTables.map((t: any) => t.name)).toEqual(['sys_audit_log', 'install_task'])
+    expect(vm.auditLogTables.map((t: any) => t.name)).toEqual(['sys_audit_log', 'ps_import_log'])
+    expect(vm.taskLogTables.map((t: any) => t.name)).toEqual(['install_task'])
 
-    // 抽屉里两个分组各自成表
+    // 抽屉里三个分组各自成表
     const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
     await detailBtn!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('业务表（2）')
-    expect(wrapper.text()).toContain('日志表（2）')
-    expect(wrapper.findAll('.migrate-detail-table').length).toBe(2)
+    expect(wrapper.text()).toContain('审计与导入日志（2）')
+    expect(wrapper.text()).toContain('任务日志（1）')
+    expect(wrapper.findAll('.migrate-detail-table').length).toBe(3)
   })
 
   it('未勾选「包含日志数据」时不显示日志表分组，并给出提示', async () => {
@@ -346,7 +349,7 @@ describe('DatabaseManagement', () => {
         options.onComplete?.({
           message: '迁移完成，共迁移 18 张表',
           tables_migrated: 18,
-          tables: [{ name: 'sys_user', columns: 5, rows: 1, is_log: false }],
+          tables: [{ name: 'sys_user', columns: 5, rows: 1, kind: 'business' }],
           backup_path: '',
         })
       }, 10)
@@ -363,12 +366,13 @@ describe('DatabaseManagement', () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
-    expect(vm.logTables.length).toBe(0)
+    expect(vm.auditLogTables.length + vm.taskLogTables.length).toBe(0)
     const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
     await detailBtn!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('业务表（1）')
-    expect(wrapper.text()).not.toContain('日志表（0）')
+    expect(wrapper.text()).not.toContain('审计与导入日志（0）')
+    expect(wrapper.text()).not.toContain('任务日志（0）')
     expect(wrapper.text()).toContain('本次迁移未包含日志表')
   })
 

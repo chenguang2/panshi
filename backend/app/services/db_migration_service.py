@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base, build_sync_engine_for, is_sqlite
 from app.core.db_config import ConnectionConfig
-from app.core.db_migration import CLEAR_ORDER, DEPENDENCY_ORDER, LOG_TABLES, tables_for_migration
+from app.core.db_migration import CLEAR_ORDER, DEPENDENCY_ORDER, table_kind, tables_for_migration
 from app.models.db_migration import DbMigrationLog
 
 logger = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ def _copy_table(src_engine, dst_engine, table: str, progress_cb=None) -> dict:
     """
     if not inspect(src_engine).has_table(table):
         logger.info("Migrate skip %s: not present in source", table)
-        return {"name": table, "columns": 0, "rows": 0, "skipped": True, "is_log": table in LOG_TABLES}
+        return {"name": table, "columns": 0, "rows": 0, "skipped": True, "kind": table_kind(table)}
     src_meta = MetaData()
     src_table = Table(table, src_meta, autoload_with=src_engine)
     # 目标侧以物理反射为准：目标库可能是旧 schema（如 legacy SQLite 缺新列），
@@ -225,7 +225,7 @@ def _copy_table(src_engine, dst_engine, table: str, progress_cb=None) -> dict:
         dst_table = dst_model  # 表尚未物化（create_all 将按模型建表），模型即物理
     else:
         logger.warning("迁移跳过 %s：目标库无此表且无模型定义", table)
-        return {"name": table, "columns": 0, "rows": 0, "skipped": True, "is_log": table in LOG_TABLES}
+        return {"name": table, "columns": 0, "rows": 0, "skipped": True, "kind": table_kind(table)}
     phys_cols = set(dst_table.columns.keys())
     cols = [c for c in src_table.columns.keys() if c in phys_cols]
     # 反射插入不触发模型自动默认值，需对「源缺列但物理目标有列」显式注入 Python 默认值
@@ -271,9 +271,9 @@ def _copy_table(src_engine, dst_engine, table: str, progress_cb=None) -> dict:
         "columns": len(src_table.columns.keys()),
         "rows": copied,
         "skipped": False,
-        # 日志表标记（sys_audit_log/ps_import_log/install_task/install_task_node）；
-        # 前端据此在迁移结果里把日志表与非日志表分开显示，见 db-migration-detail-result spec
-        "is_log": table in LOG_TABLES,
+        # 表类型（business / audit_log / task_log，见 app/core/db_migration.table_kind）；
+        # 前端据此在迁移结果里分三组展示，见 db-migration-detail-result spec
+        "kind": table_kind(table),
     }
 
 

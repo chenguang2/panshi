@@ -54,8 +54,8 @@ export interface MigrateTableDetail {
   name: string
   columns: number
   rows: number
-  /** 是否为日志表（sys_audit_log/ps_import_log/install_task/install_task_node），由后端标记 */
-  is_log?: boolean
+  /** 表类型（后端 app/core/db_migration.table_kind）：业务表 / 审计与导入日志 / 任务日志 */
+  kind?: 'business' | 'audit_log' | 'task_log'
 }
 
 export interface MigrateResult {

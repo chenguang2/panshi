@@ -40,9 +40,19 @@ CLEAR_ORDER: list[tuple[str, ...]] = list(reversed(DEPENDENCY_ORDER))
 EXCLUDED_TABLES: frozenset[str] = frozenset({"ps_db_migration_log"})
 
 # Log/audit tables that may be skipped when "include logs" is unchecked.
-LOG_TABLES: frozenset[str] = frozenset(
-    {"sys_audit_log", "ps_import_log", "install_task", "install_task_node"}
-)
+# 细分两类（迁移结果页据此分三组：业务表 / 审计与导入日志 / 任务日志）：
+AUDIT_LOG_TABLES: frozenset[str] = frozenset({"sys_audit_log", "ps_import_log"})
+TASK_LOG_TABLES: frozenset[str] = frozenset({"install_task", "install_task_node"})
+LOG_TABLES: frozenset[str] = AUDIT_LOG_TABLES | TASK_LOG_TABLES
+
+
+def table_kind(table: str) -> str:
+    """表类型判定，供迁移结果分组展示：``business`` / ``audit_log`` / ``task_log``。"""
+    if table in AUDIT_LOG_TABLES:
+        return "audit_log"
+    if table in TASK_LOG_TABLES:
+        return "task_log"
+    return "business"
 
 # All business tables in dependency order (flat).
 ALL_BUSINESS_TABLES: list[str] = [t for group in DEPENDENCY_ORDER for t in group]

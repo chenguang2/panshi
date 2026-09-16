@@ -303,8 +303,8 @@
 
           <div v-if="migrateResult?.tables?.length" class="migrate-table-detail">
             <div class="next-steps-title">
-              表明细（共 {{ migrateResult.tables.length }} 张：业务表 {{ businessTables.length }} · 日志表
-              {{ logTables.length }}）
+              表明细（共 {{ migrateResult.tables.length }} 张：业务表 {{ businessTables.length }} · 审计与导入日志
+              {{ auditLogTables.length }} · 任务日志 {{ taskLogTables.length }}）
             </div>
             <div class="migrate-table-group">
               <div class="group-label">业务表（{{ businessTables.length }}）</div>
@@ -318,10 +318,10 @@
                 class="migrate-detail-table"
               />
             </div>
-            <div v-if="logTables.length" class="migrate-table-group">
-              <div class="group-label">日志表（{{ logTables.length }}）</div>
+            <div v-if="auditLogTables.length" class="migrate-table-group">
+              <div class="group-label">审计与导入日志（{{ auditLogTables.length }}）</div>
               <a-table
-                :data-source="logTables"
+                :data-source="auditLogTables"
                 :columns="migrateTableColumns"
                 row-key="name"
                 :pagination="false"
@@ -330,7 +330,19 @@
                 class="migrate-detail-table"
               />
             </div>
-            <div v-else class="migrate-log-hint">
+            <div v-if="taskLogTables.length" class="migrate-table-group">
+              <div class="group-label">任务日志（{{ taskLogTables.length }}）</div>
+              <a-table
+                :data-source="taskLogTables"
+                :columns="migrateTableColumns"
+                row-key="name"
+                :pagination="false"
+                :scroll="{ y: 200 }"
+                size="small"
+                class="migrate-detail-table"
+              />
+            </div>
+            <div v-if="!auditLogTables.length && !taskLogTables.length" class="migrate-log-hint">
               本次迁移未包含日志表（如需一并迁移日志数据，请勾选「包含日志数据」后重新执行）
             </div>
           </div>
@@ -672,9 +684,12 @@ const migrateTableColumns = [
   { title: '迁移行数', dataIndex: 'rows', key: 'rows' },
 ]
 
-/** 迁移明细按日志表分组（is_log 由后端标记），让用户一眼看出哪些是日志表 */
-const businessTables = computed(() => (migrateResult.value?.tables || []).filter((t) => !t.is_log))
-const logTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.is_log))
+/** 迁移明细按表类型分三组（kind 由后端标记），让用户分清业务表与两类日志表 */
+const businessTables = computed(() =>
+  (migrateResult.value?.tables || []).filter((t) => t.kind !== 'audit_log' && t.kind !== 'task_log'),
+)
+const auditLogTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.kind === 'audit_log'))
+const taskLogTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.kind === 'task_log'))
 
 interface ConnForm {
   type: 'sqlite' | 'postgres'
