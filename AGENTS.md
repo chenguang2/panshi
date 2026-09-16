@@ -167,6 +167,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 44. **安全策略已知局限（已接受残余风险）** — 命令逐行校验无法拦截 shell 间接执行（变量赋值 + `$cmd`、`eval`、`source`、函数定义）；由运维负责，文档已标注，勿当漏洞重复上报。
 45. **SSE 事件格式规格与实现待收敛** — 生产代码发 `data: {type: ...}` 单流事件，主规格 `openspec/specs/migration-progress-stream/spec.md` 描述 `event: progress/complete/error` 命名事件；分歧未收敛，改 SSE 前先确认是以实现为准还是同步修规格。
 46. **静态分析清理：工具只出候选，删除须逐项核验** — 工具链 `vulture app`（Python）/ `npx knip`（TS·Vue 未用文件与导出）/ `npx jscpd src ../backend/app`（重复块），均装自国内镜像。**已知系统性误报**（禁止据此删除）：vulture 对事件钩子签名参数（`before_flush(session, flush_context, instances)` 等）；knip 对 `scripts/*.mjs`（CLI 脚本，其中 `manual-screenshots.mjs` 是**现行手册截图产线**，直接写 `docs/user-manual/images/`）、`src/env.d.ts`、`import * as ns` 命名空间导入的模板层消费、双导出/再导出、间接 devDependencies。判定死代码的唯一依据 = **排除定义文件后全仓（含 `.vue` 模板与测试）引用数 0**；报告格式见 `docs/refactoring/static-analysis-2026-09-16.md`。
+47. **统计元素/用点禁止"精确匹配 grep"** — 模板里同名类常带附加类，如 `<div class="card group-card">`；`grep -c 'class="card"'` 只匹配精确串，会把它漏掉。2026-09-16 实测教训：据 `grep 'class="card"'` 判定"页面只有 1 处 .card 用点"后删除该页本地 `.card` 覆盖，导致另一处（组级凭据卡片）**静默失去内边距/外边距**并被用户发现。核对共享样式用点须用**前缀匹配**（`grep 'class="card'`）或 DOM/Playwright 实测元素数，改共享 CSS 前后都要按"真实用点全集"复核。
 
 ## 新增功能步骤
 
