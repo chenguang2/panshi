@@ -678,6 +678,7 @@ onUnmounted(() => {
   margin-left: 12px;
 }
 .sp-version-text {
+  white-space: nowrap;
   font-size: 11px;
   color: var(--muted);
   margin-top: 4px;

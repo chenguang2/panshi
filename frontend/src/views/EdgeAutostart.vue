@@ -7,17 +7,10 @@
     </PageHeader>
 
     <div class="toolbar">
-      <a-select
-        v-model:value="clusterFilter"
-        placeholder="全部集群"
-        style="width: 220px"
-        allow-clear
-        @change="loadNodes"
-      >
-        <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">
-          {{ c.display_name || c.name }}
-        </a-select-option>
-      </a-select>
+      <select v-model="clusterFilter" class="form-input" style="width: 220px" @change="loadNodes">
+        <option value="">全部集群</option>
+        <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+      </select>
       <a-button @click="loadNodes">刷新</a-button>
     </div>
 
@@ -166,7 +159,7 @@ import { listNodes } from '@/api/nodes'
 const clusters = ref<any[]>([])
 const nodes = ref<any[]>([])
 const loading = ref(false)
-const clusterFilter = ref<number | undefined>(undefined)
+const clusterFilter = ref<number | ''>('')
 const defaultRunUser = ref('')
 
 const actionModalVisible = ref(false)

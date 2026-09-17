@@ -645,6 +645,7 @@ onUnmounted(() => {
   margin-left: 12px;
 }
 .sr-version-text {
+  white-space: nowrap;
   font-size: 11px;
   color: var(--muted);
   margin-top: 4px;
