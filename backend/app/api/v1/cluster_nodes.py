@@ -280,7 +280,7 @@ async def create_nodes_batch(cluster_id: int, body: BatchCreateNodesRequest = Bo
 
 
 @router.put("/{cluster_id}/nodes/{node_id}", response_model=NodeResponse)
-async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db: AsyncSession = Depends(get_db)):
+async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db: AsyncSession = Depends(get_db), request: Request = None):
     result = await db.execute(select(Node).where(Node.id == node_id, Node.cluster_id == cluster_id))
     node = result.scalar_one_or_none()
     if not node:
@@ -299,7 +299,7 @@ async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db
 
 
 @router.delete("/{cluster_id}/nodes/{node_id}")
-async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db)):
+async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
     if not body.delete_db and not body.delete_edge:
         raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
 
