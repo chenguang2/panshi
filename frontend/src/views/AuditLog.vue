@@ -419,7 +419,6 @@ onMounted(async () => {
 <style scoped>
 .audit-log {
   min-height: 100px;
-  padding: 20px 24px;
 }
 
 .audit-filter-bar {

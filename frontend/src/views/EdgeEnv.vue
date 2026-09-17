@@ -671,9 +671,6 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 </script>
 
 <style scoped>
-.ee-page {
-  padding: 20px 24px;
-}
 .ee-toolbar {
   display: flex;
   align-items: center;

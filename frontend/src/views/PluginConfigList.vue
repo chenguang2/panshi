@@ -1,6 +1,9 @@
 <template>
   <div class="pc-page">
-    <PageHeader title="插件组" description="管理集群级的插件组配置。插件组是一组可复用的插件配置集合，可被多个路由引用。">
+    <PageHeader
+      title="插件组"
+      description="管理集群级的插件组配置。插件组是一组可复用的插件配置集合，可被多个路由引用。"
+    >
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加插件组</button>
       </template>
@@ -8,15 +11,15 @@
 
     <div class="pc-header-actions">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索插件组名称..." class="form-input" @input="onSearch">
+        <input v-model="searchText" type="text" placeholder="搜索插件组名称..." class="form-input" @input="onSearch" />
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadConfigs">
+      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadConfigs">
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
@@ -29,7 +32,12 @@
       <div class="pc-empty-text">暂无插件组</div>
     </div>
     <div v-else class="pc-grid">
-      <div v-for="pc in displayedConfigs" :key="pc.id" class="pc-card" :style="getCardBorderStyle(pc.cluster_group_name)">
+      <div
+        v-for="pc in displayedConfigs"
+        :key="pc.id"
+        class="pc-card"
+        :style="getCardBorderStyle(pc.cluster_group_name)"
+      >
         <div class="pc-card-topbar" :style="getGroupColorStyle(pc.cluster_group_name)">
           <span>{{ pc.cluster_name || '-' }}</span>
           <span v-if="pc.cluster_group_name" class="group-badge">{{ pc.cluster_group_name }}</span>
@@ -40,10 +48,14 @@
             <div v-if="pc.description" class="pc-card-desc">{{ pc.description }}</div>
           </div>
           <div class="pc-card-meta">
-            <span v-if="pc.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+            <span v-if="pc.current_version" class="badge badge-success"
+              ><span class="status-dot online"></span>已发布</span
+            >
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="pc-version-text">
-              <template v-if="pc.current_version"><PublishStatusTag :version="pc.current_version" :published-at="pc.published_at" /></template>
+              <template v-if="pc.current_version"
+                ><PublishStatusTag :version="pc.current_version" :published-at="pc.published_at"
+              /></template>
             </div>
           </div>
         </div>
@@ -54,21 +66,44 @@
         <div class="pc-card-actions">
           <button class="btn btn-ghost btn-sm pc-action-btn" @click="viewConfig(pc)">查看</button>
           <button class="btn btn-ghost btn-sm pc-action-btn" @click="editConfig(pc)">编辑</button>
-          <button class="btn btn-ghost btn-sm pc-action-btn" style="color:var(--danger);" @click="deleteConfig(pc)">删除</button>
-          <span style="flex:1"></span>
+          <button class="btn btn-ghost btn-sm pc-action-btn" style="color: var(--danger)" @click="deleteConfig(pc)">
+            删除
+          </button>
+          <span style="flex: 1"></span>
           <button class="btn btn-secondary btn-sm" @click="publishConfig(pc)">发布</button>
           <button class="btn btn-secondary btn-sm" @click="openVersionManagement(pc)">版本管理</button>
         </div>
       </div>
     </div>
 
-    <PluginEntityFormModal :visible="formVisible" :editing-config="editingConfig" :clusters="clusters" resource-type="plugin_config" @close="closeForm" @saved="onSaved" />
-    
+    <PluginEntityFormModal
+      :visible="formVisible"
+      :editing-config="editingConfig"
+      :clusters="clusters"
+      resource-type="plugin_config"
+      @close="closeForm"
+      @saved="onSaved"
+    />
+
     <PluginConfigViewDrawer v-model:visible="viewDrawerVisible" :config="viewingPc" />
 
-    <VersionManagementModal v-model:open="vmVisible" resource-type="plugin_config" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadConfigs" @published="loadConfigs" />
-    
-    <PublishConfirmModal v-model:visible="publishVisible" title="发布插件组" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
+    <VersionManagementModal
+      v-model:open="vmVisible"
+      resource-type="plugin_config"
+      :resource-id="vmId"
+      :cluster-id="vmClusterId"
+      :resource-name="vmName"
+      @version-change="loadConfigs"
+      @published="loadConfigs"
+    />
+
+    <PublishConfirmModal
+      v-model:visible="publishVisible"
+      title="发布插件组"
+      :cluster-id="publishClusterId"
+      @confirm="onPublishConfirm"
+      @cancel="publishVisible = false"
+    />
   </div>
 </template>
 
@@ -101,14 +136,14 @@ const clusterFilter = ref('')
 const groupFilter = ref('__all__')
 
 const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map(c => c.group_name || ''))
+  const names = new Set(clusters.value.map((c) => c.group_name || ''))
   return Array.from(names).filter(Boolean).sort()
 })
 
 const filteredClusters = computed(() => {
   if (groupFilter.value === '__all__') return clusters.value
-  if (groupFilter.value === '__ung__') return clusters.value.filter(c => !c.group_name)
-  return clusters.value.filter(c => c.group_name === groupFilter.value)
+  if (groupFilter.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
+  return clusters.value.filter((c) => c.group_name === groupFilter.value)
 })
 
 function onGroupChange() {
@@ -138,9 +173,10 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-
 function onSearch() {
-  onDebouncedSearch(() => { loadConfigs() })
+  onDebouncedSearch(() => {
+    loadConfigs()
+  })
 }
 
 async function loadConfigs() {
@@ -152,21 +188,38 @@ async function loadConfigs() {
     const res = await listPluginConfigs(params)
     configs.value = res.data.items || []
     totalCount.value = res.data.total || 0
-  } catch { message.error('加载插件组失败') }
-  finally { loading.value = false }
+  } catch {
+    message.error('加载插件组失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadClusters() {
   try {
     const res = await listClusters()
     clusters.value = res.data?.items || res.data || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
-function openCreateModal() { editingConfig.value = null; formVisible.value = true }
-function editConfig(pc: any) { editingConfig.value = pc; formVisible.value = true }
-function closeForm() { formVisible.value = false; editingConfig.value = null }
-function onSaved() { loadConfigs(); closeForm() }
+function openCreateModal() {
+  editingConfig.value = null
+  formVisible.value = true
+}
+function editConfig(pc: any) {
+  editingConfig.value = pc
+  formVisible.value = true
+}
+function closeForm() {
+  formVisible.value = false
+  editingConfig.value = null
+}
+function onSaved() {
+  loadConfigs()
+  closeForm()
+}
 
 function viewConfig(pc: any) {
   viewingPc.value = pc
@@ -178,7 +231,9 @@ async function deleteConfig(pc: any) {
   try {
     const res = await getClusterNodes(pc.cluster_id)
     nodes = res.data?.items || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   showDeleteConfirm({
     title: `确定要删除插件组 "${pc.name}" 吗？`,
@@ -218,40 +273,173 @@ async function onPublishConfirm(nodeIds: number[]) {
 }
 
 function openVersionManagement(pc: any) {
-  vmId.value = pc.id; vmClusterId.value = pc.cluster_id; vmName.value = pc.name; vmVisible.value = true
+  vmId.value = pc.id
+  vmClusterId.value = pc.cluster_id
+  vmName.value = pc.name
+  vmVisible.value = true
 }
 
-onMounted(() => { const clusterId = route.query.cluster_id as string | undefined; if (clusterId) clusterFilter.value = clusterId; loadClusters(); loadConfigs() })
+onMounted(() => {
+  const clusterId = route.query.cluster_id as string | undefined
+  if (clusterId) clusterFilter.value = clusterId
+  loadClusters()
+  loadConfigs()
+})
 
-onUnmounted(() => { cancelSearch() })
+onUnmounted(() => {
+  cancelSearch()
+})
 </script>
 
 <style scoped>
-.pc-page { padding: 20px 24px; }
-.pc-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
-.loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
-.pc-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
-.pc-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
-.pc-empty-text { font-size: 14px; color: var(--muted); }
-.pc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; }
-.pc-card:hover { box-shadow: var(--shadow-md); }
-.pc-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
-.pc-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
-.group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
-.pc-card-info { flex: 1; }
-.pc-card-name { font-size: 15px; font-weight: 600; }
-.pc-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
-.pc-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
-.pc-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
-.pc-card-plugins { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 20px; }
-.pc-plugin-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
-.pc-no-plugins { font-size: 11px; color: var(--muted); font-style: italic; }
-.pc-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
-.pc-action-btn { background: none !important; background-color: transparent !important; }
-.pc-action-btn:hover { background: var(--bg) !important; }
-.text-sm { font-size: 12px; }
-.text-muted { color: var(--muted); }
+.pc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: nowrap;
+}
+.loading-state {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.pc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+.pc-empty-icon {
+  font-size: 40px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+.pc-empty-text {
+  font-size: 14px;
+  color: var(--muted);
+}
+.pc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.pc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pc-card:hover {
+  box-shadow: var(--shadow-md);
+}
+.pc-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  padding: 12px 20px 0;
+}
+.pc-card-topbar {
+  padding: 4px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 8%);
+  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.group-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--badge-bg, oklch(50% 0.12 170 / 15%));
+  color: var(--badge-fg, oklch(45% 0.12 170));
+  border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%));
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.pc-card-info {
+  flex: 1;
+}
+.pc-card-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.pc-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+.pc-card-meta {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+.pc-version-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+.pc-card-plugins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 0 20px;
+}
+.pc-plugin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--accent);
+  border: 1px solid oklch(56% 0.16 210 / 20%);
+  font-family: var(--font-mono);
+}
+.pc-no-plugins {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+.pc-card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.pc-action-btn {
+  background: none !important;
+  background-color: transparent !important;
+}
+.pc-action-btn:hover {
+  background: var(--bg) !important;
+}
+.text-sm {
+  font-size: 12px;
+}
+.text-muted {
+  color: var(--muted);
+}
 .config-preview {
   font-size: 12px;
   white-space: pre-wrap;
@@ -264,6 +452,8 @@ onUnmounted(() => { cancelSearch() })
   font-family: var(--font-mono);
 }
 @media (max-width: 768px) {
-  .pc-grid { grid-template-columns: 1fr; }
+  .pc-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -456,9 +456,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.autostart-page {
-  padding: 20px 24px;
-}
 .toolbar {
   display: flex;
   gap: 12px;

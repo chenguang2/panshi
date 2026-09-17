@@ -456,9 +456,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.route-list {
-  padding: 20px 24px;
-}
 .route-filter-bar {
   display: flex;
   align-items: center;

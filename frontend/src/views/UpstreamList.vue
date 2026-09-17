@@ -368,9 +368,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.upstream-list {
-  padding: 20px 24px;
-}
 .upstream-filter-bar {
   display: flex;
   align-items: center;

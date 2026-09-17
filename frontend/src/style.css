@@ -265,7 +265,7 @@ body {
 /* 品牌色表头变体：配置类 / 仪表盘 / Ansible 清单等页面的既定标识。
     用法：在 .table-container 上追加 table-container-brand 类。 */
 .table-container.table-container-brand .ant-table-thead > tr > th {
-  background: oklch(56% 0.16 210 / 10%) !important;
+  background: var(--accent-bg) !important;
   border-bottom: 2px solid var(--accent) !important;
 }
 /* 分页脚注：与表格外壳连成一体（原先在 7 个页面里各复制了一份，2026-09-16 收敛） */
@@ -572,7 +572,7 @@ select.form-input {
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
-  background: oklch(56% 0.16 210 / 10%);
+  background: var(--accent-bg);
 }
 
 .modal-overlay .modal-header h2 {
@@ -630,7 +630,7 @@ select.form-input {
 .ant-modal.app-modal .ant-modal-header {
   /* !important：压过下方全局 `.ant-modal-header { background: var(--surface) !important }`
      白头部规则，恢复保真的品牌色染头部（仅作用于 AppModal） */
-  background: oklch(56% 0.16 210 / 10%) !important;
+  background: var(--accent-bg) !important;
   border-bottom: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 14px 20px;
@@ -794,7 +794,7 @@ select.form-input {
 .ant-modal-header {
   /* 全局统一：AntD 弹窗（EdgeImport/UserList/AnsibleInventory 等 a-modal）头部
      品牌色染，与 AppModal/.app-modal 及 modal-overlay 系保持一致 */
-  background: oklch(56% 0.16 210 / 10%) !important;
+  background: var(--accent-bg) !important;
   border-bottom: 1px solid var(--border) !important;
 }
 .ant-modal-title {

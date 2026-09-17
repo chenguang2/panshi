@@ -5,12 +5,15 @@
    =========================== */
 
 :root {
-  --bg:      oklch(97% 0.005 250);
+  --bg: oklch(97% 0.005 250);
   --surface: oklch(100% 0 0);
-  --fg:      oklch(20% 0.02 240);
-  --muted:   oklch(50% 0.018 240);
-  --border:  oklch(88% 0.008 240);
-  --accent:  oklch(56% 0.16 210);
+  --fg: oklch(20% 0.02 240);
+  --muted: oklch(50% 0.018 240);
+  --border: oklch(88% 0.008 240);
+  --accent: oklch(56% 0.16 210);
+  --accent-hover: oklch(50% 0.16 210);
+  --accent-active: oklch(45% 0.15 210);
+  --accent-bg: oklch(56% 0.16 210 / 10%);
 
   --sidebar-bg: oklch(18% 0.015 250);
   --sidebar-fg: oklch(80% 0.01 250);
@@ -18,13 +21,23 @@
   --sidebar-hover: oklch(28% 0.015 250);
 
   --success: oklch(55% 0.15 145);
+  --success-bg: oklch(55% 0.15 145 / 12%);
   --warning: oklch(65% 0.15 85);
-  --danger:  oklch(55% 0.18 28);
-  --info:    oklch(55% 0.12 240);
+  --warning-bg: oklch(65% 0.15 85 / 12%);
+  --danger: oklch(55% 0.18 28);
+  --danger-bg: oklch(55% 0.18 28 / 10%);
+  --info: oklch(55% 0.12 240);
+
+  /* 间距刻度（8px 基准，见 docs/design/ui-style-guide.md §1.3） */
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
 
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-body:    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
 
   --radius-sm: 4px;
   --radius-md: 6px;

@@ -1214,10 +1214,6 @@ function onEdgePackRebase(e: Event) {
 </script>
 
 <style scoped>
-.node-list {
-  padding: 20px 24px;
-}
-
 .node-filter-bar {
   display: flex;
   align-items: center;

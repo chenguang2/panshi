@@ -28,4 +28,22 @@ describe('theme.css design tokens', () => {
     expect(css).toContain('--shadow-md')
     expect(css).toContain('--shadow-lg')
   })
+
+  it('should declare accent interaction tokens', () => {
+    expect(css).toContain('--accent-hover')
+    expect(css).toContain('--accent-active')
+    expect(css).toContain('--accent-bg')
+  })
+
+  it('should declare functional background tokens', () => {
+    expect(css).toContain('--success-bg')
+    expect(css).toContain('--warning-bg')
+    expect(css).toContain('--danger-bg')
+  })
+
+  it('should declare spacing scale tokens', () => {
+    for (const t of ['--space-sm', '--space-md', '--space-lg', '--space-xl', '--space-2xl']) {
+      expect(css).toContain(t)
+    }
+  })
 })

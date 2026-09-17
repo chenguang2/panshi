@@ -3,28 +3,40 @@
     <PageHeader title="四层代理" description="管理 TCP/UDP/TLS 四层转发规则">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
-        <button class="btn btn-secondary" @click="toggleBatchMode">{{ batchMode ? '退出批量管理' : '批量管理' }}</button>
+        <button class="btn btn-secondary" @click="toggleBatchMode">
+          {{ batchMode ? '退出批量管理' : '批量管理' }}
+        </button>
       </template>
     </PageHeader>
 
     <div class="sp-header-actions">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索四层代理名称..." class="form-input" @input="onSearch">
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="搜索四层代理名称..."
+          class="form-input"
+          @input="onSearch"
+        />
         <span class="search-icon">&#128269;</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width:140px;flex-shrink:0;" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width:160px;flex-shrink:0;" @change="loadProxies">
+      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadProxies">
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
       <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
       <template v-if="batchMode">
-        <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">{{ allGroupSelected ? '取消全选分组' : '全选当前分组' }}</button>
-        <button class="link-btn" @click="toggleSelectAllFiltered">{{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}</button>
+        <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">
+          {{ allGroupSelected ? '取消全选分组' : '全选当前分组' }}
+        </button>
+        <button class="link-btn" @click="toggleSelectAllFiltered">
+          {{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}
+        </button>
       </template>
     </div>
 
@@ -34,7 +46,14 @@
       <div class="sp-empty-text">暂无四层代理</div>
     </div>
     <div v-else class="sp-grid" :class="{ 'batch-mode': batchMode }">
-      <div v-for="p in displayedProxies" :key="p.id" class="sp-card" :class="{ selected: selectedProxyIds.includes(p.id) }" :style="getCardBorderStyle(p.cluster_group_name)" @click="batchMode && toggleProxy(p.id)">
+      <div
+        v-for="p in displayedProxies"
+        :key="p.id"
+        class="sp-card"
+        :class="{ selected: selectedProxyIds.includes(p.id) }"
+        :style="getCardBorderStyle(p.cluster_group_name)"
+        @click="batchMode && toggleProxy(p.id)"
+      >
         <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
           <span>{{ p.cluster_name || '-' }}</span>
           <span v-if="p.proxy_type === 'dns'" class="dns-badge">DNS</span>
@@ -48,10 +67,14 @@
             <div v-if="p.description" class="sp-card-desc">{{ p.description }}</div>
           </div>
           <div class="sp-card-meta">
-            <span v-if="p.current_version" class="badge badge-success"><span class="status-dot online"></span>已发布</span>
+            <span v-if="p.current_version" class="badge badge-success"
+              ><span class="status-dot online"></span>已发布</span
+            >
             <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
             <div class="sp-version-text">
-              <template v-if="p.current_version"><PublishStatusTag :version="p.current_version" :published-at="p.published_at" /></template>
+              <template v-if="p.current_version"
+                ><PublishStatusTag :version="p.current_version" :published-at="p.published_at"
+              /></template>
             </div>
           </div>
         </div>
@@ -69,14 +92,16 @@
 
         <!-- Normal mode: load balance + targets -->
         <template v-if="p.proxy_type !== 'dns'">
-          <div class="sp-card-details" style="margin-top:-4px;">
+          <div class="sp-card-details" style="margin-top: -4px">
             <div class="sp-detail-row">
               <span class="sp-detail-label">负载均衡</span>
               <span class="sp-detail-value">{{ lbLabel(p.load_balance) }}</span>
             </div>
           </div>
           <div class="sp-card-targets">
-            <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag">{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span>
+            <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag"
+              >{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span
+            >
             <span v-if="!p.targets || p.targets.length === 0" class="sp-no-targets">无目标</span>
           </div>
         </template>
@@ -86,7 +111,7 @@
           <div class="sp-card-dns" v-if="dnsHosts(p)">
             <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
               <div class="sp-dns-domain-name">{{ domain }}</div>
-              <div class="sp-dns-domain-lb" style="display:flex;gap:12px;">
+              <div class="sp-dns-domain-lb" style="display: flex; gap: 12px">
                 <span>类型: {{ dnsLbLabel(host.type) }}</span>
                 <span v-if="host.ttl_valid != null">TTL: {{ host.ttl_valid }}s</span>
               </div>
@@ -102,8 +127,10 @@
         <div class="sp-card-actions" @click.stop>
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="viewProxy(p)">查看</button>
           <button class="btn btn-ghost btn-sm sp-action-btn" @click="editProxy(p)">编辑</button>
-          <button class="btn btn-ghost btn-sm sp-action-btn" style="color:var(--danger);" @click="deleteProxy(p)">删除</button>
-          <span style="flex:1"></span>
+          <button class="btn btn-ghost btn-sm sp-action-btn" style="color: var(--danger)" @click="deleteProxy(p)">
+            删除
+          </button>
+          <span style="flex: 1"></span>
           <button class="btn btn-secondary btn-sm" @click="publishProxyAction(p)">发布</button>
           <button class="btn btn-secondary btn-sm" @click="openVersionManagement(p)">版本管理</button>
         </div>
@@ -112,10 +139,14 @@
 
     <!-- Bottom batch action bar -->
     <div v-show="batchMode" class="sp-batch-bar">
-      <span class="bb-selected">已选择 <b>{{ selectedProxies.length }}</b> 个四层代理</span>
+      <span class="bb-selected"
+        >已选择 <b>{{ selectedProxies.length }}</b> 个四层代理</span
+      >
       <button class="btn btn-ghost btn-sm link-btn" @click="clearSelection">取消选择</button>
       <span class="bb-spacer"></span>
-      <button class="btn btn-danger btn-sm" :disabled="selectedProxies.length === 0" @click="batchDelete">批量删除</button>
+      <button class="btn btn-danger btn-sm" :disabled="selectedProxies.length === 0" @click="batchDelete">
+        批量删除
+      </button>
       <button class="btn btn-secondary btn-sm" @click="toggleBatchMode">退出批量管理</button>
     </div>
 
@@ -125,7 +156,10 @@
       :clusters="clusters"
       :editing-proxy="editingProxy"
       :default-proxy-type="proxyType"
-      @close="wizardVisible = false; editingProxy = null"
+      @close="
+        wizardVisible = false
+        editingProxy = null
+      "
       @saved="onWizardSaved"
     />
 
@@ -133,10 +167,24 @@
     <StreamProxyViewDrawer v-model:visible="viewDrawerVisible" :proxy="viewingProxy" />
 
     <!-- Version Management -->
-    <VersionManagementModal v-model:open="vmVisible" resource-type="stream_proxy" :resource-id="vmId" :cluster-id="vmClusterId" :resource-name="vmName" @version-change="loadProxies" @published="loadProxies" />
+    <VersionManagementModal
+      v-model:open="vmVisible"
+      resource-type="stream_proxy"
+      :resource-id="vmId"
+      :cluster-id="vmClusterId"
+      :resource-name="vmName"
+      @version-change="loadProxies"
+      @published="loadProxies"
+    />
 
     <!-- Publish -->
-    <PublishConfirmModal v-model:visible="publishVisible" title="发布四层代理" :cluster-id="publishClusterId" @confirm="onPublishConfirm" @cancel="publishVisible = false" />
+    <PublishConfirmModal
+      v-model:visible="publishVisible"
+      title="发布四层代理"
+      :cluster-id="publishClusterId"
+      @confirm="onPublishConfirm"
+      @cancel="publishVisible = false"
+    />
   </div>
 </template>
 
@@ -160,19 +208,32 @@ import { useStreamProxyList } from '@/composables/useStreamProxyList'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 // ── Proxy type from route query ──
-const proxyType = computed<'normal' | 'dns'>(() =>
-  route.query.type === 'dns' ? 'dns' : 'normal'
-)
+const proxyType = computed<'normal' | 'dns'>(() => (route.query.type === 'dns' ? 'dns' : 'normal'))
 
 const {
-  proxies, clusters, totalCount, loading,
-  searchText, clusterFilter, groupFilter,
-  groupOptions, filteredClusters, displayedProxies,
-  batchMode, selectedProxyIds, selectedProxies,
-  allGroupSelected, allFilteredSelected, showGroupSelectAll,
-  toggleBatchMode, toggleProxy,
-  toggleSelectAllGroup, toggleSelectAllFiltered, clearSelection,
-  loadProxies, loadClusters,
+  proxies,
+  clusters,
+  totalCount,
+  loading,
+  searchText,
+  clusterFilter,
+  groupFilter,
+  groupOptions,
+  filteredClusters,
+  displayedProxies,
+  batchMode,
+  selectedProxyIds,
+  selectedProxies,
+  allGroupSelected,
+  allFilteredSelected,
+  showGroupSelectAll,
+  toggleBatchMode,
+  toggleProxy,
+  toggleSelectAllGroup,
+  toggleSelectAllFiltered,
+  clearSelection,
+  loadProxies,
+  loadClusters,
 } = useStreamProxyList(proxyType)
 
 function onGroupChange() {
@@ -224,18 +285,24 @@ function dnsLbLabel(algo: string | undefined): string {
   return map[algo || ''] || algo || '轮询'
 }
 
-function dnsHosts(p: any): Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> | null {
+function dnsHosts(
+  p: any,
+): Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> | null {
   try {
     const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
     return cfg?.hosts || null
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 function isWanEnabled(p: any): boolean {
   try {
     const cfg = typeof p.dns_config === 'string' ? JSON.parse(p.dns_config) : p.dns_config
     return !!(cfg && cfg.wan_enabled)
-  } catch { return false }
+  } catch {
+    return false
+  }
 }
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -274,7 +341,9 @@ async function deleteProxy(p: StreamProxy) {
   try {
     const res = await api.get(`/clusters/${p.cluster_id}/nodes`)
     nodes = res.data?.items || []
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   showDeleteConfirm({
     title: `确定要删除四层代理 "${p.name}" 吗？`,
@@ -305,9 +374,10 @@ function batchDelete() {
   const proxies = selectedProxies.value
   if (proxies.length === 0) return
   const names = proxies.map((p: any) => p.name)
-  const title = names.length > 3
-    ? `确定要删除选中的 ${names.length} 个四层代理吗？${names.slice(0, 3).join('、')} 等 ${names.length} 个`
-    : `确定要删除选中的 ${names.length} 个四层代理吗？${names.join('、')}`
+  const title =
+    names.length > 3
+      ? `确定要删除选中的 ${names.length} 个四层代理吗？${names.slice(0, 3).join('、')} 等 ${names.length} 个`
+      : `确定要删除选中的 ${names.length} 个四层代理吗？${names.join('、')}`
   showDeleteConfirm({
     title,
     apiEndpoint: '/stream-proxies',
@@ -396,9 +466,12 @@ onMounted(async () => {
 })
 
 // 侧边栏切换 TCP/DNS 时重新加载数据（组件复用，onMounted 只触发一次）
-watch(() => route.query.type, () => {
-  loadProxies()
-})
+watch(
+  () => route.query.type,
+  () => {
+    loadProxies()
+  },
+)
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
@@ -406,63 +479,321 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.sp-page { padding: 20px 24px; }
-.sp-page:has(.sp-batch-bar) { padding-bottom: 80px; }
-.sp-header-actions { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: nowrap; }
-.link-btn { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 4px; flex-shrink: 0; }
-.link-btn:hover { background: oklch(56% 0.16 210 / 8%); }
-.loading-state { text-align: center; padding: 60px 0; color: var(--muted); font-size: 14px; }
-.sp-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; text-align: center; }
-.sp-empty-icon { font-size: 40px; color: var(--muted); margin-bottom: 12px; opacity: 0.4; }
-.sp-empty-text { font-size: 14px; color: var(--muted); }
+.sp-page:has(.sp-batch-bar) {
+  padding-bottom: 80px;
+}
+.sp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: nowrap;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.link-btn:hover {
+  background: oklch(56% 0.16 210 / 8%);
+}
+.loading-state {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.sp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+.sp-empty-icon {
+  font-size: 40px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+.sp-empty-text {
+  font-size: 14px;
+  color: var(--muted);
+}
 
 /* ── Card Grid (aligns with PluginConfigList .pc-grid) ── */
-.sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.sp-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow 0.2s; display: flex; flex-direction: column; overflow: hidden; cursor: default; }
-.sp-card:hover { box-shadow: var(--shadow-md); }
-.sp-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 35%); }
-.batch-mode .sp-card { cursor: pointer; }
-.sp-card-topbar { padding: 4px 16px; font-size: 11px; font-weight: 500; color: var(--accent); background: oklch(56% 0.16 210 / 8%); border-bottom: 1px solid oklch(56% 0.16 210 / 12%); display: flex; align-items: center; gap: 6px; }
-.sp-checkbox { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all .15s; margin-left: auto; flex-shrink: 0; }
-.sp-card:not(.selected) .sp-checkbox:hover { border-color: var(--accent); }
-.sp-card.selected .sp-checkbox { border-color: var(--accent); background: var(--accent); }
-.sp-card.selected .sp-checkbox::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
-.sp-batch-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 16px oklch(0% 0 0 / 8%); padding: 12px 24px; display: flex; align-items: center; gap: 12px; z-index: 100; }
-.bb-selected { font-size: 13px; }
-.bb-selected b { color: var(--accent); }
-.bb-spacer { flex: 1; }
-.group-badge { display: inline-block; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--badge-bg, oklch(50% 0.12 170 / 15%)); color: var(--badge-fg, oklch(45% 0.12 170)); border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%)); line-height: 1.4; flex-shrink: 0; }
-.dns-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(55% 0.18 280 / 18%); color: oklch(40% 0.18 280); border: 1px solid oklch(55% 0.18 280 / 30%); line-height: 1.4; flex-shrink: 0; }
-.wan-badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: oklch(65% 0.18 45 / 18%); color: oklch(50% 0.18 45); border: 1px solid oklch(65% 0.18 45 / 30%); line-height: 1.4; flex-shrink: 0; }
-.sp-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding: 12px 20px 0; }
-.sp-card-info { flex: 1; }
-.sp-card-name { font-size: 15px; font-weight: 600; }
-.sp-card-desc { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
-.sp-card-meta { text-align: right; flex-shrink: 0; margin-left: 12px; }
-.sp-version-text { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
-.sp-card-details { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 8px; padding: 0 20px; }
-.sp-detail-row { display: inline-flex; align-items: center; gap: 4px; }
-.sp-detail-sep { color: var(--border); font-size: 12px; }
-.sp-detail-label { font-size: 11px; color: var(--muted); }
-.sp-detail-value { font-size: 12px; font-weight: 500; color: var(--fg); }
-.sp-detail-value.sp-port { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
-.sp-card-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 20px; }
-.sp-target-tag { display: inline-flex; align-items: center; gap: 2px; padding: 2px 10px; border-radius: 10px; font-size: 11px; background: oklch(56% 0.16 210 / 10%); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 20%); font-family: var(--font-mono); }
-.sp-target-wt { color: var(--muted); font-size: 10px; }
-.sp-no-targets { font-size: 11px; color: var(--muted); font-style: italic; }
-.sp-card-dns { padding: 0 20px 8px; }
-.sp-dns-domain { margin-bottom: 8px; padding: 8px; background: var(--bg); border-radius: var(--radius-md); border: 1px solid var(--border); }
-.sp-dns-domain-name { font-size: 12px; font-weight: 600; color: var(--accent); font-family: var(--font-mono); margin-bottom: 2px; }
-.sp-dns-domain-lb { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
-.sp-dns-nodes { display: flex; flex-wrap: wrap; gap: 4px; }
-.sp-card-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: auto; padding: 10px 20px 16px; border-top: 1px solid var(--border); }
-.sp-action-btn { background: none !important; background-color: transparent !important; }
-.sp-action-btn:hover { background: var(--bg) !important; }
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.sp-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: default;
+}
+.sp-card:hover {
+  box-shadow: var(--shadow-md);
+}
+.sp-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 35%);
+}
+.batch-mode .sp-card {
+  cursor: pointer;
+}
+.sp-card-topbar {
+  padding: 4px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 8%);
+  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sp-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.sp-card:not(.selected) .sp-checkbox:hover {
+  border-color: var(--accent);
+}
+.sp-card.selected .sp-checkbox {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.sp-card.selected .sp-checkbox::after {
+  content: '✓';
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sp-batch-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px oklch(0% 0 0 / 8%);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 100;
+}
+.bb-selected {
+  font-size: 13px;
+}
+.bb-selected b {
+  color: var(--accent);
+}
+.bb-spacer {
+  flex: 1;
+}
+.group-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--badge-bg, oklch(50% 0.12 170 / 15%));
+  color: var(--badge-fg, oklch(45% 0.12 170));
+  border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%));
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.dns-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: oklch(55% 0.18 280 / 18%);
+  color: oklch(40% 0.18 280);
+  border: 1px solid oklch(55% 0.18 280 / 30%);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.wan-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: oklch(65% 0.18 45 / 18%);
+  color: oklch(50% 0.18 45);
+  border: 1px solid oklch(65% 0.18 45 / 30%);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.sp-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  padding: 12px 20px 0;
+}
+.sp-card-info {
+  flex: 1;
+}
+.sp-card-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.sp-card-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+.sp-card-meta {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+.sp-version-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+.sp-card-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 8px;
+  padding: 0 20px;
+}
+.sp-detail-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-detail-sep {
+  color: var(--border);
+  font-size: 12px;
+}
+.sp-detail-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+.sp-detail-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.sp-detail-value.sp-port {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+.sp-card-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 0 20px;
+}
+.sp-target-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--accent);
+  border: 1px solid oklch(56% 0.16 210 / 20%);
+  font-family: var(--font-mono);
+}
+.sp-target-wt {
+  color: var(--muted);
+  font-size: 10px;
+}
+.sp-no-targets {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+.sp-card-dns {
+  padding: 0 20px 8px;
+}
+.sp-dns-domain {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+.sp-dns-domain-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+.sp-dns-domain-lb {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.sp-dns-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sp-card-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding: 10px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+.sp-action-btn {
+  background: none !important;
+  background-color: transparent !important;
+}
+.sp-action-btn:hover {
+  background: var(--bg) !important;
+}
 
-.text-sm { font-size: 12px; }
-.text-muted { color: var(--muted); }
+.text-sm {
+  font-size: 12px;
+}
+.text-muted {
+  color: var(--muted);
+}
 
 @media (max-width: 768px) {
-  .sp-grid { grid-template-columns: 1fr; }
+  .sp-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

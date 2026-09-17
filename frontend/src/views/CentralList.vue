@@ -1429,7 +1429,6 @@ onMounted(async () => {
 
 <style scoped>
 .cl-page {
-  padding: 20px 24px;
   min-height: calc(100vh - 56px - 40px);
 }
 

@@ -2163,10 +2163,6 @@ async function submitCreateTask() {
 </script>
 
 <style scoped>
-.node-task-list {
-  padding: 20px 24px;
-}
-
 .node-filter-bar {
   display: flex;
   align-items: center;

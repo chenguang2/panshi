@@ -334,10 +334,6 @@ onMounted(loadSwitches)
 </script>
 
 <style scoped>
-.plugin-switches {
-  padding: 20px 24px;
-}
-
 .switch-status-bar {
   display: flex;
   align-items: center;

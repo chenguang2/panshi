@@ -2121,10 +2121,6 @@ watch(selectedNode, async (_newNode) => {
 </script>
 
 <style scoped>
-.edge-client {
-  padding: 20px 24px;
-}
-
 /* ── 四层代理添加/编辑弹窗的作用域提示 ── */
 .stream-route-hint {
   margin-bottom: 14px;
