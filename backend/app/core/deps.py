@@ -63,6 +63,15 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception:
+        # 该映射是为兼容历史行为；但内部异常（如数据库错误被 autoflush 触发）
+        # 静默变 401 会误导排障——必须留下原始异常日志。
+        import logging
+
+        logging.getLogger("app.auth").exception(
+            "get_current_user 内部异常（映射为 401）: %s %s",
+            request.method if request else "?",
+            getattr(getattr(request, "url", None), "path", "?"),
+        )
         raise HTTPException(status_code=401, detail="未认证")
 
 

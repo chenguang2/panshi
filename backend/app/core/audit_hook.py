@@ -263,14 +263,26 @@ def _client_ip(request: Request) -> str | None:
 
 
 def _extract_resource_id(path_params: dict, resource: str):
-    """优先 {resource}_id，其次除 cluster_id 外的最后一个 *_id。"""
+    """优先 {resource}_id，其次除 cluster_id 外的最后一个 *_id。
+
+    path_params 恒为字符串；AuditLog.resource_id 是 Integer 列——SQLite 弱类型
+    能容忍 str 直接入库，PostgreSQL/asyncpg 会以绑参类型错误拒绝（表现为请求
+    401，见 deps.get_current_user 的异常映射），因此必须在此显式转 int。
+    """
     exact = path_params.get(f"{resource}_id")
     if exact is not None:
-        return exact
+        return _to_int_or_none(exact)
     for key in reversed(list(path_params)):
         if key.endswith("_id") and key != "cluster_id":
-            return path_params[key]
+            return _to_int_or_none(path_params[key])
     return None
+
+
+def _to_int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 async def audit_start(

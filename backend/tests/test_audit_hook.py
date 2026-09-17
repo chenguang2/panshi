@@ -218,3 +218,16 @@ def test_validate_route_map_reports_missing():
     methods_paths = {(m, p) for m, p in missing}
     assert ("POST", "/api/v1/things") in methods_paths
     assert ("DELETE", "/api/v1/things/{id}") in methods_paths
+
+
+@pytest.mark.asyncio
+async def test_extract_resource_id_coerces_path_param_str_to_int():
+    """path_params 恒为 str；resource_id 列为 Integer——PG 下 str 绑参会炸（2026-09-17 自启动 401 事故）。"""
+    from app.core.audit_hook import _extract_resource_id
+
+    assert _extract_resource_id({"node_id": "11"}, "nodes") == 11
+    assert _extract_resource_id({"route_id": "42"}, "routes") == 42
+    assert _extract_resource_id({"cluster_id": "1", "node_id": "11"}, "nodes") == 11
+    # 非数字（如 uuid 形态的 Edge id）不得抛错，回退 None
+    assert _extract_resource_id({"node_id": "abc-uuid"}, "nodes") is None
+    assert _extract_resource_id({}, "nodes") is None

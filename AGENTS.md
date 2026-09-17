@@ -168,6 +168,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 45. **SSE 事件格式规格与实现待收敛** — 生产代码发 `data: {type: ...}` 单流事件，主规格 `openspec/specs/migration-progress-stream/spec.md` 描述 `event: progress/complete/error` 命名事件；分歧未收敛，改 SSE 前先确认是以实现为准还是同步修规格。
 46. **静态分析清理：工具只出候选，删除须逐项核验** — 工具链 `vulture app`（Python）/ `npx knip`（TS·Vue 未用文件与导出）/ `npx jscpd src ../backend/app`（重复块），均装自国内镜像。**已知系统性误报**（禁止据此删除）：vulture 对事件钩子签名参数（`before_flush(session, flush_context, instances)` 等）；knip 对 `scripts/*.mjs`（CLI 脚本，其中 `manual-screenshots.mjs` 是**现行手册截图产线**，直接写 `docs/user-manual/images/`）、`src/env.d.ts`、`import * as ns` 命名空间导入的模板层消费、双导出/再导出、间接 devDependencies。判定死代码的唯一依据 = **排除定义文件后全仓（含 `.vue` 模板与测试）引用数 0**；报告格式见 `docs/refactoring/static-analysis-2026-09-16.md`。
 47. **统计元素/用点禁止"精确匹配 grep"** — 模板里同名类常带附加类，如 `<div class="card group-card">`；`grep -c 'class="card"'` 只匹配精确串，会把它漏掉。2026-09-16 实测教训：据 `grep 'class="card"'` 判定"页面只有 1 处 .card 用点"后删除该页本地 `.card` 覆盖，导致另一处（组级凭据卡片）**静默失去内边距/外边距**并被用户发现。核对共享样式用点须用**前缀匹配**（`grep 'class="card'`）或 DOM/Playwright 实测元素数，改共享 CSS 前后都要按"真实用点全集"复核。
+48. **SQLite→PG 切换后严格类型会暴露隐式 str/int 转换，且 deps 的 `except Exception→401` 会把这类错误伪装成"未认证"** — 2026-09-17 事故：audit 骨架 `_extract_resource_id` 把 str 型 path param 直塞 `AuditLog.resource_id`（Integer 列），SQLite 弱类型默默兼容、PG/asyncpg 拒绝绑定 → autoflush 在 get_current_user 的 SELECT 处炸 → 被吞成 401「未认证」（GET 无审计插入所以 200，极具迷惑性）。已修：提取时显式转 int（非数字回退 None）；get_current_user 的内部异常现在会记 ERROR 日志。**排障口诀：POST 401 而 GET 200 时，先查 mutating 路由的审计骨架写入，再看 deps 异常日志，不要急着让用户重新登录。**
 
 ## 新增功能步骤
 
