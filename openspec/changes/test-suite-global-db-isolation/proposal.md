@@ -14,7 +14,10 @@
 - **会话级 schema 与最小种子**：autouse 会话夹具建表 + 种入 `admin(id=1)` 与 `Cluster(1..3)`；会话结束 dispose 引擎并删除临时目录。
 - **跨事件循环安全**：测试引擎使用 `NullPool`（`pytest-asyncio` auto 模式下每用例独立 loop，池化连接跨 loop 复用会报 attached to a different loop）。
 - **修正两处残余用例**：① `test_database.py` 的引擎构建器用例改经新夹具 `real_create_sync_engine` 取回真实实现（重定向会替换模块属性）；② `test_route_list_api.py` 的插件过滤用例改为**自给自足种子**（种入带 `proxy_rewrite` 的路由 + 一条不带），消除长期记录的既有失败。
-- **文档同步**：`AGENTS.md` #30 由"禁止跑全量 pytest"改写为"全量可跑且隔离已强制"。
+- **PG 方言加强模式（opt-in）**：同一单点重定向支持 `TEST_DB_BACKEND=pg` —— 指向真实 PostgreSQL 的**专用 schema**（默认 `panshi_test`，DSN 取 `PG_DSN` 或活动 PG 连接，会话结束 `DROP SCHEMA CASCADE`，`public` 不动），补上"隔离即失去 PG 信号"的缺口。
+- **PG 方言冒烟用例**：新增 `tests/test_pg_dialect_smoke.py`（7 用例），覆盖三类真实事故——审计 path param `str`→Integer、`Dict` schema + TEXT 列漏序列化、JSON 字段 round-trip；并提供 `global_engine_client` 夹具（绑定全局隔离引擎、不覆盖 `get_db`）。
+- **触发式规则入 AGENTS**：#31 要求凡触及 schema/迁移/写库路径的改动，合入前跑 PG 冒烟。
+- **文档同步**：`AGENTS.md` #30 由"禁止跑全量 pytest"改写为"全量可跑且隔离已强制"（含两后端实测数据），并新增 #31 触发式 PG 冒烟规则。
 
 ## Capabilities
 
@@ -32,4 +35,4 @@
 - 测试：全量 `uv run pytest -q` **102 failed → 0 failed**（1615 passed / 12 skipped / 188s），且运行期真实库审计日志无新增条目、临时库目录无残留
 - 数据：无生产代码改动、无表结构改动；测试不再读写真实活动库
 - 依赖：无新增依赖
-- **非目标**：不做逐文件夹具迁移（被单点重定向取代）；不消除**同一会话内**测试间的数据串扰（与改造前等价，后续可用按模块清库另立项）；不改动 `PG_DSN` opt-in 的真实 PG 迁移测试（保持显式开关）
+- **非目标**：不做逐文件夹具迁移（被单点重定向取代）；不消除**同一会话内**测试间的数据串扰（与改造前等价，后续可用按模块清库另立项）；不把 PG 方言验证纳入默认全量（`TEST_DB_BACKEND=pg` 仍为显式 opt-in，默认零外部依赖）；不改动 `PG_DSN` opt-in 的迁移/归档测试（保持显式开关）

@@ -56,6 +56,11 @@ class AuthedTestClient(TestClient):
     def patch(self, *args, **kwargs):
         return super().patch(*args, **self._with_auth(kwargs))
 
+    def request(self, *args, **kwargs):
+        """通用入口：本 API 多个 DELETE 端点要求 JSON body（delete_db/delete_edge），
+        而 TestClient.delete 不接受 body，需经 request() 调用。"""
+        return super().request(*args, **self._with_auth(kwargs))
+
 
 class _NoopTaskService:
     """lifespan shutdown 时的占位服务：shutdown_sync 立即返回，不 join 线程。"""

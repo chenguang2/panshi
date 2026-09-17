@@ -26,3 +26,15 @@
 - [x] 4.1 `AGENTS.md` #30：删除"切 PG 后禁止跑全量 pytest"的临时禁令，改为"全局隔离已强制 + 全量可跑（1615 passed）"
 - [x] 4.2 新建 openspec 变更 `test-suite-global-db-isolation`（proposal / design / tasks / spec delta）
 - [x] 4.3 关系说明：本变更**取代**归档变更 `2026-09-12-test-suite-db-isolation` 的 "Per-File Migration" 路线（详见 design D1）
+
+## 5. PG 方言加强模式（opt-in）
+
+- [x] 5.1 `conftest.py` 支持 `TEST_DB_BACKEND=pg`：DSN 取 `PG_DSN` 或活动 PG 连接（`type in {postgres, postgresql}`），缺失则**显式报错**（不静默回退 SQLite）；连接经 `search_path` 固定到 `panshi_test`（可用 `TEST_DB_PG_SCHEMA` 覆盖）
+- [x] 5.2 schema 生命周期：会话开始 `DROP SCHEMA IF EXISTS ... CASCADE` + `CREATE SCHEMA` → 走生产 `init_db()`（create_all + `run_migrations`）→ 种子兜底；会话结束 `DROP SCHEMA CASCADE`
+- [x] 5.3 新增夹具：`test_db_backend` / `global_engine_dialect` / `global_engine_client`（绑定全局隔离引擎、不覆盖 `get_db`）
+- [x] 5.4 新增 `tests/test_pg_dialect_smoke.py`（7 用例）：审计 path-id 写路径、节点双路径 id、上游/路由/插件组/全局规则/四层代理 JSON round-trip、后端模式自检
+- [x] 5.5 `api_helpers.AuthedTestClient` 补 `request()` 覆写（本 API 多个 DELETE 端点要求 JSON body，`TestClient.delete` 不接受 body）
+- [x] 5.6 验证（PG 模式，真实 PG `192.168.100.90/uapm_new`）：冒烟 **7 passed / 19.8s**；全量 **1623 passed / 11 skipped / 0 failed / 8:18**；运行后 `panshi_test` 无残留、`public` 23 张表与 3 个集群原样
+- [x] 5.7 **反向验证（有效性证明）**：人为复原两处历史 bug（审计 `int(value)`→`value`；四层代理 `timeout/keepalive_pool` 跳过 dumps）→ 冒烟由 7 passed 变 **5 failed**（含 `未认证` 401 与 stream-proxy 用例），复原后复绿
+- [x] 5.8 SQLite 模式全量回归：**1622 passed / 12 skipped / 0 failed / 3:14**
+- [x] 5.9 `AGENTS.md`：新增 #31「PG 方言冒烟必跑（触发式）」，并在 #30 记录两后端实测数据
