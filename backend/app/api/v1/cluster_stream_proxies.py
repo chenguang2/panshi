@@ -234,6 +234,12 @@ async def create_stream_proxy(
         proxy_data["checks"] = json.dumps(proxy_data["checks"])
     if proxy_data.get("dns_config"):
         proxy_data["dns_config"] = json.dumps(proxy_data["dns_config"])
+    # timeout / keepalive_pool 同为 Dict schema + TEXT 列：必须显式序列化，
+    # 否则 SQLite 弱类型时代可容忍、PG/asyncpg 直接以绑参类型错误拒绝（500）。
+    for _key in ("timeout", "keepalive_pool"):
+        _val = proxy_data.get(_key)
+        if isinstance(_val, dict):
+            proxy_data[_key] = json.dumps(_val)
 
     proxy = StreamProxy(cluster_id=cluster_id, **proxy_data)
     db.add(proxy)
@@ -380,6 +386,10 @@ async def update_stream_proxy(
         update_data["targets"] = None
     for key in ("checks", "dns_config"):
         if key in update_data and update_data[key] is not None:
+            update_data[key] = json.dumps(update_data[key])
+    # 同 create：Dict schema + TEXT 列需显式序列化（PG 严格类型不接受 dict 绑参）
+    for key in ("timeout", "keepalive_pool"):
+        if key in update_data and isinstance(update_data[key], dict):
             update_data[key] = json.dumps(update_data[key])
 
     for key, value in update_data.items():
