@@ -156,10 +156,7 @@
       :clusters="clusters"
       :editing-proxy="editingProxy"
       :default-proxy-type="proxyType"
-      @close="
-        wizardVisible = false
-        editingProxy = null
-      "
+      @close="closeWizard"
       @saved="onWizardSaved"
     />
 
@@ -244,6 +241,11 @@ function onGroupChange() {
 // Wizard
 const wizardVisible = ref(false)
 const editingProxy = ref<StreamProxy | null>(null)
+
+function closeWizard(): void {
+  wizardVisible.value = false
+  editingProxy.value = null
+}
 
 // View
 const viewDrawerVisible = ref(false)
@@ -661,7 +663,7 @@ onUnmounted(() => {
   flex: 1;
 }
 .sp-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .sp-card-desc {

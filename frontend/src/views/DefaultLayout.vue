@@ -13,6 +13,11 @@
           </div>
         </div>
         <div class="header-right">
+          <button class="search-trigger" type="button" @click="globalSearchRef?.open()">
+            <SearchOutlined />
+            <span>搜索</span>
+            <span class="search-kbd">Ctrl K</span>
+          </button>
           <a-dropdown>
             <a-space class="user-info">
               <UserOutlined />
@@ -30,18 +35,21 @@
         <router-view />
       </div>
     </div>
+    <GlobalSearch ref="globalSearchRef" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { MenuUnfoldOutlined, MenuFoldOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { MenuUnfoldOutlined, MenuFoldOutlined, UserOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import AppSidebar from '@/components/AppSidebar.vue'
+import GlobalSearch from '@/components/GlobalSearch.vue'
 import { useSidebarResponsive } from '@/composables/useSidebarResponsive'
+import { pageNameMap, sectionMap } from '@/router/navMeta'
 
 const router = useRouter()
 
@@ -49,67 +57,7 @@ useSidebarResponsive()
 const route = useRoute()
 const authStore = useAuthStore()
 const themeStore = useThemeStore()
-
-const sectionMap: Record<string, string> = {
-  Dashboard: '核心功能',
-  ClusterList: '核心功能',
-  NodeList: '核心功能',
-  UpstreamList: '核心功能',
-  RouteList: '核心功能',
-  DnsQueryList: '边缘网络',
-  PluginConfigList: '核心功能',
-  GlobalRuleList: '核心功能',
-  PluginMetadataList: '核心功能',
-  StaticResourceList: '核心功能',
-  StreamProxyList: '边缘网络',
-  DnsUdpProxyList: '边缘网络',
-  EdgeEnv: '边缘网络',
-  CentralManagement: '综合',
-  Metrics: '综合',
-  MetricsDashboard: '综合',
-  PluginSwitches: '系统管理',
-  Users: '系统管理',
-  DatabaseManagement: '系统管理',
-  ClickHouseConfig: '系统管理',
-  EdgeClient: '运维管理',
-  EdgeImport: '运维管理',
-  Tools: '运维管理',
-  EdgeAutostart: '运维管理',
-  AnsibleInventory: '运维管理',
-  NodeTaskCenter: '运维管理',
-  AuditLog: '系统管理',
-}
-
-const pageNameMap: Record<string, string> = {
-  Dashboard: '概览',
-  CentralManagement: '统一管理',
-  ClusterList: '集群管理',
-  NodeList: '节点管理',
-  UpstreamList: '上游管理',
-  RouteList: '路由管理',
-  PluginConfigList: '插件组',
-  GlobalRuleList: '全局规则',
-  PluginMetadataList: '插件元数据',
-  StaticResourceList: '静态资源',
-  DnsQueryList: 'DNS代理[HTTP]',
-  StreamProxyList: '四层代理',
-  DnsUdpProxyList: 'DNS代理[UDP]',
-  EdgeEnv: 'edge.env 配置',
-  Users: '用户管理',
-  EdgeClient: 'Edge直连',
-  EdgeImport: '数据导入',
-  Tools: '工具箱',
-  Metrics: '指标查询',
-  MetricsDashboard: '指标总览',
-  PluginSwitches: '插件开关',
-  DatabaseManagement: '数据库管理',
-  ClickHouseConfig: 'ClickHouse 配置',
-  SslList: 'SSL 证书',
-  EdgeAutostart: '自启动管理',
-  AnsibleInventory: 'Ansible 主机清单',
-  NodeTaskCenter: '节点任务',
-  AuditLog: '审计日志',
-}
+const globalSearchRef = ref<InstanceType<typeof GlobalSearch> | null>(null)
 
 const currentSection = computed(() => {
   return sectionMap[route.name as string] || ''
@@ -192,6 +140,34 @@ const handleLogout = async () => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+.search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    border-color 0.2s;
+}
+.search-trigger:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.search-kbd {
+  font-size: 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 14px;
 }
 
 .user-info {

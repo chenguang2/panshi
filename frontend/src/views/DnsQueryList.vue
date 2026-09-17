@@ -94,10 +94,7 @@
       :visible="formVisible"
       :clusters="clusters"
       :editing-route="editingRoute"
-      @close="
-        formVisible = false
-        editingRoute = null
-      "
+      @close="closeRouteForm"
       @saved="onFormSaved"
     />
 
@@ -336,6 +333,11 @@ function viewRoute(r: any) {
 const formVisible = ref(false)
 const editingRoute = ref<any | null>(null)
 
+function closeRouteForm(): void {
+  formVisible.value = false
+  editingRoute.value = null
+}
+
 function openCreateForm() {
   editingRoute.value = null
   formVisible.value = true
@@ -535,7 +537,7 @@ onMounted(async () => {
   flex: 1;
 }
 .dq-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .dq-card-desc {

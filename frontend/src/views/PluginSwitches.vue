@@ -455,7 +455,7 @@ onMounted(loadSwitches)
 }
 
 .plugin-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   display: flex;
   align-items: center;

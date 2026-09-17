@@ -690,7 +690,7 @@ watch(
 
 .plugin-card-name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--accent);
   overflow-wrap: break-word;
 }

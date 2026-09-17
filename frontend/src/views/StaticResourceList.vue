@@ -630,7 +630,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 .sr-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .sr-card-path {

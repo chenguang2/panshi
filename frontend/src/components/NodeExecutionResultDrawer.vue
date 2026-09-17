@@ -409,7 +409,7 @@ async function copyAll() {
 
 /* ── Result badges ── */
 .result-badge {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .result-success {

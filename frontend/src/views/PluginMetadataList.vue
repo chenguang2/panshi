@@ -533,7 +533,7 @@ onUnmounted(() => {
   flex: 1;
 }
 .pml-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .pml-card-meta {

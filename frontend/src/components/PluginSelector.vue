@@ -862,7 +862,7 @@ const emitUpdate = () => {
 
 .selected-actions :deep(.anticon) {
   cursor: pointer;
-  font-size: 15px;
+  font-size: 14px;
   transition: color 0.2s;
   color: var(--muted);
 }

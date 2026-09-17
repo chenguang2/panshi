@@ -254,15 +254,8 @@
       :visible="modalVisible"
       :editing-cluster="editingCluster"
       :group-options="groupOptions"
-      @close="
-        modalVisible = false
-        editingCluster = null
-      "
-      @saved="
-        modalVisible = false
-        editingCluster = null
-        loadClusters()
-      "
+      @close="closeClusterForm"
+      @saved="onClusterFormSaved"
     />
   </div>
 </template>
@@ -463,6 +456,16 @@ async function runTest() {
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
 
+function closeClusterForm(): void {
+  modalVisible.value = false
+  editingCluster.value = null
+}
+
+function onClusterFormSaved(): void {
+  closeClusterForm()
+  void loadClusters()
+}
+
 function showAddModal() {
   editingCluster.value = null
   modalVisible.value = true
@@ -645,7 +648,7 @@ onMounted(() => {
   min-width: 0;
 }
 .cl-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--fg);
   white-space: nowrap;
@@ -763,7 +766,7 @@ onMounted(() => {
 }
 .node-more {
   font-size: 11px;
-  color: var(--p-text-tertiary);
+  color: var(--muted);
   padding: 2px 4px;
 }
 

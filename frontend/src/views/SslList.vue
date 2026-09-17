@@ -12,24 +12,8 @@
 
     <!-- Tab 切换 -->
     <div class="dtabs">
-      <span
-        class="dt"
-        :class="{ active: activeTab === 'all' }"
-        @click="
-          activeTab = 'all'
-          loadCerts()
-        "
-        >全部证书</span
-      >
-      <span
-        class="dt"
-        :class="{ active: activeTab === 'ca' }"
-        @click="
-          activeTab = 'ca'
-          loadCerts()
-        "
-        >CA 根证书</span
-      >
+      <span class="dt" :class="{ active: activeTab === 'all' }" @click="showAllCerts">全部证书</span>
+      <span class="dt" :class="{ active: activeTab === 'ca' }" @click="showCaCerts">CA 根证书</span>
     </div>
 
     <div class="ssl-header-actions">
@@ -256,6 +240,16 @@ const searchText = ref('')
 const groupFilter = ref('__all__')
 const clusterFilter = ref('')
 const activeTab = ref<string>('all')
+
+function showAllCerts(): void {
+  activeTab.value = 'all'
+  void loadCerts()
+}
+
+function showCaCerts(): void {
+  activeTab.value = 'ca'
+  void loadCerts()
+}
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
@@ -531,7 +525,7 @@ onMounted(() => {
   flex: 1;
 }
 .ssl-card-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .ssl-card-desc {

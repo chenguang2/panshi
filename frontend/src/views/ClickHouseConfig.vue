@@ -409,7 +409,7 @@ onMounted(load)
   gap: 8px;
 }
 .active-name .name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .active-address {

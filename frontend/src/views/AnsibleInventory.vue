@@ -398,7 +398,7 @@ function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => 
               }
             },
           },
-          [h(SettingOutlined, { style: 'font-size: 15px;' })],
+          [h(SettingOutlined, { style: 'font-size: 14px;' })],
         ),
     },
   )

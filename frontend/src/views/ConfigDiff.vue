@@ -1,11 +1,5 @@
 <template>
-  <a-drawer
-    :open="visible"
-    title="配置对比"
-    placement="right"
-    width="75vw"
-    @close="emit('update:visible', false)"
-  >
+  <a-drawer :open="visible" title="配置对比" placement="right" width="75vw" @close="emit('update:visible', false)">
     <template #extra>
       <a-select v-model:value="selectedNodeId" style="width: 280px" @change="loadDiff">
         <a-select-option v-for="n in nodes" :key="n.id" :value="n.id">
@@ -39,9 +33,15 @@
             <span class="group-stats">
               <span v-if="groupStats(group).match" class="stat-match">{{ groupStats(group).match }} 一致</span>
               <span v-if="groupStats(group).mismatch" class="stat-diff">{{ groupStats(group).mismatch }} 差异</span>
-              <span v-if="groupStats(group).only_in_db" class="stat-db-only">{{ groupStats(group).only_in_db }} 仅DB</span>
-              <span v-if="groupStats(group).only_in_edge" class="stat-edge-only">{{ groupStats(group).only_in_edge }} 仅Edge</span>
-              <span v-if="groupStats(group).expected_only_in_db" class="stat-expected-only">{{ groupStats(group).expected_only_in_db }} 无需发布</span>
+              <span v-if="groupStats(group).only_in_db" class="stat-db-only"
+                >{{ groupStats(group).only_in_db }} 仅DB</span
+              >
+              <span v-if="groupStats(group).only_in_edge" class="stat-edge-only"
+                >{{ groupStats(group).only_in_edge }} 仅Edge</span
+              >
+              <span v-if="groupStats(group).expected_only_in_db" class="stat-expected-only"
+                >{{ groupStats(group).expected_only_in_db }} 无需发布</span
+              >
             </span>
           </div>
 
@@ -54,38 +54,53 @@
               <span class="col-action"></span>
             </div>
 
-              <div v-for="item in group.items" :key="item.id">
+            <div v-for="item in group.items" :key="item.id">
               <div
                 class="diff-row"
-                :class="{ 'row-mismatch': item.status === 'mismatch', 'row-only-db': item.status === 'only_in_db', 'row-only-edge': item.status === 'only_in_edge', 'row-expected-only': item.status === 'expected_only_in_db' }"
+                :class="{
+                  'row-mismatch': item.status === 'mismatch',
+                  'row-only-db': item.status === 'only_in_db',
+                  'row-only-edge': item.status === 'only_in_edge',
+                  'row-expected-only': item.status === 'expected_only_in_db',
+                }"
               >
                 <span class="col-status">
-                  <span v-if="item.status === 'match'" style="color:#52c41a">✅</span>
-                  <span v-else-if="item.status === 'mismatch'" style="color:#ff4d4f">❌</span>
-                  <span v-else-if="item.status === 'only_in_db'" style="color:#faad14">➕</span>
-                  <span v-else-if="item.status === 'only_in_edge'" style="color:#1890ff">➖</span>
-                  <span v-else style="color:#8c8c8c">⏸</span>
+                  <span v-if="item.status === 'match'" style="color: #52c41a">✅</span>
+                  <span v-else-if="item.status === 'mismatch'" style="color: #ff4d4f">❌</span>
+                  <span v-else-if="item.status === 'only_in_db'" style="color: #faad14">➕</span>
+                  <span v-else-if="item.status === 'only_in_edge'" style="color: #1890ff">➖</span>
+                  <span v-else style="color: #8c8c8c">⏸</span>
                 </span>
                 <span class="col-name">{{ item.name }}</span>
                 <span class="col-db">{{ item.status === 'only_in_edge' ? '—' : '已配置' }}</span>
                 <span class="col-edge">
                   <template v-if="item.status === 'expected_only_in_db'">
-                    <span style="color:var(--muted);font-size:12px;">无需发布 — {{ item.reason || '' }}</span>
+                    <span style="color: var(--muted); font-size: 12px">无需发布 — {{ item.reason || '' }}</span>
                   </template>
                   <template v-else>{{ item.status === 'only_in_db' ? '—' : '已配置' }}</template>
                 </span>
                 <span class="col-action">
-                  <a v-if="item.fields?.length" style="font-size:12px;margin-right:8px;cursor:pointer" @click.stop="toggleExpand('fields', item)">
+                  <a
+                    v-if="item.fields?.length"
+                    style="font-size: 12px; margin-right: 8px; cursor: pointer"
+                    @click.stop="toggleExpand('fields', item)"
+                  >
                     {{ expandedMode[item.id] === 'fields' ? '收起字段' : '查看字段' }}
                   </a>
-                  <a v-if="item.status === 'mismatch' && item.fields?.length" style="font-size:12px;cursor:pointer" @click.stop="toggleExpand('diffs', item)">
+                  <a
+                    v-if="item.status === 'mismatch' && item.fields?.length"
+                    style="font-size: 12px; cursor: pointer"
+                    @click.stop="toggleExpand('diffs', item)"
+                  >
                     {{ expandedMode[item.id] === 'diffs' ? '收起差异' : '查看差异' }}
                   </a>
                 </span>
               </div>
 
               <div v-if="expandedMode[item.id] && item.fields?.length" class="diff-fields">
-                <div class="fields-header">{{ expandedMode[item.id] === 'diffs' ? '字段差异（仅显示不同字段）' : '全部字段' }}</div>
+                <div class="fields-header">
+                  {{ expandedMode[item.id] === 'diffs' ? '字段差异（仅显示不同字段）' : '全部字段' }}
+                </div>
                 <div
                   v-for="f in filteredFields(item, expandedMode[item.id] ?? 'diffs')"
                   :key="f.name"
@@ -144,21 +159,37 @@ const expandedMode = ref<Record<string, 'fields' | 'diffs' | null>>({})
 const fieldLabel = (groupType: string, field: string): string => {
   const labels: Record<string, Record<string, string>> = {
     upstreams: {
-      load_balance: '负载均衡', scheme: '协议', pass_host: 'Host 传递',
-      retries: '重试次数', hash_on: 'Hash 策略', key: 'Hash Key',
-      checks: '健康检查', timeout: '超时配置', keepalive_pool: '连接池',
-      targets: '目标节点', uri: 'URI',
+      load_balance: '负载均衡',
+      scheme: '协议',
+      pass_host: 'Host 传递',
+      retries: '重试次数',
+      hash_on: 'Hash 策略',
+      key: 'Hash Key',
+      checks: '健康检查',
+      timeout: '超时配置',
+      keepalive_pool: '连接池',
+      targets: '目标节点',
+      uri: 'URI',
     },
     routes: {
-      uri: 'URI', methods: '方法', hosts: '域名', priority: '优先级', status: '状态',
+      uri: 'URI',
+      methods: '方法',
+      hosts: '域名',
+      priority: '优先级',
+      status: '状态',
     },
     plugin_configs: { plugins: '插件配置' },
     global_rules: { plugins: '插件配置' },
     plugin_metadata: { config: '配置数据' },
     stream_proxies: {
-      listen_port: '监听端口', load_balance: '负载均衡', scheme: '协议',
-      targets: '目标节点', timeout: '超时配置', keepalive_pool: '连接池',
-      remote_addr: 'CIDR 范围', sni: 'TLS SNI',
+      listen_port: '监听端口',
+      load_balance: '负载均衡',
+      scheme: '协议',
+      targets: '目标节点',
+      timeout: '超时配置',
+      keepalive_pool: '连接池',
+      remote_addr: 'CIDR 范围',
+      sni: 'TLS SNI',
     },
   }
   return labels[groupType]?.[field] || field
@@ -215,14 +246,17 @@ const loadDiff = async () => {
   }
 }
 
-watch(() => props.visible, async (val) => {
-  if (val) {
-    selectedNodeId.value = props.initialNodeId
-    collapsedGroups.value = {}
-    expandedMode.value = {}
-    loadDiff()
-  }
-})
+watch(
+  () => props.visible,
+  async (val) => {
+    if (val) {
+      selectedNodeId.value = props.initialNodeId
+      collapsedGroups.value = {}
+      expandedMode.value = {}
+      loadDiff()
+    }
+  },
+)
 </script>
 
 <style scoped>
@@ -272,19 +306,40 @@ watch(() => props.visible, async (val) => {
   font-weight: 600;
   user-select: none;
 }
-.group-header:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.group-title { font-size: 15px; color: var(--fg); }
-.group-count { color: var(--muted); font-size: 13px; }
-.group-stats { margin-left: auto; font-size: 12px; display: flex; gap: 8px; }
-.stat-match { color: var(--success); }
-.stat-diff { color: var(--danger); }
-.stat-db-only { color: var(--warning); }
-.stat-edge-only { color: var(--accent); }
+.group-header:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.group-title {
+  font-size: 14px;
+  color: var(--fg);
+}
+.group-count {
+  color: var(--muted);
+  font-size: 13px;
+}
+.group-stats {
+  margin-left: auto;
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+}
+.stat-match {
+  color: var(--success);
+}
+.stat-diff {
+  color: var(--danger);
+}
+.stat-db-only {
+  color: var(--warning);
+}
+.stat-edge-only {
+  color: var(--accent);
+}
 
 .diff-row-header {
   display: flex;
   padding: 8px 16px;
-  background: rgba(0,0,0,0.02);
+  background: rgba(0, 0, 0, 0.02);
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
@@ -299,19 +354,49 @@ watch(() => props.visible, async (val) => {
   transition: background 0.15s;
   color: var(--fg);
 }
-.diff-row:hover { background: var(--bg); }
-.diff-row.row-mismatch { background: color-mix(in srgb, var(--danger) 6%, transparent); }
-.diff-row.row-mismatch:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
-.diff-row.row-only-db { background: color-mix(in srgb, var(--warning) 8%, transparent); }
-.diff-row.row-only-edge { background: oklch(56% 0.16 210 / 10%); }
-.diff-row.row-expected-only { background: color-mix(in srgb, #8c8c8c 6%, transparent); }
-.stat-expected-only { color: #8c8c8c; }
+.diff-row:hover {
+  background: var(--bg);
+}
+.diff-row.row-mismatch {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+.diff-row.row-mismatch:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.diff-row.row-only-db {
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+.diff-row.row-only-edge {
+  background: oklch(56% 0.16 210 / 10%);
+}
+.diff-row.row-expected-only {
+  background: color-mix(in srgb, #8c8c8c 6%, transparent);
+}
+.stat-expected-only {
+  color: #8c8c8c;
+}
 
-.col-status { width: 40px; text-align: center; }
-.col-name { flex: 2; font-weight: 500; }
-.col-db { flex: 2; color: var(--muted); }
-.col-edge { flex: 2; color: var(--muted); }
-.col-action { width: 160px; text-align: right; white-space: nowrap; }
+.col-status {
+  width: 40px;
+  text-align: center;
+}
+.col-name {
+  flex: 2;
+  font-weight: 500;
+}
+.col-db {
+  flex: 2;
+  color: var(--muted);
+}
+.col-edge {
+  flex: 2;
+  color: var(--muted);
+}
+.col-action {
+  width: 160px;
+  text-align: right;
+  white-space: nowrap;
+}
 
 .diff-fields {
   background: var(--bg);
@@ -331,13 +416,27 @@ watch(() => props.visible, async (val) => {
   border-bottom: 1px dashed var(--border);
   font-size: 12px;
 }
-.fields-row:last-child { border-bottom: none; }
-.field-diff { background: color-mix(in srgb, var(--danger) 6%, transparent); }
+.fields-row:last-child {
+  border-bottom: none;
+}
+.field-diff {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
 .field-diff .field-db pre,
-.field-diff .field-edge pre { border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
-.field-name { width: 100px; color: var(--muted); flex-shrink: 0; }
-.field-db { flex: 1; }
-.field-edge { flex: 1; }
+.field-diff .field-edge pre {
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.field-name {
+  width: 100px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.field-db {
+  flex: 1;
+}
+.field-edge {
+  flex: 1;
+}
 .field-db pre,
 .field-edge pre {
   margin: 0;
@@ -352,6 +451,11 @@ watch(() => props.visible, async (val) => {
   color: var(--fg);
 }
 
-.empty-state { text-align: center; padding: 80px 0; }
-.error-banner { margin-bottom: 16px; }
+.empty-state {
+  text-align: center;
+  padding: 80px 0;
+}
+.error-banner {
+  margin-bottom: 16px;
+}
 </style>

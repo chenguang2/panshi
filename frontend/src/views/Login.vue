@@ -62,14 +62,7 @@
           <a href="#" class="forgot-link" tabindex="-1">忘记密码?</a>
         </div>
 
-        <a-button
-          type="primary"
-          html-type="submit"
-          :loading="submitting"
-          block
-          size="large"
-          class="login-btn"
-        >
+        <a-button type="primary" html-type="submit" :loading="submitting" block size="large" class="login-btn">
           登 录
         </a-button>
       </form>
@@ -174,7 +167,11 @@ async function handleLogin() {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 600px 400px at 50% 40%, color-mix(in srgb, var(--accent) 6%, transparent), transparent);
+  background: radial-gradient(
+    ellipse 600px 400px at 50% 40%,
+    color-mix(in srgb, var(--accent) 6%, transparent),
+    transparent
+  );
   pointer-events: none;
 }
 
@@ -191,14 +188,24 @@ async function handleLogin() {
 }
 
 @keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.login-brand { text-align: center; margin-bottom: 36px; }
+.login-brand {
+  text-align: center;
+  margin-bottom: 36px;
+}
 
 .login-brand-icon {
-  width: 52px; height: 52px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-md);
   object-fit: contain;
   margin-bottom: 14px;
@@ -206,30 +213,47 @@ async function handleLogin() {
 }
 
 .login-brand-name {
-  font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
-  color: var(--fg); display: block; line-height: 1.3;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  display: block;
+  line-height: 1.3;
 }
 
 .login-brand-sub {
-  font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  font-weight: 400;
 }
 
 .login-divider {
-  width: 32px; height: 2px;
-  background: var(--accent); border-radius: 2px;
-  margin: 16px auto 20px; opacity: 0.5;
+  width: 32px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  margin: 16px auto 20px;
+  opacity: 0.5;
 }
 
 .login-error {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: color-mix(in srgb, var(--danger) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--danger) 18%, transparent);
   border-radius: var(--radius-md);
-  padding: 10px 12px; margin-bottom: 16px;
-  font-size: 12px; color: var(--danger);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--danger);
 }
 
-.login-error-icon { flex-shrink: 0; font-size: 14px; }
+.login-error-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
 
 /* ── 表单样式 ── */
 
@@ -262,7 +286,7 @@ async function handleLogin() {
 
 /* 输入框前缀图标 */
 .ant-input-icon {
-  font-size: 15px;
+  font-size: 14px;
   opacity: 0.5;
 }
 
@@ -312,28 +336,41 @@ async function handleLogin() {
 
 /* 底部装饰 */
 .login-token-hint {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  margin-top: 18px; font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 18px;
+  font-size: 11px;
   color: color-mix(in srgb, var(--muted) 50%, transparent);
 }
 
 .token-dot {
-  display: inline-block; width: 5px; height: 5px;
-  border-radius: 50%; background: currentColor; opacity: 0.4;
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
 }
 
 .login-footer {
-  text-align: center; margin-top: 28px;
-  padding-top: 16px; border-top: 1px solid var(--border);
+  text-align: center;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .login-footer-version {
-  font-size: 11px; color: var(--muted); font-weight: 500;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
   letter-spacing: 0.02em;
 }
 
 .login-footer-copy {
-  font-size: 10px; color: color-mix(in srgb, var(--muted) 50%, transparent);
+  font-size: 10px;
+  color: color-mix(in srgb, var(--muted) 50%, transparent);
   margin-top: 4px;
 }
 </style>

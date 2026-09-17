@@ -577,7 +577,7 @@ select.form-input {
 
 .modal-overlay .modal-header h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--fg);
 }
@@ -637,7 +637,7 @@ select.form-input {
   margin: 0;
 }
 .ant-modal.app-modal .ant-modal-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--fg);
 }
@@ -959,7 +959,7 @@ select.form-input {
 }
 .ant-modal-confirm .ant-modal-confirm-title {
   color: var(--fg) !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
 }
 .ant-modal-confirm .ant-modal-confirm-content {
