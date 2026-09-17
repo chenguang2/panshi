@@ -369,7 +369,7 @@ async function handleLogin() {
 }
 
 .login-footer-copy {
-  font-size: 10px;
+  font-size: 11px;
   color: color-mix(in srgb, var(--muted) 50%, transparent);
   margin-top: 4px;
 }

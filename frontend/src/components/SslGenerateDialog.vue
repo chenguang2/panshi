@@ -730,7 +730,7 @@ watch(
   font-size: 11px;
 }
 .sni-tag-reserved {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   background: oklch(0% 0 0 / 6%);
   padding: 0 4px;
@@ -823,7 +823,7 @@ watch(
   background: oklch(56% 0.16 210 / 5%);
 }
 .collapse-arrow {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   flex-shrink: 0;
 }
@@ -933,7 +933,7 @@ watch(
 }
 .log-toggle {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .log-detail {

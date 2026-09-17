@@ -463,7 +463,7 @@ onMounted(loadSwitches)
 }
 
 .plugin-card-category {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 7px;
   border-radius: 8px;
   font-weight: 500;
@@ -497,7 +497,7 @@ onMounted(loadSwitches)
 }
 
 .plugin-version {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   font-family: var(--font-mono);
 }

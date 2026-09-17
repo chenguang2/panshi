@@ -1544,7 +1544,7 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .group-chip {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 8px;
   border-radius: 8px;
   background: var(--accent-bg);
@@ -1688,7 +1688,7 @@ onMounted(async () => {
   line-height: 1.3;
 }
 .cl-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1891,7 +1891,7 @@ onMounted(async () => {
   margin-left: 4px;
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 11px;
   background: var(--bg);
   color: var(--muted);
 }
@@ -2282,7 +2282,7 @@ onMounted(async () => {
   font-weight: 500;
 }
 .mini-hint {
-  font-size: 10px;
+  font-size: 11px;
   opacity: 0.6;
 }
 

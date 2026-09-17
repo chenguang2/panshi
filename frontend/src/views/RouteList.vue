@@ -512,7 +512,7 @@ onUnmounted(() => {
   display: inline-block;
   padding: 0 5px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-mono);
   margin-right: 2px;
@@ -566,7 +566,7 @@ onUnmounted(() => {
 
 .dns-route-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 8px;

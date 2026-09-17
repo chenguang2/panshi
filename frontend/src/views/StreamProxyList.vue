@@ -618,7 +618,7 @@ onUnmounted(() => {
 }
 .group-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 8px;
@@ -630,7 +630,7 @@ onUnmounted(() => {
 }
 .dns-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 8px;
@@ -642,7 +642,7 @@ onUnmounted(() => {
 }
 .wan-badge {
   display: inline-block;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 8px;
@@ -735,7 +735,7 @@ onUnmounted(() => {
 }
 .sp-target-wt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .sp-no-targets {
   font-size: 11px;
@@ -760,7 +760,7 @@ onUnmounted(() => {
   margin-bottom: 2px;
 }
 .sp-dns-domain-lb {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-bottom: 4px;
 }

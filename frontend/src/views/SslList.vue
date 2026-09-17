@@ -104,42 +104,42 @@
               }}<span
                 v-if="cert.is_ca && cert.algorithm === 'sm2'"
                 class="badge algo-sm"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >CA 根证书 SM2</span
               ><span
                 v-if="cert.is_ca && cert.algorithm === 'rsa'"
                 class="badge algo-international"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >CA 根证书 RSA</span
               ><span
                 v-if="cert.is_ca && cert.algorithm === 'ecc'"
                 class="badge algo-international"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >CA 根证书 ECC</span
               ><span
                 v-else-if="cert.algorithm === 'sm2' && cert.sign_cert"
                 class="badge algo-sm"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >🇨🇳 国密 SM2 双证书</span
               ><span
                 v-else-if="cert.algorithm === 'sm2'"
                 class="badge algo-sm"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >🇨🇳 国密 SM2 单证书</span
               ><span
                 v-else-if="cert.algorithm === 'rsa'"
                 class="badge algo-international"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >🌐 国际 RSA 2048</span
               ><span
                 v-else-if="cert.algorithm === 'ecc'"
                 class="badge algo-international"
-                style="margin-left: 6px; font-size: 10px"
+                style="margin-left: 6px; font-size: 11px"
                 >🌐 国际 ECC P-256</span
               ><span
                 v-if="cert.create_method === 'local_generate'"
                 class="badge badge-secondary"
-                style="margin-left: 4px; font-size: 10px"
+                style="margin-left: 4px; font-size: 11px"
                 >本地生成</span
               ></span
             >
@@ -596,10 +596,10 @@ onMounted(() => {
 .sni-tag-locked::before {
   content: '🔒';
   margin-right: 2px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .sni-tag-reserved {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   background: oklch(0% 0 0 / 6%);
   padding: 0 4px;
@@ -675,7 +675,7 @@ onMounted(() => {
   border-radius: 0 0 1px 1px;
 }
 .algo-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 3px;

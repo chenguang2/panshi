@@ -163,7 +163,7 @@ const handleLogout = async () => {
   border-color: var(--accent);
 }
 .search-kbd {
-  font-size: 10px;
+  font-size: 11px;
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0 4px;

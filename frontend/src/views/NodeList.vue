@@ -1367,7 +1367,7 @@ function onEdgePackRebase(e: Event) {
   font-weight: 700;
 }
 .node-stat-card .ns-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;

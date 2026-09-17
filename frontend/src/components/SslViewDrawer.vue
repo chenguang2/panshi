@@ -388,7 +388,7 @@ async function downloadClientBundle(cert: any) {
 }
 .view-log-toggle {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 .view-log-detail {
@@ -440,7 +440,7 @@ async function downloadClientBundle(cert: any) {
   background: oklch(56% 0.16 210 / 5%);
 }
 .mtls-arrow {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   flex-shrink: 0;
 }

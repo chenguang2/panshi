@@ -411,7 +411,7 @@ onUnmounted(() => {
 }
 .target-tag .weight {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 .lb-badge {
   font-size: 11px;

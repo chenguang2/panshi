@@ -710,7 +710,7 @@ onMounted(() => {
   text-decoration: underline;
 }
 .cl-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;

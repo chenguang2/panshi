@@ -138,7 +138,7 @@ function copyText(text: string): void {
   margin-left: 4px;
   border-radius: 50%;
   border: 1px solid currentColor;
-  font-size: 10px;
+  font-size: 11px;
   cursor: help;
 }
 </style>

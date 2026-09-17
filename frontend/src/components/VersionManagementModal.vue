@@ -724,7 +724,7 @@ const handleClose = () => {
   display: inline-block;
   padding: 0 6px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-mono);
   background: color-mix(in srgb, var(--success) 15%, transparent);
   color: var(--success);

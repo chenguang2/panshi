@@ -31,7 +31,9 @@ defineProps<{
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.25s, box-shadow 0.25s;
+  transition:
+    transform 0.25s,
+    box-shadow 0.25s;
 }
 
 .stat-card:hover {
@@ -50,13 +52,27 @@ defineProps<{
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
-.stat-card.accent-cluster::before { background: var(--accent); }
-.stat-card.accent-route::before { background: var(--success); }
-.stat-card.accent-upstream::before { background: var(--warning); }
-.stat-card.accent-node::before { background: var(--info); }
-.stat-card.accent-user::before { background: var(--danger); }
-.stat-card.accent-plugin::before { background: #7c3aed; }
-.stat-card.accent-global::before { background: #52c41a; }
+.stat-card.accent-cluster::before {
+  background: var(--accent);
+}
+.stat-card.accent-route::before {
+  background: var(--success);
+}
+.stat-card.accent-upstream::before {
+  background: var(--warning);
+}
+.stat-card.accent-node::before {
+  background: var(--info);
+}
+.stat-card.accent-user::before {
+  background: var(--danger);
+}
+.stat-card.accent-plugin::before {
+  background: #7c3aed;
+}
+.stat-card.accent-global::before {
+  background: #52c41a;
+}
 
 .stat-card-inner {
   display: flex;
@@ -89,7 +105,7 @@ defineProps<{
 }
 
 .stat-card-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   opacity: 0.6;
   margin-top: -2px;

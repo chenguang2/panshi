@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:860px;">
+    <div class="modal modal-wide" style="max-width: 860px">
       <div class="modal-header">
         <h2>{{ copyingRoute ? '复制路由' : editingRoute ? '编辑路由' : '新建路由' }}</h2>
         <button class="modal-close" @click="$emit('close')">&times;</button>
@@ -8,10 +8,18 @@
 
       <!-- Tab Bar -->
       <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">基础配置</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">高级匹配</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'plugins' }" @click="activeTab = 'plugins'">插件管理</button>
-        <button class="tab-btn" :class="{ active: activeTab === 'pluginGroups' }" @click="activeTab = 'pluginGroups'">插件组</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">
+          基础配置
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">
+          高级匹配
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'plugins' }" @click="activeTab = 'plugins'">
+          插件管理
+        </button>
+        <button class="tab-btn" :class="{ active: activeTab === 'pluginGroups' }" @click="activeTab = 'pluginGroups'">
+          插件组
+        </button>
       </div>
 
       <div class="modal-body">
@@ -20,12 +28,12 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">名称 <span class="required">*</span></label>
-              <input v-model="form.name" type="text" class="form-input" placeholder="请输入路由名称">
+              <input v-model="form.name" type="text" class="form-input" placeholder="请输入路由名称" />
               <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
             </div>
             <div class="form-group">
               <label class="form-label">URI <span class="required">*</span></label>
-              <input v-model="form.uri" type="text" class="form-input" placeholder="如: /api/*">
+              <input v-model="form.uri" type="text" class="form-input" placeholder="如: /api/*" />
               <div v-if="formErrors.uri" class="form-error">{{ formErrors.uri }}</div>
             </div>
           </div>
@@ -40,23 +48,24 @@
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
             </div>
             <div class="form-group">
-            <label class="form-label">请求方法 <span class="required">*</span></label>
-            <div class="method-chips">
-              <span
-                v-for="m in ALL_METHODS"
-                :key="m"
-                class="method-chip"
-                :class="{ selected: form.methods.includes(m) }"
-                @click="toggleMethod(m)"
-              >{{ m }}</span>
-            </div>
-            <div style="margin-top:4px;">
-              <label class="checkbox-label" style="font-size:12px;">
-                <input type="checkbox" :checked="allMethodsSelected" @change="toggleAllMethods">
-                <span>{{ allMethodsSelected ? '取消全选' : '全选' }}</span>
-              </label>
-            </div>
-            <div v-if="formErrors.methods" class="form-error">{{ formErrors.methods }}</div>
+              <label class="form-label">请求方法 <span class="required">*</span></label>
+              <div class="method-chips">
+                <span
+                  v-for="m in ALL_METHODS"
+                  :key="m"
+                  class="method-chip"
+                  :class="{ selected: form.methods.includes(m) }"
+                  @click="toggleMethod(m)"
+                  >{{ m }}</span
+                >
+              </div>
+              <div style="margin-top: 4px">
+                <label class="checkbox-label" style="font-size: 12px">
+                  <input type="checkbox" :checked="allMethodsSelected" @change="toggleAllMethods" />
+                  <span>{{ allMethodsSelected ? '取消全选' : '全选' }}</span>
+                </label>
+              </div>
+              <div v-if="formErrors.methods" class="form-error">{{ formErrors.methods }}</div>
             </div>
           </div>
 
@@ -71,7 +80,14 @@
             </div>
             <div class="form-group">
               <label class="form-label">优先级 <span class="required">*</span></label>
-              <input v-model.number="form.priority" type="number" class="form-input" :class="{ 'has-error': formErrors.priority }" min="0" placeholder="0">
+              <input
+                v-model.number="form.priority"
+                type="number"
+                class="form-input"
+                :class="{ 'has-error': formErrors.priority }"
+                min="0"
+                placeholder="0"
+              />
               <span class="form-error" v-if="formErrors.priority">{{ formErrors.priority }}</span>
             </div>
           </div>
@@ -86,21 +102,21 @@
             </div>
             <div class="form-group">
               <label class="form-label">描述</label>
-              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息">
+              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息" />
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label class="checkbox-label">
-                <input type="checkbox" v-model="form.advancedEnabled">
+                <input type="checkbox" v-model="form.advancedEnabled" />
                 <span>开启高级匹配</span>
               </label>
               <div class="form-hint">开启后在"高级匹配"页配置请求条件</div>
             </div>
             <div class="form-group">
               <label class="checkbox-label">
-                <input type="checkbox" v-model="form.enableWebsocket">
+                <input type="checkbox" v-model="form.enableWebsocket" />
                 <span>启用 WebSocket</span>
               </label>
               <div class="form-hint">开启 WebSocket 代理支持，允许双向通信</div>
@@ -114,7 +130,11 @@
             <RouteAdvancedMatch
               :enabled="form.advancedEnabled"
               :model-value="{ vars: form.advancedMatch.vars }"
-              @update:model-value="(val: any) => { form.advancedMatch.vars = val.vars || [] }"
+              @update:model-value="
+                (val: any) => {
+                  form.advancedMatch.vars = val.vars || []
+                }
+              "
             />
           </template>
           <div v-else class="advanced-disabled-hint">
@@ -125,10 +145,7 @@
 
         <!-- ── 插件管理 ── -->
         <div v-show="activeTab === 'plugins'">
-          <PluginSelector
-            v-model="form.plugins"
-            :plugins="availablePlugins"
-          />
+          <PluginSelector v-model="form.plugins" :plugins="availablePlugins" />
         </div>
 
         <!-- ── 插件组 ── -->
@@ -137,7 +154,7 @@
             暂无插件组，请在"插件组"Tab 中创建
           </div>
           <div v-else>
-            <div class="form-hint" style="margin-bottom:12px;">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
+            <div class="form-hint" style="margin-bottom: 12px">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
             <div class="pg-list">
               <div
                 v-for="pg in clusterPluginGroups"
@@ -147,7 +164,12 @@
                 @click="togglePluginGroup(pg)"
               >
                 <div class="pg-item-header">
-                  <input type="checkbox" class="pg-checkbox" :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)">
+                  <input
+                    type="checkbox"
+                    class="pg-checkbox"
+                    :checked="isPluginGroupSelected(pg.edge_uuid || '')"
+                    @click.stop="togglePluginGroup(pg)"
+                  />
                   <strong class="pg-item-name">{{ pg.name }}</strong>
                   <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
                 </div>
@@ -155,7 +177,7 @@
                   <span v-for="(pcfg, pname) in pg.plugins" :key="pname" class="pg-item-tag">{{ pname }}</span>
                 </div>
                 <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
-            </div>
+              </div>
             </div>
           </div>
         </div>
@@ -163,7 +185,9 @@
 
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="$emit('close')">取消</button>
-        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '提交中...' : '保存' }}</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
+          {{ submitting ? '提交中...' : '保存' }}
+        </button>
       </div>
     </div>
   </div>
@@ -198,10 +222,15 @@ const clusterPluginGroups = ref<any[]>([])
 const pluginConfigIds = ref<string[]>([])
 
 const form = reactive({
-  name: '', uri: '', methods: [] as string[], priority: 0, status: 1,
+  name: '',
+  uri: '',
+  methods: [] as string[],
+  priority: 0,
+  status: 1,
   cluster_id: '' as number | string,
   upstream_id: '' as number | string | null,
-  description: '', advancedEnabled: false,
+  description: '',
+  advancedEnabled: false,
   enableWebsocket: false,
   advancedMatch: { vars: [] as RouteVarRule[] },
   plugins: [] as { plugin_name: string; config: string }[],
@@ -233,14 +262,18 @@ async function loadPlugins() {
   try {
     const res = await api.get('/plugins/builtin')
     availablePlugins.value = res.data.plugins || []
-  } catch { availablePlugins.value = [] }
+  } catch {
+    availablePlugins.value = []
+  }
 }
 
 async function loadPluginGroups(cid: number) {
   try {
     const res = await api.get(`/clusters/${cid}/plugin_configs`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
     clusterPluginGroups.value = res.data.items || []
-  } catch { clusterPluginGroups.value = [] }
+  } catch {
+    clusterPluginGroups.value = []
+  }
 }
 
 function isPluginGroupSelected(edgeUuid: string): boolean {
@@ -250,59 +283,83 @@ function isPluginGroupSelected(edgeUuid: string): boolean {
 function togglePluginGroup(pg: any) {
   const uuid = pg.edge_uuid || ''
   if (pluginConfigIds.value.includes(uuid)) {
-    pluginConfigIds.value = pluginConfigIds.value.filter(id => id !== uuid)
+    pluginConfigIds.value = pluginConfigIds.value.filter((id) => id !== uuid)
   } else {
     pluginConfigIds.value.push(uuid)
   }
 }
 
-watch(() => form.cluster_id, (cid) => {
-  if (cid) { loadUpstreams(Number(cid)); loadPluginGroups(Number(cid)) }
-})
+watch(
+  () => form.cluster_id,
+  (cid) => {
+    if (cid) {
+      loadUpstreams(Number(cid))
+      loadPluginGroups(Number(cid))
+    }
+  },
+)
 
-watch(() => props.visible, async (v) => {
-  if (!v) return
-  formErrors.name = ''
-  formErrors.uri = ''
-  formErrors.cluster_id = ''
-  formErrors.upstream_id = ''
-  formErrors.methods = ''
-  formErrors.priority = ''
+watch(
+  () => props.visible,
+  async (v) => {
+    if (!v) return
+    formErrors.name = ''
+    formErrors.uri = ''
+    formErrors.cluster_id = ''
+    formErrors.upstream_id = ''
+    formErrors.methods = ''
+    formErrors.priority = ''
 
-  await loadPlugins()
-  if (props.editingRoute) {
-    const r = props.editingRoute
-    form.name = props.copyingRoute ? `复制_${r.name}` : r.name
-    form.uri = r.uri; form.priority = r.priority ?? 0; form.status = r.status ?? 1
-    form.cluster_id = r.cluster_id; form.description = r.description || ''; form.upstream_id = r.upstream_id
-    form.methods = (r.methods || '').split(',').filter(Boolean)
-    form.advancedEnabled = !!(r.advanced_match_enabled || (r.vars && r.vars.length > 0))
-    form.advancedMatch = { vars: r.vars || [] }
-    form.enableWebsocket = !!(r.enable_websocket)
-    pluginConfigIds.value = r.plugin_config_ids || []
-    // Load plugins from API
-    if (r.id && r.cluster_id) {
-      try {
-        const res = await api.get(`/clusters/${r.cluster_id}/routes/${r.id}/plugins`)
-        form.plugins = (res.data.plugins || []).map((p: any) => ({
-          plugin_name: p.plugin_name,
-          config: typeof p.config === 'string' ? p.config : JSON.stringify(p.config || {}),
-        }))
-      } catch {
+    await loadPlugins()
+    if (props.editingRoute) {
+      const r = props.editingRoute
+      form.name = props.copyingRoute ? `复制_${r.name}` : r.name
+      form.uri = r.uri
+      form.priority = r.priority ?? 0
+      form.status = r.status ?? 1
+      form.cluster_id = r.cluster_id
+      form.description = r.description || ''
+      form.upstream_id = r.upstream_id
+      form.methods = (r.methods || '').split(',').filter(Boolean)
+      form.advancedEnabled = !!(r.advanced_match_enabled || (r.vars && r.vars.length > 0))
+      form.advancedMatch = { vars: r.vars || [] }
+      form.enableWebsocket = !!r.enable_websocket
+      pluginConfigIds.value = r.plugin_config_ids || []
+      // Load plugins from API
+      if (r.id && r.cluster_id) {
+        try {
+          const res = await api.get(`/clusters/${r.cluster_id}/routes/${r.id}/plugins`)
+          form.plugins = (res.data.plugins || []).map((p: any) => ({
+            plugin_name: p.plugin_name,
+            config: typeof p.config === 'string' ? p.config : JSON.stringify(p.config || {}),
+          }))
+        } catch {
+          form.plugins = []
+        }
+      } else {
         form.plugins = []
       }
+      if (r.cluster_id) {
+        await loadUpstreams(r.cluster_id)
+        await loadPluginGroups(r.cluster_id)
+      }
     } else {
+      form.name = ''
+      form.uri = ''
+      form.priority = 0
+      form.status = 1
+      form.cluster_id = ''
+      form.description = ''
+      form.upstream_id = ''
+      form.methods = []
+      form.advancedEnabled = false
+      form.enableWebsocket = false
+      form.advancedMatch = { vars: [] }
       form.plugins = []
     }
-    if (r.cluster_id) { await loadUpstreams(r.cluster_id); await loadPluginGroups(r.cluster_id) }
-  } else {
-    form.name = ''; form.uri = ''; form.priority = 0; form.status = 1
-    form.cluster_id = ''; form.description = ''; form.upstream_id = ''
-    form.methods = []; form.advancedEnabled = false; form.enableWebsocket = false
-    form.advancedMatch = { vars: [] }; form.plugins = []
-  }
-  activeTab.value = 'basic'
-})
+    activeTab.value = 'basic'
+  },
+)
 
 function validateForm(): boolean {
   formErrors.name = ''
@@ -312,13 +369,34 @@ function validateForm(): boolean {
   formErrors.methods = ''
   formErrors.priority = ''
 
-  if (!form.name.trim()) { formErrors.name = '请输入路由名称'; return false }
-  if (!form.uri.trim()) { formErrors.uri = '请输入URI'; return false }
-  if (!form.uri.startsWith('/')) { formErrors.uri = 'URI 必须以 / 开头'; return false }
-  if (!form.cluster_id) { formErrors.cluster_id = '请选择所属集群'; return false }
-  if (!form.upstream_id) { formErrors.upstream_id = '请选择上游'; return false }
-  if (form.methods.length === 0) { formErrors.methods = '请至少选择一种请求方法'; return false }
-  if (form.priority === undefined || form.priority === null || isNaN(Number(form.priority))) { formErrors.priority = '请输入优先级'; return false }
+  if (!form.name.trim()) {
+    formErrors.name = '请输入路由名称'
+    return false
+  }
+  if (!form.uri.trim()) {
+    formErrors.uri = '请输入URI'
+    return false
+  }
+  if (!form.uri.startsWith('/')) {
+    formErrors.uri = 'URI 必须以 / 开头'
+    return false
+  }
+  if (!form.cluster_id) {
+    formErrors.cluster_id = '请选择所属集群'
+    return false
+  }
+  if (!form.upstream_id) {
+    formErrors.upstream_id = '请选择上游'
+    return false
+  }
+  if (form.methods.length === 0) {
+    formErrors.methods = '请至少选择一种请求方法'
+    return false
+  }
+  if (form.priority === undefined || form.priority === null || isNaN(Number(form.priority))) {
+    formErrors.priority = '请输入优先级'
+    return false
+  }
   return true
 }
 
@@ -327,9 +405,12 @@ async function handleSubmit() {
   submitting.value = true
   try {
     const data: Record<string, any> = {
-      name: form.name, uri: form.uri,
-      methods: form.methods.join(','), priority: form.priority,
-      status: form.status, description: form.description,
+      name: form.name,
+      uri: form.uri,
+      methods: form.methods.join(','),
+      priority: form.priority,
+      status: form.status,
+      description: form.description,
       upstream_id: form.upstream_id,
       advanced_match_enabled: form.advancedEnabled,
     }
@@ -353,15 +434,26 @@ async function handleSubmit() {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
     }
-    emit('saved'); emit('close')
-  } catch { message.error('保存失败') }
-  finally { submitting.value = false }
+    emit('saved')
+    emit('close')
+  } catch {
+    message.error('保存失败')
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
 <style scoped>
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
-.form-group { flex: 1; margin-bottom: 16px; }
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.form-group {
+  flex: 1;
+  margin-bottom: 16px;
+}
 
 /* Tab Bar */
 .tab-bar {
@@ -383,7 +475,9 @@ async function handleSubmit() {
   transition: all 0.15s;
   font-family: var(--font-body);
 }
-.tab-btn:hover { color: var(--fg); }
+.tab-btn:hover {
+  color: var(--fg);
+}
 .tab-btn.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -397,7 +491,9 @@ async function handleSubmit() {
   font-weight: 500;
 }
 
-.required { color: var(--danger); }
+.required {
+  color: var(--danger);
+}
 
 .form-hint {
   font-size: 11px;
@@ -451,7 +547,7 @@ async function handleSubmit() {
   color: var(--fg);
   cursor: pointer;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
@@ -464,25 +560,75 @@ async function handleSubmit() {
   color: var(--muted);
   font-size: 13px;
 }
-.hint-icon { font-size: 18px; margin-right: 8px; }
+.hint-icon {
+  font-size: 18px;
+  margin-right: 8px;
+}
 
 /* ── Plugin Groups ── */
-.pg-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+.pg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
 .plugin-config-card {
-  border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px;
-  cursor: pointer; transition: all 0.2s; background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--surface);
 }
-.plugin-config-card:hover { box-shadow: var(--shadow-md); border-color: var(--accent); }
-.plugin-config-card.selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 6%); }
-.pg-item-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.pg-checkbox { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-.pg-item-name { font-size: 14px; font-weight: 600; color: var(--fg); }
-.pg-item-version { font-size: 11px; color: var(--muted); font-family: var(--font-mono); margin-left: auto; }
-.pg-item-plugins { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+.plugin-config-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent);
+}
+.plugin-config-card.selected {
+  border-color: var(--accent);
+  background: oklch(56% 0.16 210 / 6%);
+}
+.pg-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.pg-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.pg-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pg-item-version {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  margin-left: auto;
+}
+.pg-item-plugins {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
 .pg-item-tag {
-  display: inline-block; padding: 1px 7px; border-radius: 3px;
-  font-size: 10px; font-family: var(--font-mono);
-  background: oklch(56% 0.16 210 / 8%); color: var(--accent);
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: oklch(56% 0.16 210 / 8%);
+  color: var(--accent);
 }
-.pg-item-desc { font-size: 12px; color: var(--muted); }
+.pg-item-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
 </style>

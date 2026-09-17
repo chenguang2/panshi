@@ -549,7 +549,7 @@ function isActive(item: NavItem): boolean {
 }
 
 .sidebar-logo-version {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--sidebar-fg);
   opacity: 0.5;
   font-family: var(--font-mono);
@@ -599,7 +599,7 @@ function isActive(item: NavItem): boolean {
 
 .sidebar-section-title {
   padding: 12px 16px 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -758,7 +758,7 @@ function isActive(item: NavItem): boolean {
 }
 
 .sidebar-user-role {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--sidebar-fg);
   opacity: 0.6;
   line-height: 1.3;

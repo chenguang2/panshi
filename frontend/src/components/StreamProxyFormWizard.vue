@@ -1,378 +1,611 @@
 <template>
   <Teleport to="body">
-  <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal" style="max-width:680px;">
-      <div class="modal-header">
-        <h2>{{ editingProxy ? '编辑四层代理' : '新建四层代理' }}</h2>
-        <button class="modal-close" @click="handleCancel">&times;</button>
-      </div>
-
-      <!-- Step Indicator -->
-      <div class="spwf-steps">
-        <div class="spwf-step" :class="{ active: currentStep === 1, done: currentStep > 1 }">
-          <div class="spwf-circle">
-            <span v-if="currentStep > 1" class="spwf-check">&#10003;</span>
-            <span v-else>1</span>
-          </div>
-          <span class="spwf-label">端口选择</span>
+    <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 680px">
+        <div class="modal-header">
+          <h2>{{ editingProxy ? '编辑四层代理' : '新建四层代理' }}</h2>
+          <button class="modal-close" @click="handleCancel">&times;</button>
         </div>
-        <div class="spwf-connector" :class="{ done: currentStep > 1 }"></div>
-        <div class="spwf-step" :class="{ active: currentStep === 2 }">
-          <div class="spwf-circle"><span>2</span></div>
-          <span class="spwf-label">配置详情</span>
-        </div>
-      </div>
 
-      <div class="modal-body">
-        <!-- ═══ Step 1: Port Selection ═══ -->
-        <div v-show="currentStep === 1">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select v-model="form.cluster_id" class="form-input" :class="{ 'input-error': formErrors.cluster_id }" :disabled="!!editingProxy" @change="onClusterChange" @blur="formErrors.cluster_id = form.cluster_id ? '' : '请选择集群'">
-                <option value="">请选择集群</option>
-                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-              </select>
-              <span v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</span>
+        <!-- Step Indicator -->
+        <div class="spwf-steps">
+          <div class="spwf-step" :class="{ active: currentStep === 1, done: currentStep > 1 }">
+            <div class="spwf-circle">
+              <span v-if="currentStep > 1" class="spwf-check">&#10003;</span>
+              <span v-else>1</span>
             </div>
-            <div class="form-group">
-              <label class="form-label">参考节点 <span class="required">*</span></label>
-              <select v-model="form.node_id" class="form-input" :class="{ 'input-error': formErrors.node_id }" :disabled="!form.cluster_id" @blur="formErrors.node_id = form.node_id ? '' : '请选择节点'">
-                <option value="">请选择节点</option>
-                <option v-for="n in nodes" :key="n.id" :value="n.id">{{ n.ip }}:{{ n.management_port || n.service_port }}</option>
-              </select>
-              <span v-if="formErrors.node_id" class="form-error">{{ formErrors.node_id }}</span>
-            </div>
+            <span class="spwf-label">端口选择</span>
           </div>
-
-          <div class="form-group">
-            <button class="btn btn-primary" :disabled="!form.cluster_id || !form.node_id || detecting" @click="handleDetectPorts">
-              {{ detecting ? '检测中...' : '检测可用端口' }}
-            </button>
-          </div>
-
-          <!-- SSE Log Panel -->
-          <div v-if="logLines.length > 0" class="spwf-log">
-            <div v-for="(line, i) in logLines" :key="i" class="spwf-log-line">{{ line }}</div>
-          </div>
-
-          <!-- Error -->
-          <div v-if="portError" class="form-error" style="margin-bottom:12px;">{{ portError }}</div>
-
-          <!-- Port Grid -->
-          <div v-if="ports.length > 0" class="form-group">
-            <label class="form-label">可用端口（点击选择可用端口）</label>
-            <div class="spwf-port-grid">
-              <div
-                v-for="p in ports"
-                :key="p.port"
-                class="spwf-port-card"
-                :class="{
-                  'spwf-port-available': p.status === 'available',
-                  'spwf-port-inuse': p.status === 'in_use',
-                  'spwf-port-noconfig': p.status === 'not_in_config',
-                  'spwf-port-selected': selectedPort === p.port,
-                }"
-                @click="selectPort(p)"
-              >
-                <div class="spwf-port-number">{{ p.port }}</div>
-                <div class="spwf-port-status">
-                  <span class="spwf-port-badge badge-success" v-if="p.status === 'available'">可用</span>
-                  <span class="spwf-port-badge badge-danger" v-else-if="p.status === 'in_use'">占用</span>
-                  <span class="spwf-port-badge badge-neutral" v-else>未在配置</span>
-                </div>
-                <div v-if="p.status === 'in_use' && p.used_by" class="spwf-port-usedby">{{ p.used_by }}</div>
-              </div>
-            </div>
-            <span v-if="formErrors.port" class="form-error">{{ formErrors.port }}</span>
-          </div>
-
-          <!-- Proxy Type -->
-          <div class="form-group" style="margin-top:12px;">
-            <label class="form-label">代理类型 <span class="required">*</span></label>
-            <div class="spwf-toggle">
-              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'normal' }" @click="form.proxy_type = 'normal'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }">四层代理</button>
-              <button class="spwf-toggle-btn" :class="{ active: form.proxy_type === 'dns' }" @click="form.proxy_type = 'dns'" :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }">DNS代理</button>
-              <label v-if="form.proxy_type === 'dns'" class="checkbox-label spwf-wan-switch" style="margin-left:16px;font-size:12px;">
-                <input type="checkbox" v-model="dnsWanEnabled">
-                <span>启用内外网分离（按来源 IP 返回内/外网地址）</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Manual fallback -->
-          <div class="form-group" style="margin-top:12px;">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="manualPortEnabled">
-              <span>手动输入端口（检测失败或跳过检测时使用）</span>
-            </label>
-            <input v-if="manualPortEnabled" v-model.number="manualPort" type="number" class="form-input" placeholder="输入端口号 1-65535" min="1" max="65535" style="width:200px;margin-top:6px;">
-          </div>
-
-          <!-- No ports after detection -->
-          <div v-if="!detecting && ports.length === 0 && hasSearched && !portError" class="empty-state">
-            <div class="empty-state-icon">&#9881;</div>
-            <p>未检测到端口信息，请确认集群 Stream 模块已启用</p>
+          <div class="spwf-connector" :class="{ done: currentStep > 1 }"></div>
+          <div class="spwf-step" :class="{ active: currentStep === 2 }">
+            <div class="spwf-circle"><span>2</span></div>
+            <span class="spwf-label">配置详情</span>
           </div>
         </div>
 
-        <!-- ═══ Step 2: Config Details ═══ -->
-        <div v-show="currentStep === 2">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">名称 <span class="required">*</span></label>
-              <input v-model="form.name" type="text" class="form-input" placeholder="请输入代理名称">
-              <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">监听端口</label>
-              <input :value="form.listen_port" type="text" class="form-input" disabled style="background:var(--bg);color:var(--muted);">
-            </div>
-          </div>
-
-          <div class="form-row" style="margin-bottom:8px;">
-            <div class="form-group">
-              <label class="form-label">协议 <span class="required">*</span></label>
-              <div v-if="form.proxy_type === 'dns'" style="display:flex;align-items:center;gap:10px;">
-                <span class="spwf-protocol-badge">UDP</span>
-                <span style="font-size:12px;color:var(--muted);">DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</span>
-              </div>
-              <div v-else class="spwf-protocol-radio">
-                <label
-                  v-for="opt in protocolOptions"
-                  :key="opt.value"
-                  class="spwf-protocol-card"
-                  :class="{ active: form.scheme === opt.value }"
-                >
-                  <input
-                    type="radio"
-                    :name="'sp-scheme'"
-                    :value="opt.value"
-                    v-model="form.scheme"
-                    class="spwf-protocol-input"
-                  >
-                  <span class="spwf-protocol-name">{{ opt.label }}</span>
-                  <span class="spwf-protocol-desc">{{ opt.desc }}</span>
-                </label>
-              </div>
-              <div v-if="form.proxy_type !== 'dns'" class="form-hint">{{ schemeHint }}</div>
-            </div>
-          </div>
-
-          <!-- Normal Mode Content -->
-          <template v-if="form.proxy_type !== 'dns'">
+        <div class="modal-body">
+          <!-- ═══ Step 1: Port Selection ═══ -->
+          <div v-show="currentStep === 1">
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">负载均衡 <span class="required">*</span></label>
-                <select v-model="form.load_balance" class="form-input">
-                  <option value="weighted_roundrobin">加权轮询</option>
-                  <option value="chash">一致性哈希</option>
-                  <option value="ewma">EWMA</option>
-                  <option value="least_conn">最少连接</option>
+                <label class="form-label">所属集群 <span class="required">*</span></label>
+                <select
+                  v-model="form.cluster_id"
+                  class="form-input"
+                  :class="{ 'input-error': formErrors.cluster_id }"
+                  :disabled="!!editingProxy"
+                  @change="onClusterChange"
+                  @blur="formErrors.cluster_id = form.cluster_id ? '' : '请选择集群'"
+                >
+                  <option value="">请选择集群</option>
+                  <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
                 </select>
+                <span v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">参考节点 <span class="required">*</span></label>
+                <select
+                  v-model="form.node_id"
+                  class="form-input"
+                  :class="{ 'input-error': formErrors.node_id }"
+                  :disabled="!form.cluster_id"
+                  @blur="formErrors.node_id = form.node_id ? '' : '请选择节点'"
+                >
+                  <option value="">请选择节点</option>
+                  <option v-for="n in nodes" :key="n.id" :value="n.id">
+                    {{ n.ip }}:{{ n.management_port || n.service_port }}
+                  </option>
+                </select>
+                <span v-if="formErrors.node_id" class="form-error">{{ formErrors.node_id }}</span>
               </div>
             </div>
-            <!-- chash: show hash key info -->
-            <template v-if="form.load_balance === 'chash'">
-              <div class="form-row" style="margin-bottom:16px;">
-                <div class="form-group">
-                  <label class="form-label">Hash Key</label>
-                  <input :value="'remote_addr'" type="text" class="form-input" disabled style="background:var(--bg);color:var(--accent);font-weight:600;">
-                  <div class="form-hint">一致性哈希使用来源 IP（remote_addr）作为哈希键</div>
+
+            <div class="form-group">
+              <button
+                class="btn btn-primary"
+                :disabled="!form.cluster_id || !form.node_id || detecting"
+                @click="handleDetectPorts"
+              >
+                {{ detecting ? '检测中...' : '检测可用端口' }}
+              </button>
+            </div>
+
+            <!-- SSE Log Panel -->
+            <div v-if="logLines.length > 0" class="spwf-log">
+              <div v-for="(line, i) in logLines" :key="i" class="spwf-log-line">{{ line }}</div>
+            </div>
+
+            <!-- Error -->
+            <div v-if="portError" class="form-error" style="margin-bottom: 12px">{{ portError }}</div>
+
+            <!-- Port Grid -->
+            <div v-if="ports.length > 0" class="form-group">
+              <label class="form-label">可用端口（点击选择可用端口）</label>
+              <div class="spwf-port-grid">
+                <div
+                  v-for="p in ports"
+                  :key="p.port"
+                  class="spwf-port-card"
+                  :class="{
+                    'spwf-port-available': p.status === 'available',
+                    'spwf-port-inuse': p.status === 'in_use',
+                    'spwf-port-noconfig': p.status === 'not_in_config',
+                    'spwf-port-selected': selectedPort === p.port,
+                  }"
+                  @click="selectPort(p)"
+                >
+                  <div class="spwf-port-number">{{ p.port }}</div>
+                  <div class="spwf-port-status">
+                    <span class="spwf-port-badge badge-success" v-if="p.status === 'available'">可用</span>
+                    <span class="spwf-port-badge badge-danger" v-else-if="p.status === 'in_use'">占用</span>
+                    <span class="spwf-port-badge badge-neutral" v-else>未在配置</span>
+                  </div>
+                  <div v-if="p.status === 'in_use' && p.used_by" class="spwf-port-usedby">{{ p.used_by }}</div>
                 </div>
+              </div>
+              <span v-if="formErrors.port" class="form-error">{{ formErrors.port }}</span>
+            </div>
+
+            <!-- Proxy Type -->
+            <div class="form-group" style="margin-top: 12px">
+              <label class="form-label">代理类型 <span class="required">*</span></label>
+              <div class="spwf-toggle">
+                <button
+                  class="spwf-toggle-btn"
+                  :class="{ active: form.proxy_type === 'normal' }"
+                  @click="form.proxy_type = 'normal'"
+                  :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }"
+                >
+                  四层代理
+                </button>
+                <button
+                  class="spwf-toggle-btn"
+                  :class="{ active: form.proxy_type === 'dns' }"
+                  @click="form.proxy_type = 'dns'"
+                  :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }"
+                >
+                  DNS代理
+                </button>
+                <label
+                  v-if="form.proxy_type === 'dns'"
+                  class="checkbox-label spwf-wan-switch"
+                  style="margin-left: 16px; font-size: 12px"
+                >
+                  <input type="checkbox" v-model="dnsWanEnabled" />
+                  <span>启用内外网分离（按来源 IP 返回内/外网地址）</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Manual fallback -->
+            <div class="form-group" style="margin-top: 12px">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="manualPortEnabled" />
+                <span>手动输入端口（检测失败或跳过检测时使用）</span>
+              </label>
+              <input
+                v-if="manualPortEnabled"
+                v-model.number="manualPort"
+                type="number"
+                class="form-input"
+                placeholder="输入端口号 1-65535"
+                min="1"
+                max="65535"
+                style="width: 200px; margin-top: 6px"
+              />
+            </div>
+
+            <!-- No ports after detection -->
+            <div v-if="!detecting && ports.length === 0 && hasSearched && !portError" class="empty-state">
+              <div class="empty-state-icon">&#9881;</div>
+              <p>未检测到端口信息，请确认集群 Stream 模块已启用</p>
+            </div>
+          </div>
+
+          <!-- ═══ Step 2: Config Details ═══ -->
+          <div v-show="currentStep === 2">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">名称 <span class="required">*</span></label>
+                <input v-model="form.name" type="text" class="form-input" placeholder="请输入代理名称" />
+                <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">监听端口</label>
+                <input
+                  :value="form.listen_port"
+                  type="text"
+                  class="form-input"
+                  disabled
+                  style="background: var(--bg); color: var(--muted)"
+                />
+              </div>
+            </div>
+
+            <div class="form-row" style="margin-bottom: 8px">
+              <div class="form-group">
+                <label class="form-label">协议 <span class="required">*</span></label>
+                <div v-if="form.proxy_type === 'dns'" style="display: flex; align-items: center; gap: 10px">
+                  <span class="spwf-protocol-badge">UDP</span>
+                  <span style="font-size: 12px; color: var(--muted)"
+                    >DNS 模式下，请求将使用 dns_upstream 插件进行域名解析，不配置标准上游节点。</span
+                  >
+                </div>
+                <div v-else class="spwf-protocol-radio">
+                  <label
+                    v-for="opt in protocolOptions"
+                    :key="opt.value"
+                    class="spwf-protocol-card"
+                    :class="{ active: form.scheme === opt.value }"
+                  >
+                    <input
+                      type="radio"
+                      :name="'sp-scheme'"
+                      :value="opt.value"
+                      v-model="form.scheme"
+                      class="spwf-protocol-input"
+                    />
+                    <span class="spwf-protocol-name">{{ opt.label }}</span>
+                    <span class="spwf-protocol-desc">{{ opt.desc }}</span>
+                  </label>
+                </div>
+                <div v-if="form.proxy_type !== 'dns'" class="form-hint">{{ schemeHint }}</div>
+              </div>
+            </div>
+
+            <!-- Normal Mode Content -->
+            <template v-if="form.proxy_type !== 'dns'">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">负载均衡 <span class="required">*</span></label>
+                  <select v-model="form.load_balance" class="form-input">
+                    <option value="weighted_roundrobin">加权轮询</option>
+                    <option value="chash">一致性哈希</option>
+                    <option value="ewma">EWMA</option>
+                    <option value="least_conn">最少连接</option>
+                  </select>
+                </div>
+              </div>
+              <!-- chash: show hash key info -->
+              <template v-if="form.load_balance === 'chash'">
+                <div class="form-row" style="margin-bottom: 16px">
+                  <div class="form-group">
+                    <label class="form-label">Hash Key</label>
+                    <input
+                      :value="'remote_addr'"
+                      type="text"
+                      class="form-input"
+                      disabled
+                      style="background: var(--bg); color: var(--accent); font-weight: 600"
+                    />
+                    <div class="form-hint">一致性哈希使用来源 IP（remote_addr）作为哈希键</div>
+                  </div>
+                </div>
+              </template>
+
+              <div class="form-group">
+                <label class="form-label">描述</label>
+                <input v-model="form.description" type="text" class="form-input" placeholder="描述信息（可选）" />
+              </div>
+
+              <!-- Targets Table -->
+              <div class="form-group">
+                <label class="form-label">目标节点 <span class="required">*</span></label>
+                <div class="spwf-targets-box">
+                  <div class="spwf-target-header">
+                    <span class="spwf-th-cell" style="flex: 2">主机/域名</span>
+                    <span class="spwf-th-cell" style="flex: 1">端口</span>
+                    <span class="spwf-th-cell" style="flex: 1">权重</span>
+                    <span class="spwf-th-cell" style="width: 60px">操作</span>
+                  </div>
+                  <div v-for="(t, i) in form.targets" :key="t.key" class="spwf-target-row">
+                    <input
+                      v-model="t.host"
+                      type="text"
+                      class="form-input"
+                      placeholder="主机地址（IP 或域名）"
+                      style="flex: 2"
+                    />
+                    <input
+                      v-model.number="t.port"
+                      type="number"
+                      class="form-input"
+                      placeholder="端口"
+                      min="1"
+                      max="65535"
+                      style="flex: 1"
+                    />
+                    <input
+                      v-model.number="t.weight"
+                      type="number"
+                      class="form-input"
+                      placeholder="权重"
+                      min="1"
+                      max="100"
+                      style="flex: 1"
+                    />
+                    <button
+                      class="btn btn-ghost btn-sm"
+                      style="width: 60px; color: var(--danger)"
+                      @click="removeTarget(i)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div v-if="targetErrors.length > 0" class="spwf-target-errors">
+                    <div v-for="(err, i) in targetErrors" :key="i" class="form-error">{{ err }}</div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm spwf-add-target" @click="addTarget">+ 添加目标</button>
+                </div>
+                <span v-if="formErrors.targets" class="form-error">{{ formErrors.targets }}</span>
               </div>
             </template>
 
-            <div class="form-group">
-              <label class="form-label">描述</label>
-              <input v-model="form.description" type="text" class="form-input" placeholder="描述信息（可选）">
-            </div>
-
-            <!-- Targets Table -->
-            <div class="form-group">
-              <label class="form-label">目标节点 <span class="required">*</span></label>
-              <div class="spwf-targets-box">
-                <div class="spwf-target-header">
-                  <span class="spwf-th-cell" style="flex:2;">主机/域名</span>
-                  <span class="spwf-th-cell" style="flex:1;">端口</span>
-                  <span class="spwf-th-cell" style="flex:1;">权重</span>
-                  <span class="spwf-th-cell" style="width:60px;">操作</span>
-                </div>
-                <div v-for="(t, i) in form.targets" :key="t.key" class="spwf-target-row">
-                  <input v-model="t.host" type="text" class="form-input" placeholder="主机地址（IP 或域名）" style="flex:2;">
-                  <input v-model.number="t.port" type="number" class="form-input" placeholder="端口" min="1" max="65535" style="flex:1;">
-                  <input v-model.number="t.weight" type="number" class="form-input" placeholder="权重" min="1" max="100" style="flex:1;">
-                  <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeTarget(i)">删除</button>
-                </div>
-                <div v-if="targetErrors.length > 0" class="spwf-target-errors">
-                  <div v-for="(err, i) in targetErrors" :key="i" class="form-error">{{ err }}</div>
-                </div>
-                <button class="btn btn-ghost btn-sm spwf-add-target" @click="addTarget">+ 添加目标</button>
-              </div>
-              <span v-if="formErrors.targets" class="form-error">{{ formErrors.targets }}</span>
-            </div>
-          </template>
-
-          <!-- DNS Mode Content -->
-          <template v-if="form.proxy_type === 'dns'">
-            <!-- WAN/LAN Separation Panel -->
-            <div v-if="dnsWanEnabled" class="form-group" style="margin-bottom:12px;">
-              <div style="padding:10px;background:var(--bg);border-radius:6px;border:1px solid var(--border);">
-                <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:6px;">
-                  <span style="font-weight:600;color:var(--fg);">外网访问来源过滤 <span class="required">*</span></span>
-                  <span style="font-size:11px;">至少填写一项（包含或排除），输入后回车或点击「添加」</span>
-                </div>
-                <div class="spwf-target-row" style="gap:8px;">
-                  <div style="flex:1;display:flex;gap:6px;align-items:center;">
-                    <label class="form-label" style="font-size:11px;flex-shrink:0;">包含</label>
-                    <input v-model="wanFilterInput.include" type="text" class="form-input" placeholder="10.158.40.51 或 10.0.0.0/8" style="flex:1;" @keydown.enter.prevent="addWanFilter('include')">
-                    <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" @click="addWanFilter('include')">添加</button>
+            <!-- DNS Mode Content -->
+            <template v-if="form.proxy_type === 'dns'">
+              <!-- WAN/LAN Separation Panel -->
+              <div v-if="dnsWanEnabled" class="form-group" style="margin-bottom: 12px">
+                <div style="padding: 10px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border)">
+                  <div
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                      font-size: 12px;
+                      color: var(--muted);
+                      margin-bottom: 6px;
+                    "
+                  >
+                    <span style="font-weight: 600; color: var(--fg)"
+                      >外网访问来源过滤 <span class="required">*</span></span
+                    >
+                    <span style="font-size: 11px">至少填写一项（包含或排除），输入后回车或点击「添加」</span>
                   </div>
-                  <div style="flex:1;display:flex;gap:6px;align-items:center;">
-                    <label class="form-label" style="font-size:11px;flex-shrink:0;">排除</label>
-                    <input v-model="wanFilterInput.exclude" type="text" class="form-input" placeholder="192.168.0.3 或 127.0.0.1/8" style="flex:1;" @keydown.enter.prevent="addWanFilter('exclude')">
-                    <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" @click="addWanFilter('exclude')">添加</button>
-                  </div>
-                </div>
-                <div v-if="wanFilterError" class="form-error" style="margin-top:4px;">{{ wanFilterError }}</div>
-                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
-                  <span v-for="ip in dnsWanFilterInclude" :key="'i'+ip" class="wan-filter-tag">
-                    包含 {{ ip }} <a style="margin-left:4px;color:var(--danger);cursor:pointer;" @click="removeWanFilter('include', ip)">×</a>
-                  </span>
-                  <span v-for="ip in dnsWanFilterExclude" :key="'e'+ip" class="wan-filter-tag wan-filter-tag-exclude">
-                    排除 {{ ip }} <a style="margin-left:4px;color:var(--danger);cursor:pointer;" @click="removeWanFilter('exclude', ip)">×</a>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Domain List -->
-            <div class="form-group">
-              <label class="form-label">域名映射 <span class="required">*</span></label>
-              <div v-for="(dom, di) in form.dns_domains" :key="dom.key" class="spwf-dns-domain" style="margin-bottom:12px;">
-                <div class="spwf-target-header">
-                  <span class="spwf-th-cell" style="flex:2;">域名</span>
-                  <span class="spwf-th-cell" style="flex:1;">负载均衡</span>
-                  <span class="spwf-th-cell" style="width:70px;">TTL(秒)</span>
-                  <span class="spwf-th-cell" style="width:60px;">操作</span>
-                </div>
-                <div class="spwf-target-row">
-                  <div style="flex:2;display:flex;flex-direction:column;">
-                    <input v-model="dom.domain" type="text" class="form-input" placeholder="test.local" :class="{ 'input-error': dnsFieldErrors[`${di}.domain`] }" @blur="validateDnsDomain(di)">
-                    <span v-if="dnsFieldErrors[`${di}.domain`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.domain`] }}</span>
-                  </div>
-                  <select v-model="dom.lb_type" class="form-input" style="flex:1;">
-                    <option value="roundrobin">轮询</option>
-                    <option value="chash">一致性哈希</option>
-                    <option value="least_conn">最少连接</option>
-                  </select>
-                  <input v-model.number="dom.ttl" type="number" class="form-input" min="0" style="width:70px;" placeholder="10">
-                  <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsDomain(di)">删除</button>
-                </div>
-                <div style="margin:4px 8px 0;">
-                  <div class="spwf-target-header" style="font-size:10px;">
-                    <span style="flex:2;">IP 地址</span>
-                    <span style="flex:1;">端口</span>
-                    <span v-if="showDnsCidr" style="flex:1;">客户端 CIDR（可选）</span>
-                    <span v-if="dnsWanEnabled" style="flex:1.5;">外网地址（内外网分离）</span>
-                    <span style="width:60px;">操作</span>
-                  </div>
-                  <div v-for="(dt, dti) in dom.targets" :key="dt.key" class="spwf-target-row">
-                    <div style="flex:2;display:flex;flex-direction:column;">
-                      <input v-model="dt.ip" type="text" class="form-input" placeholder="10.0.0.1" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.ip`] }" @blur="validateDnsTarget(di, dti)">
-                      <span v-if="dnsFieldErrors[`${di}.t${dti}.ip`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.ip`] }}</span>
+                  <div class="spwf-target-row" style="gap: 8px">
+                    <div style="flex: 1; display: flex; gap: 6px; align-items: center">
+                      <label class="form-label" style="font-size: 11px; flex-shrink: 0">包含</label>
+                      <input
+                        v-model="wanFilterInput.include"
+                        type="text"
+                        class="form-input"
+                        placeholder="10.158.40.51 或 10.0.0.0/8"
+                        style="flex: 1"
+                        @keydown.enter.prevent="addWanFilter('include')"
+                      />
+                      <button class="btn btn-ghost btn-sm" style="flex-shrink: 0" @click="addWanFilter('include')">
+                        添加
+                      </button>
                     </div>
-                    <div style="flex:1;display:flex;flex-direction:column;">
-                      <input v-model.number="dt.port" type="number" class="form-input" placeholder="53" min="1" max="65535" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.port`] }" @blur="validateDnsTarget(di, dti)">
-                      <span v-if="dnsFieldErrors[`${di}.t${dti}.port`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.port`] }}</span>
+                    <div style="flex: 1; display: flex; gap: 6px; align-items: center">
+                      <label class="form-label" style="font-size: 11px; flex-shrink: 0">排除</label>
+                      <input
+                        v-model="wanFilterInput.exclude"
+                        type="text"
+                        class="form-input"
+                        placeholder="192.168.0.3 或 127.0.0.1/8"
+                        style="flex: 1"
+                        @keydown.enter.prevent="addWanFilter('exclude')"
+                      />
+                      <button class="btn btn-ghost btn-sm" style="flex-shrink: 0" @click="addWanFilter('exclude')">
+                        添加
+                      </button>
                     </div>
-                    <input v-if="showDnsCidr" v-model="dt.cidr" type="text" class="form-input" placeholder="192.168.0.0/16 或留空" style="flex:1;">
-                    <div v-if="dnsWanEnabled" style="flex:1.5;display:flex;flex-direction:column;">
-                      <input v-model="dt.wan" type="text" class="form-input" placeholder="10.158.40.51" :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.wan`] }" @blur="validateDnsTarget(di, dti)">
-                      <span v-if="dnsFieldErrors[`${di}.t${dti}.wan`]" class="form-error" style="font-size:10px;margin-top:2px;">{{ dnsFieldErrors[`${di}.t${dti}.wan`] }}</span>
-                    </div>
-                    <button class="btn btn-ghost btn-sm" style="width:60px;color:var(--danger);" @click="removeDnsTarget(di, dti)">删除</button>
                   </div>
-                  <button class="btn btn-ghost btn-sm" style="width:100%;border:1px dashed var(--border);font-size:11px;" @click="addDnsTarget(di)">+ 添加目标节点</button>
-                </div>
-                <div style="margin-top:6px;padding:0 8px;">
-                  <label class="checkbox-label" style="font-size:12px;">
-                    <input type="checkbox" v-model="dom.enableChecks">
-                    <span>健康检查</span>
-                  </label>
-                  <div v-if="dom.enableChecks" style="margin-top:6px;">
-                    <textarea v-model="dom.checksJson" class="form-input" rows="4" style="font-family:var(--font-mono);font-size:12px;resize:vertical;" placeholder='{"type":"http","active":{},"passive":{}}'></textarea>
+                  <div v-if="wanFilterError" class="form-error" style="margin-top: 4px">{{ wanFilterError }}</div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px">
+                    <span v-for="ip in dnsWanFilterInclude" :key="'i' + ip" class="wan-filter-tag">
+                      包含 {{ ip }}
+                      <a
+                        style="margin-left: 4px; color: var(--danger); cursor: pointer"
+                        @click="removeWanFilter('include', ip)"
+                        >×</a
+                      >
+                    </span>
+                    <span
+                      v-for="ip in dnsWanFilterExclude"
+                      :key="'e' + ip"
+                      class="wan-filter-tag wan-filter-tag-exclude"
+                    >
+                      排除 {{ ip }}
+                      <a
+                        style="margin-left: 4px; color: var(--danger); cursor: pointer"
+                        @click="removeWanFilter('exclude', ip)"
+                        >×</a
+                      >
+                    </span>
                   </div>
                 </div>
               </div>
-              <button class="btn btn-ghost btn-sm" @click="addDnsDomain">+ 添加域名</button>
-              <span v-if="formErrors.dns" class="form-error">{{ formErrors.dns }}</span>
-            </div>
 
-            <!-- DNS Log Toggle -->
-            <div class="form-group" style="margin-bottom:8px;">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="dnsEnableLog">
-                <span>生成日志（DNS 请求日志）</span>
-              </label>
-            </div>
-
-
-          </template>
-
-          <!-- Advanced Config Toggle (普通模式) -->
-          <template v-if="form.proxy_type !== 'dns'">
-            <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="advancedEnabled">
-                <span>高级配置</span>
-              </label>
-            </div>
-
-            <div v-if="advancedEnabled" class="spwf-advanced">
+              <!-- Domain List -->
               <div class="form-group">
-                <label class="form-label">健康检查（JSON）</label>
-                <textarea v-model="checksJson" class="form-input" rows="6" style="font-family:var(--font-mono);font-size:12px;resize:vertical;"></textarea>
+                <label class="form-label">域名映射 <span class="required">*</span></label>
+                <div
+                  v-for="(dom, di) in form.dns_domains"
+                  :key="dom.key"
+                  class="spwf-dns-domain"
+                  style="margin-bottom: 12px"
+                >
+                  <div class="spwf-target-header">
+                    <span class="spwf-th-cell" style="flex: 2">域名</span>
+                    <span class="spwf-th-cell" style="flex: 1">负载均衡</span>
+                    <span class="spwf-th-cell" style="width: 70px">TTL(秒)</span>
+                    <span class="spwf-th-cell" style="width: 60px">操作</span>
+                  </div>
+                  <div class="spwf-target-row">
+                    <div style="flex: 2; display: flex; flex-direction: column">
+                      <input
+                        v-model="dom.domain"
+                        type="text"
+                        class="form-input"
+                        placeholder="test.local"
+                        :class="{ 'input-error': dnsFieldErrors[`${di}.domain`] }"
+                        @blur="validateDnsDomain(di)"
+                      />
+                      <span
+                        v-if="dnsFieldErrors[`${di}.domain`]"
+                        class="form-error"
+                        style="font-size: 10px; margin-top: 2px"
+                        >{{ dnsFieldErrors[`${di}.domain`] }}</span
+                      >
+                    </div>
+                    <select v-model="dom.lb_type" class="form-input" style="flex: 1">
+                      <option value="roundrobin">轮询</option>
+                      <option value="chash">一致性哈希</option>
+                      <option value="least_conn">最少连接</option>
+                    </select>
+                    <input
+                      v-model.number="dom.ttl"
+                      type="number"
+                      class="form-input"
+                      min="0"
+                      style="width: 70px"
+                      placeholder="10"
+                    />
+                    <button
+                      class="btn btn-ghost btn-sm"
+                      style="width: 60px; color: var(--danger)"
+                      @click="removeDnsDomain(di)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div style="margin: 4px 8px 0">
+                    <div class="spwf-target-header" style="font-size: 10px">
+                      <span style="flex: 2">IP 地址</span>
+                      <span style="flex: 1">端口</span>
+                      <span v-if="showDnsCidr" style="flex: 1">客户端 CIDR（可选）</span>
+                      <span v-if="dnsWanEnabled" style="flex: 1.5">外网地址（内外网分离）</span>
+                      <span style="width: 60px">操作</span>
+                    </div>
+                    <div v-for="(dt, dti) in dom.targets" :key="dt.key" class="spwf-target-row">
+                      <div style="flex: 2; display: flex; flex-direction: column">
+                        <input
+                          v-model="dt.ip"
+                          type="text"
+                          class="form-input"
+                          placeholder="10.0.0.1"
+                          :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.ip`] }"
+                          @blur="validateDnsTarget(di, dti)"
+                        />
+                        <span
+                          v-if="dnsFieldErrors[`${di}.t${dti}.ip`]"
+                          class="form-error"
+                          style="font-size: 10px; margin-top: 2px"
+                          >{{ dnsFieldErrors[`${di}.t${dti}.ip`] }}</span
+                        >
+                      </div>
+                      <div style="flex: 1; display: flex; flex-direction: column">
+                        <input
+                          v-model.number="dt.port"
+                          type="number"
+                          class="form-input"
+                          placeholder="53"
+                          min="1"
+                          max="65535"
+                          :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.port`] }"
+                          @blur="validateDnsTarget(di, dti)"
+                        />
+                        <span
+                          v-if="dnsFieldErrors[`${di}.t${dti}.port`]"
+                          class="form-error"
+                          style="font-size: 10px; margin-top: 2px"
+                          >{{ dnsFieldErrors[`${di}.t${dti}.port`] }}</span
+                        >
+                      </div>
+                      <input
+                        v-if="showDnsCidr"
+                        v-model="dt.cidr"
+                        type="text"
+                        class="form-input"
+                        placeholder="192.168.0.0/16 或留空"
+                        style="flex: 1"
+                      />
+                      <div v-if="dnsWanEnabled" style="flex: 1.5; display: flex; flex-direction: column">
+                        <input
+                          v-model="dt.wan"
+                          type="text"
+                          class="form-input"
+                          placeholder="10.158.40.51"
+                          :class="{ 'input-error': dnsFieldErrors[`${di}.t${dti}.wan`] }"
+                          @blur="validateDnsTarget(di, dti)"
+                        />
+                        <span
+                          v-if="dnsFieldErrors[`${di}.t${dti}.wan`]"
+                          class="form-error"
+                          style="font-size: 10px; margin-top: 2px"
+                          >{{ dnsFieldErrors[`${di}.t${dti}.wan`] }}</span
+                        >
+                      </div>
+                      <button
+                        class="btn btn-ghost btn-sm"
+                        style="width: 60px; color: var(--danger)"
+                        @click="removeDnsTarget(di, dti)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                    <button
+                      class="btn btn-ghost btn-sm"
+                      style="width: 100%; border: 1px dashed var(--border); font-size: 11px"
+                      @click="addDnsTarget(di)"
+                    >
+                      + 添加目标节点
+                    </button>
+                  </div>
+                  <div style="margin-top: 6px; padding: 0 8px">
+                    <label class="checkbox-label" style="font-size: 12px">
+                      <input type="checkbox" v-model="dom.enableChecks" />
+                      <span>健康检查</span>
+                    </label>
+                    <div v-if="dom.enableChecks" style="margin-top: 6px">
+                      <textarea
+                        v-model="dom.checksJson"
+                        class="form-input"
+                        rows="4"
+                        style="font-family: var(--font-mono); font-size: 12px; resize: vertical"
+                        placeholder='{"type":"http","active":{},"passive":{}}'
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-ghost btn-sm" @click="addDnsDomain">+ 添加域名</button>
+                <span v-if="formErrors.dns" class="form-error">{{ formErrors.dns }}</span>
               </div>
 
-              <div class="form-row">
+              <!-- DNS Log Toggle -->
+              <div class="form-group" style="margin-bottom: 8px">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="dnsEnableLog" />
+                  <span>生成日志（DNS 请求日志）</span>
+                </label>
+              </div>
+            </template>
+
+            <!-- Advanced Config Toggle (普通模式) -->
+            <template v-if="form.proxy_type !== 'dns'">
+              <div class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="advancedEnabled" />
+                  <span>高级配置</span>
+                </label>
+              </div>
+
+              <div v-if="advancedEnabled" class="spwf-advanced">
                 <div class="form-group">
-                  <label class="form-label">重试次数</label>
-                  <input v-model.number="form.retries" type="number" class="form-input" min="0" placeholder="默认等于可用节点数">
-                  <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+                  <label class="form-label">健康检查（JSON）</label>
+                  <textarea
+                    v-model="checksJson"
+                    class="form-input"
+                    rows="6"
+                    style="font-family: var(--font-mono); font-size: 12px; resize: vertical"
+                  ></textarea>
                 </div>
-                <div class="form-group">
-                  <label class="form-label">重试超时（秒）</label>
-                  <input v-model.number="form.retry_timeout" type="number" class="form-input" min="0" placeholder="秒">
-                  <div class="form-hint">0 = 不限制重试时间</div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">重试次数</label>
+                    <input
+                      v-model.number="form.retries"
+                      type="number"
+                      class="form-input"
+                      min="0"
+                      placeholder="默认等于可用节点数"
+                    />
+                    <div class="form-hint">0 = 不启用重试，留空 = 自动使用节点数</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">重试超时（秒）</label>
+                    <input
+                      v-model.number="form.retry_timeout"
+                      type="number"
+                      class="form-input"
+                      min="0"
+                      placeholder="秒"
+                    />
+                    <div class="form-hint">0 = 不限制重试时间</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </template>
+            </template>
+          </div>
         </div>
-      </div>
 
-      <div class="modal-footer" style="justify-content:space-between;">
-        <button class="btn btn-secondary" @click="currentStep === 1 ? handleCancel() : (currentStep = 1)">
-          {{ currentStep === 1 ? '取消' : '上一步' }}
-        </button>
-        <div style="display:flex;gap:8px;">
-          <button
-            v-if="currentStep === 1"
-            class="btn btn-primary"
-            :disabled="!canGoNext"
-            @click="goToStep2"
-          >下一步</button>
-          <button
-            v-if="currentStep === 2"
-            class="btn btn-primary"
-            :disabled="submitting"
-            @click="handleSubmit"
-          >{{ submitting ? '提交中...' : (editingProxy ? '保存' : '创建') }}</button>
+        <div class="modal-footer" style="justify-content: space-between">
+          <button class="btn btn-secondary" @click="currentStep === 1 ? handleCancel() : (currentStep = 1)">
+            {{ currentStep === 1 ? '取消' : '上一步' }}
+          </button>
+          <div style="display: flex; gap: 8px">
+            <button v-if="currentStep === 1" class="btn btn-primary" :disabled="!canGoNext" @click="goToStep2">
+              下一步
+            </button>
+            <button v-if="currentStep === 2" class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
+              {{ submitting ? '提交中...' : editingProxy ? '保存' : '创建' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
   </Teleport>
 </template>
 
@@ -427,8 +660,22 @@ const schemeHint = computed(() => {
 })
 
 // ── Form ──
-interface DnsTarget { key: number; ip: string; port: number; cidr: string; wan: string }
-interface DnsDomain { key: number; domain: string; lb_type: string; ttl: number; enableChecks: boolean; checksJson: string; targets: DnsTarget[] }
+interface DnsTarget {
+  key: number
+  ip: string
+  port: number
+  cidr: string
+  wan: string
+}
+interface DnsDomain {
+  key: number
+  domain: string
+  lb_type: string
+  ttl: number
+  enableChecks: boolean
+  checksJson: string
+  targets: DnsTarget[]
+}
 
 const form = reactive({
   cluster_id: '' as number | string,
@@ -512,7 +759,7 @@ function validateDnsDomainAndTargets(di: number): void {
 }
 
 const defaultChecksJson = JSON.stringify({ passive: {}, active: { unhealthy: {} } }, null, 2)
-const dnsDefaultChecksJson = JSON.stringify({ type: "tcp", active: {}, passive: {} }, null, 2)
+const dnsDefaultChecksJson = JSON.stringify({ type: 'tcp', active: {}, passive: {} }, null, 2)
 const checksJson = ref(defaultChecksJson)
 
 let targetKey = 0
@@ -566,27 +813,37 @@ function parseTarget(target: string): { host: string; port: number } {
 // ── Watches ──
 
 // When chash is selected, fix hash_on/key to remote_addr
-watch(() => form.load_balance, (val) => {
-  if (val === 'chash') {
-    form.hash_on = 'vars'
-    form.key = 'remote_addr'
-  }
-})
+watch(
+  () => form.load_balance,
+  (val) => {
+    if (val === 'chash') {
+      form.hash_on = 'vars'
+      form.key = 'remote_addr'
+    }
+  },
+)
 
 // When proxy_type changes, update scheme and default checks
-watch(() => form.proxy_type, (val) => {
-  if (val === 'dns') {
-    form.scheme = 'udp'
-    checksJson.value = dnsDefaultChecksJson
-  } else if (val === 'normal') {
-    form.scheme = 'tcp'
-    checksJson.value = defaultChecksJson
-  }
-})
+watch(
+  () => form.proxy_type,
+  (val) => {
+    if (val === 'dns') {
+      form.scheme = 'udp'
+      checksJson.value = dnsDefaultChecksJson
+    } else if (val === 'normal') {
+      form.scheme = 'tcp'
+      checksJson.value = defaultChecksJson
+    }
+  },
+)
 
 // Sync checksJson textarea → form.checks
 watch(checksJson, (val) => {
-  try { form.checks = JSON.parse(val) as Record<string, unknown> } catch { /* ignore */ }
+  try {
+    form.checks = JSON.parse(val) as Record<string, unknown>
+  } catch {
+    /* ignore */
+  }
 })
 
 watch(advancedEnabled, (val) => {
@@ -676,8 +933,14 @@ function goToStep2() {
   formErrors.cluster_id = ''
   formErrors.node_id = ''
   formErrors.port = ''
-  if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; return }
-  if (!form.node_id) { formErrors.node_id = '请选择节点'; return }
+  if (!form.cluster_id) {
+    formErrors.cluster_id = '请选择集群'
+    return
+  }
+  if (!form.node_id) {
+    formErrors.node_id = '请选择节点'
+    return
+  }
   if (manualPortEnabled.value) {
     if (!manualPort.value || manualPort.value < 1 || manualPort.value > 65535) {
       formErrors.port = '请输入有效的端口号（1-65535）'
@@ -709,7 +972,15 @@ function removeTarget(index: number) {
 // ── DNS Domain Management ──
 
 function addDnsDomain() {
-  form.dns_domains.push({ key: ++targetKey, domain: '', lb_type: 'roundrobin', ttl: 10, enableChecks: true, checksJson: JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2), targets: [] })
+  form.dns_domains.push({
+    key: ++targetKey,
+    domain: '',
+    lb_type: 'roundrobin',
+    ttl: 10,
+    enableChecks: true,
+    checksJson: JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2),
+    targets: [],
+  })
 }
 
 function removeDnsDomain(index: number) {
@@ -751,7 +1022,7 @@ function isValidIpOrCidr(value: string): boolean {
   const m = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
   if (!m) return false
   const octets = [m[1], m[2], m[3], m[4]].map(Number)
-  if (octets.some(o => o > 255)) return false
+  if (octets.some((o) => o > 255)) return false
   if (m[6] !== undefined) {
     const prefix = Number(m[6])
     if (prefix < 0 || prefix > 32) return false
@@ -761,7 +1032,7 @@ function isValidIpOrCidr(value: string): boolean {
 
 function removeWanFilter(kind: 'include' | 'exclude', ip: string) {
   const list = kind === 'include' ? dnsWanFilterInclude : dnsWanFilterExclude
-  list.value = list.value.filter(x => x !== ip)
+  list.value = list.value.filter((x) => x !== ip)
 }
 
 function buildDnsConfig(): Record<string, any> {
@@ -786,7 +1057,11 @@ function buildDnsConfig(): Record<string, any> {
       domainCfg.ttl_valid = dom.ttl
     }
     if (dom.enableChecks && dom.checksJson) {
-      try { domainCfg.checks = JSON.parse(dom.checksJson) } catch { /* ignore invalid json */ }
+      try {
+        domainCfg.checks = JSON.parse(dom.checksJson)
+      } catch {
+        /* ignore invalid json */
+      }
     }
     hosts[dom.domain.trim()] = domainCfg
   }
@@ -832,7 +1107,10 @@ function validateForm(): boolean {
   wanFilterError.value = ''
   targetErrors.value = []
 
-  if (!form.name.trim()) { formErrors.name = '请输入代理名称'; return false }
+  if (!form.name.trim()) {
+    formErrors.name = '请输入代理名称'
+    return false
+  }
 
   if (form.proxy_type === 'dns') {
     if (form.dns_domains.length === 0) {
@@ -840,12 +1118,27 @@ function validateForm(): boolean {
       return false
     }
     for (const dom of form.dns_domains) {
-      if (!dom.domain.trim()) { formErrors.dns = '域名不能为空'; return false }
-      if (dom.targets.length === 0) { formErrors.dns = `域名 ${dom.domain} 至少需要一个目标节点`; return false }
+      if (!dom.domain.trim()) {
+        formErrors.dns = '域名不能为空'
+        return false
+      }
+      if (dom.targets.length === 0) {
+        formErrors.dns = `域名 ${dom.domain} 至少需要一个目标节点`
+        return false
+      }
       for (const dt of dom.targets) {
-        if (!dt.ip.trim()) { formErrors.dns = `域名 ${dom.domain} 的 IP 不能为空`; return false }
-        if (!IP_PATTERN.test(dt.ip)) { formErrors.dns = `域名 ${dom.domain} 的 IP 格式不合法`; return false }
-        if (!dt.port || dt.port < 1 || dt.port > 65535) { formErrors.dns = `域名 ${dom.domain} 的端口不合法`; return false }
+        if (!dt.ip.trim()) {
+          formErrors.dns = `域名 ${dom.domain} 的 IP 不能为空`
+          return false
+        }
+        if (!IP_PATTERN.test(dt.ip)) {
+          formErrors.dns = `域名 ${dom.domain} 的 IP 格式不合法`
+          return false
+        }
+        if (!dt.port || dt.port < 1 || dt.port > 65535) {
+          formErrors.dns = `域名 ${dom.domain} 的端口不合法`
+          return false
+        }
       }
     }
     if (dnsWanEnabled.value) {
@@ -880,16 +1173,30 @@ function validateForm(): boolean {
   const errors: string[] = []
   const seen = new Set<string>()
   form.targets.forEach((t, i) => {
-    if (!t.host) { errors.push(`第 ${i + 1} 行: 主机地址不能为空`); valid = false }
-    else {
+    if (!t.host) {
+      errors.push(`第 ${i + 1} 行: 主机地址不能为空`)
+      valid = false
+    } else {
       const hostResult = validateHost(t.host)
-      if (!hostResult.valid) { errors.push(`第 ${i + 1} 行: ${hostResult.error}`); valid = false }
+      if (!hostResult.valid) {
+        errors.push(`第 ${i + 1} 行: ${hostResult.error}`)
+        valid = false
+      }
     }
-    if (!t.port || t.port < 1 || t.port > 65535) { errors.push(`第 ${i + 1} 行: 端口不合法`); valid = false }
-    if (!t.weight || t.weight < 1 || t.weight > 100) { errors.push(`第 ${i + 1} 行: 权重不合法`); valid = false }
+    if (!t.port || t.port < 1 || t.port > 65535) {
+      errors.push(`第 ${i + 1} 行: 端口不合法`)
+      valid = false
+    }
+    if (!t.weight || t.weight < 1 || t.weight > 100) {
+      errors.push(`第 ${i + 1} 行: 权重不合法`)
+      valid = false
+    }
     if (t.host && t.port) {
       const key = buildTarget(t.host, t.port)
-      if (seen.has(key)) { errors.push(`第 ${i + 1} 行: 主机和端口组合重复`); valid = false }
+      if (seen.has(key)) {
+        errors.push(`第 ${i + 1} 行: 主机和端口组合重复`)
+        valid = false
+      }
       seen.add(key)
     }
   })
@@ -919,12 +1226,12 @@ async function handleSubmit() {
         submitting.value = false
         return
       }
-      submitData.scheme = 'udp'  // DNS 代理固定 UDP 协议
+      submitData.scheme = 'udp' // DNS 代理固定 UDP 协议
       submitData.dns_config = buildDnsConfig()
     } else {
       submitData.load_balance = form.load_balance
       submitData.description = form.description.trim()
-      submitData.targets = form.targets.map(t => ({ target: buildTarget(t.host, t.port), weight: t.weight }))
+      submitData.targets = form.targets.map((t) => ({ target: buildTarget(t.host, t.port), weight: t.weight }))
       if (form.load_balance === 'chash') {
         submitData.hash_on = form.hash_on
         submitData.key = form.key
@@ -960,149 +1267,155 @@ function handleCancel() {
 
 // ── Watch ──
 
-watch(() => props.visible, async (v) => {
-  if (!v) return
-  currentStep.value = 1
-  hasSearched.value = false
-  portError.value = ''
-  logLines.value = []
-  manualPortEnabled.value = false
-  manualPort.value = null
-  formErrors.name = ''
-  formErrors.cluster_id = ''
-  formErrors.node_id = ''
-  formErrors.port = ''
-  formErrors.targets = ''
-  formErrors.dns = ''
-  wanFilterError.value = ''
-  targetErrors.value = []
-  selectedPort.value = null
-  dnsWanEnabled.value = false
-  dnsWanFilterInclude.value = []
-  dnsWanFilterExclude.value = []
+watch(
+  () => props.visible,
+  async (v) => {
+    if (!v) return
+    currentStep.value = 1
+    hasSearched.value = false
+    portError.value = ''
+    logLines.value = []
+    manualPortEnabled.value = false
+    manualPort.value = null
+    formErrors.name = ''
+    formErrors.cluster_id = ''
+    formErrors.node_id = ''
+    formErrors.port = ''
+    formErrors.targets = ''
+    formErrors.dns = ''
+    wanFilterError.value = ''
+    targetErrors.value = []
+    selectedPort.value = null
+    dnsWanEnabled.value = false
+    dnsWanFilterInclude.value = []
+    dnsWanFilterExclude.value = []
 
-  if (props.editingProxy) {
-    const p = props.editingProxy
-    form.cluster_id = p.cluster_id
-    form.listen_port = p.listen_port
-    form.name = p.name
-    form.proxy_type = p.proxy_type === 'dns' ? 'dns' : 'normal'
-    form.description = p.description || ''
-    form.scheme = (p.scheme === 'tcp' || p.scheme === 'udp' || p.scheme === 'tls') ? p.scheme : 'tcp'
-    form.load_balance = p.load_balance || 'weighted_roundrobin'
-    form.hash_on = p.hash_on || 'vars'
-    form.key = p.key || 'remote_addr'
+    if (props.editingProxy) {
+      const p = props.editingProxy
+      form.cluster_id = p.cluster_id
+      form.listen_port = p.listen_port
+      form.name = p.name
+      form.proxy_type = p.proxy_type === 'dns' ? 'dns' : 'normal'
+      form.description = p.description || ''
+      form.scheme = p.scheme === 'tcp' || p.scheme === 'udp' || p.scheme === 'tls' ? p.scheme : 'tcp'
+      form.load_balance = p.load_balance || 'weighted_roundrobin'
+      form.hash_on = p.hash_on || 'vars'
+      form.key = p.key || 'remote_addr'
 
-    if (form.proxy_type === 'dns') {
-      // Load DNS config
-      const dc = typeof p.dns_config === 'object' ? p.dns_config : undefined
-      const exportNodesMap: Record<string, string> = {}
-      if (dc && dc.wan_enabled && dc.hosts) {
-        for (const [domain, cfg] of Object.entries(dc.hosts) as [string, any][]) {
-          if (cfg.export_nodes) {
-            for (const [lan, wan] of Object.entries(cfg.export_nodes) as [string, string][]) {
-              exportNodesMap[lan] = wan.includes(':') ? wan.split(':')[0] : wan
+      if (form.proxy_type === 'dns') {
+        // Load DNS config
+        const dc = typeof p.dns_config === 'object' ? p.dns_config : undefined
+        const exportNodesMap: Record<string, string> = {}
+        if (dc && dc.wan_enabled && dc.hosts) {
+          for (const [domain, cfg] of Object.entries(dc.hosts) as [string, any][]) {
+            if (cfg.export_nodes) {
+              for (const [lan, wan] of Object.entries(cfg.export_nodes) as [string, string][]) {
+                exportNodesMap[lan] = wan.includes(':') ? wan.split(':')[0] : wan
+              }
             }
           }
         }
-      }
-      if (dc && dc.hosts) {
-        form.dns_domains = Object.entries(dc.hosts).map(([domain, cfg]: [string, any]) => {
-          const domainKey = ++targetKey
-          const targets = Object.entries(cfg.nodes || {}).map(([ipPort, cidrs]: [string, any]) => {
-            const [ip, portStr] = ipPort.split(':')
+        if (dc && dc.hosts) {
+          form.dns_domains = Object.entries(dc.hosts).map(([domain, cfg]: [string, any]) => {
+            const domainKey = ++targetKey
+            const targets = Object.entries(cfg.nodes || {}).map(([ipPort, cidrs]: [string, any]) => {
+              const [ip, portStr] = ipPort.split(':')
+              return {
+                key: ++targetKey,
+                ip: ip || '',
+                port: portStr ? parseInt(portStr) : 53,
+                cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
+                wan: exportNodesMap[ipPort] || '',
+              }
+            })
             return {
-              key: ++targetKey,
-              ip: ip || '',
-              port: portStr ? parseInt(portStr) : 53,
-              cidr: Array.isArray(cidrs) ? cidrs.join(', ') : '',
-              wan: exportNodesMap[ipPort] || '',
+              key: domainKey,
+              domain,
+              lb_type: cfg.type || 'roundrobin',
+              ttl: cfg.ttl_valid ?? 10,
+              enableChecks: !!cfg.checks,
+              checksJson: cfg.checks
+                ? JSON.stringify(cfg.checks, null, 2)
+                : JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2),
+              targets,
             }
           })
-          return {
-            key: domainKey, domain,
-            lb_type: cfg.type || 'roundrobin',
-            ttl: cfg.ttl_valid ?? 10,
-            enableChecks: !!cfg.checks,
-            checksJson: cfg.checks ? JSON.stringify(cfg.checks, null, 2) : JSON.stringify({ type: 'http', active: {}, passive: {} }, null, 2),
-            targets,
-          }
+        }
+        // Load log_process state from existing config
+        dnsEnableLog.value = !!(dc && dc.log_process)
+        // Load WAN/LAN separation state
+        dnsWanEnabled.value = !!(dc && dc.wan_enabled)
+        dnsWanFilterInclude.value = dc && dc.wan_filter && dc.wan_filter.include ? [...dc.wan_filter.include] : []
+        dnsWanFilterExclude.value = dc && dc.wan_filter && dc.wan_filter.exclude ? [...dc.wan_filter.exclude] : []
+      } else {
+        form.targets = (p.targets || []).map((t: any) => {
+          const parsed = parseTarget(t.target)
+          return { key: ++targetKey, host: parsed.host, port: parsed.port, weight: t.weight || 100 }
         })
       }
-      // Load log_process state from existing config
-      dnsEnableLog.value = !!(dc && dc.log_process)
-      // Load WAN/LAN separation state
-      dnsWanEnabled.value = !!(dc && dc.wan_enabled)
-      dnsWanFilterInclude.value = (dc && dc.wan_filter && dc.wan_filter.include) ? [...dc.wan_filter.include] : []
-      dnsWanFilterExclude.value = (dc && dc.wan_filter && dc.wan_filter.exclude) ? [...dc.wan_filter.exclude] : []
-    } else {
-      form.targets = (p.targets || []).map((t: any) => {
-        const parsed = parseTarget(t.target)
-        return { key: ++targetKey, host: parsed.host, port: parsed.port, weight: t.weight || 100 }
-      })
-    }
 
-    // Detect if proxy has advanced config
-    form.retries = p.retries ?? undefined
-    form.retry_timeout = p.retry_timeout ?? 0
-    const isDns = form.proxy_type === 'dns'
-    const dfltCheck = isDns ? dnsDefaultChecksJson : defaultChecksJson
-    if (p.checks) {
-      const c = typeof p.checks === 'string' ? JSON.parse(p.checks) : p.checks
-      form.checks = c
-      checksJson.value = JSON.stringify(c, null, 2)
-    } else {
-      form.checks = JSON.parse(dfltCheck) as Record<string, unknown>
-      checksJson.value = dfltCheck
-    }
-    const hasChecks = p.checks && JSON.stringify(form.checks) !== dfltCheck
-    const hasRetries = p.retries !== undefined && p.retries !== null
-    const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
-    advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout)
-
-    try {
-      const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
-      nodes.value = res.data.items || res.data || []
-      // 恢复保存的参考节点；无记录时保持空让用户手动选择
-      if (p.ref_node_id) {
-        form.node_id = p.ref_node_id
+      // Detect if proxy has advanced config
+      form.retries = p.retries ?? undefined
+      form.retry_timeout = p.retry_timeout ?? 0
+      const isDns = form.proxy_type === 'dns'
+      const dfltCheck = isDns ? dnsDefaultChecksJson : defaultChecksJson
+      if (p.checks) {
+        const c = typeof p.checks === 'string' ? JSON.parse(p.checks) : p.checks
+        form.checks = c
+        checksJson.value = JSON.stringify(c, null, 2)
       } else {
-        form.node_id = ''
+        form.checks = JSON.parse(dfltCheck) as Record<string, unknown>
+        checksJson.value = dfltCheck
       }
-    } catch {
-      nodes.value = []
-    }
+      const hasChecks = p.checks && JSON.stringify(form.checks) !== dfltCheck
+      const hasRetries = p.retries !== undefined && p.retries !== null
+      const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
+      advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout)
 
-    // 编辑模式统一先进 step 1
-    currentStep.value = 1
-  } else {
-    form.cluster_id = ''
-    form.node_id = ''
-    form.listen_port = 0
-    form.name = ''
-    form.description = ''
-    form.proxy_type = props.defaultProxyType || 'normal'
-    form.scheme = 'tcp'
-    form.load_balance = 'weighted_roundrobin'
-    form.hash_on = 'vars'
-    form.key = 'remote_addr'
-    form.targets = [{ key: ++targetKey, host: '', port: 80, weight: 100 }]
-    form.dns_domains = []
-    form.retries = undefined
-    form.retry_timeout = 0
-    form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
-    checksJson.value = defaultChecksJson
-    advancedEnabled.value = false
-    dnsEnableLog.value = false
-    dnsWanEnabled.value = false
+      try {
+        const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
+        nodes.value = res.data.items || res.data || []
+        // 恢复保存的参考节点；无记录时保持空让用户手动选择
+        if (p.ref_node_id) {
+          form.node_id = p.ref_node_id
+        } else {
+          form.node_id = ''
+        }
+      } catch {
+        nodes.value = []
+      }
+
+      // 编辑模式统一先进 step 1
+      currentStep.value = 1
+    } else {
+      form.cluster_id = ''
+      form.node_id = ''
+      form.listen_port = 0
+      form.name = ''
+      form.description = ''
+      form.proxy_type = props.defaultProxyType || 'normal'
+      form.scheme = 'tcp'
+      form.load_balance = 'weighted_roundrobin'
+      form.hash_on = 'vars'
+      form.key = 'remote_addr'
+      form.targets = [{ key: ++targetKey, host: '', port: 80, weight: 100 }]
+      form.dns_domains = []
+      form.retries = undefined
+      form.retry_timeout = 0
+      form.checks = JSON.parse(defaultChecksJson) as Record<string, unknown>
+      checksJson.value = defaultChecksJson
+      advancedEnabled.value = false
+      dnsEnableLog.value = false
+      dnsWanEnabled.value = false
       dnsWanFilterInclude.value = []
-    dnsWanFilterExclude.value = []
-    wanFilterInput.include = ''
-    wanFilterInput.exclude = ''
-    nodes.value = []
-    ports.value = []
-  }
-})
+      dnsWanFilterExclude.value = []
+      wanFilterInput.include = ''
+      wanFilterInput.exclude = ''
+      nodes.value = []
+      ports.value = []
+    }
+  },
+)
 </script>
 
 <style scoped>
@@ -1161,9 +1474,17 @@ watch(() => props.visible, async (v) => {
   background: var(--accent);
   color: #fff;
 }
-.spwf-check { font-size: 14px; }
-.spwf-label { font-size: 12px; color: var(--muted); font-weight: 500; }
-.spwf-step.active .spwf-label { color: var(--fg); }
+.spwf-check {
+  font-size: 14px;
+}
+.spwf-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.spwf-step.active .spwf-label {
+  color: var(--fg);
+}
 .spwf-connector {
   width: 80px;
   height: 2px;
@@ -1172,7 +1493,9 @@ watch(() => props.visible, async (v) => {
   margin-bottom: 28px;
   transition: background 0.2s;
 }
-.spwf-connector.done { background: var(--accent); }
+.spwf-connector.done {
+  background: var(--accent);
+}
 
 /* ── SSE Log Panel ── */
 .spwf-log {
@@ -1205,7 +1528,9 @@ watch(() => props.visible, async (v) => {
   background: var(--surface);
   user-select: none;
 }
-.spwf-port-available { cursor: pointer; }
+.spwf-port-available {
+  cursor: pointer;
+}
 .spwf-port-available:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 10%);
@@ -1232,17 +1557,19 @@ watch(() => props.visible, async (v) => {
   color: var(--fg);
   margin-bottom: 4px;
 }
-.spwf-port-status { margin-bottom: 2px; }
+.spwf-port-status {
+  margin-bottom: 2px;
+}
 .spwf-port-badge {
   display: inline-flex;
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-mono);
 }
 .spwf-port-usedby {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1270,8 +1597,13 @@ watch(() => props.visible, async (v) => {
   transition: all 0.15s;
   font-family: var(--font-body);
 }
-.spwf-toggle-btn:first-child { border-right: 1px solid var(--border); }
-.spwf-toggle-btn.active { background: var(--accent); color: #fff; }
+.spwf-toggle-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+.spwf-toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
 
 /* ── Targets Table ── */
 .spwf-targets-box {
@@ -1298,7 +1630,9 @@ watch(() => props.visible, async (v) => {
   align-items: center;
   border-bottom: 1px solid var(--border);
 }
-.spwf-target-row:last-child { border-bottom: none; }
+.spwf-target-row:last-child {
+  border-bottom: none;
+}
 .spwf-target-errors {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
@@ -1349,7 +1683,9 @@ watch(() => props.visible, async (v) => {
   background: var(--surface);
   cursor: pointer;
   min-width: 140px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 .spwf-protocol-card:hover {
   border-color: var(--accent);
@@ -1384,14 +1720,22 @@ watch(() => props.visible, async (v) => {
   color: var(--fg);
   cursor: pointer;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
 }
 
 /* ── Form overrides ── */
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
-.form-row .form-group { flex: 1; }
-.input-error { border-color: var(--danger) !important; }
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.form-row .form-group {
+  flex: 1;
+}
+.input-error {
+  border-color: var(--danger) !important;
+}
 </style>

@@ -1160,7 +1160,7 @@ onMounted(loadUsers)
   font-weight: 500;
 }
 .picker-cluster-tag {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-left: auto;
   font-family: var(--font-mono);
@@ -1208,7 +1208,7 @@ onMounted(loadUsers)
   padding: 1px 7px;
   margin: 1px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
   background: var(--bg);
   border: 1px solid var(--border);
   font-family: var(--font-mono);

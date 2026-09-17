@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:780px;">
+    <div class="modal modal-wide" style="max-width: 780px">
       <div class="modal-header">
         <h2>{{ editingCert ? '编辑 SSL 证书' : '添加 SSL 证书' }}</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
@@ -10,12 +10,23 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书名称 <span class="required">*</span></label>
-            <input v-model="form.name" type="text" class="form-input" :class="{ 'has-error': formErrors.name }" placeholder="输入证书名称">
+            <input
+              v-model="form.name"
+              type="text"
+              class="form-input"
+              :class="{ 'has-error': formErrors.name }"
+              placeholder="输入证书名称"
+            />
             <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
           </div>
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <select v-model="form.cluster_id" class="form-input" :class="{ 'has-error': formErrors.cluster_id }" :disabled="!!editingCert">
+            <select
+              v-model="form.cluster_id"
+              class="form-input"
+              :class="{ 'has-error': formErrors.cluster_id }"
+              :disabled="!!editingCert"
+            >
               <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
@@ -29,7 +40,12 @@
             <div class="sni-readonly-row">
               <span class="sni-readonly-label">DNS 域名</span>
               <div class="sni-readonly-tags">
-                <span v-for="tag in dnsTags" :key="tag" class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(tag) }">
+                <span
+                  v-for="tag in dnsTags"
+                  :key="tag"
+                  class="sni-tag"
+                  :class="{ 'sni-tag-locked': isReservedSni(tag) }"
+                >
                   {{ tag }}<span v-if="isReservedSni(tag)" class="sni-tag-reserved">系统保留</span>
                 </span>
                 <span v-if="dnsTags.length === 0" class="sni-readonly-empty">无</span>
@@ -43,7 +59,9 @@
               </div>
             </div>
           </div>
-          <div class="form-hint">匹配名单不可编辑。如需新增域名/IP，请重新生成证书（生成时填写 SAN），或在其他证书中调整。</div>
+          <div class="form-hint">
+            匹配名单不可编辑。如需新增域名/IP，请重新生成证书（生成时填写 SAN），或在其他证书中调整。
+          </div>
         </div>
         <!-- 创建/导入模式：可编辑 SNI 输入 -->
         <div v-else class="form-group">
@@ -62,27 +80,29 @@
               @keydown.enter.prevent="addSniTag"
               @keydown.space.prevent="addSniTag"
               @keydown.backspace="onSniBackspace"
-            >
+            />
           </div>
           <div class="form-hint">每个域名独立添加，支持通配符如 *.example.com；IP 地址也会被 nginx 按字面匹配</div>
           <div v-if="formErrors.sni" class="form-error">{{ formErrors.sni }}</div>
-          <div v-if="!editingCert && form.cert_type === 'server'" class="form-hint">建议 SNI 包含系统保留域名 edge.local，否则管理链路/健康检查可能握手失败</div>
+          <div v-if="!editingCert && form.cert_type === 'server'" class="form-hint">
+            建议 SNI 包含系统保留域名 edge.local，否则管理链路/健康检查可能握手失败
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书类型</label>
-            <a-select v-model:value="form.cert_type" style="width:100%;">
+            <a-select v-model:value="form.cert_type" style="width: 100%">
               <a-select-option value="server">
-                <div style="font-weight:600;font-size:13px;">server（服务端）</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">接收浏览器访问</div>
+                <div style="font-weight: 600; font-size: 13px">server（服务端）</div>
+                <div style="font-size: 11px; color: var(--muted); line-height: 1.4">接收浏览器访问</div>
               </a-select-option>
               <a-select-option value="client">
-                <div style="font-weight:600;font-size:13px;">client（客户端）</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">访问后端负载</div>
+                <div style="font-weight: 600; font-size: 13px">client（客户端）</div>
+                <div style="font-size: 11px; color: var(--muted); line-height: 1.4">访问后端负载</div>
               </a-select-option>
             </a-select>
           </div>
-          <div class="form-group" style="flex:2;">
+          <div class="form-group" style="flex: 2">
             <label class="form-label">SSL 协议版本</label>
             <div class="method-chips">
               <span
@@ -91,60 +111,165 @@
                 class="method-chip"
                 :class="{ selected: form.ssl_protocols.includes(p) }"
                 @click="toggleProtocol(p)"
-              >{{ p }}</span>
+                >{{ p }}</span
+              >
             </div>
           </div>
         </div>
 
         <div class="form-row">
-          <div class="form-group" style="flex:1;">
+          <div class="form-group" style="flex: 1">
             <label class="form-label">证书文件 (PEM) <span class="required">*</span></label>
-            <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'file' }" @click="certInputMode = 'file'">上传文件</button>
-              <button class="btn btn-ghost btn-sm" :class="{ active: certInputMode === 'text' }" @click="certInputMode = 'text'">粘贴文本</button>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px">
+              <button
+                class="btn btn-ghost btn-sm"
+                :class="{ active: certInputMode === 'file' }"
+                @click="certInputMode = 'file'"
+              >
+                上传文件
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                :class="{ active: certInputMode === 'text' }"
+                @click="certInputMode = 'text'"
+              >
+                粘贴文本
+              </button>
             </div>
-            <input v-if="certInputMode === 'file'" type="file" accept=".crt,.pem,.cert" @change="onCertFileChange" style="width:100%;" :class="{ 'has-error': formErrors.cert }" />
-            <textarea v-else v-model="form.cert" class="form-input" :class="{ 'has-error': formErrors.cert }" rows="8" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+            <input
+              v-if="certInputMode === 'file'"
+              type="file"
+              accept=".crt,.pem,.cert"
+              @change="onCertFileChange"
+              style="width: 100%"
+              :class="{ 'has-error': formErrors.cert }"
+            />
+            <textarea
+              v-else
+              v-model="form.cert"
+              class="form-input"
+              :class="{ 'has-error': formErrors.cert }"
+              rows="8"
+              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+            ></textarea>
             <div v-if="formErrors.cert" class="form-error">{{ formErrors.cert }}</div>
           </div>
-          <div class="form-group" style="flex:1;">
+          <div class="form-group" style="flex: 1">
             <label class="form-label">私钥文件 (PEM) <span class="required">*</span></label>
-            <div style="display:flex;gap:8px;margin-bottom:8px;">
-              <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'file' }" @click="keyInputMode = 'file'">上传文件</button>
-              <button class="btn btn-ghost btn-sm" :class="{ active: keyInputMode === 'text' }" @click="keyInputMode = 'text'">粘贴文本</button>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px">
+              <button
+                class="btn btn-ghost btn-sm"
+                :class="{ active: keyInputMode === 'file' }"
+                @click="keyInputMode = 'file'"
+              >
+                上传文件
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                :class="{ active: keyInputMode === 'text' }"
+                @click="keyInputMode = 'text'"
+              >
+                粘贴文本
+              </button>
             </div>
-            <input v-if="keyInputMode === 'file'" type="file" accept=".key,.pem" @change="onKeyFileChange" style="width:100%;" :class="{ 'has-error': formErrors.key }" />
-            <textarea v-else v-model="form.key" class="form-input" :class="{ 'has-error': formErrors.key }" rows="8" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+            <input
+              v-if="keyInputMode === 'file'"
+              type="file"
+              accept=".key,.pem"
+              @change="onKeyFileChange"
+              style="width: 100%"
+              :class="{ 'has-error': formErrors.key }"
+            />
+            <textarea
+              v-else
+              v-model="form.key"
+              class="form-input"
+              :class="{ 'has-error': formErrors.key }"
+              rows="8"
+              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+            ></textarea>
             <div v-if="formErrors.key" class="form-error">{{ formErrors.key }}</div>
           </div>
         </div>
 
         <div v-if="showGmCheckbox" class="form-group">
           <label class="checkbox-label">
-            <input type="checkbox" v-model="form.gm"> <span>国密双证书 (GM/NTLS)</span>
+            <input type="checkbox" v-model="form.gm" /> <span>国密双证书 (GM/NTLS)</span>
           </label>
         </div>
 
         <template v-if="form.gm">
           <div class="form-row">
-            <div class="form-group" style="flex:1;">
+            <div class="form-group" style="flex: 1">
               <label class="form-label">签名证书 (sign_cert) <span class="required">*</span></label>
-              <div style="display:flex;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-ghost btn-sm" :class="{ active: signCertInputMode === 'file' }" @click="signCertInputMode = 'file'">上传文件</button>
-                <button class="btn btn-ghost btn-sm" :class="{ active: signCertInputMode === 'text' }" @click="signCertInputMode = 'text'">粘贴文本</button>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  :class="{ active: signCertInputMode === 'file' }"
+                  @click="signCertInputMode = 'file'"
+                >
+                  上传文件
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  :class="{ active: signCertInputMode === 'text' }"
+                  @click="signCertInputMode = 'text'"
+                >
+                  粘贴文本
+                </button>
               </div>
-              <input v-if="signCertInputMode === 'file'" type="file" accept=".crt,.pem" @change="onSignCertFileChange" style="width:100%;" :class="{ 'has-error': formErrors.sign_cert }" />
-              <textarea v-else v-model="form.sign_cert" class="form-input" :class="{ 'has-error': formErrors.sign_cert }" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+              <input
+                v-if="signCertInputMode === 'file'"
+                type="file"
+                accept=".crt,.pem"
+                @change="onSignCertFileChange"
+                style="width: 100%"
+                :class="{ 'has-error': formErrors.sign_cert }"
+              />
+              <textarea
+                v-else
+                v-model="form.sign_cert"
+                class="form-input"
+                :class="{ 'has-error': formErrors.sign_cert }"
+                rows="6"
+                placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+              ></textarea>
               <div v-if="formErrors.sign_cert" class="form-error">{{ formErrors.sign_cert }}</div>
             </div>
-            <div class="form-group" style="flex:1;">
+            <div class="form-group" style="flex: 1">
               <label class="form-label">签名私钥 (sign_key) <span class="required">*</span></label>
-              <div style="display:flex;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-ghost btn-sm" :class="{ active: signKeyInputMode === 'file' }" @click="signKeyInputMode = 'file'">上传文件</button>
-                <button class="btn btn-ghost btn-sm" :class="{ active: signKeyInputMode === 'text' }" @click="signKeyInputMode = 'text'">粘贴文本</button>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  :class="{ active: signKeyInputMode === 'file' }"
+                  @click="signKeyInputMode = 'file'"
+                >
+                  上传文件
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  :class="{ active: signKeyInputMode === 'text' }"
+                  @click="signKeyInputMode = 'text'"
+                >
+                  粘贴文本
+                </button>
               </div>
-              <input v-if="signKeyInputMode === 'file'" type="file" accept=".key,.pem" @change="onSignKeyFileChange" style="width:100%;" :class="{ 'has-error': formErrors.sign_key }" />
-              <textarea v-else v-model="form.sign_key" class="form-input" :class="{ 'has-error': formErrors.sign_key }" rows="6" placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"></textarea>
+              <input
+                v-if="signKeyInputMode === 'file'"
+                type="file"
+                accept=".key,.pem"
+                @change="onSignKeyFileChange"
+                style="width: 100%"
+                :class="{ 'has-error': formErrors.sign_key }"
+              />
+              <textarea
+                v-else
+                v-model="form.sign_key"
+                class="form-input"
+                :class="{ 'has-error': formErrors.sign_key }"
+                rows="6"
+                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+              ></textarea>
               <div v-if="formErrors.sign_key" class="form-error">{{ formErrors.sign_key }}</div>
             </div>
           </div>
@@ -152,9 +277,9 @@
 
         <!-- 双向认证 (mTLS) -->
         <template v-if="form.gm && form.cert_type === 'server'">
-          <div class="form-group" style="margin-top:8px;">
+          <div class="form-group" style="margin-top: 8px">
             <label class="checkbox-label">
-              <input type="checkbox" v-model="mtlsEnabled"> <span>启用双向认证 (mTLS)</span>
+              <input type="checkbox" v-model="mtlsEnabled" /> <span>启用双向认证 (mTLS)</span>
             </label>
           </div>
           <template v-if="mtlsEnabled">
@@ -167,16 +292,28 @@
               <div v-show="mtlsExpanded" class="collapse-body">
                 <div class="form-group">
                   <label class="form-label">客户端 CA 证书 (client_ca)</label>
-                  <textarea v-model="form.client_ca" class="form-input" rows="6" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"></textarea>
+                  <textarea
+                    v-model="form.client_ca"
+                    class="form-input"
+                    rows="6"
+                    placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                  ></textarea>
                   <div class="form-hint">客户端的 CA 根证书 PEM，用于验证客户端证书</div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label">证书链深度 (client_depth)</label>
-                    <input v-model.number="form.client_depth" type="number" class="form-input" min="0" max="10" placeholder="默认 1">
+                    <input
+                      v-model.number="form.client_depth"
+                      type="number"
+                      class="form-input"
+                      min="0"
+                      max="10"
+                      placeholder="默认 1"
+                    />
                     <div class="form-hint">客户端证书链最大深度，0 表示不限制</div>
                   </div>
-                  <div class="form-group" style="flex:2;">
+                  <div class="form-group" style="flex: 2">
                     <label class="form-label">跳过 mTLS 的 URI 正则</label>
                     <div class="mtls-uri-list">
                       <div v-for="(tag, i) in mtlsSkipTags" :key="i" class="mtls-uri-item">
@@ -184,7 +321,13 @@
                         <button class="btn btn-ghost btn-sm" @click="removeMtlsSkipTag(i)">删除</button>
                       </div>
                       <div class="mtls-uri-add-row">
-                        <input v-model="mtlsSkipInputValue" type="text" class="form-input" placeholder="输入正则表达式" @keydown.enter.prevent="addMtlsSkipTag">
+                        <input
+                          v-model="mtlsSkipInputValue"
+                          type="text"
+                          class="form-input"
+                          placeholder="输入正则表达式"
+                          @keydown.enter.prevent="addMtlsSkipTag"
+                        />
                         <button class="btn btn-primary btn-sm" @click="addMtlsSkipTag">添加</button>
                       </div>
                     </div>
@@ -203,12 +346,12 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">组织 (O)</label>
-            <input v-model="form.organization" type="text" class="form-input" placeholder="如 EMBRACE">
+            <input v-model="form.organization" type="text" class="form-input" placeholder="如 EMBRACE" />
             <div class="form-hint">显示在证书的"颁发对象"中</div>
           </div>
           <div class="form-group">
             <label class="form-label">组织单位 (OU)</label>
-            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="如 EDGE">
+            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="如 EDGE" />
             <div class="form-hint">显示在证书的"颁发对象"中</div>
           </div>
         </div>
@@ -216,7 +359,9 @@
 
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="handleClose">取消</button>
-        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">{{ submitting ? '保存中...' : (editingCert ? '保存' : '创建') }}</button>
+        <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
+          {{ submitting ? '保存中...' : editingCert ? '保存' : '创建' }}
+        </button>
       </div>
     </div>
   </div>
@@ -255,8 +400,8 @@ const dnsTags = ref<string[]>([])
 const ipTags = ref<string[]>([])
 
 function splitSniByType(tags: string[]) {
-  dnsTags.value = tags.filter(t => !isIpAddress(t))
-  ipTags.value = tags.filter(t => isIpAddress(t))
+  dnsTags.value = tags.filter((t) => !isIpAddress(t))
+  ipTags.value = tags.filter((t) => isIpAddress(t))
 }
 
 const mtlsEnabled = ref(false)
@@ -334,15 +479,36 @@ function clearErrors() {
 function validate(): boolean {
   clearErrors()
   let valid = true
-  if (!form.name.trim()) { formErrors.name = '请输入证书名称'; valid = false }
-  if (!form.cluster_id) { formErrors.cluster_id = '请选择集群'; valid = false }
-  if (sniTags.value.length === 0 && !props.editingCert) { formErrors.sni = '请至少添加一个 SNI 域名'; valid = false }
-  if (!form.cert.trim()) { formErrors.cert = '请上传或粘贴证书文件'; valid = false }
-  if (!form.key.trim()) { formErrors.key = '请上传或粘贴私钥文件'; valid = false }
+  if (!form.name.trim()) {
+    formErrors.name = '请输入证书名称'
+    valid = false
+  }
+  if (!form.cluster_id) {
+    formErrors.cluster_id = '请选择集群'
+    valid = false
+  }
+  if (sniTags.value.length === 0 && !props.editingCert) {
+    formErrors.sni = '请至少添加一个 SNI 域名'
+    valid = false
+  }
+  if (!form.cert.trim()) {
+    formErrors.cert = '请上传或粘贴证书文件'
+    valid = false
+  }
+  if (!form.key.trim()) {
+    formErrors.key = '请上传或粘贴私钥文件'
+    valid = false
+  }
   // 创建时国密模式要求签名证书必填；编辑时不强制（可能是单证书模式）
   if (form.gm && !props.editingCert) {
-    if (!form.sign_cert.trim()) { formErrors.sign_cert = '国密模式下请上传签名证书'; valid = false }
-    if (!form.sign_key.trim()) { formErrors.sign_key = '国密模式下请上传签名私钥'; valid = false }
+    if (!form.sign_cert.trim()) {
+      formErrors.sign_cert = '国密模式下请上传签名证书'
+      valid = false
+    }
+    if (!form.sign_key.trim()) {
+      formErrors.sign_key = '国密模式下请上传签名私钥'
+      valid = false
+    }
   }
   return valid
 }
@@ -353,68 +519,90 @@ function toggleProtocol(p: string) {
   else form.ssl_protocols.push(p)
 }
 
-watch(() => props.visible, (v) => {
-  if (!v) return
-  clearErrors()
-  certInputMode.value = 'file'
-  keyInputMode.value = 'file'
-  signCertInputMode.value = 'file'
-  signKeyInputMode.value = 'file'
-  if (props.editingCert) {
-    const c = props.editingCert
-    form.name = c.name
-    form.cluster_id = c.cluster_id
-    form.cert_type = c.cert_type
-    sniTags.value = c.sni ? c.sni.split(',').map((s: string) => s.trim()).filter(Boolean) : []
-    splitSniByType(sniTags.value)
-    form.cert = c.cert
-    form.key = c.key || c.private_key || ''
-    form.ssl_protocols = c.ssl_protocols ? (() => { try { return JSON.parse(c.ssl_protocols) } catch { return ['TLSv1.2', 'TLSv1.3'] } })() : ['TLSv1.2', 'TLSv1.3']
-    form.description = c.description || ''
-    // gm 表示"国密双证书模式"：只有既有 gm 标记又有 sign_cert 时才视为双证书
-    form.gm = !!(c.gm && c.sign_cert)
-    form.sign_cert = c.sign_cert || ''
-    form.sign_key = c.sign_key || ''
-    form.organization = c.organization || ''
-    form.organizational_unit = c.organizational_unit || ''
-    // mTLS 回填：任一字段有值即视为已启用
-    mtlsEnabled.value = !!(c.client_ca || c.client_depth != null || c.skip_mtls_uri_regex)
-    form.client_ca = c.client_ca || ''
-    form.client_depth = c.client_depth ?? ''
-    if (c.skip_mtls_uri_regex) {
-      try { mtlsSkipTags.value = JSON.parse(c.skip_mtls_uri_regex) } catch { mtlsSkipTags.value = [c.skip_mtls_uri_regex] }
+watch(
+  () => props.visible,
+  (v) => {
+    if (!v) return
+    clearErrors()
+    certInputMode.value = 'file'
+    keyInputMode.value = 'file'
+    signCertInputMode.value = 'file'
+    signKeyInputMode.value = 'file'
+    if (props.editingCert) {
+      const c = props.editingCert
+      form.name = c.name
+      form.cluster_id = c.cluster_id
+      form.cert_type = c.cert_type
+      sniTags.value = c.sni
+        ? c.sni
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : []
+      splitSniByType(sniTags.value)
+      form.cert = c.cert
+      form.key = c.key || c.private_key || ''
+      form.ssl_protocols = c.ssl_protocols
+        ? (() => {
+            try {
+              return JSON.parse(c.ssl_protocols)
+            } catch {
+              return ['TLSv1.2', 'TLSv1.3']
+            }
+          })()
+        : ['TLSv1.2', 'TLSv1.3']
+      form.description = c.description || ''
+      // gm 表示"国密双证书模式"：只有既有 gm 标记又有 sign_cert 时才视为双证书
+      form.gm = !!(c.gm && c.sign_cert)
+      form.sign_cert = c.sign_cert || ''
+      form.sign_key = c.sign_key || ''
+      form.organization = c.organization || ''
+      form.organizational_unit = c.organizational_unit || ''
+      // mTLS 回填：任一字段有值即视为已启用
+      mtlsEnabled.value = !!(c.client_ca || c.client_depth != null || c.skip_mtls_uri_regex)
+      form.client_ca = c.client_ca || ''
+      form.client_depth = c.client_depth ?? ''
+      if (c.skip_mtls_uri_regex) {
+        try {
+          mtlsSkipTags.value = JSON.parse(c.skip_mtls_uri_regex)
+        } catch {
+          mtlsSkipTags.value = [c.skip_mtls_uri_regex]
+        }
+      } else {
+        mtlsSkipTags.value = []
+      }
+      mtlsExpanded.value = mtlsEnabled.value
     } else {
+      form.name = ''
+      form.cluster_id = ''
+      form.cert_type = 'server'
+      sniTags.value = []
+      splitSniByType([])
+      form.cert = ''
+      form.key = ''
+      form.ssl_protocols = ['TLSv1.2', 'TLSv1.3']
+      form.description = ''
+      form.gm = false
+      form.sign_cert = ''
+      form.sign_key = ''
+      form.organization = ''
+      form.organizational_unit = ''
+      mtlsEnabled.value = false
+      form.client_ca = ''
+      form.client_depth = ''
       mtlsSkipTags.value = []
+      mtlsExpanded.value = false
     }
-    mtlsExpanded.value = mtlsEnabled.value
-  } else {
-    form.name = ''
-    form.cluster_id = ''
-    form.cert_type = 'server'
-    sniTags.value = []
-    splitSniByType([])
-    form.cert = ''
-    form.key = ''
-    form.ssl_protocols = ['TLSv1.2', 'TLSv1.3']
-    form.description = ''
-    form.gm = false
-    form.sign_cert = ''
-    form.sign_key = ''
-    form.organization = ''
-    form.organizational_unit = ''
-    mtlsEnabled.value = false
-    form.client_ca = ''
-    form.client_depth = ''
-    mtlsSkipTags.value = []
-    mtlsExpanded.value = false
-  }
-})
+  },
+)
 
 function onCertFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => { form.cert = reader.result as string }
+  reader.onload = () => {
+    form.cert = reader.result as string
+  }
   reader.readAsText(file)
 }
 
@@ -422,7 +610,9 @@ function onKeyFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => { form.key = reader.result as string }
+  reader.onload = () => {
+    form.key = reader.result as string
+  }
   reader.readAsText(file)
 }
 
@@ -430,7 +620,9 @@ function onSignCertFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => { form.sign_cert = reader.result as string }
+  reader.onload = () => {
+    form.sign_cert = reader.result as string
+  }
   reader.readAsText(file)
 }
 
@@ -438,7 +630,9 @@ function onSignKeyFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => { form.sign_key = reader.result as string }
+  reader.onload = () => {
+    form.sign_key = reader.result as string
+  }
   reader.readAsText(file)
 }
 
@@ -560,9 +754,24 @@ function handleClose() {
   color: var(--accent);
   white-space: nowrap;
 }
-.sni-tag-locked { background: var(--surface); border-color: var(--border); color: var(--muted); }
-.sni-tag-locked::before { content: '🔒'; margin-right: 2px; font-size: 11px; }
-.sni-tag-reserved { font-size: 10px; color: var(--muted); background: oklch(0% 0 0 / 6%); padding: 0 4px; border-radius: 8px; margin-left: 2px; }
+.sni-tag-locked {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--muted);
+}
+.sni-tag-locked::before {
+  content: '🔒';
+  margin-right: 2px;
+  font-size: 11px;
+}
+.sni-tag-reserved {
+  font-size: 11px;
+  color: var(--muted);
+  background: oklch(0% 0 0 / 6%);
+  padding: 0 4px;
+  border-radius: 8px;
+  margin-left: 2px;
+}
 .sni-tag-remove {
   display: inline-flex;
   align-items: center;
@@ -653,7 +862,7 @@ function handleClose() {
   background: oklch(56% 0.16 210 / 5%);
 }
 .collapse-arrow {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   flex-shrink: 0;
 }
