@@ -54,11 +54,11 @@ class TestIsSqlitePreserved:
 
 
 class TestEngineBuilders:
-    def test_sync_engine_points_at_active_sqlite(self, tmp_path):
+    def test_sync_engine_points_at_active_sqlite(self, tmp_path, real_create_sync_engine):
         _save_config(tmp_path, DbConfig(version=1, active="local", connections=[
             ConnectionConfig(id="local", type="sqlite", name="L", path=str(tmp_path / "mydb.db")),
         ]))
-        engine = database.create_sync_engine()
+        engine = real_create_sync_engine()
         with engine.connect() as conn:
             conn.execute(text("CREATE TABLE t (id INTEGER PRIMARY KEY)"))
             conn.commit()

@@ -82,8 +82,29 @@ class TestRouteListAPI:
         assert filtered_resp.status_code == 200
         assert filtered_resp.json()["total"] == all_total
 
-    async def test_list_routes_plugin_filter_reduces_count(self, async_isolated_client):
-        """plugin filter should reduce total count vs unfiltered list."""
+    async def test_list_routes_plugin_filter_reduces_count(self, async_isolated_client, isolated_session):
+        """plugin filter should reduce total count vs unfiltered list.
+
+        自给自足种子（隔离库不依赖真实数据）：一条带 proxy_rewrite 的路由 +
+        一条不带，过滤后 total 必须严格减少。
+        """
+        import json
+
+        from app.models.cluster import Route, RoutePlugin
+
+        async with isolated_session() as s:
+            if not await s.get(Route, 1):
+                s.add(Route(id=1, cluster_id=1, name="with-pr", uri="/with-pr/*", priority=0, status=1))
+                s.add(Route(id=2, cluster_id=1, name="without-pr", uri="/without-pr/*", priority=0, status=1))
+                s.add(
+                    RoutePlugin(
+                        route_id=1,
+                        plugin_name="proxy_rewrite",
+                        config=json.dumps({"regex_uri": ["^/a", "/b"]}),
+                    )
+                )
+                await s.commit()
+
         token = await self._login(async_isolated_client)
         headers = {"Authorization": f"Bearer {token}"}
         all_resp = await async_isolated_client.get("/api/v1/routes", headers=headers, params={"page_size": 100})

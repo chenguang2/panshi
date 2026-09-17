@@ -24,11 +24,139 @@ def _enable_sqlite_fk(dbapi_conn, record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
+
+# ===========================================================================
+# 全局测试引擎重定向（2026-09-17）
+# ===========================================================================
+# 背景：活动库切 PostgreSQL 后，未使用隔离夹具的测试会直连真实活动库：
+#   · asyncpg 不容忍跨事件循环复用连接 → 全量跑 102 failed（71 次登录即
+#     InterfaceError: another operation is in progress）
+#   · 直连真实库意味着测试可能写入真实数据（安全隐患）
+#
+# 方案：conftest 导入期把 app.core.database 的全局引擎/会话工厂**单点**
+# 重定向到会话级临时 SQLite 文件，并清扫"按值导入"产生的陈旧引用。
+# 此后任何测试（含尚未迁移到 isolated_app 夹具的文件）都命中隔离库。
+#
+# 关键细节：
+#   · NullPool：pytest-asyncio auto 模式下每个测试用例独立事件循环，
+#     池化连接跨 loop 复用会报 "attached to a different loop"。
+#   · 临时文件而非 :memory:：多个连接/线程（TestClient portal）需共享同一库。
+#   · _reload_active_engine 置空：防止切换库类测试把引擎重新指回真实配置。
+import os
+import shutil
+import sys
+import tempfile
+
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool, StaticPool
+
+TEST_DB_DIR = tempfile.mkdtemp(prefix="panshi-test-db-")
+TEST_DB_PATH = os.path.join(TEST_DB_DIR, "isolated.db")
+TEST_DB_SYNC_URL = f"sqlite:///{TEST_DB_PATH}"
+TEST_DB_ASYNC_URL = f"sqlite+aiosqlite:///{TEST_DB_PATH}"
+
+import app.core.database as _app_db_module
+
+_REAL_SESSION_FACTORY = _app_db_module.AsyncSessionLocal
+_REAL_ASYNC_ENGINE = _app_db_module._async_engine
+_REAL_CREATE_SYNC_ENGINE = _app_db_module.create_sync_engine
+
+
+def _new_test_sync_engine():
+    eng = create_engine(
+        TEST_DB_SYNC_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    event.listen(eng, "connect", _enable_sqlite_fk)
+    return eng
+
+
+_GLOBAL_TEST_ENGINE = create_async_engine(TEST_DB_ASYNC_URL, echo=False, poolclass=NullPool)
+event.listen(_GLOBAL_TEST_ENGINE.sync_engine, "connect", _enable_sqlite_fk)
+_GLOBAL_TEST_SESSION_FACTORY = async_sessionmaker(
+    _GLOBAL_TEST_ENGINE, class_=AsyncSession, expire_on_commit=False
+)
+
+
+def _pin_test_engine():
+    """把 app.core.database 的全局引擎/会话工厂钉到隔离库。"""
+    _app_db_module._async_engine = _GLOBAL_TEST_ENGINE
+    _app_db_module.AsyncSessionLocal = _GLOBAL_TEST_SESSION_FACTORY
+    _app_db_module.create_sync_engine = _new_test_sync_engine
+    _app_db_module._active_async_engine = lambda: _GLOBAL_TEST_ENGINE
+    _app_db_module._reload_active_engine = lambda: None
+
+
+def _sweep_stale_engine_refs():
+    """清扫 `from app.core.database import AsyncSessionLocal` 等按值导入的陈旧引用。
+
+    按值导入在导入时刻绑定对象，模块级 patch 无法覆盖，必须按身份逐一替换。
+    """
+    for mod in list(sys.modules.values()):
+        if mod is None:
+            continue
+        if getattr(mod, "AsyncSessionLocal", None) is _REAL_SESSION_FACTORY:
+            mod.AsyncSessionLocal = _GLOBAL_TEST_SESSION_FACTORY
+        if getattr(mod, "_async_engine", None) is _REAL_ASYNC_ENGINE:
+            mod._async_engine = _GLOBAL_TEST_ENGINE
+        if getattr(mod, "create_sync_engine", None) is _REAL_CREATE_SYNC_ENGINE:
+            mod.create_sync_engine = _new_test_sync_engine
+
+
+_pin_test_engine()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_real_db_redirect():
+    """会话级：建隔离库 schema + 最小种子，并清扫导入期后产生的陈旧引用。"""
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    _pin_test_engine()
+    _sweep_stale_engine_refs()
+
+    async def _setup():
+        async with _GLOBAL_TEST_ENGINE.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with _GLOBAL_TEST_SESSION_FACTORY() as session:
+            if not await session.get(User, 1):
+                session.add(
+                    User(
+                        id=1,
+                        username="admin",
+                        password_hash=hash_password("panshi123"),
+                        role="admin",
+                    )
+                )
+            for cid in SEED_CLUSTER_IDS:
+                if not await session.get(Cluster, cid):
+                    session.add(Cluster(id=cid, name=f"seed-cluster-{cid}"))
+            await session.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_setup())
+    finally:
+        loop.close()
+
+    yield
+
+    _pin_test_engine()
+    asyncio.run(_GLOBAL_TEST_ENGINE.dispose())
+    shutil.rmtree(TEST_DB_DIR, ignore_errors=True)
+
 @pytest.fixture(scope="session")
 def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+@pytest.fixture
+def real_create_sync_engine():
+    """真实 create_sync_engine（全局重定向会替换模块属性，验证真实行为时显式取回）。"""
+    return _REAL_CREATE_SYNC_ENGINE
+
 
 @pytest.fixture(scope="function")
 async def test_db():
