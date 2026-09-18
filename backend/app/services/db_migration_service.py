@@ -110,6 +110,7 @@ def migrate_direct(
     mode: str = "replace",
     confirmed_clear: bool = False,
     cancel_event=None,
+    wait_post_copy: bool = False,
 ) -> list[dict]:
     """Stream-copy all business tables from source_conn to target_conn.
 
@@ -197,6 +198,15 @@ def migrate_direct(
 
         t = threading.Thread(target=_post_copy_background, daemon=True, name="post-copy")
         t.start()
+        if wait_post_copy:
+            # 直调方（测试/脚本）需要确定性完成：等后台线程结束再返回，
+            # 否则下一次迁移的 DROP ... CASCADE 会与本线程的锁互撞（死锁）。
+            # SSE 路径保持 fire-and-forget（由 finalize 收尾，见 #33）。
+            t.join(timeout=300)
+            try:
+                dst_engine.dispose()
+            except Exception:
+                pass
         try:
             src_engine.dispose()
         except Exception:

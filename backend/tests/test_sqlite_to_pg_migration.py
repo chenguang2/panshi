@@ -127,12 +127,17 @@ class TestSqliteToPgMigration:
 
     def test_migrate_is_idempotent(self, sqlite_conn, pg_conn):
         """二次迁移应幂等（不报错、不重复数据）。"""
+        from app.core.database import Base
+
+        # wait_post_copy=True：migrate_direct 的序列复位/补列在后台线程执行，
+        # 直接返回会让二次迁移的 DROP ... CASCADE 与之死锁（2026-09-18）。
         done1 = migrate_direct(
             source_conn=sqlite_conn,
             target_conn=pg_conn,
             include_logs=True,
             mode="replace",
             confirmed_clear=True,
+            wait_post_copy=True,
         )
         done2 = migrate_direct(
             source_conn=sqlite_conn,
@@ -140,6 +145,7 @@ class TestSqliteToPgMigration:
             include_logs=True,
             mode="replace",
             confirmed_clear=True,
+            wait_post_copy=True,
         )
         assert len(done1) == len(done2), "二次迁移表数应一致"
 
@@ -149,6 +155,8 @@ class TestSqliteToPgMigration:
         with engine.connect() as conn:
             cnt = conn.execute(text("SELECT COUNT(*) FROM sys_user")).scalar()
             assert cnt > 0
+        # 清理：本测试会填充目标库，不清理会让下一轮的 test_pg_target_empty_before 失败
+        Base.metadata.drop_all(engine)
         engine.dispose()
 
 
@@ -204,17 +212,32 @@ class TestTypeCoercionInRealMigration:
         Base.metadata.drop_all(pg_engine)
         Base.metadata.create_all(pg_engine)
 
-        result = _copy_table(src_engine, pg_engine, target_table)
-        assert result["skipped"] is False
+        try:
+            # PG 强制外键：单表直拷会因缺父表整表被拒（行级 skip 计入
+            # "目标库约束冲突"）——先按依赖序拷贝目标表的全部祖先表。
+            from app.core.db_migration import DEPENDENCY_ORDER
 
-        pg_ins = inspect(pg_engine)
-        with src_engine.connect() as sconn, pg_engine.connect() as pconn:
-            srow = sconn.execute(text(f"SELECT {bool_col} FROM {target_table} WHERE {bool_col} IS NOT NULL LIMIT 1")).scalar()
-            prow = pconn.execute(text(f"SELECT {bool_col} FROM {target_table} WHERE {bool_col} IS NOT NULL LIMIT 1")).scalar()
-        assert isinstance(prow, bool), f"PG 布尔列应返回原生 bool，实际 {type(prow)}: {prow!r}"
-        assert prow == bool(srow)
-        src_engine.dispose()
-        pg_engine.dispose()
+            for batch in DEPENDENCY_ORDER:
+                if target_table in batch:
+                    break
+                for t in batch:
+                    if t in tables and insp.has_table(t):
+                        _copy_table(src_engine, pg_engine, t)
+            result = _copy_table(src_engine, pg_engine, target_table)
+            assert result["skipped"] is False
+            assert result["rows"] > 0, "拷贝行数应大于 0"
+
+            pg_ins = inspect(pg_engine)
+            with src_engine.connect() as sconn, pg_engine.connect() as pconn:
+                srow = sconn.execute(text(f"SELECT {bool_col} FROM {target_table} WHERE {bool_col} IS NOT NULL LIMIT 1")).scalar()
+                prow = pconn.execute(text(f"SELECT {bool_col} FROM {target_table} WHERE {bool_col} IS NOT NULL LIMIT 1")).scalar()
+            assert isinstance(prow, bool), f"PG 布尔列应返回原生 bool，实际 {type(prow)}: {prow!r}"
+            assert prow == bool(srow)
+        finally:
+            # 清理：本测试会留下数据，不清理会让下一轮的 test_pg_target_empty_before 失败
+            Base.metadata.drop_all(pg_engine)
+            src_engine.dispose()
+            pg_engine.dispose()
 
 
 class TestPgToSqliteMigration:
@@ -237,18 +260,26 @@ class TestPgToSqliteMigration:
         )
 
         # 先确保 PG 有数据：sqlite → pg
-        migrate_direct(sqlite_conn, pg_conn, include_logs=True, mode="replace", confirmed_clear=True)
+        # wait_post_copy=True：否则后台 post-copy 线程与本测试后续迁移/清理竞态
+        migrate_direct(sqlite_conn, pg_conn, include_logs=True, mode="replace", confirmed_clear=True, wait_post_copy=True)
         # 再 pg → sqlite（往返）
-        done = migrate_direct(pg_conn, roundtrip, include_logs=True, mode="replace", confirmed_clear=True)
+        done = migrate_direct(pg_conn, roundtrip, include_logs=True, mode="replace", confirmed_clear=True, wait_post_copy=True)
         assert len(done) > 0
 
         src_engine = create_engine(f"sqlite:///{sqlite_conn.path}")
         dst_engine = build_sync_engine_for(roundtrip)
-        for table in ("sys_user",):
-            with src_engine.connect() as s, dst_engine.connect() as d:
-                s_cnt = s.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
-                d_cnt = d.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
-            assert s_cnt == d_cnt, f"{table} 往返行数不一致：{s_cnt} != {d_cnt}"
-            assert d_cnt > 0
-        src_engine.dispose()
-        dst_engine.dispose()
+        try:
+            for table in ("sys_user",):
+                with src_engine.connect() as s, dst_engine.connect() as d:
+                    s_cnt = s.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                    d_cnt = d.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                assert s_cnt == d_cnt, f"{table} 往返行数不一致：{s_cnt} != {d_cnt}"
+                assert d_cnt > 0
+        finally:
+            # 清理：往返回填会填充 test_panshi，不清理会让下一轮的
+            # test_pg_target_empty_before 失败
+            pg_cleanup = build_sync_engine_for(pg_conn)
+            Base.metadata.drop_all(pg_cleanup)
+            pg_cleanup.dispose()
+            src_engine.dispose()
+            dst_engine.dispose()

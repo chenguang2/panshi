@@ -167,26 +167,56 @@ class TestPostgresSourceExport:
     """真 PG 源库导出回归（需 PG_DSN，opt-in；对源库只读）。"""
 
     def test_export_from_pg_succeeds(self, tmp_path):
+        """在本机测试 PG 上自建一次性源库（建表+种子）→ 导出 → 断言 → 删库。
+
+        不依赖也不触碰任何既有数据库的数据（2026-09-18：原实现假定 PG_DSN
+        指向带数据的库，指向空库时导出缺 data/ 文件而失败）。
+        """
         from app.core.database import build_sync_engine_for
         from app.core.db_config import encrypt_password
+        from app.models.cluster import Cluster
 
-        dsn = os.getenv("PG_DSN")
-        assert dsn, "PG_DSN must be set"
-        host, port, dbname = _parse_pg_dsn(dsn)
-        conn = ConnectionConfig(
-            id="pg_src", type="postgresql", name="PG", host=host, port=port,
-            database=dbname, username="postgres",
+        # 本机测试 PG 契约：postgres/postgres@localhost:5432（见 AGENTS #30）
+        admin = create_engine(
+            "postgresql+psycopg2://postgres:postgres@localhost:5432/postgres"
+        )
+        with admin.connect() as c:
+            c = c.execution_options(isolation_level="AUTOCOMMIT")
+            c.exec_driver_sql("DROP DATABASE IF EXISTS archive_src")
+            c.exec_driver_sql("CREATE DATABASE archive_src")
+        admin.dispose()
+
+        src = ConnectionConfig(
+            id="pg_src", type="postgresql", name="PG", host="localhost", port=5432,
+            database="archive_src", username="postgres",
             password_enc=encrypt_password("postgres"),
         )
-        out = str(tmp_path / "pg_backup.zip")
-        db_archive_service.export_archive(conn, out)
-        with zipfile.ZipFile(out) as z:
-            assert "meta.json" in z.namelist()
-            assert "data/ps_cluster.jsonl" in z.namelist()
-            # ddl/ 是 best-effort：非 SQLite 源允许为空，但导出必须完整成功
-            tables = json.loads(z.read("meta.json"))["tables"]
-            assert isinstance(tables, dict)
-        build_sync_engine_for(conn).dispose()
+        engine = build_sync_engine_for(src)
+        try:
+            Base.metadata.create_all(engine)
+            with Session(engine) as session:
+                session.add(Cluster(id=1, name="archive-src-cluster", status=1))
+                session.commit()
+            out = str(tmp_path / "pg_backup.zip")
+            db_archive_service.export_archive(src, out)
+            with zipfile.ZipFile(out) as z:
+                assert "meta.json" in z.namelist()
+                assert "data/ps_cluster.jsonl" in z.namelist()
+                # ddl/ 是 best-effort：非 SQLite 源允许为空，但导出必须完整成功
+                tables = json.loads(z.read("meta.json"))["tables"]
+                assert isinstance(tables, dict)
+                rows = [
+                    json.loads(line)
+                    for line in z.read("data/ps_cluster.jsonl").decode("utf-8").splitlines()
+                    if line.strip()
+                ]
+                assert rows and rows[0]["name"] == "archive-src-cluster"
+        finally:
+            engine.dispose()
+            with admin.connect() as c:
+                c = c.execution_options(isolation_level="AUTOCOMMIT")
+                c.exec_driver_sql("DROP DATABASE IF EXISTS archive_src")
+            admin.dispose()
 
 
 def _parse_pg_dsn(dsn: str) -> tuple[str, int, str]:
