@@ -81,39 +81,56 @@
 
 ### 1. HTTP 请求速率（QPS）
 
+与实现完全一致的真实 SQL（`metrics_service.query_time_series` counter 路径，
+指标查询页查 `edge_http_requests_total` 时执行的就是它，参数已渲染为字面量）：
+
 ```sql
 SELECT
     bucket,
     greatest((s_last - prev_last) / greatest(
-        date_diff('second', prev_t_last, t_last), 1), 0) AS req_per_sec
+        date_diff('second', prev_t_last, t_last), 1), 0) AS rate_val,
+    sample_count
 FROM (
     SELECT
-        bucket, s_last, t_last,
+        bucket,
+        s_last,
+        t_last,
+        sample_count,
         lagInFrame(s_last, 1, s_last) OVER (ORDER BY bucket ASC) AS prev_last,
         lagInFrame(t_last, 1, t_last) OVER (ORDER BY bucket ASC) AS prev_t_last
     FROM (
         SELECT
-            toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
+            bucket,
             sum(v_last) AS s_last,
-            max(t_last) AS t_last
+            max(t_last) AS t_last,
+            sum(cnt) AS sample_count
         FROM (
-            SELECT bucket, Attributes,
-                   argMax(Value, TimeUnix) AS v_last, max(TimeUnix) AS t_last
+            SELECT
+                toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
+                Attributes,
+                argMax(Value, TimeUnix) AS v_last,
+                max(TimeUnix) AS t_last,
+                count(*) AS cnt
             FROM otel_metrics_gauge
             WHERE MetricName = 'edge_http_requests_total'
               AND TimeUnix > now() - INTERVAL 86400 SECOND
             GROUP BY bucket, Attributes
         )
-        GROUP BY bucket ORDER BY bucket
+        GROUP BY bucket
+        ORDER BY bucket
     )
 )
 ORDER BY bucket
 ```
 
-> ⚠️ 计数器速率必须用**相邻桶差分**（本桶末值 − 上一桶末值，除以桶间实际间隔）。
-> "桶内 max−min ÷ 桶宽"在采集粒度 ≥ 桶粒度时（如 1/min 数据配 1m 桶）每桶只有
-> 1 个样本、单点无增量，整条线会归零；右缘未满桶也会假性塌陷。实现见
-> `metrics_service.query_time_series` counter 路径（2026-09-18 修复）。
+> ⚠️ 计数器速率必须用**相邻桶差分**（本桶各序列末值之和 − 上一桶末值之和，
+> 除以桶间实际间隔）。"桶内 max−min ÷ 桶宽"在采集粒度 ≥ 桶粒度时（如 1/min
+> 数据配 1m 桶）每桶只有 1 个样本、单点无增量，整条线会归零；右缘未满桶也会
+> 假性塌陷（2026-09-18 修复）。
+>
+> ⚠️ 多层嵌套注意：`bucket` 只能在**最内层**计算（TimeUnix 在外层不可见），
+> 中间层 `GROUP BY bucket` 时 SELECT 列表**必须带上 bucket**，否则外层
+> 窗口函数报 `Unknown expression identifier bucket`。
 
 ### 2. Nginx 当前连接数（按 state 拆分）
 
