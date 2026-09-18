@@ -83,20 +83,37 @@
 
 ```sql
 SELECT
-    toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
-    greatest((max(Value) - min(Value)) / greatest(
-        date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS req_per_sec,
-    count(*) AS sample_count
-FROM otel_metrics_gauge
-WHERE MetricName = 'edge_http_requests_total'
-  AND TimeUnix > now() - INTERVAL 86400 SECOND
-GROUP BY bucket
+    bucket,
+    greatest((s_last - prev_last) / greatest(
+        date_diff('second', prev_t_last, t_last), 1), 0) AS req_per_sec
+FROM (
+    SELECT
+        bucket, s_last, t_last,
+        lagInFrame(s_last, 1, s_last) OVER (ORDER BY bucket ASC) AS prev_last,
+        lagInFrame(t_last, 1, t_last) OVER (ORDER BY bucket ASC) AS prev_t_last
+    FROM (
+        SELECT
+            toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
+            sum(v_last) AS s_last,
+            max(t_last) AS t_last
+        FROM (
+            SELECT bucket, Attributes,
+                   argMax(Value, TimeUnix) AS v_last, max(TimeUnix) AS t_last
+            FROM otel_metrics_gauge
+            WHERE MetricName = 'edge_http_requests_total'
+              AND TimeUnix > now() - INTERVAL 86400 SECOND
+            GROUP BY bucket, Attributes
+        )
+        GROUP BY bucket ORDER BY bucket
+    )
+)
 ORDER BY bucket
 ```
 
-> ⚠️ 分母用桶内实际采样跨度而非固定桶宽：最后一个桶往往只覆盖几秒（采集粒度
-> 分钟级），按满桶除会让折线右缘假性塌陷到 ~0（实现见 `metrics_service.query_time_series`
-> counter 路径，2026-09-18 修复）。
+> ⚠️ 计数器速率必须用**相邻桶差分**（本桶末值 − 上一桶末值，除以桶间实际间隔）。
+> "桶内 max−min ÷ 桶宽"在采集粒度 ≥ 桶粒度时（如 1/min 数据配 1m 桶）每桶只有
+> 1 个样本、单点无增量，整条线会归零；右缘未满桶也会假性塌陷。实现见
+> `metrics_service.query_time_series` counter 路径（2026-09-18 修复）。
 
 ### 2. Nginx 当前连接数（按 state 拆分）
 
@@ -160,17 +177,8 @@ ORDER BY bucket, MetricName
 
 ### 5. 指标采集错误（edge_metric_errors_total）
 
-```sql
-SELECT
-    toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
-    greatest((max(Value) - min(Value)) / greatest(
-        date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS error_per_sec
-FROM otel_metrics_sum
-WHERE MetricName = 'edge_metric_errors_total'
-  AND TimeUnix > now() - INTERVAL 86400 SECOND
-GROUP BY bucket
-ORDER BY bucket
-```
+> 计数器速率算法同 §1（相邻桶差分），将 MetricName 换为
+> `edge_metric_errors_total`、表换为 `otel_metrics_sum` 即可。
 
 ---
 

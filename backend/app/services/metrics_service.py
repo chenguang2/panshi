@@ -89,21 +89,49 @@ def query_time_series(
         params["label_val"] = val
 
     if is_counter_val:
-        # Counter path — calculate rate
-        # 分母用桶内实际采样跨度而非桶宽：最后一个桶往往只覆盖几秒（采集粒度分钟级），
-        # 按满桶除会把右缘 QPS 打成 ~0，看起来像流量骤降。
+        # Counter path — calculate rate（相邻桶差分，Prometheus rate 的标准做法）
+        # 不能用"桶内 max-min ÷ 桶宽"：当采集粒度 ≥ 桶粒度时（如 1/min 数据配 1m 桶）
+        # 每桶只有 1 个样本，单点无增量 → 全线归零（2026-09-18 指标总览 QPS 全零事故）。
+        # 改为：每桶取各序列末值求和，与上一桶末值做差、除以桶间实际间隔——
+        # 单样本桶、稀疏桶、计数器复位（负差 → 钳 0）均正确。
         sql = f"""
             SELECT
-                toUnixTimestamp(toStartOfInterval(TimeUnix,
-                              INTERVAL {interval_sec} SECOND)) AS bucket,
-                greatest((max(Value) - min(Value)) / greatest(
-                    date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS rate_val,
-                count(*) AS sample_count
-            FROM {source_table}
-            WHERE MetricName = %(name)s
-              AND TimeUnix > now() - INTERVAL %(since)s SECOND
-              {label_where}
-            GROUP BY bucket
+                bucket,
+                greatest((s_last - prev_last) / greatest(
+                    date_diff('second', prev_t_last, t_last), 1), 0) AS rate_val,
+                sample_count
+            FROM (
+                SELECT
+                    bucket,
+                    s_last,
+                    t_last,
+                    sample_count,
+                    lagInFrame(s_last, 1, s_last) OVER (ORDER BY bucket ASC) AS prev_last,
+                    lagInFrame(t_last, 1, t_last) OVER (ORDER BY bucket ASC) AS prev_t_last
+                FROM (
+                    SELECT
+                        bucket,
+                        sum(v_last) AS s_last,
+                        max(t_last) AS t_last,
+                        sum(cnt) AS sample_count
+                    FROM (
+                        SELECT
+                            toUnixTimestamp(toStartOfInterval(TimeUnix,
+                                          INTERVAL {interval_sec} SECOND)) AS bucket,
+                            Attributes,
+                            argMax(Value, TimeUnix) AS v_last,
+                            max(TimeUnix) AS t_last,
+                            count(*) AS cnt
+                        FROM {source_table}
+                        WHERE MetricName = %(name)s
+                          AND TimeUnix > now() - INTERVAL %(since)s SECOND
+                          {label_where}
+                        GROUP BY bucket, Attributes
+                    )
+                    GROUP BY bucket
+                    ORDER BY bucket
+                )
+            )
             ORDER BY bucket
         """
         rows = execute_query(sql, params)

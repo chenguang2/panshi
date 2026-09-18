@@ -41,10 +41,17 @@ const props = defineProps<{
 
 const hasData = computed(() => (props.series ? props.series.length > 0 : props.data.length > 0))
 
+// 头部最新值取最近一个 sample_count >= 2 的点：刚开的桶常只有 1 个样本，
+// 单点无增量可算（rate=0），直接取会令 QPS 卡片频繁闪现 0.000
 const latestValue = computed<number | null>(() => {
   if (!hasData.value) return null
-  const last = props.data[props.data.length - 1]
-  return last.avg ?? null
+  const pts = props.data
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i]
+    if (p && (p.sample_count ?? 0) >= 2) return p.avg ?? null
+  }
+  const last = pts[pts.length - 1]
+  return last?.avg ?? null
 })
 
 const formattedValue = computed(() => {
