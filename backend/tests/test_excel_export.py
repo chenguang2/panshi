@@ -47,11 +47,12 @@ class TestExportRouterExists:
 
 @pytest.fixture
 async def test_engine():
-    engine = create_async_engine(TEST_DB_URL, echo=False)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
+
+    engine, _factory, teardown = _isolated_engine_factory()
+    await _prepare_isolated_db(engine)
     yield engine
-    await engine.dispose()
+    await teardown()
 
 
 @pytest.fixture

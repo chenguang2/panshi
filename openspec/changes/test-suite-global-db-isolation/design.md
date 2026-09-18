@@ -49,12 +49,14 @@
 - **不把 PG 设为默认**：默认必须零外部依赖（本地/CI 无 PG 也能跑）。
 - **不逐用例建 PG schema**：数百次 `CREATE SCHEMA` + `create_all` 会把全量从 3 分钟推到不可接受。
 - **采用**：`TEST_DB_BACKEND=pg`（opt-in）把同一单点重定向指向真实 PG 的 `panshi_test` schema；`init_db()` 生产启动路径在该 schema 内 create_all + 迁移；会话结束 `DROP SCHEMA CASCADE`，`public` 零影响。另加 `tests/test_pg_dialect_smoke.py` 固化高风险写路径，并配 `global_engine_client` 夹具（不覆盖 `get_db`，因此真的打到重定向后的引擎）。
-- **残余局限（诚实记录）**：用例级隔离夹具（`isolated_app` / `async_isolated_client`）仍用内存 SQLite，故 PG 模式下这些用例不产生 PG 信号；PG 信号覆盖"走全局引擎"的用例（未迁移文件 + 冒烟）。若要全用例 PG 覆盖需按用例建 schema，成本与收益不匹配，暂不做。
+- **升级（2026-09-18，用户要求"两后端全用例真打"）**：夹具族 schema——`test_db`/`app`（同步 client）/`async`/`misc`（测试文件自建客户端）/`global`（全局引擎，跨用例共享基线）各占一个专用 schema；族间互不可见（同一测试内多个 DB 夹具不再互相清掉对方的种子），**全部用例在 PG 模式下真打目标库**。族模板在 conftest **导入期**建好（该 PG 存储 DDL/TRUNCATE 每条强制 fsync 秒级，放导入期不占用例 90s 超时预算）；每用例复位用单 roundtrip 多语句 DELETE + DO 块 setval 对齐 `max(id)+1`（显式 id 种子不推进 PG 序列）。
 
 ## Risks / Trade-offs
 
 - **测试间数据串扰仍在**：会话级共享一个临时库，前序测试的写入会影响后续测试（与改造前等价）。若需强隔离，可后续引入"按模块清库/事务回滚"。
 - **依赖真实数据的用例会被暴露**：隔离后不提供生产数据，隐藏依赖会显性失败（本次即修 2 例）。这是收益而非代价——它把隐性耦合转为可见失败。
-- **PG 信号的覆盖边界**：见 D7——PG 模式下用例级隔离夹具仍为 SQLite，PG 信号来自走全局引擎的用例（含 7 条专用冒烟）。
+- **public 零污染守卫**：会话首尾对 public 全表行数快照断言（`_pg_public_row_snapshot`），任何污染立即报错。
+- **事故记录（2026-09-18）**：族 schema 方案落地前，早期实现的 search_path 带 public 兜底 + 无 schema 限定 DELETE，曾把 public 真实数据清空；已靠源 test.db 重迁恢复，并沉淀 AGENTS #30 六条铁律 + 零污染守卫。
+- **get_db override 铁律**：同步 TestClient 场景必须用工厂每请求新开会话（asyncpg 连接绑定创建它的 loop，共享 session 对象跨 loop close 会 RuntimeError/泄漏）。
 - **`PG_DSN` opt-in 测试不受影响**：迁移/归档类测试自建引擎，仍显式开关；常规全量不会连真实 PG。
 - **`reload` 语义在测试中失真**：切库类用例不能再验证"引擎真的重建"。当前此类用例断言的是配置读写与服务层行为，未覆盖重建；如将来需要，可在用例内显式调用真实实现（同 `real_create_sync_engine` 夹具模式）。

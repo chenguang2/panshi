@@ -33,15 +33,13 @@ class TestPluginWhitelist:
         importlib.reload(app.main)
         from app.main import app
         from app.models.cluster import PluginEnabled
+        from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
 
-        engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+        engine, TestSession, teardown = _isolated_engine_factory()
         import asyncio
 
-        TestSession = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
         async def _setup():
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+            await _prepare_isolated_db(engine)
             async with TestSession() as s:
                 s.add(PluginEnabled(plugin_name="cors", enabled=0))
                 from app.models.user import User
@@ -61,7 +59,7 @@ class TestPluginWhitelist:
                 yield c
         finally:
             app.dependency_overrides.clear()
-            asyncio.run(engine.dispose())
+            asyncio.run(teardown())
 
     def test_whitelist_with_all_returns_only_whitelisted(self, client):
         """all=1 should respect whitelist even without DB filter."""

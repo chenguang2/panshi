@@ -29,10 +29,12 @@ async def _seed_nodes(session: AsyncSession):
 
 class TestNodeTaskApi:
     @pytest.fixture
-    def client(self, test_db):
-        """Override get_db to use test_db session and seed required nodes + api user."""
+    def client(self, test_db, test_db_factory):
+        """Override get_db 用 test_db 同库会话工厂（每请求新会话，避免 asyncpg
+        连接跨 loop 复用），并 seed required nodes + api user。"""
         async def override_get_db():
-            yield test_db
+            async with test_db_factory() as session:
+                yield session
 
         app.dependency_overrides[get_db] = override_get_db
         # Seed nodes + auth user before tests run

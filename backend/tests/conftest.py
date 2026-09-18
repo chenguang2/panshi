@@ -92,23 +92,50 @@ def _resolve_pg_urls() -> tuple[str, str]:
 
 if _USING_PG:
     _PG_SYNC_URL, _PG_ASYNC_URL = _resolve_pg_urls()
-    TEST_DB_LABEL = f"PostgreSQL schema={PG_TEST_SCHEMA}"
+    # ── 夹具族 schema（2026-09-18）──────────────────────────────────
+    # 同一测试内多个 DB 夹具若共享一个 schema，后一个夹具的 truncate 会清掉
+    # 前一个夹具的种子（92× ps_cluster_pkey 等大面积失败的根因）。族间互不可见，
+    # 完全复刻 sqlite 模式"每夹具独立内存库"的语义。
+    PG_TEST_SCHEMA = "panshi_test"      # global 族：全局引擎（未迁移文件/冒烟，跨用例共享基线）
+    _PG_FAMILY_SCHEMAS = {
+        "global": PG_TEST_SCHEMA,
+        "test_db": "panshi_test_td",    # test_db 夹具
+        "app": "panshi_test_app",       # isolated_app / unauthenticated_app
+        "async": "panshi_test_async",   # async_isolated_client 一族
+        "misc": "panshi_test_misc",     # 测试文件自建客户端（默认族）
+    }
+    TEST_DB_LABEL = f"PostgreSQL schemas={sorted(set(_PG_FAMILY_SCHEMAS.values()))}"
 
-    def _new_test_sync_engine():
+    def _new_test_sync_engine(schema=None):
         return create_engine(
             _PG_SYNC_URL,
-            connect_args={"options": f"-csearch_path={PG_TEST_SCHEMA},public"},
+            connect_args={"options": f"-csearch_path={schema or PG_TEST_SCHEMA}"},
         )
 
-    _GLOBAL_TEST_ENGINE = create_async_engine(
-        _PG_ASYNC_URL,
-        echo=False,
-        poolclass=NullPool,
-        connect_args={"server_settings": {"search_path": f"{PG_TEST_SCHEMA},public"}},
-    )
+    def _pg_async_engine(schema):
+        return create_async_engine(
+            _PG_ASYNC_URL,
+            echo=False,
+            poolclass=NullPool,
+            connect_args={"server_settings": {"search_path": schema}},
+        )
+
+    _GLOBAL_TEST_ENGINE = _pg_async_engine(PG_TEST_SCHEMA)
+
+    _PG_FAMILY_ENGINES = {}
+
+    def _pg_family(schema):
+        """懒建族引擎（异步引擎 + 会话工厂）。"""
+        if schema not in _PG_FAMILY_ENGINES:
+            eng = _pg_async_engine(schema)
+            _PG_FAMILY_ENGINES[schema] = (
+                eng,
+                async_sessionmaker(eng, class_=AsyncSession, expire_on_commit=False),
+            )
+        return _PG_FAMILY_ENGINES[schema]
 else:
 
-    def _new_test_sync_engine():
+    def _new_test_sync_engine(schema=None):
         eng = create_engine(
             TEST_DB_SYNC_URL,
             connect_args={"check_same_thread": False},
@@ -160,7 +187,15 @@ def _isolated_real_db_redirect():
     sqlite 模式：临时文件建表 + 种子。
     pg 模式：在目标 PG 上重建专用 schema → 走生产 `init_db()`（create_all + 迁移）
     → 种子兜底；会话结束 DROP SCHEMA CASCADE（public 不动）。
+
+    注意两道防线（2026-09-18 教训）：
+    ① 引擎 search_path **不含 public 兜底**——否则 create_all 的 has_table 未命中
+       时，无 schema 限定的 INSERT 会经 search_path 回退解析到 public 真实表；
+    ② 会话 setup 前必须 `import app.main` 注册**全部**模型，否则 metadata 只有
+       conftest 顶部导入的少数模型，init_db 只建了部分表，其余表同样回退 public。
     """
+    import app.main  # noqa: F401 —— 注册全部 ORM 模型（保证 create_all 建全 23 张表）
+
     from app.core.security import hash_password
     from app.models.user import User
 
@@ -189,30 +224,48 @@ def _isolated_real_db_redirect():
 
     loop = asyncio.new_event_loop()
     try:
-        if _USING_PG:
-            sync_engine = _new_test_sync_engine()
-            with sync_engine.begin() as conn:
-                conn.execute(text(f'DROP SCHEMA IF EXISTS "{PG_TEST_SCHEMA}" CASCADE'))
-                conn.execute(text(f'CREATE SCHEMA "{PG_TEST_SCHEMA}"'))
-            sync_engine.dispose()
-            # 生产启动路径：create_all + run_migrations 全部落在专用 schema 内
-            loop.run_until_complete(_app_db_module.init_db())
-        else:
+        if not _USING_PG:
             loop.run_until_complete(_setup_sqlite())
+        # PG 模式：族模板已在**导入期**建好（_build_pg_templates），此处仅种子。
         loop.run_until_complete(_seed())
+        if _USING_PG:
+            _pg_reset_sequences(PG_TEST_SCHEMA)  # 显式 id 种子不推进序列，必须对齐
     finally:
         loop.close()
 
     print(f"\n[conftest] 测试隔离库：{TEST_DB_LABEL}")
+
+    _public_guard_before = _pg_public_row_snapshot() if _USING_PG else {}
 
     yield
 
     _pin_test_engine()
     asyncio.run(_GLOBAL_TEST_ENGINE.dispose())
     if _USING_PG:
+        # ── 真实库零污染守卫（2026-09-18 事故防线）──────────────────────
+        # 一旦测试会话写动了 public 任何一行，这里立即失败并给出差异表，
+        # 绝不允许"测试悄悄写了真实库"静默发生。
+        _public_guard_after = _pg_public_row_snapshot()
+        diff = {
+            t: (b, a)
+            for t, b in _public_guard_before.items()
+            for a in (_public_guard_after.get(t),)
+            if a != b
+        }
+        if diff:
+            details = "\n".join(f"  public.{t}: {b} -> {a}" for t, (b, a) in diff.items())
+            raise RuntimeError(
+                "PG 测试会话污染了 public 真实数据！行数差异：\n" + details
+            )
+        for sch, (eng, _f) in _PG_FAMILY_ENGINES.items():
+            try:
+                asyncio.run(eng.dispose())
+            except Exception:
+                pass
         sync_engine = _new_test_sync_engine()
         with sync_engine.begin() as conn:
-            conn.execute(text(f'DROP SCHEMA IF EXISTS "{PG_TEST_SCHEMA}" CASCADE'))
+            for sch in set(_PG_FAMILY_SCHEMAS.values()):
+                conn.execute(text(f'DROP SCHEMA IF EXISTS "{sch}" CASCADE'))
         sync_engine.dispose()
     else:
         shutil.rmtree(TEST_DB_DIR, ignore_errors=True)
@@ -258,15 +311,185 @@ def real_create_sync_engine():
     return _REAL_CREATE_SYNC_ENGINE
 
 
-@pytest.fixture(scope="function")
-async def test_db():
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    event.listen(engine.sync_engine, "connect", _enable_sqlite_fk)
+# ---------------------------------------------------------------------------
+# 后端感知的"每用例干净库"助手（2026-09-17）
+# ---------------------------------------------------------------------------
+# 需求：SQLite 与 PostgreSQL 两个后端下，**全部用例都必须真实打在目标库上**
+# （否则 PG 严格类型/方言问题在夹具用例中被内存 SQLite 掩盖）。
+#
+#   · sqlite 模式：每用例新建内存库（既有行为，天然干净）
+#   · pg 模式：复用会话级全局 PG 引擎（同一专用 schema），每用例开始
+#     `TRUNCATE ... RESTART IDENTITY CASCADE` + 复位序列——毫秒级，
+#     比"每用例建 schema + create_all"便宜两个数量级；随后由各夹具自己的
+#     种子代码补齐所需数据（保持与 SQLite 模式一致的数据基线）。
+_PG_RESET_SEQUENCES_SQL = """DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = current_schema() LOOP
+    BEGIN
+      IF pg_get_serial_sequence(quote_ident(t), 'id') IS NOT NULL THEN
+        EXECUTE 'SELECT setval(pg_get_serial_sequence('
+                || quote_literal(quote_ident(t))
+                || ', ''id''), COALESCE((SELECT MAX(id) FROM '
+                || quote_ident(t)
+                || '), 0) + 1, false)';
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+  END LOOP;
+END $$;"""
+# 注意：DO 块内禁用 format('%I'/'%L')——SQLAlchemy 会把空参数字典传给 psycopg2，
+# 触发 % 插值报 "immutabledict is not a sequence"，故统一用 quote_ident/quote_literal 拼接。
 
+
+def _create_all_sync(schema: str) -> None:
+    """在指定族 schema 上同步建全表模板（会话期一次；显式限定 schema）。"""
+    eng = _new_test_sync_engine(schema)
+    try:
+        Base.metadata.schema = schema
+        try:
+            with eng.begin() as conn:
+                Base.metadata.create_all(conn)
+        finally:
+            Base.metadata.schema = None
+    finally:
+        eng.dispose()
+
+
+if _USING_PG:
+    # ── 导入期建族模板（2026-09-18）────────────────────────────────────
+    # 该 PG 实例的存储对关系文件强制 fsync（DataFileImmediateSync），每条
+    # DDL 秒级、全套模板 40-70s。放**导入期**执行：pytest-timeout 按"用例"
+    # 计时，导入期工作不占任何用例的 90s 预算，也不会连带首个用例超时。
+    import app.main  # noqa: F401 —— 注册全部 ORM 模型
+
+    def _build_pg_templates() -> None:
+        eng = _new_test_sync_engine()
+        try:
+            with eng.begin() as conn:
+                for sch in set(_PG_FAMILY_SCHEMAS.values()):
+                    conn.execute(text(f'DROP SCHEMA IF EXISTS "{sch}" CASCADE'))
+                    conn.execute(text(f'CREATE SCHEMA "{sch}"'))
+        finally:
+            eng.dispose()
+        for sch in set(_PG_FAMILY_SCHEMAS.values()):
+            if sch == PG_TEST_SCHEMA:
+                Base.metadata.schema = sch
+                try:
+                    asyncio.run(_app_db_module.init_db())
+                finally:
+                    Base.metadata.schema = None
+            else:
+                _create_all_sync(sch)
+
+    _build_pg_templates()
+
+
+async def _create_all_on(engine):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def _public_row_snapshot_sync_conn():
+    """独立 public 连接（search_path 显式 public，与隔离引擎无关）。"""
+    return create_engine(_PG_SYNC_URL, connect_args={"options": "-csearch_path=public"})
+
+
+def _pg_public_row_snapshot() -> dict:
+    """public 全表行数快照（PG 模式专用守卫）。"""
+    eng = _public_row_snapshot_sync_conn()
+    try:
+        with eng.connect() as conn:
+            rows = conn.execute(text(
+                "select tablename from pg_tables where schemaname='public' order by 1"
+            )).fetchall()
+            return {
+                t: conn.execute(text(f'select count(*) from public."{t}"')).scalar()
+                for (t,) in rows
+            }
+    finally:
+        eng.dispose()
+
+
+def _pg_truncate_schema(schema: str) -> None:
+    """清空指定族 schema 内全部模型表并复位序列（PG 模式每用例重置）。
+
+    用单 roundtrip 的多语句 DELETE（实测 0.1s）而非 TRUNCATE——本 PG 实例上
+    TRUNCATE 触发 DataFileImmediateSync 强制刷盘，单次 13-20s，对 900+ 夹具
+    用例完全不可用。DELETE 须按子表→父表逆拓扑序执行（sorted_tables 为父→子）。
+    DELETE 不重置序列，故补 DO 块按 max(id)+1 复位，保持与"全新空库"一致的
+    id 语义（对齐 SQLite 模式每用例全新内存库的行为）。
+    """
+    tables = [f'"{t.name}"' for t in reversed(Base.metadata.sorted_tables)]
+    if not tables:
+        return
+    stmt = "; ".join(f"DELETE FROM {n}" for n in tables) + ";"
+    engine = _new_test_sync_engine(schema)
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(stmt)
+    finally:
+        engine.dispose()
+    _pg_reset_sequences(schema)
+
+
+def _pg_reset_sequences(schema: str) -> None:
+    """把 schema 内全部序列对齐到 max(id)+1（显式 id 种子不推进 PG 序列，
+    不复位则 API 创建的首行会撞种子——SQLite 的 rowid 分配天然免疫）。"""
+    engine = _new_test_sync_engine(schema)
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(_PG_RESET_SEQUENCES_SQL)
+    finally:
+        engine.dispose()
+
+
+def _isolated_engine_factory(family: str = "misc"):
+    """返回 (engine, session_factory, async_teardown)，并按后端做每用例重置。
+
+    pg 模式按夹具族分 schema：只清自己族，族间互不可见（语义=sqlite 的独立
+    内存库）；sqlite 模式每用例新建内存库。family 缺省 "misc"——测试文件
+    自建客户端的安全兜底族，绝不触碰 global 族（那里有会话级种子基线）。
+    """
+    if _USING_PG:
+        schema = _PG_FAMILY_SCHEMAS[family]
+        engine, factory = _pg_family(schema)
+        _pg_truncate_schema(schema)
+
+        async def _teardown_pg():
+            return None
+
+        return engine, factory, _teardown_pg
+
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    event.listen(engine.sync_engine, "connect", _enable_sqlite_fk)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def _teardown_sqlite():
+        await engine.dispose()
+
+    return engine, factory, _teardown_sqlite
+
+
+async def _prepare_isolated_db(engine):
+    """sqlite 模式建表；pg 模式 schema 已由会话夹具建好（仅需已完成的清空）。"""
+    if not _USING_PG:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+
+@pytest.fixture(scope="function")
+async def test_db_factory():
+    """test_db 同库的**会话工厂**（同一隔离库，每用例独立 schema/内存库）。
+
+    供"同步 TestClient + 直接 DB 断言"混用的测试：get_db override 必须用工厂
+    每请求新开会话（在客户端自己的 loop 里），不得把 test_db 的会话对象直接
+    塞给同步客户端——asyncpg 连接绑定创建它的 loop，跨 loop close 会
+    RuntimeError/泄漏连接（2026-09-18，PG 模式实测）。
+    """
+    engine, async_session, teardown = _isolated_engine_factory("test_db")
+    await _prepare_isolated_db(engine)
 
     async with async_session() as session:
         for cid in SEED_CLUSTER_IDS:
@@ -274,12 +497,18 @@ async def test_db():
             if existing is None:
                 session.add(Cluster(id=cid, name=f"seed-cluster-{cid}"))
         await session.commit()
+    if _USING_PG:
+        _pg_reset_sequences(_PG_FAMILY_SCHEMAS["test_db"])
+
+    yield async_session
+    await teardown()
+
+
+@pytest.fixture(scope="function")
+async def test_db(test_db_factory):
+    engine = None
+    async with test_db_factory() as session:
         yield session
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-    await engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -307,20 +536,17 @@ def isolated_app():
     """创建全面隔离的 AuthedTestClient。
 
     - lifespan stub（init_db/seed_data/recover/shutdown 全部 noop）
-    - get_db override → per-test 内存库
+    - get_db override → 当前后端隔离库（sqlite：内存库；pg：专用 schema，每用例已清空）
     - 最小种子：admin(id=1) + cluster(id=1)
     """
     from app.core.security import hash_password
     from app.models.user import User
 
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    event.listen(engine.sync_engine, "connect", _enable_sqlite_fk)
+    engine, session_factory, teardown = _isolated_engine_factory("app")
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with factory() as session:
+        await _prepare_isolated_db(engine)
+        async with session_factory() as session:
             # 最小种子：admin + cluster
             if not await session.get(User, 1):
                 session.add(User(
@@ -331,11 +557,11 @@ def isolated_app():
             if not await session.get(Cluster, 1):
                 session.add(Cluster(id=1, name="test-cluster"))
             await session.commit()
+        if _USING_PG:
+            _pg_reset_sequences(_PG_FAMILY_SCHEMAS["app"])
 
     loop = asyncio.new_event_loop()
     loop.run_until_complete(_setup())
-
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db_override():
         async with session_factory() as session:
@@ -350,7 +576,7 @@ def isolated_app():
             yield client
         _fastapi_app.dependency_overrides.clear()
 
-    loop.run_until_complete(engine.dispose())
+    loop.run_until_complete(teardown())
     loop.close()
 
 
@@ -364,22 +590,19 @@ def isolated_app():
 @pytest.fixture(scope="function")
 def unauthenticated_app():
     """创建隔离的无认证 TestClient。用于安全守卫测试验证 401 拒绝。"""
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    event.listen(engine.sync_engine, "connect", _enable_sqlite_fk)
+    engine, session_factory, teardown = _isolated_engine_factory("app")
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with factory() as session:
+        await _prepare_isolated_db(engine)
+        async with session_factory() as session:
             if not await session.get(Cluster, 1):
                 session.add(Cluster(id=1, name="test-cluster"))
             await session.commit()
+        if _USING_PG:
+            _pg_reset_sequences(_PG_FAMILY_SCHEMAS["app"])
 
     loop = asyncio.new_event_loop()
     loop.run_until_complete(_setup())
-
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db_override():
         async with session_factory() as session:
@@ -394,7 +617,7 @@ def unauthenticated_app():
             yield client
         _fastapi_app.dependency_overrides.clear()
 
-    loop.run_until_complete(engine.dispose())
+    loop.run_until_complete(teardown())
     loop.close()
 
 
@@ -414,17 +637,13 @@ import httpx as _httpx
 
 @pytest.fixture(scope="function")
 async def async_isolated_client():
-    """创建隔离的 httpx.AsyncClient，内存库 + lifespan stub。"""
+    """创建隔离的 httpx.AsyncClient（内存库 / PG 族 schema）+ lifespan stub。"""
     from app.core.security import hash_password
     from app.models.user import User
 
-    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    event.listen(engine.sync_engine, "connect", _enable_sqlite_fk)
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with factory() as session:
+    engine, session_factory, teardown = _isolated_engine_factory("async")
+    await _prepare_isolated_db(engine)
+    async with session_factory() as session:
         if not await session.get(User, 1):
             session.add(User(
                 id=1, username="admin",
@@ -434,8 +653,8 @@ async def async_isolated_client():
         if not await session.get(Cluster, 1):
             session.add(Cluster(id=1, name="test-cluster"))
         await session.commit()
-
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    if _USING_PG:
+        _pg_reset_sequences(_PG_FAMILY_SCHEMAS["async"])
 
     async def _get_db_override():
         async with session_factory() as session:
@@ -453,7 +672,7 @@ async def async_isolated_client():
             yield client
         _fastapi_app.dependency_overrides.clear()
 
-    await engine.dispose()
+    await teardown()
 
 
 @pytest.fixture(scope="function")

@@ -3,7 +3,7 @@
 ### Requirement: Isolated Test Harness
 The backend test suite SHALL use isolated databases with zero dependency on the real active database (`db_config.json` active connection) **for every test — not only for tests that opt into isolation fixtures**.
 
-The isolation SHALL be enforced by a session-scoped global engine redirect performed at `conftest` import time: `app.core.database` 的全局异步引擎、会话工厂与同步引擎工厂 SHALL be pinned to a session-scoped isolated database, so that 未使用夹具的测试、以及触发应用 lifespan（`init_db`）的测试 equally target the isolated database. 隔离库默认是临时 SQLite 文件；`TEST_DB_BACKEND=pg` 时 SHALL 改为真实 PostgreSQL 的专用 schema（见 PG Dialect Verification Mode）。
+The isolation SHALL be enforced by a session-scoped global engine redirect performed at `conftest` import time: `app.core.database` 的全局异步引擎、会话工厂与同步引擎工厂 SHALL be pinned to a session-scoped isolated database, so that 未使用夹具的测试、以及触发应用 lifespan（`init_db`）的测试 equally target the isolated database. 隔离库默认是临时 SQLite 文件；`TEST_DB_BACKEND=pg` 时 SHALL 改为真实 PostgreSQL 的**夹具族 schema 组**（见 PG Dialect Verification Mode）。
 
 #### Scenario: Test does not touch real database
 - **WHEN** any test executes any database operation (via fixtures, via a bare `TestClient(app)`, or via an application lifespan startup)
@@ -21,6 +21,10 @@ The isolation SHALL be enforced by a session-scoped global engine redirect perfo
 - **WHEN** the test completes (pass or fail)
 - **THEN** the per-test engine is disposed and all dependency overrides are cleared
 
+#### Scenario: Fixture families do not clobber each other
+- **WHEN** 同一测试使用多个数据库夹具（`test_db`、`isolated_app`、`async_isolated_client`、全局引擎）
+- **THEN** 各夹具 SHALL 各自绑定独立的族 schema（族间互不可见，等价于 SQLite 模式下的独立内存库），任何夹具的每用例复位不得清除其他夹具的种子数据
+
 ### Requirement: No Real Database Writes
 The test suite SHALL NOT perform any write operation against the real active database, **including when the active connection is PostgreSQL**.
 
@@ -35,6 +39,10 @@ The test suite SHALL NOT perform any write operation against the real active dat
 #### Scenario: Full suite is runnable on PostgreSQL active connection
 - **WHEN** the active connection is PostgreSQL (asyncpg)
 - **THEN** the full suite SHALL complete without cross-event-loop connection reuse errors (`InterfaceError: another operation is in progress`), because the isolated engine uses `NullPool` and per-checkout connections
+
+#### Scenario: Zero-pollution guard fails the session on any public write
+- **WHEN** PG 模式会话结束（无论通过与否）
+- **THEN** conftest SHALL 对 `public` 全表做行数快照对比，任何与首拍不一致的表 SHALL 使会话以显式错误收场并列出差异
 
 ## ADDED Requirements
 
@@ -65,7 +73,7 @@ The conftest SHALL provide a fixture exposing the pre-redirect real implementati
 
 #### Scenario: Backend selection is explicit
 - **WHEN** 设置 `TEST_DB_BACKEND=pg`
-- **THEN** 全局隔离引擎 SHALL 指向 PostgreSQL，连接经 `search_path` 固定到专用 schema（默认 `panshi_test`）
+- **THEN** 全局隔离引擎 SHALL 指向 PostgreSQL，所有连接的 `search_path` SHALL 固定为各自族 schema 且**不得包含 `public` 兜底**（缺表必须报错，而非回退解析到 public 真实表）
 
 #### Scenario: Missing PostgreSQL target fails fast
 - **WHEN** `TEST_DB_BACKEND=pg` 且既无 `PG_DSN` 也无活动 PG 连接
@@ -78,6 +86,18 @@ The conftest SHALL provide a fixture exposing the pre-redirect real implementati
 #### Scenario: Isolation backend is observable
 - **WHEN** 用例读取 `test_db_backend` 与 `global_engine_dialect` 夹具
 - **THEN** 两者 SHALL 一致地反映实际隔离后端（`pg` ↔ `postgresql`，否则 `sqlite`）
+
+#### Scenario: Family templates are built at import time
+- **WHEN** PG 模式下 conftest 被导入
+- **THEN** 全部族 schema SHALL 在导入期重建并完成建表（`global` 族走生产 `init_db()` 建表+迁移，DDL 经 `Base.metadata.schema` 显式限定），使模板成本不占用例超时预算
+
+#### Scenario: Per-test reset aligns sequences
+- **WHEN** 夹具以显式 id 种子（如 `Cluster(id=1..3)`、`User(id=1)`）准备数据
+- **THEN** 种子后 SHALL 将该族 schema 的全部序列对齐到 `max(id)+1`（显式 id 不推进 PG 序列，不复位则 API 创建的首行撞主键）
+
+#### Scenario: Sync client get_db uses per-request sessions
+- **WHEN** 测试把 get_db override 提供给同步 `TestClient`/`AuthedTestClient`
+- **THEN** override SHALL 用会话工厂**每请求新开会话**，不得复用异步夹具的 session 对象（asyncpg 连接绑定创建它的 loop）
 
 ## REMOVED Requirements
 

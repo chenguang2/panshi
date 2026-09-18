@@ -74,6 +74,12 @@ def enrich_audit(request, *, resource_id=None, detail=None) -> None:
     if audit is None:
         return
     if resource_id is not None:
-        audit.resource_id = resource_id
+        # resource_id 列是 Integer（#48）：语义化字符串 id（如 ClickHouse 的 "ck_xxxx"）
+        # 在 PG/asyncpg 下会绑定失败 → 500。非整型 id 折进 detail 保留可追溯性。
+        try:
+            audit.resource_id = int(resource_id)
+        except (TypeError, ValueError):
+            suffix = f"（资源ID {resource_id}）"
+            detail = f"{detail}{suffix}" if detail else suffix
     if detail:
         audit.detail = detail

@@ -6,31 +6,30 @@ from unittest.mock import patch
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from app.core.database import Base, get_db
 from app.core.security import hash_password
-from app.models.cluster import Node
+from app.models.cluster import Cluster, Node
 from app.models.user import User
 from tests.api_helpers import AuthedTestClient, auth_headers_for
 
 
 @pytest.fixture
 def db_env():
-    """Create in-memory DB with a node + user, override get_db, return (app, sessionmaker, auth_headers)."""
+    """创建隔离库（sqlite 内存 / pg 专用 schema）含 node + admin，override get_db。"""
     from app.main import app
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
 
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    engine, S, teardown = _isolated_engine_factory()
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await _prepare_isolated_db(engine)
         async with S() as s:
+            s.add(Cluster(id=1, name="seed-cluster"))
             s.add(Node(id=1, cluster_id=1, ip="192.168.0.24", edge_path="/data/uap-edge",
-                      service_port=80, management_port=16620))
+                       service_port=80, management_port=16620))
             s.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
-                      role="admin", status=1))
+                       role="admin", status=1))
             await s.commit()
-        return S
 
-    S = asyncio.run(_setup())
+    asyncio.run(_setup())
 
     async def override_get_db():
         async with S() as session:
@@ -41,7 +40,7 @@ def db_env():
     yield app, S, auth_headers_for(1)
 
     app.dependency_overrides.clear()
-    asyncio.run(engine.dispose())
+    asyncio.run(teardown())
 
 
 def test_status_with_root_creds_uses_root_user():

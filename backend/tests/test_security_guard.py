@@ -95,25 +95,22 @@ def test_secured_endpoint_passes_with_valid_token(isolated_app):
 def test_disabled_user_token_rejected():
     """status=0 用户的 token 应被拒绝（Phase 1 统一状态校验后的行为）。"""
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-    from app.core.database import Base, get_db
+    from app.core.database import get_db
     from app.models.user import User
     from app.core.security import hash_password, create_access_token
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
 
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    engine, S, teardown = _isolated_engine_factory()
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await _prepare_isolated_db(engine)
         async with S() as s:
             s.add(User(id=1, username="disabled_user",
                        password_hash=hash_password("password123"),
                        role="user", status=0))
             await s.commit()
-        return S
 
-    S = asyncio.run(_setup())
+    asyncio.run(_setup())
 
     async def override_get_db():
         async with S() as session:
@@ -129,23 +126,24 @@ def test_disabled_user_token_rejected():
             assert resp.json()["detail"] == "用户已禁用"
     finally:
         app.dependency_overrides.clear()
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def _make_db_with_users(users: list[dict]):
-    """构建 in-memory 库（含用户/权限），返回依赖覆盖后的 app 与 user_id→headers 映射。"""
+    """构建隔离库（含用户/权限），返回依赖覆盖后的 app 与 user_id→headers 映射。
+
+    后端感知：sqlite 内存库 / pg 专用 schema（每用例清空）， teardown 由调用方执行。
+    """
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-    from app.core.database import Base, get_db
+    from app.core.database import get_db
     from app.models.user import User, UserPermission
     from app.core.security import hash_password, create_access_token
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
 
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    engine, S, teardown = _isolated_engine_factory()
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await _prepare_isolated_db(engine)
         async with S() as s:
             for u in users:
                 s.add(User(id=u["id"], username=u["username"], password_hash=hash_password("password123"),
@@ -153,9 +151,8 @@ def _make_db_with_users(users: list[dict]):
                 for perm in u.get("permissions", []):
                     s.add(UserPermission(user_id=u["id"], resource_type=perm, enabled=1))
             await s.commit()
-        return S
 
-    S = asyncio.run(_setup())
+    asyncio.run(_setup())
 
     async def override_get_db():
         async with S() as session:
@@ -163,12 +160,12 @@ def _make_db_with_users(users: list[dict]):
 
     app.dependency_overrides[get_db] = override_get_db
     headers = {u["id"]: {"Authorization": f"Bearer {create_access_token({'sub': str(u['id'])})}"} for u in users}
-    return app, S, headers, engine
+    return app, S, headers, teardown
 
 
 def test_non_admin_without_permission_gets_403():
     """普通用户无 routes 权限访问全局路由端点 → 403（S6 资源级权限）。"""
-    app, S, headers, engine = _make_db_with_users([
+    app, S, headers, teardown = _make_db_with_users([
         {"id": 1, "username": "plain_user", "role": "user", "permissions": []},
     ])
     try:
@@ -179,12 +176,12 @@ def test_non_admin_without_permission_gets_403():
     finally:
         app.dependency_overrides.clear()
         import asyncio
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def test_non_admin_with_permission_passes():
     """普通用户持有 routes 权限访问全局路由端点 → 到达业务层（非 403）。"""
-    app, S, headers, engine = _make_db_with_users([
+    app, S, headers, teardown = _make_db_with_users([
         {"id": 1, "username": "routes_user", "role": "user", "permissions": ["routes"]},
     ])
     try:
@@ -195,12 +192,12 @@ def test_non_admin_with_permission_passes():
     finally:
         app.dependency_overrides.clear()
         import asyncio
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def test_require_any_permission_stream_proxy():
     """/stream-proxies 同时服务 stream_proxy 与 dns_proxy_udp 两种权限用户（任一放行）。"""
-    app, S, headers, engine = _make_db_with_users([
+    app, S, headers, teardown = _make_db_with_users([
         {"id": 1, "username": "dns_only_user", "role": "user", "permissions": ["dns_proxy_udp"]},
     ])
     try:
@@ -211,12 +208,12 @@ def test_require_any_permission_stream_proxy():
     finally:
         app.dependency_overrides.clear()
         import asyncio
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def test_cluster_resource_requires_clusters_permission():
     """集群子资源（/clusters/{id}/routes）由 clusters 容器权限门控。"""
-    app, S, headers, engine = _make_db_with_users([
+    app, S, headers, teardown = _make_db_with_users([
         {"id": 1, "username": "route_only_user", "role": "user", "permissions": ["routes"]},
     ])
     try:
@@ -226,7 +223,7 @@ def test_cluster_resource_requires_clusters_permission():
     finally:
         app.dependency_overrides.clear()
         import asyncio
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def test_operations_endpoint_admin_only(monkeypatch):
@@ -238,7 +235,7 @@ def test_operations_endpoint_admin_only(monkeypatch):
         features_mod, "get_features",
         lambda: {"features": {"audit_log": True}, "enabled_plugins": [], "concurrency": {}},
     )
-    app, S, headers, engine = _make_db_with_users([
+    app, S, headers, teardown = _make_db_with_users([
         {"id": 1, "username": "admin_user", "role": "admin"},
         {"id": 2, "username": "plain_user", "role": "user"},
     ])
@@ -252,24 +249,22 @@ def test_operations_endpoint_admin_only(monkeypatch):
     finally:
         app.dependency_overrides.clear()
         import asyncio
-        asyncio.run(engine.dispose())
+        asyncio.run(teardown())
 
 
 def test_log_audit_writes_row():
     """log_audit 写入 sys_audit_log（M1）。"""
     import asyncio
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
     from app.core.database import Base
     from app.models.system import AuditLog
     from app.services.audit import log_audit
     from app.models.user import User
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
 
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    engine, S, teardown = _isolated_engine_factory()
 
     async def _run():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await _prepare_isolated_db(engine)
         async with S() as s:
             user = User(id=1, username="tester", password_hash="x", role="admin", status=1)
             s.add(user)
@@ -282,4 +277,4 @@ def test_log_audit_writes_row():
             assert rows[0].resource_id == 42
 
     asyncio.run(_run())
-    asyncio.run(engine.dispose())
+    asyncio.run(teardown())

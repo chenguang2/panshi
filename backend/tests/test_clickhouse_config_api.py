@@ -29,19 +29,18 @@ def env(tmp_path, monkeypatch):
     cfg_path = tmp_path / "clickhouse.yaml"
     monkeypatch.setattr(ch, "_CONFIG_PATH", cfg_path)
     monkeypatch.setattr(ch, "_LEGACY_CONFIG_PATH", tmp_path / "nonexistent.yaml")
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
+
+    engine, S, teardown = _isolated_engine_factory()
 
     async def _setup():
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        S = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        await _prepare_isolated_db(engine)
         async with S() as s:
             s.add(User(id=1, username="admin", password_hash=hash_password("x"), role="admin", status=1))
             s.add(User(id=2, username="alice", password_hash=hash_password("x"), role="user", status=1))
             await s.commit()
-        return S
 
-    S = asyncio.run(_setup())
+    asyncio.run(_setup())
 
     async def override_get_db():
         async with S() as session:
@@ -68,7 +67,7 @@ def env(tmp_path, monkeypatch):
                           audit_rows=audit_rows, S=S)
 
     app.dependency_overrides.clear()
-    asyncio.run(engine.dispose())
+    asyncio.run(teardown())
 
 
 VALID_BODY = {"name": "生产指标库", "host": "10.0.0.8", "port": 9000,

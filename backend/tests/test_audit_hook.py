@@ -22,12 +22,12 @@ from app.services.audit import log_audit
 
 @pytest.fixture()
 async def env(tmp_path):
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 't.db'}")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    from tests.conftest import _isolated_engine_factory, _prepare_isolated_db
+
+    engine, factory, teardown = _isolated_engine_factory()
+    await _prepare_isolated_db(engine)
     yield factory
-    await engine.dispose()
+    await teardown()
 
 
 def _build_app(factory) -> FastAPI:

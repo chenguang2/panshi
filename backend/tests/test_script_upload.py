@@ -14,12 +14,14 @@ from app.core.security import hash_password
 
 
 @pytest.fixture
-def client(test_db, tmp_path, monkeypatch):
-    """Override get_db to use test_db session and seed api user.
+def client(test_db, test_db_factory, tmp_path, monkeypatch):
+    """Override get_db to use test_db 同库会话工厂并 seed api user。
 
     存储目录整体隔离到 tmp_path：历史上本夹具曾 rmtree 真实的
     backend/data/task-scripts/，把用户任务留档一并清掉（2026-09-12 事故）。
     端点/handler 均在调用时读取模块属性，monkeypatch 全程生效。
+    get_db 用工厂每请求新开会话：不得把 test_db 会话直接交给同步 TestClient
+    （asyncpg 连接绑定创建它的 loop，跨 loop close 报错/泄漏，2026-09-18）。
     """
     import asyncio, shutil
     from pathlib import Path
@@ -34,7 +36,8 @@ def client(test_db, tmp_path, monkeypatch):
     TEMP_DIR = script_upload_mod.TEMP_DIR
 
     async def override_get_db():
-        yield test_db
+        async with test_db_factory() as session:
+            yield session
 
     app.dependency_overrides[get_db] = override_get_db
 

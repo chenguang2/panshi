@@ -1,7 +1,7 @@
 """SSL Certificate model."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.core.database import Base
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
@@ -35,5 +35,7 @@ class SslCertificate(Base):
     create_method = Column(String(32), nullable=False, default="upload")
     generate_log = Column(Text, nullable=True)
     status = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # 注意：必须用 naive utcnow（约定 #26）。曾用 aware datetime.now(timezone.utc)，
+    # SQLite 弱类型容忍，PG/asyncpg 拒绝 aware 值绑定 TIMESTAMP WITHOUT TIME ZONE → 500。
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
