@@ -4,6 +4,8 @@ export interface MetricDataPoint {
   avg: number
   max?: number
   min?: number
+  /** gauge 指标：桶内最新读数（argMax），卡片头部"当前值"优先取它 */
+  last?: number
   sample_count: number
 }
 

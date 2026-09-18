@@ -35,14 +35,15 @@ class TestMetricsService:
         mock_exec.side_effect = [
             [],  # _is_counter: not found in otel_metrics_sum
             [
-                (1690000000, 50.0, 80.0, 30.0, 6),
-                (1690000300, 55.0, 85.0, 35.0, 6),
-            ],  # gauge data (bucket, avg, max, min, count)
+                (1690000000, 50.0, 80.0, 30.0, 55.0, 6),
+                (1690000300, 55.0, 85.0, 35.0, 60.0, 6),
+            ],  # gauge data (bucket, avg, max, min, last, count)
         ]
         from app.services.metrics_service import query_time_series
         result = query_time_series("cpu_usage")
         assert len(result) == 2
         assert result[0]["avg"] == 50.0
+        assert result[0]["last"] == 55.0
         assert result[0]["metric_name"] == "cpu_usage"
 
     @patch("app.services.metrics_service.execute_query")
@@ -77,7 +78,7 @@ class TestMetricsService:
     def test_time_series_with_label(self, mock_exec):
         mock_exec.side_effect = [
             [],  # _is_counter: not found in otel_metrics_sum
-            [(1690000000, 10.0, 20.0, 5.0, 3)],
+            [(1690000000, 10.0, 20.0, 5.0, 12.0, 3)],
         ]
         from app.services.metrics_service import query_time_series
         result = query_time_series(
@@ -108,7 +109,7 @@ class TestMetricsService:
     def test_time_series_parse_since_and_interval(self, mock_exec):
         mock_exec.side_effect = [
             [],  # _is_counter: not found in otel_metrics_sum
-            [(1690000000, 50.0, 60.0, 40.0, 12)],
+            [(1690000000, 50.0, 60.0, 40.0, 45.0, 12)],
         ]
         from app.services.metrics_service import query_time_series
         result = query_time_series("cpu_usage", since="6h", interval="15m")

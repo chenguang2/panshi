@@ -148,7 +148,7 @@ def query_time_series(
             if r[1] is not None
         ]
 
-    # Gauge path — raw avg/max/min values
+    # Gauge path — raw avg/max/min/last values（last=桶内最新读数，供卡片头部展示"当前值"）
     sql = f"""
         SELECT
             toUnixTimestamp(toStartOfInterval(TimeUnix,
@@ -156,6 +156,7 @@ def query_time_series(
             avg(Value) AS avg_val,
             max(Value) AS max_val,
             min(Value) AS min_val,
+            argMax(Value, TimeUnix) AS last_val,
             count(*) AS sample_count
         FROM otel_metrics_gauge
         WHERE MetricName = %(name)s
@@ -174,7 +175,8 @@ def query_time_series(
             "avg": float(r[1]),
             "max": float(r[2]),
             "min": float(r[3]),
-            "sample_count": r[4],
+            "last": float(r[4]),
+            "sample_count": r[5],
         }
         for r in rows
     ]

@@ -41,13 +41,16 @@ const props = defineProps<{
 
 const hasData = computed(() => (props.series ? props.series.length > 0 : props.data.length > 0))
 
-// 头部最新值取最近一个 sample_count >= 2 的点：刚开的桶常只有 1 个样本，
-// 单点无增量可算（rate=0），直接取会令 QPS 卡片频繁闪现 0.000
+// 头部"当前值"取值优先级：
+// 1. 最近一个带 last（gauge 最新读数）的点——连接数等瞬时值不应显示桶均值的假小数
+// 2. 最近一个 sample_count >= 2 的点的 avg——刚开的计数器桶常只有 1 个样本，
+//    单点无增量可算（rate=0），直接取会令 QPS 卡片频繁闪现 0.000
 const latestValue = computed<number | null>(() => {
   if (!hasData.value) return null
   const pts = props.data
   for (let i = pts.length - 1; i >= 0; i--) {
     const p = pts[i]
+    if (p && p.last !== undefined && p.last !== null) return p.last
     if (p && (p.sample_count ?? 0) >= 2) return p.avg ?? null
   }
   const last = pts[pts.length - 1]
@@ -56,9 +59,11 @@ const latestValue = computed<number | null>(() => {
 
 const formattedValue = computed(() => {
   if (latestValue.value === null) return '--'
-  if (latestValue.value >= 100) return latestValue.value.toFixed(1)
-  if (latestValue.value >= 10) return latestValue.value.toFixed(2)
-  return latestValue.value.toFixed(3)
+  const v = latestValue.value
+  // 去尾零：整数不带小数点（586 而非 586.0），小数保留原有精度
+  if (v >= 100) return Number(v.toFixed(1)).toString()
+  if (v >= 10) return Number(v.toFixed(2)).toString()
+  return Number(v.toFixed(3)).toString()
 })
 
 const chartOption = computed(() => {
