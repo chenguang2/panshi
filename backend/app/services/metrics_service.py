@@ -90,12 +90,14 @@ def query_time_series(
 
     if is_counter_val:
         # Counter path — calculate rate
-        params["delta"] = interval_sec
+        # 分母用桶内实际采样跨度而非桶宽：最后一个桶往往只覆盖几秒（采集粒度分钟级），
+        # 按满桶除会把右缘 QPS 打成 ~0，看起来像流量骤降。
         sql = f"""
             SELECT
                 toUnixTimestamp(toStartOfInterval(TimeUnix,
                               INTERVAL {interval_sec} SECOND)) AS bucket,
-                greatest((max(Value) - min(Value)) / %(delta)s, 0) AS rate_val,
+                greatest((max(Value) - min(Value)) / greatest(
+                    date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS rate_val,
                 count(*) AS sample_count
             FROM {source_table}
             WHERE MetricName = %(name)s
@@ -274,13 +276,16 @@ def query_route_stats(
 
 
 def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
-    # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由汇总
+    # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由汇总。
+    # 注意：子查询按 code 拆分，外层必须 sum(total_inc)——直接引用别名会触发
+    # CH Code 215（total_inc not under aggregate function），曾被吞成空结果
+    # 导致路由统计页全空。
     rows = execute_query("""
         SELECT
             route_id,
             uri,
-            greatest(total_inc / %(since)s, 0) AS requests_per_sec,
-            greatest(total_inc, 0) AS total_requests,
+            greatest(sum(total_inc) / %(since)s, 0) AS requests_per_sec,
+            greatest(sum(total_inc), 0) AS total_requests,
             sum(sample_count) AS sample_count
         FROM (
             SELECT
@@ -315,13 +320,14 @@ def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
 
 def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
     # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由/方向汇总
+    # 外层 sum(total_inc)：同 _query_route_qps 的 Code 215 教训
     rows = execute_query("""
         SELECT
             route_id,
             uri,
             direction,
-            greatest(total_inc / %(since)s, 0) AS bytes_per_sec,
-            greatest(total_inc, 0) AS total_bytes
+            greatest(sum(total_inc) / %(since)s, 0) AS bytes_per_sec,
+            greatest(sum(total_inc), 0) AS total_bytes
         FROM (
             SELECT
                 Attributes['route'] AS route_id,
@@ -333,6 +339,7 @@ def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
               AND TimeUnix > now() - INTERVAL %(since)s SECOND
             GROUP BY route_id, uri, direction
         )
+        GROUP BY route_id, uri, direction
         ORDER BY total_bytes DESC
         LIMIT %(limit)s
     """, {"since": since_sec, "limit": limit})

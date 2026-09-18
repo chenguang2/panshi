@@ -84,7 +84,8 @@
 ```sql
 SELECT
     toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
-    greatest((max(Value) - min(Value)) / 900, 0) AS req_per_sec,
+    greatest((max(Value) - min(Value)) / greatest(
+        date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS req_per_sec,
     count(*) AS sample_count
 FROM otel_metrics_gauge
 WHERE MetricName = 'edge_http_requests_total'
@@ -92,6 +93,10 @@ WHERE MetricName = 'edge_http_requests_total'
 GROUP BY bucket
 ORDER BY bucket
 ```
+
+> ⚠️ 分母用桶内实际采样跨度而非固定桶宽：最后一个桶往往只覆盖几秒（采集粒度
+> 分钟级），按满桶除会让折线右缘假性塌陷到 ~0（实现见 `metrics_service.query_time_series`
+> counter 路径，2026-09-18 修复）。
 
 ### 2. Nginx 当前连接数（按 state 拆分）
 
@@ -158,7 +163,8 @@ ORDER BY bucket, MetricName
 ```sql
 SELECT
     toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket,
-    greatest((max(Value) - min(Value)) / 900, 0) AS error_per_sec
+    greatest((max(Value) - min(Value)) / greatest(
+        date_diff('second', min(TimeUnix), max(TimeUnix)), 1), 0) AS error_per_sec
 FROM otel_metrics_sum
 WHERE MetricName = 'edge_metric_errors_total'
   AND TimeUnix > now() - INTERVAL 86400 SECOND
@@ -361,6 +367,11 @@ ORDER BY avg_latency_ms DESC
 ### 18. 路由 QPS 排行（用 edge_http_status 替代）
 
 > ⚠️ `edge_http_requests_total` 无路由标签，需用 `edge_http_status` 的 Sum 值计算
+>
+> ⚠️ 实现注意（`metrics_service._query_route_qps`）：如需按 `code` 拆分子查询，
+> 外层必须 `sum(total_inc)` 聚合——外层裸引用子查询别名会触发 ClickHouse
+> Code 215（not under aggregate function），异常被 `execute_query` 吞掉后
+> 页面表现为"路由统计无值"（2026-09-18 修复）。
 
 ```sql
 SELECT
