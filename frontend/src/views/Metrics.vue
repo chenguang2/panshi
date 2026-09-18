@@ -212,7 +212,7 @@ function fmtVal(v: number): string {
   return Number(v.toFixed(3)).toString()
 }
 
-const hasMaxMin = computed(() => store.chartData.some((d) => d.max !== undefined && d.min !== undefined))
+const hasMax = computed(() => store.chartData.some((d) => d.max !== undefined))
 
 const currentValue = computed(() => {
   if (!hasChartData.value) return '--'
@@ -243,25 +243,15 @@ const chartOption = computed(() => {
       showSymbol: false,
     },
   ]
-  if (hasMaxMin.value) {
-    series.push(
-      {
-        name: '最大值',
-        type: 'line',
-        data: store.chartData.map((d) => [d.timestamp * 1000, d.max!]),
-        smooth: true,
-        lineStyle: { width: 1, type: 'dashed' },
-        showSymbol: false,
-      },
-      {
-        name: '最小值',
-        type: 'line',
-        data: store.chartData.map((d) => [d.timestamp * 1000, d.min!]),
-        smooth: true,
-        lineStyle: { width: 1, type: 'dashed' },
-        showSymbol: false,
-      },
-    )
+  if (hasMax.value) {
+    series.push({
+      name: '最大值',
+      type: 'line',
+      data: store.chartData.map((d) => [d.timestamp * 1000, d.max!]),
+      smooth: true,
+      lineStyle: { width: 1, type: 'dashed' },
+      showSymbol: false,
+    })
   }
   return {
     tooltip: {
@@ -288,7 +278,7 @@ const chartOption = computed(() => {
       },
     },
     legend: {
-      data: hasMaxMin.value ? ['平均值', '最大值', '最小值'] : ['平均值'],
+      data: hasMax.value ? ['平均值', '最大值'] : ['平均值'],
       right: 0,
       top: 'center',
       orient: 'vertical',
