@@ -161,7 +161,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 **public 零污染守卫**：会话首尾对 public 全表行数快照断言，任何污染立即报错（conftest `_pg_public_row_snapshot`）。
 **product 侧连带修复**：`SslCertificate` 时间默认值 aware→naive utcnow（PG 下创建 SSL 证书曾必 500）；`enrich_audit` 非整型 resource_id（如 ClickHouse "ck_xxxx"）折进 detail（同 #48 类）。
 **本机测试 PG（2026-09-18 起推荐，实测对照）**：远程 192.168.100.90 全量 26 分钟的主因是连接建立 ~180ms/次（远端 fork 后端进程）+ 网络往返（提交本身仅 8ms，synchronous_commit 开关几乎无差）。本机 PG 全量 **4 分多**（远程的 1/6）：
-- 原生 apt PG16：`postgres/postgres@localhost:5432`（服务名 panshi-test）；docker：容器 `panshi-test-pg`（postgres:16-alpine，`postgres/postgres@localhost:15432`，daemon.json 已配 daocloud 镜像源）。二者性能打平（4:12 vs 4:29）。
+- 原生 apt PG16：`postgres/postgres@localhost:5432`（默认集群 16/main）；docker：容器 `panshi-test-pg`（postgres:16-alpine，`postgres/postgres@localhost:15432`，daemon.json 已配 daocloud 镜像源）。二者性能打平（4:12 vs 4:29）。
 - 跑法：`PG_DSN=postgresql://postgres:postgres@localhost:5432/test_panshi TEST_DB_BACKEND=pg uv run pytest`（docker 把 5432 换 15432、库名 test_panshi）。设置 PG_DSN 会额外激活 8 个 PG-gated 用例（`test_sqlite_to_pg_migration.py` 全部 + `test_db_archive_service.py::TestPostgresSourceExport`）——这些用例**硬编码契约** `postgres/postgres@localhost:5432/test_panshi`（空库自给自足、用后自清理）。
 - **`migrate_direct` 直调必须传 `wait_post_copy=True`**：其序列复位/补列在后台 daemon 线程执行、函数即时返回（为 SSE 不卡 complete 而设计，生产由 finalize 收尾串行化）；直调方不等线程就发起下一次迁移，DROP ... CASCADE 会与线程互锁死锁（2026-09-18 实测）。逐文件迁移路线（原 45 文件清单）已废弃；需验证真实引擎构建器行为时用 `real_create_sync_engine` 夹具。设计见 `openspec/changes/test-suite-global-db-isolation`。同会话内测试间数据串扰仍存在（与改造前等价），需强隔离时另立项。
 31. **PG 方言冒烟必跑（触发式）** — 凡改动触及 **schema/迁移/写库路径**（新增或修改模型列、raw SQL、JSON→TEXT 字段序列化、审计 path param 提取、dialect 敏感逻辑）时，合入前必须跑：
