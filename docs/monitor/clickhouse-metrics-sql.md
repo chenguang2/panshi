@@ -81,8 +81,31 @@
 
 ### 1. HTTP 请求速率（QPS）
 
-与实现完全一致的真实 SQL（`metrics_service.query_time_series` counter 路径，
-指标查询页查 `edge_http_requests_total` 时执行的就是它，参数已渲染为字面量）：
+**简写版（单序列场景，日常手查推荐）**——窗口函数直接作用于原始行，无聚合嵌套：
+
+```sql
+SELECT
+    bucket,
+    round(greatest((v - prev_v) / greatest(date_diff('second', prev_t, t), 1), 0), 4) AS qps
+FROM (
+    SELECT
+        toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 60 SECOND)) AS bucket,
+        Value AS v,
+        TimeUnix AS t,
+        lagInFrame(Value, 1, Value) OVER (ORDER BY TimeUnix) AS prev_v,
+        lagInFrame(TimeUnix, 1, TimeUnix) OVER (ORDER BY TimeUnix) AS prev_t
+    FROM otel_metrics_gauge
+    WHERE MetricName = 'edge_http_requests_total'
+      AND TimeUnix > now() - INTERVAL 3600 SECOND
+)
+ORDER BY bucket
+```
+
+> ⚠️ 仅当该指标**只有一条序列**（单个 Edge 节点）时结果正确；多序列时
+> `lagInFrame` 会跨序列取值。当前部署实测序列数为 1，与下方实现版数值逐点一致。
+
+**实现版（多序列安全，指标查询页执行的就是它）**：`metrics_service.query_time_series`
+counter 路径，参数已渲染为字面量：
 
 ```sql
 SELECT
@@ -128,7 +151,13 @@ ORDER BY bucket
 > 数据配 1m 桶）每桶只有 1 个样本、单点无增量，整条线会归零；右缘未满桶也会
 > 假性塌陷（2026-09-18 修复）。
 >
-> ⚠️ 多层嵌套注意：`bucket` 只能在**最内层**计算（TimeUnix 在外层不可见），
+> ⚠️ 三层结构为何不能压缩（本 ClickHouse 版本实测）：
+> ① 聚合函数不能出现在窗口函数内部 → `lagInFrame(sum(x), 1)` 报 Code 184，
+>    必须把聚合下沉到子查询、窗口只作用于普通列；
+> ② `runningDifference()` 已废弃 → 报 Code 721，需服务端开关才能启用，不推荐。
+> 多序列时"每桶按序列取末值 → 跨序列求和 → 窗口取上一桶"三件事各占一层。
+>
+> ⚠️ 嵌套注意：`bucket` 只能在**最内层**计算（TimeUnix 在外层不可见），
 > 中间层 `GROUP BY bucket` 时 SELECT 列表**必须带上 bucket**，否则外层
 > 窗口函数报 `Unknown expression identifier bucket`。
 
