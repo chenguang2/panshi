@@ -3986,3 +3986,21 @@ openspec/changes/test-suite-db-isolation
 
 /brainstorming 请仔细阅读 openspec/changes/test-suite-db-isolation 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+==================================================
+
+需要继续改进的：
+
+1. 自启动管理的集群选择下拉框是否和其他页面的下拉框样式不同？
+2. 插件组，插件元数据，全家规则，静态资源的卡片中，是否和其他的卡片样式不一样？
+   我看其他卡片 版本和时间是单独占一行的？ 
+================================================
+
+skill:
+
+grill-me
+grill-with-docs
+book-to-skills
+ripwire
+archify
+cognee
