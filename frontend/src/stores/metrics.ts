@@ -10,6 +10,14 @@ const intervalMap: Record<string, string> = {
   '7d': '1h',
 }
 
+// 部分多序列指标必须按标签聚焦后查询：否则不同量纲的序列混入同一 avg/max
+// 计算（如 nginx 连接数的 active≈1 与 accepted/handled 累计值≈数千），
+// 折线会被累计值压成无变化的直线，头部值也失真。与总览页
+// metricsDashboard 的 CONNECTION_CHART_DEFS 聚焦口径保持一致。
+const METRIC_LABEL_FILTERS: Record<string, string> = {
+  edge_nginx_http_current_connections: 'state:active',
+}
+
 export const useMetricsStore = defineStore('metrics', () => {
   const metricNames = ref<string[]>([])
   const selectedMetric = ref<string>('')
@@ -51,6 +59,7 @@ export const useMetricsStore = defineStore('metrics', () => {
         selectedMetric.value,
         timeRange.value,
         intervalMap[timeRange.value] || '5m',
+        METRIC_LABEL_FILTERS[selectedMetric.value],
       )
     } catch {
       error.value = '数据加载失败'

@@ -206,9 +206,10 @@ const METRIC_LABELS: Record<string, string> = {
 }
 
 function fmtVal(v: number): string {
-  if (v >= 100) return v.toFixed(1)
-  if (v >= 10) return v.toFixed(2)
-  return v.toFixed(3)
+  // 去尾零：整数不带小数点（1756 而非 1756.0）
+  if (v >= 100) return Number(v.toFixed(1)).toString()
+  if (v >= 10) return Number(v.toFixed(2)).toString()
+  return Number(v.toFixed(3)).toString()
 }
 
 const hasMaxMin = computed(() => store.chartData.some((d) => d.max !== undefined && d.min !== undefined))
