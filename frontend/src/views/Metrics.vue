@@ -34,7 +34,7 @@
       <div class="current-label">
         {{ store.selectedMetric ? METRIC_LABELS[store.selectedMetric] || store.selectedMetric : '' }}
       </div>
-      <div class="current-value">{{ currentValue }}</div>
+      <div class="current-value">{{ currentValue }}{{ currentUnit }}</div>
     </div>
 
     <!-- ── Chart ── -->
@@ -216,9 +216,17 @@ const hasMaxMin = computed(() => store.chartData.some((d) => d.max !== undefined
 const currentValue = computed(() => {
   if (!hasChartData.value) return '--'
   const last = store.chartData[store.chartData.length - 1]
-  const v = last.avg
+  // gauge 指标优先取桶内最新读数（last，整数语义）；计数器指标 avg 即每秒速率
+  const v = last.last ?? last.avg
   if (v === undefined || v === null) return '--'
   return fmtVal(v)
+})
+
+// 计数器指标的头部值是每秒速率，补 "/s" 单位避免与"计数"类名称产生歧义
+const currentUnit = computed(() => {
+  if (!hasChartData.value) return ''
+  const last = store.chartData[store.chartData.length - 1]
+  return last.unit ?? ''
 })
 
 const chartOption = computed(() => {

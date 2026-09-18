@@ -6,6 +6,8 @@ export interface MetricDataPoint {
   min?: number
   /** gauge 指标：桶内最新读数（argMax），卡片头部"当前值"优先取它 */
   last?: number
+  /** 计数器指标：avg 实为每秒速率，带 "/s" 单位 */
+  unit?: string
   sample_count: number
 }
 

@@ -143,6 +143,9 @@ def query_time_series(
                 "timestamp": r[0],
                 "avg": max(float(r[1]), 0.0) if r[1] is not None else 0.0,
                 "sample_count": r[2],
+                # 计数器路径的 avg 实为每秒速率：带单位供前端头部展示（0.017/s），
+                # 避免"计数"类指标名 + 裸数字造成语义歧义
+                "unit": "/s",
             }
             for r in rows
             if r[1] is not None
