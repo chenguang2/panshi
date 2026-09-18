@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active": "conn_97987cd5",
+  "active": "pg_local_native",
   "connections": [
     {
       "id": "local_sqlite",
@@ -15,7 +15,7 @@
       "ssl": false
     },
     {
-      "id": "conn_15cbb267",
+      "id": "pg_remote_uapm",
       "type": "postgres",
       "name": "192.168.100.90",
       "path": null,
@@ -27,7 +27,7 @@
       "ssl": false
     },
     {
-      "id": "conn_16fcf5a4",
+      "id": "sqlite_manual_demo",
       "type": "sqlite",
       "name": "手册演示库",
       "path": "./data/manual-demo.db",
@@ -39,19 +39,7 @@
       "ssl": false
     },
     {
-      "id": "conn_f9d0d3f3",
-      "type": "postgres",
-      "name": "e2e-pg-1787982488432",
-      "path": null,
-      "host": "127.0.0.1",
-      "port": 5432,
-      "database": "panshi_e2e",
-      "username": "postgres",
-      "password_enc": "gAAAAABqknKcEuOu43ENR3glAOheXgiHTcGRJQjBxpWl-V3xM0lKDUYheXx0ifrtWv7qZaMwvZpS1_ldo1TMw-Rwye75UGfJ-A==",
-      "ssl": false
-    },
-    {
-      "id": "conn_97987cd5",
+      "id": "sqlite_test",
       "type": "sqlite",
       "name": "测试数据库",
       "path": "./data/test.db",
@@ -63,7 +51,7 @@
       "ssl": false
     },
     {
-      "id": "conn_b3908275",
+      "id": "sqlite_export_test",
       "type": "sqlite",
       "name": "导出测试库",
       "path": "./data/daochu.db",
@@ -72,6 +60,30 @@
       "database": null,
       "username": null,
       "password_enc": null,
+      "ssl": false
+    },
+    {
+      "id": "pg_local_native",
+      "type": "postgres",
+      "name": "本机 PG(原生 5432)",
+      "path": null,
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "test_panshi",
+      "username": "postgres",
+      "password_enc": "gAAAAABqrM7hOkDKN3OY_5JNwzfHLiZ3gz8aBJtvO-5j4NjcGPaHTqm5OHYvStDRpXuJGf00gREezAfrOBuuWd5v7Ckf7m3fMQ==",
+      "ssl": false
+    },
+    {
+      "id": "pg_local_docker",
+      "type": "postgres",
+      "name": "本机 PG(docker 15432)",
+      "path": null,
+      "host": "127.0.0.1",
+      "port": 15432,
+      "database": "test_panshi",
+      "username": "postgres",
+      "password_enc": "gAAAAABqrM7hi_YasJh4dmxKs2sDg1DSZHD0wy1S_LQvWWwuw6KevPi332RD_CuANLSygI63ETeA8gatfsayOQec-8f68k36Xw==",
       "ssl": false
     }
   ]
