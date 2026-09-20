@@ -54,7 +54,7 @@
 
 ### Requirement: 客户端证书使用
 
-生成的客户端证书用于 `gmssl s_client` 等双向认证工具，**不发布到 Edge 节点**。
+生成的客户端证书 SHALL 用于 `gmssl s_client` 等双向认证工具，SHALL NOT 发布到 Edge 节点。
 
 #### Scenario: 客户端证书禁止发布
 

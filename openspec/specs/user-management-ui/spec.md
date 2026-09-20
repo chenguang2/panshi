@@ -124,6 +124,12 @@
 - **WHEN** 非管理员用户请求我的集群
 - **THEN** 仅返回 `sys_user_cluster` 表中分配给该用户的集群
 
+## Purpose
+
+
+用户管理 UI：管理员角色包含审计日志权限，审计日志模块受特性开关控制，前端按权限展示入口。
+## Requirements
+
 ### Requirement: Admin user management includes audit log permission
 The user management capability SHALL include a new permission key `audit_logs` (plural, consistent with existing keys like `clusters`, `routes`, `upstreams`) for accessing the audit log page.
 

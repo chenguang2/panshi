@@ -189,6 +189,8 @@
 
 ### Requirement: CA 和客户端证书不发布
 
+客户端证书与 CA 证书 SHALL NOT 发布到 Edge 节点；前端 SHALL NOT 提供发布入口，API SHALL 拒绝此类发布请求。
+
 #### Scenario: 客户端证书拒绝发布
 - **WHEN** 用户试图发布一个 `cert_type=client` 的 SSL 证书
 - **THEN** 前端 SHALL 不显示"发布"按钮

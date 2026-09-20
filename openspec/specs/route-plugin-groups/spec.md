@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+路由关联插件组：在路由上关联插件组，并使其参与发布与回滚流程。
+## Requirements
 ### Requirement: 路由关联插件组
 系统 SHALL 支持路由关联多个插件组，关联的插件组配置将与路由独立插件配置合并后生效。
 

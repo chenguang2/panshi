@@ -4,8 +4,7 @@
 
 Replace 5 near-identical `log_xxx_operation` methods in `EdgeLogger` with a single parametrized `log_operation` method.
 
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Single log_operation method
 `EdgeLogger` SHALL provide a single `log_operation(resource_type, ...)` method that replaces the 5 existing `log_xxx_operation` methods.
 
@@ -21,7 +20,6 @@ The old `log_xxx_operation` method names SHALL be kept as thin wrappers that del
 #### Scenario: Old method names still work
 - **WHEN** `log_edge_operation(...)` is called
 - **THEN** it delegates to `log_operation('upstream', ...)` with the same args
-## Requirements
 ### Requirement: Single log_operation method
 `EdgeLogger` SHALL provide a single `log_operation(resource_type, ...)` method that replaces the 5 existing `log_xxx_operation` methods.
 

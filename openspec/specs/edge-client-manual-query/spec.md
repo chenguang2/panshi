@@ -62,9 +62,6 @@ The backend SHALL execute synchronous EdgeClient calls in a thread pool to avoid
 - **THEN** FastAPI SHALL cancel the asyncio task
 - **AND** the thread pool thread SHALL complete without blocking the event loop
 
-
-## ADDED Requirements
-
 ### Requirement: Edge 直连功能受特性配置控制
 
 Edge 直连页面 SHALL 受 `features.yaml` 中 `edge_client` 特性控制。

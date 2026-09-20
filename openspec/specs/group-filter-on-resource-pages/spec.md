@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+资源列表页按分组预过滤：服务端通过 group 参数过滤，卡片网格展示每个资源的分组归属。
+## Requirements
 ### Requirement: Resource list pages support group pre-filtering
 The system SHALL provide a group filter dropdown on all resource list pages (nodes, upstreams, routes, plugin configs, stream proxies, global rules, static resources, edge.env), positioned between the search input and the cluster filter dropdown.
 

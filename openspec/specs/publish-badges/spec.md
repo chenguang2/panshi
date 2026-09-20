@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+发布状态徽标：节点操作下拉与上游/路由表格展示发布状态，便于识别未发布配置。
+## Requirements
 ### Requirement: Node operations have more dropdown
 
 The system SHALL provide a dropdown menu ("更多") in the node operations column to display action buttons not selected in the column settings.

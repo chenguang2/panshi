@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+Edge 数据导入的四层代理支持：从节点抓取 Stream Route，完成类型转换、冲突检测与导入落库。
+## Requirements
 ### Requirement: 数据导入支持四层代理类型
 系统 SHALL 在 Edge 数据导入的配置类型选择中增加「四层代理」选项，支持从 Edge 节点批量导入 Stream Route 到本地数据库。
 

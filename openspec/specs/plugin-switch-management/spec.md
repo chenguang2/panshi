@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+插件启停开关管理：管理页展示全部插件并提供启停开关，开关能力受特性配置控制。
+## Requirements
 ### Requirement: Plugin enable/disable switch
 
 Admins SHALL be able to enable or disable builtin plugins via a management UI.
@@ -17,8 +20,6 @@ The management page SHALL always show all plugins regardless of switch state.
 #### Scenario: Management shows all
 - **WHEN** viewing the plugin management page
 - **THEN** both enabled and disabled plugins SHALL be visible
-
-## ADDED Requirements
 
 ### Requirement: 插件开关功能受特性配置控制
 

@@ -1,4 +1,4 @@
-﻿## Purpose
+## Purpose
 
 Edge 节点数据导入功能，支持将已在运行（通过其他系统配置）的 PANSHI Edge 节点上的路由、上游、插件配置等数据，通过 Admin API 拉取并导入到磐石 Admin 数据库，使其纳入磐石的管理体系。
 ## Requirements
@@ -152,9 +152,6 @@ Edge 节点数据导入功能，支持将已在运行（通过其他系统配置
 - **THEN** 系统 SHALL 按时间倒序展示导入记录列表
 - **AND** 每条记录 SHALL 展示：导入时间、节点、状态、导入数量摘要
 - **AND** 用户 SHALL 可点击查看详情（冲突列表、错误信息）
-
-
-## ADDED Requirements
 
 ### Requirement: 数据导入功能受特性配置控制
 

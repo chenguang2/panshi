@@ -4,8 +4,7 @@
 
 Unify the publish progress modal and delete confirmation patterns across all resource types (upstream, route, plugin_config, global_rule, static_resource, plugin_metadata).
 
-## ADDED Requirements
-
+## Requirements
 ### Requirement: Unified publish function
 All resource composables SHALL use a shared `executePublish()` function from `useClusterUtils.ts` instead of duplicating the progress modal and edge result logic inline.
 
@@ -31,7 +30,6 @@ ClusterList.vue SHALL have all 7 inline modal/drawer components removed, along w
 - **THEN** no duplicate route/pluginConfig/globalRule/staticResource inline modals or drawers exist
 - **THEN** no duplicate VersionManagementModal exists
 - **THEN** unused composable destructuring is removed
-## Requirements
 ### Requirement: Unified publish function
 All resource composables SHALL use a shared `executePublish()` function from `useClusterUtils.ts` instead of duplicating the progress modal and edge result logic inline.
 

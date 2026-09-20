@@ -1,6 +1,7 @@
 ## Purpose
 
-全局规则管理，允许用户创建可复用的全局规则，通过发布同步到 Edge 节点。
+
+集群全局规则能力：全局规则的卡片详情、CRUD 与发布，规则在集群范围内统一生效。
 ## Requirements
 ### Requirement: 全局规则卡片提供查看详情功能
 
@@ -11,8 +12,6 @@
 - **THEN** 系统 SHALL 打开抽屉展示全局规则信息
 - **AND** 展示名称、描述、发布状态、版本号
 - **AND** 展示该全局规则包含的所有插件配置 JSON
-
-## ADDED Requirements
 
 ### Requirement: 全局规则 CRUD
 系统 SHALL 支持对全局规则进行增删改查操作。

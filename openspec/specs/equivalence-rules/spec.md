@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+字段等价规则：集中式规则文件与等价引擎，在配置对比时归一化等价字段，减少误报差异。
+## Requirements
 ### Requirement: Centralized equivalence rules file
 
 The system SHALL provide a YAML configuration file at `backend/app/config/equivalence_rules.yaml` that defines field equivalence rules for config comparison.

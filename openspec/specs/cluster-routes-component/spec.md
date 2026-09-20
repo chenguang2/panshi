@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+集群路由 Vue 组件（ClusterRoutes）：承载集群路由列表、增删改查与发布状态展示交互。
+## Requirements
 ### Requirement: ClusterRoutes component
 The system SHALL provide a `ClusterRoutes` component that renders the routes tab content.
 

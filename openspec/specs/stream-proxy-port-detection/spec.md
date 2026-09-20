@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+从 edge.env 探测可用四层代理端口：区分可用与占用端口，并在前端展示实时探测进度。
+## Requirements
 ### Requirement: System detects available stream ports from edge.env
 The system SHALL read the remote edge.env file from a selected cluster node and parse available stream listen ports.
 

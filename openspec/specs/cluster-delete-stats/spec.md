@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+集群删除前的资源统计与级联删除：删除接口级联清理关联资源并向 Edge 节点同步，前端在删除前展示资源统计供确认。
+## Requirements
 ### Requirement: Backend provides cluster resource statistics
 
 The system SHALL provide a `GET /clusters/{id}/stats` endpoint that returns the count of all associated resources under a cluster.

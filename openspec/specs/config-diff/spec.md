@@ -1,6 +1,7 @@
 ## Purpose
 
-数据库与 Edge 节点配置对比功能，提供差异检测和同步验证。
+
+配置对比能力：后端 diff 接口、Edge 节点配置清单、前端抽屉展示与等价规则归一化，减少误报差异。
 ## Requirements
 ### Requirement: 插件元数据为空配置时正确判断存在性
 
@@ -20,8 +21,6 @@
 - **WHEN** Edge 节点返回的插件元数据配置中包含 `"id": "plugin_name"` 字段
 - **THEN** 系统 SHALL 根据 `equivalence_rules.yaml` 中 `plugin_metadata.ignore_edge_fields` 配置移除该字段
 - **AND** 该字段差异 SHALL NOT 标记为配置差异
-
-## ADDED Requirements
 
 ### Requirement: Backend provides config diff API
 

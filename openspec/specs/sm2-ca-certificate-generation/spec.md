@@ -45,7 +45,7 @@
 
 ### Requirement: CA 使用约束
 
-CA 私钥仅在证书签发时使用，不用于 TLS 握手。CA 证书不需要发布到 Edge 节点。
+CA 私钥 SHALL 仅在证书签发时使用，SHALL NOT 用于 TLS 握手。CA 证书 SHALL NOT 发布到 Edge 节点。
 
 #### Scenario: CA 信息展示
 

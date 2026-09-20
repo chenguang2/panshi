@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+开发与部署脚本的端口参数化：脚本接受端口参数，PID 与端口文件落于项目目录，并保持对既有调用方式的向后兼容。
+## Requirements
 ### Requirement: Scripts accept port parameter
 The 4 deployment scripts (Linux start/stop, Windows start/stop) SHALL accept a port number to override the default.
 

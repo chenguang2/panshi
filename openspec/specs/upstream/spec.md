@@ -1,7 +1,7 @@
-﻿## Purpose
+## Purpose
 
-上游服务管理负载均衡算法配置，支持发布到边缘节点。
 
+上游负载均衡能力：负载均衡类型、哈希位置与 Key 格式要求，以及已废弃类型的迁移处理。
 ## Requirements
 
 ### Requirement: 上游负载均衡类型
@@ -43,7 +43,7 @@
 - **AND** 使用字段名 `key` 保存哈希 key 值
 
 ### Requirement: 哈希 Key 格式要求
-当 hash_on 为 `vars` 时，key 值必须符合 Nginx 变量格式。
+当 `hash_on` 为 `vars` 时，key 值 SHALL 符合 Nginx 变量格式。
 
 #### Scenario: vars 模式的 key 验证
 - **WHEN** hash_on 为 `vars` 时
@@ -51,7 +51,7 @@
 - **AND** 边缘节点（PANSHI）会验证 key 格式，不合法则拒绝
 
 ### Requirement: 已废弃的负载均衡类型
-以下负载均衡类型已被移除：iphash、leastconn、weightedroundrobin（拼写错误）。
+以下负载均衡类型 SHALL 视为已移除：iphash、leastconn、weightedroundrobin（拼写错误）。
 
 #### Scenario: 旧数据迁移
 - **WHEN** 数据库中存在旧的负载均衡类型值

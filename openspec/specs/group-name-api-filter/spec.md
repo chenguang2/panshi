@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+全局列表 API 的 group_name 过滤与 cluster_group_name 响应字段（8 个端点）。
+
+## Requirements
 ### Requirement: Global list APIs support group_name query filter
 All global resource list API endpoints SHALL accept an optional `group_name` query parameter to filter resources by cluster group. When provided, the backend SHALL join the resource's cluster and filter by `Cluster.group_name`.
 

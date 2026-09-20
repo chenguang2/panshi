@@ -1,5 +1,8 @@
-## ADDED Requirements
+## Purpose
 
+
+集群插件配置 Vue 组件（ClusterPluginConfigs）：承载插件配置列表、编辑弹窗与删除交互。
+## Requirements
 ### Requirement: ClusterPluginConfigs component
 The system SHALL provide a `ClusterPluginConfigs` component that renders the plugin configs tab content.
 
