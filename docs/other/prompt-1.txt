@@ -4004,3 +4004,48 @@ book-to-skills
 ripwire
 archify
 cognee
+
+=============================================================================================
+
+现在需要配置应用可观测性图表：
+
+应用可观测性系统地址:
+http://192.168.100.195:8066/main.html
+admin/admin@123
+
+目前我已经配置了一个仪表盘：
+
+点击：可视化管理->图表设计->edge-overview 
+目前只有几个 nginx 的图，不够，配置的也不美观
+
+配置方法为：
+1. 需要先在 系统管理->数据视图->CK->Nginx 目录下先生成指标数据，
+   目前nginx 的指标只能通过构造 sql 来生成指标， 然后保存后供使用
+2. 在 可视化管理->图表设计->测试->Nginx 目录下，可以看已经配置的指标图
+3. 在 可视化管理->图表设计->测试->Nginx 界面里，点击 + ->新建数据图表，然后通过 SQL Editor 方式生成图表
+4. 最后在 可视化管理->图表设计->edge-overview 中加入图表，形成 nginx 仪表盘
+
+配置文档请参考使用：
+docs/monitor/应用可观测性软件用户手册.docx
+docs/monitor/应用可观测性系统培训.pdf
+
+我现在已经配置了 CK , 可以正常访问
+backend/clickhouse.yaml 
+
+已经在磐石系统中，配置了 指标查询/指标总览的数据
+
+现在需要在 应用可观测性系统中，edge-overview 仪表盘中，在修改和添加应该显示的图形监控指标
+
+可以参考文档：
+docs/monitor/clickhouse-metrics-sql.md
+
+请使用 /opsx-propose 命令， 先生成文档
+   
+
+
+openspec/changes/edge-overview-nginx-charts/
+
+/brainstorming 请仔细阅读 openspec/changes/edge-overview-nginx-charts/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+=============================================================
