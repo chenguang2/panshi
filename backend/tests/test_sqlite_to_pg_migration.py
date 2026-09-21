@@ -4,8 +4,12 @@
   PG_DSN=postgresql://user:pass@host:5432/dbname
 
 若未设置 PG_DSN，测试自动跳过。
+
+注意：迁移测试会 drop_all / create_all 全部表，必须使用独立的测试数据库，
+不得共享 test_panshi（有真实生产数据）或 conftest 的 panshi_test schema。
 """
 import os
+import re
 import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
@@ -18,6 +22,59 @@ from app.core.db_migration import tables_for_migration
 
 PG_DSN = os.getenv("PG_DSN")
 SQLITE_PATH = "./data/panshi.db"
+
+# 迁移测试专用数据库名 —— 与 test_panshi（含真实数据）完全隔离
+PG_MIGRATION_DB = "test_panshi_migrate"
+
+
+def _parse_pg_dsn(dsn: str):
+    """从 PG_DSN 中解析 user/password/host/port。"""
+    m = re.match(r"postgresql(?:\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)", dsn)
+    if not m:
+        return None
+    return {"user": m.group(1), "password": m.group(2), "host": m.group(3), "port": int(m.group(4))}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _setup_migration_database():
+    """会话级：创建/销毁迁移测试专用 PG 数据库。
+
+    连接 postgres 维护库执行 CREATE/DROP DATABASE，
+    确保迁移测试不会污染 test_panshi 真实数据或 conftest 的隔离 schema。
+    """
+    if not PG_DSN:
+        yield
+        return
+
+    creds = _parse_pg_dsn(PG_DSN)
+    if not creds:
+        yield
+        return
+
+    admin_url = f"postgresql://{creds['user']}:{creds['password']}@{creds['host']}:{creds['port']}/postgres"
+    admin_engine = create_engine(admin_url)
+
+    with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        # 终止残留连接
+        conn.execute(text(
+            f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            f"WHERE datname = '{PG_MIGRATION_DB}' AND pid <> pg_backend_pid()"
+        ))
+        conn.execute(text(f"DROP DATABASE IF EXISTS {PG_MIGRATION_DB}"))
+        conn.execute(text(f"CREATE DATABASE {PG_MIGRATION_DB}"))
+
+    admin_engine.dispose()
+    yield
+
+    # teardown: 清理专用库
+    admin_engine = create_engine(admin_url)
+    with admin_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text(
+            f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            f"WHERE datname = '{PG_MIGRATION_DB}' AND pid <> pg_backend_pid()"
+        ))
+        conn.execute(text(f"DROP DATABASE IF EXISTS {PG_MIGRATION_DB}"))
+    admin_engine.dispose()
 
 
 @pytest.mark.skipif(not PG_DSN, reason="PG_DSN not set; skipping SQLite→PG migration test")
@@ -36,18 +93,19 @@ class TestSqliteToPgMigration:
 
     @pytest.fixture(scope="class")
     def pg_conn(self):
-        """PostgreSQL 目标连接配置。"""
+        """PostgreSQL 目标连接配置（专用隔离库）。"""
         from app.core.db_config import encrypt_password
 
+        creds = _parse_pg_dsn(PG_DSN)
         return ConnectionConfig(
             id="test_pg",
             type="postgresql",
             name="Test PG",
-            host="localhost",
-            port=5432,
-            database="test_panshi",
-            username="postgres",
-            password_enc=encrypt_password("postgres"),
+            host=creds["host"],
+            port=creds["port"],
+            database=PG_MIGRATION_DB,
+            username=creds["user"],
+            password_enc=encrypt_password(creds["password"]),
         )
 
     def test_sqlite_source_has_data(self, sqlite_conn):
@@ -203,10 +261,12 @@ class TestTypeCoercionInRealMigration:
             src_engine.dispose()
             pytest.skip("源库无含布尔列数据的表，跳过类型协同 E2E")
 
+        creds = _parse_pg_dsn(PG_DSN)
         pg_conn = ConnectionConfig(
-            id="tc_pg", type="postgresql", name="TC目标", host="localhost", port=5432,
-            database="test_panshi", username="postgres",
-            password_enc=__import__("app.core.db_config", fromlist=["encrypt_password"]).encrypt_password("postgres"),
+            id="tc_pg", type="postgresql", name="TC目标",
+            host=creds["host"], port=creds["port"],
+            database=PG_MIGRATION_DB, username=creds["user"],
+            password_enc=__import__("app.core.db_config", fromlist=["encrypt_password"]).encrypt_password(creds["password"]),
         )
         pg_engine = build_sync_engine_for(pg_conn)
         Base.metadata.drop_all(pg_engine)
@@ -234,7 +294,6 @@ class TestTypeCoercionInRealMigration:
             assert isinstance(prow, bool), f"PG 布尔列应返回原生 bool，实际 {type(prow)}: {prow!r}"
             assert prow == bool(srow)
         finally:
-            # 清理：本测试会留下数据，不清理会让下一轮的 test_pg_target_empty_before 失败
             Base.metadata.drop_all(pg_engine)
             src_engine.dispose()
             pg_engine.dispose()
@@ -251,9 +310,12 @@ class TestPgToSqliteMigration:
         from app.core.db_config import encrypt_password
 
         sqlite_conn = ConnectionConfig(id="rt_src", type="sqlite", name="往返源", path="./data/panshi.db")
+        creds = _parse_pg_dsn(PG_DSN)
         pg_conn = ConnectionConfig(
-            id="rt_pg", type="postgresql", name="往返PG", host="localhost", port=5432,
-            database="test_panshi", username="postgres", password_enc=encrypt_password("postgres"),
+            id="rt_pg", type="postgresql", name="往返PG",
+            host=creds["host"], port=creds["port"],
+            database=PG_MIGRATION_DB, username=creds["user"],
+            password_enc=encrypt_password(creds["password"]),
         )
         roundtrip = ConnectionConfig(
             id="rt_dst", type="sqlite", name="往返目标", path=str(tmp_path / "roundtrip.db"),
@@ -276,8 +338,7 @@ class TestPgToSqliteMigration:
                 assert s_cnt == d_cnt, f"{table} 往返行数不一致：{s_cnt} != {d_cnt}"
                 assert d_cnt > 0
         finally:
-            # 清理：往返回填会填充 test_panshi，不清理会让下一轮的
-            # test_pg_target_empty_before 失败
+            # 清理：往返回填会填充专用隔离库
             pg_cleanup = build_sync_engine_for(pg_conn)
             Base.metadata.drop_all(pg_cleanup)
             pg_cleanup.dispose()
