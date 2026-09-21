@@ -388,23 +388,40 @@ LIMIT 10
 
 ![共享字典使用率视图运行结果](./edge-overview-benchmark/view-edge_shared_dict_usage-run.png)
 
-### 4.10 可选：把横轴改为可读时间
+### 4.10 横轴改为可读时间（已验证，2026-09-21）
 
 默认视图把 `bucket` 输出为 `toUnixTimestamp(...)`（Unix 秒级时间戳，10 位数字），
-图表横轴会直接显示 `1789792200` 这类数字。若希望横轴显示 `2026-09-20 13:45` 形式，
-把含时间轴的 5 个视图按如下方式调整（其余逻辑不变）：
+图表横轴会直接显示 `1789792200` 这类数字。改为可读时间需调整含时间轴的 5 个视图
+（V1 与 V4、V6 在 SQL 最内层，V2 与 V7 在最外层；V3、V5、V8 无时间轴），有两种渲染形态：
+
+**方案 A（推荐，已采用）：`formatDateTime` 输出短字符串**
 
 ```sql
 -- 改前
 toUnixTimestamp(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND)) AS bucket
 -- 改后
+formatDateTime(toStartOfInterval(TimeUnix, INTERVAL 900 SECOND), '%m-%d %H:%i') AS bucket
+```
+
+- 横轴显示 `09-20 09:00` 风格，紧凑清晰，长标签不截断（效果见
+  `edge-overview-benchmark/axis-time-short-format.png`）
+- 输出为不可再解析的分类字符串，按 SQL `ORDER BY bucket` 排序天然正确
+- ClickHouse `%i` = 分钟（同 MySQL）；`%M` 在 ClickHouse 中也是分钟，勿按 MySQL 习惯当月份用
+
+**方案 B：去掉包装直接输出 `DateTime`（不采用，仅备查）**
+
+```sql
 toStartOfInterval(TimeUnix, INTERVAL 900 SECOND) AS bucket
 ```
 
-- 涉及视图：V1 与 V4、V6 在 SQL 最内层，V2 与 V7 在最外层；V3、V5、V8 无时间轴
-- 视图模型中 `bucket` 列的类型保持 `DATE` 不变
-- ClickHouse 侧已实测：改后 5 个视图均正常返回（每视图 97 行，`bucket` 列类型为 `DateTime`）
-- 可视化系统侧的横轴渲染效果待验证
+- 系统会把该列识别为日期并以 ISO 8601 全格式渲染：`2026-09-20T17:00:00.000+08:00`，
+  信息完整但冗长，图表边缘标签会截断（效果见 `edge-overview-benchmark/axis-time-iso-format.png`）
+
+通用说明：
+
+- 视图模型中 `bucket` 列的类型保持 `DATE` 不变，两种方案均无需改模型
+- 视图 `PUT` 保存后即时生效，图表/仪表盘**无需重新发布**（仪表盘状态不受视图编辑影响）
+- 线上当前状态：5 个时间轴视图均为方案 A 短格式
 
 ## 5. 数据图表
 
@@ -535,7 +552,7 @@ toStartOfInterval(TimeUnix, INTERVAL 900 SECOND) AS bucket
 | 图线恒为 0 | histogram 的 `Max` 未上报；或速率算法用了桶内 max−min | 去掉最大值线；速率改用相邻桶差分 |
 | 字典使用率出现 100% | LEFT JOIN 非匹配行以 0 填充 | 改 `INNER JOIN` |
 | 行数过多、排行不可读 | 未限制条数 | 加 `LIMIT`（如 Top10） |
-| 图表横轴显示 10 位数字（如 1789792200） | 视图 `bucket` 用了 `toUnixTimestamp()`，输出为 Unix 秒 | 去掉包装、直接输出 `DateTime`（见 4.10 节） |
+| 图表横轴显示 10 位数字（如 1789792200） | 视图 `bucket` 用了 `toUnixTimestamp()`，输出为 Unix 秒 | 改 `formatDateTime(toStartOfInterval(...), '%m-%d %H:%i')`（见 4.10 节方案 A） |
 | 滚轮在图表上无效 | 布局为 free；auto 下悬停图表绘图区正中也会被图表吞掉 | 用 auto 布局，并把鼠标移到组件间隙或边距处滚动 |
 | 仪表盘不在「仪表盘」菜单 | 保存后退回草稿（status=2） | 重新点发布按钮 |
 
