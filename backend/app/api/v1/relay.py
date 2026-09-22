@@ -4,6 +4,7 @@
 权限：require_permission("relay_gateway")（router 级，AGENTS #19 形态 1）。
 """
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,8 @@ from app.core.deps import require_permission
 from app.models.cluster import Cluster
 from app.models.relay import RelayGateway
 from app.schemas.relay import (
+    RelayConfigFile,
+    RelayConfigPreview,
     RelayGatewayCreate,
     RelayGatewayOut,
     RelayGatewayUpdate,
@@ -26,9 +29,41 @@ from app.services.relay_push import RelayPushError
 
 router = APIRouter(prefix="/relay", tags=["relay"], dependencies=[Depends(require_permission("relay_gateway"))])
 
+# 同区域并发保护（单进程）：acquire 在端点（SSE 开始前可返回 409）；release 由流的 finally
+# 调用——客户端断连也会触发 finally，规则 #33 要求 finally 只做同步操作（discard 满足）。
+_INFLIGHT: set[str] = set()
+
+
+def _acquire_region(region_code: str) -> None:
+    if region_code in _INFLIGHT:
+        raise HTTPException(
+            status_code=409,
+            detail=f"区域「{region_code}」已有进行中的初始化/下发任务，请等待其结束",
+        )
+    _INFLIGHT.add(region_code)
+
+
+async def _region_stream(region_code: str, stream):
+    """SSE 事件流转发：流结束/客户端断连时释放并发占位。"""
+    try:
+        async for event in stream:
+            yield event
+    finally:
+        _INFLIGHT.discard(region_code)
+
 
 async def _get_or_404(db: AsyncSession, gateway_id: int) -> RelayGateway:
     return await edge_sync.get_or_404(db, RelayGateway, id=gateway_id, detail="区域不存在")
+
+
+async def _refresh_routing() -> None:
+    """注册表变更后立即重载快照（单 worker）。
+
+    仅 `invalidate()` 不够：它只把 _loaded_at 置 0，而同步读取方
+    route_for_ip/route_for_cluster 走 _require_snapshot() 不判 TTL → 路由变更实际
+    要等进程重启才生效。故此处显式 force 重载。
+    """
+    await relay_registry.ensure_fresh(force=True)
 
 
 @router.get("/gateways", response_model=list[RelayGatewayOut])
@@ -46,7 +81,7 @@ async def create_gateway(payload: RelayGatewayCreate, db: AsyncSession = Depends
     db.add(gateway)
     await db.commit()
     await db.refresh(gateway)
-    relay_registry.invalidate()  # 注册表变更即时生效（单 worker）
+    await _refresh_routing()  # 注册表变更立即重载（仅 invalidate 需重启才生效）
     return RelayGatewayOut.model_validate(gateway)
 
 
@@ -62,7 +97,7 @@ async def update_gateway(
         setattr(gateway, key, value)
     await db.commit()
     await db.refresh(gateway)
-    relay_registry.invalidate()
+    await _refresh_routing()
     return RelayGatewayOut.model_validate(gateway)
 
 
@@ -74,7 +109,7 @@ async def update_gateway_status(
     gateway.status = payload.status
     await db.commit()
     await db.refresh(gateway)
-    relay_registry.invalidate()
+    await _refresh_routing()
     return RelayGatewayOut.model_validate(gateway)
 
 
@@ -88,32 +123,122 @@ async def delete_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=409, detail=f"区域仍被集群挂接，无法删除: {names}")
     await db.delete(gateway)
     await db.commit()
-    relay_registry.invalidate()
+    await _refresh_routing()
     return {"ok": True}
 
 
 @router.post("/gateways/{gateway_id}/init")
 async def init_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
-    """首次初始化该局网关：写 8443 server 块 + 白名单并启动 OpenResty（幂等）。"""
+    """流式首次初始化：写 8443 server 块 + 白名单并启动/重载 OpenResty（幂等）。
+
+    前置校验（区域/前缀/网关清单）在流开始前完成，错误以 HTTP 4xx/5xx 返回；通过后
+    在请求会话内渲染配置并 commit（同时释放写锁并落审计——AGENTS #29），再交出 SSE
+    事件流（实时 stdout 行 + 进度 + 终态 `{rc, status, hosts_pattern, listen_port}`）。
+    """
     gateway = await _get_or_404(db, gateway_id)
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
     try:
-        return await relay_init.init_region(
-            gateway.code, openresty_prefix=gateway.openresty_prefix, db=db
-        )
+        relay_init.ensure_gateway_inventory()
     except RelayInitError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    _acquire_region(gateway.code)
+    try:
+        edge_targets_conf = await relay_push.render_nginx_map(gateway.code, db=db)
+        stream = relay_init.stream_init_region(
+            region_code=gateway.code,
+            listen_port=relay_init.listen_port_of(gateway.http_base_url),
+            openresty_prefix=gateway.openresty_prefix,
+            edge_targets_conf=edge_targets_conf,
+        )
+        await db.commit()  # 落审计 + 释放写锁，流内 ansible 期间不再持事务
+    except BaseException:
+        _INFLIGHT.discard(gateway.code)
+        raise
+    return StreamingResponse(_region_stream(gateway.code, stream), media_type="text/event-stream")
 
 
 @router.post("/gateways/{gateway_id}/push-config")
 async def push_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db)):
-    """按区域渲染网关白名单并双写推送（openspec: relay-config-push）。"""
+    """流式下发白名单到该局网关机（openspec: relay-config-push）；同 init 走 SSE。"""
     gateway = await _get_or_404(db, gateway_id)
+    if not gateway.openresty_prefix:
+        raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
     try:
-        return await relay_push.push_region(gateway.code, db=db)
+        relay_push.ensure_gateway_inventory()
     except RelayPushError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    _acquire_region(gateway.code)
+    try:
+        edge_targets_conf = await relay_push.render_nginx_map(gateway.code, db=db)
+        relay_sshd_conf = await relay_push.render_permit_open(gateway.code, db=db)
+        stream = relay_push.stream_push_region(
+            region_code=gateway.code,
+            openresty_prefix=gateway.openresty_prefix,
+            edge_targets_conf=edge_targets_conf,
+            relay_sshd_conf=relay_sshd_conf,
+        )
+        await db.commit()  # 落审计 + 释放写锁（同 init）
+    except BaseException:
+        _INFLIGHT.discard(gateway.code)
+        raise
+    return StreamingResponse(_region_stream(gateway.code, stream), media_type="text/event-stream")
+
+
+@router.get("/gateways/{gateway_id}/config-preview", response_model=RelayConfigPreview)
+async def preview_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db)):
+    """预览将要写入网关机的配置文件内容（只读、不触网）。
+
+    用途：界面展示 init 的 nginx 配置与 push 的白名单内容，用户可直接复制；当 ansible
+    不可用时也可据此手工在网关机上配置。内容由与下发相同的渲染函数产出，保证一致。
+    """
+    gateway = await _get_or_404(db, gateway_id)
+    if not gateway.openresty_prefix:
+        raise HTTPException(
+            status_code=400, detail="区域未配置 openresty_prefix，无法推导配置文件路径"
+        )
+    prefix = gateway.openresty_prefix.rstrip("/")
+    conf_dir = f"{prefix}/conf"
+    listen_port = relay_init.listen_port_of(gateway.http_base_url)
+    edge_targets = await relay_push.render_nginx_map(gateway.code, db=db)
+    permit_open = await relay_push.render_permit_open(gateway.code, db=db)
+    files = [
+        RelayConfigFile(
+            path=f"{conf_dir}/relay_8443.conf",
+            content=relay_init.render_relay_server_conf(
+                listen_port=listen_port, region_code=gateway.code
+            ),
+            purpose="8443 server 块（「初始化网关」写入）",
+        ),
+        RelayConfigFile(
+            path=f"{conf_dir}/edge_targets.conf",
+            content=edge_targets,
+            purpose="节点白名单 map（「初始化网关」/「下发配置」写入）",
+        ),
+        RelayConfigFile(
+            path=f"{conf_dir}/nginx.conf",
+            content="    include relay_8443.conf;",
+            purpose="在 nginx.conf 的 http 块末尾追加该 include（「初始化网关」写入，已存在则跳过）",
+        ),
+        RelayConfigFile(
+            path="/etc/ssh/sshd_config.d/relay-tunnel.conf",
+            content=permit_open,
+            purpose="sshd PermitOpen 白名单（当前暂缓，平台不下发；如需手工启用请写入后 reload sshd）",
+        ),
+    ]
+    notes = [
+        f"手工应用：将以上内容写入对应路径（OpenResty 前缀 {prefix}）。",
+        f"校验配置：{prefix}/sbin/nginx -p {prefix} -c conf/nginx.conf -t",
+        f"重载（已运行）：{prefix}/sbin/nginx -p {prefix} -c conf/nginx.conf -s reload；未运行则直接启动。",
+        "本窗口为只读预览，不会改动网关机；调整节点/集群后重新打开即可刷新白名单。",
+    ]
+    return RelayConfigPreview(
+        region_code=gateway.code,
+        openresty_prefix=prefix,
+        listen_port=listen_port,
+        files=files,
+        notes=notes,
+    )
 
 
 @router.get("/health-check")

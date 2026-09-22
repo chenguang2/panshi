@@ -70,6 +70,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("delete", "/api/v1/relay/gateways/1"),
     ("post", "/api/v1/relay/gateways/1/init"),
     ("post", "/api/v1/relay/gateways/1/push-config"),
+    ("get", "/api/v1/relay/gateways/1/config-preview"),
+    ("get", "/api/v1/relay/health-check"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

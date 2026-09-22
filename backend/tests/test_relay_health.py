@@ -24,6 +24,108 @@ async def _seed(test_db):
     await test_db.commit()
 
 
+# ── 自跳节点：跳板==目标（网关机自身也是业务节点）→ SSH 腿不适用，走直连 ──
+#
+# 实测事故：aoh 网关 jboss@192.168.0.13 同时是该集群节点 192.168.0.13。实际节点
+# 操作走直连（relay_registry.ssh_jump_for_ip 自跳守卫），体检却仍按跳板探测并把
+# 该节点误报为失败。
+
+def _seed_self_region(test_db):
+    import asyncio
+
+    async def _seed():
+        test_db.add(Cluster(id=7, name="c7", region_code="selfreg", status=1))
+        test_db.add(RelayGateway(id=7, code="selfreg", name="自跳局",
+                                 http_base_url="https://10.7.7.7:8443",
+                                 ssh_jump="tunnel@10.7.7.7:22"))
+        test_db.add(Node(id=7, cluster_id=7, ip="10.7.7.7", service_port=80,
+                         management_port=9180, ssh_port=22, edge_path="/e"))
+        await test_db.commit()
+
+    asyncio.run(_seed())
+
+
+def test_self_jump_node_ssh_leg_skipped(test_db, monkeypatch):
+    import asyncio
+
+    _seed_self_region(test_db)
+
+    async def ok(*args, **kwargs):
+        return None
+
+    async def ssh_boom(jump, ip, ssh_port, timeout):
+        raise ConnectionError("跳板转发建立失败 (rc=255)")
+
+    monkeypatch.setattr(relay_health, "_tcp_probe", _fake_probe(ok=True))
+    monkeypatch.setattr(relay_health, "_probe_node_mgmt_via_gateway", ok)
+    monkeypatch.setattr(relay_health, "_probe_node_ssh_via_jump", ssh_boom)
+
+    res = asyncio.run(relay_health.check_region("selfreg", db=test_db))
+    seg3 = next(s for s in res["segments"] if s["name"] == "抽样节点两腿")
+    assert seg3["ok"] is True, seg3
+    assert seg3["nodes"][0]["ssh_skipped"] is True
+
+
+def test_sampling_prefers_non_self_jump_node(test_db, monkeypatch):
+    """同集群既有自跳节点又有远端节点时，抽样应选远端节点——否则跳板问题被掩盖。"""
+    import asyncio
+
+    _seed_self_region(test_db)
+
+    async def _add_remote_node():
+        test_db.add(Node(id=8, cluster_id=7, ip="10.7.8.8", service_port=80,
+                         management_port=9180, ssh_port=22, edge_path="/e"))
+        await test_db.commit()
+
+    asyncio.run(_add_remote_node())
+
+    probed: list[str] = []
+
+    async def ok(*args, **kwargs):
+        return None
+
+    async def ssh_probe(jump, ip, ssh_port, timeout):
+        probed.append(ip)
+
+    monkeypatch.setattr(relay_health, "_tcp_probe", _fake_probe(ok=True))
+    monkeypatch.setattr(relay_health, "_probe_node_mgmt_via_gateway", ok)
+    monkeypatch.setattr(relay_health, "_probe_node_ssh_via_jump", ssh_probe)
+
+    asyncio.run(relay_health.check_region("selfreg", db=test_db))
+    assert probed == ["10.7.8.8"]  # 选中远端节点，而非自跳的 10.7.7.7
+
+
+def test_normal_node_ssh_leg_still_probed(test_db, monkeypatch):
+    """对照：跳板与节点不同主机时不得误跳过（SSH 腿失败仍计失败）。"""
+    import asyncio
+
+    async def _seed():
+        test_db.add(RelayGateway(id=8, code="othreg", name="他局",
+                                 http_base_url="https://10.9.9.9:8443",
+                                 ssh_jump="tunnel@10.9.9.9:22"))
+        test_db.add(Cluster(id=8, name="c8", region_code="othreg", status=1))
+        test_db.add(Node(id=8, cluster_id=8, ip="10.8.8.8", service_port=80,
+                         management_port=9180, ssh_port=22, edge_path="/e"))
+        await test_db.commit()
+
+    asyncio.run(_seed())
+
+    async def ok(*args, **kwargs):
+        return None
+
+    async def ssh_boom(jump, ip, ssh_port, timeout):
+        raise ConnectionError("跳板转发建立失败 (rc=255)")
+
+    monkeypatch.setattr(relay_health, "_tcp_probe", _fake_probe(ok=True))
+    monkeypatch.setattr(relay_health, "_probe_node_mgmt_via_gateway", ok)
+    monkeypatch.setattr(relay_health, "_probe_node_ssh_via_jump", ssh_boom)
+
+    res = asyncio.run(relay_health.check_region("othreg", db=test_db))
+    seg3 = next(s for s in res["segments"] if s["name"] == "抽样节点两腿")
+    assert seg3["ok"] is False
+    assert "SSH腿" in seg3["error"]
+
+
 @pytest.fixture
 def all_up(monkeypatch):
     """段 1/2/3 全部可达。"""
@@ -132,6 +234,38 @@ async def test_seg1_tls_follows_scheme(test_db, test_db_factory, monkeypatch):
     await test_db.commit()
     await relay_health.check_region("luju", db=test_db)
     assert seen and seen[0] is False  # http 不得走 TLS
+
+
+@pytest.mark.asyncio
+async def test_health_ends_db_transaction_before_probe(test_db, test_db_factory, monkeypatch):
+    """单区域体检：网络探测前必须结束读事务，避免 SQLite SHARED 锁横跨探测
+    阻塞并发写请求提交（AGENTS #29 同类隐患）。"""
+    await _seed(test_db)
+    seen = {}
+
+    async def fake_probe(region, nodes):
+        seen["in_transaction"] = test_db.in_transaction()
+        return {"region": region.code, "ok": True, "segments": []}
+
+    monkeypatch.setattr(relay_health, "_probe_region", fake_probe)
+    await relay_health.check_region("luju", db=test_db)
+    assert seen["in_transaction"] is False
+
+
+@pytest.mark.asyncio
+async def test_check_all_ends_db_transaction_before_probe(test_db, test_db_factory, monkeypatch):
+    """全量巡检：并发探测前必须结束读事务（且探测不再共享会话）。"""
+    await _seed(test_db)
+    seen = {}
+
+    async def fake_probe(region, nodes):
+        seen[region.code] = test_db.in_transaction()
+        return {"region": region.code, "ok": True, "segments": []}
+
+    monkeypatch.setattr(relay_health, "_probe_region", fake_probe)
+    await relay_health.check_all(db=test_db)
+    assert seen, "应有区域被探测"
+    assert all(v is False for v in seen.values())
 
 
 @pytest.mark.asyncio

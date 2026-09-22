@@ -51,13 +51,112 @@ async def _seed_routing(test_db, *, region_status: str = "enabled", cluster2_reg
 
 
 @pytest.fixture
-def relay_env(monkeypatch):
-    """开启总开关并隔离快照缓存（用例内自行 seed + ensure_fresh）。"""
-    monkeypatch.setenv("EDGE_RELAY_ENABLED", "1")
-    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", "/tmp/relay_test_ed25519")
+def relay_env(monkeypatch, tmp_path):
+    """开启总开关（features.yaml 的 relay_gateway=true）并隔离快照缓存。
+
+    总开关已从 EDGE_RELAY_ENABLED 环境变量迁移到 features.yaml（mtime 热加载）。
+    """
+    import app.core.features as fmod
+
+    cfg = tmp_path / "features.yaml"
+    cfg.write_text("features:\n  relay_gateway: true\n", encoding="utf-8")
+    monkeypatch.setattr(fmod, "_FEATURES_PATH", cfg)
+    monkeypatch.setattr(fmod, "_features", None)
+    monkeypatch.setattr(fmod, "_features_mtime", 0.0)
+    key = tmp_path / "relay_test_ed25519"
+    key.write_text("dummy-relay-key", encoding="utf-8")  # 仅存在性，不用于真实连接
+    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", str(key))
     relay_registry.invalidate()
-    yield
+    yield str(key)
+    monkeypatch.setattr(fmod, "_features", None)
+    monkeypatch.setattr(fmod, "_features_mtime", 0.0)
     relay_registry.invalidate()
+
+
+@pytest.fixture
+def relay_feature_file(monkeypatch, tmp_path):
+    """返回一个可写入临时 features.yaml 的 helper（用于总开关来源用例）。"""
+    import app.core.features as fmod
+
+    def _write(body: str):
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(body, encoding="utf-8")
+        monkeypatch.setattr(fmod, "_FEATURES_PATH", cfg)
+        monkeypatch.setattr(fmod, "_features", None)
+        monkeypatch.setattr(fmod, "_features_mtime", 0.0)
+
+    yield _write
+    monkeypatch.setattr(fmod, "_features", None)
+    monkeypatch.setattr(fmod, "_features_mtime", 0.0)
+
+
+# ── 总开关来源：features.yaml.features.relay_gateway（显式 opt-in，默认关） ──
+
+def test_relay_disabled_when_flag_absent(relay_feature_file):
+    """未配置 relay_gateway 时默认关闭（不沿用 features.yaml 的 opt-out 约定）。"""
+    relay_feature_file("features:\n  metrics: true\n")
+    assert relay_registry.relay_enabled() is False
+
+
+def test_relay_enabled_when_flag_true(relay_feature_file):
+    relay_feature_file("features:\n  relay_gateway: true\n")
+    assert relay_registry.relay_enabled() is True
+
+
+# ── CRUD 后路由快照强制重载（回归：原先只 invalidate，需重启才生效） ──
+#
+# 注：不能"POST 后直接读快照断言"——测试夹具的 get_db(API) 与 relay_registry 内部
+# 使用的 AsyncSessionLocal 是两个隔离库（conftest test_db vs 全局），快照读不到
+# API 写入的数据。故断言"端点确实强制重载"（生产两者同库，重载即生效）。
+
+def _spy_refresh(monkeypatch) -> list:
+    calls: list[bool] = []
+
+    async def _spy(force: bool = False, **kwargs):
+        calls.append(force)
+        return None
+
+    monkeypatch.setattr(relay_registry, "ensure_fresh", _spy)
+    return calls
+
+
+def _create_gateway(client) -> dict:
+    resp = client.post(
+        "/api/v1/relay/gateways",
+        json={"code": "newreg", "name": "新区域", "http_base_url": "http://10.9.9.9:8443"},
+    )
+    assert resp.status_code in (200, 201)
+    return resp.json()
+
+
+def test_create_gateway_force_refreshes_routing(client, monkeypatch):
+    calls = _spy_refresh(monkeypatch)
+    _create_gateway(client)
+    assert calls == [True], "CREATE 后未强制重载路由快照（回归：变更需重启才生效）"
+
+
+def test_update_gateway_force_refreshes_routing(client, monkeypatch):
+    created = _create_gateway(client)
+    calls = _spy_refresh(monkeypatch)
+    resp = client.put(f"/api/v1/relay/gateways/{created['id']}", json={"name": "改名"})
+    assert resp.status_code == 200
+    assert calls == [True], "UPDATE 后未强制重载路由快照"
+
+
+def test_update_status_force_refreshes_routing(client, monkeypatch):
+    created = _create_gateway(client)
+    calls = _spy_refresh(monkeypatch)
+    resp = client.put(f"/api/v1/relay/gateways/{created['id']}/status", json={"status": "disabled"})
+    assert resp.status_code == 200
+    assert calls == [True], "status 更新后未强制重载路由快照"
+
+
+def test_delete_gateway_force_refreshes_routing(client, monkeypatch):
+    created = _create_gateway(client)
+    calls = _spy_refresh(monkeypatch)
+    resp = client.delete(f"/api/v1/relay/gateways/{created['id']}")
+    assert resp.status_code == 200
+    assert calls == [True], "DELETE 后未强制重载路由快照"
 
 
 @pytest.fixture
@@ -101,6 +200,53 @@ def test_switch_off_build_ssh_cmd_direct():
 
     cmd = _build_ssh_cmd(NODE_IP, "ops", "echo hi", password="pw")
     assert "-J" not in cmd
+
+
+# ── 自跳守卫：网关机同时是该集群业务节点（跳板 == 目标）→ 跳过中继直连 ──
+#
+# 实测事故：aoh 网关是 jboss@192.168.0.13，而同一集群的业务节点也是 192.168.0.13。
+# 开启总开关后 ansible 注入 ProxyCommand 经"自己"跳板去连"自己"，ssh 报
+# jumphost loop → 连接被关闭（rc=4，Connection closed by UNKNOWN port 65535）。
+
+SELF_IP = "10.2.2.2"
+
+
+def test_self_jump_host_is_skipped(test_db, test_db_factory, relay_env):
+    import asyncio
+
+    from app.services.ansible_service import _relay_ssh_common_args
+
+    async def _seed():
+        test_db.add(RelayGateway(id=9, code="selfreg", name="自跳局",
+                                 http_base_url="http://10.2.2.2:8443",
+                                 ssh_jump="jboss@10.2.2.2:22", status="enabled"))
+        test_db.add(Cluster(id=9, name="self-cluster", region_code="selfreg", status=1))
+        test_db.add(Node(id=9, cluster_id=9, ip=SELF_IP, service_port=80,
+                         management_port=9180, edge_path="/usr/local/edge"))
+        await test_db.commit()
+        await relay_registry.ensure_fresh(session_factory=test_db_factory)
+
+    asyncio.run(_seed())
+
+    # 路由本身仍活跃、配置里的 jump 仍在
+    route, state = relay_registry.route_for_ip(SELF_IP)
+    assert state == "active"
+    assert route is not None and route.ssh_jump == "jboss@10.2.2.2:22"
+    # 但 SSH 腿必须跳过自跳（回退直连）
+    assert relay_registry.ssh_jump_for_ip(SELF_IP) is None
+    assert _relay_ssh_common_args([SELF_IP]) is None
+
+
+def test_non_self_jump_still_proxies(test_db, test_db_factory, relay_env):
+    """对照：跳板与目标不同主机时守卫不得误伤。"""
+    import asyncio
+
+    async def _seed():
+        await _seed_routing(test_db)
+        await relay_registry.ensure_fresh(session_factory=test_db_factory)
+
+    asyncio.run(_seed())
+    assert relay_registry.ssh_jump_for_ip(NODE_IP) == JUMP
 
 
 # ── 任务 2.5：EdgeClient 网关模式 ─────────────────────────────
@@ -231,7 +377,60 @@ def test_build_ssh_cmd_with_jump(test_db, test_db_factory, relay_env):
     cmd = _build_ssh_cmd(NODE_IP, "ops", "echo hi", password="pw")
     assert "-J" in cmd
     assert JUMP in cmd
-    assert "/tmp/relay_test_ed25519" in cmd
+    assert relay_env in cmd  # 专用密钥存在 → 注入 -i
+
+
+# ── 当前实况：未部署专用跳板密钥 → 不注入 -i，回退平台默认 SSH 身份 ──
+#
+# 设计要求（专用 tunnel 账号 + relay_ed25519 + PermitOpen）是建议；现实部署常用普通
+# 账号 + 平台默认密钥。缺密钥文件时必须省略 -i，否则 ssh 会打印
+# 「Identity file ... not accessible」告警并污染命令回显。
+
+def _seed_relay(test_db, test_db_factory):
+    import asyncio
+
+    async def _seed():
+        await _seed_routing(test_db)
+        await relay_registry.ensure_fresh(session_factory=test_db_factory)
+    asyncio.run(_seed())
+
+
+def test_relay_key_args_omitted_when_file_missing(tmp_path, monkeypatch):
+    from app.services.ansible_service import _relay_key_args
+
+    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", str(tmp_path / "nope"))
+    assert _relay_key_args() == []
+
+
+def test_relay_key_args_present_when_file_exists(tmp_path, monkeypatch):
+    from app.services.ansible_service import _relay_key_args
+
+    key = tmp_path / "relay_ed25519"
+    key.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", str(key))
+    assert _relay_key_args() == ["-i", str(key)]
+
+
+def test_build_ssh_cmd_without_key_uses_default_identity(test_db, test_db_factory, relay_env, tmp_path, monkeypatch):
+    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", str(tmp_path / "nope"))
+    _seed_relay(test_db, test_db_factory)
+    from app.services.ansible_service import _build_ssh_cmd
+
+    cmd = _build_ssh_cmd(NODE_IP, "ops", "echo hi", password="pw")
+    assert "-J" in cmd and JUMP in cmd  # 跳板仍在
+    assert "nope" not in cmd            # 但不引用不存在的密钥
+    assert "-i" not in cmd
+
+
+def test_proxy_command_without_key_omits_identity(test_db, test_db_factory, relay_env, tmp_path, monkeypatch):
+    monkeypatch.setenv("EDGE_RELAY_SSH_KEY", str(tmp_path / "nope"))
+    _seed_relay(test_db, test_db_factory)
+    from app.services.ansible_service import _relay_ssh_common_args
+
+    args = _relay_ssh_common_args([NODE_IP])
+    assert args is not None and "ProxyCommand" in args and "tunnel@10.10.1.1" in args
+    assert "nope" not in args
+    assert "-i " not in args  # 不注入 -i
 
 
 def test_build_ssh_cmd_ambiguous_no_jump(test_db, test_db_factory, relay_env):
@@ -346,7 +545,10 @@ def test_ssh_conn_failure_retried_once_when_relay_on(test_db, relay_env, monkeyp
 
 
 def test_ssh_conn_failure_no_retry_when_relay_off(monkeypatch):
-    from app.services import ansible_service
+    from app.services import ansible_service, relay_registry
+
+    # 用例前提=总开关关闭；显式钉住，避免依赖部署 features.yaml 的取值
+    monkeypatch.setattr(relay_registry, "relay_enabled", lambda: False)
 
     key_calls = {"n": 0}
     pass_calls = {"n": 0}

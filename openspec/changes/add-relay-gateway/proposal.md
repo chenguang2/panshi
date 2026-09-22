@@ -4,7 +4,7 @@
 
 ## What Changes
 
-- 新增**区域注册表**：`relay_gateways` 表（code/name/http_base_url/ssh_jump/status）+ 设置页管理（增删改、启停、连通性测试）；集群表新增 `region_code` 挂接；全局总开关 `EDGE_RELAY_ENABLED`（默认关，一键回退直连）
+- 新增**区域注册表**：`relay_gateways` 表（code/name/http_base_url/ssh_jump/status）+ 设置页管理（增删改、启停、连通性测试）；集群表新增 `region_code` 挂接；全局总开关 `features.yaml` 的 `features.relay_gateway`（显式 opt-in，默认关，热加载可一键回退直连）
 - 新增**跨中心通道寻址**：EdgeClient 网关模式（`http_base_url` + `X-Edge-Target` 头）；裸 SSH 经 `resolve_relay_jump(ip)` 加 `-J`（覆盖 edge_autostart 与 node_task 全部裸 SSH 路径）；inventory 渲染按节点所在区域写入行级 `ansible_ssh_common_args`（ProxyJump）；直连区域（路由为空）三条通道保持现状
 - 新增**网关配置下发**：按区域渲染 OpenResty map 白名单与 sshd PermitOpen 清单，经 ansible fleet 推送双机 reload 并校验，失败告警该局不阻塞他局
 - 新增**链路体检端点**（GET，只读）：三段式（网关 8443 → 跳板 22 → 抽样节点两腿）探活，支持 `?region=` 单局体检与全量巡检

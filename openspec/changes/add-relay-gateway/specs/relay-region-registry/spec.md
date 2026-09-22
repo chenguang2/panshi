@@ -34,11 +34,15 @@
 - **THEN** luju 区域节点立即按直连路径解析，luju 区域以外节点不受影响
 
 ### Requirement: 全局总开关
-系统 SHALL 提供环境变量 `EDGE_RELAY_ENABLED` 作为全局总开关（默认 `0`）；关闭时所有区域一律按直连路径执行，无论区域配置如何。
+系统 SHALL 提供 `features.yaml` 的 `features.relay_gateway` 作为全局总开关（显式 opt-in，默认 `false`，不沿用 features.yaml 的"未列出即启用"约定）；关闭时所有区域一律按直连路径执行，无论区域配置如何。该开关经 `app.core.features` 的 mtime 热加载读取，改完即时生效、无需重启。
 
 #### Scenario: 一键回退
-- **WHEN** `EDGE_RELAY_ENABLED=0` 时后端重启
+- **WHEN** `features.yaml` 中 `relay_gateway: false`
 - **THEN** 所有节点通道寻址按现状直连路径执行，行为与本变更合入前一致
+
+#### Scenario: 开关热生效
+- **WHEN** 管理员将 `features.yaml` 的 `relay_gateway` 由 `false` 改为 `true`
+- **THEN** 无需重启后端，后续寻址即按区域网关路径（HTTP `X-Edge-Target` / SSH `-J`）执行
 
 ### Requirement: 区域连通性测试
 设置页 SHALL 提供单区域连通性测试动作，按区域路由依次探测：网关 HTTP 腿可达、SSH 跳板可达。

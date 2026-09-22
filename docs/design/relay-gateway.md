@@ -178,7 +178,7 @@ def _build_ssh_cmd(ip, ssh_user, cmd, password=None, port=None):
 | 组件 | 选型 | 要点 |
 | --- | --- | --- |
 | HTTP 反代 | OpenResty（或 nginx） | map 白名单 + reload；`proxy_buffering off` 保 SSE；TLS 必配 |
-| SSH 跳板 | 系统自带 sshd | 专用账号 `tunnel`：密钥登录、无有效 shell、`PermitOpen` 白名单 |
+| SSH 跳板 | 系统自带 sshd | **建议**：专用账号 `tunnel`（密钥登录、无有效 shell、`PermitOpen` 白名单）。现实部署可用普通账号 + 平台默认 SSH 身份，已受支持 |
 | 常驻 | systemd | 服务化 + 开机自启 |
 | HA | keepalived VIP 双机（推荐档 1） | 防火墙规则指向 VIP，秒级漂移，平台无感；详见"网关高可用"章 |
 | 审计 | nginx access log | 记录源 IP / `X-Edge-Target` / 耗时；sshd 侧可选 tlog 会话录制 |
@@ -371,7 +371,7 @@ systemctl is-active --quiet sshd || exit 1
 | `status` | `enabled` / `disabled` | 单局摘除排障，不动其他局 |
 
 - **直连即特例**：任何 `http_base_url` / `ssh_jump` 均为空的区域（如武清本地）三条通道全部走原直连路径——多局设计是单局设计的严格超集，存量部署零迁移
-- **全局总开关**：保留环境变量 `EDGE_RELAY_ENABLED`（默认 `0`）作一键回退；区域级启停走设置页
+- **全局总开关**：`features.yaml` 的 `features.relay_gateway`（显式 opt-in，默认 `false`，mtime 热加载免重启）作一键回退；区域级启停走设置页
 - **新增路局的标准动作** = 设置页加一行 + 该局装同构网关（档 1 为一对）+ 提交一条防火墙申请，平台代码零改动
 
 ### 三通道按区域路由汇总
@@ -410,7 +410,7 @@ systemctl is-active --quiet sshd || exit 1
 
 | 层级 | 载体 | 作用 |
 | --- | --- | --- |
-| 全局总开关 | 环境变量 `EDGE_RELAY_ENABLED`（默认 `0`） | 一键回退直连，重启生效 |
+| 全局总开关 | `features.yaml` 的 `relay_gateway`（显式 opt-in，默认 `false`） | 一键回退直连，改文件热生效免重启 |
 | 区域级启停 | `relay_gateways.status`（设置页） | 单局摘除排障，不影响其他局 |
 | 区域级路由 | `relay_gateways.http_base_url` / `ssh_jump` | 空 = 该区域直连（武清本地即此形态） |
 
@@ -429,9 +429,9 @@ systemctl is-active --quiet sshd || exit 1
 ## 安全设计
 
 1. **SSRF 是本方案第一风险**。HTTP 反代按 header 选 upstream 等于"武清可指定任意路局内网地址"。网关必须按平台下发的白名单拒绝清单外目标（nginx 的 403 分支），否则一个泄露的 `EDGE_ADMIN_KEY` 就能横扫路局内网。多局下白名单按局隔离（每台网关只认本局节点），单局失守不波及他局。
-2. **跳板账号最小化**：`tunnel` 仅密钥认证、无有效 shell、`PermitOpen` 逐节点放行、禁 agent/X11/tunnel 转发。
+2. **跳板账号最小化（建议，非强制）**：`tunnel` 仅密钥认证、无有效 shell、`PermitOpen` 逐节点放行、禁 agent/X11/tunnel 转发。**当前部署实况**为普通账号（如 `jboss`）+ 平台默认 SSH 身份，平台已支持该形态。
 3. **传输加密**：HTTP 腿走 TLS（内部 CA 证书，跨广域网段必须）；SSH 腿天然加密；SM4 载荷照旧端到端。
-4. **密钥管理**：跳板私钥（`relay_ed25519`）仅存在于武清后端主机；网关侧只放公钥。
+4. **密钥管理（建议）**：跳板私钥（`relay_ed25519`）仅存在于武清后端主机；网关侧只放公钥。密钥文件缺失时平台**省略 `-i`** 并回退默认 SSH 身份/config/agent（不报错）。
 5. **审计**：网关 access log 记录源 IP / 目标 / 耗时；平台侧沿用 `sys_audit_log`；可选 tlog 录制跳板会话。
 6. **网关主机加固**：最小安装、fail2ban、进 ansible 受管域，纳入与节点一致的安全基线。
 7. **已知局限声明**：白名单是目标级而非操作级，网关无法区分"发布路由"与"删除路由"（方案一/二的集中审计可覆盖，方案三接受该残余）。

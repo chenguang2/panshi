@@ -1,27 +1,26 @@
 """网关初始化测试（openspec: add-relay-gateway / relay-gateway-init）。
 
-覆盖：relay 服务器配置渲染、init 前置（网关清单）、init 推送参数、init API 端点。
-init 职责 = 首次装机写入 8443 server 块 + 空/现有白名单 + 起服务；
-push 职责 = 后续白名单/sshd 更新（见 test_relay_push.py）。
+覆盖：relay 服务器配置渲染、监听端口提取、网关清单前置校验、init SSE 事件流
+（实时 stdout 行 + 终态 fields）。init 职责 = 首次装机写入 8443 server 块 + 白名单
++ 起服务；push 职责 = 后续白名单更新（见 test_relay_push.py）。
 """
+import asyncio
+import json
+
 import pytest
 
-from app.models.cluster import Cluster, Node
-from app.models.relay import RelayGateway
 from app.services import relay_init
 
 
-async def _seed_region(test_db):
-    test_db.add(RelayGateway(id=1, code="luju", name="路局A",
-                             http_base_url="http://10.10.1.1:8443", ssh_jump="tunnel@10.10.1.1:22"))
-    c1 = await test_db.get(Cluster, 1)
-    if c1 is None:
-        c1 = Cluster(id=1, name="c1", status=1)
-        test_db.add(c1)
-    c1.region_code = "luju"
-    test_db.add(Node(id=1, cluster_id=1, ip="10.1.1.1", service_port=80, management_port=9180,
-                     ssh_port=22, edge_path="/e"))
-    await test_db.commit()
+def _collect(agen) -> list[dict]:
+    async def _run():
+        return [json.loads(event.removeprefix("data: ").strip()) async for event in agen]
+
+    return asyncio.run(_run())
+
+
+def _lines(events: list[dict]) -> list[str]:
+    return [e["line"] for e in events if "line" in e]
 
 
 def test_render_relay_server_conf_structure():
@@ -41,48 +40,80 @@ def test_render_relay_server_conf_port_parametrized():
     assert "listen 9443" in conf
 
 
-def test_init_requires_gateway_inventory(test_db, monkeypatch):
-    import asyncio
+def test_listen_port_of():
+    """端口提取：显式端口优先；缺省回退 8443（沿用原 init 行为）。"""
+    assert relay_init.listen_port_of("http://10.10.1.1:8443") == 8443
+    assert relay_init.listen_port_of("http://10.10.1.1:9443") == 9443
+    assert relay_init.listen_port_of("https://10.10.1.1") == 8443
+    assert relay_init.listen_port_of(None) == 8443
 
-    asyncio.run(_seed_region(test_db))
+
+def test_ensure_gateway_inventory_missing(monkeypatch):
     monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", "/nonexistent/gateways")
     with pytest.raises(relay_init.RelayInitError) as ei:
-        asyncio.run(relay_init.init_region("luju", openresty_prefix="/opt/nginx", db=test_db))
+        relay_init.ensure_gateway_inventory()
     assert "网关清单" in str(ei.value)
 
 
-def test_init_success_reports_hosts(test_db, monkeypatch, tmp_path):
-    import asyncio
+def test_ensure_gateway_inventory_ok(monkeypatch, tmp_path):
+    inv = tmp_path / "gateways"
+    inv.write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
+    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+    relay_init.ensure_gateway_inventory()  # 不抛
 
-    asyncio.run(_seed_region(test_db))
-    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(tmp_path / "gateways"))
-    (tmp_path / "gateways").write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
 
-    captured = {}
+def test_init_stream_emits_lines_and_final(monkeypatch, tmp_path):
+    inv = tmp_path / "gateways"
+    inv.write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
+    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+
+    captured: dict = {}
 
     def fake_run(**kw):
         captured.update(kw)
+        handler = kw.get("event_handler")
+        assert handler is not None, "流式执行必须传 event_handler"
+        handler({"stdout": "PLAY [初始化中继网关]"})
+        handler({"event_data": {"res": {"stdout": "ok: [10.10.1.1]"}}})
         return {"rc": 0, "status": "successful"}
 
     monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
-    result = asyncio.run(relay_init.init_region(
-        "luju", openresty_prefix="/work/openresty/nginx", db=test_db))
-    assert result["ok"] is True
-    assert "gateways_luju" in captured["extravars"]["hosts_pattern"]
+    events = _collect(
+        relay_init.stream_init_region(
+            region_code="luju",
+            listen_port=8443,
+            openresty_prefix="/work/openresty/nginx",
+            edge_targets_conf="map $http_x_edge_target $edge_upstream {}",
+        )
+    )
+    joined = _lines(events)
+    assert "PLAY [初始化中继网关]" in joined
+    assert "ok: [10.10.1.1]" in joined
+
+    final = events[-1]
+    assert final["rc"] == 0
+    assert final["status"] == "successful"
+    assert final["percent"] == 100
+    assert final["hosts_pattern"] == "gateways_luju"
+    assert final["listen_port"] == 8443
+
+    # extravars：服务骨架 + 当前白名单 + 前缀（推送参数断言）
     assert captured["extravars"]["openresty_prefix"] == "/work/openresty/nginx"
     assert "listen 8443" in captured["extravars"]["relay_server_conf"]
-    # 初始化应带上当前节点白名单（或空 map），与 push 同源渲染
     assert "map $http_x_edge_target $edge_upstream" in captured["extravars"]["edge_targets_conf"]
+    assert captured["inventory"] == str(inv)
 
 
-def test_init_failure_marks_not_ok(test_db, monkeypatch, tmp_path):
-    import asyncio
+def test_init_stream_reports_failure(monkeypatch, tmp_path):
+    inv = tmp_path / "gateways"
+    inv.write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
+    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+    monkeypatch.setattr(relay_init, "_run_ansible_init", lambda **kw: {"rc": 2, "status": "failed"})
 
-    asyncio.run(_seed_region(test_db))
-    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(tmp_path / "gateways"))
-    (tmp_path / "gateways").write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
-    monkeypatch.setattr(relay_init, "_run_ansible_init",
-                        lambda **kw: {"rc": 2, "status": "failed"})
-    result = asyncio.run(relay_init.init_region(
-        "luju", openresty_prefix="/opt/nginx", db=test_db))
-    assert result["ok"] is False
+    events = _collect(
+        relay_init.stream_init_region(
+            region_code="luju", listen_port=8443, openresty_prefix="/opt/nginx",
+            edge_targets_conf="",
+        )
+    )
+    assert events[-1]["rc"] == 2

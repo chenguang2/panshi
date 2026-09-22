@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
+from app.services.ansible_service import _relay_key_args
 
 _SEGMENT_TIMEOUT = 10.0
 _REGION_BUDGET = 60.0
@@ -73,7 +74,7 @@ async def _probe_node_ssh_via_jump(jump: str, ip: str, ssh_port: int, timeout: f
     proc = await asyncio.create_subprocess_exec(
         "ssh",
         "-W", f"{ip}:{ssh_port}",
-        "-i", _relay_key_path(),
+        *_relay_key_args(),
         "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
@@ -90,12 +91,6 @@ async def _probe_node_ssh_via_jump(jump: str, ip: str, ssh_port: int, timeout: f
         raise TimeoutError("探测超时")
     if rc != 0:
         raise ConnectionError(f"跳板转发建立失败 (rc={rc})")
-
-
-def _relay_key_path() -> str:
-    import os
-
-    return os.path.expanduser(os.getenv("EDGE_RELAY_SSH_KEY", "~/.ssh/relay_ed25519"))
 
 
 async def _run_segment(name: str, coro_factory) -> dict:
@@ -124,13 +119,25 @@ async def _run_segment(name: str, coro_factory) -> dict:
         }
 
 
-async def check_region(region_code: str, db: AsyncSession) -> dict:
-    region = (
+async def _load_region(db: AsyncSession, region_code: str) -> RelayGateway | None:
+    return (
         await db.execute(select(RelayGateway).where(RelayGateway.code == region_code))
     ).scalar_one_or_none()
-    if region is None:
-        return {"region": region_code, "ok": False, "segments": [], "error": "区域不存在"}
 
+
+async def _load_nodes(db: AsyncSession, region_code: str) -> list[Node]:
+    result = await db.execute(
+        select(Node)
+        .join(Cluster, Node.cluster_id == Cluster.id)
+        .where(Cluster.region_code == region_code, Node.status == 1)
+        .order_by(Node.ip)
+    )
+    return list(result.scalars().all())
+
+
+async def _probe_region(region: RelayGateway, nodes: list[Node]) -> dict:
+    """纯网络探测（不触库）：段 1 网关 HTTP 腿 → 段 2 SSH 跳板 → 段 3 抽样节点两腿。"""
+    region_code = region.code
     start = time.monotonic()
     segments: list[dict] = []
 
@@ -169,19 +176,10 @@ async def check_region(region_code: str, db: AsyncSession) -> dict:
     # 经中继路径探测：管理腿走网关 HTTP（X-Edge-Target），SSH 腿走跳板 stdio 转发；
     # 两者均无需节点凭据（任何 HTTP 响应 / 转发建立成功即视为路径存活）。
     if seg2["ok"] and seg1["ok"]:
-        nodes = (
-            (
-                await db.execute(
-                    select(Node)
-                    .join(Cluster, Node.cluster_id == Cluster.id)
-                    .where(Cluster.region_code == region_code, Node.status == 1)
-                    .order_by(Node.ip)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        samples = _sample_nodes(list(nodes))
+        # 优先抽"真正走跳板"的节点：自跳节点不经过跳板，若抽到它会掩盖跳板本身的问题
+        # （跳板转发被拒等）。全部为自跳时才回退用全量。
+        candidates = [n for n in nodes if not jump_host or n.ip != jump_host] or nodes
+        samples = _sample_nodes(candidates)
 
         async def _probe_node(n: Node) -> dict:
             try:
@@ -190,6 +188,15 @@ async def check_region(region_code: str, db: AsyncSession) -> dict:
                 )
             except Exception as e:
                 return {"node": n.ip, "ok": False, "error": f"管理腿(经网关): {e}"}
+            # 自跳节点（网关机自身也是该集群业务节点）：实际路径走直连，跳板转发
+            # 对它无意义（ssh -W 到跳板本身必被拒）。不探测跳板，也不计为失败。
+            if jump_host and n.ip == jump_host:
+                return {
+                    "node": n.ip,
+                    "ok": True,
+                    "ssh_skipped": True,
+                    "note": "网关机自身节点，走直连（不适用跳板）",
+                }
             try:
                 await _probe_node_ssh_via_jump(jump, n.ip, n.ssh_port or 22, _SEGMENT_TIMEOUT)
             except Exception as e:
@@ -230,16 +237,36 @@ async def check_region(region_code: str, db: AsyncSession) -> dict:
     }
 
 
+async def check_region(region_code: str, db: AsyncSession) -> dict:
+    """单区域体检：先读库（region + nodes）并结束事务，再做网络探测。
+
+    读事务若横跨网络探测，会在 SQLite 上以 SHARED 锁阻塞并发写请求的提交
+    （AGENTS #29 同类隐患），故探测前显式 commit 结束事务。
+    """
+    region = await _load_region(db, region_code)
+    if region is None:
+        return {"region": region_code, "ok": False, "segments": [], "error": "区域不存在"}
+    nodes = await _load_nodes(db, region_code)
+    await db.commit()  # 结束读事务：探测期间不持有数据库锁
+    return await _probe_region(region, nodes)
+
+
 async def check_all(db: AsyncSession) -> dict:
-    """全量巡检：全部启用区域各自独立体检，区域间互不阻塞。"""
+    """全量巡检：串行读库 → 结束事务 → 并发探测（探测不共享会话）。
+
+    原实现让并发协程共享同一 AsyncSession（非并发安全），且读事务横跨全部探测；
+    改为读阶段串行读完、commit 后再并发执行纯探测。
+    """
     regions = (
         await db.execute(select(RelayGateway).where(RelayGateway.status == "enabled").order_by(RelayGateway.id))
     ).scalars().all()
+    loaded: list[tuple[RelayGateway, list[Node]]] = [(r, await _load_nodes(db, r.code)) for r in regions]
+    await db.commit()  # 读事务结束后再并发探测
     results = await asyncio.gather(
-        *[check_region(r.code, db=db) for r in regions], return_exceptions=True
+        *[_probe_region(r, nodes) for r, nodes in loaded], return_exceptions=True
     )
     out = []
-    for r, res in zip(regions, results):
+    for (r, _nodes), res in zip(loaded, results):
         if isinstance(res, Exception):
             out.append({"region": r.code, "ok": False, "error": str(res), "segments": []})
         else:

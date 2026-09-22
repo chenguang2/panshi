@@ -17,6 +17,8 @@ features:
   ansible_inventory: true
   clickhouse_config: true
   audit_log: true
+  # 中继总开关（敏感：改变节点网络路径，默认关；显式开启后才经区域网关路由）
+  relay_gateway: true
 enabled_plugins:
   - proxy_rewrite
   - response_rewrite

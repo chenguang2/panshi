@@ -1,36 +1,49 @@
 ---
 # 中继网关白名单配置分发（openspec: add-relay-gateway / relay-config-push）
 # 由平台按区域双写推送；inventory/gateways 按局分组（gateways_<region_code>）。
+# 网关机为非特权用户：become/gather_facts 均关闭（同 relay_init.yml——setup 会因
+# 探测 systemctl EACCES 失败），nginx 路径由 openresty_prefix 推导。
 - name: 分发并应用中继网关白名单配置
   hosts: "{{ hosts_pattern }}"
-  become: true
+  become: false
+  gather_facts: false
+  vars:
+    openresty_prefix: "{{ openresty_prefix }}"
+    conf_dir: "{{ openresty_prefix }}/conf"
+    sbin: "{{ openresty_prefix }}/sbin/nginx"
+    edge_targets_path: "{{ conf_dir }}/edge_targets.conf"
+    # sshd PermitOpen 腿需 root（写 /etc/ssh + reload sshd），部署特权方案（免密
+    # sudoers 白名单 / 特权账号）未定前暂缓；置 true 即恢复，其余任务不受影响。
+    relay_sshd_enabled: false
   tasks:
-    - name: 写入 nginx 目标白名单
+    - name: 写入白名单 map（edge_targets.conf）
       ansible.builtin.copy:
         content: "{{ edge_targets_conf }}"
-        dest: "{{ relay_nginx_conf_path | default('/etc/openresty/conf.d/edge_targets.conf') }}"
+        dest: "{{ edge_targets_path }}"
         backup: true
-      register: nginx_conf
+      register: edge_targets
 
     - name: 校验 nginx 配置
-      ansible.builtin.command: nginx -t
-      when: nginx_conf.changed
+      ansible.builtin.command: "{{ sbin }} -p {{ openresty_prefix }} -c conf/nginx.conf -t"
+      when: edge_targets.changed
 
     - name: 重载 OpenResty
-      ansible.builtin.command: systemctl reload openresty
-      when: nginx_conf.changed
+      ansible.builtin.command: "{{ sbin }} -p {{ openresty_prefix }} -c conf/nginx.conf -s reload"
+      when: edge_targets.changed
 
+    # ── 暂缓：sshd PermitOpen 腿（relay_sshd_enabled=false）──────────────────
     - name: 写入 sshd PermitOpen 白名单
       ansible.builtin.copy:
         content: "{{ relay_sshd_conf }}"
         dest: "{{ relay_sshd_conf_path | default('/etc/ssh/sshd_config.d/relay-tunnel.conf') }}"
         backup: true
       register: sshd_conf
+      when: relay_sshd_enabled | bool
 
     - name: 校验 sshd 配置
       ansible.builtin.command: sshd -t
-      when: sshd_conf.changed
+      when: relay_sshd_enabled | bool and sshd_conf.changed
 
     - name: 重载 sshd
       ansible.builtin.command: systemctl reload sshd
-      when: sshd_conf.changed
+      when: relay_sshd_enabled | bool and sshd_conf.changed

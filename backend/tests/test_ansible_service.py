@@ -198,8 +198,11 @@ class TestSshHelpers:
     @pytest.mark.asyncio
     async def test_run_ssh_fallback_non_auth_error_does_not_retry(self):
         """When failure is not auth-related (rc=1, no Permission denied), skip retry."""
+        from app.services import relay_registry
         from app.services.ansible_service import _run_ssh_with_fallback
         with (
+            # 用例前提=中继关闭；显式钉住，勿依赖部署 features.yaml 的取值
+            patch.object(relay_registry, "relay_enabled", return_value=False),
             patch("app.services.ansible_service._run_subprocess",
                   new_callable=AsyncMock) as mock_run,
         ):

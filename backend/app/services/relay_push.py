@@ -3,18 +3,21 @@
 - 渲染：以区域为单元产出 nginx map（该局节点管理端口白名单）与 sshd PermitOpen
   （该局节点 SSH 端口白名单）；白名单仅由节点表投影。
 - 下发：经独立 inventory/gateways 清单（按局分组，不混入 edge_cluster——AGENTS #21①）
-  双写推送该局全部网关机，playbook 内逐台校验（nginx -t / sshd -t）后 reload。
+  推送该局全部网关机，playbook 内 `nginx -t` 后 reload（幂等）。
+- **sshd PermitOpen 腿暂缓**：写 `/etc/ssh` 并 reload sshd 需 root，而网关机为非特权
+  用户（见 relay_push.yml 的 `relay_sshd_enabled=false`）。渲染函数保留，特权方案
+  确定后置 true 即恢复；当前只下发 nginx 白名单。
 """
 import asyncio
 import logging
 from pathlib import Path
+from typing import AsyncGenerator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cluster import Cluster, Node
-from app.models.relay import RelayGateway
-from app.services.ansible_service import PRIVATE_DATA_DIR
+from app.services.ansible_service import PRIVATE_DATA_DIR, _stream_ansible_events
 
 logger = logging.getLogger(__name__)
 
@@ -76,50 +79,60 @@ def _run_ansible_push(**kwargs) -> dict:
     """同步薄封装（便于测试 monkeypatch）：ansible-runner 单次执行。"""
     import ansible_runner
 
-    result = ansible_runner.run(
-        private_data_dir=kwargs["private_data_dir"],
-        playbook=kwargs["playbook"],
-        inventory=kwargs["inventory"],
-        extravars=kwargs["extravars"],
-    )
+    run_kwargs = {
+        "private_data_dir": kwargs["private_data_dir"],
+        "playbook": kwargs["playbook"],
+        "inventory": kwargs["inventory"],
+        "extravars": kwargs["extravars"],
+    }
+    if kwargs.get("event_handler"):
+        run_kwargs["event_handler"] = kwargs["event_handler"]
+    result = ansible_runner.run(**run_kwargs)
     return {"rc": getattr(result, "rc", -1), "status": getattr(result, "status", "failed")}
 
 
-async def push_region(region_code: str, db: AsyncSession) -> dict:
-    """渲染该局白名单并双写推送全部网关机；全部成功才算成功（G5，幂等可重跑）。"""
-    region = (
-        await db.execute(select(RelayGateway).where(RelayGateway.code == region_code))
-    ).scalar_one_or_none()
-    if region is None:
-        raise RelayPushError("区域不存在")
+def ensure_gateway_inventory() -> None:
+    """网关清单存在性校验（端点前置：错误需在 SSE 流开始前以 HTTP 错误返回）。"""
+    if not Path(_GATEWAYS_INVENTORY).exists():
+        raise RelayPushError(
+            f"网关清单不存在: {_GATEWAYS_INVENTORY}（D1 装机时创建 inventory/gateways）"
+        )
 
-    inv_path = Path(_GATEWAYS_INVENTORY)
-    if not inv_path.exists():
-        raise RelayPushError(f"网关清单不存在: {inv_path}（D1 装机时创建 inventory/gateways）")
 
-    edge_targets_conf = await render_nginx_map(region_code, db=db)
-    relay_sshd_conf = await render_permit_open(region_code, db=db)
+async def stream_push_region(
+    *,
+    region_code: str,
+    openresty_prefix: str,
+    edge_targets_conf: str,
+    relay_sshd_conf: str,
+) -> AsyncGenerator[str, None]:
+    """流式下发该局白名单到全部网关机（当前仅 nginx 腿）；全部成功才算成功（幂等可重跑）。
+
+    纯数据入参（不触库）：调用方（端点）已在其会话内完成白名单渲染与审计提交。
+    """
     extravars = {
         "region_code": region_code,
         "hosts_pattern": f"gateways_{region_code}",
+        "openresty_prefix": openresty_prefix,
         "edge_targets_conf": edge_targets_conf,
+        # sshd 腿暂缓：playbook 内 relay_sshd_enabled=false 时不消费该变量，保留以便恢复
         "relay_sshd_conf": relay_sshd_conf,
     }
-    logger.info("relay push: region=%s inventory=%s", region_code, _GATEWAYS_INVENTORY)
-    result = await asyncio.to_thread(
-        _run_ansible_push,
-        private_data_dir=str(PRIVATE_DATA_DIR),
-        inventory=_GATEWAYS_INVENTORY,
-        playbook=_PUSH_PLAYBOOK,
-        extravars=extravars,
-    )
-    ok = result.get("rc") == 0
-    if not ok:
-        logger.warning("relay push failed: region=%s result=%s", region_code, result)
-    return {
-        "ok": ok,
-        "region": region_code,
-        "rc": result.get("rc"),
-        "status": result.get("status"),
-        "hosts_pattern": extravars["hosts_pattern"],
-    }
+    logger.info("relay push(stream): region=%s inventory=%s", region_code, _GATEWAYS_INVENTORY)
+
+    async def _call(event_handler) -> dict:
+        return await asyncio.to_thread(
+            _run_ansible_push,
+            private_data_dir=str(PRIVATE_DATA_DIR),
+            inventory=_GATEWAYS_INVENTORY,
+            playbook=_PUSH_PLAYBOOK,
+            extravars=extravars,
+            event_handler=event_handler,
+        )
+
+    async for event in _stream_ansible_events(
+        _call,
+        initial_line="正在下发白名单到网关机...",
+        final_extra={"hosts_pattern": extravars["hosts_pattern"]},
+    ):
+        yield event

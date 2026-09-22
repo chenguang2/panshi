@@ -12,11 +12,11 @@
 - **THEN** EdgeClient 按节点真实 IP 直连，请求中不携带 `X-Edge-Target`
 
 ### Requirement: 裸 SSH 经跳板寻址
-当全局总开关开启且节点所属区域配置了 `ssh_jump` 时，`_build_ssh_cmd` 生成的 SSH 命令 SHALL 携带 `-J` 跳板选项（含该局跳板与专用密钥）；该行为 SHALL 覆盖全部裸 SSH 调用方（edge_autostart 与 node_task_service 的脚本执行、文件分发）。
+当全局总开关开启且节点所属区域配置了 `ssh_jump` 时，`_build_ssh_cmd` 生成的 SSH 命令 SHALL 携带 `-J` 跳板选项（含该局跳板）；该行为 SHALL 覆盖全部裸 SSH 调用方（edge_autostart 与 node_task_service 的脚本执行、文件分发）。跳板专用密钥（专用 `tunnel` 账号 + `relay_ed25519` + `PermitOpen`）属**部署建议**：仅当密钥文件（`EDGE_RELAY_SSH_KEY`，缺省 `~/.ssh/relay_ed25519`）存在时才注入 `-i`，缺失时 SHALL 省略 `-i` 并回退平台默认 SSH 身份/config/agent（不报错、不污染命令回显）。
 
 #### Scenario: 跳板模式命令
 - **WHEN** 对 luju 区域节点执行自启动状态查询且区域跳板已配置
-- **THEN** 生成的 ssh 命令含 `-J tunnel@10.10.1.1:22` 与专用密钥参数，节点目标仍为真实 IP
+- **THEN** 生成的 ssh 命令含 `-J tunnel@10.10.1.1:22`，节点目标仍为真实 IP；若跳板专用密钥文件存在则同时含其 `-i` 参数，否则省略 `-i`
 
 #### Scenario: 跳板信息回显
 - **WHEN** 命令构造成功并生成前端展示用完整命令

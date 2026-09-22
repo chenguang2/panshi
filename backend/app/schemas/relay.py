@@ -82,3 +82,21 @@ class RelayGatewayOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RelayConfigFile(BaseModel):
+    """一份待写入网关机的配置文件内容（只读预览，供界面复制/手工配置兜底）。"""
+
+    path: str
+    content: str
+    purpose: str
+
+
+class RelayConfigPreview(BaseModel):
+    """区域配置预览：init 的 nginx 配置 + push 的白名单内容（不触网、不改远端）。"""
+
+    region_code: str
+    openresty_prefix: str
+    listen_port: int
+    files: list[RelayConfigFile]
+    notes: list[str]

@@ -36,6 +36,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "ansible_inventory",
     "clickhouse_config",
     "audit_log",
+    "relay_gateway",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.

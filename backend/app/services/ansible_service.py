@@ -36,8 +36,19 @@ from app.services import relay_registry  # noqa: E402  （仅 stdlib/sqlalchemy 
 
 
 def _relay_key_path() -> str:
-    """跳板专用密钥路径（与节点凭据无关；网关只认这把钥匙）。"""
+    """跳板专用密钥路径（部署建议：网关只放公钥、平台持有私钥）。"""
     return os.path.expanduser(os.getenv("EDGE_RELAY_SSH_KEY", "~/.ssh/relay_ed25519"))
+
+
+def _relay_key_args() -> list[str]:
+    """跳板 `-i` 参数：**仅当密钥文件存在时**返回 ``["-i", path]``，否则返回 ``[]``。
+
+    设计要求（专用 `tunnel` 账号 + `relay_ed25519` + `PermitOpen` 白名单）是**建议**；
+    现实部署常用普通账号 + 平台默认密钥/agent。缺密钥文件时若仍注入 `-i`，ssh 会打印
+    「Identity file ... not accessible」告警并污染命令回显（且实际仍回退默认身份）。
+    """
+    path = _relay_key_path()
+    return ["-i", path] if os.path.isfile(path) else []
 
 
 def _relay_ssh_common_args(ips: list[str]) -> str | None:
@@ -60,7 +71,9 @@ def _relay_ssh_common_args(ips: list[str]) -> str | None:
         user_host, gw_port = jump.rsplit(":", 1)
     else:
         user_host, gw_port = jump, "22"
-    return f'-o ProxyCommand="ssh -W %h:%p -p {gw_port} -i {_relay_key_path()} {user_host}"'
+    key = " ".join(_relay_key_args())
+    key_part = f"{key} " if key else ""
+    return f'-o ProxyCommand="ssh -W %h:%p -p {gw_port} {key_part}{user_host}"'
 
 
 def _inventory_inject_relay(ip: str) -> str | None:
@@ -165,7 +178,7 @@ def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None
     if relay_registry.relay_enabled():
         jump = relay_registry.ssh_jump_for_ip(ip)
         if jump:
-            base_opts += ["-J", jump, "-i", _relay_key_path()]
+            base_opts += ["-J", jump, *_relay_key_args()]
     if password:
         return [
             "sshpass", "-p", password, "ssh",
@@ -715,6 +728,66 @@ _SENTINEL = object()
 MAX_LOG_LINES = 500
 
 
+async def _stream_ansible_events(
+    run_with_handler,
+    initial_line: str = "正在连接远程主机并启动 Ansible...",
+    final_extra: dict[str, Any] | None = None,
+) -> AsyncGenerator[str, None]:
+    """把一次 ansible 执行转成 SSE 事件流（实时 stdout 行 + 进度 + 终态）。
+
+    Args:
+        run_with_handler: ``async (event_handler) -> dict``；内部用给定 event_handler
+            执行 ansible 并返回 ``{"rc", "status"}``。
+        initial_line: 首个事件行（确认连接建立）。
+        final_extra: 合并进终态事件的附加字段（如 hosts_pattern / listen_port）。
+
+    Yields:
+        ``data: {"line": "...", "percent": N}\n\n``
+        终态 ``data: {"rc": N, "status": "...", "percent": 100, **final_extra}\n\n``
+    """
+    q: queue.Queue = queue.Queue()
+    line_count = 0
+
+    def event_handler(event_data: dict) -> None:
+        # Ansible display line (e.g. "TASK [edge : Build edge server]")
+        stdout = event_data.get("stdout", "")
+        for line in stdout.splitlines():
+            if line.strip():
+                q.put(line)
+        # Task result stdout/stderr (actual command output from raw/shell modules)
+        res = event_data.get("event_data", {}).get("res", {})
+        if res:
+            for line in (res.get("stdout") or "").splitlines():
+                if line.strip():
+                    q.put(line)
+            for line in (res.get("stderr") or "").splitlines():
+                if line.strip():
+                    q.put(f"[stderr] {line}")
+
+    async def _run() -> dict[str, Any]:
+        try:
+            return await run_with_handler(event_handler)
+        finally:
+            q.put(_SENTINEL)
+
+    yield f"data: {json.dumps({'line': initial_line, 'percent': 0})}\n\n"
+
+    task = asyncio.create_task(_run())
+    while True:
+        line = await asyncio.to_thread(q.get)
+        if line is _SENTINEL:
+            break
+        line_count += 1
+        pct = min(int(line_count / 200 * 100), 99) if line_count < 200 else min(50 + int((line_count - 200) / 20), 99)
+        yield f"data: {json.dumps({'line': line, 'percent': pct})}\n\n"
+
+    result = await task
+    final: dict[str, Any] = {"rc": result.get("rc", -1), "status": result.get("status", "failed"), "percent": 100}
+    if final_extra:
+        final.update(final_extra)
+    yield f"data: {json.dumps(final)}\n\n"
+
+
 async def _run_ansible_stream(
     runner_method,
     ip: str,
@@ -737,56 +810,16 @@ async def _run_ansible_stream(
         SSE event strings: ``data: {"line": "...", "percent": N}\\n\\n``
         Final event: ``data: {"rc": N, "status": "...", "percent": 100}\\n\\n``
     """
-    q: queue.Queue = queue.Queue()
-    line_count = 0
+    async def _call(event_handler) -> dict[str, Any]:
+        return await runner_method.run_playbook(
+            ip=ip, tag=tag, extravars=extravars,
+            event_handler=event_handler,
+            job_timeout=job_timeout,
+            ssh_port=ssh_port,
+        )
 
-    def event_handler(event_data: dict) -> None:
-        # Ansible's display line (e.g. "TASK [edge : Build edge server]")
-        stdout = event_data.get("stdout", "")
-        for line in stdout.splitlines():
-            if line.strip():
-                q.put(line)
-        # Task result stdout (actual command output from raw/shell modules)
-        res = event_data.get("event_data", {}).get("res", {})
-        if res:
-            task_stdout = res.get("stdout", "") or ""
-            for line in task_stdout.splitlines():
-                if line.strip():
-                    q.put(line)
-            task_stderr = res.get("stderr", "") or ""
-            for line in task_stderr.splitlines():
-                if line.strip():
-                    q.put(f"[stderr] {line}")
-
-    async def _run_with_handler() -> dict[str, Any]:
-        try:
-            return await runner_method.run_playbook(
-                ip=ip, tag=tag, extravars=extravars,
-                event_handler=event_handler,
-                job_timeout=job_timeout,
-                ssh_port=ssh_port,
-            )
-        finally:
-            q.put(_SENTINEL)
-
-    # Yield initial event to confirm connection is established
-    yield f"data: {json.dumps({'line': '正在连接远程主机并启动 Ansible...', 'percent': 0})}\n\n"
-
-    # Start run_playbook in background, read from queue concurrently
-    task = asyncio.create_task(_run_with_handler())
-
-    while True:
-        line = await asyncio.to_thread(q.get)
-        if line is _SENTINEL:
-            break
-        line_count += 1
-        pct = min(int(line_count / 200 * 100), 99) if line_count < 200 else min(50 + int((line_count - 200) / 20), 99)
-        yield f"data: {json.dumps({'line': line, 'percent': pct})}\n\n"
-
-    result = await task
-    rc = result.get("rc", -1)
-    status = result.get("status", "failed")
-    yield f"data: {json.dumps({'rc': rc, 'status': status, 'percent': 100})}\n\n"
+    async for event in _stream_ansible_events(_call):
+        yield event
 
 
 class AnsibleExecutionError(Exception):
