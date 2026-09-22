@@ -18,6 +18,7 @@ from app.api.v1 import (
     database,
     ansible_inventory,
     clickhouse_config,
+    relay,
 )
 
 # ── Always-on routers (registered unconditionally) ──────────────────
@@ -25,6 +26,7 @@ api_router = APIRouter()
 
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+api_router.include_router(relay.router)
 api_router.include_router(users.router)
 api_router.include_router(clusters.router)
 api_router.include_router(cluster_upstreams.router)

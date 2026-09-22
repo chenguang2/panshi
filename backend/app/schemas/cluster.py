@@ -25,6 +25,7 @@ class ClusterBase(BaseModel):
 
 class ClusterCreate(ClusterBase):
     admin_key: Optional[str] = Field(None, max_length=255)
+    region_code: Optional[str] = Field(None, max_length=32)
 
 
 class ClusterUpdate(BaseModel):
@@ -34,6 +35,7 @@ class ClusterUpdate(BaseModel):
     status: Optional[int] = None
     group_name: Optional[str] = Field(None, max_length=100)
     admin_key: Optional[str] = Field(None, max_length=255)
+    region_code: Optional[str] = Field(None, max_length=32)  # 空串/None = 清除挂接（直连区域）
 
     @field_validator('name')
     @classmethod
@@ -62,6 +64,7 @@ class ClusterResponse(BaseModel):
     # 更新走 exclude_unset 语义（留空 = 保持原值）。备份导出同样排除（cluster_backup._serialize_without）。
     status: int = 1
     group_name: Optional[str] = None
+    region_code: Optional[str] = None
     created_at: Optional[str] = None
     node_count: int = 0
     healthy_node_count: int = 0

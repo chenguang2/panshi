@@ -132,6 +132,12 @@ const coreRoutes: RouteRecordRaw[] = [
       { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue') },
       {
+        path: 'relay-gateways',
+        name: 'RelayGateways',
+        component: () => import('@/views/RelayGateways.vue'),
+        meta: { permission: 'relay_gateway' },
+      },
+      {
         path: 'central-management',
         name: 'CentralManagement',
         component: () => import('@/views/CentralList.vue'),

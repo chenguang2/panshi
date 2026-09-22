@@ -122,6 +122,15 @@ async def create_cluster(
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="集群名称已存在")
 
+    if cluster.region_code:
+        from app.models.relay import RelayGateway
+
+        region = await db.execute(
+            select(RelayGateway).where(RelayGateway.code == cluster.region_code)
+        )
+        if region.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail="区域不存在")
+
     db_cluster = Cluster(**cluster.model_dump(), creator_id=current_user.id)
     db.add(db_cluster)
     await db.flush()  # 先拿 id；审计增强须在首次 flush 前写入骨架
@@ -167,6 +176,16 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, request
             raise HTTPException(status_code=400, detail="集群名称已存在")
 
     changes = {k: v for k, v in cluster_update.model_dump(exclude_unset=True).items()}
+    if changes.get("region_code") == "":
+        changes["region_code"] = None  # 空串视为清除挂接
+    if changes.get("region_code"):
+        from app.models.relay import RelayGateway
+
+        region = await db.execute(
+            select(RelayGateway).where(RelayGateway.code == changes["region_code"])
+        )
+        if region.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail="区域不存在")
     old_values = {k: getattr(cluster, k, None) for k in changes}
     for key, value in changes.items():
         setattr(cluster, key, value)

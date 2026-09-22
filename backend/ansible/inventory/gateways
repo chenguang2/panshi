@@ -1,0 +1,13 @@
+# 中继网关机清单（openspec: add-relay-gateway / relay-config-push）
+# 按局分组：gateways_<region_code>；与 edge_cluster 分开（AGENTS #21①）
+gateways_aoh:
+  hosts:
+    192.168.0.13:
+      ansible_user: jboss
+      ansible_ssh_pass: linux123!@#
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      # 勿写 /usr/bin/python3（该机为 3.7，ansible 模块载荷需 ≥3.8）；jboss PATH 首选 anaconda 3.13
+      ansible_python_interpreter: /work/jboss/anaconda3/bin/python3
+  vars:
+    ansible_user: jboss
+    ansible_ssh_pass: linux123!@#

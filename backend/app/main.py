@@ -34,6 +34,9 @@ async def lifespan(app: FastAPI):
         await seed_data(session)
     from app.services.node_task_service import recover_interrupted_tasks
     await recover_interrupted_tasks()
+    # 中继区域注册快照预热（EDGE_RELAY_ENABLED=0 时加载也无副作用）
+    from app.services import relay_registry
+    await relay_registry.ensure_fresh()
     yield
     from app.services.node_task_service import get_node_task_service
     get_node_task_service().shutdown_sync()

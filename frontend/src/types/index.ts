@@ -38,6 +38,7 @@ export interface Cluster {
   description?: string
   group_name?: string
   status: number
+  region_code?: string | null
   created_at?: string
   node_count: number
   healthy_node_count: number

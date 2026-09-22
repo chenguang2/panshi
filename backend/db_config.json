@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "active": "pg_local_native",
+  "active": "sqlite_test",
   "connections": [
     {
       "id": "local_sqlite",
@@ -84,6 +84,30 @@
       "database": "test_panshi",
       "username": "postgres",
       "password_enc": "gAAAAABqrM7hi_YasJh4dmxKs2sDg1DSZHD0wy1S_LQvWWwuw6KevPi332RD_CuANLSygI63ETeA8gatfsayOQec-8f68k36Xw==",
+      "ssl": false
+    },
+    {
+      "id": "conn_7c160613",
+      "type": "sqlite",
+      "name": "南昌局",
+      "path": "./data/nanchang/panshi.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
+      "ssl": false
+    },
+    {
+      "id": "conn_4c070e16",
+      "type": "sqlite",
+      "name": "上海局",
+      "path": "./data/shanghai/panshi.db",
+      "host": null,
+      "port": 5432,
+      "database": null,
+      "username": null,
+      "password_enc": null,
       "ssl": false
     }
   ]

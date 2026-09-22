@@ -1,0 +1,36 @@
+---
+# 中继网关白名单配置分发（openspec: add-relay-gateway / relay-config-push）
+# 由平台按区域双写推送；inventory/gateways 按局分组（gateways_<region_code>）。
+- name: 分发并应用中继网关白名单配置
+  hosts: "{{ hosts_pattern }}"
+  become: true
+  tasks:
+    - name: 写入 nginx 目标白名单
+      ansible.builtin.copy:
+        content: "{{ edge_targets_conf }}"
+        dest: "{{ relay_nginx_conf_path | default('/etc/openresty/conf.d/edge_targets.conf') }}"
+        backup: true
+      register: nginx_conf
+
+    - name: 校验 nginx 配置
+      ansible.builtin.command: nginx -t
+      when: nginx_conf.changed
+
+    - name: 重载 OpenResty
+      ansible.builtin.command: systemctl reload openresty
+      when: nginx_conf.changed
+
+    - name: 写入 sshd PermitOpen 白名单
+      ansible.builtin.copy:
+        content: "{{ relay_sshd_conf }}"
+        dest: "{{ relay_sshd_conf_path | default('/etc/ssh/sshd_config.d/relay-tunnel.conf') }}"
+        backup: true
+      register: sshd_conf
+
+    - name: 校验 sshd 配置
+      ansible.builtin.command: sshd -t
+      when: sshd_conf.changed
+
+    - name: 重载 sshd
+      ansible.builtin.command: systemctl reload sshd
+      when: sshd_conf.changed

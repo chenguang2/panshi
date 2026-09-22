@@ -188,3 +188,31 @@ def test_clean_db_gets_unique_index_without_duplicates(tmp_path):
     unique = _unique_indexes(engine, "install_task_node")
     assert "uq_install_task_node_task_node" in unique
     engine.dispose()
+
+
+def test_cluster_region_code_column_added(tmp_path):
+    """Legacy ps_cluster (pre-relay) gains region_code via run_migrations.
+
+    Regression: without this entry, lifespan's relay_registry.ensure_fresh()
+    crashes on SELECT ps_cluster.region_code → Application startup failed →
+    port never binds → every frontend API call returns 502.
+    """
+    engine = _create_engine(tmp_path / "region.db")
+    with engine.connect() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE ps_cluster (id INTEGER PRIMARY KEY, "
+            "name VARCHAR(100) NOT NULL, display_name VARCHAR(200), "
+            "admin_url VARCHAR(500), admin_key VARCHAR(255), description TEXT, "
+            "group_name VARCHAR(100), status INTEGER NOT NULL, "
+            "creator_id INTEGER, current_version INTEGER, "
+            "created_at DATETIME, updated_at DATETIME)"
+        )
+        conn.commit()
+    try:
+        run_migrations(engine)
+        assert "region_code" in _columns(engine, "ps_cluster")
+        # idempotent: second run must not fail
+        run_migrations(engine)
+        assert "region_code" in _columns(engine, "ps_cluster")
+    finally:
+        engine.dispose()

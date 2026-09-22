@@ -469,6 +469,7 @@ const permissionKeyToLabel: Record<string, string> = {
   database_management: '数据库管理',
   clickhouse_config: 'ClickHouse 配置',
   audit_logs: '审计日志',
+  relay_gateway: '中继区域管理',
 }
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
@@ -570,6 +571,7 @@ const permissionGroups = computed(() => {
         { key: 'database_management', label: '数据库管理' },
         { key: 'clickhouse_config', label: 'ClickHouse 配置' },
         { key: 'audit_logs', label: '审计日志' },
+        { key: 'relay_gateway', label: '中继区域管理' },
       ],
     },
     {

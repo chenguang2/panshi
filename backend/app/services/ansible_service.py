@@ -32,6 +32,111 @@ _INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
 
 _SSH_CONTROL_PATH_DIR = "/tmp/panshi-cp"
 
+from app.services import relay_registry  # noqa: E402  （仅 stdlib/sqlalchemy 顶层依赖，无循环）
+
+
+def _relay_key_path() -> str:
+    """跳板专用密钥路径（与节点凭据无关；网关只认这把钥匙）。"""
+    return os.path.expanduser(os.getenv("EDGE_RELAY_SSH_KEY", "~/.ssh/relay_ed25519"))
+
+
+def _relay_ssh_common_args(ips: list[str]) -> str | None:
+    """为目标 ip 列表构造 ansible_ssh_common_args（经路局网关 ProxyCommand）。
+
+    跨区域批量（ips 分属不同区域）整体注入不支持：返回 None 回退直连并告警。
+    """
+    if not relay_registry.relay_enabled():
+        return None
+    jumps = {relay_registry.ssh_jump_for_ip(ip) for ip in ips}
+    jumps.discard(None)
+    if not jumps:
+        return None
+    if len(jumps) > 1:
+        logger.warning("relay: 跨区域批量跳板不一致 %s，不注入 ProxyCommand（回退直连）", jumps)
+        return None
+    jump = jumps.pop()
+    assert jump is not None  # discard(None) 后必非空
+    if ":" in jump:
+        user_host, gw_port = jump.rsplit(":", 1)
+    else:
+        user_host, gw_port = jump, "22"
+    return f'-o ProxyCommand="ssh -W %h:%p -p {gw_port} -i {_relay_key_path()} {user_host}"'
+
+
+def _inventory_inject_relay(ip: str) -> str | None:
+    """临时为 *ip* 写入 ansible_ssh_common_args（中继跳板），返回原值（无则 None）。
+
+    与 _inventory_inject_port 同款先例：用户管理的 inventory 不落盘修改，
+    运行前注入、finally 恢复；无路由时不做任何修改。
+    """
+    args = _relay_ssh_common_args([ip])
+    if args is None:
+        return None
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip)
+            if not isinstance(host_entry, dict):
+                return None
+            previous = host_entry.get("ansible_ssh_common_args")
+            if previous == args:
+                return str(previous) if previous is not None else None
+            host_entry["ansible_ssh_common_args"] = args
+            with open(_INVENTORY_PATH, "w") as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            logger.info("Injected relay ProxyCommand for %s into inventory", ip)
+            return str(previous) if previous is not None else None
+        except (FileNotFoundError, OSError, yaml.YAMLError) as e:
+            logger.warning("relay: 注入 ansible_ssh_common_args 失败 %s: %s", ip, e)
+            return None
+
+
+def _inventory_restore_relay(ip: str) -> None:
+    """移除为 *ip* 注入的中继跳板参数。
+
+    仅当当前值等于"本会话将注入的值"才移除；运维自行配置的
+    ansible_ssh_common_args（与现注入值不同）原样保留。
+    """
+    injected = _relay_ssh_common_args([ip])
+    with _inventory_lock:
+        try:
+            with open(_INVENTORY_PATH) as f:
+                data = yaml.safe_load(f) or {}
+            hosts = (
+                data.get("all", {})
+                .get("children", {})
+                .get("edge_cluster", {})
+                .get("hosts", {})
+            )
+            host_entry = hosts.get(ip)
+            if not isinstance(host_entry, dict):
+                return
+            current = host_entry.get("ansible_ssh_common_args")
+            if current is None:
+                return
+            if injected is not None and current != injected:
+                return  # 运维自行配置，保留
+            del host_entry["ansible_ssh_common_args"]
+            with open(_INVENTORY_PATH, "w") as f:
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+        except (FileNotFoundError, OSError, yaml.YAMLError) as e:
+            logger.warning("relay: 恢复 inventory 失败 %s: %s", ip, e)
+
+
+def _append_relay_hint(ip: str, rc: int, stderr: str) -> str:
+    """连接类失败且节点区域中继被禁用时，追加可解释提示（G2，不 fail-fast）。"""
+    if rc != 0 and relay_registry.disabled_hint_for(ip):
+        base = stderr + "\n" if stderr else ""
+        return base + "提示: 该区域中继已禁用，直连通常不可达。请检查设置页中继开关与区域状态"
+    return stderr
+
 
 def _ensure_control_path_dir() -> None:
     """Ensure the SSH ControlMaster socket dir exists (self-healing).
@@ -55,6 +160,12 @@ def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None
     ]
     if port and port != 22:
         base_opts += ["-p", str(port)]
+    # 跨中心中继（openspec: relay-channel-routing）：总开关开启且节点区域配置了
+    # 跳板时经 -J 走路局网关；disabled/歧义/无路由 → 现状直连。
+    if relay_registry.relay_enabled():
+        jump = relay_registry.ssh_jump_for_ip(ip)
+        if jump:
+            base_opts += ["-J", jump, "-i", _relay_key_path()]
     if password:
         return [
             "sshpass", "-p", password, "ssh",
@@ -146,6 +257,20 @@ async def _run_ssh_with_fallback(
     if rc == 0:
         return rc, stdout, stderr
 
+    # 档 1 HA 配套（openspec relay-channel-routing）：中继启用时，连接类失败
+    # （VIP 漂移窗口 3~5s）立即原样重试一次；重试成功按成功处理。
+    if (
+        relay_registry.relay_enabled()
+        and ("Connection refused" in stderr or "timed out" in stderr)
+    ):
+        if on_line is not None:
+            rc1, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line)
+        else:
+            rc1, stdout, stderr = await _run_subprocess(key_cmd)
+        if rc1 == 0:
+            return rc1, stdout, stderr
+        rc, stderr = rc1, stderr
+
     # Check whether to attempt password fallback
     is_auth_failure = (
         rc == 255
@@ -153,7 +278,7 @@ async def _run_ssh_with_fallback(
         or "Authentication failed" in stderr
     )
     if not is_auth_failure:
-        return rc, stdout, stderr
+        return rc, stdout, _append_relay_hint(ip, rc, stderr)
     if password and not _sshpass_available():
         hint = "\n提示: 免密登录失败，且 sshpass 未安装，无法使用密码认证。请安装 sshpass 后重试: sudo apt-get install sshpass"
         return rc, stdout, stderr + hint
@@ -173,7 +298,7 @@ async def _run_ssh_with_fallback(
 
     # Both failed — merge errors
     merged_stderr = f"免密登录失败: {stderr}\n--- 密码认证也失败 ---\n{stderr2}"
-    return rc2, stdout2, merged_stderr
+    return rc2, stdout2, _append_relay_hint(ip, rc2, merged_stderr)
 
 
 def get_ssh_password(ip: str) -> str | None:
@@ -752,6 +877,18 @@ class AnsibleRunnerService:
         if ip:
             ev["ips"] = ip
 
+        # 中继跳板（openspec relay-channel-routing）：目标 ip 运行期注入
+        # ansible_ssh_common_args，finally 恢复（用户清单零落盘修改）。
+        relay_injected_ips: list[str] = []
+        if relay_registry.relay_enabled():
+            relay_ips = [i.strip() for i in str(ev.get("ips") or "").split(",") if i.strip()]
+            if not relay_ips and ip:
+                relay_ips = [ip]
+            if relay_ips and _relay_ssh_common_args(relay_ips) is not None:
+                for _rip in relay_ips:
+                    _inventory_inject_relay(_rip)
+                    relay_injected_ips.append(_rip)
+
         logger.info(
             "Running ansible playbook tag=%s ip=%s extravars=%s",
             tag, ip, _sanitize_for_log(ev),
@@ -822,6 +959,8 @@ class AnsibleRunnerService:
             finally:
                 if inject_port:
                     _inventory_restore_port(ip, inject_port)
+                for _rip in relay_injected_ips:
+                    _inventory_restore_relay(_rip)
 
         _raw_stdout = getattr(result, "stdout", "")
         _raw_stderr = getattr(result, "stderr", "")

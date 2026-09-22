@@ -129,6 +129,7 @@ COLUMN_MIGRATIONS = [
     ("ps_node", "openresty_path", "VARCHAR(255)"),
     ("ps_node", "ssh_port", "INTEGER"),
     ("ps_cluster", "current_version", "INTEGER"),
+    ("ps_cluster", "region_code", "VARCHAR(32)"),
     ("ps_import_log", "stream_proxy_count", "INTEGER DEFAULT 0"),
     ("ps_stream_proxy", "ref_node_id", "INTEGER"),
     ("ps_stream_proxy", "hash_on", "VARCHAR(20)"),
@@ -157,6 +158,7 @@ COLUMN_MIGRATIONS = [
     ("install_task_node", "stdout_tail", "TEXT"),
     ("ps_db_migration_log", "duration_seconds", "FLOAT"),
     ("ps_db_migration_log", "started_at", "DATETIME"),
+    ("relay_gateways", "openresty_prefix", "VARCHAR(255)"),
 ]
 
 

@@ -48,6 +48,13 @@ SKIP_PATHS = {
 # ── 显式映射：核心业务 CRUD / 批量（design 的 ~30 条在此扩充） ──────────
 # (method, path_template) → (resource, verb, is_batch)；action = f"{resource}_{verb}"
 ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
+    # 跨中心中继（区域注册表）
+    ("POST", "/api/v1/relay/gateways"): ("relay_gateway", "create", False),
+    ("PUT", "/api/v1/relay/gateways/{gateway_id}"): ("relay_gateway", "update", False),
+    ("PUT", "/api/v1/relay/gateways/{gateway_id}/status"): ("relay_gateway", "update", False),
+    ("DELETE", "/api/v1/relay/gateways/{gateway_id}"): ("relay_gateway", "delete", False),
+    ("POST", "/api/v1/relay/gateways/{gateway_id}/init"): ("relay_gateway", "init", False),
+    ("POST", "/api/v1/relay/gateways/{gateway_id}/push-config"): ("relay_gateway", "push_config", False),
     # 集群
     ("POST", "/api/v1/clusters"): ("cluster", "create", False),
     ("PUT", "/api/v1/clusters/{cluster_id}"): ("cluster", "update", False),

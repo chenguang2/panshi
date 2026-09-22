@@ -62,6 +62,14 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes"),
     ("put", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes/some-id"),
     ("delete", "/api/v1/edge-client/nodes/192.168.0.13/16620/stream-routes/some-id"),
+    # 跨中心区域注册表（2026-09-22，relay_gateway 权限）
+    ("get", "/api/v1/relay/gateways"),
+    ("post", "/api/v1/relay/gateways"),
+    ("put", "/api/v1/relay/gateways/1"),
+    ("put", "/api/v1/relay/gateways/1/status"),
+    ("delete", "/api/v1/relay/gateways/1"),
+    ("post", "/api/v1/relay/gateways/1/init"),
+    ("post", "/api/v1/relay/gateways/1/push-config"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

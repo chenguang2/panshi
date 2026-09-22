@@ -34,6 +34,7 @@ export const sectionMap: Record<string, string> = {
   AnsibleInventory: '运维管理',
   NodeTaskCenter: '运维管理',
   AuditLog: '系统管理',
+  RelayGateways: '系统管理',
 }
 
 export const pageNameMap: Record<string, string> = {
@@ -65,6 +66,7 @@ export const pageNameMap: Record<string, string> = {
   AnsibleInventory: 'Ansible 主机清单',
   NodeTaskCenter: '节点任务',
   AuditLog: '审计日志',
+  RelayGateways: '中继区域管理',
 }
 
 export interface NavEntry {

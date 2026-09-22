@@ -17,6 +17,7 @@ class Cluster(Base):
     status = Column(Integer, nullable=False, default=1)
     creator_id = Column(Integer, nullable=True)
     current_version = Column(Integer, nullable=True)
+    region_code = Column(String(32), nullable=True)  # 所属区域（relay_gateways.code）；空 = 直连区域
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

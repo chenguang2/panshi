@@ -1,0 +1,98 @@
+---
+# 中继网关首次初始化（openspec: add-relay-gateway / relay-gateway-init）
+# 写入 8443 server 块 + edge_targets 白名单，nginx -t 后启动/重载 OpenResty。
+# 与 relay_push.yml 分离：push 只更新白名单内容，init 负责服务骨架与进程。
+- name: 初始化中继网关 OpenResty（8443 server + 白名单）
+  hosts: "{{ hosts_pattern }}"
+  become: false
+  # 网关机非特权用户跑 setup 会因探测 systemctl EACCES 失败；本 playbook 不依赖 facts
+  gather_facts: false
+  vars:
+    openresty_prefix: "{{ openresty_prefix }}"
+    conf_dir: "{{ openresty_prefix }}/conf"
+    sbin: "{{ openresty_prefix }}/sbin/nginx"
+    # 标准布局：edge_targets.conf 写入 conf 根，由 relay server 块 include
+    edge_targets_path: "{{ conf_dir }}/edge_targets.conf"
+    relay_server_path: "{{ conf_dir }}/relay_8443.conf"
+  tasks:
+    - name: 确认 OpenResty 前缀存在
+      ansible.builtin.stat:
+        path: "{{ sbin }}"
+      register: nginx_bin
+
+    - name: 中止（OpenResty 未安装或路径错误）
+      ansible.builtin.fail:
+        msg: "未找到 nginx 可执行文件 {{ sbin }}，请确认 openresty_prefix"
+      when: not nginx_bin.stat.exists
+
+    - name: 写入白名单 map（edge_targets.conf）
+      ansible.builtin.copy:
+        content: "{{ edge_targets_conf }}"
+        dest: "{{ edge_targets_path }}"
+        backup: true
+      register: edge_targets
+
+    - name: 写入 8443 server 块（relay_8443.conf）
+      ansible.builtin.copy:
+        content: "{{ relay_server_conf }}"
+        dest: "{{ relay_server_path }}"
+        backup: true
+      register: relay_server
+
+    # 主配置需 include relay_8443.conf；幂等追加到 nginx.conf 的 http 块内最末 } 前
+    # 若主配置已 include 则跳过（idempotent）
+    - name: 检查主配置是否已 include relay_8443
+      ansible.builtin.command: grep -q 'include.*relay_8443.conf' {{ conf_dir }}/nginx.conf
+      register: include_check
+      failed_when: false
+      changed_when: false
+
+    - name: 追加 include relay_8443.conf 到 nginx.conf
+      ansible.builtin.lineinfile:
+        path: "{{ conf_dir }}/nginx.conf"
+        regexp: '^include\s+relay_8443\.conf'
+        line: '    include relay_8443.conf;'
+        insertbefore: '^\s*}\s*$'
+      when: include_check.rc != 0
+      register: include_line
+
+    - name: 校验 nginx 配置
+      ansible.builtin.command: "{{ sbin }} -p {{ openresty_prefix }} -c conf/nginx.conf -t"
+      when: edge_targets.changed or relay_server.changed or include_line.changed
+
+    - name: 检查 OpenResty 是否运行（pid 文件）
+      ansible.builtin.stat:
+        path: "{{ openresty_prefix }}/logs/nginx.pid"
+      register: pid_file
+
+    - name: 读取 pid（若存在）
+      ansible.builtin.slurp:
+        path: "{{ openresty_prefix }}/logs/nginx.pid"
+      register: pid_content
+      when: pid_file.stat.exists
+      failed_when: false
+
+    - name: 判断进程存活
+      ansible.builtin.command: kill -0 {{ pid_content.content | b64decode | trim }}
+      when: pid_file.stat.exists and pid_content.content is defined
+      register: alive
+      failed_when: false
+      changed_when: false
+
+    - name: 重载（已运行且配置有变更）
+      ansible.builtin.command: "{{ sbin }} -p {{ openresty_prefix }} -c conf/nginx.conf -s reload"
+      when:
+        - edge_targets.changed or relay_server.changed or include_line.changed
+        - pid_file.stat.exists
+        - alive.rc | default(1) == 0
+
+    - name: 冷启动（未运行）
+      ansible.builtin.command: "{{ sbin }} -p {{ openresty_prefix }} -c conf/nginx.conf"
+      when: not pid_file.stat.exists or (alive.rc | default(1) != 0)
+
+    - name: 确认 8443 监听
+      ansible.builtin.wait_for:
+        port: "{{ relay_listen_port }}"
+        host: 127.0.0.1
+        timeout: 10
+      when: not ansible_check_mode

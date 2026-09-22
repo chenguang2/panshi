@@ -49,7 +49,42 @@ class EdgeClient:
         else:
             self._resolve_edge_url()
 
+        # 跨中心区域路由（openspec: relay-channel-routing）：
+        # 总开关关闭时保持现状直连；开启时按注册快照改写 edge_url 并记录目标头。
+        self.relay_target: str | None = None
+        self.relay_state: str = "off"
+        self._apply_relay(node_ip=node_ip, node_port=node_port)
+
         self._resolve_api_key()
+
+    def _apply_relay(self, node_ip: str | None, node_port: int | None) -> None:
+        """按区域注册快照应用网关路由。
+
+        解析源：显式 node_ip 优先（Edge 直连页/逐节点发布），无显式目标时回退
+        集群挂接区域。disabled/ambiguous/无路由 → 保持直连（disabled 时连接类
+        失败会附"中继已禁用"提示）。
+        """
+        from app.services import relay_registry
+
+        if not relay_registry.relay_enabled():
+            return
+        if node_ip:
+            route, state = relay_registry.route_for_ip(node_ip)
+        else:
+            route, state = relay_registry.route_for_cluster(self.cluster_id)
+        self.relay_state = state
+        if state == "active" and route and route.http_base_url:
+            target_ip = node_ip or getattr(self, "_resolved_node_ip", None)
+            target_port = node_port or getattr(self, "_resolved_node_port", None)
+            if target_ip and target_port:
+                self.edge_url = route.http_base_url
+                self.relay_target = f"{target_ip}:{target_port}"
+
+    def _conn_error_msg(self, msg: str) -> str:
+        """连接类失败：区域被禁用时附可解释提示（G2，不 fail-fast）。"""
+        if self.relay_state == "disabled":
+            msg += "（该区域中继已禁用，直连通常不可达）"
+        return msg
 
     def _resolve_edge_url(self) -> None:
         if self.db is None:
@@ -67,6 +102,8 @@ class EdgeClient:
         if not node:
             raise EdgeConnectionError(f"No active node found for cluster {self.cluster_id}")
 
+        self._resolved_node_ip = node.ip
+        self._resolved_node_port = node.management_port
         self.edge_url = f"http://{node.ip}:{node.management_port}"
 
     def _resolve_api_key(self) -> None:
@@ -158,6 +195,8 @@ class EdgeClient:
             "X-API-KEY": self.api_key,
             "Content-Type": "application/json"
         }
+        if self.relay_target:
+            headers["X-Edge-Target"] = self.relay_target
 
         url = f"{self.edge_url}{path}"
 
@@ -178,9 +217,14 @@ class EdgeClient:
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
         except httpx.TimeoutException as e:
-            raise EdgeConnectionError(f"Request to {url} timed out: {e}") from e
+            raise EdgeConnectionError(self._conn_error_msg(f"Request to {url} timed out: {e}")) from e
         except httpx.ConnectError as e:
-            raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
+            raise EdgeConnectionError(self._conn_error_msg(f"Failed to connect to {url}: {e}")) from e
+
+        # 网关白名单拦截（网关对白名单外目标 return 403，body 非 Edge JSON 错误结构）：
+        # 映射为可定位提示，避免运维把"忘下发配置"当 Edge 故障排障（G11）。
+        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
+            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
 
         if response.status_code not in (200, 201, 204):
             try:
@@ -214,6 +258,14 @@ class EdgeClient:
             except json.JSONDecodeError:
                 return {"raw_response": response.text}
 
+    def _looks_like_edge_error(self, text: str) -> bool:
+        """判断 403 响应体是否为 Edge API 的 JSON 错误结构（区分网关拦截与 Edge 拒绝）。"""
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            return False
+        return isinstance(data, dict) and "error_msg" in data
+
     def raw_put(
         self,
         path: str,
@@ -237,15 +289,20 @@ class EdgeClient:
             "X-API-KEY": self.api_key,
             "Content-Type": "application/octet-stream",
         }
+        if self.relay_target:
+            headers["X-Edge-Target"] = self.relay_target
 
         url = f"{self.edge_url}{path}"
 
         try:
             response = httpx.put(url, headers=headers, content=data, timeout=30.0, trust_env=False)
         except httpx.TimeoutException as e:
-            raise EdgeConnectionError(f"Request to {url} timed out: {e}") from e
+            raise EdgeConnectionError(self._conn_error_msg(f"Request to {url} timed out: {e}")) from e
         except httpx.ConnectError as e:
-            raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
+            raise EdgeConnectionError(self._conn_error_msg(f"Failed to connect to {url}: {e}")) from e
+
+        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
+            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
 
         if response.status_code not in (200, 201, 204):
             try:
