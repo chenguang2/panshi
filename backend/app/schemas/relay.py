@@ -100,3 +100,10 @@ class RelayConfigPreview(BaseModel):
     listen_port: int
     files: list[RelayConfigFile]
     notes: list[str]
+
+
+class RelaySshdSetupRequest(BaseModel):
+    """以 root 在网关机配置 sshd 跳板转发（凭据仅本次使用，不保存、不落库）。"""
+
+    root_user: str = Field(default="root", description="root 账号")
+    root_password: str = Field(..., min_length=1, description="root 密码（仅本次使用，不保存）")

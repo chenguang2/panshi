@@ -70,6 +70,14 @@ export const relayInitStreamUrl = (id: number) => `/relay/gateways/${id}/init`
 
 export const relayPushStreamUrl = (id: number) => `/relay/gateways/${id}/push-config`
 
+/** sshd 跳板转发配置的 SSE 流地址（以 root 在网关机配置，凭据仅本次使用、不保存）。 */
+export const relaySshdSetupStreamUrl = (id: number) => `/relay/gateways/${id}/sshd-setup`
+
+export interface RelaySshdSetupRequest {
+  root_user: string
+  root_password: string
+}
+
 export function relayHealthCheck(region?: string) {
   const query = region ? `?region=${encodeURIComponent(region)}` : ''
   return api.get<RelayHealthResult | { regions: RelayHealthResult[] }>(

@@ -92,6 +92,7 @@
 1. **透明转发**：网关是 L4/L7 管道，不理解业务。平台侧 ansible-runner、sshpass、SM4 加解密全部原地不动。
 2. **凭据不下沉**：与方案一/二的本质区别。网关只有一个受限跳板账号，转发的是端到端认证/加密过的流量。
 3. **平台是寻址事实源**：节点表是唯一权威，网关配置（HTTP map 白名单、sshd PermitOpen 清单）都是它的投影，由平台自动下发。
+   - **已落地（2026-09-22）**：sshd 部分走独立 root 通道 `POST /relay/gateways/{id}/sshd-setup`（界面「配置跳板转发」，`relay_sshd.yml`）：以 root 写 `sshd_config.d/relay-tunnel.conf`（`AllowTcpForwarding yes` + `PermitOpen`），改前备份 + `sshd -t` + `sshd -T` 生效性验证 + 失败回滚 + 仅 reload；root 凭据仅本次注入网关清单、流 `finally` 还原。
 4. **开关可回退**：三处改写全部挂 feature flag（环境变量），关闭即回直连，存量防火墙规则在观察期内保留。
 
 ## 三条通道设计
@@ -637,3 +638,18 @@ AllowedIPs = <武清后端网段>              # 只放行管理端网段，反�
 | 3 | 一期 HA 档位：档 0（基线）还是档 1（VIP 双机，推荐）；档 1 需网管确认三项前提（见"网关高可用"） | 每局成本 +1 台虚机 |
 | 4 | `ssh -W` 在 nologin shell + PermitOpen 配置下的实测 | 跳板账号最终形态 |
 | 5 | 武清 → 路局是否已有可复用的出向通道（影响方案二零规则可行性，仅记录） | 演进路线 |
+
+## 实现补充（2026-09-22）
+
+以下为实现期相对本文初稿的收敛（**以代码为准**）：
+
+- **执行过程可视化**：`init`/`push` 由同步请求改为 **SSE 流式**（与节点安装同模型）；前端复用 `NodeExecutionResultDrawer` 实时显示 ansible 逐行输出、进度与用时；**不再使用任务注册表/轮询**。
+- **总开关**：由 `EDGE_RELAY_ENABLED` 环境变量迁至 `features.yaml` 的 `features.relay_gateway`（显式 opt-in、默认关；mtime 热加载，改完即时生效免重启）。
+- **注册表变更生效**：CRUD 后必须 `await ensure_fresh(force=True)`；仅 `invalidate()` 不足（同步读取方不判 TTL，会等到重启才生效）。
+- **跳板自环防护**：跳板主机 == 目标 ip 时视为直连，避免 ssh `jumphost loop`（实测 rc=4）。
+- **跳板专用密钥为建议**：`relay_ed25519`/`EDGE_RELAY_SSH_KEY` 缺失时省略 `-i`，回退平台默认身份（当前实况即此）。
+- **sshd 跳板配置**：新增独立 root 通道（界面「配置跳板转发」/ `POST /relay/gateways/{id}/sshd-setup`）；含备份、`sshd -t`、`sshd -T` 生效性验证、失败自动回滚、仅 reload；root 凭据仅本次注入清单并还原。
+- **PermitOpen 厂商差异**：重复指令仅首个生效；LinxOS 不支持逗号 → 首选单条逗号，`sshd -t` 失败自动回退为仅 `AllowTcpForwarding yes`。
+- **节点范围**：nginx 流量 map 仅含启用节点；sshd SSH **管理**白名单含全部节点（含禁用）。
+- **待写入配置预览**：只读 `GET /relay/gateways/{id}/config-preview`（界面「查看配置」），ansible 不可用时手工配置兜底。
+- **中继可见性**：跳板运行期注入清单、不在命令行，故展示用 command 追加 `# [中继] 经跳板 …`。

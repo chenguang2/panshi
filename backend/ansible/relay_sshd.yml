@@ -1,0 +1,126 @@
+---
+# 网关机 sshd 跳板转发配置（openspec: add-relay-gateway / relay-sshd-permit）。
+# 需 root：写 /etc/ssh/sshd_config.d/ 并 reload sshd。由界面「配置跳板转发」触发，
+# 平台以 root 直连 SSH 运行（root 凭据仅本次注入网关清单、跑完即恢复，不落库）。
+#
+# 安全：sshd 配置写错会导致（重启后）无法登录网关，故本 playbook
+#   ① 改前备份主配置 ② sshd -t 校验 ③ 校验失败或生效性验证不通过 → 回滚并失败
+#   ④ 只用 reload（不用 restart），失败也不影响正在运行的 sshd。
+- name: 配置网关 sshd 跳板转发白名单
+  hosts: "{{ hosts_pattern }}"
+  become: false
+  gather_facts: false
+  vars:
+    sshd_conf_dir: /etc/ssh/sshd_config.d
+    sshd_dropin: "{{ sshd_conf_dir }}/relay-tunnel.conf"
+    sshd_main: /etc/ssh/sshd_config
+    sshd_backup: "{{ sshd_main }}.panshi.bak"
+    sshd_include_line: "Include {{ sshd_conf_dir }}/*.conf"
+  tasks:
+    - name: 备份主 sshd_config
+      ansible.builtin.copy:
+        src: "{{ sshd_main }}"
+        dest: "{{ sshd_backup }}"
+        remote_src: true
+        mode: preserve
+
+    - name: 应用 sshd 跳板配置（写 drop-in + Include + 校验 + 生效性验证）
+      block:
+        - name: 创建 sshd_config.d 目录
+          ansible.builtin.file:
+            path: "{{ sshd_conf_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: 写入 relay-tunnel.conf（首选：AllowTcpForwarding + PermitOpen 白名单）
+          ansible.builtin.copy:
+            content: "{{ sshd_conf }}"
+            dest: "{{ sshd_dropin }}"
+            owner: root
+            group: root
+            mode: "0644"
+          register: sshd_dropin_res
+
+        - name: 语法校验（首选格式）
+          ansible.builtin.command: sshd -t
+          changed_when: false
+          register: sshd_check_preferred
+          failed_when: false
+
+        - name: 首选格式不被该 sshd 支持（如 LinxOS 的多目标 PermitOpen）→ 回退为仅放行转发
+          ansible.builtin.copy:
+            content: "{{ sshd_conf_fallback }}"
+            dest: "{{ sshd_dropin }}"
+            owner: root
+            group: root
+            mode: "0644"
+          register: sshd_dropin_fallback_res
+          when: sshd_check_preferred.rc != 0
+
+        - name: 语法校验（回退后；仍失败则触发整体回滚）
+          ansible.builtin.command: sshd -t
+          changed_when: false
+          when: sshd_check_preferred.rc != 0
+
+        - name: 确保主配置在开头 Include sshd_config.d（首个匹配生效，故置顶）
+          ansible.builtin.lineinfile:
+            path: "{{ sshd_main }}"
+            regexp: '^\s*Include\s+{{ sshd_conf_dir }}/'
+            line: "{{ sshd_include_line }}"
+            insertbefore: BOF
+            state: present
+            backup: true
+          register: sshd_include_res
+
+        - name: 提示（回退生效）
+          ansible.builtin.debug:
+            msg: >-
+              该网关 sshd 不支持多目标 PermitOpen（{{ sshd_check_preferred.stderr | default('') | trim }}），
+              已回退为「仅放行 TCP 转发」（无逐目标白名单）。
+          when: sshd_check_preferred.rc != 0
+
+        - name: 重载 sshd（仅 reload，坏配置不影响在跑的 sshd）
+          ansible.builtin.command: systemctl reload sshd
+          when: >-
+            sshd_dropin_res.changed
+            or (sshd_dropin_fallback_res.changed | default(false))
+            or sshd_include_res.changed
+
+        - name: 生效性验证：实际 AllowTcpForwarding 必须为 yes
+          ansible.builtin.shell: "set -o pipefail; sshd -T | grep -i '^allowtcpforwarding'"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          register: sshd_effective
+          failed_when: "'yes' not in (sshd_effective.stdout | lower)"
+
+      rescue:
+        - name: 回滚 drop-in
+          ansible.builtin.file:
+            path: "{{ sshd_dropin }}"
+            state: absent
+
+        - name: 回滚主 sshd_config
+          ansible.builtin.copy:
+            src: "{{ sshd_backup }}"
+            dest: "{{ sshd_main }}"
+            remote_src: true
+            mode: preserve
+
+        - name: 回滚后再次校验
+          ansible.builtin.command: sshd -t
+          changed_when: false
+
+        - name: 重载回滚后的配置
+          ansible.builtin.command: systemctl reload sshd
+          changed_when: false
+
+        - name: 报告失败（已回滚，网关 sshd 保持原状）
+          ansible.builtin.fail:
+            msg: >-
+              网关 sshd 跳板配置失败，已回滚到原配置（网关未受影响）。
+              常见原因：主 sshd_config 中存在先于 Include 生效的
+              AllowTcpForwarding 设置，或账号无 root 权限。
+              校验输出：{{ sshd_effective.stdout | default('') }} {{ sshd_effective.stderr | default('') }}

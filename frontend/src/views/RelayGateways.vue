@@ -54,6 +54,9 @@
                   {{ activeId === record.id && activeKind === 'push' ? '下发中...' : '下发配置' }}
                 </button>
                 <button class="btn btn-sm" @click="openConfigPreview(record)">查看配置</button>
+                <button class="btn btn-sm" :disabled="busy" @click="openSshdSetup(record)">
+                  {{ activeId === record.id && activeKind === 'sshd' ? '配置中...' : '配置跳板转发' }}
+                </button>
                 <button class="btn btn-sm btn-danger" :disabled="busy" @click="handleDelete(record)">删除</button>
               </div>
             </template>
@@ -164,6 +167,48 @@
       </div>
     </div>
 
+    <!-- 配置网关 sshd 跳板转发（需 root；凭据仅本次使用，不保存） -->
+    <div v-if="sshdModal.open" class="modal-overlay" @click.self="closeSshdSetup">
+      <div class="modal-card" style="width: 560px">
+        <h2>配置跳板转发 - {{ sshdModal.record?.name }}</h2>
+        <p class="config-hint">
+          网关 sshd 默认禁止 TCP 转发（跳板查询会报 <code>administratively prohibited</code>）。此处以
+          root 在网关机写入 <code>/etc/ssh/sshd_config.d/relay-tunnel.conf</code>
+          （放行转发 + 仅允许连本局节点 SSH 端口）并重载 sshd；校验失败会自动回滚，不影响正在运行的
+          sshd。
+        </p>
+        <div class="form-group">
+          <label class="form-label">root 账号</label>
+          <input
+            type="text"
+            class="form-input"
+            v-model="sshdModal.root_user"
+            placeholder="root"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label">root 密码</label>
+          <input
+            type="password"
+            class="form-input"
+            v-model="sshdModal.root_password"
+            placeholder="请输入 root 密码（仅本次使用，不保存）"
+          />
+          <span class="form-hint">仅本次注入网关清单用于连接，跑完立即还原；不落库、不打日志</span>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeSshdSetup">取消</button>
+          <button
+            class="btn btn-primary"
+            :disabled="!sshdModal.root_password"
+            @click="submitSshdSetup"
+          >
+            开始配置
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 执行过程抽屉：复用节点管理同款（实时 stdout + 进度 + 终态） -->
     <NodeExecutionResultDrawer
       v-model:visible="execDrawerVisible"
@@ -197,6 +242,7 @@ import {
   relayHealthCheck,
   relayInitStreamUrl,
   relayPushStreamUrl,
+  relaySshdSetupStreamUrl,
   updateRelayGateway,
   type RelayConfigPreview,
   type RelayGateway,
@@ -210,7 +256,7 @@ const regions = ref<RelayGateway[]>([])
 const loading = ref(false)
 const testing = ref(false)
 const testingId = ref<number | null>(null)
-const activeKind = ref<'init' | 'push' | null>(null)
+const activeKind = ref<'init' | 'push' | 'sshd' | null>(null)
 const activeId = ref<number | null>(null)
 
 // 执行过程抽屉：复用节点管理同款 NodeExecutionResultDrawer + useInstallStream（SSE），
@@ -219,6 +265,14 @@ const installStream = useInstallStream()
 const { installing: execInstalling, error: execError, status: execStreamStatus } = installStream
 const execDrawerVisible = ref(false)
 const execDrawerTitle = ref('执行结果')
+
+// 配置跳板转发（需 root）：root 凭据仅本次使用、提交后立即清空，不落库、不持久化
+const sshdModal = reactive({
+  open: false,
+  record: null as RelayGateway | null,
+  root_user: 'root',
+  root_password: '',
+})
 const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
 const execLogs = ref<string[]>([])
 const execElapsed = ref<number | null>(null)
@@ -450,12 +504,23 @@ function resetActiveState() {
 }
 
 /** 打开执行过程抽屉并开始 SSE 流（复用节点安装的流式模型）。 */
-function startExec(record: RelayGateway, kind: 'init' | 'push') {
+function startExec(
+  record: RelayGateway,
+  kind: 'init' | 'push' | 'sshd',
+  body: Record<string, unknown> = {},
+) {
   const isInit = kind === 'init'
+  const label = { init: '初始化网关', push: '下发配置', sshd: '配置跳板转发' }[kind]
+  const url =
+    kind === 'init'
+      ? relayInitStreamUrl(record.id)
+      : kind === 'push'
+        ? relayPushStreamUrl(record.id)
+        : relaySshdSetupStreamUrl(record.id)
   activeKind.value = kind
   activeId.value = record.id
   finalEvent = null
-  execDrawerTitle.value = `${isInit ? '初始化网关' : '下发配置'} - ${record.name}`
+  execDrawerTitle.value = `${label} - ${record.name}`
   execDrawerVisible.value = true
   execLogs.value = []
   execHighlights.value = []
@@ -465,8 +530,8 @@ function startExec(record: RelayGateway, kind: 'init' | 'push') {
   startElapsedTimer()
 
   installStream.start(
-    isInit ? relayInitStreamUrl(record.id) : relayPushStreamUrl(record.id),
-    {},
+    url,
+    body,
     {
       onLine: (line: string) => {
         // useInstallStream 对无 line 字段的结构化事件以 JSON 字符串转发；此处仅捕获终态
@@ -496,7 +561,11 @@ function startExec(record: RelayGateway, kind: 'init' | 'push') {
         const port = (finalEvent?.listen_port as number) || 8443
         execHighlights.value =
           rc === 0
-            ? [isInit ? `初始化完成：${hosts}，监听 ${port}` : `下发完成：${hosts}`]
+            ? kind === 'init'
+              ? [`初始化完成：${hosts}，监听 ${port}`]
+              : kind === 'push'
+                ? [`下发完成：${hosts}`]
+                : [`sshd 跳板转发配置完成：${hosts}`]
             : [`执行失败（rc=${rc}，${status}）`]
         if (rc === 0) {
           message.success(isInit ? `初始化完成（${hosts}，监听 ${port}）` : `配置已下发（${hosts}）`)
@@ -548,6 +617,31 @@ function handleInit(record: RelayGateway) {
       startExec(record, 'init')
     },
   })
+}
+
+function openSshdSetup(record: RelayGateway) {
+  sshdModal.record = record
+  sshdModal.root_user = 'root'
+  sshdModal.root_password = ''
+  sshdModal.open = true
+}
+
+function closeSshdSetup() {
+  sshdModal.open = false
+  sshdModal.root_password = '' // 凭据不留存
+  sshdModal.record = null
+}
+
+function submitSshdSetup() {
+  const record = sshdModal.record
+  if (!record) return
+  if (!sshdModal.root_password) {
+    message.warning('请输入 root 密码')
+    return
+  }
+  const body = { root_user: sshdModal.root_user || 'root', root_password: sshdModal.root_password }
+  closeSshdSetup()
+  startExec(record, 'sshd', body)
 }
 
 function handlePush(record: RelayGateway) {

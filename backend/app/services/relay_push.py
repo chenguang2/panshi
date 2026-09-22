@@ -29,13 +29,23 @@ class RelayPushError(RuntimeError):
     """下发前置条件不满足（区域不存在 / 网关清单缺失）。"""
 
 
-async def _region_nodes(db: AsyncSession, region_code: str) -> list[Node]:
-    result = await db.execute(
+async def _region_nodes(
+    db: AsyncSession, region_code: str, *, enabled_only: bool = True
+) -> list[Node]:
+    """该区域节点。
+
+    ``enabled_only=True``（默认）用于 **nginx 流量白名单**——禁用节点不承载流量；
+    ``enabled_only=False`` 用于 **SSH 管理白名单（PermitOpen）**——禁用节点仍需被管理
+    （状态查询/节点任务/自启动），二者语义不同。
+    """
+    stmt = (
         select(Node)
         .join(Cluster, Node.cluster_id == Cluster.id)
-        .where(Cluster.region_code == region_code, Node.status == 1)
-        .order_by(Node.ip)
+        .where(Cluster.region_code == region_code)
     )
+    if enabled_only:
+        stmt = stmt.where(Node.status == 1)
+    result = await db.execute(stmt.order_by(Node.ip))
     return list(result.scalars().all())
 
 
@@ -61,17 +71,53 @@ async def render_nginx_map(
     return "\n".join(lines) + "\n"
 
 
+def _sshd_header(region_code: str) -> str:
+    return f"# 由磐石平台自动生成（region: {region_code}），勿手改"
+
+
 async def render_permit_open(region_code: str, db: AsyncSession | None = None) -> str:
     """渲染该局 sshd PermitOpen 白名单（跳板仅可连节点 SSH 端口）。"""
+    return await _render_sshd(region_code, db, with_forwarding=False)
+
+
+async def render_sshd_dropin(
+    region_code: str, db: AsyncSession | None = None, *, include_permitopen: bool = True
+) -> str:
+    """渲染网关 sshd drop-in 全文：放行 TCP 转发 + 仅允许连本局节点 SSH 端口。
+
+    以 root 写入 ``/etc/ssh/sshd_config.d/relay-tunnel.conf``（见 relay_sshd.yml）。
+
+    ``include_permitopen=False`` 用于**回退格式**：部分厂商 sshd（如 LinxOS）不接受
+    多目标 ``PermitOpen``（``bad port number in permitopen``），此时只能仅放行转发；
+    playbook 会先试带白名单的格式，``sshd -t`` 失败再回退（见 relay_sshd.yml）。
+    """
+    return await _render_sshd(region_code, db, with_forwarding=True, include_permitopen=include_permitopen)
+
+
+async def _render_sshd(
+    region_code: str,
+    db: AsyncSession | None,
+    *,
+    with_forwarding: bool,
+    include_permitopen: bool = True,
+) -> str:
     if db is None:
         from app.core.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as db:
-            return await render_permit_open(region_code, db=db)
-    nodes = await _region_nodes(db, region_code)
-    lines = [f"# 由磐石平台自动生成（region: {region_code}），勿手改"]
-    for n in nodes:
-        lines.append(f"PermitOpen {n.ip}:{n.ssh_port or 22}")
+            return await _render_sshd(
+                region_code, db, with_forwarding=with_forwarding, include_permitopen=include_permitopen
+            )
+    nodes = await _region_nodes(db, region_code, enabled_only=False)
+    lines = [_sshd_header(region_code)]
+    if with_forwarding:
+        lines.append("AllowTcpForwarding yes")
+    # PermitOpen 必须是**单条指令 + 逗号分隔**：sshd 对重复关键字只取首个值，写成多行
+    # 时只有第一条生效，其余节点转发会被拒（实测：`channel 0: open failed:
+    # administratively prohibited`，rc=255）。
+    if include_permitopen and nodes:
+        targets = ",".join(f"{n.ip}:{n.ssh_port or 22}" for n in nodes)
+        lines.append(f"PermitOpen {targets}")
     return "\n".join(lines) + "\n"
 
 

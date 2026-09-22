@@ -42,7 +42,7 @@ inventory 为用户管理的清单文件。当全局总开关开启时，系统 
 - **THEN** `ansible_ssh_pass` 明文原样保留，不做掩码或改写
 
 ### Requirement: 跳板解析的歧义防护
-`resolve_relay_jump(ip)` 解析 SHALL 基于**区域注册快照**（DB 为唯一事实源；TTL 缓存 + 注册表 CRUD 即时失效；同步消费方零 IO 读取）。当数据库中该 ip 命中多个节点且区域不一致时，SHALL 回退直连并记录告警日志。
+`resolve_relay_jump(ip)` 解析 SHALL 基于**区域注册快照**（DB 为唯一事实源；TTL 缓存 + 注册表 CRUD 后由端点显式 `ensure_fresh(force=True)` **立即重载**（仅 `invalidate()` 置脏标记不足：同步消费方不判 TTL，会让变更等到进程重启才生效）；同步消费方零 IO 读取）。当数据库中该 ip 命中多个节点且区域不一致时，SHALL 回退直连并记录告警日志。
 
 #### Scenario: 同 IP 跨集群歧义
 - **WHEN** 两个不同区域的集群各含节点 192.168.1.10
@@ -72,3 +72,17 @@ inventory 为用户管理的清单文件。当全局总开关开启时，系统 
 #### Scenario: 漂移窗口内重试
 - **WHEN** 首次连接因跳板 VIP 漂移被拒，重试时新 MASTER 已就绪
 - **THEN** 第二次连接成功，操作按成功返回
+
+### Requirement: 跳板自环防护
+当目标节点 ip 与其所属区域的跳板主机相同时（网关机同时被当作该集群业务节点）`ssh_jump_for_ip(ip)` SHALL 返回 None，该 ip SHALL 视同直连（ansible 不注入 `ansible_ssh_common_args`、裸 SSH 不带 `-J`）。
+
+#### Scenario: 网关机自身作为业务节点
+- **WHEN** aoh 网关为 `jboss@192.168.0.13`，且同一集群存在业务节点 192.168.0.13
+- **THEN** 该节点回退直连，不注入跳板；若强行经自身跳板，ssh 会报 `jumphost loop`（实测 rc=4 `Connection closed by UNKNOWN port 65535`）
+
+### Requirement: 中继路由在展示命令中可见
+ansible 跳板是**运行期**以 `ansible_ssh_common_args` 注入清单、不在 `ansible-playbook` 命令行中的，因此系统 SHALL 在返回给界面展示的 command 中追加中继说明行，使运维无需抓取清单即可判断是否走中继。
+
+#### Scenario: 展示命令标注中继
+- **WHEN** 本次 playbook 运行期为目标 ip 注入了跳板 ProxyCommand
+- **THEN** 展示用 command 追加 `# [中继] 经跳板 <jump>（清单 ansible_ssh_common_args，运行期注入、已还原）`

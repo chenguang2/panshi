@@ -58,9 +58,27 @@ def test_render_nginx_map_region_scoped(test_db):
 def test_render_permit_open_region_scoped(test_db):
     asyncio.run(_seed_region(test_db))
     conf = asyncio.run(relay_push.render_permit_open("luju", db=test_db))
-    assert "PermitOpen 10.1.1.1:22" in conf
-    assert "PermitOpen 10.1.2.2:2222" in conf  # 节点自定义 SSH 端口
+    # 必须是单条逗号分隔指令：sshd 对重复 PermitOpen 只取首条，写成多行只有第一个节点生效
+    assert "PermitOpen 10.1.1.1:22,10.1.2.2:2222" in conf
+    assert conf.count("PermitOpen ") == 1
     assert "10.2.2.2" not in conf
+
+
+def test_disabled_node_in_sshd_whitelist_but_not_nginx_map(test_db):
+    """禁用节点仍需 SSH 管理（进 PermitOpen），但不承载流量（不进 nginx map）。"""
+    asyncio.run(_seed_region(test_db))
+
+    async def _disable():
+        node = await test_db.get(Node, 1)
+        node.status = 0
+        await test_db.commit()
+
+    asyncio.run(_disable())
+    sshd_conf = asyncio.run(relay_push.render_permit_open("luju", db=test_db))
+    nginx_map = asyncio.run(relay_push.render_nginx_map("luju", db=test_db))
+    assert "10.1.1.1:22" in sshd_conf  # 禁用节点仍可被管理
+    assert "10.1.1.1:9180" not in nginx_map  # 但不进流量白名单
+    assert '"10.1.2.2:9181"' in nginx_map  # 启用节点照常
 
 
 def test_ensure_gateway_inventory_missing(monkeypatch):

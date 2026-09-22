@@ -1016,6 +1016,18 @@ class AnsibleRunnerService:
         # Capture the full ansible-playbook command for diagnostic display
         command = getattr(result.config, "command", None)
         command_str = " ".join(command) if isinstance(command, list) else (command or "")
+        # 中继是**运行期**以 ansible_ssh_common_args 注入节点清单的，不在 ansible-playbook
+        # 命令行里，用户从「执行命令/输出」看不出是否走了中继 → 这里显式补一行说明。
+        if relay_injected_ips:
+            _jumps = sorted(
+                {j for j in (relay_registry.ssh_jump_for_ip(i) for i in relay_injected_ips) if j}
+            )
+            if _jumps:
+                _note = (
+                    f"# [中继] 经跳板 {'、'.join(_jumps)}"
+                    "（清单 ansible_ssh_common_args，运行期注入、已还原）"
+                )
+                command_str = f"{command_str}\n{_note}" if command_str else _note
 
         logger.info(
             "Ansible result tag=%s ip=%s rc=%d status=%s",

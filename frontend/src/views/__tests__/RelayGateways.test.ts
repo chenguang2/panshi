@@ -322,6 +322,37 @@ describe('RelayGateways', () => {
     expect(text).toContain('手工应用：写入对应路径')
   })
 
+  it('配置跳板转发：输入 root 密码后以 sshd 流启动，且凭据不残留', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('配置跳板转发'))!
+    await btn.trigger('click')
+    await flushPromises()
+
+    // 模态出现，未填密码时「开始配置」禁用
+    const modal = wrapper.find('.modal-overlay')
+    expect(modal.exists()).toBe(true)
+    const pwd = modal.find('input[type="password"]')
+    expect(pwd.exists()).toBe(true)
+
+    await pwd.setValue('s3cret')
+    await flushPromises()
+    const startBtn = modal.findAll('button').find((b) => b.text().includes('开始配置'))!
+    await startBtn.trigger('click')
+    await flushPromises()
+
+    expect(streamMock.start).toHaveBeenCalledTimes(1)
+    const [url, body] = streamMock.start.mock.calls[0]
+    expect(url).toBe('/relay/gateways/1/sshd-setup')
+    expect(body).toEqual({ root_user: 'root', root_password: 's3cret' })
+
+    // 凭据不残留：再次打开模态时密码为空
+    await btn.trigger('click')
+    await flushPromises()
+    expect((wrapper.find('.modal-overlay input[type="password"]').element as HTMLInputElement).value).toBe('')
+  })
+
   it('删除经确认后 DELETE /relay/gateways/:id', async () => {
     mockDelete.mockResolvedValue({ data: { ok: true } })
     const wrapper = await mountPage()

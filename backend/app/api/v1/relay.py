@@ -18,12 +18,14 @@ from app.schemas.relay import (
     RelayGatewayCreate,
     RelayGatewayOut,
     RelayGatewayUpdate,
+    RelaySshdSetupRequest,
     RelayStatusUpdate,
 )
 from app.services import edge_sync
 from app.services import relay_init
 from app.services import relay_push
 from app.services import relay_registry
+from app.services import relay_sshd
 from app.services.relay_init import RelayInitError
 from app.services.relay_push import RelayPushError
 
@@ -185,6 +187,47 @@ async def push_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db
     return StreamingResponse(_region_stream(gateway.code, stream), media_type="text/event-stream")
 
 
+@router.post("/gateways/{gateway_id}/sshd-setup")
+async def setup_gateway_sshd(
+    gateway_id: int,
+    body: RelaySshdSetupRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """以 root 在网关机配置 sshd 跳板转发（SSE，校验失败自动回滚）。
+
+    网关 sshd 默认禁 TCP 转发（`-W` 报 administratively prohibited），需 root 写
+    `/etc/ssh/sshd_config.d/relay-tunnel.conf` 并 reload。root 凭据仅本次注入网关清单，
+    跑完即还原，不落库、不进命令行（与自启动同款做法）。
+    """
+    gateway = await _get_or_404(db, gateway_id)
+    hosts_pattern = f"gateways_{gateway.code}"
+    if not relay_sshd._gateway_hosts(hosts_pattern):
+        raise HTTPException(
+            status_code=400,
+            detail=f"网关清单中不存在主机组 {hosts_pattern}（D1 装机时创建 inventory/gateways）",
+        )
+    sshd_conf = await relay_push.render_sshd_dropin(gateway.code, db=db)
+    # 回退格式：部分厂商 sshd 不支持多目标 PermitOpen，playbook 校验失败时会用这份
+    sshd_conf_fallback = await relay_push.render_sshd_dropin(
+        gateway.code, db=db, include_permitopen=False
+    )
+    _acquire_region(gateway.code)
+    try:
+        stream = relay_sshd.stream_sshd_setup(
+            region_code=gateway.code,
+            hosts_pattern=hosts_pattern,
+            root_user=body.root_user or "root",
+            root_password=body.root_password,
+            sshd_conf=sshd_conf,
+            sshd_conf_fallback=sshd_conf_fallback,
+        )
+        await db.commit()  # 落审计 + 释放写锁（同 init/push）
+    except BaseException:
+        _INFLIGHT.discard(gateway.code)
+        raise
+    return StreamingResponse(_region_stream(gateway.code, stream), media_type="text/event-stream")
+
+
 @router.get("/gateways/{gateway_id}/config-preview", response_model=RelayConfigPreview)
 async def preview_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db)):
     """预览将要写入网关机的配置文件内容（只读、不触网）。
@@ -201,7 +244,7 @@ async def preview_gateway_config(gateway_id: int, db: AsyncSession = Depends(get
     conf_dir = f"{prefix}/conf"
     listen_port = relay_init.listen_port_of(gateway.http_base_url)
     edge_targets = await relay_push.render_nginx_map(gateway.code, db=db)
-    permit_open = await relay_push.render_permit_open(gateway.code, db=db)
+    permit_open = await relay_push.render_sshd_dropin(gateway.code, db=db)
     files = [
         RelayConfigFile(
             path=f"{conf_dir}/relay_8443.conf",
@@ -223,7 +266,11 @@ async def preview_gateway_config(gateway_id: int, db: AsyncSession = Depends(get
         RelayConfigFile(
             path="/etc/ssh/sshd_config.d/relay-tunnel.conf",
             content=permit_open,
-            purpose="sshd PermitOpen 白名单（当前暂缓，平台不下发；如需手工启用请写入后 reload sshd）",
+            purpose=(
+                "sshd 跳板转发配置（AllowTcpForwarding + PermitOpen）：可用「配置跳板转发」以 root 自动下发，"
+                "或按此手工写入并 reload sshd。注：部分厂商 sshd 不支持多目标 PermitOpen（LinxOS 报 "
+                "bad port number in permitopen），此时平台会自动回退为仅 AllowTcpForwarding yes"
+            ),
         ),
     ]
     notes = [

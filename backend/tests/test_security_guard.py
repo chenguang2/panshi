@@ -70,6 +70,7 @@ UNAUTHENTICATED_SAMPLES = [
     ("delete", "/api/v1/relay/gateways/1"),
     ("post", "/api/v1/relay/gateways/1/init"),
     ("post", "/api/v1/relay/gateways/1/push-config"),
+    ("post", "/api/v1/relay/gateways/1/sshd-setup"),
     ("get", "/api/v1/relay/gateways/1/config-preview"),
     ("get", "/api/v1/relay/health-check"),
 ]
