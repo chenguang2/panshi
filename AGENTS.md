@@ -190,6 +190,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 50. **中继路由快照派生自 `relay_gateways`/`ps_cluster.region_code`/`ps_node`，凡改动这三张表都须重载** — 快照是**进程内**的（`relay_registry`），而同步读取方（`run_playbook` 的跳板注入、`EdgeClient`）只走 `_require_snapshot()` **不判 TTL**，故任何改动都需显式唤醒：端点写操作用 `await relay_registry.refresh_routing()`（提交**之后**调用，避免与审计骨架写锁叠加），并辅以 `main.py` lifespan 里 `_relay_refresh_loop` 的 **30s TTL 兜底**（覆盖导入/还原、切换活动数据库等无端点触发点的改动——换库后旧快照会指向旧库数据）。2026-09-23 实测：给 `demo-cluster` 绑定区域 `aoh` 后，`192.168.0.14` 的节点状态仍直连不重启不生效（集群/节点 CRUD 只改了库、没重载快照）；修复后经 API 绑定即刻生效、解绑即刻回直连。回归 `tests/test_relay_routing.py`（集群/节点 CRUD 各一条 spy 断言 + `_relay_refresh_loop` 周期兜底用例）。排查口诀：改完区域/节点却"没走中继"，先确认库已改（GET 接口）再看快照是否重载。
 
+    另：**绑定/换绑区域只是"改库 + 刷新快照"，不会更新网关机上的节点白名单**（nginx `edge_targets.conf`），必须对该区域执行一次「下发配置」——否则该区域节点经网关访问**一律 403**（`目标不在该局网关白名单，请执行配置下发`），发布/节点任务必失败。2026-09-23 实测：`demo-cluster` 绑 `aoh` 后网关白名单仍是空表（`default ""`，写于绑定之前）→ upstream 发布 403；执行「下发配置」后三节点白名单就位、403 变 404（已放行，404 只是 Edge 根路径无路由）。节点增删同理（改变白名单成员）。前端已在集群保存成功后弹一次「需下发网关配置」引导（`ClusterFormModal.vue::showRegionGuide`，条件 = 区域非空且相对原值变化）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

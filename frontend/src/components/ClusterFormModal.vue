@@ -91,11 +91,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watchEffect, computed, nextTick } from 'vue'
+import { ref, reactive, watchEffect, computed, nextTick, h } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import { listRelayGateways, type RelayGateway } from '@/api/relay'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 
 const props = defineProps<{
   visible: boolean
@@ -107,6 +109,8 @@ const emit = defineEmits<{
   close: []
   saved: []
 }>()
+
+const router = useRouter()
 
 const submitting = ref(false)
 const showNewGroupInput = ref(false)
@@ -237,6 +241,33 @@ function handleCancel() {
   emit('close')
 }
 
+/**
+ * 成功挂接/变更区域后的引导：绑定区域只改平台路由 + 刷新路由快照，
+ * 不会自动更新网关机上的节点白名单（edge_targets.conf）；未下发前该区域
+ * 节点经网关访问一律 403，发布/节点任务会失败。
+ */
+function showRegionGuide(regionCode: string) {
+  const region = regionOptions.value.find((r) => r.code === regionCode)
+  const label = region ? `${region.name}（${region.code}）` : regionCode
+  showOverlayModal({
+    title: '需下发网关配置',
+    content: h('div', null, [
+      h('p', null, `已挂接区域「${label}」。`),
+      h(
+        'p',
+        null,
+        '绑定区域只改变平台路由，不会自动更新网关机上的节点白名单；未下发前该区域节点访问会返回 403，发布、节点任务等会失败。',
+      ),
+      h('p', { style: 'color: var(--muted); font-size: 12px' }, '请到「中继区域管理」对该区域执行一次「下发配置」。'),
+    ]),
+    okText: '去下发配置',
+    cancelText: '稍后',
+    onOk: () => {
+      void router.push('/relay-gateways')
+    },
+  })
+}
+
 async function handleSubmit() {
   if (!validateName()) return
   if (!form.display_name) {
@@ -262,8 +293,11 @@ async function handleSubmit() {
       await api.post('/clusters', data)
       message.success('集群已创建')
     }
+    // 区域新挂或换绑（值确实变化且非空）→ 保存成功后引导下发网关配置
+    const regionChanged = !!form.region_code && form.region_code !== (props.editingCluster?.region_code || '')
     emit('saved')
     emit('close')
+    if (regionChanged) showRegionGuide(form.region_code)
   } catch (error: any) {
     message.error(error.response?.data?.detail || '操作失败')
   } finally {
