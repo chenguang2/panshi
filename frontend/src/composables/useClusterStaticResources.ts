@@ -8,6 +8,7 @@ import {
   executePublish,
   executeDeleteWithProgress,
   buildDeleteProgressContent,
+  routeLabel,
 } from './useClusterUtils'
 import { formatFileSize } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
@@ -276,7 +277,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
           addLog('')
           addLog('节点同步结果:')
           for (const r of data.results) {
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+            const rl = routeLabel(r.route)
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
           }
         }
         progress.percent = 100

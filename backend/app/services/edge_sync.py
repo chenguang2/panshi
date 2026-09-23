@@ -296,7 +296,7 @@ async def create_config_version(
     return new_version
 
 
-def _mark_route(node_result: dict, client: EdgeClient) -> None:
+def mark_route(node_result: dict, client: EdgeClient) -> None:
     """在该节点使用的 EdgeClient 实例上判定实际路由，写入逐节点结果。
 
     判定源必须是该实例（_apply_relay 改写后的 relay_target / edge_url），
@@ -339,7 +339,7 @@ async def delete_on_nodes(
         }
         try:
             client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-            _mark_route(node_result, client)
+            mark_route(node_result, client)
             response = edge_delete_fn(client, edge_uuid)
             node_result["status"] = "success"
             node_result["response"] = response
@@ -390,7 +390,7 @@ async def publish_to_nodes(
         }
         try:
             client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-            _mark_route(node_result, client)
+            mark_route(node_result, client)
             encrypted = client._encrypt(json.dumps(edge_data).encode())
 
             response = publish_fn(client)

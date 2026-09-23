@@ -6,7 +6,7 @@ import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
 
 /** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连。字段缺失时返回空串（向后兼容）。 */
-function routeLabel(route?: 'relay' | 'direct'): string {
+export function routeLabel(route?: 'relay' | 'direct'): string {
   if (route === 'relay') return '经中继'
   if (route === 'direct') return '直连'
   return ''
@@ -587,6 +587,8 @@ interface DeleteResponseItem {
   node?: string
   details?: Record<string, number>
   results?: DeleteResponseItem[]
+  /** 节点执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
   [key: string]: unknown
 }
 
@@ -771,7 +773,10 @@ function logSingleDeleteResults(
         const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${r.details?.[k] ?? 0}`)
         detail = ` (${parts.join(' ')})`
       }
-      addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail} ${r.error ? '- ' + r.error : ''}`)
+      const rl = routeLabel(r.route)
+      addLog(
+        `  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
+      )
     }
     addLog('')
     addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)

@@ -137,7 +137,12 @@ import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
 import { formatDate } from '@/utils/format'
-import { showDeleteConfirm, buildDeleteProgressContent, executePublish } from '@/composables/useClusterUtils'
+import {
+  showDeleteConfirm,
+  buildDeleteProgressContent,
+  executePublish,
+  routeLabel,
+} from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string
@@ -401,7 +406,10 @@ const deletePlugin = (item: ConfiguredPlugin) => {
           for (const r of edgeResults) {
             if (r.status === 'success') ok++
             else fail++
-            addLog(`  ${r.node}: ${r.status === 'success' ? '✅' : '❌'} ${r.error ? '- ' + r.error : ''}`)
+            const rl = routeLabel(r.route)
+            addLog(
+              `  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
+            )
           }
           addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
         } else if (deleteEdge) {

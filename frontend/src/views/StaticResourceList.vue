@@ -23,6 +23,10 @@
       <span class="text-sm text-muted">共 {{ totalCount }} 个静态资源</span>
     </div>
 
+    <div class="text-sm text-muted" style="margin-bottom: 20px">
+      经中继发布时由网关转发，网关对请求体有上限（当前部署 32MB），超出会返回 413，请缩小 zip 后重试。
+    </div>
+
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-else-if="displayedResources.length === 0" class="sr-empty">
       <div class="sr-empty-icon">▣</div>
@@ -219,7 +223,7 @@ import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { executePublish, showDeleteConfirm, executeDeleteWithProgress, routeLabel } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
@@ -487,7 +491,8 @@ async function onPublishConfirm(nodeIds: number[]) {
         addLog('')
         addLog('节点同步结果:')
         for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          const rl = routeLabel(r.route)
+          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
         }
       }
       progress.percent = 100

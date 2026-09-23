@@ -198,7 +198,7 @@ import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'
 import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { executePublish, showDeleteConfirm, executeDeleteWithProgress, routeLabel } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
@@ -421,7 +421,8 @@ async function onPublishConfirm(nodeIds: number[]) {
         addLog('══════ 节点同步结果 ══════')
         for (const r of data.results) {
           const icon = r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌'
-          addLog(`${icon} 节点: ${r.node || r.scope || '-'}`)
+          const rl = routeLabel(r.route)
+          addLog(`${icon} 节点: ${r.node || r.scope || '-'}${rl ? `（${rl}）` : ''}`)
           addLog(`   状态: ${r.status}`)
           if (r.message) addLog(`   消息: ${r.message}`)
           if (r.error) addLog(`   错误: ${r.error}`)

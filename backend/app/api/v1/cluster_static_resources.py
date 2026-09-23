@@ -388,6 +388,21 @@ async def upload_static_resource_zip(
     return resource_to_response(resource)
 
 
+def _publish_error_detail(e: Exception) -> str:
+    """逐节点发布失败文本。
+
+    仅 413 特判为可读说明（经中继时网关 nginx client_max_body_size 可能被超出），
+    其余错误一律原样 str(e)。不吞异常、不影响 all_success 判定。
+    """
+    if isinstance(e, EdgeAPIError) and e.status_code == 413:
+        return (
+            "请求体过大（413）：经中继发布经网关转发，网关请求体上限"
+            "（nginx client_max_body_size，当前部署 32m）可能被超出；"
+            f"可缩小 zip 或改直连。原始错误：{e}"
+        )
+    return str(e)
+
+
 @router.post("/{resource_id}/publish")
 async def publish_static_resource(
     cluster_id: int,
@@ -436,15 +451,18 @@ async def publish_static_resource(
     path = f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}"
 
     for node in nodes:
+        node_result: dict = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
         try:
             client = EdgeClient(
                 cluster_id=cluster_id,
                 node_ip=node.ip,
                 node_port=node.management_port,
             )
+            edge_sync.mark_route(node_result, client)
             response = client.raw_put(path, zip_data)
 
-            results.append({"node": f"{node.ip}:{node.management_port}", "status": "success"})
+            node_result["status"] = "success"
+            results.append(node_result)
 
             edge_logger.log_publish_result(
                 resource_type="static_resource",
@@ -461,7 +479,9 @@ async def publish_static_resource(
                 error=None,
             )
         except (EdgeConnectionError, EdgeAPIError) as e:
-            results.append({"node": f"{node.ip}:{node.management_port}", "status": "failed", "error": str(e)})
+            node_result["status"] = "failed"
+            node_result["error"] = _publish_error_detail(e)
+            results.append(node_result)
             all_success = False
 
             edge_logger.log_publish_result(

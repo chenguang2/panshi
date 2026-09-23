@@ -542,3 +542,56 @@ describe('经中继 / 直连 路径标签（发布进度）', () => {
     expect(text).not.toContain('直连')
   })
 })
+
+describe('经中继 / 直连 路径标签（删除进度）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  async function runDelete(results: unknown[]) {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({ data: { message: '路由已删除', results } })
+    await executeDeleteWithProgress({
+      title: '删除路由',
+      apiEndpoint: '/clusters/1/routes/5',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [10],
+      refreshFn: vi.fn(),
+    })
+    return document.body.textContent || ''
+  }
+
+  it('edge + route=relay → 节点行尾（经中继）', async () => {
+    const text = await runDelete([{ scope: 'edge', node: '10.0.0.1:9180', status: 'success', route: 'relay' }])
+    expect(text).toContain('10.0.0.1:9180: ✅ （经中继）')
+  })
+
+  it('edge + route=direct → 节点行尾（直连）', async () => {
+    const text = await runDelete([{ scope: 'edge', node: '10.0.0.2:9180', status: 'success', route: 'direct' }])
+    expect(text).toContain('10.0.0.2:9180: ✅ （直连）')
+  })
+
+  it('edge 无 route 字段 → 不显示任何路径标注（向后兼容）', async () => {
+    const text = await runDelete([{ scope: 'edge', node: '10.0.0.9:9180', status: 'success' }])
+    expect(text).toContain('10.0.0.9:9180: ✅')
+    expect(text).not.toContain('（经中继）')
+    expect(text).not.toContain('（直连）')
+  })
+
+  it('带 detail 的 edge 行：标注追加在行尾', async () => {
+    const text = await runDelete([
+      { scope: 'edge', node: '10.0.0.1:9180', status: 'success', route: 'relay', details: { routes: 1 } },
+    ])
+    expect(text).toContain('10.0.0.1:9180: ✅ (路由:1 上游:0 插件组:0 全局规则:0 插件元数据:0) （经中继）')
+  })
+
+  it('scope=database 条目即使带 route 也不标注', async () => {
+    const text = await runDelete([{ scope: 'database', status: 'success', message: '数据库已删除', route: 'relay' }])
+    expect(text).toContain('数据库: 数据库已删除')
+    expect(text).not.toContain('（经中继）')
+    expect(text).not.toContain('（直连）')
+  })
+})
