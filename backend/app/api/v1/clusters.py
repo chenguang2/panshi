@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 
@@ -399,21 +400,33 @@ async def test_connection(
             continue
 
         port = node.management_port
-        import asyncio
+        # 走实际管理路径的调试探测（中继感知）：EdgeClient 会按区域快照把
+        # edge_url 改写为网关并设 X-Edge-Target。mark_route 在发起请求前调用，
+        # 保证失败节点也带 route/relay_via。
+        client = EdgeClient(cluster_id, node_ip=node.ip, node_port=port)
+        node_result = {
+            "node_id": node.id, "ip": node.ip, "port": port,
+            "ok": False, "msg": "", "version": "",
+        }
+        edge_sync.mark_route(node_result, client)
         ok = False
         msg = ""
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(node.ip, port), timeout=5.0)
-            writer.close()
-            await writer.wait_closed()
-            ok, msg = True, "管理端口可达"
-        except asyncio.TimeoutError:
-            msg = "连接超时"
-        except ConnectionRefusedError:
-            msg = "连接被拒绝"
-        except OSError as e:
-            msg = str(e)[:50]
+            # 最轻量只读探测：GET /edge/admin/plugins/list（仅返回插件名列表）。
+            # offload 到线程，避免同步 httpx（最长 5s）阻塞事件循环。
+            await asyncio.to_thread(client.list_available_plugins)
+            ok, msg = True, "管理面可达"
+        except EdgeConnectionError as e:
+            msg = str(e)[:200]
+        except EdgeAPIError as e:
+            # 网关白名单拦截：可定位文案直接透出（非可达）。
+            if e.status_code == 403 and client.relay_target:
+                msg = str(e)
+            else:
+                # 有 HTTP 响应即通（Edge 自身 4xx 如 404 也算可达）。
+                ok, msg = True, "管理面可达"
+        node_result["ok"] = ok
+        node_result["msg"] = msg
 
         node.status = 1 if ok else 0
         node.status_detail = json.dumps({
@@ -422,7 +435,7 @@ async def test_connection(
             "last_status": "ok" if ok else "failed",
             "last_error": None if ok else msg,
         }, ensure_ascii=False)
-        results.append({"node_id": node.id, "ip": node.ip, "port": port, "ok": ok, "msg": msg, "version": ""})
+        results.append(node_result)
 
     await db.commit()
     return {"results": results}

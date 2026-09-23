@@ -6,6 +6,22 @@ interface NodeResultItem {
   status: string
   error?: string
   steps?: Record<string, unknown>[]
+  /** 节点执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的跳板主机串，如 jboss@192.168.0.13 */
+  relay_via?: string
+}
+
+/** 读取配置流（GET /clusters/{id}/edge-env/read-stream）的单个事件负载 */
+interface EdgeEnvReadStreamEvent {
+  type: string
+  line?: string
+  message?: string
+  content?: string
+  /** 节点执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的跳板主机串，如 jboss@192.168.0.13 */
+  relay_via?: string
 }
 
 interface EdgeEnvDeployResponse {
@@ -38,7 +54,7 @@ export function getVersionDetail(clusterId: number, versionId: number) {
 export function readEdgeEnvStream(
   clusterId: number,
   nodeId: number,
-  onEvent: (data: Record<string, unknown>) => void,
+  onEvent: (data: EdgeEnvReadStreamEvent) => void,
   onError?: (err: string) => void,
 ): AbortController {
   const controller = new AbortController()

@@ -270,7 +270,12 @@ import api from '@/api'
 import { listRelayGateways } from '@/api/relay'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
-import { showDeleteConfirm, executeDeleteWithProgress, showNameConfirm } from '@/composables/useClusterUtils'
+import {
+  showDeleteConfirm,
+  executeDeleteWithProgress,
+  showNameConfirm,
+  routeLabel,
+} from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
@@ -411,6 +416,20 @@ const testVisible = ref(false)
 const testRunning = ref(false)
 const testNodes = ref<{ id: number; ip: string; service_port: number; management_port: number; status: number }[]>([])
 const testLogs = ref<{ status: 'pending' | 'success' | 'error'; msg: string }[]>([])
+
+/** POST /clusters/{id}/test 的逐节点结果 */
+interface ConnectionTestResult {
+  node_id: number
+  ip: string
+  port: number
+  ok: boolean
+  msg?: string
+  version?: string
+  /** 节点执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的网关地址 */
+  relay_via?: string
+}
 let testingCluster: Cluster | null = null
 
 function resetTest() {
@@ -456,19 +475,21 @@ async function runTest() {
   }
   try {
     const res = await api.post(`/clusters/${testingCluster.id}/test`, { node_ids: nodeIds })
-    const results: any[] = res.data.results || []
+    const results: ConnectionTestResult[] = res.data.results || []
     let successCount = 0
     let failCount = 0
     for (const r of results) {
       const idx = testNodes.value.findIndex((n) => n.id === r.node_id)
       if (idx >= 0) {
         const label = `${r.ip}:${r.port}`
+        const rl = routeLabel(r.route)
+        const routeSuffix = rl ? `（${rl}）` : ''
         if (r.ok) {
           successCount++
-          testLogs.value[idx] = { status: 'success', msg: `${label} 连接成功` }
+          testLogs.value[idx] = { status: 'success', msg: `${label} 连接成功${routeSuffix}` }
         } else {
           failCount++
-          testLogs.value[idx] = { status: 'error', msg: `${label} 连接失败 — ${r.msg}` }
+          testLogs.value[idx] = { status: 'error', msg: `${label} 连接失败 — ${r.msg}${routeSuffix}` }
         }
       }
     }

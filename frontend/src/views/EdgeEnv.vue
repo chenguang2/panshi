@@ -62,6 +62,17 @@
           <button class="modal-close" @click="closeReadModal">&times;</button>
         </div>
         <div class="modal-body">
+          <div v-if="readNode" class="ee-node-card">
+            <div class="ee-node-card-header">
+              <span class="ee-node-card-ip">{{ readNode.ip }}</span>
+              <span class="ee-node-card-status">
+                <span class="badge" :class="readBadgeClass(readNode.status)">{{
+                  readStatusText(readNode.status)
+                }}</span>
+                <span v-if="routeTag(readNode)" class="ee-node-route">{{ routeTag(readNode) }}</span>
+              </span>
+            </div>
+          </div>
           <div v-if="readLogs.length === 0" class="ee-deploying">
             <div class="ee-spinner"></div>
             <div>正在连接远程主机...</div>
@@ -197,17 +208,20 @@
           <div v-for="nodeResult in nodeResults" :key="nodeResult.ip" class="ee-node-card">
             <div class="ee-node-card-header">
               <span class="ee-node-card-ip">{{ nodeResult.ip }}</span>
-              <span
-                class="badge"
-                :class="
-                  nodeResult.status === 'success'
-                    ? 'badge-success'
-                    : nodeResult.status === 'failed'
-                      ? 'badge-danger'
-                      : 'badge-neutral'
-                "
-              >
-                {{ nodeResult.status === 'success' ? '成功' : nodeResult.status === 'failed' ? '失败' : '发布中...' }}
+              <span class="ee-node-card-status">
+                <span
+                  class="badge"
+                  :class="
+                    nodeResult.status === 'success'
+                      ? 'badge-success'
+                      : nodeResult.status === 'failed'
+                        ? 'badge-danger'
+                        : 'badge-neutral'
+                  "
+                >
+                  {{ nodeResult.status === 'success' ? '成功' : nodeResult.status === 'failed' ? '失败' : '发布中...' }}
+                </span>
+                <span v-if="routeTag(nodeResult)" class="ee-node-route">{{ routeTag(nodeResult) }}</span>
               </span>
             </div>
             <div v-if="nodeResult.error" class="ee-node-error">{{ nodeResult.error }}</div>
@@ -257,6 +271,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import api from '@/api'
 import * as edgeEnvApi from '@/api/edgeEnv'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { routeLabel } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
@@ -337,6 +352,12 @@ const readModalVisible = ref(false)
 const readStreaming = ref(false)
 const readLogs = ref<string[]>([])
 const readError = ref('')
+interface ReadNodeState {
+  ip: string
+  status: 'reading' | 'success' | 'failed'
+  route?: 'relay' | 'direct'
+}
+const readNode = ref<ReadNodeState | null>(null)
 let readAbort: AbortController | null = null
 
 // Publish
@@ -473,25 +494,33 @@ async function startReadTemplate() {
   readStreaming.value = true
   readLogs.value = []
   readError.value = ''
+  const target = nodes.value.find((n) => n.id === Number(selectedNodeId.value))
+  readNode.value = { ip: target?.ip || String(selectedNodeId.value), status: 'reading' }
 
   readAbort = edgeEnvApi.readEdgeEnvStream(
     Number(selectedClusterId.value),
     Number(selectedNodeId.value),
-    (data: any) => {
+    (data) => {
       if (data.line) readLogs.value.push(data.line)
       if (data.type === 'content') {
-        editorContent.value = data.content
-        savedContent.value = data.content
+        editorContent.value = data.content || ''
+        savedContent.value = data.content || ''
+        if (readNode.value) {
+          if (data.route) readNode.value.route = data.route
+          readNode.value.status = 'success'
+        }
         readStreaming.value = false
         readLogs.value.push('✅ 配置模板获取完成')
       }
       if (data.type === 'error') {
         readError.value = data.message || '读取失败'
+        if (readNode.value) readNode.value.status = 'failed'
         readStreaming.value = false
       }
     },
     (err) => {
       readError.value = err
+      if (readNode.value) readNode.value.status = 'failed'
       readStreaming.value = false
     },
   )
@@ -500,6 +529,7 @@ async function startReadTemplate() {
 function closeReadModal() {
   readModalVisible.value = false
   readStreaming.value = false
+  readNode.value = null
   readAbort?.abort()
   readAbort = null
 }
@@ -603,6 +633,20 @@ function clearAllPublishNodes() {
   selectedPublishNodeIds.value = []
 }
 
+/** 节点行尾的路径标注，如「（经中继）」；无 route 字段时返回空串（不渲染） */
+function routeTag(nr: { route?: 'relay' | 'direct' }): string {
+  const label = routeLabel(nr.route)
+  return label ? `（${label}）` : ''
+}
+
+function readBadgeClass(status: ReadNodeState['status']): string {
+  return status === 'success' ? 'badge-success' : status === 'failed' ? 'badge-danger' : 'badge-neutral'
+}
+
+function readStatusText(status: ReadNodeState['status']): string {
+  return status === 'success' ? '成功' : status === 'failed' ? '失败' : '读取中...'
+}
+
 async function executePublish() {
   if (!selectedClusterId.value || selectedPublishNodeIds.value.length === 0) return
   publishNodeModalVisible.value = false
@@ -620,10 +664,13 @@ async function executePublish() {
       try {
         const data = JSON.parse(line)
         if (data.type === 'node_start') {
-          nodeResults.value.push({ ip: data.ip, status: 'deploying', logs: [] })
+          nodeResults.value.push({ ip: data.ip, status: 'deploying', logs: [], route: data.route })
         } else if (data.type === 'node_done') {
           const nr = nodeResults.value.find((n) => n.ip === data.ip)
-          if (nr) nr.status = data.status === 'success' ? 'success' : 'failed'
+          if (nr) {
+            nr.status = data.status === 'success' ? 'success' : 'failed'
+            if (data.route) nr.route = data.route
+          }
         } else if (data.type === 'complete') {
           publishResult.value = data
           savedContent.value = editorContent.value
@@ -755,6 +802,15 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 .ee-node-card-ip {
   font-family: var(--font-mono);
   font-weight: 600;
+}
+.ee-node-card-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ee-node-route {
+  font-size: 12px;
+  color: var(--muted);
 }
 .ee-node-error {
   margin-top: 8px;

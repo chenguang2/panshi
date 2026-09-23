@@ -6,6 +6,8 @@ class EdgeEnvReadResponse(BaseModel):
     node_id: int
     node_ip: str
     content: str
+    route: str
+    relay_via: Optional[str] = None
 
 
 class EdgeEnvDeployRequest(BaseModel):
