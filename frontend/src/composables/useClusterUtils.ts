@@ -5,6 +5,13 @@ import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
 
+/** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连。字段缺失时返回空串（向后兼容）。 */
+function routeLabel(route?: 'relay' | 'direct'): string {
+  if (route === 'relay') return '经中继'
+  if (route === 'direct') return '直连'
+  return ''
+}
+
 export const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
   upstreams: '上游服务',
@@ -466,6 +473,8 @@ interface PublishResultData {
     stdout?: string
     stderr?: string
     rc?: number
+    /** 节点执行路径（后端提供；缺失时不显示标签） */
+    route?: 'relay' | 'direct'
     [key: string]: unknown
   }>
   [key: string]: unknown
@@ -526,7 +535,8 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
         addLog('')
         addLog('节点同步结果:')
         for (const r of data.results) {
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}`)
+          const rl = routeLabel(r.route)
+          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
         }
       }
 

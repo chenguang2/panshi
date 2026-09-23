@@ -45,6 +45,7 @@
                   ><span class="status-dot online"></span>运行中</span
                 >
                 <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+                <span class="badge cl-route-badge" :class="routeBadge(c).cls">{{ routeBadge(c).label }}</span>
               </div>
             </div>
             <div class="cl-card-stats">
@@ -261,23 +262,64 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watchEffect } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import api from '@/api'
+import { listRelayGateways } from '@/api/relay'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 import { showDeleteConfirm, executeDeleteWithProgress, showNameConfirm } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 const authStore = useAuthStore()
+const featuresStore = useFeaturesStore()
 
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const groupFilter = ref('__all__')
 const expandedGroups = ref<Record<string, boolean>>({})
+
+// ── 经中继 / 直连 徽章 ────────────────────────────────────────────────
+// 中继总开关在 features.yaml 中是显式 opt-in（缺失即关闭），故直接读原始值，
+// 不使用 featuresStore.has()（那是「未列出即启用」的 opt-out 语义）。
+const relayFeatureOn = computed(() => featuresStore.features.relay_gateway === true)
+const regionNames = ref<Record<string, string>>({})
+/** 只有成功拉到区域列表才算「中继可用」；拉取失败（功能关闭常见 404/403）按未启用处理 */
+const relayUsable = ref(false)
+let relayFetchStarted = false
+
+watchEffect(() => {
+  if (!relayFeatureOn.value) {
+    relayUsable.value = false
+    return
+  }
+  if (relayFetchStarted) return
+  // 没有任何集群挂接区域时无需拉取区域名
+  if (!clusters.value.some((c) => !!c.region_code)) return
+  relayFetchStarted = true
+  Promise.resolve()
+    .then(() => listRelayGateways())
+    .then((res) => {
+      const map: Record<string, string> = {}
+      for (const g of res.data) map[g.code] = g.name
+      regionNames.value = map
+      relayUsable.value = true
+    })
+    .catch(() => {
+      relayUsable.value = false
+    })
+})
+
+/** 集群卡片右上角的路径徽章：经中继（品牌/成功色）或直连（中性色） */
+function routeBadge(c: Cluster): { label: string; cls: string } {
+  if (!relayUsable.value || !c.region_code) return { label: '直连', cls: 'badge-neutral' }
+  const name = regionNames.value[c.region_code] || c.region_code
+  return { label: `经中继 · ${name}`, cls: 'badge-success' }
+}
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c) => c.group_name || ''))
@@ -666,9 +708,15 @@ onMounted(() => {
   overflow: hidden;
 }
 .cl-card-meta {
-  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   flex-shrink: 0;
   margin-left: 12px;
+}
+.cl-route-badge {
+  white-space: nowrap;
 }
 
 .cl-card-stats {

@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockApiDelete = vi.fn()
+const mockApiPost = vi.fn()
 vi.mock('@/api', () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: (...args: any[]) => mockApiDelete(...args) },
+  default: {
+    get: vi.fn(),
+    post: (...args: any[]) => mockApiPost(...args),
+    put: vi.fn(),
+    delete: (...args: any[]) => mockApiDelete(...args),
+  },
 }))
 
 function makeCluster() {
@@ -483,5 +489,56 @@ describe('executeDeleteWithProgress', () => {
     const healthCell = Array.from(document.querySelectorAll('td')).find((td) => td.textContent === '健康')
     expect(healthCell).toBeTruthy()
     expect(getComputedStyle(healthCell!).whiteSpace).toBe('nowrap')
+  })
+})
+
+describe('经中继 / 直连 路径标签（发布进度）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('executePublish: 逐节点结果带 route 时追加路径标签', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({
+      data: {
+        status: 'ok',
+        message: '发布完成',
+        version: 3,
+        results: [
+          { node: '10.0.0.1:9180', status: 'success', route: 'relay' },
+          { node: '10.0.0.2:9180', status: 'success', route: 'direct' },
+        ],
+      },
+    })
+
+    await executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [1, 2],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('经中继')
+    expect(text).toContain('直连')
+  })
+
+  it('executePublish: 无 route 字段 → 节点日志不含路径标签（向后兼容）', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({
+      data: { status: 'ok', message: '发布完成', results: [{ node: '10.0.0.9:9180', status: 'success' }] },
+    })
+
+    await executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [9],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).not.toContain('经中继')
+    expect(text).not.toContain('直连')
   })
 })
