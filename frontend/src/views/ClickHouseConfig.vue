@@ -35,7 +35,6 @@
     <div class="card">
       <div class="card-header">
         <h3>连接列表</h3>
-        <button class="btn btn-primary btn-sm" @click="openCreateModal">+ 新建连接</button>
       </div>
       <div class="card-body table-body">
         <a-table

@@ -10,54 +10,56 @@
     </PageHeader>
 
     <div class="card">
-      <div class="card-header"><h3>区域列表</h3></div>
-      <div class="card-body">
+      <div class="card-header">
+        <h3>区域列表</h3>
+      </div>
+      <div class="card-body table-body">
         <a-table
           :columns="columns"
           :data-source="regions"
           :loading="loading"
           row-key="id"
           :pagination="false"
-          size="middle"
+          class="region-table"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'code'">
               <a-tag color="blue">{{ record.code }}</a-tag>
             </template>
             <template v-else-if="column.key === 'http_base_url'">
-              {{ record.http_base_url || '—' }}
+              <span class="mono">{{ record.http_base_url || '—' }}</span>
             </template>
             <template v-else-if="column.key === 'ssh_jump'">
-              {{ record.ssh_jump || '—' }}
+              <span class="mono">{{ record.ssh_jump || '—' }}</span>
             </template>
             <template v-else-if="column.key === 'openresty_prefix'">
-              {{ record.openresty_prefix || '—' }}
+              <span class="mono">{{ record.openresty_prefix || '—' }}</span>
             </template>
             <template v-else-if="column.key === 'status'">
-              <a-tag :color="record.status === 'enabled' ? 'green' : 'default'">
+              <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
                 {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
-              </a-tag>
+              </span>
             </template>
             <template v-else-if="column.key === 'actions'">
-              <div class="row-actions">
-                <button class="btn btn-sm" :disabled="busy" @click="openEdit(record)">编辑</button>
-                <button class="btn btn-sm" :disabled="busy" @click="handleToggle(record)">
+              <div class="table-actions">
+                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="openEdit(record)">编辑</button>
+                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="handleToggle(record)">
                   {{ record.status === 'enabled' ? '禁用' : '启用' }}
                 </button>
-                <button class="btn btn-sm" :disabled="busy || testing" @click="handleTest(record)">
-                  {{ testingId === record.id ? '测试中...' : '连通性测试' }}
+                <button class="btn btn-secondary btn-sm" :disabled="busy || testing" @click="handleTest(record)">
+                  {{ testingId === record.id ? '测试中…' : '连通性测试' }}
                 </button>
-                <button class="btn btn-sm" :disabled="busy" @click="handleInit(record)">
-                  {{ activeId === record.id && activeKind === 'init' ? '初始化中...' : '初始化网关' }}
+                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="handleInit(record)">
+                  {{ activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关' }}
                 </button>
-                <button class="btn btn-sm btn-primary" :disabled="busy" @click="handlePush(record)">
-                  {{ activeId === record.id && activeKind === 'push' ? '下发中...' : '下发配置' }}
+                <button class="btn btn-primary btn-sm" :disabled="busy" @click="handlePush(record)">
+                  {{ activeId === record.id && activeKind === 'push' ? '下发中…' : '下发配置' }}
                 </button>
-                <button class="btn btn-sm" @click="openConfigPreview(record)">查看配置</button>
-                <button class="btn btn-sm" :disabled="busy" @click="openSshdSetup(record)">
-                  {{ activeId === record.id && activeKind === 'sshd' ? '配置中...' : '配置跳板转发' }}
+                <button class="btn btn-secondary btn-sm" @click="openConfigPreview(record)">查看配置</button>
+                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="openSshdSetup(record)">
+                  {{ activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发' }}
                 </button>
-                <button class="btn btn-sm btn-danger" :disabled="busy" @click="handleDelete(record)">删除</button>
+                <button class="btn btn-danger btn-sm" :disabled="busy" @click="handleDelete(record)">删除</button>
               </div>
             </template>
           </template>
@@ -70,66 +72,85 @@
 
     <!-- 新建 / 编辑弹窗（视图级内联弹窗，约定 #25） -->
     <div v-if="modal.open" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-card">
-        <h2>{{ modal.editing ? '编辑区域' : '新建区域' }}</h2>
-        <div class="form-group">
-          <label class="form-label">区域码 <span class="required">*</span></label>
-          <input
-            type="text"
-            class="form-input"
-            :class="{ 'has-error': formErrors.code }"
-            v-model="form.code"
-            :disabled="modal.editing"
-            placeholder="小写字母开头，小写字母/数字/中划线，如 luju"
-          />
-          <span class="form-error" v-if="formErrors.code">{{ formErrors.code }}</span>
-          <span class="form-hint" v-else>创建后不可修改；用于集群挂接与网关配置渲染</span>
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ modal.editing ? '编辑区域' : '新建区域' }}</h2>
+          <button class="modal-close" @click="closeModal">&times;</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">展示名 <span class="required">*</span></label>
-          <input type="text" class="form-input" v-model="form.name" placeholder="如：路局A" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">网关 HTTP 腿</label>
-          <input
-            type="text"
-            class="form-input"
-            v-model="form.http_base_url"
-            placeholder="如 http://10.10.1.1:8443（留空 = 直连）"
-          />
-          <span class="form-hint">该局网关的 HTTP 反向代理地址；留空表示该区域直连</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">SSH 跳板</label>
-          <input
-            type="text"
-            class="form-input"
-            v-model="form.ssh_jump"
-            placeholder="如 tunnel@10.10.1.1:22（留空 = 直连）"
-          />
-          <span class="form-hint">跳板专用账号与网关地址；留空表示该区域 SSH 直连</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">OpenResty 前缀</label>
-          <input
-            type="text"
-            class="form-input"
-            v-model="form.openresty_prefix"
-            placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
-          />
-          <span class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
-        </div>
-        <div class="form-group">
-          <label class="form-label">状态</label>
-          <select class="form-input" v-model="form.status">
-            <option value="enabled">启用</option>
-            <option value="disabled">禁用（该区域回退直连）</option>
-          </select>
+        <div class="modal-body">
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">区域码 <span class="required">*</span></label>
+              <input
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': formErrors.code }"
+                v-model="form.code"
+                :disabled="modal.editing"
+                placeholder="小写字母开头，小写字母/数字/中划线，如 luju"
+              />
+            </div>
+            <span v-if="formErrors.code" class="form-error">{{ formErrors.code }}</span>
+            <span v-else class="form-hint">创建后不可修改；用于集群挂接与网关配置渲染</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <div class="field-inline">
+                <label class="form-label">展示名 <span class="required">*</span></label>
+                <input type="text" class="form-input" v-model="form.name" placeholder="如：路局A" />
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="field-inline">
+                <label class="form-label">状态</label>
+                <select class="form-input" v-model="form.status">
+                  <option value="enabled">启用</option>
+                  <option value="disabled">禁用（该区域回退直连）</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">网关 HTTP 腿</label>
+              <input
+                type="text"
+                class="form-input"
+                v-model="form.http_base_url"
+                placeholder="如 http://10.10.1.1:8443（留空 = 直连）"
+              />
+            </div>
+            <span class="form-hint">该局网关的 HTTP 反向代理地址；留空表示该区域直连</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">SSH 跳板</label>
+              <input
+                type="text"
+                class="form-input"
+                v-model="form.ssh_jump"
+                placeholder="如 tunnel@10.10.1.1:22（留空 = 直连）"
+              />
+            </div>
+            <span class="form-hint">跳板专用账号与网关地址；留空表示该区域 SSH 直连</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">OpenResty 前缀</label>
+              <input
+                type="text"
+                class="form-input"
+                v-model="form.openresty_prefix"
+                placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
+              />
+            </div>
+            <span class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
           <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
-            {{ submitting ? '保存中...' : '保存' }}
+            {{ submitting ? '保存中…' : '保存' }}
           </button>
         </div>
       </div>
@@ -137,30 +158,34 @@
 
     <!-- 配置预览（只读）：展示将写入网关机的文件内容，可复制；ansible 不可用时据此手工配置 -->
     <div v-if="configModal.open" class="modal-overlay" @click.self="configModal.open = false">
-      <div class="modal-card config-modal">
-        <h2>配置预览 · {{ configModal.regionName }}</h2>
-        <div v-if="configModal.loading" class="config-hint">加载中...</div>
-        <template v-else-if="configModal.data">
-          <p class="config-hint">
-            区域 <a-tag color="blue">{{ configModal.data.region_code }}</a-tag>
-            OpenResty 前缀 <code>{{ configModal.data.openresty_prefix }}</code>
-            · 监听端口 {{ configModal.data.listen_port }}
-          </p>
-          <div v-for="f in configModal.data.files" :key="f.path" class="config-file">
-            <div class="config-file-head">
-              <div class="config-file-meta">
-                <div class="config-file-path">{{ f.path }}</div>
-                <div class="config-file-purpose">{{ f.purpose }}</div>
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>配置预览 · {{ configModal.regionName }}</h2>
+          <button class="modal-close" @click="configModal.open = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="configModal.loading" class="config-hint">加载中…</div>
+          <template v-else-if="configModal.data">
+            <p class="config-hint">
+              区域 <a-tag color="blue">{{ configModal.data.region_code }}</a-tag> OpenResty 前缀
+              <code>{{ configModal.data.openresty_prefix }}</code> · 监听端口 {{ configModal.data.listen_port }}
+            </p>
+            <div v-for="f in configModal.data.files" :key="f.path" class="config-file">
+              <div class="config-file-head">
+                <div class="config-file-meta">
+                  <div class="config-file-path">{{ f.path }}</div>
+                  <div class="config-file-purpose">{{ f.purpose }}</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" @click="copyText(f.content)">复制</button>
               </div>
-              <button class="btn btn-sm" @click="copyText(f.content)">复制</button>
+              <pre class="config-pre">{{ f.content }}</pre>
             </div>
-            <pre class="config-pre">{{ f.content }}</pre>
-          </div>
-          <ul class="config-notes">
-            <li v-for="(n, i) in configModal.data.notes" :key="i">{{ n }}</li>
-          </ul>
-        </template>
-        <div v-else class="config-hint">加载失败，请重试</div>
+            <ul class="config-notes">
+              <li v-for="(n, i) in configModal.data.notes" :key="i">{{ n }}</li>
+            </ul>
+          </template>
+          <div v-else class="config-hint">加载失败，请重试</div>
+        </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="configModal.open = false">关闭</button>
         </div>
@@ -169,40 +194,39 @@
 
     <!-- 配置网关 sshd 跳板转发（需 root；凭据仅本次使用，不保存） -->
     <div v-if="sshdModal.open" class="modal-overlay" @click.self="closeSshdSetup">
-      <div class="modal-card" style="width: 560px">
-        <h2>配置跳板转发 - {{ sshdModal.record?.name }}</h2>
-        <p class="config-hint">
-          网关 sshd 默认禁止 TCP 转发（跳板查询会报 <code>administratively prohibited</code>）。此处以
-          root 在网关机写入 <code>/etc/ssh/sshd_config.d/relay-tunnel.conf</code>
-          （放行转发 + 仅允许连本局节点 SSH 端口）并重载 sshd；校验失败会自动回滚，不影响正在运行的
-          sshd。
-        </p>
-        <div class="form-group">
-          <label class="form-label">root 账号</label>
-          <input
-            type="text"
-            class="form-input"
-            v-model="sshdModal.root_user"
-            placeholder="root"
-          />
+      <div class="modal">
+        <div class="modal-header">
+          <h2>配置跳板转发 · {{ sshdModal.record?.name }}</h2>
+          <button class="modal-close" @click="closeSshdSetup">&times;</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">root 密码</label>
-          <input
-            type="password"
-            class="form-input"
-            v-model="sshdModal.root_password"
-            placeholder="请输入 root 密码（仅本次使用，不保存）"
-          />
-          <span class="form-hint">仅本次注入网关清单用于连接，跑完立即还原；不落库、不打日志</span>
+        <div class="modal-body">
+          <p class="config-hint">
+            网关 sshd 默认禁止 TCP 转发（跳板查询会报 <code>administratively prohibited</code>）。此处以 root
+            在网关机写入 <code>/etc/ssh/sshd_config.d/relay-tunnel.conf</code>
+            （放行转发 + 仅允许连本局节点 SSH 端口）并重载 sshd；校验失败会自动回滚，不影响正在运行的 sshd。
+          </p>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">root 账号</label>
+              <input type="text" class="form-input" v-model="sshdModal.root_user" placeholder="root" />
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">root 密码</label>
+              <input
+                type="password"
+                class="form-input"
+                v-model="sshdModal.root_password"
+                placeholder="请输入 root 密码（仅本次使用，不保存）"
+              />
+            </div>
+            <span class="form-hint">仅本次注入网关清单用于连接，跑完立即还原；不落库、不打日志</span>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeSshdSetup">取消</button>
-          <button
-            class="btn btn-primary"
-            :disabled="!sshdModal.root_password"
-            @click="submitSshdSetup"
-          >
+          <button class="btn btn-primary" :disabled="!sshdModal.root_password" @click="submitSshdSetup">
             开始配置
           </button>
         </div>
@@ -460,9 +484,7 @@ async function handleTest(record: RelayGateway) {
     const lines = result.segments
       .map((s) => {
         const head = `${s.name}：${s.ok ? '✓ 可达' : `✗ ${s.error || '不可达'}`}`
-        const notes = (s.nodes || [])
-          .filter((n) => n.ssh_skipped && n.note)
-          .map((n) => `　└ ${n.node}：${n.note}`)
+        const notes = (s.nodes || []).filter((n) => n.ssh_skipped && n.note).map((n) => `\u3000└ ${n.node}：${n.note}`)
         return [head, ...notes].join('\n')
       })
       .join('\n')
@@ -504,11 +526,7 @@ function resetActiveState() {
 }
 
 /** 打开执行过程抽屉并开始 SSE 流（复用节点安装的流式模型）。 */
-function startExec(
-  record: RelayGateway,
-  kind: 'init' | 'push' | 'sshd',
-  body: Record<string, unknown> = {},
-) {
+function startExec(record: RelayGateway, kind: 'init' | 'push' | 'sshd', body: Record<string, unknown> = {}) {
   const isInit = kind === 'init'
   const label = { init: '初始化网关', push: '下发配置', sshd: '配置跳板转发' }[kind]
   const url =
@@ -529,61 +547,57 @@ function startExec(
   execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   startElapsedTimer()
 
-  installStream.start(
-    url,
-    body,
-    {
-      onLine: (line: string) => {
-        // useInstallStream 对无 line 字段的结构化事件以 JSON 字符串转发；此处仅捕获终态
-        // 事件（含 rc/status/hosts_pattern/listen_port），不混入日志。
-        if (line.startsWith('{"')) {
-          try {
-            finalEvent = JSON.parse(line) as Record<string, unknown>
-            return
-          } catch {
-            /* 非 JSON：按普通日志处理 */
-          }
+  installStream.start(url, body, {
+    onLine: (line: string) => {
+      // useInstallStream 对无 line 字段的结构化事件以 JSON 字符串转发；此处仅捕获终态
+      // 事件（含 rc/status/hosts_pattern/listen_port），不混入日志。
+      if (line.startsWith('{"')) {
+        try {
+          finalEvent = JSON.parse(line) as Record<string, unknown>
+          return
+        } catch {
+          /* 非 JSON：按普通日志处理 */
         }
-        execLogs.value = [...execLogs.value, line]
-      },
-      onProgress: (percent: number) => {
-        if (percent > execProgress.percent) execProgress.percent = percent
-      },
-      onComplete: (rc: number, status: string) => {
-        // 收到终态事件即结束加载态/恢复按钮（不等底层流关闭，避免按钮卡在「初始化中...」）
-        installStream.forceComplete()
-        stopElapsedTimer()
-        resetActiveState()
-        execProgress.status = rc === 0 ? 'success' : 'exception'
-        execProgress.percent = 100
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
-        const hosts = (finalEvent?.hosts_pattern as string) || `gateways_${record.code}`
-        const port = (finalEvent?.listen_port as number) || 8443
-        execHighlights.value =
-          rc === 0
-            ? kind === 'init'
-              ? [`初始化完成：${hosts}，监听 ${port}`]
-              : kind === 'push'
-                ? [`下发完成：${hosts}`]
-                : [`sshd 跳板转发配置完成：${hosts}`]
-            : [`执行失败（rc=${rc}，${status}）`]
-        if (rc === 0) {
-          message.success(isInit ? `初始化完成（${hosts}，监听 ${port}）` : `配置已下发（${hosts}）`)
-        } else {
-          message.error(`${isInit ? '初始化' : '下发'}失败（rc=${rc}），详见执行日志`)
-        }
-        load()
-      },
-      onError: (err: string) => {
-        stopElapsedTimer()
-        resetActiveState()
-        execProgress.status = 'exception'
-        execError.value = err
-        execLogs.value = [...execLogs.value, `❌ ${err}`]
-        message.error(err)
-      },
+      }
+      execLogs.value = [...execLogs.value, line]
     },
-  )
+    onProgress: (percent: number) => {
+      if (percent > execProgress.percent) execProgress.percent = percent
+    },
+    onComplete: (rc: number, status: string) => {
+      // 收到终态事件即结束加载态/恢复按钮（不等底层流关闭，避免按钮卡在「初始化中...」）
+      installStream.forceComplete()
+      stopElapsedTimer()
+      resetActiveState()
+      execProgress.status = rc === 0 ? 'success' : 'exception'
+      execProgress.percent = 100
+      execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
+      const hosts = (finalEvent?.hosts_pattern as string) || `gateways_${record.code}`
+      const port = (finalEvent?.listen_port as number) || 8443
+      execHighlights.value =
+        rc === 0
+          ? kind === 'init'
+            ? [`初始化完成：${hosts}，监听 ${port}`]
+            : kind === 'push'
+              ? [`下发完成：${hosts}`]
+              : [`sshd 跳板转发配置完成：${hosts}`]
+          : [`执行失败（rc=${rc}，${status}）`]
+      if (rc === 0) {
+        message.success(isInit ? `初始化完成（${hosts}，监听 ${port}）` : `配置已下发（${hosts}）`)
+      } else {
+        message.error(`${isInit ? '初始化' : '下发'}失败（rc=${rc}），详见执行日志`)
+      }
+      load()
+    },
+    onError: (err: string) => {
+      stopElapsedTimer()
+      resetActiveState()
+      execProgress.status = 'exception'
+      execError.value = err
+      execLogs.value = [...execLogs.value, `❌ ${err}`]
+      message.error(err)
+    },
+  })
 }
 
 function cancelExec() {
@@ -693,60 +707,82 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 20px;
 }
-.row-actions {
+
+/* ── 区域列表表格 ── */
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
+.table-body {
+  padding: 0;
+}
+.region-table :deep(.ant-table) {
+  background: transparent;
+}
+.region-table :deep(.ant-table-thead > tr > th) {
+  background: oklch(56% 0.16 210 / 10%);
+  border-bottom: 2px solid var(--accent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 8px;
+  white-space: nowrap;
+}
+.region-table :deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+.region-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.region-table :deep(.ant-table-tbody > tr:last-child > td) {
+  border-bottom: none !important;
+}
+.region-table :deep(.ant-table-tbody > tr:hover > td) {
+  background: var(--bg);
+}
+.table-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 .empty-hint {
-  color: var(--muted);
+  padding: 14px 16px;
   font-size: 13px;
-  padding: 12px 0;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+
+/* ── 弹窗表单：标签与输入同行（同 ClickHouse 配置页） ── */
+.field-inline {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.modal-card {
-  background: var(--bg-primary, #fff);
-  border-radius: 8px;
-  padding: 20px;
-  width: 480px;
-  max-height: 85vh;
-  overflow: auto;
-}
-.modal-card h2 {
-  margin: 0 0 16px;
-  font-size: 16px;
-}
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
   gap: 8px;
-  margin-top: 16px;
 }
-.btn-danger {
-  color: #cf1322;
-  border-color: #ffa39e;
+.field-inline .form-label {
+  margin-bottom: 0;
+  white-space: nowrap;
 }
-.btn-danger:hover {
-  background: #fff1f0;
+.field-inline .form-input {
+  flex: 1 1 140px;
+  min-width: 0;
 }
-.config-modal {
-  width: 760px;
-}
+
+/* ── 配置预览弹窗内容 ── */
 .config-hint {
   color: var(--muted);
   font-size: 13px;
   margin: 0 0 12px;
 }
 .config-file {
-  border: 1px solid var(--border-color, #f0f0f0);
+  border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 12px;
   overflow: hidden;
@@ -757,10 +793,10 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--bg-secondary, #fafafa);
+  background: var(--bg);
 }
 .config-file-path {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   word-break: break-all;
 }

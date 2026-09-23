@@ -163,11 +163,11 @@ describe('RelayGateways', () => {
     await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
     await flushPromises()
 
-    const inputs = wrapper.findAll('.modal-card input.form-input')
+    const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
     await inputs[1]!.setValue('路局B')
     await wrapper
-      .findAll('.modal-card button.btn-primary')
+      .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
       .trigger('click')
     await flushPromises()
@@ -184,12 +184,12 @@ describe('RelayGateways', () => {
     await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
     await flushPromises()
 
-    const inputs = wrapper.findAll('.modal-card input.form-input')
+    const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('Bad_Code')
     await inputs[1]!.setValue('x')
     mockPost.mockClear()
     await wrapper
-      .findAll('.modal-card button.btn-primary')
+      .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
       .trigger('click')
     await flushPromises()
