@@ -383,6 +383,19 @@ systemctl is-active --quiet sshd || exit 1
 | 裸 SSH | `resolve_relay_jump(ip)` → relay_gateways.ssh_jump | `_build_ssh_cmd` 加 `-J` |
 | Ansible | inventory 节点行 `ansible_ssh_common_args`（渲染器按区域写入） | ProxyJump，节点行级 |
 
+**各操作实际走的通道与界面标注位置**（2026-09-23 实测；判定字段见"实现补充（2026-09-23）"）：
+
+| 操作 | 通道 | 界面上的路径标注 |
+| --- | --- | --- |
+| 集群域资源配置发布（路由 / 上游 / 插件组 / 全局规则 / SSL / 流代理 / DNS 代理） | Edge Admin API（HTTP 腿） | 发布进度弹窗逐节点 `（经中继）` / `（直连）` |
+| 同上删除 | Edge Admin API（HTTP 腿） | 删除进度弹窗逐节点 |
+| 静态资源 zip 发布 | Edge Admin API（HTTP 腿，zip 整体作 PUT body） | 发布进度弹窗逐节点 |
+| 集群连接测试（统一管理 / 集群管理） | Edge Admin API（HTTP 腿） | 测试结果行尾 |
+| 配置对比（节点管理） | Edge Admin API（HTTP 腿） | 抽屉「Edge 节点：…（经中继）」 |
+| edge.env 发布 / 读取 | Ansible（SSH 腿） | 部署结果 / 读取弹窗节点行 |
+| 节点命令、节点任务、脚本分发、自启动 | Ansible 或裸 SSH（SSH 腿） | 展示用 command 里的 `# [中继] 经跳板 …` |
+| 集群卡片路径徽章 | 取该集群区域 | 卡片右上「经中继 · 上海局」/「直连」 |
+
 ### 跨局 IP 重叠（设计决策）
 
 已核实硬约束：inventory 以 IP 为主键（`edge_cluster.hosts` 映射、`get_ssh_password(ip)`、`run_playbook(ip)` 均按 ip 寻址），两局网段重叠会在 inventory 层撞主机（同名主机视为同一台）。
@@ -404,7 +417,7 @@ systemctl is-active --quiet sshd || exit 1
 | 4 | 区域注册表 | 新增 `relay_gateways` 表 + 设置页管理端点/页面；集群表加 `region_code` | 中 |
 | 5 | 网关配置下发 | 新增 service + 端点（按区域渲染 conf + fleet 推送 reload + 校验） | 中 |
 | 6 | SSE 日志流 | ProxyJump 后 ansible stdout 仍在武清聚合，零改动；HTTP 侧 `proxy_buffering off` 已在网关解决 | 零 |
-| 7 | 前端 | 业务页面零改动（寻址变化全在后端）；仅设置页新增区域管理块 | 小 |
+| 7 | 前端 | 寻址变化全在后端；前端新增区域管理块 + **「经中继 / 直连」路径标注**（发布/删除/连接测试/配置对比/edge.env）+ 集群挂接区域后的「需下发网关配置」引导 + 静态资源 zip 体积提示 | 中 |
 | 8 | `_run_ssh_with_fallback`（仅档 1） | 连接类失败立即重试一次，覆盖 VIP 漂移窗口 | 极小 |
 
 **开关设计**（全局总开关 + 区域注册表，缺省关闭 = 现状直连）：
@@ -654,3 +667,17 @@ AllowedIPs = <武清后端网段>              # 只放行管理端网段，反�
 - **节点范围**：nginx 流量 map 仅含启用节点；sshd SSH **管理**白名单含全部节点（含禁用）。
 - **待写入配置预览**：只读 `GET /relay/gateways/{id}/config-preview`（界面「查看配置」），ansible 不可用时手工配置兜底。
 - **中继可见性**：跳板运行期注入清单、不在命令行，故展示用 command 追加 `# [中继] 经跳板 …`。
+
+## 实现补充（2026-09-23）
+
+以下为 2026-09-23 的实现收敛与事故沉淀（**以代码为准**）：
+
+- **跳板 ControlMaster 跨账号复用（事故修复）**：`ansible.cfg` 的 `control_path` 曾写作 `%%%%h-%%%%p-%%%%r`。ansible ssh 插件会执行 `control_path % dict(directory=…)`，故插件之后给到 ssh 的是 `%%h`，而 ssh 视 `%%` 为字面量 `%` —— **全部主机与账号塌缩到同一 socket 文件 `%h-%p-%r`**，root 直连的 sshd 跳板配置静默复用了先前 jboss 运行留下的 master，命令实际以 jboss 身份执行（`mkdir: cannot create directory "/root": Permission denied` → ansible 误报"临时目录"错误）。修复：模板改 `%%h-%%p-%%r`；`ansible_service.SSH_CONTROL_PATH` 与 `ansible.cfg` 单一来源、由 `_runner_env` 注入，防将来漂移。**坑**：relay 的三个 runner（`_run_ansible_sshd` / `_run_ansible_push` / `_run_ansible_init`）直接调 `ansible_runner.run` 且**未传 `env`**，会回退读取 `ansible.cfg` —— 只修 env 不够。守卫：`tests/test_ansible_service.py::TestSshControlPathEscaping`。排查口诀：`ls /tmp/panshi-cp/` 看 socket 名是否含真实主机/用户名；"按 A 配置却以 B 身份生效"先查此处。同因副作用：同一区域的多台网关此前会复用同一 socket，可能连错机器。
+- **路由快照重载**：中继路由快照是**进程内**对象（`relay_registry`），而同步读取方（`run_playbook` 的跳板注入、`EdgeClient`）只走 `_require_snapshot()`、**不判 TTL**；此前集群/节点 CRUD 从不触发重载，绑定区域后旧快照仍走直连、不重启不生效。现于集群 create/update(区域变更)/delete 与节点 create/batch create/update/delete/batch delete 后调用 `refresh_routing()`（**须在 commit 之后**，避免与审计骨架写锁叠加），并由 lifespan 的 30s TTL 循环兜底（覆盖导入/还原、切换活动数据库等无端点触发点的改动）。回归 `tests/test_relay_routing.py`。排查口诀：改完区域/节点却"没走中继"→ 先 `GET` 确认库已改，再看快照是否重载。
+- **"绑定区域"不等于"下发网关配置"**：绑定/换绑区域只改库 + 刷新快照，**不会**更新网关机上的 nginx 白名单（`edge_targets.conf`）；未下发时该区域节点经网关访问一律 403（文案 `目标不在该局网关白名单，请执行配置下发`）。节点增删同理（改变白名单成员）。前端在集群保存且区域非空并相对原值变化后弹一次「需下发网关配置」引导（`ClusterFormModal.vue::showRegionGuide`）。
+- **节点执行路径可见性契约**：逐节点结果新增 `route: "relay" | "direct"`，经中继时另带 `relay_via`（HTTP 腿 = 网关基址如 `http://192.168.0.13:8443`；SSH 腿 = 跳板主机如 `jboss@192.168.0.13`）；**字段缺失时前端不渲染标签**（向后兼容）。HTTP 腿经 `edge_sync.mark_route(node_result, client)` 标注，调用点在**发起请求之前**故**失败节点也带**，覆盖资源配置发布/删除、静态资源 zip 发布、集群连接测试、配置对比（后两者为响应顶层字段）；SSH 腿经 `cluster_edge_env._node_route_fields(ip)`（`relay_registry.ssh_jump_for_ip` 判定，在**发起 ansible 之前**取，与 ansible 实际注入同源）覆盖 edge.env 发布（`node_start`/`node_done`/`complete.node_results[]`）与读取（单节点响应 + `read-stream` 的 `content`/`error`），直连时 **`relay_via` 键不出现**（读取接口用 `response_model_exclude_none=True` 保证不是 `null`）。前端一律复用 `useClusterUtils.ts` 导出的 `routeLabel()`。
+- **两腿判定独立**：同一节点（典型是网关机本机）可能在连接测试显示「经中继」、在 edge.env 读取显示「直连」——后者命中跳板自环防护（跳板主机 == 目标 ip 时返回 None），属正确行为。集群卡片徽章的启用条件是 `features.relay_gateway === true`（显式 opt-in 语义，不可用 `has()` 的 opt-out，否则键缺失会误显示）。
+- **集群连接测试改管理面探测**：原实现是裸 TCP `asyncio.open_connection(node.ip, management_port)` 直连探测，在**中继专用区域会假失败**（节点从平台侧不可直连）并把 `node.status` 置 0；现改为 `EdgeClient.list_available_plugins()`（现有公开方法里最轻量的只读调用，沿用 `_request` 的 5s 超时）+ `asyncio.to_thread` 执行以免阻塞事件循环。语义：拿到 HTTP 响应即 `ok`（含 Edge 自身 404）；连接层失败/超时 → not ok；白名单 403 → not ok 并提示下发配置。
+- **配置对比不再阻塞事件循环**：`diff_cluster_config` 原在 `async def` 内同步串行拉取 8 类 Edge 资源（upstreams / routes / plugin_configs / global_rules / plugin_metadata / stream_routes / ssl）；现收进嵌套同步 helper、**一次** `asyncio.to_thread` 执行（DB/AsyncSession 不进线程；`try/except` 降级语义不变：主 5 项失败 → 502，stream/SSL 各自降级空 dict）。
+- **静态资源 zip 体积**：zip 整体作为 PUT body 经网关转发，故受网关机 nginx `client_max_body_size` 约束（当前部署 32m），超限经中继返回 413 而直连无此限制（详见排障表与"已知代价与边界"）；前端静态资源页有对应提示。
+- **进度日志的多份重复实现**：发布/删除的逐节点日志在仓库有共享实现与多个视图内联实现并存，改标注须全仓覆盖，且验收必须落在用户实际操作的页面上（详见 AGENTS #51）。
