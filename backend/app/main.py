@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -15,7 +17,6 @@ logging.basicConfig(
 )
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
 
 from app.api.v1 import api_router, feature_routers
 from app.core.database import init_db, close_db, AsyncSessionLocal
@@ -25,6 +26,24 @@ from app.core.features import load_features, feature_enabled
 # Load deployment feature configuration before the app starts.
 # This ensures validation errors surface early (crash on import).
 load_features()
+
+
+async def _relay_refresh_loop(interval: float | None = None) -> None:
+    """按 TTL 兜底重载中继路由快照（覆盖非端点改动）。
+
+    快照派生自 relay_gateways / ps_cluster.region_code / ps_node：端点 CRUD 已显式
+    `refresh_routing()`，但导入/还原、切换活动数据库等改动没有触发点，而同步读取方
+    （run_playbook 跳板注入、EdgeClient）不判 TTL，故需周期性唤醒 ensure_fresh()。
+    """
+    from app.services import relay_registry
+
+    period = relay_registry.TTL_SECONDS if interval is None else interval
+    while True:
+        await asyncio.sleep(period)
+        try:
+            await relay_registry.ensure_fresh()
+        except Exception:  # noqa: BLE001 - 兜底任务不得因单次失败而退出
+            logging.getLogger(__name__).exception("relay 路由快照周期刷新失败")
 
 
 @asynccontextmanager
@@ -37,10 +56,16 @@ async def lifespan(app: FastAPI):
     # 中继区域注册快照预热（relay_gateway 关闭时加载也无副作用）
     from app.services import relay_registry
     await relay_registry.ensure_fresh()
-    yield
-    from app.services.node_task_service import get_node_task_service
-    get_node_task_service().shutdown_sync()
-    await close_db()
+    refresh_task = asyncio.create_task(_relay_refresh_loop())
+    try:
+        yield
+    finally:
+        refresh_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await refresh_task
+        from app.services.node_task_service import get_node_task_service
+        get_node_task_service().shutdown_sync()
+        await close_db()
 
 
 app = FastAPI(title="Panshi Admin API", version="1.0.0", lifespan=lifespan)

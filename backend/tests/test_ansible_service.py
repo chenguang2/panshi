@@ -1171,3 +1171,45 @@ class TestControlPathDirSelfHeal:
         await svc.run_playbook(ip="192.0.2.1", tag="nginx_cmd_run")
 
         assert os.path.isdir("/tmp/panshi-cp")
+
+
+class TestSshControlPathEscaping:
+    """回归：ControlPath 模板必须安全穿过 ansible 的 ``%`` 格式化。
+
+    ansible 的 ssh 插件会执行 ``control_path % dict(directory=cpdir)``
+    （``ansible/plugins/connection/ssh.py``），故模板里的 ``%`` 每字面量需写两遍；
+    若写成 ``%%%%h`` → ansible 得到 ``%%h`` → ssh 把 ``%%`` 当字面量 ``%``，
+    于是所有连接（含不同 remote_user / host）塌缩到**同一个** ControlMaster
+    socket（实测文件名就是 ``%h-%p-%r``）。
+
+    后果：root 通道的 sshd-setup 会静默复用先前 jboss 建立的 master，命令以
+    jboss 身份执行 → ``mkdir: 无法创建目录 "/root": 权限不够``（2026-09-23 中继
+    区域管理 aoh「配置跳板转发」报错根因）。
+    """
+
+    @staticmethod
+    def _read_cfg_control_path() -> str:
+        import configparser
+        from pathlib import Path
+        cfg = Path(__file__).resolve().parents[1] / "ansible" / "ansible.cfg"
+        parser = configparser.RawConfigParser()  # 原样读取，模拟 ansible 不做 configparser 插值
+        parser.read(cfg)
+        return parser.get("ssh_connection", "control_path")
+
+    @staticmethod
+    def _as_ssh_sees(raw: str) -> str:
+        """复刻 ansible ssh.py 交给 ssh 的值（Python ``%`` 格式化一次）。"""
+        return raw % {"directory": "/tmp/panshi-cp"}
+
+    def test_ansible_cfg_control_path_expands_to_real_ssh_tokens(self):
+        import re
+        expanded = self._as_ssh_sees(self._read_cfg_control_path())
+        assert "%%" not in expanded, (
+            f"ssh 会把 %% 当字面量 → 所有连接共用一个 socket: {expanded!r}"
+        )
+        assert set(re.findall(r"%[hpr]", expanded)) == {"%h", "%p", "%r"}
+
+    def test_playbook_env_control_path_agrees_with_cfg(self):
+        from app.services.ansible_service import SSH_CONTROL_PATH
+        assert self._as_ssh_sees(SSH_CONTROL_PATH) == self._as_ssh_sees(self._read_cfg_control_path())
+        assert "%%" not in self._as_ssh_sees(SSH_CONTROL_PATH)

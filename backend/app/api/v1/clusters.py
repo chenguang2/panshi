@@ -18,6 +18,7 @@ from app.schemas.cluster import (
     DeleteClusterRequest,
 )
 from app.services import edge_sync
+from app.services import relay_registry
 from app.services.audit import enrich_audit
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
@@ -151,6 +152,9 @@ async def create_cluster(
         db.add(UserCluster(user_id=current_user.id, cluster_id=db_cluster.id))
         await db.commit()
 
+    # 路由快照派生自 ps_cluster.region_code，写后强制重载（提交之后再调用）
+    await relay_registry.refresh_routing()
+
     return ClusterResponse.model_validate(db_cluster)
 
 
@@ -198,6 +202,8 @@ async def update_cluster(cluster_id: int, cluster_update: ClusterUpdate, request
 
     await db.commit()
     await db.refresh(cluster)
+    # 区域挂接变更直接影响中继路由，写后强制重载快照
+    await relay_registry.refresh_routing()
     return ClusterResponse.model_validate(cluster)
 
 
@@ -361,6 +367,9 @@ async def delete_cluster(
         enrich_audit(request, detail=f"删除集群 {cluster_id}（数据库+Edge）")
         await db.delete(cluster)
         await db.commit()
+
+        # 集群（含其节点）已从库中移除，路由快照须重载
+        await relay_registry.refresh_routing()
 
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除", "details": db_details})
         return {"message": "集群已删除", "results": results}

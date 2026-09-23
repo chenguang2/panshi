@@ -102,6 +102,20 @@ def invalidate() -> None:
     _snapshot = None
 
 
+async def refresh_routing() -> None:
+    """路由相关写操作（网关/集群/节点 CRUD）提交后强制重载快照。
+
+    快照的 cluster_region/node_region 派生自 ``ps_cluster.region_code`` 与
+    ``ps_node``；同步读取方（`run_playbook` 的跳板注入、EdgeClient）只走
+    `_require_snapshot()` 不判 TTL，故**任何**改动这三张表的写操作后都必须显式
+    force 重载，否则要等进程重启才生效——2026-09-23 实测：给集群绑定区域后
+    `192.168.0.14` 仍直连，正是集群更新未触发重载所致。
+
+    调用方须在 DB **提交之后**调用（避免与审计骨架的写锁叠加）。
+    """
+    await ensure_fresh(force=True)
+
+
 async def ensure_fresh(session_factory=None, force: bool = False) -> RelaySnapshot:
     """TTL 过期/未加载/force 时从 DB 重载快照。异步入口调用。"""
     global _snapshot, _loaded_at

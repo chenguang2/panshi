@@ -20,6 +20,7 @@ from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIErr
 from app.services.audit import enrich_audit
 from app.services.config_diff import EquivalenceRules
 from app.services import edge_sync
+from app.services import relay_registry
 from app.services.ansible_service import (
     AnsibleRunnerService,
     AnsibleExecutionError,
@@ -228,6 +229,8 @@ async def create_node(cluster_id: int, node: NodeCreate, db: AsyncSession = Depe
         audit.detail = f"创建节点 {db_node.ip}:{db_node.service_port}"
     await db.commit()
     await db.refresh(db_node)
+    # 节点归属决定中继路由（node_region 派生自 ps_node），写后强制重载
+    await relay_registry.refresh_routing()
     return NodeResponse.model_validate(db_node)
 
 
@@ -276,6 +279,8 @@ async def create_nodes_batch(cluster_id: int, body: BatchCreateNodesRequest = Bo
             fail_count += 1
         results.append(node_result)
 
+    if success_count:
+        await relay_registry.refresh_routing()
     return {"message": f"成功创建 {success_count} 条，失败 {fail_count} 条", "results": results}
 
 
@@ -295,6 +300,7 @@ async def update_node(cluster_id: int, node_id: int, node_update: NodeUpdate, db
 
     await db.commit()
     await db.refresh(node)
+    await relay_registry.refresh_routing()
     return NodeResponse.model_validate(node)
 
 
@@ -317,6 +323,7 @@ async def delete_node(cluster_id: int, node_id: int, body: DeleteClusterRequest 
     if body.delete_db:
         await db.delete(node)
         await db.commit()
+        await relay_registry.refresh_routing()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
 
     if body.delete_edge:
@@ -375,6 +382,8 @@ async def delete_nodes_batch(cluster_id: int, body: BatchDeleteNodesRequest = Bo
     summary = "、".join(n for n in names[:5] if n) + ("…" if len(names) > 5 else "")
     enrich_audit(request, detail=f"批量删除节点 {len(names)} 个：{summary}")
     await db.commit()
+    if names:
+        await relay_registry.refresh_routing()
     return {"message": f"批量删除完成: {len(results)} 条节点", "results": results}
 
 

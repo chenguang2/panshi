@@ -31,6 +31,13 @@ MAX_CONCURRENT_PLAYBOOKS = 5
 _INVENTORY_PATH = Path(PRIVATE_DATA_DIR) / "inventory" / "host"
 
 _SSH_CONTROL_PATH_DIR = "/tmp/panshi-cp"
+# ansible ssh 插件会把此模板做一次 `template % dict(directory=...)`（见
+# ansible/plugins/connection/ssh.py），故每个字面量 `%` 必须写成 `%%`：`%%h` 交给
+# ssh 才是 `%h` 并按其变量展开。若写成 `%%%%h` → ssh 收到 `%%h` 当字面量，所有
+# 连接（不同 host / remote_user）会复用**同一个** ControlMaster socket——root
+# sshd 通道会静默复用 jboss 的 master 并以 jboss 执行（2026-09-23 aoh「配置跳板
+# 转发」报 mkdir /root 权限不够的根因）。须与 ansible/ansible.cfg 保持一致。
+SSH_CONTROL_PATH = "/tmp/panshi-cp/%%h-%%p-%%r"
 
 from app.services import relay_registry  # noqa: E402  （仅 stdlib/sqlalchemy 顶层依赖，无循环）
 
@@ -934,7 +941,7 @@ class AnsibleRunnerService:
         _runner_env = {
             "ANSIBLE_HOST_KEY_CHECKING": "False",
             "ANSIBLE_SSH_ARGS": "-C -o ControlMaster=auto -o ControlPersist=600s -o UpdateHostKeys=no",
-            "ANSIBLE_SSH_CONTROL_PATH": "/tmp/panshi-cp/%%h-%%p-%%r",
+            "ANSIBLE_SSH_CONTROL_PATH": SSH_CONTROL_PATH,
             "ANSIBLE_PIPELINING": "True",
         }
         if _venv_bin not in _current_path:

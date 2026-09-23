@@ -159,6 +159,109 @@ def test_delete_gateway_force_refreshes_routing(client, monkeypatch):
     assert calls == [True], "DELETE 后未强制重载路由快照"
 
 
+# ── 集群 / 节点变更后路由快照强制重载 ──
+#
+# 路由快照的 node_region/cluster_region 派生自 ps_cluster.region_code 与 ps_node；
+# 仅网关 CRUD 会重载是不够的：集群绑定区域、增删节点同样改变路由，却不重载
+# → 同步读取方（run_playbook 的跳板注入）仍用旧快照，绑定区域后不重启不生效
+# （2026-09-23 实测：demo-cluster 绑定 aoh 后 192.168.0.14 仍直连）。
+
+def _create_cluster(client, name: str = "reg-cluster") -> dict:
+    resp = client.post("/api/v1/clusters", json={"name": name})
+    assert resp.status_code in (200, 201), resp.text
+    return resp.json()
+
+
+def _create_node(client, cluster_id: int, ip: str = "10.1.1.1") -> dict:
+    resp = client.post(
+        f"/api/v1/clusters/{cluster_id}/nodes",
+        json={"ip": ip, "edge_path": "/opt/edge", "service_port": 80, "management_port": 9180},
+    )
+    assert resp.status_code in (200, 201), resp.text
+    return resp.json()
+
+
+def test_create_cluster_force_refreshes_routing(client, monkeypatch):
+    calls = _spy_refresh(monkeypatch)
+    _create_cluster(client)
+    assert calls == [True], "集群创建后未强制重载路由快照"
+
+
+def test_update_cluster_region_force_refreshes_routing(client, monkeypatch):
+    cluster = _create_cluster(client)
+    calls = _spy_refresh(monkeypatch)
+    resp = client.put(f"/api/v1/clusters/{cluster['id']}", json={"region_code": None})
+    assert resp.status_code == 200
+    assert calls == [True], "集群区域变更后未强制重载路由快照（回归：绑定区域不重启不生效）"
+
+
+def test_delete_cluster_force_refreshes_routing(client, monkeypatch):
+    cluster = _create_cluster(client)
+    calls = _spy_refresh(monkeypatch)
+    resp = client.request(
+        "DELETE", f"/api/v1/clusters/{cluster['id']}", json={"delete_db": True}
+    )
+    assert resp.status_code == 200
+    assert calls == [True], "集群删除后未强制重载路由快照"
+
+
+def test_create_node_force_refreshes_routing(client, monkeypatch):
+    cluster = _create_cluster(client)
+    calls = _spy_refresh(monkeypatch)
+    _create_node(client, cluster["id"])
+    assert calls == [True], "节点创建后未强制重载路由快照"
+
+
+def test_update_node_force_refreshes_routing(client, monkeypatch):
+    cluster = _create_cluster(client)
+    node = _create_node(client, cluster["id"])
+    calls = _spy_refresh(monkeypatch)
+    resp = client.put(f"/api/v1/clusters/{cluster['id']}/nodes/{node['id']}", json={"service_port": 8080})
+    assert resp.status_code == 200
+    assert calls == [True], "节点更新后未强制重载路由快照"
+
+
+def test_delete_node_force_refreshes_routing(client, monkeypatch):
+    cluster = _create_cluster(client)
+    node = _create_node(client, cluster["id"])
+    calls = _spy_refresh(monkeypatch)
+    resp = client.request(
+        "DELETE",
+        f"/api/v1/clusters/{cluster['id']}/nodes/{node['id']}",
+        json={"delete_db": True},
+    )
+    assert resp.status_code == 200
+    assert calls == [True], "节点删除后未强制重载路由快照"
+
+
+def test_relay_refresh_loop_periodically_reloads(monkeypatch):
+    """30s TTL 兜底：覆盖导入/还原、切换活动数据库等非端点改动。"""
+    import asyncio
+
+    from app import main as app_main
+
+    calls: list[int] = []
+
+    async def _spy(**kwargs):
+        calls.append(1)
+
+    monkeypatch.setattr(relay_registry, "ensure_fresh", _spy)
+
+    async def _run():
+        task = asyncio.create_task(app_main._relay_refresh_loop(interval=0.01))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_run())
+    assert calls, "周期兜底未调用 ensure_fresh（TTL 形同虚设）"
+
+
+
+
 @pytest.fixture
 def client(test_db, test_db_factory):
     async def override_get_db():
