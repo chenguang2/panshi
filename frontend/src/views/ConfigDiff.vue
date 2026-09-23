@@ -21,7 +21,7 @@
           <a-statistic title="⏸ 无需发布" :value="summary.expected_only_in_db" :value-style="{ color: '#8c8c8c' }" />
         </div>
 
-        <div v-if="nodeAddr" class="node-addr-info">Edge 节点：{{ nodeAddr }}</div>
+        <div v-if="nodeAddr" class="node-addr-info">Edge 节点：{{ nodeAddr }}{{ nodeRouteText }}</div>
 
         <!-- 分组对比 -->
         <div v-for="group in groups" :key="group.type" class="diff-group">
@@ -133,8 +133,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import api from '@/api'
+import { routeLabel } from '@/composables/useClusterUtils'
+
+/** GET /clusters/{cluster_id}/nodes/{node_id}/diff 的响应（仅声明本页新增所需字段） */
+interface NodeDiffResponse {
+  node?: string
+  /** 该次对比的实际执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的网关基址 */
+  relay_via?: string
+  summary?: unknown
+  groups?: unknown[]
+}
 
 const props = defineProps<{
   visible: boolean
@@ -155,6 +167,13 @@ const nodes = ref<any[]>([])
 const selectedNodeId = ref(props.initialNodeId)
 const collapsedGroups = ref<Record<string, boolean>>({})
 const expandedMode = ref<Record<string, 'fields' | 'diffs' | null>>({})
+const diffRoute = ref<'relay' | 'direct' | undefined>(undefined)
+
+/** 与 nodeAddr 同行的路径标注，如「（经中继）」；无 route 字段时为空串（不渲染） */
+const nodeRouteText = computed(() => {
+  const label = routeLabel(diffRoute.value)
+  return label ? `（${label}）` : ''
+})
 
 const fieldLabel = (groupType: string, field: string): string => {
   const labels: Record<string, Record<string, string>> = {
@@ -233,8 +252,9 @@ const loadDiff = async () => {
       api.get(`/clusters/${cid}/nodes/${nid}/diff`),
       api.get(`/clusters/${cid}/nodes`),
     ])
-    const data = diffRes.data
-    nodeAddr.value = data.node
+    const data: NodeDiffResponse = diffRes.data
+    nodeAddr.value = data.node || ''
+    diffRoute.value = data.route
     summary.value = data.summary
     groups.value = data.groups || []
     nodes.value = nodesRes.data.items || []

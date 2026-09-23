@@ -1,4 +1,4 @@
-"""Tests for test_connection TCP probe result write-back to Node status."""
+"""Tests for test_connection result write-back to Node status (EdgeClient probe)."""
 import json
 from unittest.mock import patch, AsyncMock, MagicMock
 
@@ -8,6 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.v1.clusters as clusters_module
 from app.models.cluster import Cluster, Node
+from app.services import relay_registry
+from app.services.edge_client import EdgeClient, EdgeConnectionError
+
+
+@pytest.fixture(autouse=True)
+def _relay_off(monkeypatch):
+    """钉住总开关，避免依赖部署 features.yaml；路由断言取 direct。"""
+    monkeypatch.setattr(relay_registry, "relay_enabled", lambda: False)
 
 
 @pytest.fixture
@@ -31,12 +39,6 @@ async def cluster_and_node(test_db: AsyncSession):
     return cluster, node
 
 
-def _fake_stream():
-    writer = MagicMock()
-    writer.wait_closed = AsyncMock()
-    return MagicMock(), writer
-
-
 def _spy_commit(session: AsyncSession):
     commits = []
     original = session.commit
@@ -53,14 +55,14 @@ class TestTestConnectionWriteBack:
 
     async def test_success_sets_status_1_and_detail(self, test_db, cluster_and_node):
         cluster, node = cluster_and_node
-        mock_open = AsyncMock(return_value=_fake_stream())
         commits = _spy_commit(test_db)
 
-        with patch("asyncio.open_connection", mock_open):
+        with patch.object(EdgeClient, "list_available_plugins", return_value=[]):
             resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[node.id]), test_db)
 
         assert resp == {"results": [
-            {"node_id": node.id, "ip": node.ip, "port": node.management_port, "ok": True, "msg": "管理端口可达", "version": ""},
+            {"node_id": node.id, "ip": node.ip, "port": node.management_port, "ok": True,
+             "msg": "管理面可达", "version": "", "route": "direct"},
         ]}
         assert node.status == 1
         detail = json.loads(node.status_detail)
@@ -78,9 +80,9 @@ class TestTestConnectionWriteBack:
 
     async def test_connection_refused_sets_status_0(self, test_db, cluster_and_node):
         cluster, node = cluster_and_node
-        mock_open = AsyncMock(side_effect=ConnectionRefusedError)
 
-        with patch("asyncio.open_connection", mock_open):
+        with patch.object(EdgeClient, "list_available_plugins",
+                          side_effect=EdgeConnectionError("连接被拒绝")):
             resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[node.id]), test_db)
 
         assert resp["results"][0]["ok"] is False
@@ -93,9 +95,9 @@ class TestTestConnectionWriteBack:
 
     async def test_timeout_sets_status_0(self, test_db, cluster_and_node):
         cluster, node = cluster_and_node
-        mock_open = AsyncMock(side_effect=TimeoutError)
 
-        with patch("asyncio.open_connection", mock_open):
+        with patch.object(EdgeClient, "list_available_plugins",
+                          side_effect=EdgeConnectionError("连接超时")):
             resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[node.id]), test_db)
 
         assert resp["results"][0]["ok"] is False
@@ -120,9 +122,9 @@ class TestTestConnectionWriteBack:
         await test_db.refresh(node2)
 
         commits = _spy_commit(test_db)
-        mock_open = AsyncMock(side_effect=ConnectionRefusedError)
 
-        with patch("asyncio.open_connection", mock_open):
+        with patch.object(EdgeClient, "list_available_plugins",
+                          side_effect=EdgeConnectionError("连接被拒绝")):
             resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[node.id, node2.id]), test_db)
 
         assert len(resp["results"]) == 2
@@ -133,7 +135,6 @@ class TestTestConnectionWriteBack:
     async def test_node_not_found_does_not_update(self, test_db, cluster_and_node):
         cluster, _ = cluster_and_node
 
-        with patch("asyncio.open_connection", AsyncMock(side_effect=ConnectionRefusedError)):
-            resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[99999]), test_db)
+        resp = await clusters_module.test_connection(cluster.id, clusters_module.TestConnectionRequest(node_ids=[99999]), test_db)
 
         assert resp["results"] == [{"node_id": 99999, "ip": "-", "port": 0, "ok": False, "msg": "节点不存在", "version": ""}]

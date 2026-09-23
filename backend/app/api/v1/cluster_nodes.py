@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import Optional, Any
@@ -542,6 +543,9 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="节点不存在")
 
     client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
 
     # ---------- 1. 从 DB 查询 ----------
     async def _get_all(model, **filters):
@@ -580,38 +584,65 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         v = item.get("value")
         return v if isinstance(v, dict) else item
 
-    try:
-        # list_upstreams 返回解析后的 [{key, value}, ...]
-        edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
-        edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
-        edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
-        edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
-        edge_plugin_metadatas = {}
-        for p in client.list_plugin_metadata():
-            pd = _edge_val(p)
-            pname = pd.get("name") or (p.get("key", "").rsplit("/", 1)[-1] if p.get("key") else "")
-            if pname:
-                edge_plugin_metadatas[pname] = pd
-    except (EdgeConnectionError, EdgeAPIError) as e:
-        raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
+    def _fetch_edge_config() -> dict:
+        """同步拉取 Edge 侧全量配置（仅供 asyncio.to_thread 调用）。
 
-    # 单独拉取 stream routes：不受支持的 Edge 节点不应影响其他资源的对比
-    try:
-        edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
-    except Exception:
-        edge_stream_proxies = {}
+        只触碰 EdgeClient（普通属性 + 同步 httpx），绝不触碰 db/AsyncSession。
+        保持既有 try/except 语义：主 5 项失败 → 抛 HTTPException(502)；
+        stream routes / SSL 失败各自降级为空 dict。
+        """
+        try:
+            # list_upstreams 返回解析后的 [{key, value}, ...]
+            edge_upstreams = {_edge_val(u).get("id", ""): _edge_val(u) for u in client.list_upstreams()}
+            edge_routes = {_edge_val(r).get("id", ""): _edge_val(r) for r in client.list_routes()}
+            edge_plugin_configs = {_edge_val(p).get("id", ""): _edge_val(p) for p in client.list_plugin_configs()}
+            edge_global_rules = {_edge_val(g).get("id", ""): _edge_val(g) for g in client.list_global_rules()}
+            edge_plugin_metadatas = {}
+            for p in client.list_plugin_metadata():
+                pd = _edge_val(p)
+                pname = pd.get("name") or (p.get("key", "").rsplit("/", 1)[-1] if p.get("key") else "")
+                if pname:
+                    edge_plugin_metadatas[pname] = pd
+        except (EdgeConnectionError, EdgeAPIError) as e:
+            raise HTTPException(status_code=502, detail=f"连接 Edge 节点失败: {e}")
 
-    # 单独拉取 SSL 证书
-    try:
-        edge_ssl_certificates = {}
-        for c in client.list_ssl():
-            cd = _edge_val(c)
-            cid = cd.get("id", "") or (c.get("key", "").rsplit("/", 1)[-1] if isinstance(c, dict) and c.get("key") else "")
-            if cid:
-                cd["id"] = cid  # 确保 id 字段存在，供后续对比使用
-                edge_ssl_certificates[cid] = cd
-    except Exception:
-        edge_ssl_certificates = {}
+        # 单独拉取 stream routes：不受支持的 Edge 节点不应影响其他资源的对比
+        try:
+            edge_stream_proxies = {_edge_val(sp).get("id", ""): _edge_val(sp) for sp in client.list_stream_routes()}
+        except Exception:
+            edge_stream_proxies = {}
+
+        # 单独拉取 SSL 证书
+        try:
+            edge_ssl_certificates = {}
+            for c in client.list_ssl():
+                cd = _edge_val(c)
+                cid = cd.get("id", "") or (c.get("key", "").rsplit("/", 1)[-1] if isinstance(c, dict) and c.get("key") else "")
+                if cid:
+                    cd["id"] = cid  # 确保 id 字段存在，供后续对比使用
+                    edge_ssl_certificates[cid] = cd
+        except Exception:
+            edge_ssl_certificates = {}
+
+        return {
+            "edge_upstreams": edge_upstreams,
+            "edge_routes": edge_routes,
+            "edge_plugin_configs": edge_plugin_configs,
+            "edge_global_rules": edge_global_rules,
+            "edge_plugin_metadatas": edge_plugin_metadatas,
+            "edge_stream_proxies": edge_stream_proxies,
+            "edge_ssl_certificates": edge_ssl_certificates,
+        }
+
+    # 一次线程跳转内完成全部同步 Edge 拉取（不阻塞事件循环；仅线程做 Edge HTTP）。
+    fetched = await asyncio.to_thread(_fetch_edge_config)
+    edge_upstreams = fetched["edge_upstreams"]
+    edge_routes = fetched["edge_routes"]
+    edge_plugin_configs = fetched["edge_plugin_configs"]
+    edge_global_rules = fetched["edge_global_rules"]
+    edge_plugin_metadatas = fetched["edge_plugin_metadatas"]
+    edge_stream_proxies = fetched["edge_stream_proxies"]
+    edge_ssl_certificates = fetched["edge_ssl_certificates"]
 
     # ---------- 3. 对比函数 ----------
     _rules = EquivalenceRules()
@@ -1069,4 +1100,5 @@ async def diff_cluster_config(cluster_id: int, node_id: int, db: AsyncSession = 
         "node": f"{node.ip}:{node.management_port}",
         "summary": summary,
         "groups": groups,
+        **route_info,
     }
