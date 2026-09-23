@@ -192,6 +192,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
     另：**绑定/换绑区域只是"改库 + 刷新快照"，不会更新网关机上的节点白名单**（nginx `edge_targets.conf`），必须对该区域执行一次「下发配置」——否则该区域节点经网关访问**一律 403**（`目标不在该局网关白名单，请执行配置下发`），发布/节点任务必失败。2026-09-23 实测：`demo-cluster` 绑 `aoh` 后网关白名单仍是空表（`default ""`，写于绑定之前）→ upstream 发布 403；执行「下发配置」后三节点白名单就位、403 变 404（已放行，404 只是 Edge 根路径无路由）。节点增删同理（改变白名单成员）。前端已在集群保存成功后弹一次「需下发网关配置」引导（`ClusterFormModal.vue::showRegionGuide`，条件 = 区域非空且相对原值变化）。
 
+    **判定「发布/删除是否经中继」看 `results[].route`，别看 `# [中继]` 标记（两者是不同腿）**：发布/删除由 `EdgeClient` 走 **HTTP 腿**（网关 8443 + `X-Edge-Target`）执行，**不含** ansible 的 `# [中继] 经跳板 …` 标记（该标记只出现在 `run_playbook` 的展示 command 里，对应 **SSH 腿**）。逐节点结果的 `route`（`"relay"`/`"direct"`；经中继另带 `relay_via` = 网关基址）由 `edge_sync._mark_route()` 按**该节点实际用的 `EdgeClient` 实例**写入、调用点在请求发起前（**失败节点也带**）；`build_publish_response` 原样透传 `results`。前端据此显示发布日志 `（经中继）`/`（直连）` 与集群卡片路径徽章。另：`403 目标不在该局网关白名单，请执行配置下发` 只在 `relay_target` 非空时产生（`edge_client.py`），故该文案本身就是「**已走中继、只是白名单没下发**」的证据；直连失败报 `Failed to connect to …`/`timed out`（区域被禁用时附「该区域中继已禁用，直连通常不可达」）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
