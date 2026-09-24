@@ -685,6 +685,12 @@ describe('NodeTaskCenter create-task flow', () => {
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
 
+    // 必须先切到 edge_pack_rebase：watch(createNodeIds) 只在该任务类型下触发版本加载
+    const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
+    typeSel!.value = 'edge_pack_rebase'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
     // 勾选第二个节点（node 10 / 192.168.0.14）
     const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
     checkboxes[1]!.checked = true
