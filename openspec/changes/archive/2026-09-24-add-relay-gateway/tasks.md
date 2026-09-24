@@ -48,3 +48,15 @@
 - [x] 6.3 前端 `npx vue-tsc -b` + `npx vitest run` 通过
 - [ ] 6.4 灰度验证清单核对（阻塞：待 D1 基础设施就绪——网关机/防火墙/VIP；到货后按设计文档 D3 三腿验证执行）（对照设计文档 D3：HTTP 腿发布路由 / 裸 SSH 自启动 / Ansible 脚本任务 + SSE 日志三腿各验一集群）
 - [x] 6.5 `openspec validate add-relay-gateway` 通过，任务逐项打勾，更新 `docs/design/relay-gateway.md` 实施进度（如需）
+
+## 7. 路径可见性补齐与缺陷修复（2026-09-24）
+
+- [x] 7.1 Edge 直连 8 个查询端点经 `mark_route` 携带 route/relay_via；数据导入 service/schema/三端点同款（失败响应也带）
+- [x] 7.2 自启动 SSE 首事件附 route/relay_via（SSH 腿语义，直连不含 relay_via）；`useInstallStream` 增 `onMeta` 一次性接收
+- [x] 7.3 三页面展示「（经中继）/（直连）」：已连接行 / 连接成功提示行 / 抽屉标题
+- [x] 7.4 `ssh_relay_note`（与 `-J` 注入同源、含自跳守卫）：cmd_exec 脚本模式、software_check 降级、install_openresty 第二阶段日志标注
+- [x] 7.5 software_check 降级文案按实际路由（经中继/直连），修正硬编码「直连」的误导
+- [x] 7.6 software_check/cmd_exec/distribute_file 透传展示用 command（含 `# [中继]` 标记）到 `item.command`，前端命令 tab 恢复可见
+- [x] 7.7 edge-pack-list 同名版本去重（current 取并集，`_parse_pack_versions`）+ 响应附 route/relay_via；目标版本标签旁显示标注
+- [x] 7.8 修复目标版本下拉误用集群节点表首节点（网关机）：改查第一个勾选节点
+- [x] 7.9 回归：pytest（test_cluster_install 26、节点任务+中继域 236）、vitest（NodeTaskCenter 29 等）、vue-tsc 全绿

@@ -86,3 +86,40 @@ ansible 跳板是**运行期**以 `ansible_ssh_common_args` 注入清单、不�
 #### Scenario: 展示命令标注中继
 - **WHEN** 本次 playbook 运行期为目标 ip 注入了跳板 ProxyCommand
 - **THEN** 展示用 command 追加 `# [中继] 经跳板 <jump>（清单 ansible_ssh_common_args，运行期注入、已还原）`
+
+### Requirement: 逐节点结果携带执行路径字段
+凡经平台代为访问 Edge 节点的操作（配置发布/删除、连接测试、Edge 直连查询、数据导入、自启动、版本列表等），其逐节点结果或响应 SHALL 携带 `route` 字段（`"relay"` 或 `"direct"`）；经中继时 SHALL 另附 `relay_via`——HTTP 腿为网关基址，SSH/Ansible 腿为跳板主机串——直连 SHALL 不含 `relay_via` 键。路径判定 SHALL 在发起请求**之前**按该次实际使用的连接实例（HTTP 腿 `mark_route`）或跳板解析（SSH/Ansible 腿 `ssh_jump_for_ip`）取值，与实际执行路径同源；失败响应同样携带。前端 SHALL 复用 `routeLabel` 渲染「（经中继）/（直连）」，字段缺失时不渲染（向后兼容）。
+
+#### Scenario: HTTP 腿（Edge 直连查询/数据导入）
+- **WHEN** 中继开启且区域路由生效时执行 Edge 直连查询或数据导入 test-connection/preview/execute
+- **THEN** 响应含 `route: "relay"` 与 `relay_via=<网关基址>`；总开关关闭时 `route: "direct"` 且无 `relay_via`
+
+#### Scenario: SSE 首事件（自启动）
+- **WHEN** 自启动启用/禁用/状态查询的 SSE 流开始
+- **THEN** 首个事件携带 `route`/`relay_via`，进度与终态事件不变；前端经 `useInstallStream` 的 `onMeta` 一次性接收（未知 route 值不触发回调，旧事件流零行为变化）
+
+#### Scenario: 版本列表（edge-pack-list）
+- **WHEN** 拉取节点可选版本列表且判定发生在 ansible 发起前
+- **THEN** 响应附 `route`/`relay_via`，前端目标版本标签旁显示「（经中继）/（直连）」
+
+#### Scenario: 缺省向后兼容
+- **WHEN** 响应或事件未携带 `route` 字段
+- **THEN** 前端不渲染任何路径标注
+
+### Requirement: SSH 腿展示中继说明
+裸 SSH 调用方（cmd_exec 脚本模式、software_check 降级、install_openresty 第二阶段）SHALL 在展示日志中追加与 `_build_ssh_cmd` 的 `-J` 注入同源的中继说明行（`ssh_relay_note`，含自跳守卫），直连时不追加；software_check 降级提示 SHALL 按实际路由显示「降级为 SSH 执行（经中继/直连）」，不得硬编码「直连」。
+
+#### Scenario: 脚本执行经中继
+- **WHEN** 中继开启且节点区域配置了跳板时执行 cmd_exec 脚本模式
+- **THEN** 实时日志出现中继说明行（`# [中继] 经跳板 <jump>（SSH -J）`）；直连时无该行
+
+#### Scenario: 降级文案按实际路由
+- **WHEN** software_check 的 ansible 查询失败、降级为 SSH 执行
+- **THEN** 提示为「降级为 SSH 执行（经中继）」或「降级为 SSH 执行（直连）」
+
+### Requirement: 节点任务展示命令透传
+software_check、cmd_exec（普通模式）与 distribute_file 的结果 SHALL 透传 `run_playbook` 返回的展示用 command（含中继说明行）到逐节点 `item.command`，供前端命令 tab 显示。
+
+#### Scenario: 命令 tab 可见中继标记
+- **WHEN** 软件查询/命令执行/分发文件任一任务完成且本次运行经跳板
+- **THEN** 逐节点 `item.command` 含 `# [中继] 经跳板 …`，前端命令 tab 正常显示（此前这些路径丢弃该字段导致界面不可见）

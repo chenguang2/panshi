@@ -326,3 +326,15 @@
 | cmd_exec (命令) | `cmd_exec_run` ansible tag | cmd, security, timeout, whitelist | — |
 | cmd_exec (脚本) | SSH + base64 管道直执行 | script_content, timeout | — |
 | distribute_file | `edge_master_copy_to_slaves`（Ansible copy 模块） | srcpath, destpath, timeout | — |
+
+### Requirement: 创建表单目标版本下拉按选中节点拉取
+「升级 Edge(切版本)」表单的目标版本下拉 SHALL 按**用户勾选的第一个节点**请求 `edge-pack-list`，不得使用集群节点表的第一个节点（表序恰好以网关机在先时，会恒查网关机自身的版本列表——它从未收到升级包，表现为下拉只剩网关机当前版本）。
+
+#### Scenario: 勾选非首行节点
+- **WHEN** 集群节点表顺序为 [网关机 11, 节点 10]，用户仅勾选节点 10 并切换任务类型为 edge_pack_rebase
+- **THEN** 前端请求 `/clusters/{cid}/nodes/10/edge-pack-list`
+- **AND** 下拉展示节点 10 的版本列表
+
+#### Scenario: 未勾选节点
+- **WHEN** 用户未勾选任何节点
+- **THEN** 不发起 edge-pack-list 请求

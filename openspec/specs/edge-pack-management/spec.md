@@ -7,7 +7,7 @@ Edge 小版本包管理：查看可用版本包列表、添加新版本包、切
 ## Requirements
 
 ### Requirement: 查看小版本包列表
-系统 SHALL 提供 `GET /clusters/{cluster_id}/nodes/{node_id}/edge-pack-list` 接口，返回 Edge 实例当前可用的小版本包列表。通过 ansible 执行 `bin/edge pack-list`，解析输出中 `[*]` 前缀标记当前版本。
+系统 SHALL 提供 `GET /clusters/{cluster_id}/nodes/{node_id}/edge-pack-list` 接口，返回 Edge 实例当前可用的小版本包列表。通过 ansible 执行 `bin/edge pack-list`，解析输出中 `[*]` 前缀标记当前版本。解析 SHALL 对同名版本去重（`current` 标记取并集、保持首次出现顺序）——同一版本可能被 edge 二进制输出两次（current + 非 current）。响应另附 `route`/`relay_via` 执行路径字段（契约见 relay-channel-routing）。
 
 #### Scenario: 成功返回版本列表
 - **WHEN** 用户发送 `GET /api/v1/clusters/1/nodes/5/edge-pack-list`
@@ -16,6 +16,11 @@ Edge 小版本包管理：查看可用版本包列表、添加新版本包、切
 - **AND** 响应体 SHALL 包含 `versions` 数组
 - **AND** 数组第一个元素 SHALL 为 `{ name: "2.7.5.26012617", current: true }`
 - **AND** 数组第二个元素 SHALL 为 `{ name: "2.7.6.26020421", current: false }`
+
+#### Scenario: 同名版本去重
+- **WHEN** `bin/edge pack-list` 输出 `[*]3.1.4.26090809\n3.1.1.26071611\n3.1.4.26090809`
+- **THEN** 响应 `versions` 数组不含重复项（仅 `3.1.4.26090809` 与 `3.1.1.26071611`）
+- **AND** `3.1.4.26090809` 条目的 `current` SHALL 为 `true`（重复项标记取并集）
 
 #### Scenario: 节点不可达
 - **WHEN** 节点无法通过 SSH 连接
