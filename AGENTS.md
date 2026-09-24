@@ -135,7 +135,6 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 12. **重构治理文档统一放 `docs/refactoring/`** — 重构方案（`refactoring-plan-*.md`）、代码评审报告（`code-review-report*.md`）等治理类文档一律写入该目录，**不得散落在 `docs/` 根**（根目录只留 user-manual、architecture 等长期文档）。新会话产出重构计划前先确认此归属。
 13. **经验与规则沉淀一律写本文件，不用 magic-context memory** — 需要"防未来会话犯错"的规则/教训（原 ctx_memory 类）直接追加到本文件关键约定或相应节；ctx_memory 仅用于尚未成熟、值得观察的临时偏好。决策论证类长文落 `docs/` 对应文档，本文件只放一行规则+指针。
 14. **排查"写库不生效/数据陈旧"先查活动数据库** — `backend/db_config.json` 的 `active` 连接决定运行时库，可被"数据库管理"功能切走（2026-08-30 实测 active 长期为 `./data/manual-demo.db` 而非默认 `./data/panshi.db`）。直连 SQLite 取证前必须先确认 active，曾连续两轮误诊"写库静默失败"（实为读错副本库），真实 bug 另在其因（修复于 commit 23a94f9 覆盖逻辑）。
-15. **禁止使用子代理（task/explorer/fixer 等）** — 当前模型对子代理有限制，会话频繁报错。所有侦察、实现、审查一律由主代理直接完成。
 16. **新功能/缺陷修复走 TDD** — 先写失败测试（RED）并验证失败，最小实现（GREEN）验证通过，再重构；openspec 变更的 `tasks.md` 逐项打勾推进。
 17. **集群 JSON 备份/导入为 clone-only 单向语义** — 丢弃全部平台 ID、由库分配新 ID、FK 经插入期捕获的旧→新映射重建（主键全库唯一，保号导入必撞车；`stream_proxies.ref_node_id` 随 nodes 重映射；Node 表无 name 字段，备份/还原以 `ip+service_port` 为节点身份键）。导入总是新建未发布集群（status=1，需手动发布）；目标名须过 NAME_PATTERN 且查重先于任何写库。整库还原走"数据库管理"功能，勿造保号模式。
 18. **发布/版本/回滚编排单实现** — `edge_sync.publish_resource()` / `list_config_versions()` / `delete_config_version()` 是所有集群域资源的唯一实现，资源差异用参数表达（post_version_hook、prefer_display_name、日志字段），禁止逐资源复制。`backend/tests/test_publish_response.py` 是**源码模式守卫测试**（正则检查 publish 函数体），把响应构建/版本返回搬离原位时必须同步更新该守卫。
