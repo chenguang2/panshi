@@ -59,8 +59,8 @@
           </template>
           <template #description>
             <div>
-              节点: {{ connectionResult?.node || '-' }} · 版本: {{ connectionResult?.version || '-' }} · 响应时间:
-              {{ connectionResult?.response_time_ms || '-' }}ms
+              节点: {{ connectionResult?.node || '-' }}{{ connectionRouteText }} · 版本:
+              {{ connectionResult?.version || '-' }} · 响应时间: {{ connectionResult?.response_time_ms || '-' }}ms
             </div>
             <div style="margin-top: 4px">
               路由: {{ connectionResult?.route_count }} 条 · 上游: {{ connectionResult?.upstream_count }} 个 · 插件:
@@ -471,6 +471,7 @@ import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
 import PageHeader from '@/components/PageHeader.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { routeLabel } from '@/composables/useClusterUtils'
 import type { TestConnectionResponse, PreviewResponse, ImportResponse } from '@/api/edgeImport'
 
 // ---- State ----
@@ -489,6 +490,12 @@ const testingConnection = ref(false)
 const connectionResult = ref<TestConnectionResponse | null>(null)
 const connectionError = ref('')
 const connectionTested = ref(false)
+
+/** 与节点同行的路径标注，如「（经中继）」；无 route 字段时为空串（不渲染） */
+const connectionRouteText = computed(() => {
+  const label = routeLabel(connectionResult.value?.route)
+  return label ? `（${label}）` : ''
+})
 
 const previewData = ref<PreviewResponse | null>(null)
 const loadingPreview = ref(false)

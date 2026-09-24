@@ -330,3 +330,55 @@ def test_status_query_real_output_updates_despite_rc1(db_env):
 
     row = _fetch_autostart_rows(S)[0]
     assert row.status == "disabled", f"rc=1 的真实输出未刷新: {row.status}"
+
+
+# ── SSE 首事件的节点执行路径标注（SSH 腿 route/relay_via，契约与 edge.env 对齐）──
+
+def _post_autostart_status(app, AUTH):
+    import app.api.v1.edge_autostart as mod
+
+    async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
+        return {"rc": 0, "status": "successful", "stdout": "enabled", "stderr": ""}
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart", json={"action": "status"})
+            assert resp.status_code == 200
+            return resp.text
+
+
+def _first_event(body: str) -> dict:
+    import json
+    first = body.split("\n\n")[0]
+    assert first.startswith("data: ")
+    return json.loads(first[len("data: "):])
+
+
+def test_autostart_first_event_marks_relay(db_env, monkeypatch):
+    """有跳板时首个 SSE 事件带 route=relay + relay_via（进度/终态事件不受影响）。"""
+    import app.api.v1.edge_autostart as mod
+
+    app, _, AUTH = db_env
+    JUMP = "jboss@192.168.0.13"
+    monkeypatch.setattr(mod, "ssh_jump_for_ip", lambda ip: JUMP)
+
+    first = _first_event(_post_autostart_status(app, AUTH))
+    assert first["line"] == "正在连接远程主机并执行 systemctl..."
+    assert first["percent"] == 0
+    assert first["route"] == "relay"
+    assert first["relay_via"] == JUMP
+
+
+def test_autostart_first_event_direct_omits_via(db_env, monkeypatch):
+    """无跳板时首事件 route=direct，不含 relay_via（与 edge.env 契约对齐）。"""
+    import app.api.v1.edge_autostart as mod
+
+    app, _, AUTH = db_env
+    monkeypatch.setattr(mod, "ssh_jump_for_ip", lambda ip: None)
+
+    first = _first_event(_post_autostart_status(app, AUTH))
+    assert first["route"] == "direct"
+    assert "relay_via" not in first

@@ -25,6 +25,7 @@ from app.services.ansible_service import (
     is_node_in_inventory,
     sanitize_command_for_store,
 )
+from app.services.relay_registry import ssh_jump_for_ip
 
 from app.core.deps import require_permission
 
@@ -142,8 +143,11 @@ async def node_autostart(
     edge_service_content = build_edge_service_content(run_user, edge_path) if body.action == "enable" else ""
 
     async def event_stream():
+        # 节点执行路径（SSH 腿）：与 ansible 注入同源，在连接前取一次。
+        jump = ssh_jump_for_ip(node.ip)
+        route_meta = {"route": "relay", "relay_via": jump} if jump else {"route": "direct"}
         # 与 useInstallStream 的 SSE 格式兼容
-        yield f"data: {json.dumps({'line': '正在连接远程主机并执行 systemctl...', 'percent': 0})}\n\n"
+        yield f"data: {json.dumps({'line': '正在连接远程主机并执行 systemctl...', 'percent': 0, **route_meta})}\n\n"
         import asyncio
         import queue as _queue
 

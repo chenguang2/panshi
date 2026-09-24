@@ -30,6 +30,8 @@ class TestConnectionResponse(BaseModel):
     cluster_name: Optional[str] = None
     response_time_ms: Optional[int] = None
     message: Optional[str] = None
+    route: Optional[str] = None        # 'relay' | 'direct'
+    relay_via: Optional[str] = None    # 经中继时的网关基址；直连时为 None
 
 
 class PluginPreview(BaseModel):
@@ -133,6 +135,8 @@ class ImportPreviewResponse(BaseModel):
     conflicts: List[ConflictInfo]
     plugin_summary: PluginSummary
     warnings: List[str] = []
+    route: Optional[str] = None        # 'relay' | 'direct'
+    relay_via: Optional[str] = None    # 经中继时的网关基址；直连时为 None
 
 
 class ImportSelection(BaseModel):
@@ -170,3 +174,5 @@ class ImportExecuteResponse(BaseModel):
     skipped_counts: Optional[ImportCounts] = None
     plugin_summary: Optional[PluginSummary] = None
     message: Optional[str] = None
+    route: Optional[str] = None        # 'relay' | 'direct'
+    relay_via: Optional[str] = None    # 经中继时的网关基址；直连时为 None

@@ -8,6 +8,8 @@ interface InstallStreamOptions {
   onProgress?: (percent: number) => void
   onComplete?: (rc: number, status: string) => void
   onError?: (error: string) => void
+  /** SSE 事件携带执行路径（relay/direct）时回调，用于界面标注（经中继）/（直连）；无 route 字段的事件不触发 */
+  onMeta?: (meta: { route?: 'relay' | 'direct'; relay_via?: string }) => void
 }
 
 export function useInstallStream() {
@@ -57,6 +59,8 @@ export function useInstallStream() {
             percent?: number
             rc?: number
             status?: string
+            route?: string
+            relay_via?: string
           }
           if (data.line) {
             logs.value.push(data.line)
@@ -73,6 +77,10 @@ export function useInstallStream() {
           if (data.rc !== undefined) {
             options.onComplete?.(data.rc, data.status || 'success')
             progress.percent = 100
+          }
+          // 执行路径事件：经类型守卫收窄后转发，未知取值不触发回调（存量流无 route 字段，零行为变化）
+          if (data.route === 'relay' || data.route === 'direct') {
+            options.onMeta?.({ route: data.route, relay_via: data.relay_via })
           }
         } catch {
           // Ignore malformed SSE events

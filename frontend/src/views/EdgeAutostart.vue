@@ -146,6 +146,7 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
+import { routeLabel } from '@/composables/useClusterUtils'
 import {
   autostartUrl,
   listAutostartRecords,
@@ -276,6 +277,7 @@ async function confirmAction() {
   actionModalVisible.value = false
   execTitle.value =
     action.value === 'enable' ? `启用自启动: ${selectedNode.value.ip}` : `禁用自启动: ${selectedNode.value.ip}`
+  const baseTitle = execTitle.value
   resetExec()
   execVisible.value = true
 
@@ -296,6 +298,10 @@ async function confirmAction() {
       onLine: (line) => {
         captureCommandLine(line)
         addLog(line)
+      },
+      onMeta: (m) => {
+        const label = routeLabel(m.route)
+        if (label) execTitle.value = `${baseTitle}（${label}）`
       },
       onComplete: (rc, status) => {
         execProgress.percent = 100
@@ -330,6 +336,7 @@ async function confirmAction() {
 
 async function queryStatus(node: any, useRoot = false) {
   execTitle.value = `查询自启动状态: ${node.ip}`
+  const baseTitle = execTitle.value
   resetExec()
   execVisible.value = true
 
@@ -346,6 +353,10 @@ async function queryStatus(node: any, useRoot = false) {
       onLine: (line) => {
         captureCommandLine(line)
         addLog(line)
+      },
+      onMeta: (m) => {
+        const label = routeLabel(m.route)
+        if (label) execTitle.value = `${baseTitle}（${label}）`
       },
       onComplete: () => {
         // SSH 版 status：enabled rc=0，disabled/not_configured 时 is-enabled 返回 rc=1。

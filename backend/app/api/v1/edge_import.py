@@ -29,7 +29,7 @@ async def test_connection(
         db_session=db,
         admin_key=body.admin_key,
     )
-    result = service.test_connection()
+    result = {**service.test_connection(), **service.route_info}
     return result
 
 
@@ -44,7 +44,7 @@ async def preview_import(
         db_session=db,
         admin_key=body.admin_key,
     )
-    result = await service.preview_import()
+    result = {**await service.preview_import(), **service.route_info}
     return result
 
 
@@ -60,10 +60,10 @@ async def execute_import(
         db_session=db,
         admin_key=body.admin_key,
     )
-    result = await service.execute_import(
+    result = {**await service.execute_import(
         selections=body.selections,
         session=db,
-    )
+    ), **service.route_info}
     enrich_audit(request, detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
     await db.commit()  # 持久化审计骨架
     return result

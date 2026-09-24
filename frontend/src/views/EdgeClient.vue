@@ -53,7 +53,9 @@
 
       <button class="btn btn-primary" @click="startQuery" :disabled="loading"><SearchOutlined /> 查询</button>
       <button class="btn btn-ghost" @click="cancelQuery" :disabled="!loading"><CloseCircleOutlined /> 取消查询</button>
-      <span v-if="loadedNode" class="text-muted text-sm" style="margin-left: auto"> 已连接: {{ loadedNode }} </span>
+      <span v-if="loadedNode" class="text-muted text-sm" style="margin-left: auto">
+        已连接: {{ loadedNode }}{{ loadedNodeRouteText }}
+      </span>
     </div>
 
     <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px">
@@ -962,6 +964,7 @@ import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import { useProgressModal } from '@/composables/useProgressModal'
+import { routeLabel } from '@/composables/useClusterUtils'
 import {
   buildStreamRoutePayload,
   emptyStreamRouteForm,
@@ -989,7 +992,14 @@ const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
 const loadedNode = ref('')
+const routeInfo = ref<{ route?: 'relay' | 'direct'; relay_via?: string }>({})
 const currentSignal = ref<AbortSignal | undefined>(undefined)
+
+/** 与 loadedNode 同行的路径标注，如「（经中继）」；无 route 字段时为空串（不渲染） */
+const loadedNodeRouteText = computed(() => {
+  const label = routeLabel(routeInfo.value.route)
+  return label ? `（${label}）` : ''
+})
 
 // AbortController for cancel query
 let abortController: AbortController | null = null
@@ -1001,6 +1011,7 @@ function cancelQuery() {
   }
   loading.value = false
   loadedNode.value = ''
+  routeInfo.value = {}
 }
 
 onUnmounted(() => {
@@ -1143,6 +1154,7 @@ const loadUpstreams = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`, { signal: currentSignal.value })
     upstreams.value = res.data.upstreams || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadUpstreams error:', error)
@@ -1153,6 +1165,7 @@ const loadRoutes = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`, { signal: currentSignal.value })
     routes.value = res.data.routes || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadRoutes error:', error)
@@ -1163,6 +1176,7 @@ const loadGlobalRules = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`, { signal: currentSignal.value })
     globalRules.value = res.data.global_rules || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadGlobalRules error:', error)
@@ -1173,6 +1187,7 @@ const loadPluginConfigs = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`, { signal: currentSignal.value })
     pluginConfigs.value = res.data.plugin_configs || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadPluginConfigs error:', error)
@@ -1183,6 +1198,7 @@ const loadPluginMetadata = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`, { signal: currentSignal.value })
     pluginMetadataList.value = res.data.plugin_metadata || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadPluginMetadata error:', error)
@@ -1193,6 +1209,7 @@ const loadPluginList = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`, { signal: currentSignal.value })
     pluginList.value = res.data.plugins || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     console.error('[DEBUG] loadPluginList error:', error)
   }
@@ -1202,6 +1219,7 @@ const loadStreamRoutes = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/stream-routes`, { signal: currentSignal.value })
     streamRoutes.value = res.data.stream_routes || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadStreamRoutes error:', error)
@@ -1212,6 +1230,7 @@ const loadSslCertificates = async (ip: string, port: string) => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/ssl`, { signal: currentSignal.value })
     sslList.value = res.data.ssl_certificates || []
+    routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
   } catch (error: any) {
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
     console.error('[DEBUG] loadSslCertificates error:', error)

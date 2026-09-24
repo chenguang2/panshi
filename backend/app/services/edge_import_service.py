@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select
 
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services import edge_sync
 from app.models.cluster import (
     Cluster,
     Upstream,
@@ -62,6 +63,7 @@ class EdgeImportService:
         port: int,
         edge_path: str,
         client: EdgeClient,
+        route_info: dict,
     ):
         self.cluster_id = cluster_id
         self.node_id = node_id
@@ -70,6 +72,7 @@ class EdgeImportService:
         self.port = port
         self.edge_path = edge_path
         self.client = client
+        self.route_info = route_info
 
     @classmethod
     async def create(
@@ -118,7 +121,11 @@ class EdgeImportService:
         )
         client.api_key = admin_key
 
-        return cls(cluster_id, node_id, db_session, ip, port, edge_path, client)
+        # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+        route_info: dict = {}
+        edge_sync.mark_route(route_info, client)
+
+        return cls(cluster_id, node_id, db_session, ip, port, edge_path, client, route_info)
 
     def _count_list(self, items: list | None) -> int:
         return len(items) if isinstance(items, list) else 0

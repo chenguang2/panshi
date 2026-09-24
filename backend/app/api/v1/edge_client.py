@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.database import get_db
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
+from app.services import edge_sync
 from app.models.cluster import Node, Cluster
 
 from app.core.deps import require_permission
@@ -126,14 +127,17 @@ async def list_edge_nodes(db: AsyncSession = Depends(get_db)):
 @router.get("/nodes/{ip}/{port}/upstreams")
 async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_upstreams)
         if isinstance(result, list):
-            return {"upstreams": result}
+            return {"upstreams": result, **route_info}
         if isinstance(result, dict) and "raw_response" in result:
-            return {"error": "解密失败", "detail": "Edge server response could not be decrypted", "raw_length": len(result.get("raw_response", ""))}
+            return {"error": "解密失败", "detail": "Edge server response could not be decrypted", "raw_length": len(result.get("raw_response", "")), **route_info}
         nodes = client._parse_node_list(result)
-        return {"upstreams": nodes}
+        return {"upstreams": nodes, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"连接失败: {str(e)}")
     except EdgeAPIError as e:
@@ -205,9 +209,12 @@ async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession
 @router.get("/nodes/{ip}/{port}/routes")
 async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_routes)
-        return {"routes": result}
+        return {"routes": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -291,9 +298,12 @@ async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 @router.get("/nodes/{ip}/{port}/global_rules")
 async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_global_rules)
-        return {"global_rules": result}
+        return {"global_rules": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -351,9 +361,12 @@ async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession 
 @router.get("/nodes/{ip}/{port}/plugin_configs")
 async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_plugin_configs)
-        return {"plugin_configs": result}
+        return {"plugin_configs": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -411,9 +424,12 @@ async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSess
 @router.get("/nodes/{ip}/{port}/plugin_metadata")
 async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_plugin_metadata)
-        return {"plugin_metadata": result}
+        return {"plugin_metadata": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -471,9 +487,12 @@ async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: Async
 @router.get("/nodes/{ip}/{port}/ssl")
 async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = client.api("ssl", "list")
-        return {"ssl_certificates": result}
+        return {"ssl_certificates": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -505,9 +524,12 @@ async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSess
 @router.get("/nodes/{ip}/{port}/plugins/list")
 async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_available_plugins)
-        return {"plugins": result}
+        return {"plugins": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -532,9 +554,12 @@ async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db))
 @router.get("/nodes/{ip}/{port}/stream-routes")
 async def list_stream_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
+    route_info: dict[str, Any] = {}
+    edge_sync.mark_route(route_info, client)
     try:
         result = await run_edge_sync(client.list_stream_routes)
-        return {"stream_routes": result}
+        return {"stream_routes": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:

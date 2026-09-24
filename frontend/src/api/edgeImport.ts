@@ -42,6 +42,10 @@ export interface TestConnectionResponse {
   cluster_name?: string
   response_time_ms?: number
   message?: string
+  /** 本次连接的实际执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的网关基址 */
+  relay_via?: string
 }
 
 export interface PluginSummary {
@@ -80,6 +84,10 @@ export interface PreviewResponse {
   conflicts: Conflict[]
   plugin_summary: PluginSummary
   warnings?: string[]
+  /** 预览数据来源节点的实际执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的网关基址 */
+  relay_via?: string
 }
 
 export interface ImportedCounts {
@@ -99,6 +107,10 @@ export interface ImportResponse {
   imported_counts: ImportedCounts
   plugin_summary: PluginSummary
   message: string
+  /** 导入来源节点的实际执行路径（后端提供；缺失时不显示标签） */
+  route?: 'relay' | 'direct'
+  /** 经中继时的网关基址 */
+  relay_via?: string
 }
 
 // ---- API Functions ----
