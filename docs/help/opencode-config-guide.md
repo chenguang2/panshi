@@ -2,56 +2,47 @@
 
 ## 配置原理
 
-所有模型 preset 统一定义在 `~/.config/opencode/oh-my-opencode-slim.json` 的 `presets` 字段中。通过环境变量 `OH_MY_OPENCODE_SLIM_PRESET` 在启动时选择 preset。
+所有模型 preset 统一定义在 `~/.config/opencode/oh-my-opencode-slim.json` 的 `presets` 字段中，当前生效的 preset 由同文件的 `preset` 字段决定。会话内用 `/preset` 命令切换（直接写入该字段），按提示 reload 后新会话生效。
 
 | 模型 | Preset 名称 | 模型 ID |
 |---|---|---|
 | 智谱 GLM | `glm` | `zhipuai-coding-plan/glm-5.3-flash` |
 | DeepSeek | `deepseek` | `deepseek/deepseek-flash` |
-| MiMo 2.5 Free | `mimo` | `opencode/mimo-v2.5-free` |
+| MiMo 2.6 Flash Free | `mimo` | `opencode/mimo-v2.6-flash-free` |
 
-默认 preset 为 `openai`（GLM），直接运行 `opencode` 即可。
+默认 preset 为 `mimo`，直接运行 `opencode` 即可。
 
 ## 启动命令
 
-### 智谱 GLM（默认）
+统一用裸命令启动，不带任何环境变量：
 
 ```bash
 opencode
-# 或显式指定
-OH_MY_OPENCODE_SLIM_PRESET=glm opencode
 ```
 
-### MiMo 2.5 Free
+切换模型在 TUI 内执行 `/preset`，选择 `glm` / `deepseek` / `mimo`，保存后按提示 reload OpenCode。
 
-```bash
-OH_MY_OPENCODE_SLIM_PRESET=mimo opencode
-```
-
-### DeepSeek
-
-```bash
-OH_MY_OPENCODE_SLIM_PRESET=deepseek opencode
-```
+> **不要用环境变量 `OH_MY_OPENCODE_SLIM_PRESET` 切换（已验证不通，2026-09-23）**：OpenCode 是多客户端共享一个后台 service 的架构，插件在 **service 进程**里读取该变量；alias 只把 env 传给 TUI 客户端进程，service 感知不到，于是静默回落到配置文件的 `preset` 字段。若改为用该 env 启动 service，又会把所有连接的 TUI 钉在同一 preset，无法各切各的。
 
 ## 快捷别名
 
-`~/.bashrc` 中已配置：
+`~/.bashrc` 中已配置（仅为启动习惯保留，不携带任何环境变量，等价于 `opencode`）：
 
 ```bash
-alias oc-mimo='OH_MY_OPENCODE_SLIM_PRESET=mimo opencode'
-alias oc-deepseek='OH_MY_OPENCODE_SLIM_PRESET=deepseek opencode'
-alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
+alias oc-mimo='opencode'
+alias oc-deepseek='opencode'
+alias oc-glm='opencode'
 ```
 
-直接用 `oc-mimo`、`oc-deepseek`、`oc-glm` 启动。修改后需 `source ~/.bashrc` 生效。
+直接用 `oc-mimo`、`oc-deepseek`、`oc-glm` 启动，启动后用 `/preset` 切换。修改后需 `source ~/.bashrc` 生效。
 
 ## 注意事项
 
-- 切换模型需要**重启 OpenCode**（环境变量只在启动时读取）
+- 切换模型用 `/preset` 命令，保存后需 **reload OpenCode** 才对新会话生效；**当前会话保留原模型**（插件有意为之，避免截断上下文/打断运行中的子代理）
+- 改完 `~/.bashrc` 后已开的终端不会自动生效，需 `source ~/.bashrc`；改前启动的 opencode 进程若残留 `OH_MY_OPENCODE_SLIM_PRESET` env，会拦截 `/preset` 切换，重启一次 opencode 即可
 - 如果 DeepSeek 启动报 provider 错误，需要在 `~/.config/opencode/opencode.json` 的 `provider` 中添加 DeepSeek 的 API Key 配置
-- 会话内临时切模型可用 `/models` 命令或 `Ctrl+X m` 快捷键
-- 新增模型只需在 `oh-my-opencode-slim.json` 的 `presets` 中添加对应 preset，再加一条 alias 即可
+- 会话内临时切**当前**模型可用 `/models` 命令或 `Ctrl+X m` 快捷键（只影响会话主模型，不改各 agent 的 preset）
+- 新增模型只需在 `oh-my-opencode-slim.json` 的 `presets` 中添加对应 preset，无需再加 alias
 
 ---
 
@@ -179,16 +170,8 @@ alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
 ```json
 {
   "$schema": "https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json",
-  "preset": "openai",
+  "preset": "mimo",
   "presets": {
-    "openai": {
-      "orchestrator": { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
-      "oracle":      { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["simplify"], "mcps": [] },
-      "librarian":   { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": ["context7", "gh_grep"] },
-      "explorer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
-      "designer":    { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] },
-      "fixer":       { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] }
-    },
     "glm": {
       "orchestrator": { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
       "oracle":      { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": ["simplify"], "mcps": [] },
@@ -198,12 +181,12 @@ alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
       "fixer":       { "model": "zhipuai-coding-plan/glm-5.3-flash", "skills": [], "mcps": [] }
     },
     "mimo": {
-      "orchestrator": { "model": "opencode/mimo-v2.5-free", "skills": ["*"], "mcps": ["*", "!context7"] },
-      "oracle":      { "model": "opencode/mimo-v2.5-free", "skills": ["simplify"], "mcps": [] },
-      "librarian":   { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": ["context7", "gh_grep"] },
-      "explorer":    { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] },
-      "designer":    { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] },
-      "fixer":       { "model": "opencode/mimo-v2.5-free", "skills": [], "mcps": [] }
+      "orchestrator": { "model": "opencode/mimo-v2.6-flash-free", "skills": ["*"], "mcps": ["*", "!context7"] },
+      "oracle":      { "model": "opencode/mimo-v2.6-flash-free", "skills": ["simplify"], "mcps": [] },
+      "librarian":   { "model": "opencode/mimo-v2.6-flash-free", "skills": [], "mcps": ["context7", "gh_grep"] },
+      "explorer":    { "model": "opencode/mimo-v2.6-flash-free", "skills": [], "mcps": [] },
+      "designer":    { "model": "opencode/mimo-v2.6-flash-free", "skills": [], "mcps": [] },
+      "fixer":       { "model": "opencode/mimo-v2.6-flash-free", "skills": [], "mcps": [] }
     },
     "deepseek": {
       "orchestrator": { "model": "deepseek/deepseek-flash", "skills": ["*"], "mcps": ["*", "!context7"] },
@@ -359,9 +342,9 @@ Never edit files or perform state-changing actions.
 #### `~/.bashrc` 别名追加内容
 
 ```bash
-alias oc-mimo='OH_MY_OPENCODE_SLIM_PRESET=mimo opencode'
-alias oc-deepseek='OH_MY_OPENCODE_SLIM_PRESET=deepseek opencode'
-alias oc-glm='OH_MY_OPENCODE_SLIM_PRESET=glm opencode'
+alias oc-mimo='opencode'
+alias oc-deepseek='opencode'
+alias oc-glm='opencode'
 ```
 
 ### 一键迁移脚本
@@ -388,7 +371,7 @@ cp -r ~/.config/opencode/plugins  $DEST/
 cp -r ~/.config/opencode/skills   $DEST/
 
 # 复制 bashrc alias（只取相关行）
-grep 'oc-mimo\|oc-deepseek\|oc-glm\|OH_MY_OPENCODE_SLIM_PRESET' ~/.bashrc > $DEST/bashrc-aliases.sh
+grep 'oc-mimo\|oc-deepseek\|oc-glm' ~/.bashrc > $DEST/bashrc-aliases.sh
 
 echo "备份完成：$DEST"
 echo "⚠️  opencode.json 中含 API Key，请替换后再部署到新机器"
