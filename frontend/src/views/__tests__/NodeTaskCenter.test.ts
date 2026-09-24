@@ -582,6 +582,120 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(body.params.version).toBe('edge-26071508')
     wrapper.unmount()
   })
+
+  it.each([
+    ['relay', '目标版本（经中继）'],
+    ['direct', '目标版本（直连）'],
+  ] as const)('edge_pack_rebase shows %s route label next to target version', async (route, expected) => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      }
+      if (url === '/clusters/1/nodes') {
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      }
+      if (url === '/clusters/1/nodes/10/edge-pack-list') {
+        return Promise.resolve({
+          data: {
+            versions: [{ name: '3.1.1.26071611', current: false }],
+            route,
+            ...(route === 'relay' ? { relay_via: 'jboss@192.168.0.13' } : {}),
+          },
+        })
+      }
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+
+    const bodySelects = Array.from(document.querySelectorAll('select'))
+    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
+    typeSel!.value = 'edge_pack_rebase'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const nodeInput = document.querySelector('input[type="checkbox"]') as HTMLInputElement
+    nodeInput!.checked = true
+    nodeInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.body.textContent || '').toContain(expected)
+    wrapper.unmount()
+  })
+
+  it('edge_pack_rebase loads versions from the SELECTED node, not the first cluster node', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      }
+      if (url === '/clusters/1/nodes') {
+        // 集群节点表顺序：网关机 11 在前；用户勾选的是第二个节点 10。
+        // 历史 bug：loadEdgePackVersions 用 createNodes.value[0]（列表首节点=网关机）
+        // 而非选中节点，导致无论选谁都查网关机的版本列表（只有一个版本）。
+        return Promise.resolve({
+          data: {
+            total: 2,
+            items: [
+              { id: 11, ip: '192.168.0.13' },
+              { id: 10, ip: '192.168.0.14' },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters/1/nodes/10/edge-pack-list') {
+        return Promise.resolve({
+          data: {
+            versions: [
+              { name: '3.1.1.26071611', current: false },
+              { name: '3.1.4.26090809', current: true },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters/1/nodes/11/edge-pack-list') {
+        return Promise.resolve({ data: { versions: [{ name: '3.1.4.26090809', current: true }] } })
+      }
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+
+    const bodySelects = Array.from(document.querySelectorAll('select'))
+    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    // 勾选第二个节点（node 10 / 192.168.0.14）
+    const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+    checkboxes[1]!.checked = true
+    checkboxes[1]!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/10/edge-pack-list')
+    expect(api.get).not.toHaveBeenCalledWith('/clusters/1/nodes/11/edge-pack-list')
+    expect(document.body.textContent || '').toContain('3.1.1.26071611')
+    wrapper.unmount()
+  })
 })
 
 describe('NodeTaskCenter create-task node selection', () => {

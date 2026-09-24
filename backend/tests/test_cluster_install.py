@@ -176,6 +176,89 @@ class TestEdgePackListEndpoint:
         assert resp.status_code in (200, 404)
 
 
+class TestParsePackVersions:
+    """_parse_pack_versions：bin/edge pack-list 输出解析，同名版本必须去重。
+
+    实测节点上同一版本会被 edge 二进制输出两次（current + 非 current），
+    端点原样透传导致前端下拉出现重复项（且模板 :key="v.name" 重复键）。
+    """
+
+    def test_dedupes_same_name_and_keeps_order(self):
+        from app.api.v1.cluster_install import _parse_pack_versions
+
+        stdout = "[*]3.1.4.26090809\n3.1.1.26071611\n3.1.4.26090809\n"
+        versions = _parse_pack_versions(stdout)
+        assert [v["name"] for v in versions] == ["3.1.4.26090809", "3.1.1.26071611"]
+        assert versions[0]["current"] is True
+        assert versions[1]["current"] is False
+
+    def test_dedup_merges_current_when_duplicate_is_current(self):
+        from app.api.v1.cluster_install import _parse_pack_versions
+
+        stdout = "3.1.4.26090809\n[*]3.1.4.26090809\n"
+        versions = _parse_pack_versions(stdout)
+        assert len(versions) == 1
+        assert versions[0]["current"] is True
+
+    def test_skips_motd_and_non_version_lines(self):
+        from app.api.v1.cluster_install import _parse_pack_versions
+
+        stdout = (
+            "System load: \t0.01\n"
+            "IP address: \t192.168.0.14\n"
+            "To run a command as administrator(user \"root\"),use \"sudo <command>\".\n"
+            "[*]3.1.4.26090809\n"
+            "v1.2.3\n"
+            "edge-pack-3.1.1.26071611-1.29.2.5\n"
+        )
+        versions = _parse_pack_versions(stdout)
+        assert [v["name"] for v in versions] == ["3.1.4.26090809"]
+        assert versions[0]["current"] is True
+
+    def test_empty_output_returns_empty_list(self):
+        from app.api.v1.cluster_install import _parse_pack_versions
+
+        assert _parse_pack_versions("") == []
+        assert _parse_pack_versions("\n  \n") == []
+
+
+class TestEdgePackListRoute:
+    """edge-pack-list 响应必须携带 route/relay_via（ansible/SSH 腿契约对齐，
+    与 cluster_edge_env._node_route_fields 同源）。"""
+
+    def _patch_env(self, monkeypatch, jump):
+        from types import SimpleNamespace
+        from app.api.v1 import cluster_install
+        from app.services import relay_registry as relay_registry_mod
+
+        node = SimpleNamespace(ip="10.0.0.5", edge_path="/work/edge")
+        monkeypatch.setattr(
+            cluster_install.edge_sync, "verify_node", AsyncMock(return_value=node),
+        )
+        monkeypatch.setattr(
+            cluster_install._ansible_service, "generic_run",
+            AsyncMock(return_value={"rc": 0, "shell_stdout": "[*]1.2.3\n1.2.4\n"}),
+        )
+        monkeypatch.setattr(relay_registry_mod, "ssh_jump_for_ip", lambda ip: jump)
+
+    def test_relay_route_in_response(self, isolated_app, monkeypatch):
+        self._patch_env(monkeypatch, "jboss@10.0.0.254")
+        resp = isolated_app.get("/api/v1/clusters/1/nodes/10/edge-pack-list")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["route"] == "relay"
+        assert data["relay_via"] == "jboss@10.0.0.254"
+        assert [v["name"] for v in data["versions"]] == ["1.2.3", "1.2.4"]
+
+    def test_direct_route_omits_relay_via(self, isolated_app, monkeypatch):
+        self._patch_env(monkeypatch, None)
+        resp = isolated_app.get("/api/v1/clusters/1/nodes/10/edge-pack-list")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["route"] == "direct"
+        assert "relay_via" not in data
+
+
 class TestEdgePackAddEndpoint:
     """POST /clusters/{id}/nodes/{nid}/edge-pack-add"""
 

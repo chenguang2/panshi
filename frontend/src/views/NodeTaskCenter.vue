@@ -595,7 +595,7 @@
             </div>
             <div v-if="createTaskType === 'edge_pack_rebase'" style="margin-bottom: 12px">
               <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >目标版本</label
+                >目标版本{{ edgePackRouteText }}</label
               >
               <select
                 v-model="selectedPackVersion"
@@ -1077,6 +1077,7 @@ import {
   type TaskFile,
 } from '@/api/scriptUpload'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { routeLabel } from '@/composables/useClusterUtils'
 import api from '@/api'
 
 const tasks = ref<NodeTaskData[]>([])
@@ -1116,6 +1117,12 @@ const edgePackFiles = ref<Array<{ name: string; size_display?: string }>>([])
 const selectedPackFile = ref('')
 const edgePackVersions = ref<Array<{ name: string; current: boolean }>>([])
 const selectedPackVersion = ref('')
+const edgePackRoute = ref<{ route?: 'relay' | 'direct'; relay_via?: string }>({})
+/** 目标版本标签旁的路径标注，如「（经中继）」；无 route 字段时不渲染 */
+const edgePackRouteText = computed(() => {
+  const label = routeLabel(edgePackRoute.value.route)
+  return label ? `（${label}）` : ''
+})
 
 // ── software_check ──
 const softwareOptions = [
@@ -2014,6 +2021,7 @@ async function openCreateModal() {
   edgePackFiles.value = []
   selectedPackFile.value = ''
   edgePackVersions.value = []
+  edgePackRoute.value = {}
   selectedPackVersion.value = ''
   createNodes.value = []
   resetCmdExecForm()
@@ -2036,10 +2044,14 @@ async function loadEdgePackFiles() {
 }
 
 async function loadEdgePackVersions() {
-  const firstNode = createNodes.value[0]
+  // 取第一个"被勾选"的节点。此前误用 createNodes.value[0]（集群节点表首节点，
+  // 恰好是网关机），导致无论用户勾选哪个节点，版本列表永远查的是网关机——
+  // 它没传过升级包，下拉里自然只有它自己的当前版本。
+  const firstNode = createNodes.value.find((n) => createNodeIds.value.includes(n.id))
   if (!createClusterId.value || !firstNode) return
   const res = await api.get(`/clusters/${createClusterId.value}/nodes/${firstNode.id}/edge-pack-list`)
   edgePackVersions.value = res.data?.versions || []
+  edgePackRoute.value = { route: res.data.route, relay_via: res.data.relay_via }
 }
 
 async function onTaskTypeChange() {
@@ -2065,6 +2077,7 @@ watch(createClusterId, () => {
   openrestyFiles.value = []
   selectedPackFile.value = ''
   edgePackVersions.value = []
+  edgePackRoute.value = {}
   selectedPackVersion.value = ''
 })
 

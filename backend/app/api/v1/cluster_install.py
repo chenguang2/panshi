@@ -44,6 +44,34 @@ _ansible_service = AnsibleRunnerService()
 _VERSION_LIKE_RE = re.compile(r"^\d+(\.\d+)+$")
 
 
+def _parse_pack_versions(stdout: str) -> list[dict]:
+    """解析 ``bin/edge pack-list`` 输出为版本列表。
+
+    - 每行 ``[*]<version>`` 表示当前版本；跳过 SSH banner/motd 与非版本行。
+    - 同名版本去重：实测同一版本会被 edge 二进制输出两次（current + 非 current），
+      原样透传会让前端下拉出现重复项（模板 ``:key="v.name"`` 重复键）。
+      current 标记取并集，保持首次出现顺序。
+    """
+    versions: dict[str, dict] = {}
+    for line in stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        current = line.startswith("[*]")
+        name = line.replace("[*]", "").strip()
+        # Skip SSH login banner / system motd lines; keep version-like names
+        if not name or len(name) > 64:
+            continue
+        if not _VERSION_LIKE_RE.match(name):
+            continue
+        if name in versions:
+            if current:
+                versions[name]["current"] = True
+            continue
+        versions[name] = {"name": name, "current": current}
+    return list(versions.values())
+
+
 def list_openresty_files(soft_dir: str) -> list[dict]:
     """List openresty-*.tar.gz files in soft_dir with name, size, size_display, mtime."""
     soft_path = Path(soft_dir)
@@ -446,7 +474,11 @@ async def edge_pack_list(
     db: AsyncSession = Depends(get_db),
 ):
     """List available edge version packs on the target node via ansible."""
+    from app.api.v1.cluster_edge_env import _node_route_fields
+
     node = await edge_sync.verify_node(db, cluster_id, node_id)
+    # 节点执行路径：发起 ansible 之前取一次（与注入同源，ansible 腿语义）。
+    route_fields = _node_route_fields(node.ip)
     try:
         result = await _ansible_service.generic_run(
             ip=node.ip, tag="edge_pack_list",
@@ -456,20 +488,7 @@ async def edge_pack_list(
         raise HTTPException(status_code=502, detail=f"节点 {node.ip} 连接失败: {str(e)}")
 
     stdout = result.get("shell_stdout") or ""
-    versions = []
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        current = line.startswith("[*]")
-        name = line.replace("[*]", "").strip()
-        # Skip SSH login banner / system motd lines; keep version-like names
-        if not name or len(name) > 64:
-            continue
-        if not _VERSION_LIKE_RE.match(name):
-            continue
-        versions.append({"name": name, "current": current})
-    return {"versions": versions}
+    return {"versions": _parse_pack_versions(stdout), **route_fields}
 
 
 @install_edge_router.get("/{cluster_id}/nodes/edge-pack-files")
