@@ -158,6 +158,20 @@ def _append_relay_hint(ip: str, rc: int, stderr: str) -> str:
     return stderr
 
 
+def ssh_relay_note(ip: str) -> str:
+    """SSH 腿展示用中继标记：经跳板时返回一行说明，直连返回空串。
+
+    与 _build_ssh_cmd 的 -J 注入同源（relay_enabled + ssh_jump_for_ip，含自跳
+    守卫），调用方须在发起 SSH 前取一次；语义对齐 run_playbook 展示 command 的
+    `# [中继] 经跳板 …` 后缀（那边是 ansible_ssh_common_args 腿，这边是 SSH -J 腿）。
+    """
+    if relay_registry.relay_enabled():
+        jump = relay_registry.ssh_jump_for_ip(ip)
+        if jump:
+            return f"# [中继] 经跳板 {jump}（SSH -J）"
+    return ""
+
+
 def _ensure_control_path_dir() -> None:
     """Ensure the SSH ControlMaster socket dir exists (self-healing).
 

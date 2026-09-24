@@ -482,6 +482,7 @@ class NodeTaskService:
                 # Execute via SSH + base64 pipeline (no file on disk)
                 from app.services.ansible_service import (
                     get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port,
+                    ssh_relay_note,
                 )
                 ssh_user = get_ssh_user(node.ip)
                 ssh_port = resolve_ssh_port(node)
@@ -489,6 +490,9 @@ class NodeTaskService:
                 b64 = base64.b64encode(script_content.encode("utf-8")).decode()
                 ssh_cmd = f"echo '{b64}' | base64 -d | bash"
                 on_log({"stdout": f"$ [script] bash -c '<base64_encoded_script>'"})
+                _note = ssh_relay_note(node.ip)
+                if _note:
+                    on_log({"stdout": _note})
                 try:
                     rc, stdout, stderr = await asyncio.wait_for(
                         _run_ssh_with_fallback(
@@ -688,13 +692,16 @@ class NodeTaskService:
             item.rc = nr.get("rc", rc)
             item.status = "success" if nr.get("success", False) else "failed"
             item.stdout = nr.get("stdout", stdout)
+            # 批量命令对全体节点相同，透传 run_playbook 的 command（含
+            # `# [中继] 经跳板 …` 标记）供前端命令 tab 显示。
+            item.command = result.get("command")
             item.stderr = nr.get("stderr", stderr if not nr.get("success", False) else "")
             item.finished_at = datetime.utcnow()
         await db.commit()
 
     async def _software_check_node(self, node, cmd_str: str, on_log) -> dict:
         """Run software_check via ansible, falling back to direct SSH on failure."""
-        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, PRIVATE_DATA_DIR
+        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, PRIVATE_DATA_DIR, ssh_relay_note
 
         if self._ansible is not None:
             result = await self._ansible.run_playbook(
@@ -707,8 +714,15 @@ class NodeTaskService:
                     "rc": 0, "status": "successful",
                     "stdout": json.dumps(parse_software_check_output(raw), ensure_ascii=False),
                     "stderr": result.get("stderr", ""),
+                    # 透传展示用 command（含 run_playbook 的 `# [中继] 经跳板 …` 标记），
+                    # 供前端命令 tab 显示；此前被丢弃导致成功路径看不到中继信息。
+                    "command": result.get("command") or "",
                 }
-            on_log({"stdout": "ansible 软件查询失败，降级为 SSH 直连执行"})
+            # 降级路径实际路由由 -J 注入决定（可能经中继），不得硬编码「直连」。
+            _note = ssh_relay_note(node.ip)
+            on_log({"stdout": f"ansible 软件查询失败，降级为 SSH 执行（{'经中继' if _note else '直连'}）"})
+            if _note:
+                on_log({"stdout": _note})
 
         ssh_user = get_ssh_user(node.ip)
         ssh_port = resolve_ssh_port(node)
@@ -812,15 +826,18 @@ def _cmd_exec_result_from_playbook(result: dict) -> dict:
     """
     raw = result.get("shell_stdout") or result.get("stdout") or ""
     rc = result.get("rc")
+    # 透传展示用 command（含 run_playbook 的 `# [中继] 经跳板 …` 标记），
+    # 供前端命令 tab 显示；此前三个分支都丢弃该键，界面看不到中继信息。
+    command = result.get("command") or ""
     if rc != 0:
         stderr = result.get("stderr") or ""
         if not stderr:
             stderr = "命令执行失败（ansible rc=%s）" % rc
-        return {"rc": rc, "status": "failed", "stdout": raw, "stderr": stderr}
+        return {"rc": rc, "status": "failed", "stdout": raw, "stderr": stderr, "command": command}
     parsed = parse_cmd_exec_output(raw, rc=rc)
     if parsed["status"] == "ok":
-        return {"rc": 0, "status": "successful", "stdout": parsed["stdout"]}
-    return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"]}
+        return {"rc": 0, "status": "successful", "stdout": parsed["stdout"], "command": command}
+    return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"], "command": command}
 
 
 def _ansible_false_success_error(result: dict, ip: str) -> str | None:
@@ -935,13 +952,16 @@ async def _resolve_node(task_id: int, node_id: int):
 
 async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], None]) -> dict:
     """Phase 2 of install_openresty: SSH build of install-edge.sh on the node."""
-    from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port
+    from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, ssh_relay_note
 
     ssh_user = get_ssh_user(node.ip)
     ssh_port = resolve_ssh_port(node)
     destpath = str(Path(prefix).parent) + "/"
     build_cmd = f"cd {destpath}soft/install-edge && ./install-edge.sh {prefix}"
     on_log({"stdout": f"$ {build_cmd}"})
+    _note = ssh_relay_note(node.ip)
+    if _note:
+        on_log({"stdout": _note})
     rc, stdout, stderr = await _run_ssh_with_fallback(
         node.ip, ssh_user, build_cmd, on_line=on_log, port=ssh_port,
     )
