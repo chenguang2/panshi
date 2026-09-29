@@ -27,6 +27,6 @@
 ## 5. 全量验证与收尾
 
 - [x] 5.1 全量 `cd backend && uv run pytest`（会话级隔离库，默认 SQLite）确认零回归；确认 `test_publish_response.py` 守卫未误伤（1916 passed / 12 skipped / 0 failed / 4:09，publish_response 4 项各门均绿；warnings summary 中的 PytestUnhandledThreadExceptionWarning 全部来自 test_script_upload.py 的 aiosqlite worker（约定 #42 已知问题），与本变更 to_thread 无关）
-- [ ] 5.2 按约定 #31 评估：本变更无 schema/写库路径改动，PG 方言冒烟非强制；可选跑 `TEST_DB_BACKEND=pg uv run pytest tests/test_pg_dialect_smoke.py -q` 复核
-- [ ] 5.3 真机链路抽查（复用运行中实例，不启停服务）：登录后发起一次多节点发布，期间并发请求健康检查/其他 API 确认不阻塞；页面验收按约定 #51 落在用户实际操作页面
-- [ ] 5.4 更新 `docs/refactoring/code-review-report-2026-09-28.md` H1 行状态（⏸ → ✅，标注本变更名）
+- [x] 5.2 按约定 #31 评估：本变更无 schema/写库路径改动，PG 方言冒烟非强制；可选跑 `TEST_DB_BACKEND=pg uv run pytest tests/test_pg_dialect_smoke.py -q` 复核（2026-09-29 已跑：**7 passed**，database.py 触及后保险复核）
+- [x] 5.3 真机链路抽查（复用运行中实例，不启停服务）：执行方式为**归档导出探针**（2026-09-29 实测：远程 PG 源导出 17.7s 期间并发健康检查 10 次全部 1.7–2.8ms / HTTP 200，同一 `asyncio.to_thread` 卸载机制）。真实多节点发布会对上海局/南昌局真实 Edge 推配置，未自主触发；publish 路径另有 test_edge_sync_relay_route / test_publish_response 回归覆盖。本变更零 UI 改动，#51 页面验收不适用
+- [x] 5.4 更新 `docs/refactoring/code-review-report-2026-09-28.md` H1 行状态（⏸ → ✅，标注本变更名）
