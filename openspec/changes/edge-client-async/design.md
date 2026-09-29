@@ -42,22 +42,34 @@
 
 **备选（否决）**：EdgeClient 出 AsyncClient 双 API —— 结构更干净，但风险/收益不成比例；留作后续独立演进（见 Open Questions）。
 
-### Decision 2: 编排层卸载粒度 = 整个逐节点同步工作进线程，不是只包 publish_fn
+### Decision 2: 卸载边界 = 网络调用进线程，构造/标注/日志留事件循环（2026-09-29 审查修正）
 
-`publish_to_nodes` 每节点的闭包覆盖：**EdgeClient 构造 + `mark_route` + `publish_fn(client)` + `post_publish_fn`**。理由：
+原表述「整个逐节点同步工作进线程」经代码复核后修正（用户确认）：
 
-- `EdgeClient.__init__ → _resolve_edge_url` 含同步 DB 查询（:123-141），构造留在事件循环仍是阻塞点
-- `mark_route`(:393) 需要 client 实例（读 `relay_target` 写 `route`/`relay_via`），必须在构造后、请求前执行——进同一闭包即天然保序
-- `post_publish_fn`（如 plugin_metadata 的 `client.reload_plugins()`）是同 client 上的又一同步 EdgeClient 调用，同闭包
-- 闭包把结果写进可变 holder（dict/list）或直接 return，`log_fn` 留在事件循环按原时序执行（edge_logger 文件追加是小同步写，不值得再拆）
+- **实测依据修正**：全部迁移范围内的构造点（`edge_sync.py:392`、`clusters.py:291`、`api/v1/edge_client.py` 全部 29 处）都显式传 `node_ip`+`node_port`，`__init__`(:81-84) 该分支**不调 `_resolve_edge_url`**——构造实际只做 env 读取 + relay 快照内存读，亚毫秒级、非阻塞。原「构造含同步 db.query 阻塞点」的论据在该路径不成立
+- **闭包边界（方案 B）**：构造 + `mark_route`(:393) + `_encrypt`(:394) 留在事件循环；仅真正阻塞的网络调用进 `to_thread`。收益：db/会话访问永远留在循环线程，杜绝未来构造改动引入跨线程会话风险
+- **两跳时序（log_fn 保序关键）**：`publish_to_nodes` 现序为 `publish_fn`(:396) → `log_fn`(:402-403) → `post_publish_fn`(:405-406) → post_log_fn，log_fn 夹在两次网络调用之间，必须拆两跳：
 
-线程安全论证：同一节点的构造+请求+post 钩子在**同一个 worker 线程内串行**完成，无跨线程共享可变状态；`node_result` dict 的写入发生在闭包内，GIL 下单键赋值安全。`db` 会话若被 `_resolve_edge_url` 使用，同样只在单线程串行路径触碰。
+  ```
+  hop1: await asyncio.to_thread(publish_fn, client)
+  → 事件循环内 log_fn(...)
+  hop2: await asyncio.to_thread(post_publish_fn, client)   # 仅 post_publish_fn 非空时
+  → 事件循环内 post_log_fn(...)
+  ```
 
-`delete_on_nodes`(:343) 同型处理。异常传播：`to_thread` 原样透传异常，:411 的 `except (EdgeConnectionError, EdgeAPIError)` 无需改动。
+  `log_fn`/`post_log_fn` 一律留在事件循环。**约束：线程闭包内禁止触碰请求级 db 会话**——当前 8+12 处 `publish_fn`/`post_publish_fn` lambda 均为纯 client 调用；未来若新增依赖 db 的钩子，须重新评估边界
+- **既有 quirk 原样保留**：post_publish_fn 抛异常时节点先计 success 再计 fail、status 翻转 failed、log_fn 被调用两次——语句顺序不变则行为不变，不修不扩
+- `delete_on_nodes`(:343) 单跳：`await asyncio.to_thread(edge_delete_fn, client, edge_uuid)`；异常经 `to_thread` 原样透传，既有 except 分支无需改动
+
+线程安全论证：逐节点 `await` 串行 → 同一编排至多 1 个 worker 线程存活；lambda 只闭包 route 文件局部变量与 client，无共享可变状态；`node_result` 写入全部发生在事件循环。
 
 ### Decision 3: api/v1/edge_client.py 裸调端点统一迁入既有 `run_edge_sync`
 
 单实现原则：helper 已存在（to_thread + wait_for），仅迁移 ~20 个裸调端点（get_upstream:151、create/update/patch/delete upstream、route 同组、global_rule 同组、plugin_config 同组、plugin_metadata 同组、ssl :494/506/517、reload_plugins:543、stream_route create/update/delete）。外层 `wait_for(10s)` > 内层 httpx timeout 5s，超时语义与已迁移的 9 个端点一致，不新增错误形态。
+
+**超时不变量（2026-09-29 审查补充）**：`run_edge_sync` 的 timeout MUST 严格大于所包方法的内层 httpx timeout（当前 10 > 5 ✓）。`raw_put` timeout=30、`raw_delete` timeout=10——本文件端点目前均未使用（已核验）；若未来某端点改用，MUST 同步调大该端点的 `run_edge_sync` timeout。
+
+**残余风险（已接受）**：`wait_for` 超时只取消 await，worker 线程不可取消、会继续执行至完成——极端 hang 下 Edge 可能实际配置成功而平台报超时。与既有 9 个已迁移端点行为一致，非本次新增。
 
 ### Decision 4: 证书生成与归档 = `asyncio.to_thread` 包裹 service 调用
 
@@ -69,15 +81,15 @@
 
 新增 `backend/tests/test_async_offloading_guard.py`，同 `test_publish_response.py` 的正则抽函数体模式：
 
-- 断言 `publish_to_nodes` / `delete_on_nodes` / `publish_static_resource` / `_generate_local` / `export_archive` / `import_archive` / clusters 删除流函数体含 `asyncio.to_thread`
-- 断言 `api/v1/edge_client.py` 全部 async 端点函数体不含裸 `client.` 直调（须经 `run_edge_sync` 或 to_thread）
+- 断言 `publish_to_nodes` / `delete_on_nodes` / `publish_static_resource` / `_generate_local` / `export_archive` / `import_archive` / clusters 删除流函数体含 `await asyncio.to_thread(...)` 调用形态（非仅出现 `to_thread` 字样）
+- 断言 `api/v1/edge_client.py` 含 `EdgeClient(` 构造的 async 端点函数体同时含 `run_edge_sync`（构造与卸载同现），且不含裸 `client.` 方法直调
 - **TDD 顺序（约定 #16）**：先写守卫（RED：扫出全部现存裸调点并验证失败）→ 逐咽喉点修复（GREEN）→ 全量回归
 
 ## Risks / Trade-offs
 
-- [线程内 `_resolve_edge_url` 同步 DB 查询的会话线程安全] → 构造与请求在同一 worker 线程串行，无并发共享；实现时确认传入会话类型并在守卫测试中保持该形态
+- [线程闭包触碰请求级 db 会话（未来风险）] → 方案 B 下构造/日志留循环，当前 8+12 处 lambda 均纯 client 调用；设计约束 + 实现处代码注释：线程闭包内禁止触碰请求级 db 会话，新增依赖 db 的钩子须重新评估边界
 - [to_thread 默认线程池占用（raw_put 30s 长任务）] → 逐节点串行循环同时至多 1 线程；管理面低并发；edge-client 端点有 wait_for 兜底
-- [事件循环解放后并发写请求增多，SQLite 写锁竞争面变大] → 遵循约定 #29 既有范式（外部 IO 前 commit 释放锁）；本变更不新增写库路径
+- [事件循环解放后并发写请求增多，SQLite 写锁竞争面变大] → 具体场景：归档导入线程写目标库（target==active 时）可与并发 CRUD 在 SQLite 写锁上竞争，慢方经 busy_timeout 兜底后报错；管理面低频导入操作，接受。其余路径遵循约定 #29 既有范式（外部 IO 前 commit 释放锁）；本变更不新增写库路径
 - [`test_publish_response.py` 守卫误伤] → 端点保持 `async def` + 委托 `publish_resource` 不变；实现后显式跑该文件
 - [正则守卫的脆弱性] → 宽松断言（函数体含 `asyncio.to_thread`/`run_edge_sync` 即可），不做精确 AST 匹配；断言清单与咽喉点清单一一对应，漂移即红
 

@@ -14,9 +14,9 @@
 
 #### Scenario: 逐节点结果标注语义不变
 
-- **WHEN** 逐节点同步工作（EdgeClient 构造、`mark_route`、`publish_fn`、`post_publish_fn`）在线程中执行
+- **WHEN** 仅网络调用（`publish_fn`、`post_publish_fn`、`edge_delete_fn`）经 `asyncio.to_thread` 在 worker 线程执行，EdgeClient 构造、`mark_route`、逐节点日志留在事件循环
 - **THEN** 每节点结果的 `route`/`relay_via` 标注仍在请求发起前写入（失败节点也带）
-- **THEN** 逐节点日志时序、成功/失败计数与响应结构与既有行为完全一致
+- **THEN** 逐节点日志时序（成功日志夹在 publish 与 post 之间）、成功/失败计数与响应结构与既有行为完全一致
 
 #### Scenario: edge-client 直连端点统一封装
 

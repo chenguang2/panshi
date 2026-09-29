@@ -2,13 +2,13 @@
 
 ## 1. 守卫测试先行（RED）
 
-- [ ] 1.1 新增 `backend/tests/test_async_offloading_guard.py`：正则抽函数体断言 `publish_to_nodes`/`delete_on_nodes`/`publish_static_resource`/`_generate_local`/`export_archive`/`import_archive`/clusters 删除流含 `asyncio.to_thread`；断言 `api/v1/edge_client.py` 全部 async 端点经 `run_edge_sync` 执行（模式参照 `test_publish_response.py`）
+- [ ] 1.1 新增 `backend/tests/test_async_offloading_guard.py`：正则抽函数体断言 `publish_to_nodes`/`delete_on_nodes`/`publish_static_resource`/`_generate_local`/`export_archive`/`import_archive`/clusters 删除流含 `await asyncio.to_thread(...)` 调用形态；断言 `api/v1/edge_client.py` 含 `EdgeClient(` 构造的 async 端点同时经 `run_edge_sync` 执行且无裸 `client.` 直调（模式参照 `test_publish_response.py`）
 - [ ] 1.2 运行守卫测试验证 RED：扫出全部现存裸调点并确认失败原因与 design.md 盘点清单一致
 
 ## 2. edge_sync 编排卸载（GREEN 第一步）
 
-- [ ] 2.1 `edge_sync.py::publish_to_nodes`(:386-408)：每节点「EdgeClient 构造 + mark_route + publish_fn + post_publish_fn」整体闭包进 `asyncio.to_thread`，结果回传事件循环；`log_fn` 保持原时序；异常透传路径不变
-- [ ] 2.2 `edge_sync.py::delete_on_nodes`(:313-350)：同型处理（构造 + mark_route? 无 + `edge_delete_fn` 闭包进线程）
+- [ ] 2.1 `edge_sync.py::publish_to_nodes`(:386-408) 按两跳形态卸载（design 决策 2 方案 B）：构造 + `mark_route` + `_encrypt` 留事件循环；`publish_fn` → `await asyncio.to_thread(...)`（hop1）→ 循环内 `log_fn` → `post_publish_fn` 非空时 `await asyncio.to_thread(...)`（hop2）→ 循环内 post_log_fn；既有双计数/log_fn 两次调用 quirk 原样保留；线程闭包内不得触碰请求级 db 会话（加代码注释）
+- [ ] 2.2 `edge_sync.py::delete_on_nodes`(:313-350)：构造留事件循环，`edge_delete_fn` 单跳 `await asyncio.to_thread(edge_delete_fn, client, edge_uuid)`；异常透传路径不变
 - [ ] 2.3 跑 `pytest tests/test_edge_sync_relay_route.py tests/test_publish_response.py -q` 确认 route/relay_via 标注与响应结构零变化；守卫测试对应断言转绿
 
 ## 3. 同型腿卸载（GREEN 第二步）
@@ -16,12 +16,12 @@
 - [ ] 3.1 `cluster_static_resources.py::publish_static_resource`(:478-487)：逐节点 `client.raw_put(path, zip_data)` 包 `asyncio.to_thread`；守卫转绿
 - [ ] 3.2 `cluster_ssl.py`：`_generate_local`(:532/:544) 两次生成调用与 `_apply_cert_chain` 钩子的 `detect_openssl`/`get_cert_expiry`(:375-377) 包 `asyncio.to_thread`；守卫转绿
 - [ ] 3.3 `database.py`：`export_archive`(:609)/`import_archive`(:635) service 调用包 `asyncio.to_thread`；守卫转绿
-- [ ] 3.4 `clusters.py` 集群删除流(:291-312)：逐节点 `client.delete_*` 包 `asyncio.to_thread`（对照 :417 既有范例）；守卫转绿
+- [ ] 3.4 `clusters.py` 集群删除流(:291-312)：构造留事件循环，「整个 per-node 删除批次」（七类资源循环 + errs 聚合）闭包为局部函数整体进 `asyncio.to_thread`（对照 :417 既有范例）；守卫转绿
 - [ ] 3.5 跑 `pytest -k "static or ssl or archive or cluster_delete" -q` 确认相关域回归零红
 
 ## 4. edge-client 路由端点统一（GREEN 第三步）
 
-- [ ] 4.1 `api/v1/edge_client.py`：~20 个裸调端点迁移至既有 `run_edge_sync`（upstream/route/global_rule/plugin_config/plugin_metadata/ssl/reload_plugins/stream_route 各组 get/create/update/patch/delete）
+- [ ] 4.1 `api/v1/edge_client.py`：~20 个裸调端点迁移至既有 `run_edge_sync`（upstream/route/global_rule/plugin_config/plugin_metadata/ssl/reload_plugins/stream_route 各组 get/create/update/patch/delete）；迁移时逐端点核对所包方法的 httpx timeout < `run_edge_sync` timeout（design 决策 3 超时不变量，当前全部 `_request` 系 5s ✓）
 - [ ] 4.2 跑 `pytest tests/test_edge_client_api.py tests/test_edge_client_relay_route.py -q` 确认 8 个列表端点之外的端点行为零变化；守卫测试全量转绿
 
 ## 5. 全量验证与收尾
