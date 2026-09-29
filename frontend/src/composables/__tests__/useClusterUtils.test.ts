@@ -41,6 +41,7 @@ describe('executeDeleteWithProgress', () => {
 
     expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/routes', {
       data: { delete_db: true, delete_edge: false, node_ids: undefined, route_ids: [1, 2, 3] },
+      timeout: 300_000,
     })
     expect(refreshFn).toHaveBeenCalled()
     expect(clearSelectedFn).toHaveBeenCalled()
@@ -68,6 +69,7 @@ describe('executeDeleteWithProgress', () => {
 
     expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/routes/5', {
       data: { delete_db: true, delete_edge: false, node_ids: undefined },
+      timeout: 300_000,
     })
   })
 
@@ -238,6 +240,7 @@ describe('executeDeleteWithProgress', () => {
 
     expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/upstreams', {
       data: { delete_db: true, delete_edge: false, node_ids: undefined, upstream_ids: [10, 11] },
+      timeout: 300_000,
     })
     expect(refreshFn).toHaveBeenCalled()
     expect(clearSelectedFn).toHaveBeenCalled()
@@ -306,6 +309,7 @@ describe('executeDeleteWithProgress', () => {
 
     expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/routes', {
       data: { delete_db: true, delete_edge: false, node_ids: undefined, route_ids: [1, 2, 3] },
+      timeout: 300_000,
     })
   })
 
@@ -540,6 +544,138 @@ describe('经中继 / 直连 路径标签（发布进度）', () => {
     const text = document.body.textContent || ''
     expect(text).not.toContain('经中继')
     expect(text).not.toContain('直连')
+  })
+})
+
+describe('发布/删除 长超时与 in-flight 锁（M7）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('executePublish: api.post 收到按请求 300s 超时覆盖（不吃全局 30s）', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({ data: { status: 'ok', message: '发布完成' } })
+
+    await executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/upstreams/publish', { node_ids: [1] }, { timeout: 300_000 })
+  })
+
+  it('executeDeleteWithProgress: api.delete 收到按请求 300s 超时覆盖', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({ data: { message: '路由已删除', results: [] } })
+
+    await executeDeleteWithProgress({
+      title: '删除路由',
+      apiEndpoint: '/clusters/1/routes/5',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: false,
+      nodeIds: [],
+      refreshFn: vi.fn(),
+    })
+
+    expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/routes/5', expect.objectContaining({ timeout: 300_000 }))
+  })
+
+  it('executePublish 进行中二次调用被拒：不发第二次请求、告警一次、完成后锁释放', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    const { message } = await import('ant-design-vue')
+    const warnSpy = vi.spyOn(message, 'warning')
+    let release!: (v: unknown) => void
+    mockApiPost.mockImplementation(
+      (_url: string) =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
+
+    // 第一次调用进入 in-flight（入口同步置位，随后 await 400ms 模拟延时）
+    const first = executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+    // 等第一次调用真正发出请求（穿过 400ms 入口延时）
+    await vi.waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+    // 第二次并发调用：应立即被拒
+    const second = await executePublish({
+      title: '发布上游-并发',
+      apiEndpoint: '/clusters/2/upstreams/publish',
+      nodeIds: [2],
+      refreshFn: vi.fn(),
+    })
+
+    expect(second).toBeUndefined()
+    expect(mockApiPost).toHaveBeenCalledTimes(1)
+    // URL 感知：只放行了第一次调用的端点
+    expect(mockApiPost.mock.calls[0][0]).toBe('/clusters/1/upstreams/publish')
+    expect(warnSpy).toHaveBeenCalledWith('已有发布/删除任务进行中，请稍候')
+
+    release({ data: { status: 'ok', message: '发布完成' } })
+    await first
+    warnSpy.mockClear()
+
+    // 完成后锁释放：可再次发起
+    mockApiPost.mockResolvedValue({ data: { status: 'ok', message: '发布完成' } })
+    await executePublish({
+      title: '发布上游-再次',
+      apiEndpoint: '/clusters/3/upstreams/publish',
+      nodeIds: [3],
+      refreshFn: vi.fn(),
+    })
+    expect(mockApiPost).toHaveBeenCalledTimes(2)
+    expect(warnSpy).not.toHaveBeenCalled()
+    warnSpy.mockRestore()
+  })
+
+  it('executeDeleteWithProgress 进行中二次调用被拒：不发第二次请求、告警一次', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    const { message } = await import('ant-design-vue')
+    const warnSpy = vi.spyOn(message, 'warning')
+    let release!: (v: unknown) => void
+    mockApiDelete.mockImplementation(
+      (_url: string) =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
+
+    const first = executeDeleteWithProgress({
+      title: '删除路由',
+      apiEndpoint: '/clusters/1/routes/5',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: false,
+      nodeIds: [],
+      refreshFn: vi.fn(),
+    })
+    await vi.waitFor(() => expect(mockApiDelete).toHaveBeenCalledTimes(1))
+    const second = await executeDeleteWithProgress({
+      title: '删除路由-并发',
+      apiEndpoint: '/clusters/2/routes/6',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: false,
+      nodeIds: [],
+      refreshFn: vi.fn(),
+    })
+
+    expect(second).toBeUndefined()
+    expect(mockApiDelete).toHaveBeenCalledTimes(1)
+    expect(mockApiDelete.mock.calls[0][0]).toBe('/clusters/1/routes/5')
+    expect(warnSpy).toHaveBeenCalledWith('已有发布/删除任务进行中，请稍候')
+
+    release({ data: { message: '路由已删除', results: [] } })
+    await first
+    warnSpy.mockRestore()
   })
 })
 

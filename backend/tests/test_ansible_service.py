@@ -81,13 +81,13 @@ class TestSshHelpers:
         assert cmd[-1] == "ls -la"
 
     def test_build_ssh_cmd_password_based(self):
-        """_build_ssh_cmd should return sshpass command when password is given."""
+        """_build_ssh_cmd wraps with sshpass -e; password travels via SSHPASS env, never argv."""
         from app.services.ansible_service import _build_ssh_cmd
         cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls -la", password="secret123")
         assert cmd[0] == "sshpass"
-        assert cmd[1] == "-p"
-        assert cmd[2] == "secret123"
-        assert cmd[3] == "ssh"
+        assert cmd[1] == "-e"
+        assert "secret123" not in cmd  # 密码不得进 argv（ps//proc cmdline 可见）
+        assert cmd[2] == "ssh"
         assert "jboss@10.0.0.1" in cmd
         assert cmd[-1] == "ls -la"
         assert "BatchMode=yes" not in " ".join(cmd)
@@ -582,14 +582,13 @@ class TestSshPortInjection:
         from app.services.ansible_service import _build_ssh_cmd
         cmd = _build_ssh_cmd("10.0.0.1", "jboss", "ls", password="pw", port=1122)
         assert cmd[0] == "sshpass"
-        # sshpass -p <password> 是密码参数；ssh -p <port> 才是端口
-        # 从 ssh 之后查找端口标志
+        # sshpass 改用 -e（密码经 SSHPASS 环境变量），argv 中唯一的 -p 属于 ssh 端口
         ssh_idx = cmd.index("ssh")
         rest = cmd[ssh_idx + 1:]
         assert "-p" in rest
         assert rest[rest.index("-p") + 1] == "1122"
-        # 密码仍正确（第一个 -p 属于 sshpass）
-        assert cmd[cmd.index("-p") + 1] == "pw"
+        # 密码不进 argv（经 SSHPASS 环境变量传递）
+        assert "pw" not in cmd
 
     @pytest.mark.asyncio
     async def test_run_ssh_fallback_passes_port(self):

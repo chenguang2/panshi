@@ -5,6 +5,7 @@ Design refs: openspec/changes/add-cluster-json-backup/design.md
   D6 hard validation vs auto-clean warnings.
 """
 import json
+import re
 from datetime import date, datetime
 
 from pydantic import BaseModel
@@ -172,6 +173,27 @@ _DATA_KEYS = (
 )
 
 
+# edge_uuid 会被拼进 data/static/<edge_uuid>/ 作为落盘目录（导入写盘与
+# 删除端点 rmtree 均使用），必须是单段安全目录名：仅允许字母、数字与
+# . _ -；拒绝空串、路径分隔符（/ \）与目录别名 . ..（防目录穿越写入/删除）。
+_EDGE_UUID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def validate_edge_uuid(edge_uuid) -> None:
+    """静态资源 edge_uuid 安全校验：非法值抛 ValueError（2026-09 安全缺陷修复）。
+
+    None（未生成 uuid）合法；写盘方会以 "imported" 兜底。
+    """
+    if edge_uuid is None:
+        return
+    if (not isinstance(edge_uuid, str)
+            or not _EDGE_UUID_PATTERN.match(edge_uuid)
+            or edge_uuid in (".", "..")):
+        raise ValueError(
+            f"edge_uuid 含非法字符，已拒绝：{edge_uuid!r}"
+            "（仅允许字母、数字与 . _ -，禁止路径分隔符与目录别名）")
+
+
 def validate_backup_document(doc: dict, expected_checksum: str | None = None) -> list[str]:
     """Hard validation (design D6). Returns aggregated error list; [] = valid."""
     errors: list[str] = []
@@ -197,6 +219,16 @@ def validate_backup_document(doc: dict, expected_checksum: str | None = None) ->
             errors.append(
                 f"checksum 校验失败：期望 {expected_checksum}，实际 {actual}"
                 "（文件可能损坏或被修改）")
+
+    # 字段值安全校验：static_resources[].edge_uuid 会用作落盘目录名，
+    # 恶意值（如 ../..）可导致任意路径写入/删除，必须在导入入口拒绝
+    for item in data.get("static_resources") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            validate_edge_uuid(item.get("edge_uuid"))
+        except ValueError as exc:
+            errors.append(str(exc))
 
     # 说明：不做"备份内名称唯一性"硬校验——导入采用旧ID→新ID精确映射，
     # 不依赖名称；源数据中的重名（历史数据常见）不应阻断导入。
@@ -244,6 +276,9 @@ def _write_static_file(edge_uuid: str | None, version, content_b64: str) -> str:
     import base64
     from pathlib import Path
 
+    # 写盘前兜底防线（双保险）：即使绕过 validate_backup_document 直调导入，
+    # 恶意 edge_uuid 也不得拼出 base 之外的目录
+    validate_edge_uuid(edge_uuid)
     ver = version if isinstance(version, int) and version > 0 else 1
     target_dir = Path(_BASE_STORAGE_DIR) / (edge_uuid or "imported")
     target_dir.mkdir(parents=True, exist_ok=True)

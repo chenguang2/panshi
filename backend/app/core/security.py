@@ -1,3 +1,4 @@
+import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -90,8 +91,26 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def password_version(password_hash: str) -> str:
+    """pwd_ver claim 值：password_hash 的短摘要（16 hex 字符）。
+
+    密码变更 ⇒ hash 变化 ⇒ 存量 token 的 pwd_ver 与当前派生值不一致 ⇒ 401，
+    实现"改密即吊销存量 JWT"，无需表结构改动。
+    """
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+    password_hash: Optional[str] = None,
+) -> str:
+    """签发 JWT。传入 password_hash 时附带 pwd_ver claim（登录路径必须传入，
+    使密码重置能吊销存量 token；不传则无该 claim——兼容测试辅助函数在无 DB
+    场景下签发的 token）。"""
     to_encode = data.copy()
+    if password_hash:
+        to_encode["pwd_ver"] = password_version(password_hash)
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:

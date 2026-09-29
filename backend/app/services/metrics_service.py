@@ -13,6 +13,10 @@ from app.services.clickhouse_client import execute_query
 
 _SINCE_PATTERN = re.compile(r"^(\d+)([smhd])$")
 _INTERVAL_PATTERN = re.compile(r"^(\d+)([sm])$")
+# label 键来自查询参数且直接拼接进 SQL（值已参数绑定、键无法绑定），
+# 仅放行安全字符集：字母/数字/下划线/点/连字符。排除单引号、反斜杠、
+# 空格、分号、注释符等一切可用于注入的字符。
+_LABEL_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
 def _parse_since_seconds(since: str) -> int:
@@ -85,8 +89,11 @@ def query_time_series(
     params: dict[str, Any] = {"name": metric_name, "since": since_sec}
     if label and ":" in label:
         key, val = label.split(":", 1)
-        label_where = f"AND Attributes['{key}'] = %(label_val)s"
-        params["label_val"] = val
+        # 键不过安全字符集时跳过该过滤条件（与本模块 _parse_since_seconds 的
+        # 宽容降级风格一致），绝不把未校验的键拼进 SQL
+        if _LABEL_KEY_PATTERN.match(key):
+            label_where = f"AND Attributes['{key}'] = %(label_val)s"
+            params["label_val"] = val
 
     if is_counter_val:
         # Counter path — calculate rate（相邻桶差分，Prometheus rate 的标准做法）

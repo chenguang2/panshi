@@ -7,8 +7,8 @@ const api: AxiosInstance = axios.create({
   baseURL: '/api/v1',
   timeout: 30000,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 })
 
 api.interceptors.request.use(
@@ -21,7 +21,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 api.interceptors.response.use(
@@ -30,13 +30,17 @@ api.interceptors.response.use(
   },
   (error: AxiosError) => {
     if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      message.error('登录状态已失效，请重新登录')
-      router.push('/login')
+      // 动态 import 打破 api ↔ stores/auth 的循环依赖（stores/auth 静态依赖本模块），
+      // 运行期模块已就绪，这里拿到的是同一 auth store 实例。
+      return import('@/stores/auth').then(({ useAuthStore }) => {
+        useAuthStore().clearSession()
+        message.error('登录状态已失效，请重新登录')
+        router.push('/login')
+        return Promise.reject(error)
+      })
     }
     return Promise.reject(error)
-  }
+  },
 )
 
 export default api

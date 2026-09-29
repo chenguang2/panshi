@@ -359,6 +359,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
+import { buildCertZip, downloadBlob } from '@/utils/download'
 import { splitSniTags, isReservedSni, mergeReservedDnsTags, RESERVED_SNIS } from '@/utils/sniTags'
 import { isIpAddress } from '@/utils/ip'
 
@@ -617,8 +618,14 @@ function removeMtlsSkipTag(i: number) {
   mtlsSkipTags.value.splice(i, 1)
 }
 
-function downloadClientBundle(clientCert: any) {
-  window.open(`/api/v1/ssl/${clientCert.id}/download`, '_blank')
+async function downloadClientBundle(clientCert: any) {
+  try {
+    const blob = await buildCertZip(clientCert, ['sign_cert', 'sign_key', 'cert', 'key'])
+    downloadBlob(blob, `${clientCert.name}_client_bundle.zip`)
+    message.success('客户端证书包已下载')
+  } catch {
+    message.error('打包下载失败')
+  }
 }
 
 // Reset form when opened

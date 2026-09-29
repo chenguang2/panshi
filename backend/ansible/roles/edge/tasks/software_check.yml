@@ -1,7 +1,10 @@
 ---
 ###################### run software check ########################
 - name: run software check
-  script: "{{ software_check_script_path_name }} {{ software_list }}"
+  # software_list 必须经 quote 再拼进远程命令行：未 quote 的元字符
+  # （; ` $() 等）会被目标机 shell 解释（服务端另有字符集白名单校验，
+  # 此处为纵深防御）。
+  script: "{{ software_check_script_path_name }} {{ software_list | quote }}"
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
   register: cmd_output
   changed_when: false

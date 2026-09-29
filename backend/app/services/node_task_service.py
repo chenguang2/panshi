@@ -16,6 +16,8 @@ import asyncio
 import json
 import logging
 import queue as _queue
+import re
+import shlex
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -456,8 +458,12 @@ class NodeTaskService:
             return await self._ansible.statistic(node.ip, prefix, ports)
 
         if task_type == "software_check":
-            software_list = params.get("software_list") or []
-            cmd_str = ",".join(software_list)
+            # C2 修复：software_list 会拼进目标机 shell 命令行（playbook 与
+            # SSH 降级两条路径的共同上游），必须先过白名单字符集校验。
+            try:
+                cmd_str = _validate_software_list(params.get("software_list"))
+            except ValueError as e:
+                return {"rc": -1, "status": "failed", "stderr": str(e)}
             return await self._software_check_node(node, cmd_str, on_log)
 
         if task_type == "cmd_exec":
@@ -475,6 +481,16 @@ class NodeTaskService:
                     script_content = script_path.read_text(encoding="utf-8")
                 if not script_content.strip():
                     return {"rc": -1, "status": "failed", "stderr": "脚本内容为空"}
+                # M1 修复：脚本模式同样接入安全校验（此前完全未接，仅 cmd 模式有）。
+                # 语义与 cmd 模式一致：security 缺省 blacklist，命中黑名单命令
+                # （rm/mkfs/dd/shutdown/reboot/init/halt/poweroff）或白名单模式下
+                # 不在白名单的命令 → 直接失败，不发起执行。systemctl/tar 等
+                # 正常运维命令不受影响。
+                security = params.get("security") or "blacklist"
+                whitelist = _build_cmd_exec_whitelist(params.get("whitelist") or [])
+                block_err = _validate_script_security(script_content, security, whitelist)
+                if block_err:
+                    return {"rc": -1, "status": "failed", "stderr": block_err}
                 try:
                     timeout = int(params.get("timeout") or 30)
                 except (TypeError, ValueError):
@@ -729,7 +745,7 @@ class NodeTaskService:
         script_path = Path(PRIVATE_DATA_DIR) / "cmd_scripts" / "software_check.sh"
         script_content = script_path.read_text(encoding="utf-8")
         rc, stdout, stderr = await _run_ssh_with_fallback(
-            node.ip, ssh_user, f"bash -s {cmd_str} <<'SOFT_CHECK_EOF'\n{script_content}\nSOFT_CHECK_EOF",
+            node.ip, ssh_user, _software_check_ssh_command(cmd_str, script_content),
             on_line=on_log, port=ssh_port,
         )
         return {
@@ -783,6 +799,39 @@ def _build_cmd_exec_whitelist(custom: list[str]) -> str:
             seen.add(name)
             merged.append(name)
     return ",".join(merged)
+
+
+# software_check 软件名白名单字符集：字母/数字/. _ + -。
+# 软件名会被拼进目标机 shell 命令行（playbook script 模块 + SSH 降级两条路径），
+# ; ` $() 空格 / 等元字符都会被远端 shell 解释（命令注入），在此源头拒绝。
+_SOFTWARE_NAME_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
+
+
+def _validate_software_list(software_list: Any) -> str:
+    """校验 software_check 软件名列表，返回逗号分隔串（供两条执行路径共用）。
+
+    任一名字不匹配 ^[A-Za-z0-9._+-]+$ 即抛 ValueError（中文错误信息，与仓库
+    错误风格一致）。字符串入参按单个软件名处理（不被逐字符拆散）。
+    """
+    if software_list is None:
+        return ""
+    names = [software_list] if isinstance(software_list, str) else [str(s) for s in software_list]
+    for name in names:
+        if not _SOFTWARE_NAME_RE.match(name):
+            raise ValueError(
+                f"软件名不合法: {name}（仅允许字母、数字及 . _ + - ，不得包含空格或特殊字符）"
+            )
+    return ",".join(names)
+
+
+def _software_check_ssh_command(cmd_str: str, script_content: str) -> str:
+    """构造 SSH 降级软件检查命令。
+
+    cmd_str 必须已通过 _validate_software_list 校验；此处再对参数做
+    shlex.quote 兜底（合法字符集下为无操作），即使校验被绕过，元字符也
+    不会以裸形式进入远端 shell。脚本本体经 <<'EOF'（禁展开 heredoc）传递。
+    """
+    return f"bash -s {shlex.quote(cmd_str)} <<'SOFT_CHECK_EOF'\n{script_content}\nSOFT_CHECK_EOF"
 
 
 def _validate_script_security(script_content: str, security: str, whitelist: str = "") -> str | None:

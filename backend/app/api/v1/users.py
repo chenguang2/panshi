@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from typing import Optional
 
+from app.config import MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.core.deps import get_current_user, get_current_admin_user
 from app.core.security import hash_password
@@ -26,8 +27,8 @@ async def get_current_user_info(
 async def list_users(
     keyword: Optional[str] = None,
     role: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):

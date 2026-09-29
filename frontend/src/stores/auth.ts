@@ -35,8 +35,8 @@ export const useAuthStore = defineStore('auth', () => {
     return response.data
   }
 
-  const logout = async () => {
-    await api.post('/auth/logout')
+  /** 会话清理的单一实现：复位 store 状态 + 清空 localStorage（401 拦截器与 logout 共用） */
+  const clearSession = () => {
     token.value = null
     user.value = null
     permissions.value = []
@@ -45,5 +45,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('permissions')
   }
 
-  return { token, user, permissions, hasPermission, login, logout }
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // 服务端登出失败不阻塞本地登出，会话清理必须完成
+    } finally {
+      clearSession()
+    }
+  }
+
+  return { token, user, permissions, hasPermission, login, logout, clearSession }
 })

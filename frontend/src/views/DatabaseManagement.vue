@@ -1119,6 +1119,9 @@ onUnmounted(() => {
     clearInterval(_migrationPollTimer)
     _migrationPollTimer = null
   }
+  // 离开页面时中止进行中的迁移 SSE 流（范式：RelayGateways.vue / useInstallStream.cancel）
+  migrationController.value?.abort()
+  migrationController.value = null
 })
 
 defineExpose({

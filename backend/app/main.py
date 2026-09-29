@@ -17,6 +17,7 @@ logging.basicConfig(
 )
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.api.v1 import api_router, feature_routers
 from app.core.database import init_db, close_db, AsyncSessionLocal
@@ -48,6 +49,10 @@ async def _relay_refresh_loop(interval: float | None = None) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 生产环境 Edge 通道密钥守卫（缺失/仍为源码默认值时拒绝启动，非 production 无感）
+    from app.services.edge_client import ensure_edge_secrets_configured
+
+    ensure_edge_secrets_configured()
     await init_db()
     async with AsyncSessionLocal() as session:
         await seed_data(session)
@@ -77,6 +82,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── 响应 gzip 压缩：生产 dist 体积较大，原样传输浪费带宽 ─────────────
+# minimum_size=1024 跳过小响应；starlette 内建按 content-type 排除
+# text/event-stream（见 starlette/middleware/gzip.py DEFAULT_EXCLUDED_CONTENT_TYPES），
+# 全部 SSE 流式端点（迁移/安装/中继/节点任务流）不受压缩影响。
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 from app.core.maintenance import maintenance_middleware
 app.middleware("http")(maintenance_middleware)

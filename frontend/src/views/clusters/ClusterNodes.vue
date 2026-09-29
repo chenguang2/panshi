@@ -3,45 +3,78 @@
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
       <a-button size="small" @click="editNode(cluster)" :disabled="!singleOpEnabled">编辑节点</a-button>
-      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
+      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
+        >删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
+      >
       <a-divider type="vertical" />
-      <a-button size="small" @click="handleNodeStart" :disabled="!(singleOpEnabled || batchOpEnabled)">▶ 启动{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
-      <a-button size="small" @click="handleNodeStop" :disabled="!(singleOpEnabled || batchOpEnabled)">⏹ 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
-      <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)">⟳ reload{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
-      <a-button size="small" @click="handleNodeStatusQuery" :disabled="!(singleOpEnabled || batchOpEnabled)">状态查询{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button>
-      <a-dropdown v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')" :trigger="['click']">
+      <a-button size="small" @click="handleNodeStart" :disabled="!(singleOpEnabled || batchOpEnabled)"
+        >▶ 启动{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
+      >
+      <a-button size="small" @click="handleNodeStop" :disabled="!(singleOpEnabled || batchOpEnabled)"
+        >⏹ 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
+      >
+      <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)"
+        >⟳ reload{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
+      >
+      <a-button size="small" @click="handleNodeStatusQuery" :disabled="!(singleOpEnabled || batchOpEnabled)"
+        >状态查询{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
+      >
+      <a-dropdown
+        v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')"
+        :trigger="['click']"
+      >
         <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
         <template #overlay>
           <a-menu>
-            <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty" :disabled="!cluster.selectedNode">安装 OpenResty</a-menu-item>
-            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge" :disabled="!cluster.selectedNode">安装 Edge</a-menu-item>
-            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleAssociateNewOpenresty" :disabled="!cluster.selectedNode">关联新OpenResty</a-menu-item>
-            <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleEdgePackManagement" :disabled="!cluster.selectedNode">升级Edge小版本</a-menu-item>
+            <a-menu-item
+              v-if="featuresStore.has('install_openresty')"
+              @click="handleInstallOpenresty"
+              :disabled="!cluster.selectedNode"
+              >安装 OpenResty</a-menu-item
+            >
+            <a-menu-item
+              v-if="featuresStore.has('install_edge')"
+              @click="handleInstallEdge"
+              :disabled="!cluster.selectedNode"
+              >安装 Edge</a-menu-item
+            >
+            <a-menu-item
+              v-if="featuresStore.has('install_edge')"
+              @click="handleAssociateNewOpenresty"
+              :disabled="!cluster.selectedNode"
+              >关联新OpenResty</a-menu-item
+            >
+            <a-menu-item
+              v-if="featuresStore.has('install_edge')"
+              @click="handleEdgePackManagement"
+              :disabled="!cluster.selectedNode"
+              >升级Edge小版本</a-menu-item
+            >
           </a-menu>
         </template>
       </a-dropdown>
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
         <template #content>
-          <div style="min-width: 400px;">
-            <div style="font-weight: 500; margin-bottom: 8px;">列选择</div>
+          <div style="min-width: 400px">
+            <div style="font-weight: 500; margin-bottom: 8px">列选择</div>
             <a-checkbox-group v-model:value="nodeColumnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <div v-for="col in allNodeColumns" :key="col.key" style="margin-bottom: 4px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <div v-for="col in allNodeColumns" :key="col.key" style="margin-bottom: 4px">
                   <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
                 </div>
               </div>
             </a-checkbox-group>
-            <a-divider style="margin: 12px 0;" />
-            <div style="font-weight: 500; margin-bottom: 8px;">操作按钮</div>
+            <a-divider style="margin: 12px 0" />
+            <div style="font-weight: 500; margin-bottom: 8px">操作按钮</div>
             <a-checkbox-group v-model:value="nodeActionsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                <div v-for="btn in allNodeActionButtons" :key="btn.key" style="margin-bottom: 4px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <div v-for="btn in allNodeActionButtons" :key="btn.key" style="margin-bottom: 4px">
                   <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
                 </div>
               </div>
             </a-checkbox-group>
-            <a-divider style="margin: 12px 0;" />
-            <div style="font-weight: 500; margin-bottom: 8px;">搜索</div>
+            <a-divider style="margin: 12px 0" />
+            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
             <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
           </div>
         </template>
@@ -53,15 +86,22 @@
           <a-input-search
             v-model:value="cluster.nodesSearch"
             placeholder="搜索节点"
-            style="width: 150px;"
-            @search="() => { cluster.nodesPagination!.page = 1; cluster.selectedNodeKeys = []; cluster.selectedNode = null; loadNodes(cluster) }"
+            style="width: 150px"
+            @search="
+              () => {
+                cluster.nodesPagination!.page = 1
+                cluster.selectedNodeKeys = []
+                cluster.selectedNode = null
+                loadNodes(cluster)
+              }
+            "
             allow-clear
             size="small"
           />
           <a-select
             v-model:value="cluster.nodesSearchField"
             placeholder="字段"
-            style="width: 90px;"
+            style="width: 90px"
             allow-clear
             size="small"
           >
@@ -76,14 +116,28 @@
       :columns="visibleNodeColumns"
       :data-source="cluster.nodes || []"
       :pagination="paginationProps(cluster.nodesPagination)"
-      :row-selection="{ selectedRowKeys: cluster.selectedNodeKeys || [], preserveSelectedRowKeys: true, onChange: (keys: unknown, rows: unknown[]) => selectNodes(cluster, keys as number[], rows as import('@/types').Node[]) }"
-      :custom-row="(record: import('@/types').Node) => ({ onClick: () => { cluster.selectedNode = record } })"
+      :row-selection="{
+        selectedRowKeys: cluster.selectedNodeKeys || [],
+        preserveSelectedRowKeys: true,
+        onChange: (keys: unknown, rows: unknown[]) =>
+          selectNodes(cluster, keys as number[], rows as import('@/types').Node[]),
+      }"
+      :custom-row="
+        (record: import('@/types').Node) => ({
+          onClick: () => {
+            cluster.selectedNode = record
+          },
+        })
+      "
       :loading="cluster.nodesLoading"
       :showSorterTooltip="false"
       size="small"
       row-key="id"
       class="node-table"
-      @change="(pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) => handleNodeTableChange(cluster, pag, sorter)"
+      @change="
+        (pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) =>
+          handleNodeTableChange(cluster, pag, sorter)
+      "
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'edge_version'">
@@ -102,9 +156,7 @@
             </a-button>
           </template>
           <a-dropdown v-if="moreNodeActions.length > 0">
-            <a-button size="small">
-              更多 <DownOutlined />
-            </a-button>
+            <a-button size="small"> 更多 <DownOutlined /> </a-button>
             <template #overlay>
               <a-menu @click="(e: { key: string }) => handleNodeActionWithConfirm(cluster, record, e.key)">
                 <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
@@ -118,168 +170,258 @@
     </a-table>
 
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
-      <div class="modal" :style="nodeImportMode === 'batch' ? 'max-width: 960px;' : 'max-width: 720px;'">
-        <div class="modal-header">
-          <h2>{{ editingNode ? '编辑节点' : nodeImportMode === 'batch' ? '批量导入节点' : '添加节点' }}</h2>
-          <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="!editingNode" style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px;">
-            <button
-              class="btn btn-sm"
-              :class="nodeImportMode === 'single' ? 'btn-primary' : 'btn-secondary'"
-              @click="nodeImportMode = 'single'"
-            >单个添加</button>
-            <button
-              class="btn btn-sm"
-              :class="nodeImportMode === 'batch' ? 'btn-primary' : 'btn-secondary'"
-              @click="nodeImportMode = 'batch'"
-            >批量导入</button>
+      <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
+        <div class="modal" :style="nodeImportMode === 'batch' ? 'max-width: 960px;' : 'max-width: 720px;'">
+          <div class="modal-header">
+            <h2>{{ editingNode ? '编辑节点' : nodeImportMode === 'batch' ? '批量导入节点' : '添加节点' }}</h2>
+            <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
           </div>
-
-          <a-form v-if="nodeImportMode === 'single'" ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
-              <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
-            </a-form-item>
-            <a-form-item label="服务端口" name="service_port" :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]">
-              <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
-            </a-form-item>
-            <a-form-item label="管理端口" name="management_port" :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]">
-              <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
-            </a-form-item>
-            <a-form-item label="SSH端口" name="ssh_port" :rules="[{ type: 'number', message: '请输入SSH端口' }]">
-              <a-input-number v-model:value="nodeForm.ssh_port" :min="1" :max="65535" style="width: 100%" placeholder="默认 22" />
-            </a-form-item>
-            <a-form-item label="OpenResty安装路径" name="openresty_path" :rules="[{ required: true, message: '请输入OpenResty安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
-              <a-input v-model:value="nodeForm.openresty_path" placeholder="/usr/local/nginx" />
-            </a-form-item>
-            <a-form-item label="Edge安装路径" name="edge_path" :rules="[{ required: true, message: '请输入Edge安装路径' }, { pattern: /^\//, message: '必须以 / 开头' }, { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' }, { max: 255, message: '最多255个字符' }]">
-              <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
-            </a-form-item>
-            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-              <a-select v-model:value="nodeForm.status">
-                <a-select-option :value="1">正常</a-select-option>
-                <a-select-option :value="0">禁用</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-form>
-
-          <template v-else>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <div class="modal-body">
+            <div
+              v-if="!editingNode"
+              style="
+                display: flex;
+                gap: 8px;
+                margin-bottom: 14px;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 10px;
+              "
+            >
               <button
                 class="btn btn-sm"
-                :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportTab = 'text'"
-              >文本粘贴</button>
+                :class="nodeImportMode === 'single' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportMode = 'single'"
+              >
+                单个添加
+              </button>
               <button
                 class="btn btn-sm"
-                :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportTab = 'csv'"
-              >CSV 上传</button>
+                :class="nodeImportMode === 'batch' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportMode = 'batch'"
+              >
+                批量导入
+              </button>
             </div>
 
-            <template v-if="nodeImportTab === 'text'">
-              <textarea
-                v-model="nodeImportText"
-                rows="6"
-                style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-md);font-family:var(--font-mono);font-size:12px;"
-                placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
-              ></textarea>
-              <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
-                <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
-                <span style="font-size:12px;color:var(--muted);">已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span>
-              </div>
-            </template>
+            <a-form
+              v-if="nodeImportMode === 'single'"
+              ref="nodeFormRef"
+              :model="nodeForm"
+              :label-col="{ span: 6 }"
+              :wrapper-col="{ span: 16 }"
+            >
+              <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
+                <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
+              </a-form-item>
+              <a-form-item
+                label="服务端口"
+                name="service_port"
+                :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]"
+              >
+                <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
+              </a-form-item>
+              <a-form-item
+                label="管理端口"
+                name="management_port"
+                :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]"
+              >
+                <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
+              </a-form-item>
+              <a-form-item label="SSH端口" name="ssh_port" :rules="[{ type: 'number', message: '请输入SSH端口' }]">
+                <a-input-number
+                  v-model:value="nodeForm.ssh_port"
+                  :min="1"
+                  :max="65535"
+                  style="width: 100%"
+                  placeholder="默认 22"
+                />
+              </a-form-item>
+              <a-form-item
+                label="OpenResty安装路径"
+                name="openresty_path"
+                :rules="[
+                  { required: true, message: '请输入OpenResty安装路径' },
+                  { pattern: /^\//, message: '必须以 / 开头' },
+                  { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
+                  { max: 255, message: '最多255个字符' },
+                ]"
+              >
+                <a-input v-model:value="nodeForm.openresty_path" placeholder="/usr/local/nginx" />
+              </a-form-item>
+              <a-form-item
+                label="Edge安装路径"
+                name="edge_path"
+                :rules="[
+                  { required: true, message: '请输入Edge安装路径' },
+                  { pattern: /^\//, message: '必须以 / 开头' },
+                  { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
+                  { max: 255, message: '最多255个字符' },
+                ]"
+              >
+                <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
+              </a-form-item>
+              <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+                <a-select v-model:value="nodeForm.status">
+                  <a-select-option :value="1">正常</a-select-option>
+                  <a-select-option :value="0">禁用</a-select-option>
+                </a-select>
+              </a-form-item>
+            </a-form>
 
             <template v-else>
-              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-                <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size:12px;" />
-                <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
+              <div style="display: flex; gap: 8px; margin-bottom: 12px">
+                <button
+                  class="btn btn-sm"
+                  :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
+                  @click="nodeImportTab = 'text'"
+                >
+                  文本粘贴
+                </button>
+                <button
+                  class="btn btn-sm"
+                  :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
+                  @click="nodeImportTab = 'csv'"
+                >
+                  CSV 上传
+                </button>
               </div>
-              <div v-if="nodeImportRows.length > 0" style="font-size:12px;color:var(--muted);margin-bottom:8px;">
-                已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
+
+              <template v-if="nodeImportTab === 'text'">
+                <textarea
+                  v-model="nodeImportText"
+                  rows="6"
+                  style="
+                    width: 100%;
+                    padding: 8px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-md);
+                    font-family: var(--font-mono);
+                    font-size: 12px;
+                  "
+                  placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
+                ></textarea>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center">
+                  <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
+                  <span style="font-size: 12px; color: var(--muted)"
+                    >已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span
+                  >
+                </div>
+              </template>
+
+              <template v-else>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px">
+                  <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size: 12px" />
+                  <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
+                </div>
+                <div v-if="nodeImportRows.length > 0" style="font-size: 12px; color: var(--muted); margin-bottom: 8px">
+                  已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
+                </div>
+              </template>
+
+              <div
+                style="
+                  display: flex;
+                  gap: 10px;
+                  align-items: center;
+                  margin: 12px 0 8px;
+                  font-size: 12px;
+                  flex-wrap: wrap;
+                  border-top: 1px solid var(--border);
+                  padding-top: 10px;
+                "
+              >
+                <span style="color: var(--muted); font-weight: 500">默认值（应用于所有行）</span>
+                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                  服务端口
+                  <input v-model.number="nodeImportDefaults.service_port" type="number" style="width: 70px" />
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                  管理端口
+                  <input v-model.number="nodeImportDefaults.management_port" type="number" style="width: 70px" />
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                  Edge路径
+                  <input v-model="nodeImportDefaults.edge_path" style="width: 130px" placeholder="/edge" />
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                  Nginx安装目录
+                  <input
+                    v-model="nodeImportDefaults.openresty_path"
+                    style="width: 150px"
+                    placeholder="/usr/local/nginx"
+                  />
+                </label>
+              </div>
+
+              <div v-if="nodeImportRows.length > 0" style="margin-top: 6px">
+                <div
+                  style="
+                    max-height: 260px;
+                    overflow-y: auto;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-md);
+                  "
+                >
+                  <table style="width: 100%; font-size: 12px; border-collapse: collapse">
+                    <thead>
+                      <tr style="background: var(--bg); color: var(--muted); text-align: left">
+                        <th style="padding: 6px 8px">IP</th>
+                        <th style="padding: 6px 8px">服务端口</th>
+                        <th style="padding: 6px 8px">管理端口</th>
+                        <th style="padding: 6px 8px">Edge路径</th>
+                        <th style="padding: 6px 8px">Nginx安装目录</th>
+                        <th style="padding: 6px 8px">状态</th>
+                        <th style="padding: 6px 8px">原因</th>
+                        <th style="padding: 6px 8px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
+                        <td style="padding: 4px 8px"><input v-model="row.ip" style="width: 110px" /></td>
+                        <td style="padding: 4px 8px">
+                          <input v-model.number="row.service_port" type="number" style="width: 70px" />
+                        </td>
+                        <td style="padding: 4px 8px">
+                          <input v-model.number="row.management_port" type="number" style="width: 70px" />
+                        </td>
+                        <td style="padding: 4px 8px"><input v-model="row.edge_path" style="width: 130px" /></td>
+                        <td style="padding: 4px 8px"><input v-model="row.openresty_path" style="width: 150px" /></td>
+                        <td style="padding: 4px 8px">
+                          <select v-model.number="row.status" style="width: 70px">
+                            <option :value="1">正常</option>
+                            <option :value="0">禁用</option>
+                          </select>
+                        </td>
+                        <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">{{ row.error || '' }}</td>
+                        <td style="padding: 4px 8px">
+                          <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </template>
-
-            <div style="display:flex;gap:10px;align-items:center;margin:12px 0 8px;font-size:12px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px;">
-              <span style="color:var(--muted);font-weight:500;">默认值（应用于所有行）</span>
-              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
-                服务端口
-                <input v-model.number="nodeImportDefaults.service_port" type="number" style="width:70px;" />
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
-                管理端口
-                <input v-model.number="nodeImportDefaults.management_port" type="number" style="width:70px;" />
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
-                Edge路径
-                <input v-model="nodeImportDefaults.edge_path" style="width:130px;" placeholder="/edge" />
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;color:var(--fg);">
-                Nginx安装目录
-                <input v-model="nodeImportDefaults.openresty_path" style="width:150px;" placeholder="/usr/local/nginx" />
-              </label>
-            </div>
-
-            <div v-if="nodeImportRows.length > 0" style="margin-top:6px;">
-              <div style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-md);">
-                <table style="width:100%;font-size:12px;border-collapse:collapse;">
-                  <thead>
-                    <tr style="background:var(--bg);color:var(--muted);text-align:left;">
-                      <th style="padding:6px 8px;">IP</th>
-                      <th style="padding:6px 8px;">服务端口</th>
-                      <th style="padding:6px 8px;">管理端口</th>
-                      <th style="padding:6px 8px;">Edge路径</th>
-                      <th style="padding:6px 8px;">Nginx安装目录</th>
-                      <th style="padding:6px 8px;">状态</th>
-                      <th style="padding:6px 8px;">原因</th>
-                      <th style="padding:6px 8px;"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
-                      <td style="padding:4px 8px;"><input v-model="row.ip" style="width:110px;" /></td>
-                      <td style="padding:4px 8px;"><input v-model.number="row.service_port" type="number" style="width:70px;" /></td>
-                      <td style="padding:4px 8px;"><input v-model.number="row.management_port" type="number" style="width:70px;" /></td>
-                      <td style="padding:4px 8px;"><input v-model="row.edge_path" style="width:130px;" /></td>
-                      <td style="padding:4px 8px;"><input v-model="row.openresty_path" style="width:150px;" /></td>
-                      <td style="padding:4px 8px;">
-                        <select v-model.number="row.status" style="width:70px;">
-                          <option :value="1">正常</option>
-                          <option :value="0">禁用</option>
-                        </select>
-                      </td>
-                      <td style="padding:4px 8px;color:var(--danger);font-size:11px;">{{ row.error || '' }}</td>
-                      <td style="padding:4px 8px;">
-                        <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </template>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
-          <button
-            v-if="nodeImportMode === 'batch'"
-            class="btn btn-primary"
-            :disabled="validImportCount === 0"
-            @click="handleImportSubmit"
-          >创建 {{ validImportCount }} 个节点</button>
-          <button v-else class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
+            <button
+              v-if="nodeImportMode === 'batch'"
+              class="btn btn-primary"
+              :disabled="validImportCount === 0"
+              @click="handleImportSubmit"
+            >
+              创建 {{ validImportCount }} 个节点
+            </button>
+            <button v-else class="btn btn-primary" @click="handleNodeSubmit">
+              {{ editingNode ? '保存' : '创建' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
-    <ConfigDiff
-      v-model:visible="diffDrawerVisible"
-      :cluster-id="diffClusterId"
-      :initial-node-id="diffNodeId"
-    />
+    <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
 
     <NodeExecutionResultDrawer
       v-model:visible="execDrawerVisible"
@@ -301,28 +443,28 @@
       :title="batchProgressTitle"
       :items="batchProgressItems"
       :expanded-ip="batchProgressExpandedIp"
-      @toggle-expand="batchProgressExpandedIp = (batchProgressExpandedIp === $event ? null : $event)"
+      @toggle-expand="batchProgressExpandedIp = batchProgressExpandedIp === $event ? null : $event"
     />
 
     <!-- Custom Confirm Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
-      <div class="modal" style="max-width: 420px;">
-        <div class="modal-header">
-          <h2>{{ confirmState.title }}</h2>
-          <button class="modal-close" @click="confirmState.visible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6;">{{ confirmState.content }}</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
-          <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
-            {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
-          </button>
+      <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
+        <div class="modal" style="max-width: 420px">
+          <div class="modal-header">
+            <h2>{{ confirmState.title }}</h2>
+            <button class="modal-close" @click="confirmState.visible = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmState.content }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
+            <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
+              {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
     <InstallOpenrestyDialog
@@ -419,15 +561,15 @@ const {
   parseIpList,
   parseNodeCsv,
   buildNodeCsvTemplate,
-    deleteNode,
-    deleteNodes,
-    batchNodeAction,
-    batchNodeStatus,
-    batchProgressVisible,
-    batchProgressTitle,
-    batchProgressItems,
-    batchProgressExpandedIp,
-    startNode,
+  deleteNode,
+  deleteNodes,
+  batchNodeAction,
+  batchNodeStatus,
+  batchProgressVisible,
+  batchProgressTitle,
+  batchProgressItems,
+  batchProgressExpandedIp,
+  startNode,
   stopNode,
   queryNodeStatus,
   executeNodeAction,
@@ -446,9 +588,11 @@ const {
 
 // ── batch delete selection state ─────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedNodeKeys || []).length)
-const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedNode || batchCount.value === 1))
+const singleOpEnabled = computed(
+  () => batchCount.value <= 1 && (!!props.cluster.selectedNode || batchCount.value === 1),
+)
 const batchOpEnabled = computed(() => batchCount.value > 1)
-const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedNode ? 1 : 0))
+const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedNode ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
 
 function handleDeleteClick() {
@@ -512,9 +656,9 @@ function removeImportRow(index: number) {
 }
 
 function rowStyle(row: { ip: string; valid: boolean; error?: string }, idx: number) {
-  const duplicateIp = !row.valid ? false : nodeImportRows.value.some(
-    (other, otherIdx) => otherIdx !== idx && other.ip === row.ip,
-  )
+  const duplicateIp = !row.valid
+    ? false
+    : nodeImportRows.value.some((other, otherIdx) => otherIdx !== idx && other.ip === row.ip)
   if (!row.valid) return 'background:color-mix(in srgb, var(--danger) 12%, transparent);'
   if (duplicateIp) return 'background:color-mix(in srgb, var(--warning) 15%, transparent);'
   return ''
@@ -570,20 +714,14 @@ function handleNodeStart() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm(
-      '确认批量启动节点',
-      confirmTitle(batchCount.value, ips),
-      `确认启动(${batchCount.value})`,
-      () => batchNodeAction(props.cluster, 'start', '启动'),
+    showConfirm('确认批量启动节点', confirmTitle(batchCount.value, ips), `确认启动(${batchCount.value})`, () =>
+      batchNodeAction(props.cluster, 'start', '启动'),
     )
     return
   }
   if (!node) return
-  showConfirm(
-    '确认启动节点',
-    `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`,
-    '确认启动',
-    () => executeNodeAction(node, 'start', '启动'),
+  showConfirm('确认启动节点', `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
+    executeNodeAction(node, 'start', '启动'),
   )
 }
 
@@ -612,11 +750,8 @@ function handleNodeReload() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm(
-      '确认批量 reload 节点',
-      confirmTitle(batchCount.value, ips),
-      `确认reload(${batchCount.value})`,
-      () => batchNodeAction(props.cluster, 'reload', 'reload'),
+    showConfirm('确认批量 reload 节点', confirmTitle(batchCount.value, ips), `确认reload(${batchCount.value})`, () =>
+      batchNodeAction(props.cluster, 'reload', 'reload'),
     )
     return
   }
@@ -632,11 +767,8 @@ function handleNodeReload() {
 function handleNodeStatusQuery() {
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm(
-      '确认批量状态查询',
-      confirmTitle(batchCount.value, ips),
-      `确认查询(${batchCount.value})`,
-      () => batchNodeStatus(props.cluster),
+    showConfirm('确认批量状态查询', confirmTitle(batchCount.value, ips), `确认查询(${batchCount.value})`, () =>
+      batchNodeStatus(props.cluster),
     )
     return
   }
@@ -646,11 +778,8 @@ function handleNodeStatusQuery() {
 
 function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: string) {
   if (btnKey === 'start') {
-    showConfirm(
-      '确认启动节点',
-      `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
-      '确认启动',
-      () => executeNodeAction(record, 'start', '启动'),
+    showConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
+      executeNodeAction(record, 'start', '启动'),
     )
   } else if (btnKey === 'stop') {
     showConfirm(
@@ -675,7 +804,12 @@ const execTargetNode = ref<any | null>(null)
 const { installing: installInstalling, error: installError, status: installStatus } = installStream
 
 let _installTimer: ReturnType<typeof setInterval> | null = null
-function clearInstallTimer() { if (_installTimer) { clearInterval(_installTimer); _installTimer = null } }
+function clearInstallTimer() {
+  if (_installTimer) {
+    clearInterval(_installTimer)
+    _installTimer = null
+  }
+}
 
 function buildInstallCommand(node: any, tag: string, extravars: Record<string, string>) {
   const ev = JSON.stringify({ ...extravars, ips: node.ip })
@@ -689,11 +823,16 @@ function buildInstallCommand(node: any, tag: string, extravars: Record<string, s
   const sshUser = 'jboss'
   const sshCmd = [
     'ssh',
-    '-i', '~/.ssh/id_rsa',
-    '-o', 'BatchMode=yes',
-    '-o', 'ConnectTimeout=30',
-    '-o', 'StrictHostKeyChecking=no',
-    '-o', 'UserKnownHostsFile=/dev/null',
+    '-i',
+    '~/.ssh/id_rsa',
+    '-o',
+    'BatchMode=yes',
+    '-o',
+    'ConnectTimeout=30',
+    '-o',
+    'StrictHostKeyChecking=no',
+    '-o',
+    'UserKnownHostsFile=/dev/null',
     `${sshUser}@${node.ip}`,
     `"source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`,
   ].join(' ')
@@ -726,7 +865,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   clearInstallTimer()
   _installTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 
   installStream.start(
@@ -746,7 +885,9 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
         const prevCmd = execResult.value?.command || ''
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
-      onError: () => { clearInstallTimer() },
+      onError: () => {
+        clearInstallTimer()
+      },
     },
   )
 }
@@ -772,7 +913,7 @@ function handleInstallEdge() {
       clearInstallTimer()
       _installTimer = setInterval(() => {
         execElapsed.value = (execElapsed.value ?? 0) + 1
-        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+        execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
       }, 1000)
 
       installStream.start(
@@ -792,7 +933,9 @@ function handleInstallEdge() {
             const prevCmd = execResult.value?.command || ''
             execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
           },
-          onError: () => { clearInstallTimer() },
+          onError: () => {
+            clearInstallTimer()
+          },
         },
       )
     },
@@ -839,11 +982,7 @@ function handleCancelInstall() {
         execLogs.value.push('')
         execLogs.value.push('═══════════════════════════════════════════')
         execLogs.value.push(
-          data.status === 'skipped'
-            ? '⚠️ 没有运行中的安装进程'
-            : allOk
-              ? '✅ 安装已取消'
-              : '⚠️ 取消过程部分异常'
+          data.status === 'skipped' ? '⚠️ 没有运行中的安装进程' : allOk ? '✅ 安装已取消' : '⚠️ 取消过程部分异常',
         )
 
         execProgress.percent = 100
@@ -892,15 +1031,19 @@ function handleAssociateNewOpenresty() {
       clearInstallTimer()
       _installTimer = setInterval(() => {
         execElapsed.value = (execElapsed.value ?? 0) + 1
-        execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+        execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
       }, 1000)
 
       installStream.start(
         `/clusters/${node.cluster_id}/nodes/${node.id}/associate-new-openresty`,
         {},
         {
-          onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-          onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+          onLine: (line: string) => {
+            execLogs.value = [...execLogs.value, line]
+          },
+          onProgress: (percent: number) => {
+            if (percent > execProgress.percent) execProgress.percent = percent
+          },
           onComplete: (rc: number, _status: string) => {
             clearInstallTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -908,7 +1051,9 @@ function handleAssociateNewOpenresty() {
             const prevCmd = execResult.value?.command || ''
             execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
           },
-          onError: () => { clearInstallTimer() },
+          onError: () => {
+            clearInstallTimer()
+          },
         },
       )
     },
@@ -937,12 +1082,16 @@ function streamEdgeAction(node: any, title: string, url: string, body: Record<st
   clearInstallTimer()
   _installTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round((execElapsed.value ?? 0) / 200 * 100), 99)
+    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 
   installStream.start(url, body, {
-    onLine: (line: string) => { execLogs.value = [...execLogs.value, line] },
-    onProgress: (percent: number) => { if (percent > execProgress.percent) execProgress.percent = percent },
+    onLine: (line: string) => {
+      execLogs.value = [...execLogs.value, line]
+    },
+    onProgress: (percent: number) => {
+      if (percent > execProgress.percent) execProgress.percent = percent
+    },
     onComplete: (rc: number, _status: string) => {
       clearInstallTimer()
       execProgress.status = rc === 0 ? 'success' : 'exception'
@@ -950,7 +1099,9 @@ function streamEdgeAction(node: any, title: string, url: string, body: Record<st
       const prevCmd = execResult.value?.command || ''
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
     },
-    onError: () => { clearInstallTimer() },
+    onError: () => {
+      clearInstallTimer()
+    },
   })
 }
 
@@ -982,6 +1133,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 离开页面时停掉安装进度定时器（范式：RelayGateways.vue），避免后台残留
+  clearInstallTimer()
   window.removeEventListener('edge-pack-add', onEdgePackAdd)
   window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
 })

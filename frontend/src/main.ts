@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { message } from 'ant-design-vue'
 import router, { setupDynamicRoutes } from './router'
 import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
@@ -11,6 +12,27 @@ import './style.css'
 import './styles/theme.css'
 
 dayjs.locale('zh-cn')
+
+const FEATURE_LOAD_MAX_RETRIES = 5
+const FEATURE_LOAD_RETRY_INTERVAL_MS = 3000
+
+/**
+ * 拉取功能配置，失败最多重试 FEATURE_LOAD_MAX_RETRIES 次（间隔固定），
+ * 仍失败返回 false 交由调用方提示并放行启动（应用已挂载，登录页始终可用）。
+ */
+export async function loadFeaturesWithRetry(load: () => Promise<unknown>): Promise<boolean> {
+  for (let attempt = 0; attempt <= FEATURE_LOAD_MAX_RETRIES; attempt++) {
+    try {
+      await load()
+      return true
+    } catch {
+      if (attempt < FEATURE_LOAD_MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, FEATURE_LOAD_RETRY_INTERVAL_MS))
+      }
+    }
+  }
+  return false
+}
 
 async function bootstrap() {
   const app = createApp(App)
@@ -29,14 +51,10 @@ async function bootstrap() {
   // 动态导入无法分包（rolldown INEFFECTIVE_DYNAMIC_IMPORT 告警），且会掩盖
   // 真实的模块求值顺序。
   const featuresStore = useFeaturesStore()
-  while (true) {
-    try {
-      await featuresStore.load()
-      break
-    } catch {
-      // Retry with backoff; login page remains usable.
-      await new Promise((r) => setTimeout(r, 3000))
-    }
+  const featuresLoaded = await loadFeaturesWithRetry(() => featuresStore.load())
+  if (!featuresLoaded) {
+    // bootstrap 阶段无组件上下文，用 antd 静态 message（与 api/index.ts 同款用法）
+    message.error('系统功能配置加载失败，请刷新重试')
   }
 
   // Register feature-gated routes now that we know what's available.

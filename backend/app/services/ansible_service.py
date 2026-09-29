@@ -186,7 +186,19 @@ SSH_KEY_PATH = os.path.expanduser("~/.ssh/id_rsa")
 
 
 def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None, port: int | None = None) -> list[str]:
-    """Build SSH command list, optionally wrapping with sshpass."""
+    """Build SSH command list, optionally wrapping with sshpass.
+
+    密码经 ``sshpass -e`` + 环境变量 ``SSHPASS`` 传递，**不出现在 argv**：
+    ``sshpass -p <密码>`` 会把密码暴露在 ``ps`` / ``/proc/<pid>/cmdline``
+    （world-readable）；环境变量只出现在 ``/proc/<pid>/environ``（0400，仅属主）。
+
+    SSHPASS 在此写入父进程环境（子进程默认继承）：密码腿有多个 spawn 点
+    （本模块 _run_subprocess/_run_subprocess_stream 与 cluster_install 的自有
+    流式执行器），统一在命令构造处就位，调用方无需改动。每次构建覆盖旧值；
+    残留值仅属主进程内可见（清单密码明文本就是已接受的 #10）。
+    已知残余竞态：并发两条不同密码的密码腿交错时，子进程可能拿到对方的
+    SSHPASS → 认证失败可见报错，不会静默串权限。
+    """
     base_opts = [
         "-o", "ConnectTimeout=30",
         "-o", "StrictHostKeyChecking=no",
@@ -201,8 +213,9 @@ def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None
         if jump:
             base_opts += ["-J", jump, *_relay_key_args()]
     if password:
+        os.environ["SSHPASS"] = password
         return [
-            "sshpass", "-p", password, "ssh",
+            "sshpass", "-e", "ssh",
             *base_opts,
             f"{ssh_user}@{ip}", cmd,
         ]

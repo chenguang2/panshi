@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, password_version
 from app.models.user import User, UserPermission
 
 
@@ -58,6 +58,14 @@ async def get_current_user(
         if user.status != 1:
             raise HTTPException(status_code=401, detail="用户已禁用")
 
+        # pwd_ver 校验：token 签发时的 password_hash 摘要与当前 hash 不一致
+        # 说明凭据已变更（重置密码/改密），存量 token 立即失效。
+        # 无 pwd_ver claim 的 token（测试辅助函数在无 DB 场景下签发）不做校验，
+        # 属已知残余风险：能伪造此类 token 的前提是持有 JWT_SECRET。
+        pwd_ver = payload.get("pwd_ver")
+        if pwd_ver is not None and pwd_ver != password_version(user.password_hash):
+            raise HTTPException(status_code=401, detail="凭据已更新，请重新登录")
+
         _backfill_audit_user(request, user)
         return user
     except HTTPException:
@@ -96,6 +104,11 @@ async def get_current_admin_user(
             raise HTTPException(status_code=403, detail="需要管理员权限")
         if user.status != 1:
             raise HTTPException(status_code=401, detail="用户已禁用")
+        # pwd_ver 校验：与 get_current_user 同一吊销语义（管理员改密后旧 token
+        # 不得继续操作 admin 端点）；无 claim 的测试 token 不校验。
+        pwd_ver = payload.get("pwd_ver")
+        if pwd_ver is not None and pwd_ver != password_version(user.password_hash):
+            raise HTTPException(status_code=401, detail="凭据已更新，请重新登录")
         return user
     except HTTPException:
         raise

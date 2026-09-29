@@ -891,6 +891,69 @@
                     "
                   ></textarea>
                 </div>
+                <div style="display: flex; gap: 12px; margin-top: 10px">
+                  <label
+                    v-for="s in cmdSecurityOptions"
+                    :key="s.value"
+                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer"
+                  >
+                    <input
+                      type="radio"
+                      :value="s.value"
+                      v-model="cmdSecurity"
+                      style="accent-color: var(--accent, #4096ff)"
+                    />
+                    <span>{{ s.label }}</span>
+                  </label>
+                </div>
+                <div v-if="cmdSecurity === 'whitelist'" style="margin-top: 10px">
+                  <div style="font-size: 13px; color: var(--muted, #888); margin-bottom: 6px">
+                    白名单命令（内置只读命令 + 本次任务添加）
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px">
+                    <span
+                      v-for="c in cmdBuiltinWhitelist"
+                      :key="c"
+                      style="
+                        font-size: 12px;
+                        padding: 3px 8px;
+                        border: 1px solid var(--border, #e5e5e5);
+                        border-radius: 12px;
+                      "
+                      >{{ c }}</span
+                    >
+                  </div>
+                  <div
+                    v-if="cmdCustomWhitelist.length"
+                    style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px"
+                  >
+                    <span
+                      v-for="c in cmdCustomWhitelist"
+                      :key="c"
+                      style="
+                        font-size: 12px;
+                        padding: 3px 8px;
+                        border: 1px solid var(--border, #e5e5e5);
+                        border-radius: 12px;
+                        background: var(--bg, #f8f8f8);
+                      "
+                    >
+                      {{ c }}
+                      <a style="color: var(--danger, #e5484d); cursor: pointer" @click="removeCmdWhitelist(c)">×</a>
+                    </span>
+                  </div>
+                  <div style="display: flex; gap: 6px">
+                    <input
+                      v-model="cmdWhitelistInput"
+                      data-test="cmd-whitelist-add"
+                      type="text"
+                      placeholder="输入命令名（如 mytool）"
+                      style="flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
+                      @keydown.enter.prevent="addCmdWhitelist"
+                    />
+                    <button class="btn btn-secondary btn-sm" @click="addCmdWhitelist">添加</button>
+                  </div>
+                </div>
                 <label
                   style="
                     font-size: 13px;
@@ -2134,10 +2197,11 @@ async function submitCreateTask() {
       params.script_content = scriptPreviewContent.value
     } else {
       params.cmd = cmdCommand.value
-      params.security = cmdSecurity.value
-      if (cmdSecurity.value === 'whitelist' && cmdCustomWhitelist.value.length > 0) {
-        params.whitelist = [...cmdCustomWhitelist.value]
-      }
+    }
+    // 安全参数对命令/脚本两种模式一致提交（后端按 params.security/whitelist 校验脚本内容，缺省 blacklist）
+    params.security = cmdSecurity.value
+    if (cmdSecurity.value === 'whitelist' && cmdCustomWhitelist.value.length > 0) {
+      params.whitelist = [...cmdCustomWhitelist.value]
     }
     params.timeout = cmdTimeout.value
   }

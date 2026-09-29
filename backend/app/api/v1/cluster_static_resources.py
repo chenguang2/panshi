@@ -36,6 +36,11 @@ BASE_STORAGE_DIR = os.path.join(
     "data", "static"
 )
 
+# 静态资源 zip 上传大小上限，对齐网关 nginx client_max_body_size（当前部署 32m）：
+# 经中继发布是把整个 zip 作为 PUT body 发给网关（cluster_static_resources.publish_static_resource），
+# 超过网关上限会在发布腿报 413；上传腿在此提前拦截，也避免无上限全量读入内存。
+STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024
+
 
 def _get_storage_path(edge_uuid: str, version: int) -> str:
     """Generate storage path: {BASE}/static/{edge_uuid}/{version}.zip"""
@@ -288,11 +293,11 @@ async def delete_static_resource(
         )
     )
     resource = result.scalar_one_or_none()
+    if not resource:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
     audit = getattr(request.state, "audit", None)
     if audit is not None:
         audit.detail = f"删除静态资源 {resource.name}"
-    if not resource:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
     results = []
 
@@ -301,6 +306,15 @@ async def delete_static_resource(
             os.remove(resource.storage_path)
         del_dir_name = resource.edge_uuid or str(resource.route_id)
         route_dir = os.path.join(BASE_STORAGE_DIR, del_dir_name)
+        # 越界防护（2026-09 安全缺陷修复）：edge_uuid 可能是历史脏数据
+        # （如经恶意备份导入的 ../..），rmtree 前必须确认拼接结果解析后
+        # 仍落在存储根目录内；越界即 400 拒绝，绝不执行 rmtree
+        real_base = os.path.realpath(BASE_STORAGE_DIR)
+        real_dir = os.path.realpath(route_dir)
+        if real_dir == real_base or not real_dir.startswith(real_base + os.sep):
+            raise HTTPException(
+                status_code=400,
+                detail="静态资源存储目录越界，已拒绝删除（目录不在数据存储根内）")
         if os.path.exists(route_dir):
             shutil.rmtree(route_dir)
         await db.execute(
@@ -348,9 +362,20 @@ async def upload_static_resource_zip(
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="仅支持 zip 格式文件")
 
-    content = await file.read()
+    # 大小上限：优先用客户端声明的 file.size 拦截（避免超限内容全量读入内存）
+    if file.size is not None and file.size > STATIC_ZIP_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"zip 文件过大：上限 {STATIC_ZIP_MAX_BYTES // (1024 * 1024)}MB（对齐网关 client_max_body_size）")
+
+    # file.size 可能为 None（multipart 解析器之外路径）：最多读上限+1 字节做防御校验
+    content = await file.read(STATIC_ZIP_MAX_BYTES + 1)
     if not content:
         raise HTTPException(status_code=400, detail="文件内容为空")
+    if len(content) > STATIC_ZIP_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"zip 文件过大：上限 {STATIC_ZIP_MAX_BYTES // (1024 * 1024)}MB（对齐网关 client_max_body_size）")
 
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="无效的 zip 文件")

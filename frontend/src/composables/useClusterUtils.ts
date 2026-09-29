@@ -493,77 +493,93 @@ interface PublishOptions {
   ) => void
 }
 
+/** 发布/删除为长耗时同步接口（服务端逐节点串行执行），按请求放宽 axios 全局 30s 超时，
+ * 避免前端先超时而服务端仍在执行（范式：api/relay.ts RELAY_LONG_TIMEOUT）。 */
+const PROGRESS_TASK_TIMEOUT = 300_000
+
+/** 发布/删除进行中标志（共用一把锁）：进度弹窗期间禁止并发触发第二轮发布/删除。 */
+let progressTaskInFlight = false
+
 export async function executePublish(opts: PublishOptions): Promise<void> {
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  if (progressTaskInFlight) {
+    message.warning('已有发布/删除任务进行中，请稍候')
+    return
   }
-  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-    percent: 0,
-    status: 'active',
-  }
-
-  const modal = createProgressModal(opts.title, progress, logs)
-
-  const updateContent = () => {
-    modal.update()
-  }
-
-  addLog(`开始发布...`)
-  progress.percent = 10
-  updateContent()
-
-  await new Promise((r) => setTimeout(r, 400))
-
+  progressTaskInFlight = true
   try {
-    addLog('正在构建发布配置...')
-    progress.percent = 30
+    const logs: string[] = []
+    const addLog = (text: string) => {
+      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+    }
+    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+      percent: 0,
+      status: 'active',
+    }
+
+    const modal = createProgressModal(opts.title, progress, logs)
+
+    const updateContent = () => {
+      modal.update()
+    }
+
+    addLog(`开始发布...`)
+    progress.percent = 10
     updateContent()
 
-    const res = await api.post(opts.apiEndpoint, { node_ids: opts.nodeIds })
-    const data = res.data as PublishResultData
-    progress.percent = 70
+    await new Promise((r) => setTimeout(r, 400))
 
-    if (opts.handleResult) {
-      opts.handleResult(data, addLog, progress)
-    } else {
-      addLog(`状态: ${data.status}`)
-      addLog(`消息: ${data.message}`)
-      if (data.version !== undefined) addLog(`版本: v${data.version}`)
+    try {
+      addLog('正在构建发布配置...')
+      progress.percent = 30
+      updateContent()
 
-      if (data.results && data.results.length > 0) {
+      const res = await api.post(opts.apiEndpoint, { node_ids: opts.nodeIds }, { timeout: PROGRESS_TASK_TIMEOUT })
+      const data = res.data as PublishResultData
+      progress.percent = 70
+
+      if (opts.handleResult) {
+        opts.handleResult(data, addLog, progress)
+      } else {
+        addLog(`状态: ${data.status}`)
+        addLog(`消息: ${data.message}`)
+        if (data.version !== undefined) addLog(`版本: v${data.version}`)
+
+        if (data.results && data.results.length > 0) {
+          addLog('')
+          addLog('节点同步结果:')
+          for (const r of data.results) {
+            const rl = routeLabel(r.route)
+            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
+          }
+        }
+
+        progress.percent = 100
         addLog('')
-        addLog('节点同步结果:')
-        for (const r of data.results) {
-          const rl = routeLabel(r.route)
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
+        if (data.status === 'ok') {
+          progress.status = 'success'
+          addLog('✅ 发布成功!')
+        } else if (data.status === 'partial') {
+          progress.status = 'exception'
+          addLog('⚠️ 部分成功')
+        } else {
+          progress.status = 'exception'
+          addLog('❌ 发布失败')
         }
       }
+      updateContent()
 
+      await opts.refreshFn()
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: string } }; message?: string }
+      const errMsg = err.response?.data?.detail || err.message || '未知错误'
       progress.percent = 100
+      progress.status = 'exception'
       addLog('')
-      if (data.status === 'ok') {
-        progress.status = 'success'
-        addLog('✅ 发布成功!')
-      } else if (data.status === 'partial') {
-        progress.status = 'exception'
-        addLog('⚠️ 部分成功')
-      } else {
-        progress.status = 'exception'
-        addLog('❌ 发布失败')
-      }
+      addLog(`❌ 发布失败: ${errMsg}`)
+      updateContent()
     }
-    updateContent()
-
-    await opts.refreshFn()
-  } catch (error: unknown) {
-    const err = error as { response?: { data?: { detail?: string } }; message?: string }
-    const errMsg = err.response?.data?.detail || err.message || '未知错误'
-    progress.percent = 100
-    progress.status = 'exception'
-    addLog('')
-    addLog(`❌ 发布失败: ${errMsg}`)
-    updateContent()
+  } finally {
+    progressTaskInFlight = false
   }
 }
 
@@ -615,63 +631,73 @@ interface DeleteProgressOptions {
 }
 
 export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Promise<void> {
-  const logs: string[] = []
-  const addLog = (text: string) => {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+  if (progressTaskInFlight) {
+    message.warning('已有发布/删除任务进行中，请稍候')
+    return
   }
-  const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
-    percent: 0,
-    status: 'active',
-  }
-
-  const modal = createProgressModal(opts.title, progress, logs)
-
-  const updateContent = () => {
-    modal.update()
-  }
-
-  addLog(`开始删除...`)
-  progress.percent = 20
-  updateContent()
-
-  await new Promise((r) => setTimeout(r, 400))
-
+  progressTaskInFlight = true
   try {
-    const resourceKey =
-      opts.resourceKey ??
-      (opts.routeIds && opts.routeIds.length > 0
-        ? { field: 'route_ids', label: '路由', nameField: 'route_name', keys: opts.routeIds }
-        : undefined)
-    const res = await api.delete(opts.apiEndpoint, {
-      data: {
-        delete_db: opts.deleteDb,
-        delete_edge: opts.deleteEdge,
-        node_ids: opts.nodeIds.length > 0 ? opts.nodeIds : undefined,
-        [resourceKey?.field as string]: resourceKey && resourceKey.keys.length > 0 ? resourceKey.keys : undefined,
-      },
-    })
-    const data = res.data
-    progress.percent = 60
-
-    if (resourceKey && resourceKey.keys.length > 0) {
-      logBatchDeleteResults(data, resourceKey, addLog, progress)
-    } else {
-      logSingleDeleteResults(data, opts, addLog, progress)
+    const logs: string[] = []
+    const addLog = (text: string) => {
+      logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
+    }
+    const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
+      percent: 0,
+      status: 'active',
     }
 
+    const modal = createProgressModal(opts.title, progress, logs)
+
+    const updateContent = () => {
+      modal.update()
+    }
+
+    addLog(`开始删除...`)
+    progress.percent = 20
     updateContent()
 
-    if (opts.afterDelete) {
-      await opts.afterDelete()
+    await new Promise((r) => setTimeout(r, 400))
+
+    try {
+      const resourceKey =
+        opts.resourceKey ??
+        (opts.routeIds && opts.routeIds.length > 0
+          ? { field: 'route_ids', label: '路由', nameField: 'route_name', keys: opts.routeIds }
+          : undefined)
+      const res = await api.delete(opts.apiEndpoint, {
+        data: {
+          delete_db: opts.deleteDb,
+          delete_edge: opts.deleteEdge,
+          node_ids: opts.nodeIds.length > 0 ? opts.nodeIds : undefined,
+          [resourceKey?.field as string]: resourceKey && resourceKey.keys.length > 0 ? resourceKey.keys : undefined,
+        },
+        timeout: PROGRESS_TASK_TIMEOUT,
+      })
+      const data = res.data
+      progress.percent = 60
+
+      if (resourceKey && resourceKey.keys.length > 0) {
+        logBatchDeleteResults(data, resourceKey, addLog, progress)
+      } else {
+        logSingleDeleteResults(data, opts, addLog, progress)
+      }
+
+      updateContent()
+
+      if (opts.afterDelete) {
+        await opts.afterDelete()
+      }
+      await opts.refreshFn()
+      opts.clearSelectedFn?.()
+    } catch (error: unknown) {
+      progress.percent = 100
+      progress.status = 'exception'
+      addLog('')
+      addLog(`❌ 删除失败: ${getApiErrorMessage(error)}`)
+      updateContent()
     }
-    await opts.refreshFn()
-    opts.clearSelectedFn?.()
-  } catch (error: unknown) {
-    progress.percent = 100
-    progress.status = 'exception'
-    addLog('')
-    addLog(`❌ 删除失败: ${getApiErrorMessage(error)}`)
-    updateContent()
+  } finally {
+    progressTaskInFlight = false
   }
 }
 

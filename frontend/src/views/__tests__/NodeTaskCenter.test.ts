@@ -1229,6 +1229,95 @@ describe('NodeTaskCenter cmd_exec flow', () => {
     wrapper.unmount()
   })
 
+  it('script mode renders security radios and submits params.security with script_content', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await checkFirstNode()
+
+    // 切换到脚本模式
+    const scriptBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === '脚本')
+    expect(scriptBtn).toBeTruthy()
+    scriptBtn!.click()
+    await flushPromises()
+
+    // 脚本模式应渲染与命令模式一致的 security 单选（黑名单/白名单/不限制）
+    const radios = Array.from(document.querySelectorAll('input[type="radio"]')) as HTMLInputElement[]
+    expect(radios.map((r) => r.value)).toEqual(['blacklist', 'whitelist', 'none'])
+    const text = document.body.textContent || ''
+    expect(text).toContain('黑名单')
+    expect(text).toContain('白名单')
+    expect(text).toContain('不限制')
+
+    const vm = wrapper.vm as any
+    vm.scriptFile = new File(['echo hi'], 'probe.sh', { type: 'text/x-sh' })
+    vm.scriptPreviewContent = 'echo hi'
+    await flushPromises()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    createBtn!.click()
+    await flushPromises()
+
+    const call = vi.mocked(api.post).mock.calls[0]
+    const body = call[1] as { task_type: string; params: Record<string, unknown> }
+    expect(body.task_type).toBe('cmd_exec')
+    expect(body.params.script_content).toBe('echo hi')
+    // 脚本模式同样提交 security（缺省 blacklist，与后端校验对齐）
+    expect(body.params.security).toBe('blacklist')
+    expect(body.params.timeout).toBe(30)
+    wrapper.unmount()
+  })
+
+  it('script mode whitelist selection submits params.security=whitelist and whitelist list', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
+      return Promise.resolve({ data: { total: 0, items: [] } })
+    })
+    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await openCreateModal(wrapper)
+    await selectClusterAndType(wrapper, 'cmd_exec')
+    await checkFirstNode()
+
+    const scriptBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.trim() === '脚本')
+    scriptBtn!.click()
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    vm.scriptFile = new File(['mytool --help'], 'probe.sh', { type: 'text/x-sh' })
+    vm.scriptPreviewContent = 'mytool --help'
+    vm.cmdSecurity = 'whitelist'
+    vm.cmdCustomWhitelist = ['mytool']
+    await flushPromises()
+
+    const createBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('创建'))
+    createBtn!.click()
+    await flushPromises()
+
+    const call = vi.mocked(api.post).mock.calls[0]
+    const body = call[1] as { task_type: string; params: Record<string, unknown> }
+    expect(body.task_type).toBe('cmd_exec')
+    expect(body.params.security).toBe('whitelist')
+    expect(body.params.whitelist).toEqual(['mytool'])
+    expect(body.params.script_content).toBe('mytool --help')
+    wrapper.unmount()
+  })
+
   it('distribute_file form shows timeout select with default 600', async () => {
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })

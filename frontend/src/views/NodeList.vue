@@ -539,7 +539,8 @@ async function loadClusters() {
     const res = await api.get('/clusters')
     clusters.value = res.data?.items || []
   } catch {
-    /* ignore */
+    // 筛选下拉静默为空会误导用户以为没有集群，至少给出一次提示
+    message.warning('集群列表加载失败')
   }
 }
 
@@ -1153,6 +1154,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelSearch()
+  // 离开页面时停掉执行耗时定时器（范式：RelayGateways.vue），避免后台残留
+  stopElapsedTimer()
   window.removeEventListener('edge-pack-add', onEdgePackAdd)
   window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
 })

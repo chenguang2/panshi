@@ -2,7 +2,7 @@ import os
 import logging
 from typing import AsyncGenerator, Optional
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine as _create_async_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import DeclarativeBase
@@ -121,6 +121,29 @@ def _reload_active_engine():
     )
 
 
+def _ensure_pg_schema(sync_engine) -> None:
+    """PG 启动 schema 自检（可测辅助函数，fail-fast）。
+
+    - inspect 自检失败（瞬时连接/权限问题等）→ 抛 RuntimeError 拒绝启动，
+      绝不退化为 drop_all 全库重建（误删活动库风险）；
+    - sys_user 残留且缺 id 列 → 定向 drop_all 全库重建（历史行为，配 warning）；
+    - 表不存在或列齐全 → 什么都不做（create_all 随后补齐缺失表）。
+    """
+    try:
+        insp = inspect(sync_engine)
+        if not insp.has_table("sys_user"):
+            return
+        cols = {c["name"] for c in insp.get_columns("sys_user")}
+    except Exception as exc:
+        raise RuntimeError(
+            "PG schema 完整性自检失败，为避免误删数据拒绝继续启动；"
+            f"请检查数据库连接/权限后重试: {exc}"
+        ) from exc
+    if "id" not in cols:
+        logger.warning("检测到 sys_user 表残留且缺 id 列，执行完全重建")
+        Base.metadata.drop_all(sync_engine)
+
+
 async def init_db():
     # G9: on startup, roll back to .bak if the active connection fails and a
     # switch flag is present (the switch was never completed successfully).
@@ -134,21 +157,10 @@ async def init_db():
     is_pg = not is_sqlite(str(sync_engine.url))
 
     # 关键修复：PostgreSQL 上若残留旧 schema（表存在但列不全），create_all 不会重建，
-    # 导致后续建 FK 表报错。启动时先 drop_all 再 create_all 确保 schema 完整。
+    # 导致后续建 FK 表报错。启动时自检，仅在确认残留缺列时定向重建；
+    # 自检失败 fail-fast 抛错（见 _ensure_pg_schema），绝不盲目 drop_all。
     if is_pg:
-        try:
-            # 检查 sys_user 表是否存在且缺 id 列
-            from sqlalchemy import inspect
-            insp = inspect(sync_engine)
-            if insp.has_table("sys_user"):
-                cols = {c["name"] for c in insp.get_columns("sys_user")}
-                if "id" not in cols:
-                    logger.warning("检测到 sys_user 表残留且缺 id 列，执行完全重建")
-                    Base.metadata.drop_all(sync_engine)
-        except Exception:
-            # 检查失败则保守重建
-            logger.warning("schema 完整性检查失败，执行完全重建")
-            Base.metadata.drop_all(sync_engine)
+        _ensure_pg_schema(sync_engine)
 
     async with _async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

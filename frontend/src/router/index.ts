@@ -37,7 +37,7 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     path: 'ansible-inventory',
     name: 'AnsibleInventory',
     component: () => import('@/views/AnsibleInventory.vue'),
-    meta: { permission: 'ansible_inventory' },
+    meta: { permission: 'ansible_inventory', adminOnly: true },
   },
   plugin_switches: {
     path: 'plugin-switches',
@@ -130,7 +130,7 @@ const coreRoutes: RouteRecordRaw[] = [
     component: () => import('@/views/DefaultLayout.vue'),
     children: [
       { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
-      { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue') },
+      { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue'), meta: { adminOnly: true } },
       {
         path: 'relay-gateways',
         name: 'RelayGateways',

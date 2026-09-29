@@ -36,8 +36,42 @@ class EdgeAPIError(Exception):
         super().__init__(f"Edge API error {status_code}: {message}")
 
 
+# 源码内默认密钥（仅非 production 环境兜底可用）。生产环境必须在启动前通过
+# 环境变量覆盖，否则加密通道与管理面对拿到源码者透明（ensure_edge_secrets_configured 守卫）。
+_SM4_KEY_DEFAULT = "a16bc20453da220f"
+_ADMIN_KEY_DEFAULT = "f9357106bff442f89d4de7169c37c61e"
+
+
+def ensure_edge_secrets_configured() -> None:
+    """生产环境启动守卫：Edge 通道密钥不得缺失或仍为源码默认值。
+
+    仿照 app/core/security.py 的 JWT 密钥守卫模式：APP_ENV=production 时，
+    EDGE_SM4_KEY（Edge 加密通道 SM4 密钥）或 EDGE_ADMIN_KEY（Edge 管理 API Key）
+    任一缺失或仍等于源码默认值即抛 RuntimeError 拒绝启动；非 production 环境
+    保持现状完全可用（不改变类属性/实例行为的取值来源）。
+    """
+    if os.getenv("APP_ENV", "development") != "production":
+        return
+
+    problems: list[str] = []
+    sm4_key = os.getenv("EDGE_SM4_KEY")
+    if not sm4_key or sm4_key == _SM4_KEY_DEFAULT:
+        problems.append("EDGE_SM4_KEY")
+    admin_key = os.getenv("EDGE_ADMIN_KEY")
+    if not admin_key or admin_key == _ADMIN_KEY_DEFAULT:
+        problems.append("EDGE_ADMIN_KEY")
+
+    if problems:
+        raise RuntimeError(
+            f"生产环境（APP_ENV=production）必须通过环境变量配置 Edge 通道密钥，"
+            f"以下密钥缺失或仍为源码默认值：{'、'.join(problems)}。"
+            "请设置 EDGE_SM4_KEY（Edge 加密通道 SM4 密钥）与 "
+            "EDGE_ADMIN_KEY（Edge 管理 API Key）后重启。"
+        )
+
+
 class EdgeClient:
-    SM4_KEY = os.getenv("EDGE_SM4_KEY", "a16bc20453da220f").encode()
+    SM4_KEY = os.getenv("EDGE_SM4_KEY", _SM4_KEY_DEFAULT).encode()
     BLOCK_SIZE = 16
 
     def __init__(self, cluster_id: int, db: "Session | None" = None, node_ip: str | None = None, node_port: int | None = None):
@@ -108,7 +142,7 @@ class EdgeClient:
 
     def _resolve_api_key(self) -> None:
         """Resolve API key from environment variable."""
-        api_key = os.getenv("EDGE_ADMIN_KEY", "f9357106bff442f89d4de7169c37c61e")
+        api_key = os.getenv("EDGE_ADMIN_KEY", _ADMIN_KEY_DEFAULT)
         self.api_key = api_key
 
     def _pkcs7_pad(self, data: bytes) -> bytes:
