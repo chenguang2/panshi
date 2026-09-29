@@ -160,7 +160,9 @@
 | L7 | ✅ 已修复 | users 分页 `ge=1` / `le=MAX_PAGE_SIZE(500)` |
 | L8 | ✅ 已修复 | `sshpass -e` + `SSHPASS` 环境变量传递（argv 无明文；跨 spawn 点竞态为可见失败非串权限） |
 | L6（audit detail） | ✅ 已修复 | 随 C1 车道 |
-| H1 | ⏸ 未修复 | EdgeClient 同步 httpx 异步化——结构性工程，单独立项 |
+| H1 | ✅ 已修复（2026-09-29） | EdgeClient 同步 httpx 异步化——经 OpenSpec 变更 `edge-client-async` 落地：调用点 `asyncio.to_thread` 卸载（方案 B：网络调用进线程，构造/mark_route/日志留事件循环，两跳保日志时序）+ 源码守卫 `test_async_offloading_guard.py`；真机探针：远程 PG 归档导出 17.7s 期间健康检查 10 次全部 ~2ms |
 | vite 预压缩（L5 前端半边） | ⏸ 未做 | 避免新增构建依赖，后端 GZip 已覆盖主要收益 |
 
 终验（2026-09-28，全部车道汇合后）：后端全量 pytest **1907 passed / 12 skipped / 0 failed**；PG 方言冒烟 7/7；前端 vitest 989/990（1 例为全量负载型预存 flake，单跑 3/3 绿）、`vue-tsc -b` 0 错、eslint 0 errors（触及文件 83 warn 均为 #27 预存模板 any）。
+
+H1 终验（2026-09-29，`edge-client-async` 合入后）：后端全量 pytest **1916 passed / 12 skipped / 0 failed**（含新增源码守卫 9 项）。

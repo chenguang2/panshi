@@ -606,7 +606,8 @@ async def export_archive(
         raise HTTPException(status_code=404, detail="连接不存在")
     path = _archive_output_path()
     try:
-        db_archive_service.export_archive(source, path)
+        # 归档打包是同步重 IO（逐表 SELECT + zip 写盘），卸载到线程避免阻塞事件循环
+        await asyncio.to_thread(db_archive_service.export_archive, source, path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"导出失败: {e}")
     enrich_audit(request, detail=f"导出数据库 {body.source_id} → {path}")
@@ -632,7 +633,11 @@ async def import_archive(
     t0 = time.monotonic()
     started_at = datetime.utcnow()
     try:
-        db_archive_service.import_archive(body.archive_path, target, confirmed_clear=body.confirmed_clear)
+        # 归档导入是同步重 IO（清空目标库 + 逐表写入），卸载到线程避免阻塞事件循环
+        await asyncio.to_thread(
+            db_archive_service.import_archive,
+            body.archive_path, target, confirmed_clear=body.confirmed_clear,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     await db_migration_service.record_migration_log(

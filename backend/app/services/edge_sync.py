@@ -5,6 +5,7 @@ Extracts the repeated `for node in active_nodes: EdgeClient(...)` pattern
 that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 """
 
+import asyncio
 import json
 from typing import Any, Awaitable, Optional, Callable
 from fastapi import HTTPException, status
@@ -338,9 +339,12 @@ async def delete_on_nodes(
             "status": "pending",
         }
         try:
+            # 单跳卸载（design 决策 2）：构造/mark_route 留事件循环，仅
+            # edge_delete_fn 的阻塞网络调用进线程；异常经 to_thread 原样透传，
+            # 既有 except 分支不变。线程闭包内禁止触碰请求级 db 会话。
             client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             mark_route(node_result, client)
-            response = edge_delete_fn(client, edge_uuid)
+            response = await asyncio.to_thread(edge_delete_fn, client, edge_uuid)
             node_result["status"] = "success"
             node_result["response"] = response
         except (EdgeConnectionError, EdgeAPIError) as e:
@@ -389,11 +393,16 @@ async def publish_to_nodes(
             "status": "pending",
         }
         try:
+            # 两跳形态（design 决策 2 方案 B）：构造/mark_route/_encrypt 与日志
+            # 全部留在事件循环，仅真正的阻塞网络调用进线程——线程闭包内禁止
+            # 触碰请求级 db 会话（当前 8 处 publish_fn/post_publish_fn 均为纯
+            # client 调用；未来新增依赖 db 的钩子须重新评估边界）。
             client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
             mark_route(node_result, client)
             encrypted = client._encrypt(json.dumps(edge_data).encode())
 
-            response = publish_fn(client)
+            # hop1：publish_fn 网络调用进线程
+            response = await asyncio.to_thread(publish_fn, client)
 
             node_result["status"] = "success"
             node_result["response"] = response
@@ -403,7 +412,10 @@ async def publish_to_nodes(
                 log_fn(node_result, response, None, encrypted)
 
             if post_publish_fn:
-                post_response = post_publish_fn(client)
+                # hop2：post_publish_fn 网络调用进线程（log_fn/post_log_fn 保序
+                # 夹在两跳之间，留在事件循环；post 失败的既有 quirk——先计
+                # success 再计 fail、log_fn 调用两次——原样保留）
+                post_response = await asyncio.to_thread(post_publish_fn, client)
                 node_result["post_action"] = "ok"
                 if post_log_fn:
                     post_log_fn(node_result, post_response, None, None)

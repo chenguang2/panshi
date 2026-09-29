@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shutil
@@ -484,7 +485,9 @@ async def publish_static_resource(
                 node_port=node.management_port,
             )
             edge_sync.mark_route(node_result, client)
-            response = client.raw_put(path, zip_data)
+            # zip 上传经中继可达 32m，raw_put 内层 timeout=30s——卸载到线程，
+            # 避免同步 httpx 阻塞事件循环（构造/mark_route 留事件循环）
+            response = await asyncio.to_thread(client.raw_put, path, zip_data)
 
             node_result["status"] = "success"
             results.append(node_result)

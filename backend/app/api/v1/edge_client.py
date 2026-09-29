@@ -148,7 +148,7 @@ async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db))
 async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.get_upstream(upstream_id)
+        result = await run_edge_sync(lambda: client.get_upstream(upstream_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -161,7 +161,7 @@ async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSes
     client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
-        result = client.create_upstream(payload)
+        result = await run_edge_sync(lambda: client.create_upstream(payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -174,7 +174,7 @@ async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUp
     client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
-        result = client.update_upstream(upstream_id, payload)
+        result = await run_edge_sync(lambda: client.update_upstream(upstream_id, payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -186,7 +186,7 @@ async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUp
 async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.patch_upstream(upstream_id, data)
+        result = await run_edge_sync(lambda: client.patch_upstream(upstream_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -198,7 +198,7 @@ async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: di
 async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_upstream(upstream_id)
+        result = await run_edge_sync(lambda: client.delete_upstream(upstream_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -225,7 +225,7 @@ async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.get_route(route_id)
+        result = await run_edge_sync(lambda: client.get_route(route_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -238,7 +238,7 @@ async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession =
     client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
-        result = client.create_route(payload)
+        result = await run_edge_sync(lambda: client.create_route(payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -251,7 +251,7 @@ async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUp
     client = EdgeClient(0, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
-        result = client.update_route(route_id, payload)
+        result = await run_edge_sync(lambda: client.update_route(route_id, payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -263,7 +263,7 @@ async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUp
 async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.patch_route(route_id, data)
+        result = await run_edge_sync(lambda: client.patch_route(route_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -275,7 +275,7 @@ async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db
 async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_route(route_id)
+        result = await run_edge_sync(lambda: client.delete_route(route_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -314,7 +314,7 @@ async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_d
 async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.get_global_rule(rule_id)
+        result = await run_edge_sync(lambda: client.get_global_rule(rule_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -326,7 +326,7 @@ async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = D
 async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.create_global_rule(rule_id, data)
+        result = await run_edge_sync(lambda: client.create_global_rule(rule_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -338,7 +338,7 @@ async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.update_global_rule(rule_id, data)
+        result = await run_edge_sync(lambda: client.update_global_rule(rule_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -350,7 +350,7 @@ async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_global_rule(rule_id)
+        result = await run_edge_sync(lambda: client.delete_global_rule(rule_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -377,7 +377,7 @@ async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get
 async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.get_plugin_config(config_id)
+        result = await run_edge_sync(lambda: client.get_plugin_config(config_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -389,7 +389,7 @@ async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession
 async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.create_plugin_config(config_id, data)
+        result = await run_edge_sync(lambda: client.create_plugin_config(config_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -401,7 +401,7 @@ async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.update_plugin_config(config_id, data)
+        result = await run_edge_sync(lambda: client.update_plugin_config(config_id, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -413,7 +413,7 @@ async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_plugin_config(config_id)
+        result = await run_edge_sync(lambda: client.delete_plugin_config(config_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -440,7 +440,7 @@ async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(ge
 async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.get_plugin_metadata(plugin_name)
+        result = await run_edge_sync(lambda: client.get_plugin_metadata(plugin_name))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -452,7 +452,7 @@ async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSes
 async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.create_plugin_metadata(plugin_name, data)
+        result = await run_edge_sync(lambda: client.create_plugin_metadata(plugin_name, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -464,7 +464,7 @@ async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dic
 async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.update_plugin_metadata(plugin_name, data)
+        result = await run_edge_sync(lambda: client.update_plugin_metadata(plugin_name, data))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -476,7 +476,7 @@ async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, d
 async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_plugin_metadata(plugin_name)
+        result = await run_edge_sync(lambda: client.delete_plugin_metadata(plugin_name))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -491,7 +491,7 @@ async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(g
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
     try:
-        result = client.api("ssl", "list")
+        result = await run_edge_sync(lambda: client.api("ssl", "list"))
         return {"ssl_certificates": result, **route_info}
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -503,7 +503,7 @@ async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(g
 async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        return client.api("ssl", "get", cert_id)
+        return await run_edge_sync(lambda: client.api("ssl", "get", cert_id))
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -514,7 +514,7 @@ async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession
 async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        return client.api("ssl", "delete", cert_id)
+        return await run_edge_sync(lambda: client.api("ssl", "delete", cert_id))
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
     except EdgeAPIError as e:
@@ -540,7 +540,7 @@ async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(
 async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.reload_plugins()
+        result = await run_edge_sync(client.reload_plugins)
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -585,8 +585,9 @@ async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: A
     `StreamRouteCreate` 负责把无效载荷挡在平台侧——Edge 不做校验（见模型 docstring）。
     """
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    payload = data.model_dump(exclude_unset=True)
     try:
-        result = client.create_stream_route(data.model_dump(exclude_unset=True))
+        result = await run_edge_sync(lambda: client.create_stream_route(payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -598,8 +599,9 @@ async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: A
 async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRouteUpdate, db: AsyncSession = Depends(get_db)):
     """更新 Edge 节点上的 Stream 路由（PUT 全量替换，路径 id 为准）。"""
     client = EdgeClient(0, node_ip=ip, node_port=port)
+    payload = data.model_dump(exclude_unset=True)
     try:
-        result = client.update_stream_route(route_id, data.model_dump(exclude_unset=True))
+        result = await run_edge_sync(lambda: client.update_stream_route(route_id, payload))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")
@@ -611,7 +613,7 @@ async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRou
 async def delete_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
     client = EdgeClient(0, node_ip=ip, node_port=port)
     try:
-        result = client.delete_stream_route(route_id)
+        result = await run_edge_sync(lambda: client.delete_stream_route(route_id))
         return result
     except EdgeConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Connection failed: {str(e)}")

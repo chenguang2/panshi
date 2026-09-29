@@ -1,5 +1,6 @@
 """SSL certificate management API endpoints."""
 
+import asyncio
 import json
 import uuid
 from typing import Optional
@@ -372,9 +373,10 @@ async def publish_ssl_certificate(
             if ca_record and ca_record.cert:
                 from app.services.cert_generator import get_cert_expiry, detect_openssl
                 try:
-                    openssl_info = detect_openssl()
+                    # openssl 子进程探测/过期检查卸载到线程，避免阻塞事件循环
+                    openssl_info = await asyncio.to_thread(detect_openssl)
                     if openssl_info["path"] and ca_record.cert:
-                        if get_cert_expiry(openssl_info["path"], ca_record.cert) < date.today():
+                        if await asyncio.to_thread(get_cert_expiry, openssl_info["path"], ca_record.cert) < date.today():
                             raise HTTPException(status_code=400, detail="签发该证书的 CA 已过期，无法发布")
                 except Exception:
                     pass
@@ -529,7 +531,9 @@ async def _generate_local(
 
     try:
         if is_sm2:
-            cert_result, gen_logs = generate_dual_certificates(
+            # openssl 子进程证书生成（SM2 = 7 次串行子进程）卸载到线程，避免阻塞事件循环
+            cert_result, gen_logs = await asyncio.to_thread(
+                generate_dual_certificates,
                 openssl_path=provider.openssl_path,
                 common_name=req.common_name,
                 dns_sans=cert_dns,
@@ -541,7 +545,8 @@ async def _generate_local(
                 org=org, ou=ou,
             )
         else:
-            cert_result, gen_logs = provider.generate_certificate(
+            cert_result, gen_logs = await asyncio.to_thread(
+                provider.generate_certificate,
                 algorithm=req.algorithm,
                 common_name=req.common_name,
                 dns_sans=cert_dns,
@@ -612,7 +617,9 @@ async def _generate_local(
     client_cert_record = None
     if is_sm2 and req.generate_client_certs:
         cn_client = f"{req.common_name}-client"
-        client_result, client_logs = _generate_client_dual_certs(
+        # 同型阻塞：客户端双证书也是 7 次串行 openssl 子进程，一并卸载
+        client_result, client_logs = await asyncio.to_thread(
+            _generate_client_dual_certs,
             provider, cn_client, raw_dns, raw_ip,
             req.validity_days, ca_cert_pem, ca_key_pem,
             org=org, ou=ou,

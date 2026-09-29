@@ -288,29 +288,39 @@ async def delete_cluster(
                     },
                 }
                 try:
+                    # 两段式卸载（design 决策 2 方案 B）：EdgeClient 构造留在
+                    # 事件循环，「整个 per-node 删除批次」（七类资源循环 + errs
+                    # 聚合）闭包为局部函数整体进单个 to_thread（对照本文件
+                    # test_connection 的既有范例）；闭包内只有 client 调用与
+                    # node_result 计数，禁止触碰请求级 db 会话。
                     client = EdgeClient(cluster_id, node_ip=node.ip, node_port=node.management_port)
-                    errs = []
-                    for r in routes:
-                        try: client.delete_route(r.edge_uuid); node_result["details"]["routes"] += 1
-                        except Exception: errs.append(f"route:{r.edge_uuid}")
-                    for u in upstreams:
-                        try: client.delete_upstream(u.edge_uuid); node_result["details"]["upstreams"] += 1
-                        except Exception: errs.append(f"upstream:{u.edge_uuid}")
-                    for p in plugin_configs:
-                        try: client.delete_plugin_config(p.edge_uuid); node_result["details"]["plugin_configs"] += 1
-                        except Exception: errs.append(f"plugin_config:{p.edge_uuid}")
-                    for g in global_rules:
-                        try: client.delete_global_rule(g.edge_uuid); node_result["details"]["global_rules"] += 1
-                        except Exception: errs.append(f"global_rule:{g.edge_uuid}")
-                    for pm in plugin_metadatas:
-                        try: client.delete_plugin_metadata(pm.plugin_name); node_result["details"]["plugin_metadatas"] += 1
-                        except Exception: errs.append(f"plugin_metadata:{pm.plugin_name}")
-                    for sp in stream_proxies:
-                        try: client.delete_stream_route(sp.edge_uuid); node_result["details"]["stream_proxies"] += 1
-                        except Exception: errs.append(f"stream_proxy:{sp.edge_uuid}")
-                    for sc in ssl_certificates:
-                        try: client.delete_ssl(sc.edge_uuid); node_result["details"]["ssl_certificates"] += 1
-                        except Exception: errs.append(f"ssl:{sc.edge_uuid}")
+
+                    def _delete_edge_batch() -> list[str]:
+                        errs: list[str] = []
+                        for r in routes:
+                            try: client.delete_route(r.edge_uuid); node_result["details"]["routes"] += 1
+                            except Exception: errs.append(f"route:{r.edge_uuid}")
+                        for u in upstreams:
+                            try: client.delete_upstream(u.edge_uuid); node_result["details"]["upstreams"] += 1
+                            except Exception: errs.append(f"upstream:{u.edge_uuid}")
+                        for p in plugin_configs:
+                            try: client.delete_plugin_config(p.edge_uuid); node_result["details"]["plugin_configs"] += 1
+                            except Exception: errs.append(f"plugin_config:{p.edge_uuid}")
+                        for g in global_rules:
+                            try: client.delete_global_rule(g.edge_uuid); node_result["details"]["global_rules"] += 1
+                            except Exception: errs.append(f"global_rule:{g.edge_uuid}")
+                        for pm in plugin_metadatas:
+                            try: client.delete_plugin_metadata(pm.plugin_name); node_result["details"]["plugin_metadatas"] += 1
+                            except Exception: errs.append(f"plugin_metadata:{pm.plugin_name}")
+                        for sp in stream_proxies:
+                            try: client.delete_stream_route(sp.edge_uuid); node_result["details"]["stream_proxies"] += 1
+                            except Exception: errs.append(f"stream_proxy:{sp.edge_uuid}")
+                        for sc in ssl_certificates:
+                            try: client.delete_ssl(sc.edge_uuid); node_result["details"]["ssl_certificates"] += 1
+                            except Exception: errs.append(f"ssl:{sc.edge_uuid}")
+                        return errs
+
+                    errs = await asyncio.to_thread(_delete_edge_batch)
                     if errs:
                         node_result["status"] = "failed"
                         node_result["error"] = f"部分失败: {', '.join(errs[:5])}"
