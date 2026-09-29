@@ -18,6 +18,7 @@
 - [x] 3.3 `database.py`：`export_archive`(:609)/`import_archive`(:635) service 调用包 `asyncio.to_thread`；守卫转绿
 - [x] 3.4 `clusters.py` 集群删除流(:291-312)：构造留事件循环，「整个 per-node 删除批次」（七类资源循环 + errs 聚合）闭包为局部函数整体进 `asyncio.to_thread`（对照 :417 既有范例）；守卫转绿
 - [x] 3.5 跑 `pytest -k "static or ssl or archive or cluster" -q` 确认相关域回归零红（467 passed / 5 skipped；守卫 TestSameShapedLegsOffloading 5 项转绿，test_publish_response 保持绿）
+- [x] 3.6 （范围外补充，2026-09-29 用户确认顺手处理）`cluster_ssl.py::create_ca_certificate` 的 `detect_openssl`/`generate_ca_certificate`（:76/:90）包 `asyncio.to_thread`——fixer 实施时发现的同型遗留；守卫补 `test_create_ca_certificate_uses_to_thread`（TestSameShapedLegsOffloading 6 项）；回归 test_cert_generator/test_ssl/test_ssl_reserved_sni 177 passed
 
 ## 4. edge-client 路由端点统一（GREEN 第三步）
 

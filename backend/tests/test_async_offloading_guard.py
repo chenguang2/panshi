@@ -5,7 +5,7 @@ design.md 咽喉点清单一一对应，漂移即红：
 
 - edge_sync.publish_to_nodes / delete_on_nodes —— 逐节点 Edge 发布/删除编排
 - cluster_static_resources.publish_static_resource —— 逐节点 raw_put zip
-- cluster_ssl._generate_local —— openssl 子进程证书生成
+- cluster_ssl._generate_local / create_ca_certificate —— openssl 子进程证书生成
 - database.export_archive / import_archive —— 归档打包/导入
 - clusters.delete_cluster —— 七类资源 per-node 删除批次
 - api/v1/edge_client.py —— 构造 EdgeClient 的 async 端点必须经 run_edge_sync
@@ -80,6 +80,9 @@ class TestSameShapedLegsOffloading:
 
     def test_generate_local_uses_to_thread(self):
         _assert_offloaded(SSL, "_generate_local")
+
+    def test_create_ca_certificate_uses_to_thread(self):
+        _assert_offloaded(SSL, "create_ca_certificate")
 
     def test_export_archive_uses_to_thread(self):
         _assert_offloaded(DATABASE, "export_archive")

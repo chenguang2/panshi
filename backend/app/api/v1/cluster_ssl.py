@@ -73,7 +73,8 @@ async def create_ca_certificate(
     )
 
     detect_logs: list[CommandResult] = []
-    openssl_info = detect_openssl(detect_logs=detect_logs)
+    # openssl 子进程探测卸载到线程，避免阻塞事件循环（同 _generate_local 模式）
+    openssl_info = await asyncio.to_thread(detect_openssl, detect_logs=detect_logs)
     if not openssl_info["path"]:
         from app.services.cert_generator import BUNDLED_OPENSSL_FIX
         raise HTTPException(
@@ -87,7 +88,9 @@ async def create_ca_certificate(
     org = data.organization or "EMBRACE"
     ou = data.organizational_unit or "EDGE"
     try:
-        result, gen_logs = generate_ca_certificate(
+        # openssl 子进程 CA 根证书生成卸载到线程，避免阻塞事件循环
+        result, gen_logs = await asyncio.to_thread(
+            generate_ca_certificate,
             openssl_path=openssl_info["path"],
             common_name=cn,
             validity_days=data.validity_days,
