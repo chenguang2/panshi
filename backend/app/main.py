@@ -62,12 +62,18 @@ async def lifespan(app: FastAPI):
     from app.services import relay_registry
     await relay_registry.ensure_fresh()
     refresh_task = asyncio.create_task(_relay_refresh_loop())
+    # SQLite 异地备份调度（未启用/配置不全时 tick 内部直接跳过）
+    from app.services import db_backup_service
+    backup_task = asyncio.create_task(db_backup_service.backup_scheduler_loop())
     try:
         yield
     finally:
         refresh_task.cancel()
+        backup_task.cancel()
         with suppress(asyncio.CancelledError):
             await refresh_task
+        with suppress(asyncio.CancelledError):
+            await backup_task
         from app.services.node_task_service import get_node_task_service
         get_node_task_service().shutdown_sync()
         await close_db()

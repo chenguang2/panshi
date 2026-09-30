@@ -144,6 +144,13 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("POST", "/api/v1/database/migrate-stream"): ("db_migration", "migrate", False),
     ("POST", "/api/v1/database/export"): ("db_archive", "export", False),
     ("POST", "/api/v1/database/import"): ("db_archive", "import", False),
+    # SQLite 异地备份 / DR 恢复
+    ("PUT", "/api/v1/db-backup/config"): ("db_backup", "update_config", False),
+    ("POST", "/api/v1/db-backup/run"): ("db_backup", "manual_backup", False),
+    ("POST", "/api/v1/db-backup/test"): ("db_backup", "test_connection", True),
+    ("POST", "/api/v1/db-backup/restore/list"): ("db_backup", "restore_list", True),
+    ("POST", "/api/v1/db-backup/restore/verify"): ("db_backup", "restore_verify", True),
+    ("POST", "/api/v1/db-backup/restore/execute"): ("db_backup", "restore_execute", False),
     ("POST", "/api/v1/database/history/cleanup"): ("db_migration_log", "cleanup", True),
     ("DELETE", "/api/v1/database/history/{log_id}"): ("db_migration_log", "delete", False),
     # 用户

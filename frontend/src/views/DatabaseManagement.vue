@@ -80,6 +80,9 @@
       </div>
     </div>
 
+    <!-- SQLite 备份与容灾（卡片自带数据加载） -->
+    <DbBackupCard />
+
     <!-- 数据迁移 -->
     <div class="card">
       <div class="card-header">
@@ -583,6 +586,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import DbBackupCard from '@/components/DbBackupCard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { formatDateTime, parseBackendDate } from '@/utils/format'
 import {

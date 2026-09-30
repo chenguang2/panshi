@@ -16,6 +16,7 @@ from app.api.v1 import (
     node_tasks,
     edge_autostart,
     database,
+    db_backup,
     ansible_inventory,
     clickhouse_config,
     relay,
@@ -61,6 +62,12 @@ node_task_router = APIRouter()
 node_task_router.include_router(node_tasks.router)
 node_task_router.include_router(node_tasks.global_router)
 
+# ── Combined router for database management (page + SQLite 备份/DR) ──
+# db_backup 与数据库管理页同域同门（features.database_management）。
+database_mgmt_router = APIRouter()
+database_mgmt_router.include_router(database.router)
+database_mgmt_router.include_router(db_backup.router)
+
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
 feature_routers: dict[str, APIRouter] = {
@@ -75,7 +82,7 @@ feature_routers: dict[str, APIRouter] = {
     "dns_proxy_udp": cluster_dns_proxies.router,
     "ssl_cert": ssl_router,
     "task_center": node_task_router,
-    "database_management": database.router,
+    "database_management": database_mgmt_router,
     "edge_autostart": edge_autostart.router,
     "ansible_inventory": ansible_inventory.router,
 }
