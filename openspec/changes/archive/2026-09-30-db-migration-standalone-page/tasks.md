@@ -24,4 +24,4 @@
 
 - [x] 4.1 e2e database-management spec 按新结构核对（必要时更新选择器/路径）；手动链路验证：迁移页发起 → 断连重进恢复进度 → 摘要卡状态；**空态验证（可用连接不足 2 个时发起禁用）**
 - [x] 4.2 前端全量 vitest + `vue-tsc -b`
-- [ ] 4.3 主 specs 同步（`db-migration-page` 能力合并入库，归档时执行）
+- [x] 4.3 主 specs 同步（`db-migration-page` 能力合并入库，归档时执行）
