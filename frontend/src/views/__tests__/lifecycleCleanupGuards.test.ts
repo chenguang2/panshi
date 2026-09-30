@@ -8,9 +8,14 @@ import { fileURLToPath } from 'node:url'
 // 防止未来重构把清理逻辑删掉（范式：RelayGateways.vue 的 onUnmounted → stopElapsedTimer + cancel）。
 
 const viewsDir = join(dirname(fileURLToPath(import.meta.url)), '..')
+const componentsDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'components')
 
 function sourceOf(...segments: string[]): string {
   return readFileSync(join(viewsDir, ...segments), 'utf-8')
+}
+
+function componentSourceOf(...segments: string[]): string {
+  return readFileSync(join(componentsDir, ...segments), 'utf-8')
 }
 
 /** 取源码中 onUnmounted( 回调起始处往后的代码片段（每个视图仅一个 onUnmounted） */
@@ -40,8 +45,8 @@ describe('视图生命周期清理守卫（源码守卫）', () => {
     expect(block).toContain('clearInstallTimer()')
   })
 
-  it('DatabaseManagement.vue: onUnmounted 中止迁移 SSE（migrationController.abort）', () => {
-    const block = onUnmountedBlock(sourceOf('DatabaseManagement.vue'))
+  it('DbMigrationCard.vue: onUnmounted 中止迁移 SSE（migrationController.abort）——2026-09 迁移段自 DatabaseManagement.vue 抽出', () => {
+    const block = onUnmountedBlock(componentSourceOf('DbMigrationCard.vue'))
     expect(block).toContain('migrationController.value?.abort()')
   })
 })

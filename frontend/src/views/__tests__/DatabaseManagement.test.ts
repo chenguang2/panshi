@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -291,197 +290,6 @@ describe('DatabaseManagement', () => {
     expect(setCurrentBtns.some((n) => n.attributes('disabled') === undefined)).toBe(true)
   })
 
-  it('migrate button calls migrateDatabaseStream with selected source/target', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    await flushPromises()
-    expect(mocks.migrateDatabaseStream).toHaveBeenCalledWith(
-      'conn_1',
-      'conn_2',
-      expect.objectContaining({ mode: 'replace' }),
-    )
-  })
-
-  it('disables the timeout select while migrating and re-enables after completion', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    await nextTick()
-    // 超时下拉框以默认值 300 唯一标识（源/目标/模式下拉的值均不是 300）
-    const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
-    expect(timeoutSelect).toBeDefined()
-    expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(true)
-    // SSE 完成后恢复可用
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await flushPromises()
-    expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(false)
-  })
-
-  it('shows migration result text after a successful migration', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    // Wait for SSE callbacks to fire
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await flushPromises()
-    expect(wrapper.text()).toContain('迁移完成')
-    expect(wrapper.text()).toContain('22')
-  })
-
-  it('迁移完成后只渲染紧凑结果条，明细按需在抽屉展开（页面不被撑长）', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 22 张表',
-          tables_migrated: 22,
-          tables: [
-            { name: 'sys_user', columns: 5, rows: 1 },
-            { name: 'sys_audit_log', columns: 8, rows: 120 },
-          ],
-          backup_path: '/tmp/migration_backup.zip',
-        })
-      }, 10)
-      return new AbortController()
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await flushPromises()
-
-    // 结果以一行摘要条呈现（含表数与耗时）
-    expect(wrapper.find('.migrate-result-bar').exists()).toBe(true)
-    expect(wrapper.text()).toContain('22 张表')
-    expect(wrapper.text()).toContain('耗时')
-    // 明细不默认铺在主页面（这正是原先页面过长的原因）
-    expect(vm.migrateDetailOpen).toBe(false)
-    expect(wrapper.find('.migrate-detail-table').exists()).toBe(false)
-
-    // 点「查看迁移详情」才打开抽屉
-    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
-    expect(detailBtn).toBeTruthy()
-    await detailBtn!.trigger('click')
-    expect(vm.migrateDetailOpen).toBe(true)
-
-    // 「去切换数据库」复用既有切换确认弹窗（省掉去连接列表找目标的两步）
-    const switchBtn = wrapper.findAll('button').find((b) => b.text().includes('去切换数据库'))
-    expect(switchBtn).toBeTruthy()
-    await switchBtn!.trigger('click')
-    expect(vm.switchModal.open).toBe(true)
-    expect(vm.switchModal.connection?.id).toBe('conn_2')
-  })
-
-  it('迁移详情把日志表与非日志表分开显示（用户能看出哪些是日志表）', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 22 张表',
-          tables_migrated: 22,
-          tables: [
-            { name: 'sys_user', columns: 5, rows: 1, kind: 'business' },
-            { name: 'ps_route', columns: 6, rows: 3, kind: 'business' },
-            { name: 'sys_audit_log', columns: 8, rows: 120, kind: 'audit_log' },
-            { name: 'ps_import_log', columns: 3, rows: 5, kind: 'audit_log' },
-            { name: 'install_task', columns: 7, rows: 4, kind: 'task_log' },
-          ],
-          backup_path: '/tmp/migration_backup.zip',
-        })
-      }, 10)
-      return new AbortController()
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await flushPromises()
-
-    // 分组数据来源：后端的 kind 标记（business / audit_log / task_log）
-    expect(vm.businessTables.map((t: any) => t.name)).toEqual(['sys_user', 'ps_route'])
-    expect(vm.auditLogTables.map((t: any) => t.name)).toEqual(['sys_audit_log', 'ps_import_log'])
-    expect(vm.taskLogTables.map((t: any) => t.name)).toEqual(['install_task'])
-
-    // 抽屉里三个分组各自成表
-    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
-    await detailBtn!.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('业务表（2）')
-    expect(wrapper.text()).toContain('审计与导入日志（2）')
-    expect(wrapper.text()).toContain('任务日志（1）')
-    expect(wrapper.findAll('.migrate-detail-table').length).toBe(3)
-  })
-
-  it('未勾选「包含日志数据」时不显示日志表分组，并给出提示', async () => {
-    mocks.listConnections.mockResolvedValue({
-      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
-    })
-    mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 18 张表',
-          tables_migrated: 18,
-          tables: [{ name: 'sys_user', columns: 5, rows: 1, kind: 'business' }],
-          backup_path: '',
-        })
-      }, 10)
-      return new AbortController()
-    })
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.migrateForm.sourceId = 'conn_1'
-    vm.migrateForm.targetId = 'conn_2'
-    vm.migrateForm.confirmed_clear = true
-    vm.migrateForm.includeLogs = false
-    await nextTick()
-    await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    await flushPromises()
-
-    expect(vm.auditLogTables.length + vm.taskLogTables.length).toBe(0)
-    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
-    await detailBtn!.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('业务表（1）')
-    expect(wrapper.text()).not.toContain('审计与导入日志（0）')
-    expect(wrapper.text()).not.toContain('任务日志（0）')
-    expect(wrapper.text()).toContain('本次迁移未包含日志表')
-  })
-
   it('add connection form validation requires a name', async () => {
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
@@ -507,75 +315,6 @@ describe('DatabaseManagement', () => {
     expect(mocks.createConnection).toHaveBeenCalledWith(expect.objectContaining({ name: '新库', type: 'postgres' }))
   })
 
-  it('shows static resource file location notice', async () => {
-    const wrapper = await mountPage()
-    expect(wrapper.text()).toContain('静态资源文件存储于服务器磁盘')
-  })
-
-  describe('迁移历史清理', () => {
-    function historyRows(count: number) {
-      return Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        direction: 'sqlite_to_postgres',
-        source_connection: 'local_sqlite',
-        target_connection: 'prod_pg',
-        mode: 'replace',
-        status: 'success',
-        tables_count: 22,
-        created_at: '2026-09-16T02:00:00',
-      }))
-    }
-
-    it('弹窗按服务端真实总数预览，确认后调用清理并刷新历史', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
-      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 96, will_delete: 86, will_keep: 10 } })
-      mocks.cleanupHistory.mockResolvedValue({ data: { deleted: 86, remaining: 10 } })
-      const wrapper = await mountPage()
-
-      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
-      expect(openBtn).toBeTruthy()
-      await openBtn!.trigger('click')
-      await flushPromises()
-
-      // 预览按服务端总数（96）而非已加载条数（3）计算
-      expect(mocks.getCleanupPreview).toHaveBeenCalledWith(10)
-      const preview = wrapper.find('.cleanup-preview').text()
-      expect(preview).toContain('96')
-      expect(preview).toContain('将删除')
-      expect(preview).toContain('86')
-
-      const confirm = wrapper.find('.cleanup-confirm-btn')
-      expect(confirm.attributes('disabled')).toBeUndefined()
-      await confirm.trigger('click')
-      await flushPromises()
-
-      expect(mocks.cleanupHistory).toHaveBeenCalledWith(10)
-      expect(mocks.getHistory).toHaveBeenCalledTimes(2) // 初次加载 + 清理后刷新
-      expect((wrapper.vm as any).cleanupModal.open).toBe(false)
-    })
-
-    it('无需清理时禁用确认按钮', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
-      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 3, will_delete: 0, will_keep: 3 } })
-      const wrapper = await mountPage()
-
-      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
-      await openBtn!.trigger('click')
-      await flushPromises()
-
-      expect(wrapper.find('.cleanup-preview').text()).toContain('无需清理')
-      expect(wrapper.find('.cleanup-confirm-btn').attributes('disabled')).toBe('')
-    })
-
-    it('历史条数达后端单页上限时提示仅显示最近 100 条', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(100) })
-      const wrapper = await mountPage()
-
-      expect(wrapper.find('.history-cap-hint').exists()).toBe(true)
-      expect(wrapper.find('.history-cap-hint').text()).toContain('100')
-    })
-  })
-
   describe('SQLite 备份摘要卡', () => {
     it('管理员可见摘要卡：四格统计 + 最近一次结果（partial + N/M）+ 双入口', async () => {
       const wrapper = await mountPage()
@@ -595,6 +334,43 @@ describe('DatabaseManagement', () => {
       const wrapper = await mountPage()
       expect(wrapper.findComponent({ name: 'DbBackupSummaryCard' }).exists()).toBe(false)
       expect(backupMocks.getConfig).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('数据迁移摘要卡', () => {
+    it('管理员可见摘要卡：active 连接 + 最近一次迁移结果（页面本体无迁移表单/进度 UI）', async () => {
+      mocks.getHistory.mockResolvedValue({
+        data: [
+          {
+            id: 97,
+            direction: 'sqlite_to_postgres',
+            source_connection: 'local_sqlite',
+            target_connection: 'prod_pg',
+            mode: 'replace',
+            status: 'success',
+            tables_count: 22,
+            duration_seconds: 34.2,
+            started_at: '2026-09-17T01:59:56.136478',
+            created_at: '2026-09-17T02:00:27.441140',
+          },
+        ],
+      })
+      const wrapper = await mountPage()
+      expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(true)
+      expect(wrapper.text()).toContain('本地库') // active 连接来自页面 status mock（conn() 名为「本地库」）
+      expect(wrapper.text()).toContain('成功') // 最近一次迁移结果
+      // 迁移执行 UI 已整体迁出：页面不再渲染迁移表单与进度
+      expect(wrapper.findComponent({ name: 'DbMigrationCard' }).exists()).toBe(false)
+      expect(wrapper.find('.migrate-btn').exists()).toBe(false)
+      expect(wrapper.find('.migration-history-table').exists()).toBe(false)
+    })
+
+    it('无 database_management 权限的用户不渲染摘要卡（也不发迁移状态请求）', async () => {
+      seedAuth([], 'user')
+      const wrapper = await mountPage()
+      expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(false)
+      // 摘要卡是 running-tasks 的唯一消费方：不发请求即整卡未挂载
+      expect(mocks.getRunningTasks).not.toHaveBeenCalled()
     })
   })
 })

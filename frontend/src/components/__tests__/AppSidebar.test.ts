@@ -159,3 +159,48 @@ describe('AppSidebar 分组折叠与活动项定位', () => {
     expect(call.block).toBe('nearest')
   })
 })
+
+describe('AppSidebar 数据迁移菜单项（database_management 权限键沿用）', () => {
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Dashboard', component: { template: '<div />' } },
+        { path: '/db-migration', name: 'DbMigration', component: { template: '<div />' } },
+      ],
+    })
+  }
+
+  function findNavItem(wrapper: ReturnType<typeof mount>, label: string) {
+    return wrapper.findAll('.nav-item').find((w) => w.find('.nav-label').text() === label)
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    // features 未加载时 has() 全 false，feature 门控菜单项会被过滤空
+    useFeaturesStore().$patch({ loaded: true })
+    Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
+  })
+
+  it('持有 database_management 权限的用户可见「数据迁移」入口', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 2, username: 'op', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['database_management']))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const item = findNavItem(wrapper, '数据迁移')
+    expect(item).toBeDefined()
+    expect(item!.attributes('href')).toBe('/db-migration')
+  })
+
+  it('无 database_management 权限的普通用户不可见', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 3, username: 'viewer', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['clusters']))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(findNavItem(wrapper, '数据迁移')).toBeUndefined()
+    expect(findNavItem(wrapper, '数据库管理')).toBeUndefined()
+  })
+})

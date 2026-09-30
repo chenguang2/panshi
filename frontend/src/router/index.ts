@@ -95,12 +95,20 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/NodeTaskCenter.vue'),
     meta: { permission: 'task_center' },
   },
-  database_management: {
-    path: 'database-management',
-    name: 'DatabaseManagement',
-    component: () => import('@/views/DatabaseManagement.vue'),
-    meta: { permission: 'database_management' },
-  },
+  database_management: [
+    {
+      path: 'database-management',
+      name: 'DatabaseManagement',
+      component: () => import('@/views/DatabaseManagement.vue'),
+      meta: { permission: 'database_management' },
+    },
+    {
+      path: 'db-migration',
+      name: 'DbMigration',
+      component: () => import('@/views/DbMigrationPage.vue'),
+      meta: { permission: 'database_management' },
+    },
+  ],
   audit_log: {
     path: 'audit-log',
     name: 'AuditLog',

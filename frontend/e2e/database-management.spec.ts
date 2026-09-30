@@ -75,7 +75,13 @@ test.describe('Database Management', () => {
   })
 
   test('迁移校验：未选择源/目标时提示错误', async ({ page }) => {
+    // 迁移执行 UI 已迁至独立页（db-migration-standalone-page）：数据库管理页只留摘要卡导航入口
     await gotoDatabasePage(page)
+    const summaryEntry = page.locator('button', { hasText: '开始迁移' })
+    await expect(summaryEntry).toBeVisible()
+    await summaryEntry.click()
+    await expect(page).toHaveURL(/\/db-migration$/)
+    await expect(page.locator('.migrate-btn')).toBeVisible()
     // 现行 UI：需先勾选「我了解将清空目标库」按钮才可用
     await page.locator('.checkbox-label', { hasText: '我了解将清空目标库' }).click()
     await page.locator('.migrate-btn').click()
