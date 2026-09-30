@@ -92,8 +92,32 @@ function pkg(o: Record<string, unknown> = {}) {
     meta: { created_at: '2026-09-30T07:42:43', app_version: '1.0', git_commit: null },
     source: 'node-a',
     source_renamed: false,
-    locations: null,
+    present_in: null,
     ...o,
+  }
+}
+
+function verifyFixture(name: string) {
+  return {
+    data: {
+      verify_id: 'verify-1',
+      package_name: name,
+      size: 123,
+      meta: {
+        verify_id: 'verify-1',
+        package_name: name,
+        created_at: '2026-09-30T00:00:00',
+        app_version: null,
+        git_commit: null,
+        active_connection_id: null,
+        databases: {},
+        skipped_databases: [],
+        missing_b_segments: [],
+        expires_at: '2026-09-30T01:00:00',
+      },
+      version_note: null,
+      checks: { tar_integrity: 'ok', sha256: 'ok', db_integrity: {}, key_tables: 'ok' },
+    },
   }
 }
 
@@ -171,11 +195,18 @@ describe('DbBackupRestoreWizard 备份来源（多目标）', () => {
     expect(mockList).toHaveBeenCalledWith({ target_id: 2 })
   })
 
-  it('聚合视图：行上标注存在位置，不可达位置降级提示', async () => {
+  it('聚合视图：行上标注存在位置（真实 API 形态 present_in），不可达位置降级提示', async () => {
     mockGetConfig.mockResolvedValue(configWithTargets([makeTarget(), makeTarget({ id: 2, name: '中心机房' })]))
     mockList.mockResolvedValue({
       data: {
-        packages: [pkg({ locations: ['局内DR', '中心机房'] })],
+        packages: [
+          pkg({
+            present_in: [
+              { target_id: 1, target_name: '局内DR' },
+              { target_id: 2, target_name: '中心机房' },
+            ],
+          }),
+        ],
         failed_locations: ['异地容灾'],
       },
     })
@@ -192,6 +223,58 @@ describe('DbBackupRestoreWizard 备份来源（多目标）', () => {
     const locs = wrapper.find('.dbw-pkg-locs')
     expect(locs.exists()).toBe(true)
     expect(locs.text()).toBe('存在位置：局内DR、中心机房')
+  })
+
+  it('全部位置校验：verify 载荷从包的 present_in 解析具体位置 target_id（null 会 422）', async () => {
+    mockGetConfig.mockResolvedValue(configWithTargets([makeTarget(), makeTarget({ id: 2, name: '中心机房' })]))
+    mockList.mockResolvedValue({
+      data: {
+        packages: [
+          pkg({
+            name: 'panshi_backup_mainadmin_20260930_190439.tar.gz',
+            present_in: [
+              { target_id: 2, target_name: '中心机房' },
+              { target_id: 1, target_name: '局内DR' },
+            ],
+          }),
+        ],
+        failed_locations: null,
+      },
+    })
+    const wrapper = mount(DbBackupRestoreWizard, {
+      props: { visible: true },
+      global: { stubs },
+    })
+    await flushPromises()
+    await listButton(wrapper).trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.dbw-pkg')[0].trigger('click')
+    mockVerify.mockResolvedValue(verifyFixture('panshi_backup_mainadmin_20260930_190439.tar.gz'))
+    await wrapper
+      .findAll('button')
+      .filter((b) => b.text() === '校验此包')[0]
+      .trigger('click')
+    await flushPromises()
+    expect(mockVerify).toHaveBeenCalledWith({
+      target: { target_id: 2 },
+      package_name: 'panshi_backup_mainadmin_20260930_190439.tar.gz',
+    })
+  })
+
+  it('指定位置校验：verify 载荷携带所选位置 target_id', async () => {
+    const wrapper = await mountWizard([makeTarget(), makeTarget({ id: 2, name: '中心机房', host: '10.0.0.8' })])
+    const select = wrapper.findAll('.dbw-src-option')[0].find('select.dbw-target-select')
+    await select.setValue('2')
+    await listButton(wrapper).trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.dbw-pkg')[0].trigger('click')
+    mockVerify.mockResolvedValue(verifyFixture(pkg().name))
+    await wrapper
+      .findAll('button')
+      .filter((b) => b.text() === '校验此包')[0]
+      .trigger('click')
+    await flushPromises()
+    expect(mockVerify).toHaveBeenCalledWith({ target: { target_id: 2 }, package_name: pkg().name })
   })
 
   it('手动输入模式沿用原有手输载荷', async () => {

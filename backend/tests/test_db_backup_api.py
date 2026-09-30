@@ -588,3 +588,60 @@ class TestRestoreListApi:
         monkeypatch.setattr(dbc, "load_config", lambda: cfg)
         r = await async_authed_client.post("/api/v1/db-backup/restore/list", json={"target_id": 999})
         assert r.status_code == 404
+
+
+class TestRestoreVerifyTargetId:
+    """向导步骤2 target_id 三形态（对齐 /restore/list）：已配置位置密码只在服务端解密，
+    前端无法回传连接字段（GET /targets 无明文回显），故校验端点必须支持 target_id 解析。"""
+
+    async def test_verify_accepts_target_id(self, async_authed_client, monkeypatch, tmp_path):
+        cfg = _mkcfg(tmp_path)
+        monkeypatch.setattr(dbc, "load_config", lambda: cfg)
+        rt = await async_authed_client.post("/api/v1/db-backup/targets", json={
+            "name": "局内DR", "host": "192.0.2.10", "username": "backup",
+            "password": "s3cret", "remote_dir": "/srv/dr", "retain_count": 7,
+        })
+        assert rt.status_code == 200, rt.text
+        tid = rt.json()["id"]
+        seen = []
+
+        async def fake_verify(target, package_name):
+            seen.append((target, package_name))
+            return {
+                "verify_id": "v-1",
+                "package_name": package_name,
+                "app_version": "1.0.0",
+                "databases": {},
+            }
+
+        from app.services import db_restore_service as rst
+
+        monkeypatch.setattr(rst, "verify_and_stage", fake_verify)
+        r = await async_authed_client.post("/api/v1/db-backup/restore/verify", json={
+            "target": {"target_id": tid},
+            "package_name": "panshi_backup_a_20260930_120000.tar.gz",
+        })
+        assert r.status_code == 200, r.text
+        assert r.json()["verify_id"] == "v-1"
+        assert seen and seen[0][0]["host"] == "192.0.2.10"
+        assert seen[0][0]["password"] == "s3cret"  # 服务端解密注入
+        assert seen[0][1] == "panshi_backup_a_20260930_120000.tar.gz"
+
+    async def test_verify_target_id_not_found_404(self, async_authed_client, monkeypatch, tmp_path):
+        cfg = _mkcfg(tmp_path)
+        monkeypatch.setattr(dbc, "load_config", lambda: cfg)
+        r = await async_authed_client.post("/api/v1/db-backup/restore/verify", json={
+            "target": {"target_id": 999},
+            "package_name": "panshi_backup_a_20260930_120000.tar.gz",
+        })
+        assert r.status_code == 404, r.text
+
+    async def test_verify_without_target_id_or_manual_422(self, async_authed_client, monkeypatch, tmp_path):
+        """target_id 与手输字段组二选一：两者皆无 → 422 明确报缺字段。"""
+        cfg = _mkcfg(tmp_path)
+        monkeypatch.setattr(dbc, "load_config", lambda: cfg)
+        r = await async_authed_client.post("/api/v1/db-backup/restore/verify", json={
+            "target": {},
+            "package_name": "panshi_backup_a_20260930_120000.tar.gz",
+        })
+        assert r.status_code == 422, r.text

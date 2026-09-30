@@ -157,8 +157,8 @@
                             >已改名</a-tag
                           >
                         </span>
-                        <span v-if="pkg.locations && pkg.locations.length" class="dbw-pkg-locs"
-                          >存在位置：{{ pkg.locations.join('、') }}</span
+                        <span v-if="pkg.present_in && pkg.present_in.length" class="dbw-pkg-locs"
+                          >存在位置：{{ pkg.present_in.map((p) => p.target_name).join('、') }}</span
                         >
                         <span v-if="pkgMeta(pkg).created_at">备份于 {{ formatDateTime(pkgMeta(pkg).created_at) }}</span>
                         <span v-if="pkgMeta(pkg).app_version">版本 {{ pkgMeta(pkg).app_version }}</span>
@@ -495,6 +495,16 @@ function listPayload(): RestoreTargetPayload {
   return targetPayload()
 }
 
+/** 校验载荷：必须落到一个具体位置下载。「全部位置」时从选中包的 present_in 取
+ * 第一个列包成功的位置（后端 target_id null 会 422——包行必带 ≥1 个存在位置）。 */
+function verifyTarget(): RestoreTargetPayload {
+  if (sourceMode.value !== 'configured') return targetPayload()
+  if (selectedTargetId.value !== 'all') return { target_id: Number(selectedTargetId.value) }
+  const found = packages.value.find((p) => p.name === selected.value)
+  const tid = found?.present_in?.[0]?.target_id
+  return { target_id: tid != null ? Number(tid) : null }
+}
+
 async function handleList(): Promise<void> {
   if (!targetReady.value) {
     message.error(
@@ -525,7 +535,7 @@ async function handleVerify(): Promise<void> {
   verifying.value = true
   verifyError.value = ''
   try {
-    const res = await verifyRestorePackage({ target: listPayload(), package_name: selected.value })
+    const res = await verifyRestorePackage({ target: verifyTarget(), package_name: selected.value })
     verifyResult.value = res.data
   } catch (err: unknown) {
     verifyResult.value = null

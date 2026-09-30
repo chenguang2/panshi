@@ -554,13 +554,33 @@ async def restore_list_packages(
 @router.post("/restore/verify")
 async def restore_verify_package(
     payload: RestoreVerifyRequest,
+    db: AsyncSession = Depends(get_db),
     _user=Depends(require_db_admin(PERM_DB_BACKUP)),
 ):
-    """向导步骤 2：下载 + 完整校验 + 暂存（verify_id 供执行步骤复用）。"""
+    """向导步骤 2：下载 + 完整校验 + 暂存（verify_id 供执行步骤复用）。
+
+    target 三形态（对齐 /restore/list）：target_id 引用已配置位置（服务端解密凭据，
+    前端无明文可回传）；或手输连接字段组（host/username/remote_dir 必填）。
+    """
     from app.services import db_restore_service as rst
 
+    ref = payload.target
+    if ref.target_id is not None:
+        specs = await rst._configured_target_specs(db=db)
+        target = next((t for tid, _n, t in specs if tid == ref.target_id), None)
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"备份位置不存在：{ref.target_id}")
+    else:
+        missing = [k for k in ("host", "username", "remote_dir") if not getattr(ref, k, None)]
+        if missing:
+            raise HTTPException(
+                status_code=422, detail=f"手输目标缺少字段：{'、'.join(missing)}（或提供 target_id）"
+            )
+        target = _target_dict(ref)
+    # 审计骨架落库并释放写锁（约定 #29/#48）：后续 scp 下载为长外部 IO，不能持锁等待
+    await db.commit()
     try:
-        result = await rst.verify_and_stage(_target_dict(payload.target), payload.package_name)
+        result = await rst.verify_and_stage(target, payload.package_name)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)[:500])
     current = svc._app_version_info().get("app_version")

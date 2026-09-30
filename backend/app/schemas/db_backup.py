@@ -215,8 +215,24 @@ class RestoreListResponse(BaseModel):
     packages: List[RestorePackageItem]
 
 
+class RestoreTargetRef(BaseModel):
+    """恢复向导目标三形态（对齐 /restore/list）：target_id 引用已配置位置
+    （密码只在服务端解密——GET /targets 无明文回显，前端无法回传连接字段），
+    或手输临时目标连接字段组（host/username/remote_dir 必填由端点校验）。
+    字段约束镜像 RestoreTarget（全部放宽为可选，组合校验在端点做）。"""
+
+    target_id: Optional[int] = None
+    host: Optional[str] = Field(None, max_length=255)
+    port: int = Field(22, ge=1, le=65535)
+    username: Optional[str] = Field(None, max_length=128)
+    auth_type: str = Field("password", pattern="^(password|key)$")
+    password: Optional[str] = Field(None, max_length=256)
+    key_path: Optional[str] = Field(None, max_length=512)
+    remote_dir: Optional[str] = Field(None, max_length=512)
+
+
 class RestoreVerifyRequest(BaseModel):
-    target: RestoreTarget
+    target: RestoreTargetRef
     package_name: str = Field(..., max_length=255)
 
 

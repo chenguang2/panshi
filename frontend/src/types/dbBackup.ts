@@ -189,8 +189,8 @@ export interface RestorePackageItem {
   source?: string | null
   /** 包内 meta 与文件名不一致（包被手工改名过） */
   source_renamed?: boolean
-  /** 「全部位置」聚合视图：该包名存在的位置名称列表（按包名去重合并后标注） */
-  locations?: string[] | null
+  /** 「全部位置」聚合视图：该包名存在的位置（列包成功的位置，按包名去重合并后标注） */
+  present_in?: Array<{ target_id: number; target_name: string }> | null
 }
 
 export interface RestoreListResult {

@@ -44,7 +44,7 @@ function pkg(o: Record<string, unknown> = {}) {
     meta: { created_at: '2026-09-30T07:42:43', app_version: '1.0', git_commit: null },
     source: 'node-a',
     source_renamed: false,
-    locations: null,
+    present_in: null,
     ...o,
   }
 }
