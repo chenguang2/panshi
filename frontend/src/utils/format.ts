@@ -13,7 +13,10 @@
  * 无后缀视为 UTC；带 Z / ±hh:mm 后缀的原样解析。
  */
 export function parseBackendDate(s: string): Date {
-  return /[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? new Date(s) : new Date(s + 'Z')
+  // 剥掉尾部人类可读括号注记（备份包 meta 历史格式 " (Asia/Shanghai)"——非合法
+  // ISO，存量包已固化该格式），再做时区后缀判定
+  const cleaned = s.replace(/\s*\([^()]*\)\s*$/, '')
+  return /[Zz]|[+-]\d{2}:?\d{2}$/.test(cleaned) ? new Date(cleaned) : new Date(cleaned + 'Z')
 }
 
 /** dash 格式 `YYYY-MM-DD HH:mm`（分钟精度，Asia/Shanghai 时区）。历史 useClusterUtils.formatDate 同语义。 */

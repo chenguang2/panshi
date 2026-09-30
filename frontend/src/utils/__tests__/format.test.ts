@@ -31,6 +31,11 @@ describe('utils/format', () => {
     it('带 Z 后缀的 UTC 串按 UTC 解析转东 8 区', () => {
       expect(formatDateTime('2026-08-02T02:00:00Z')).toBe('2026/08/02 10:00:00')
     })
+    it('尾部括号注记（备份包 meta 的 "(Asia/Shanghai)"）被剥掉后正常解析', () => {
+      // 备份包 meta.json 的 created_local 历史格式带 " (Asia/Shanghai)" 后缀，非法 ISO；
+      // 存量包已固化该格式，前端必须兼容（否则列表/校验详情显示 Invalid Date）
+      expect(formatDateTime('2026-08-30T20:02:38.123456+08:00 (Asia/Shanghai)')).toBe('2026/08/30 20:02:38')
+    })
     it('空值返回 -，非法值输出 Invalid Date（与历史行为一致）', () => {
       expect(formatDateTime(null)).toBe('-')
       expect(formatDateTime('not-a-date')).toBe('Invalid Date')

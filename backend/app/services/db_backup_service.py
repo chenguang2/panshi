@@ -262,7 +262,7 @@ def build_package(
         # 来源标识进 meta（设计 D5）：恢复侧展示/核对用；随 format_version 机制向后兼容
         meta["source"] = source
     meta["created_utc"] = _utcnow().isoformat()
-    meta["created_local"] = f"{now_shanghai.isoformat()} (Asia/Shanghai)"
+    meta["created_local"] = now_shanghai.isoformat()  # 裸 ISO8601（勿加括号注记——前端按 ISO 解析）
     meta["includes"] = {
         "static": bool(includes.get("static")),
         "task_scripts": bool(includes.get("task_scripts")),

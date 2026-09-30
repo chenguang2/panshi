@@ -170,8 +170,26 @@ class TestPackage:
         assert meta["source"] == "srv-a"
         with tarfile.open(_pkg) as tf:
             m = json.loads(tf.extractfile("meta.json").read().decode())
-        assert m["source"] == "srv-a"
+        assert m == meta
         assert m["format_version"] == 1
+
+    def test_meta_created_local_is_bare_iso(self, tmp_path):
+        """created_local 必须是裸 ISO8601（可含 +08:00 offset）——历史值带
+        " (Asia/Shanghai)" 注记后缀，非合法 ISO，前端 new Date 直接 Invalid Date。"""
+        w, db1 = self._workdir(tmp_path)
+        snapshots = [{"conn_id": "main", "source": str(db1), "snapshot": str(db1)}]
+        _pkg, meta = svc.build_package(
+            workdir=str(w),
+            snapshots=snapshots,
+            skipped=[],
+            includes={},
+            version_info={"app_version": "1.0.0", "git_commit": None},
+            meta={"active_connection_id": "main", "databases": {}},
+        )
+        from datetime import datetime
+
+        assert "(" not in meta["created_local"]
+        assert isinstance(datetime.fromisoformat(meta["created_local"]), datetime)
 
     def test_package_name_matches_whitelist_for_various_sources(self):
         for source in ("192.168.0.5", "edge-01.aoh.local", "20260101", "host_20260101_123456", "a"):
