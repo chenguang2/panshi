@@ -14,7 +14,7 @@ class DbBackupConfigUpdate(BaseModel):
     """
 
     enabled: bool = False
-    interval_minutes: int = Field(5, ge=1, le=60 * 24 * 7)
+    interval_minutes: int = Field(60, ge=1, le=60 * 24 * 7)
     include_static: bool = False
     include_task_scripts: bool = False
     include_task_logs: bool = False

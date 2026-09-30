@@ -45,7 +45,7 @@ class DbBackupConfig(Base):
     # 来源标识（设计 db-backup-source-tag D1）：共享远端目录时区分备份归属；
     # NULL = 未解析（配置保存载荷空 / 存量升级遗留），由 resolve_source_name 解析回写
     source_name = Column(String(64), nullable=True)
-    interval_minutes = Column(Integer, nullable=False, default=5)
+    interval_minutes = Column(Integer, nullable=False, default=60)
     retain_count = Column(Integer, nullable=False, default=7)
     # B 类数据段开关（默认 false，包不含对应目录）
     include_static = Column(Boolean, nullable=False, default=False)

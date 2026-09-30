@@ -30,23 +30,42 @@ class FakeRemote:
 
     async def __call__(self, argv, env=None, timeout=None):
         cmd = " ".join(argv)
-        if "ls -1" in cmd:
-            names = sorted(p.name for p in self.root.glob("panshi_backup_*"))
-            names += sorted(p.name for p in self.root.glob("garbage_*"))
-            return 0, "\n".join(names) + ("\n" if names else ""), ""
-        if "stat -c" in cmd:
-            tail = cmd.split("stat -c %s ")[-1].strip()
-            sizes = []
-            for name in tail.split():
-                sizes.append(str(self._resolve(name.strip().strip("'")).stat().st_size))
-            return 0, "\n".join(sizes), ""
-        if "tar -xzOf" in cmd:
-            name = cmd.split("tar -xzOf ")[1].split(" meta.json")[0].strip().strip("'")
-            try:
-                with tarfile.open(self._resolve(name)) as tf:
-                    return 0, tf.extractfile("meta.json").read().decode(), ""
-            except Exception as exc:
-                return 1, "", str(exc)
+        if "<<<PANSHI_SECT_STAT>>>" in cmd:
+            # 合成列包命令（单次往返）：ls 全量名单 + 「size name」段 + 批量 meta 段（shell 原始形态）
+            import tarfile as _tf
+
+            pkgs = sorted(self.root.glob("panshi_backup_*"))
+            lines = [p.name for p in pkgs]
+            lines += [p.name for p in sorted(self.root.glob("garbage_*"))]
+            lines.append("<<<PANSHI_SECT_STAT>>>")
+            lines += [f"{p.stat().st_size} {p.name}" for p in pkgs]
+            lines.append("<<<PANSHI_SECT_META>>>")
+            body = []
+            for p in pkgs:
+                body.append(f"<<<PANSHI_META{p.name}\n")
+                try:
+                    with _tf.open(p) as tf:
+                        body.append(tf.extractfile("meta.json").read().decode())
+                except Exception:
+                    pass
+                body.append("\n>>>PANSHI_META\n")
+            return 0, "\n".join(lines) + "\n" + "".join(body), ""
+        if "<<<PANSHI_META" in cmd:
+            # 独立批量 meta 形态（保留兼容）：for n in 'a' 'b'; do echo ...; tar ...; echo; echo ...; done
+            # 真实 shell 语义：tar 输出无末尾换行，紧接的 echo 直接粘在内容后（故 end 前须有 echo 空行）
+            import shlex as _shlex
+
+            name_list = _shlex.split(cmd.split("for n in ", 1)[1].split("; do", 1)[0])
+            out = []
+            for pkg in name_list:
+                out.append(f"<<<PANSHI_META{pkg}\n")
+                try:
+                    with tarfile.open(self._resolve(pkg)) as tf:
+                        out.append(tf.extractfile("meta.json").read().decode())
+                except Exception:
+                    pass
+                out.append("\n>>>PANSHI_META\n")
+            return 0, "".join(out), ""
         if "test -f" in cmd:
             name = cmd.split("test -f ")[1].split(" &&")[0].strip().strip("'")
             return (0 if self._resolve(name).exists() else 1, "", "")
@@ -60,6 +79,18 @@ class FakeRemote:
             shutil.copyfile(self._resolve(name), local_part)
             return 0, "", ""
         return 1, "", f"unmatched: {cmd}"
+
+
+class CountingFakeRemote(FakeRemote):
+    """统计远端命令条数（单次列包应只发 1 条合成命令：ls+stat+meta 一次往返）。"""
+
+    def __init__(self, root: Path):
+        super().__init__(root)
+        self.calls = 0
+
+    async def __call__(self, argv, env=None, timeout=None):
+        self.calls += 1
+        return await super().__call__(argv, env, timeout)
 
 
 async def _mk_package(remote_dir: Path, tmp: Path, backup_source_name: str = None) -> dict:
@@ -146,17 +177,37 @@ def _target(remote_dir: Path) -> dict:
 
 
 def _mk_pkg_file(remote_dir: Path, name: str, meta: dict) -> str:
-    """按受控文件名直接落一个最小包（tar.gz 内仅 meta.json），供排序/解析用例。"""
+    """按受控文件名直接落一个最小包（tar.gz 内仅 meta.json），供排序/解析用例。
+
+    meta 写入与 build_package 一致用 indent=2（多行 JSON——批量 meta 流解析的拟真关键）。
+    """
     remote_dir.mkdir(parents=True, exist_ok=True)
     path = remote_dir / name
     import io
 
-    buf = json.dumps(meta, ensure_ascii=False).encode()
+    buf = json.dumps(meta, ensure_ascii=False, indent=2).encode()
     with tarfile.open(path, "w:gz") as tf:
         ti = tarfile.TarInfo("meta.json")
         ti.size = len(buf)
         tf.addfile(ti, io.BytesIO(buf))
     return name
+
+
+class TestParseMetaStream:
+    """批量 meta 流解析（_parse_meta_stream）单元用例——重点钉住真实 shell 的粘连形态。"""
+
+    def test_parses_multiline_meta(self):
+        out = '<<<PANSHI_METAa.tar.gz\n{\n  "app_version": "1.0"\n}\n>>>PANSHI_META\n'
+        assert rst._parse_meta_stream(out, ["a.tar.gz"]) == {"a.tar.gz": {"app_version": "1.0"}}
+
+    def test_handles_glued_end_delimiter(self):
+        """tar 输出无末尾换行时 `}` 与 `>>>PANSHI_META` 粘在一行——必须剥掉结束符再解析。"""
+        out = '<<<PANSHI_METAa.tar.gz\n{\n  "app_version": "1.0"\n}>>>PANSHI_META\n'
+        assert rst._parse_meta_stream(out, ["a.tar.gz"]) == {"a.tar.gz": {"app_version": "1.0"}}
+
+    def test_missing_package_falls_back_to_error(self):
+        out = "<<<PANSHI_METAa.tar.gz\n\n>>>PANSHI_META\n"
+        assert rst._parse_meta_stream(out, ["a.tar.gz", "b.tar.gz"])["b.tar.gz"]["_error"]
 
 
 class TestListRemotePackages:
@@ -197,6 +248,22 @@ class TestListRemotePackages:
         assert by_name["panshi_backup_20260930_160000.tar.gz"]["source"] is None
         assert by_name["panshi_backup_192.168.0.5_20260930_153000.tar.gz"]["source_renamed"] is False
         assert by_name["panshi_backup_20260930_160000.tar.gz"]["source_renamed"] is False
+
+    async def test_list_batches_meta_into_single_remote_command(self, tmp_path, monkeypatch):
+        """列包一次远端往返：ls + stat + 批量 meta 合成单条命令（每条 SSH 握手 ~3s，
+        逐条发曾使聚合列包 18s+；6 条 → 2 条且可并行）。"""
+        remote_dir = tmp_path / "remote"
+        _mk_pkg_file(remote_dir, "panshi_backup_node-a_20260930_120001.tar.gz", {"app_version": "1.0.0"})
+        _mk_pkg_file(remote_dir, "panshi_backup_node-b_20260930_120002.tar.gz", {"app_version": "1.0.0"})
+        _mk_pkg_file(remote_dir, "panshi_backup_20260930_120003.tar.gz", {"app_version": "1.0.0"})
+        remote = CountingFakeRemote(remote_dir)
+        monkeypatch.setattr(rst, "_run", remote)
+        items = await rst.list_remote_packages(_target(remote_dir))
+        assert len(items) == 3
+        assert all(i["app_version"] == "1.0.0" for i in items)
+        assert all(i["file_size"] and i["file_size"] > 0 for i in items)
+        assert all(i["meta_error"] is None for i in items)
+        assert remote.calls == 1
 
     async def test_list_sorts_by_parsed_ts_not_lexicographic(self, tmp_path, monkeypatch):
         """混合来源按文件名时间戳倒序：构造字典序与时间序不一致的用例防回退（D4）。"""

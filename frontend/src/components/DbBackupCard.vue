@@ -80,7 +80,7 @@
               type="number"
               class="form-input dbb-interval-input"
               min="1"
-              placeholder="5"
+              placeholder="60"
             />
           </div>
         </div>
@@ -240,7 +240,7 @@
                         >
                       </td>
                       <td>
-                        <span class="dbb-pkgname" :title="item.package_name || ''">{{ item.package_name || '-' }}</span>
+                        <span class="dbb-pkgname">{{ item.package_name || '-' }}</span>
                       </td>
                       <td class="num mono t-muted">
                         {{ item.file_size != null ? formatFileSize(item.file_size) : '-' }}
@@ -492,7 +492,7 @@ const wizardOpen = ref(false)
 /** 全局表单（目标连接字段已迁移至位置表，此处仅全局策略） */
 const form = reactive({
   enabled: false,
-  interval_minutes: 5 as number | '',
+  interval_minutes: 60 as number | '',
   source_name: '',
   include_static: false,
   include_task_scripts: false,
@@ -663,7 +663,7 @@ async function loadConfig(): Promise<void> {
 
 function applyConfigToForm(cfg: DbBackupConfig): void {
   form.enabled = !!cfg.enabled
-  form.interval_minutes = cfg.interval_minutes ?? 5
+  form.interval_minutes = cfg.interval_minutes ?? 60
   form.source_name = cfg.source_name || ''
   form.include_static = !!cfg.include_static
   form.include_task_scripts = !!cfg.include_task_scripts
@@ -1359,12 +1359,7 @@ tr.row-disabled td {
 .dbb-pkgname {
   font-family: var(--font-mono);
   font-size: 12px;
-  max-width: 250px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-  vertical-align: middle;
+  word-break: break-all;
 }
 .dbb-hist-status {
   white-space: nowrap;

@@ -113,33 +113,55 @@ def drop_staged(verify_id: str) -> None:
         _rmtree(entry.get("dir"))
 
 
+_SECT_STAT = "<<<PANSHI_SECT_STAT>>>"
+_SECT_META = "<<<PANSHI_SECT_META>>>"
+
+
+def _list_cmd(remote_dir: str) -> str:
+    """列包合成命令：ls + 批量 stat + 批量 meta 一次远端往返（每条 SSH 握手 ~3s，逐条发曾致 18s+）。"""
+    q = shlex.quote(remote_dir)
+    return (
+        f"cd {q} && ls -1 && echo '{_SECT_STAT}' && "
+        f"for n in ./panshi_backup_*; do [ -e \"$n\" ] || continue; "
+        f"echo \"$(stat -c %s \"$n\" 2>/dev/null) ${{n##*/}}\"; done && "
+        f"echo '{_SECT_META}' && "
+        f"for n in ./panshi_backup_*; do [ -e \"$n\" ] || continue; "
+        f"echo '{_META_START}'\"${{n##*/}}\"; tar -xzOf \"$n\" meta.json 2>/dev/null; "
+        f"echo; echo '{_META_END}'; done"
+    )
+
+
+def _parse_list_sections(out: str) -> tuple[list, dict, str]:
+    """按段切分合成命令输出 → (ls 全量名单, {包名: size}, meta 流)。"""
+    parts = out.split(_SECT_STAT)
+    ls_part = parts[0]
+    rest = parts[1].split(_SECT_META) if len(parts) > 1 else ("", "")
+    stat_part, meta_part = rest[0], rest[1] if len(rest) > 1 else ""
+    names = [n.strip() for n in ls_part.splitlines() if n.strip()]
+    sizes: dict = {}
+    for line in stat_part.splitlines():
+        bits = line.strip().split(" ", 1)
+        if len(bits) == 2 and bits[0].isdigit():
+            sizes[bits[1]] = int(bits[0])
+    return names, sizes, meta_part
+
+
 async def list_remote_packages(target: dict) -> list:
-    """列出远端目录中的备份包（白名单过滤 + meta 摘要远程读取）。"""
-    remote_dir = target["remote_dir"]
-    rc, out, err = await _ssh_run(target, f"ls -1 {shlex.quote(remote_dir)} 2>/dev/null || true")
+    """列出远端目录中的备份包（白名单过滤 + meta 摘要远程读取）。
+
+    ls + stat + meta 合成**单条**远端命令（一次 SSH 往返）；目录为空返回 []。
+    """
+    rc, out, err = await _ssh_run(target, _list_cmd(target["remote_dir"]), timeout=120)
     if rc != 0:
         raise RuntimeError(f"读取远端目录失败：{err or out}")
-    names = [n.strip() for n in out.splitlines() if n.strip()]
-    names = [n for n in names if PACKAGE_NAME_RE.match(n)]
+    all_names, sizes, meta_part = _parse_list_sections(out)
+    names = [n for n in all_names if PACKAGE_NAME_RE.match(n)]
     if not names:
         return []
-
-    # 批量取大小（一条 stat）
-    stat_cmd = f"cd {shlex.quote(remote_dir)} && stat -c %s " + " ".join(
-        shlex.quote(n) for n in names
-    )
-    rc, out, err = await _ssh_run(target, stat_cmd)
-    sizes = {}
-    if rc == 0:
-        for name, line in zip(names, out.splitlines()):
-            try:
-                sizes[name] = int(line.strip())
-            except ValueError:
-                pass
-
+    summaries = _parse_meta_stream(meta_part, names)
     items = []
     for name in names:
-        summary = await _remote_meta_summary(target, remote_dir, name)
+        summary = summaries.get(name, {"_error": "meta.json 读取失败（远端需支持 tar）"})
         # 文件名解析是来源标识的唯一事实来源（设计 D5）：旧格式 → None
         pkg_source, _ts = parse_package_name(name)
         meta_source = summary.get("source")
@@ -231,20 +253,27 @@ async def list_aggregated(db=None) -> dict:
     specs = await _configured_target_specs(db=db)
     if not specs:
         return {"packages": [], "targets_status": [], "hint": "未配置任何备份位置，请先在备份管理中添加位置，或在下方手输临时目标"}
+
+    async def _one(tid: int, name: str, target: dict):
+        try:
+            return tid, name, await list_remote_packages(target), None
+        except Exception as exc:  # noqa: BLE001 - 单位置不可达不阻断聚合
+            return tid, name, None, str(exc)[:300]
+
+    # 各位置并行列包（每位置一次 SSH 往返，握手 ~3s 串行会翻倍）；gather 保序 → targets_status 仍按 id 序
+    results = await asyncio.gather(*[_one(tid, name, target) for tid, name, target in specs])
     merged: dict = {}
     targets_status: list = []
-    for tid, name, target in specs:
-        try:
-            items = await list_remote_packages(target)
-        except Exception as exc:  # noqa: BLE001 - 单位置不可达不阻断聚合
+    for tid, name, items, exc in results:
+        if exc is not None:
             targets_status.append(
-                {"target_id": tid, "target_name": name, "status": "failed", "error": str(exc)[:300]}
+                {"target_id": tid, "target_name": name, "status": "failed", "error": exc}
             )
             continue
         targets_status.append(
             {"target_id": tid, "target_name": name, "status": "ok", "error": None}
         )
-        for it in items:
+        for it in items or []:
             entry = merged.setdefault(it["package_name"], {**it, "_present": []})
             entry["_present"].append({"target_id": tid, "target_name": name})
     packages = sorted(
@@ -255,15 +284,47 @@ async def list_aggregated(db=None) -> dict:
     return {"packages": packages, "targets_status": targets_status, "hint": None}
 
 
-async def _remote_meta_summary(target: dict, remote_dir: str, name: str) -> dict:
-    cmd = f"cd {shlex.quote(remote_dir)} && tar -xzOf {shlex.quote(name)} meta.json 2>/dev/null"
-    rc, out, err = await _ssh_run(target, cmd, timeout=30)
-    if rc != 0 or not out.strip():
-        return {"_error": f"meta.json 读取失败（远端需支持 tar）"}
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError:
-        return {"_error": "meta.json 解析失败"}
+_META_START, _META_END = "<<<PANSHI_META", ">>>PANSHI_META"
+
+
+def _parse_meta_stream(out: str, names: list) -> dict:
+    """解析批量 meta 流（`<<<PANSHI_META<名>` 起始、`>>>PANSHI_META` 结束）→ {包名: meta}。
+
+    单包内容为空 → 读取失败；非合法 JSON → 解析失败；两者都落 `_error`（与旧逐包版语义一致）。
+    """
+    summaries: dict = {}
+
+    def _flush(cur: str, buf: list) -> None:
+        text = "\n".join(buf).strip()
+        if not text:
+            summaries[cur] = {"_error": "meta.json 读取失败（远端需支持 tar）"}
+            return
+        try:
+            summaries[cur] = json.loads(text)
+        except json.JSONDecodeError:
+            summaries[cur] = {"_error": "meta.json 解析失败"}
+
+    cur, buf = None, []
+    for line in out.splitlines():
+        if line == _META_END or (
+            cur is not None and line.endswith(_META_END) and not line.startswith(_META_START)
+        ):
+            # 容忍粘连：tar 输出无末尾换行时 `}` 与结束符粘在一行（剥掉结束符再收尾）
+            if cur is not None:
+                buf.append(line[: -len(_META_END)] if line != _META_END else "")
+                _flush(cur, buf)
+            cur, buf = None, []
+        elif line.startswith(_META_START):
+            if cur is not None:
+                _flush(cur, buf)
+            cur, buf = line[len(_META_START):], []
+        elif cur is not None:
+            buf.append(line)
+    if cur is not None:
+        _flush(cur, buf)
+    for n in names:  # 远端缺包/循环未覆盖 → 与读取失败同语义
+        summaries.setdefault(n, {"_error": "meta.json 读取失败（远端需支持 tar）"})
+    return summaries
 
 
 async def verify_and_stage(target: dict, package_name: str) -> dict:

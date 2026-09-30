@@ -22,6 +22,9 @@ const BACKUP_RUN_TIMEOUT = 120_000
 /** 校验需先下载完整备份包再算 SHA256 / integrity，覆盖全局 30s 超时 */
 const RESTORE_VERIFY_TIMEOUT = 300_000
 
+/** 列包耗时随 位置数 × 包数 增长（逐包 SSH 取 meta 摘要），聚合模式实测可达 1 分钟+，须覆盖全局 30s（约定 #29） */
+const RESTORE_LIST_TIMEOUT = 180_000
+
 /** 读取备份配置（全局字段 + 位置列表）与派生状态（适用性 / 下次预计 / 进行中标记） */
 export function getDbBackupConfig() {
   return api.get<DbBackupConfigResponse>('/db-backup/config')
@@ -71,7 +74,9 @@ export function getDbBackupHistory(page: number, pageSize: number) {
  * - 手输参数组 = 临时远端目标（换机场景）
  */
 export function listRestorePackages(data: RestoreTargetPayload) {
-  return api.post<RestoreListResult>('/db-backup/restore/list', data)
+  return api.post<RestoreListResult>('/db-backup/restore/list', data, {
+    timeout: RESTORE_LIST_TIMEOUT,
+  })
 }
 
 /** 恢复向导步骤 2：下载 + SHA256 + 完整性校验并暂存（verify_id 供执行复用） */

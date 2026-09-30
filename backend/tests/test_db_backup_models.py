@@ -1,7 +1,7 @@
 """SQLite 异地备份：模型与 schema 契约测试（tasks 1.1/1.3）。
 
 设计依据 openspec/changes/sqlite-backup-dr + docs/design/sqlite-backup-dr.md：
-- ps_db_backup_config 单行配置表（enabled 默认 False、interval 默认 5、retain 默认 7、
+- ps_db_backup_config 单行配置表（enabled 默认 False、interval 默认 60、retain 默认 7、
   三开关默认 False、密码 Fernet 加密存 password_encrypted）
 - ps_db_backup_history（status running|success|failed、trigger scheduled|manual）
 - 时间列一律 naive UTC（约定 #26）
@@ -24,7 +24,7 @@ class TestDbBackupConfigModel:
             await s.commit()
             await s.refresh(row)
             assert row.enabled is False
-            assert row.interval_minutes == 5
+            assert row.interval_minutes == 60
             assert row.retain_count == 7
             assert row.include_static is False
             assert row.include_task_scripts is False
