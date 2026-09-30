@@ -15,7 +15,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import shlex
 import sqlite3
 import tarfile
@@ -27,12 +26,13 @@ from pathlib import Path
 from typing import Optional
 
 from app.services import db_backup_service as bsvc
-from app.services.db_backup_service import _run, _ssh_argv
+from app.services.db_backup_service import _run, _ssh_argv, parse_package_name
 
 logger = logging.getLogger(__name__)
 
 SCP_DOWNLOAD_TIMEOUT_SECONDS = 300
-PACKAGE_NAME_RE = re.compile(r"^panshi_backup_\d{8}_\d{6}\.tar\.gz$")
+# 组合白名单正则单点定义于备份服务（设计 D2：禁止两处硬编码各自演化）
+PACKAGE_NAME_RE = bsvc.PACKAGE_NAME_RE
 STAGE_TTL_SECONDS = 600  # 暂存 10 分钟
 
 # 暂存表：verify_id → {dir, meta, package_name, target, expires}
@@ -140,6 +140,9 @@ async def list_remote_packages(target: dict) -> list:
     items = []
     for name in names:
         summary = await _remote_meta_summary(target, remote_dir, name)
+        # 文件名解析是来源标识的唯一事实来源（设计 D5）：旧格式 → None
+        pkg_source, _ts = parse_package_name(name)
+        meta_source = summary.get("source")
         items.append(
             {
                 "package_name": name,
@@ -152,15 +155,104 @@ async def list_remote_packages(target: dict) -> list:
                 "skipped_databases": summary.get("skipped_databases") or [],
                 "missing_b_segments": _missing_b_segments(summary.get("includes") or {}),
                 "meta_error": summary.get("_error"),
+                "source": pkg_source,
+                # meta.source 仅作核对：存在且 ≠ 文件名解析值 → 包被改名过
+                "source_renamed": meta_source is not None and meta_source != pkg_source,
             }
         )
-    items.sort(key=lambda x: x["package_name"], reverse=True)
+    # 按包名中的时间戳倒序（混合来源下文件名字典序不再等价时间序，设计 D4）；
+    # 白名单保证可解析，ts 兜底空串仅作安全网（排序放末尾）
+    items.sort(key=lambda x: parse_package_name(x["package_name"])[1] or "", reverse=True)
     return items
 
 
 def _missing_b_segments(includes: dict) -> list:
     """包未包含的 B 类数据段（静态资源/任务脚本/任务日志）。"""
     return [k for k in ("static", "task_scripts", "task_logs") if not includes.get(k)]
+
+
+async def _configured_target_specs(db=None) -> list:
+    """全部已配置位置（含停用）→ [(id, name, restore_target_dict)]。
+
+    会话内完成行读取与凭据解密后立即返回（不持事务跨外部 IO，约定 #29）。
+    """
+    from sqlalchemy import select
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.db_backup import DbBackupTarget
+
+    async def _collect(s) -> list:
+        rows = (
+            await s.execute(select(DbBackupTarget).order_by(DbBackupTarget.id.asc()))
+        ).scalars().all()
+        return [(t.id, t.name, _row_to_restore_target(t)) for t in rows]
+
+    if db is not None:
+        return await _collect(db)
+    async with AsyncSessionLocal() as s:
+        return await _collect(s)
+
+
+def _row_to_restore_target(t) -> dict:
+    """位置行 → 恢复侧 target dict（凭据解密，密码只进内存）。"""
+    password = None
+    if t.auth_type == "password" and t.password_encrypted:
+        try:
+            password = bsvc.db_config.decrypt_password(t.password_encrypted)
+        except Exception:
+            password = None
+    return {
+        "host": t.host,
+        "port": t.port or 22,
+        "username": t.username,
+        "auth_type": t.auth_type,
+        "password": password,
+        "private_key_path": t.key_path if t.auth_type == "key" else None,
+        "remote_dir": t.remote_dir,
+    }
+
+
+async def list_by_target_id(target_id: int, db=None) -> list:
+    """按位置 ID 列包（恢复向导下拉选择已配置位置）。"""
+    specs = await _configured_target_specs(db=db)
+    for tid, _name, target in specs:
+        if tid == target_id:
+            return await list_remote_packages(target)
+    raise RuntimeError(f"备份位置不存在：{target_id}")
+
+
+async def list_aggregated(db=None) -> dict:
+    """聚合全部已配置位置（**含停用**）列包（设计 D5/D6 恢复向导聚合视图）。
+
+    - 逐位置列包 → 按包名去重合并（行标注存在位置 `_present`）
+    - 某位置不可达 → targets_status 标注 failed，不阻断其余位置
+    - 无已配置位置 → 空列表 + 提示走手输目标
+    """
+    specs = await _configured_target_specs(db=db)
+    if not specs:
+        return {"packages": [], "targets_status": [], "hint": "未配置任何备份位置，请先在备份管理中添加位置，或在下方手输临时目标"}
+    merged: dict = {}
+    targets_status: list = []
+    for tid, name, target in specs:
+        try:
+            items = await list_remote_packages(target)
+        except Exception as exc:  # noqa: BLE001 - 单位置不可达不阻断聚合
+            targets_status.append(
+                {"target_id": tid, "target_name": name, "status": "failed", "error": str(exc)[:300]}
+            )
+            continue
+        targets_status.append(
+            {"target_id": tid, "target_name": name, "status": "ok", "error": None}
+        )
+        for it in items:
+            entry = merged.setdefault(it["package_name"], {**it, "_present": []})
+            entry["_present"].append({"target_id": tid, "target_name": name})
+    packages = sorted(
+        merged.values(),
+        key=lambda x: parse_package_name(x["package_name"])[1] or "",
+        reverse=True,
+    )
+    return {"packages": packages, "targets_status": targets_status, "hint": None}
 
 
 async def _remote_meta_summary(target: dict, remote_dir: str, name: str) -> dict:

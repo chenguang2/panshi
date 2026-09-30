@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import shlex
+import socket
 import sqlite3
 import subprocess
 import tarfile
@@ -31,6 +32,7 @@ from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core import db_config
 from app.services.ansible_service import _sshpass_available
@@ -40,9 +42,25 @@ if TYPE_CHECKING:  # pragma: no cover
 
 # ── 常量 ────────────────────────────────────────────────────────────────────
 
-PACKAGE_RE = re.compile(r"^panshi_backup_\d{8}_\d{6}\.tar\.gz$")
+# 组合白名单正则（设计 D2，单点定义，恢复侧 db_restore_service 复用）：
+# 新格式 panshi_backup_{source}_{时间戳}.tar.gz ∪ 旧格式 panshi_backup_{时间戳}.tar.gz。
+# 解析用字符类 [A-Za-z0-9._-]+ 有意保持宽容超集——生成侧已被 SOURCE_NAME_RE 收紧。
+PACKAGE_NAME_RE = re.compile(
+    r"^(?:panshi_backup_[A-Za-z0-9._-]+_\d{8}_\d{6}|panshi_backup_\d{8}_\d{6})\.tar\.gz$"
+)
+# 拆分解析（两分支不相交、拆分唯一）：时间戳后缀恰占尾部 15 字符（$ 锚定），
+# source 随之唯一确定——source 含内嵌 `_数字_数字` 或纯数字也不产生歧义。
+_PACKAGE_PARSE_RE = re.compile(
+    r"^panshi_backup_(?:(?P<source>[A-Za-z0-9._-]+)_)?(?P<ts>\d{8}_\d{6})\.tar\.gz$"
+)
 META_FORMAT_VERSION = 1
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+# 来源标识（设计 db-backup-source-tag D1/D2）——校验正则：首字符字母/数字、
+# 字符白名单含点（容纳 hostname）、总长 ≤64；空串/None 视为「未填 → 自动解析」
+SOURCE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+# 自动解析全链路失败时的兜底常量
+FALLBACK_SOURCE_NAME = "panshi"
 
 # 备份/恢复互斥（同一时刻只允许一个备份或恢复在跑）
 _INFLIGHT_LOCK = threading.Lock()
@@ -170,8 +188,22 @@ def _app_version_info() -> dict:
 # ── 打包 ────────────────────────────────────────────────────────────────────
 
 
-def _package_name(now_shanghai: datetime) -> str:
-    return f"panshi_backup_{now_shanghai:%Y%m%d_%H%M%S}.tar.gz"
+def _package_name(source: str, now_shanghai: datetime) -> str:
+    """`panshi_backup_{source}_{YYYYMMDD_HHMMSS}.tar.gz`（source 由调用方保证已清洗）。"""
+    return f"panshi_backup_{source}_{now_shanghai:%Y%m%d_%H%M%S}.tar.gz"
+
+
+def parse_package_name(name: str) -> tuple[Optional[str], Optional[str]]:
+    """解析包名 → (source | None, "YYYYMMDD_HHMMSS")。
+
+    - 新格式 → (source, ts)；旧格式（升级前，无 source）→ (None, ts)
+    - 非白名单名 → (None, None)
+    - 文件名解析是来源标识的唯一事实来源（设计 D5）：排序 / 保留清理 / 列表展示同源
+    """
+    m = _PACKAGE_PARSE_RE.match(name or "")
+    if not m:
+        return None, None
+    return m.group("source"), m.group("ts")
 
 
 def _sha256(path: Path) -> str:
@@ -208,19 +240,27 @@ def build_package(
     includes: dict,
     version_info: dict,
     meta: dict,
+    source: Optional[str] = None,
 ) -> tuple[str, dict]:
     """把快照 + 配置/密钥/清单/数据段打成 tar.gz。
 
     返回 (包绝对路径, 最终 meta dict)。meta['files'] 在此填充完整清单。
+    source：来源标识，进包名（新格式）；None 时退回旧格式命名（兼容直调场景）。
     """
     root = _backend_root()
     now_shanghai = datetime.now(SHANGHAI)
-    name = _package_name(now_shanghai)
+    if source:
+        name = _package_name(source, now_shanghai)
+    else:
+        name = f"panshi_backup_{now_shanghai:%Y%m%d_%H%M%S}.tar.gz"
     pkg_path = str(Path(workdir) / name)
 
     meta.setdefault("format_version", META_FORMAT_VERSION)
     meta["app_version"] = version_info.get("app_version")
     meta["git_commit"] = version_info.get("git_commit")
+    if source:
+        # 来源标识进 meta（设计 D5）：恢复侧展示/核对用；随 format_version 机制向后兼容
+        meta["source"] = source
     meta["created_utc"] = _utcnow().isoformat()
     meta["created_local"] = f"{now_shanghai.isoformat()} (Asia/Shanghai)"
     meta["includes"] = {
@@ -385,22 +425,34 @@ async def list_remote_packages(target: dict, remote_dir: str,
         if len(parts) != 2:
             continue
         ts, name = parts
-        if not PACKAGE_RE.match(name):
+        if not PACKAGE_NAME_RE.match(name):
             continue
         packages.append({"name": name, "mtime_epoch": int(ts)})
-    packages.sort(key=lambda p: p["name"], reverse=True)
+    # 按包名中的时间戳倒序（混合来源下文件名字典序不再等价时间序，设计 D4）；
+    # 解析失败（理论不可达：白名单保证可解析）兜底 mtime 放末尾
+    packages.sort(
+        key=lambda p: (parse_package_name(p["name"])[1] or "", p["mtime_epoch"]),
+        reverse=True,
+    )
     return packages
 
 
-async def cleanup_retention(target: dict, remote_dir: str, retain_count: int,
+async def cleanup_retention(target: dict, remote_dir: str, retain_count: int, source: str,
                             password: Optional[str] = None, key_path: Optional[str] = None) -> list[str]:
-    """保留最近 retain_count 份，删更旧的。只动白名单内的包名。"""
+    """保留最近 retain_count 份，删更旧的（设计 D3：候选集按源过滤）。
+
+    - 候选集 = {新格式且 source == 本机} ∪ {旧格式包}——旧格式必须能自然老化，
+      否则升级前本机产物永久堆积；共享目录多实例可竞争删 legacy（有界过渡态）
+    - **绝不删除其他 source 的新格式包**（可能是别机命脉），也不计入保留份数
+    - own source 经 re.escape 参与匹配（防正则注入放大匹配面）
+    """
     out = await _remote_exec(target, f"ls -1 {shlex.quote(remote_dir)} 2>/dev/null || true", password, key_path)
-    names = sorted(
-        (n for n in out.splitlines() if PACKAGE_RE.match(n.strip())),
-        reverse=True,
-    )
-    to_remove = names[retain_count:]
+    own_re = re.compile(rf"^panshi_backup_{re.escape(source)}_\d{{8}}_\d{{6}}\.tar\.gz$")
+    legacy_re = re.compile(r"^panshi_backup_\d{8}_\d{6}\.tar\.gz$")
+    candidates = [n.strip() for n in out.splitlines() if own_re.match(n.strip()) or legacy_re.match(n.strip())]
+    # 候选集内按包名时间戳倒序（与格式无关，新旧混排）
+    candidates.sort(key=lambda n: (parse_package_name(n)[1] or "", n), reverse=True)
+    to_remove = candidates[retain_count:]
     if to_remove:
         quoted = " ".join(shlex.quote(n) for n in to_remove)
         await _remote_exec(
@@ -427,27 +479,69 @@ async def get_config_row(db) -> "DbBackupConfig":
     return row
 
 
-def config_target(row) -> tuple[dict, Optional[str], Optional[str]]:
-    """从配置行提取 (target dict, password, key_path)。"""
-    password = None
-    if row.auth_type == "password" and row.password_encrypted:
+async def ensure_targets_migrated(db=None) -> bool:
+    """存量单行配置一次性迁移为「默认位置」（设计 D7，幂等）。
+
+    - 触发：全局行 targets_migrated 为假 **且** 旧目标字段（host）非空
+    - 动作：复制全部旧目标字段建 name='default' 的位置（enabled=True）并置位标志；
+      旧列不回写不清空（回滚到旧版代码仍可按单目标跑）
+    - 标志置位后不再触发（防「删光位置后重启 → 默认位置复活」）
+    - 并发幂等靠 name 唯一约束：插入冲突回滚后重查认领（不重复建）
+    - 挂载点：lifespan 启动 + GET /config 首读兜底（双保险）
+    """
+    from app.core.database import AsyncSessionLocal
+    from app.models.db_backup import DbBackupConfig, DbBackupTarget
+
+    @contextlib.asynccontextmanager
+    async def _session():
+        if db is not None:
+            yield db
+        else:
+            async with AsyncSessionLocal() as s:
+                yield s
+
+    async with _session() as session:
+        row = await session.get(DbBackupConfig, 1)
+        if row is None or row.targets_migrated:
+            return False
+        if not row.host:
+            return False
+        existing = (
+            await session.execute(select(DbBackupTarget).where(DbBackupTarget.name == "default"))
+        ).scalars().first()
+        row.targets_migrated = True
+        if existing is None:
+            session.add(
+                DbBackupTarget(
+                    name="default",
+                    host=row.host,
+                    port=row.port or 22,
+                    username=row.username,
+                    auth_type=row.auth_type or "password",
+                    password_encrypted=row.password_encrypted,
+                    key_path=row.key_path,
+                    remote_dir=row.remote_dir,
+                    retain_count=row.retain_count or 7,
+                    enabled=True,
+                )
+            )
         try:
-            password = db_config.decrypt_password(row.password_encrypted)
-        except Exception:
-            password = None
-    return (
-        {
-            "host": row.host,
-            "port": row.port,
-            "username": row.username,
-            "auth_type": row.auth_type,
-        },
-        password,
-        row.key_path if row.auth_type == "key" else None,
-    )
+            await session.commit()
+        except IntegrityError:
+            # 并发对手方已建 default（name 唯一约束兜底）：回滚后仅认领标志
+            await session.rollback()
+            row2 = await session.get(DbBackupConfig, 1)
+            if row2 is not None and not row2.targets_migrated:
+                row2.targets_migrated = True
+                await session.commit()
+        return True
 
 
 def config_complete(row) -> tuple[bool, Optional[str]]:
+    """多目标化后仅用于兼容判断：全局行不再承载目标连接字段。
+
+    新语义见 get_enabled_targets（无启用位置 = 不完整）。
+    """
     if not row.host or not row.username or not row.remote_dir:
         return False, "主机 / 用户名 / 远端目录未配置完整"
     if row.auth_type == "password" and not row.password_encrypted:
@@ -455,6 +549,110 @@ def config_complete(row) -> tuple[bool, Optional[str]]:
     if row.auth_type == "key" and not row.key_path:
         return False, "密钥认证未设置私钥路径"
     return True, None
+
+
+async def get_enabled_targets(db) -> list:
+    """启用位置（按 id 升序 = 「第一个启用位置」的扇出/探测方向，D3/D8）。"""
+    from app.models.db_backup import DbBackupTarget
+
+    rows = (
+        await db.execute(
+            select(DbBackupTarget)
+            .where(DbBackupTarget.enabled.is_(True))
+            .order_by(DbBackupTarget.id.asc())
+        )
+    ).scalars().all()
+    return list(rows)
+
+
+def backup_target_to_service(t) -> tuple[dict, Optional[str], Optional[str]]:
+    """位置行 → (target dict, password, key_path)（凭据解密，密码只进内存）。"""
+    password = None
+    if t.auth_type == "password" and t.password_encrypted:
+        try:
+            password = db_config.decrypt_password(t.password_encrypted)
+        except Exception:
+            password = None
+    return (
+        {
+            "host": t.host,
+            "port": t.port,
+            "username": t.username,
+            "auth_type": t.auth_type,
+        },
+        password,
+        t.key_path if t.auth_type == "key" else None,
+    )
+
+
+# ── 来源标识解析（设计 D1：出口 IP → hostname → 兜底常量，一次性解析持久化）──
+
+
+def _clean_source_name(raw: Optional[str]) -> str:
+    """把探测到的原始标识清洗为满足校验正则的 source 名。
+
+    - 非法字符逐个替换为 '-'（IPv6 冒号 → 如 ``fe80::1`` → ``fe80--1``，确定性变形）
+    - 超长截断到 64 字符
+    - 前导非字母数字字符去除（首字符必须字母/数字）；清洗后为空回退兜底常量
+    """
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "-", (raw or "").strip())
+    cleaned = cleaned[:64]
+    cleaned = re.sub(r"^[^A-Za-z0-9]+", "", cleaned)
+    if not SOURCE_NAME_RE.match(cleaned):
+        return FALLBACK_SOURCE_NAME
+    return cleaned
+
+
+def _detect_source_raw(host: Optional[str], port: Optional[int]) -> str:
+    """探测原始标识（逐级回退）：出口 IP → 主机名 → 兜底常量。
+
+    出口 IP 经 UDP ``connect`` 到备份目标 host:port——不发真实流量，只做本地
+    路由选择，得到「目标侧看到的本机 IP」。目标未配置（半配置）时跳过直接
+    落 hostname（粘滞，补救路径 = 清空字段重存即重解析）。
+    """
+    if host:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.settimeout(2)
+                s.connect((host, int(port or 22)))
+                ip = s.getsockname()[0]
+                if ip:
+                    return ip
+            finally:
+                s.close()
+        except Exception:
+            pass
+    try:
+        return socket.gethostname()
+    except Exception:  # pragma: no cover - 极端环境
+        return FALLBACK_SOURCE_NAME
+
+
+async def resolve_source_name(
+    row: "DbBackupConfig",
+    force: bool = False,
+    probe_host: Optional[str] = None,
+    probe_port: Optional[int] = None,
+) -> str:
+    """解析来源标识并回写配置行（触发点收敛于此）。
+
+    - 存储值非空且未强制 → 直接返回（**备份执行只读存储值，绝不动态探测**）
+    - 否则探测 → 清洗 → 赋值 ``row.source_name``（回写仅挂在 ORM 对象上，
+      由调用方事务提交持久化：配置保存在端点 commit 前、run_backup 在第一段
+      commit 前——避免提前 commit 破坏审计同事务合并，约定 #37/#29）
+
+    force=True 供配置保存「载荷空 → 重新解析」使用（清空字段重存即重解析）。
+    探测方向（D8）：出口 IP 取 probe_host:probe_port（多目标下 = 第一个启用
+    位置；未提供时跳过目标方向，直接 hostname → 兜底）。
+    """
+    stored = (row.source_name or "").strip()
+    if stored and not force:
+        return stored
+    raw = await asyncio.to_thread(_detect_source_raw, probe_host, probe_port)
+    source = _clean_source_name(raw)
+    row.source_name = source
+    return source
 
 
 def sqlite_applicable() -> bool:
@@ -482,8 +680,16 @@ async def perform_backup(trigger: str, db=None) -> dict:
 
 
 async def _perform_backup_locked(trigger: str, db=None) -> dict:
+    """扇出执行（设计 D3/D4）：解析来源 → 构建一次 → 逐启用位置推送与保留清理。
+
+    - 三态：全部启用位置成功 = success；部分 = partial；全败/构建失败 = failed
+    - 构建阶段失败或无启用位置 → 整体 failed 且无子结果行
+    - 单位置失败记录子结果后继续下一位置（不中断）
+    - last_success_at 仅全绿更新；调度节奏仍按 last_run_at（成败均计）
+    - 约定 #29：外部 IO 期间不持有数据库事务——三段式短会话
+    """
     from app.core.database import AsyncSessionLocal
-    from app.models.db_backup import DbBackupConfig, DbBackupHistory
+    from app.models.db_backup import DbBackupConfig, DbBackupHistory, DbBackupHistoryTarget
 
     started = _utcnow()
     history_id: Optional[int] = None
@@ -496,20 +702,21 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
             async with AsyncSessionLocal() as s:
                 yield s
 
-    # ── 第一段：读配置 + 落历史骨架（commit 后不再持有事务）──
+    # ── 第一段：读配置与位置 + 落历史骨架（commit 后不再持有事务）──
     async with _session_or(db) as session:
         row = await get_config_row(session)
-        complete, reason = config_complete(row)
-        if not complete:
-            raise RuntimeError(f"备份配置不完整：{reason}")
-        target, password, key_path = config_target(row)
+        enabled_targets = await get_enabled_targets(session)
+        if not enabled_targets:
+            raise RuntimeError("无启用的备份位置：请先在备份管理中配置并启用位置")
         includes = {
             "static": bool(row.include_static),
             "task_scripts": bool(row.include_task_scripts),
             "task_logs": bool(row.include_task_logs),
         }
-        retain_count = row.retain_count
-        remote_dir = row.remote_dir
+        # 来源标识解析（一次性持久化语义不变，D8）：探测方向 = 第一个启用位置；
+        # 存量 NULL 首次备份在此回写（随本段 commit 持久化，此后只读存储值）
+        first = enabled_targets[0]
+        source_name = await resolve_source_name(row, probe_host=first.host, probe_port=first.port)
         history = DbBackupHistory(started_at=started, status="running", trigger=trigger)
         session.add(history)
         row.last_run_at = started
@@ -519,11 +726,12 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
         await session.commit()
 
     workdir = tempfile.mkdtemp(prefix="panshi_backup_")
-    error_msg: Optional[str] = None
+    build_error: Optional[str] = None
     package_name: Optional[str] = None
     file_size: Optional[int] = None
+    target_results: list[dict] = []
     try:
-        # ── 外部 IO 段：快照 + 打包 + 推送（无事务）──
+        # ── 外部 IO 段 1：快照 + 打包（一次，与位置数无关，D2）──
         cfg = db_config.load_config()
         conns, type_skipped = collect_sqlite_connections(cfg)
         if not conns:
@@ -547,19 +755,54 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
             includes=includes,
             version_info=_app_version_info(),
             meta=meta,
+            source=source_name,
         )
         package_name = Path(pkg_path).name
         file_size = Path(pkg_path).stat().st_size
 
-        await ensure_remote_dir(target, remote_dir, password, key_path)
-        await push_package(target, pkg_path, remote_dir, package_name, password, key_path)
-        await cleanup_retention(target, remote_dir, retain_count, password, key_path)
-    except Exception as exc:
-        error_msg = str(exc)[:2000]
+        # ── 外部 IO 段 2：扇出推送（逐启用位置串行；失败记录子结果后继续）──
+        for t in enabled_targets:
+            t_target, t_password, t_key = backup_target_to_service(t)
+            t_started = _utcnow()
+            try:
+                await ensure_remote_dir(t_target, t.remote_dir, t_password, t_key)
+                await push_package(t_target, pkg_path, t.remote_dir, package_name, t_password, t_key)
+                await cleanup_retention(
+                    t_target, t.remote_dir, t.retain_count, source_name, t_password, t_key
+                )
+                t_status, t_error = "success", None
+            except Exception as exc:  # noqa: BLE001 - 单位置失败不中断整体（D3）
+                t_status, t_error = "failed", str(exc)[:1000]
+            target_results.append(
+                {
+                    "target_id": t.id,
+                    "target_name": t.name,
+                    "status": t_status,
+                    "error": t_error,
+                    "duration_ms": int((_utcnow() - t_started).total_seconds() * 1000),
+                }
+            )
+    except Exception as exc:  # noqa: BLE001 - 构建阶段失败：无子结果行
+        build_error = str(exc)[:2000]
     finally:
         import shutil as _shutil
 
         _shutil.rmtree(workdir, ignore_errors=True)
+
+    # ── 三态汇总（D4）──
+    failed_results = [r for r in target_results if r["status"] == "failed"]
+    if build_error:
+        status = "failed"
+        summary_error = build_error
+    elif not failed_results:
+        status = "success"
+        summary_error = None
+    elif len(failed_results) == len(target_results):
+        status = "failed"
+        summary_error = "; ".join(f"{r['target_name']}: {r['error']}" for r in failed_results)
+    else:
+        status = "partial"
+        summary_error = "; ".join(f"{r['target_name']}: {r['error']}" for r in failed_results)
 
     # ── 第二段：回写历史与状态 ──
     finished = _utcnow()
@@ -569,33 +812,46 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
         history = await session.get(DbBackupHistory, history_id)
         if history is not None:
             history.finished_at = finished
-            history.status = "failed" if error_msg else "success"
+            history.status = status
             history.package_name = package_name
             history.file_size = file_size
             history.duration_ms = duration_ms
-            history.error = error_msg
+            history.error = summary_error
+        # 子结果行仅推送阶段产生（构建失败无子结果，D4）
+        if not build_error:
+            for r in target_results:
+                session.add(
+                    DbBackupHistoryTarget(
+                        history_id=history_id,
+                        target_id=r["target_id"],
+                        target_name=r["target_name"],
+                        status=r["status"],
+                        error=r["error"],
+                        duration_ms=r["duration_ms"],
+                    )
+                )
         cfg_row = await session.get(DbBackupConfig, 1)
         if cfg_row is not None:
-            cfg_row.last_status = "failed" if error_msg else "success"
-            if error_msg:
-                cfg_row.last_error = error_msg
-            else:
-                cfg_row.last_error = None
+            cfg_row.last_status = status
+            cfg_row.last_error = summary_error
+            if status == "success":
+                # last_success_at 仅全绿更新（「距上次完整成功」展示指标）
                 cfg_row.last_success_at = finished
         await session.commit()
 
-    if error_msg:
-        raise RuntimeError(error_msg)
+    if status == "failed":
+        raise RuntimeError(summary_error or "备份失败")
     return {
         "id": history_id,
-        "status": "success",
+        "status": status,
         "trigger": trigger,
         "started_at": started.isoformat() if started else None,
         "finished_at": finished.isoformat() if finished else None,
         "package_name": package_name,
         "file_size": file_size,
         "duration_ms": duration_ms,
-        "error": None,
+        "error": summary_error,
+        "targets": target_results,
     }
 
 
@@ -628,8 +884,8 @@ async def scheduler_tick() -> bool:
         row = await db.get(DbBackupConfig, 1)
         if row is None or not row.enabled:
             return False
-        complete, _reason = config_complete(row)
-        if not complete:
+        # 无启用位置 → 跳过（显示不适用，spec：无启用备份位置跳过）
+        if not await get_enabled_targets(db):
             return False
         anchor = row.last_run_at or row.last_success_at
         interval_minutes = row.interval_minutes or 5

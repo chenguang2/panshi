@@ -35,8 +35,11 @@ class FakeRemote:
             names += sorted(p.name for p in self.root.glob("garbage_*"))
             return 0, "\n".join(names) + ("\n" if names else ""), ""
         if "stat -c" in cmd:
-            name = cmd.split("stat -c %s ")[-1].strip().strip("'")
-            return 0, str(self._resolve(name).stat().st_size), ""
+            tail = cmd.split("stat -c %s ")[-1].strip()
+            sizes = []
+            for name in tail.split():
+                sizes.append(str(self._resolve(name.strip().strip("'")).stat().st_size))
+            return 0, "\n".join(sizes), ""
         if "tar -xzOf" in cmd:
             name = cmd.split("tar -xzOf ")[1].split(" meta.json")[0].strip().strip("'")
             try:
@@ -59,8 +62,12 @@ class FakeRemote:
         return 1, "", f"unmatched: {cmd}"
 
 
-async def _mk_package(remote_dir: Path, tmp: Path) -> dict:
-    """构造一个真实小包并放进「远端」。"""
+async def _mk_package(remote_dir: Path, tmp: Path, backup_source_name: str = None) -> dict:
+    """构造一个真实小包并放进「远端」。
+
+    backup_source_name：包内站点库 ps_db_backup_config 行携带的来源标识
+    （模拟旧机备份配置，验证恢复继承语义）。
+    """
     db_path = tmp / "panshi.db"
     import sqlite3
 
@@ -69,6 +76,9 @@ async def _mk_package(remote_dir: Path, tmp: Path) -> dict:
     con.execute("INSERT INTO sys_user VALUES (1, 'restored-admin')")
     con.execute("CREATE TABLE ps_cluster (id INTEGER PRIMARY KEY, name TEXT)")
     con.execute("INSERT INTO ps_cluster VALUES (1, 'restored-cluster')")
+    if backup_source_name is not None:
+        con.execute("CREATE TABLE ps_db_backup_config (id INTEGER PRIMARY KEY, source_name TEXT)")
+        con.execute("INSERT INTO ps_db_backup_config VALUES (1, ?)", (backup_source_name,))
     con.commit()
     con.close()
     workdir = tmp / "wd"
@@ -135,6 +145,20 @@ def _target(remote_dir: Path) -> dict:
     }
 
 
+def _mk_pkg_file(remote_dir: Path, name: str, meta: dict) -> str:
+    """按受控文件名直接落一个最小包（tar.gz 内仅 meta.json），供排序/解析用例。"""
+    remote_dir.mkdir(parents=True, exist_ok=True)
+    path = remote_dir / name
+    import io
+
+    buf = json.dumps(meta, ensure_ascii=False).encode()
+    with tarfile.open(path, "w:gz") as tf:
+        ti = tarfile.TarInfo("meta.json")
+        ti.size = len(buf)
+        tf.addfile(ti, io.BytesIO(buf))
+    return name
+
+
 class TestListRemotePackages:
     async def test_list_filters_and_reads_meta(self, tmp_path, monkeypatch):
         remote = FakeRemote(tmp_path / "remote")
@@ -150,6 +174,61 @@ class TestListRemotePackages:
         assert item["app_version"] == "1.0.0"
         assert item["file_size"] > 0
         assert item["skipped_databases"] == ["pg"]
+
+    async def test_list_accepts_new_format_and_parses_source(self, tmp_path, monkeypatch):
+        """新旧格式并存可见：新格式解析出 source，旧格式 source 为 None（spec D5）。"""
+        remote = FakeRemote(tmp_path / "remote")
+        _mk_pkg_file(
+            tmp_path / "remote", "panshi_backup_192.168.0.5_20260930_153000.tar.gz",
+            {"source": "192.168.0.5", "app_version": "1.0.0"},
+        )
+        _mk_pkg_file(
+            tmp_path / "remote", "panshi_backup_20260930_160000.tar.gz",
+            {"app_version": "0.9.0"},  # 旧包 meta 无 source 键
+        )
+        monkeypatch.setattr(rst, "_run", remote)
+        items = await rst.list_remote_packages(_target(tmp_path / "remote"))
+        by_name = {i["package_name"]: i for i in items}
+        assert set(by_name) == {
+            "panshi_backup_192.168.0.5_20260930_153000.tar.gz",
+            "panshi_backup_20260930_160000.tar.gz",
+        }
+        assert by_name["panshi_backup_192.168.0.5_20260930_153000.tar.gz"]["source"] == "192.168.0.5"
+        assert by_name["panshi_backup_20260930_160000.tar.gz"]["source"] is None
+        assert by_name["panshi_backup_192.168.0.5_20260930_153000.tar.gz"]["source_renamed"] is False
+        assert by_name["panshi_backup_20260930_160000.tar.gz"]["source_renamed"] is False
+
+    async def test_list_sorts_by_parsed_ts_not_lexicographic(self, tmp_path, monkeypatch):
+        """混合来源按文件名时间戳倒序：构造字典序与时间序不一致的用例防回退（D4）。"""
+        remote = FakeRemote(tmp_path / "remote")
+        # 字典序倒序 = zzz, legacy, aaa；时间序倒序 = legacy(13:00) > aaa(12:00) > zzz(09-29)
+        _mk_pkg_file(tmp_path / "remote", "panshi_backup_zzz_20260929_120000.tar.gz", {"source": "zzz"})
+        _mk_pkg_file(tmp_path / "remote", "panshi_backup_aaa_20260930_120000.tar.gz", {"source": "aaa"})
+        _mk_pkg_file(tmp_path / "remote", "panshi_backup_20260930_130000.tar.gz", {})
+        monkeypatch.setattr(rst, "_run", remote)
+        items = await rst.list_remote_packages(_target(tmp_path / "remote"))
+        assert [i["package_name"] for i in items] == [
+            "panshi_backup_20260930_130000.tar.gz",
+            "panshi_backup_aaa_20260930_120000.tar.gz",
+            "panshi_backup_zzz_20260929_120000.tar.gz",
+        ]
+
+    async def test_list_flags_renamed_package(self, tmp_path, monkeypatch):
+        """meta.source 与文件名解析不一致 → source_renamed=True（包被改名过，D5）。"""
+        remote = FakeRemote(tmp_path / "remote")
+        _mk_pkg_file(
+            tmp_path / "remote", "panshi_backup_bbb_20260930_100000.tar.gz",
+            {"source": "ccc"},  # 与文件名 bbb 不一致
+        )
+        _mk_pkg_file(
+            tmp_path / "remote", "panshi_backup_ddd_20260930_110000.tar.gz",
+            {"source": "ddd"},  # 一致
+        )
+        monkeypatch.setattr(rst, "_run", remote)
+        items = await rst.list_remote_packages(_target(tmp_path / "remote"))
+        by_name = {i["package_name"]: i for i in items}
+        assert by_name["panshi_backup_bbb_20260930_100000.tar.gz"]["source_renamed"] is True
+        assert by_name["panshi_backup_ddd_20260930_110000.tar.gz"]["source_renamed"] is False
 
 
 class TestVerifyAndStage:
@@ -235,6 +314,35 @@ class TestExecuteRestore:
             con.close()
             assert rows == [("restored-admin",)]
 
+    async def test_restore_preserves_source_name(self, tmp_path, monkeypatch):
+        """恢复继承回归（设计 D7）：落位后包内 source_name 原样保留，不做清除/改写。"""
+        remote = FakeRemote(tmp_path / "remote")
+        pkg_info = await _mk_package(tmp_path / "remote", tmp_path, backup_source_name="old-host-01")
+        monkeypatch.setattr(rst, "_run", remote)
+        fake_root = pkg_info["fake_root"]
+        monkeypatch.setattr(rst, "_engine_reload", lambda: None)
+
+        with isolated_app_lifespan():
+            result = await rst.verify_and_stage(_target(tmp_path / "remote"), pkg_info["name"])
+            from app.core.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as db:
+                out = await rst.execute_restore(result["verify_id"], confirmed=True, db=db)
+            assert out["activated"] is True
+
+            restored = sorted((fake_root / "data").glob("panshi.db.restored-*"))
+            assert restored
+            import sqlite3
+
+            con = sqlite3.connect(restored[0])
+            try:
+                rows = con.execute(
+                    "SELECT source_name FROM ps_db_backup_config WHERE id = 1"
+                ).fetchall()
+            finally:
+                con.close()
+            assert rows == [("old-host-01",)]
+
     async def test_restore_requires_confirm(self, tmp_path, monkeypatch):
         remote = FakeRemote(tmp_path / "remote")
         pkg_info = await _mk_package(tmp_path / "remote", tmp_path)
@@ -264,3 +372,130 @@ class TestExecuteRestore:
         }
         assert rst.get_staged("expired-one") is None
         assert "expired-one" not in rst._STAGED
+
+
+class MultiHostFakeRemote:
+    """按 host 路由到不同 FakeRemote 实例；未注册 host = 不可达。"""
+
+    def __init__(self):
+        self.hosts: dict = {}  # host → FakeRemote
+
+    async def __call__(self, argv, env=None, timeout=None):
+        host = "?"
+        for tok in argv:
+            if "@" in tok and not tok.startswith("-"):
+                uh = tok.split(":")[0]
+                if "@" in uh:
+                    host = uh.split("@", 1)[1]
+        fake = self.hosts.get(host)
+        if fake is None:
+            return 1, "", f"ssh: connect to host {host}: Connection refused"
+        return await fake(argv, env=env, timeout=timeout)
+
+
+async def _seed_restore_targets(specs):
+    """位置行种子（AsyncSessionLocal 世界；跨用例清理后重建）。"""
+    from sqlalchemy import select
+
+    from app.core.database import AsyncSessionLocal
+    from app.core.db_config import encrypt_password
+    from app.models.db_backup import DbBackupTarget
+
+    async with AsyncSessionLocal() as s:
+        for t in (await s.execute(select(DbBackupTarget))).scalars().all():
+            await s.delete(t)
+        await s.flush()
+        for spec in specs:
+            s.add(DbBackupTarget(
+                name=spec["name"], host=spec["host"], port=spec.get("port", 22),
+                username=spec.get("username", "backup"), auth_type="password",
+                password_encrypted=encrypt_password("pw"),
+                remote_dir=spec.get("remote_dir", "/srv/dr"),
+                retain_count=7, enabled=spec.get("enabled", True),
+            ))
+        await s.commit()
+
+
+class TestAggregatedListing:
+    """聚合列包（设计 D5/D6）：含停用位置、去重合并、存在位置标注、不可达不阻断。"""
+
+    async def test_aggregate_merges_by_name_and_annotates(self, tmp_path, monkeypatch):
+        dir1 = tmp_path / "dr1"
+        dir2 = tmp_path / "dr2"
+        dir1.mkdir(); dir2.mkdir()
+        _mk_pkg_file(dir1, "panshi_backup_src-a_20260930_120000.tar.gz", {})
+        _mk_pkg_file(dir1, "panshi_backup_src-a_20260929_120000.tar.gz", {})
+        _mk_pkg_file(dir2, "panshi_backup_src-a_20260930_120000.tar.gz", {})  # 同名包两位置都有
+        _mk_pkg_file(dir2, "panshi_backup_src-a_20260928_120000.tar.gz", {})
+        multi = MultiHostFakeRemote()
+        multi.hosts = {"192.0.2.10": FakeRemote(dir1), "10.8.0.2": FakeRemote(dir2)}
+        monkeypatch.setattr(rst, "_run", multi)
+        await _seed_restore_targets([
+            {"name": "局内DR", "host": "192.0.2.10"},
+            {"name": "中心机房", "host": "10.8.0.2"},
+        ])
+        result = await rst.list_aggregated()
+        names = [p["package_name"] for p in result["packages"]]
+        assert names == [
+            "panshi_backup_src-a_20260930_120000.tar.gz",
+            "panshi_backup_src-a_20260929_120000.tar.gz",
+            "panshi_backup_src-a_20260928_120000.tar.gz",
+        ]  # 去重合并 + 时间倒序
+        present = {p["package_name"]: [t["target_name"] for t in p["_present"]] for p in result["packages"]}
+        assert present["panshi_backup_src-a_20260930_120000.tar.gz"] == ["局内DR", "中心机房"]
+        assert present["panshi_backup_src-a_20260929_120000.tar.gz"] == ["局内DR"]
+        assert all(s["status"] == "ok" for s in result["targets_status"])
+
+    async def test_unreachable_target_marked_not_blocking(self, tmp_path, monkeypatch):
+        dir1 = tmp_path / "dr1"
+        dir1.mkdir()
+        _mk_pkg_file(dir1, "panshi_backup_src-a_20260930_120000.tar.gz", {})
+        multi = MultiHostFakeRemote()
+        multi.hosts = {"192.0.2.10": FakeRemote(dir1)}  # 10.8.0.2 不可达
+        monkeypatch.setattr(rst, "_run", multi)
+        await _seed_restore_targets([
+            {"name": "局内DR", "host": "192.0.2.10"},
+            {"name": "中心机房", "host": "10.8.0.2"},
+        ])
+        result = await rst.list_aggregated()
+        by_name = {s["target_name"]: s for s in result["targets_status"]}
+        assert by_name["中心机房"]["status"] == "failed"
+        assert "Connection refused" in (by_name["中心机房"]["error"] or "")
+        assert by_name["局内DR"]["status"] == "ok"
+        # 健康位置的包照常返回（不阻断）
+        assert [p["package_name"] for p in result["packages"]] == ["panshi_backup_src-a_20260930_120000.tar.gz"]
+
+    async def test_no_targets_empty_with_hint(self, tmp_path, monkeypatch):
+        await _seed_restore_targets([])
+        result = await rst.list_aggregated()
+        assert result["packages"] == []
+        assert result["targets_status"] == []
+        assert result["hint"] and "手输" in result["hint"]
+
+    async def test_disabled_targets_included_in_aggregation(self, tmp_path, monkeypatch):
+        """聚合含停用位置（spec：恢复可从已停位置取包）。"""
+        dir1 = tmp_path / "dr1"
+        dir1.mkdir()
+        _mk_pkg_file(dir1, "panshi_backup_src-a_20260930_120000.tar.gz", {})
+        multi = MultiHostFakeRemote()
+        multi.hosts = {"192.0.2.10": FakeRemote(dir1)}
+        monkeypatch.setattr(rst, "_run", multi)
+        await _seed_restore_targets([
+            {"name": "停用DR", "host": "192.0.2.10", "enabled": False},
+        ])
+        result = await rst.list_aggregated()
+        assert result["targets_status"][0]["target_name"] == "停用DR"
+        assert len(result["packages"]) == 1
+
+    async def test_list_by_target_id(self, tmp_path, monkeypatch):
+        dir1 = tmp_path / "dr1"
+        dir1.mkdir()
+        _mk_pkg_file(dir1, "panshi_backup_src-a_20260930_120000.tar.gz", {})
+        multi = MultiHostFakeRemote()
+        multi.hosts = {"192.0.2.10": FakeRemote(dir1)}
+        monkeypatch.setattr(rst, "_run", multi)
+        await _seed_restore_targets([{"name": "局内DR", "host": "192.0.2.10"}])
+        items = await rst.list_by_target_id(1)
+        assert [i["package_name"] for i in items] == ["panshi_backup_src-a_20260930_120000.tar.gz"]
+        with pytest.raises(RuntimeError, match="不存在"):
+            await rst.list_by_target_id(999)

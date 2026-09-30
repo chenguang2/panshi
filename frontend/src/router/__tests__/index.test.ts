@@ -22,4 +22,12 @@ describe('Router', () => {
       .some((r: unknown) => (r as { name?: string }).name === 'DnsQueryList')
     expect(found).toBe(true)
   })
+
+  it('has /backup-management route with db_backup permission meta (static registration)', async () => {
+    const routes = (await import('../index')).default.getRoutes()
+    const route = routes.find((r: any) => r.path === '/backup-management')
+    expect(route).toBeDefined()
+    expect(route?.name).toBe('BackupManagement')
+    expect(route?.meta?.permission).toBe('db_backup')
+  })
 })

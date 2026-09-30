@@ -80,8 +80,8 @@
       </div>
     </div>
 
-    <!-- SQLite 备份与容灾（卡片自带数据加载） -->
-    <DbBackupCard />
+    <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页；无 db_backup 权限整卡不渲染，避免 403） -->
+    <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup')" />
 
     <!-- 数据迁移 -->
     <div class="card">
@@ -586,7 +586,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
-import DbBackupCard from '@/components/DbBackupCard.vue'
+import DbBackupSummaryCard from '@/components/DbBackupSummaryCard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { formatDateTime, parseBackendDate } from '@/utils/format'
 import {
@@ -603,6 +603,7 @@ import {
   getMigrationHistoryCleanupPreview,
   getRunningTasks,
 } from '@/api/database'
+import { useAuthStore } from '@/stores/auth'
 import type {
   DbConnection,
   DbStatus,
@@ -615,6 +616,9 @@ import type {
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
+
+// 摘要卡权限门控：无 db_backup 权限时整卡不渲染（避免无权限请求 403）
+const authStore = useAuthStore()
 const migrating = ref(false)
 const migrateResult = ref<MigrateResult | null>(null)
 /** 迁移详情抽屉开关（完成后默认收起，避免页面被明细撑长） */

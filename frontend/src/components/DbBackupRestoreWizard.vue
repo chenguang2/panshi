@@ -28,53 +28,94 @@
         </div>
 
         <div class="modal-body">
-          <!-- ═══ 步骤 1：临时远端目标 ═══ -->
+          <!-- ═══ 步骤 1：备份来源（已配置位置 / 手动输入） ═══ -->
           <div v-show="step === 1">
             <div class="form-hint dbw-target-hint">
-              恢复使用独立的临时远端目标（与备份配置无关）——新机场景下备份配置表是空的，直接在这里填写备份机连接信息。
+              选择备份包的来源：优先从已配置的备份位置浏览（不修改现有配置）；换机等临时场景可手动输入任意主机与目录。
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">主机 <span class="required">*</span></label>
-                <input v-model="target.host" type="text" class="form-input" placeholder="备份机地址" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">端口</label>
-                <input
-                  v-model.number="target.port"
-                  type="number"
-                  class="form-input"
-                  min="1"
-                  max="65535"
-                  placeholder="22"
-                />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">用户名 <span class="required">*</span></label>
-                <input v-model="target.username" type="text" class="form-input" placeholder="root" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">认证方式</label>
-                <select v-model="target.auth_type" class="form-input">
-                  <option value="password">密码认证</option>
-                  <option value="key">密钥认证</option>
-                </select>
-              </div>
-            </div>
-            <div v-if="target.auth_type === 'password'" class="form-group">
-              <label class="form-label">密码</label>
-              <a-input-password v-model:value="target.password" placeholder="SSH 密码" autocomplete="new-password" />
-            </div>
-            <div v-else class="form-group">
-              <label class="form-label">私钥路径</label>
-              <input v-model="target.key_path" type="text" class="form-input" placeholder="/root/.ssh/id_ed25519" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">远端目录 <span class="required">*</span></label>
-              <input v-model="target.remote_dir" type="text" class="form-input" placeholder="/srv/panshi-dr" />
-              <div class="form-hint">备份包所在目录（备份配置中的 remote_dir）</div>
+            <div class="dbw-src-options">
+              <label class="dbw-src-option" :class="{ selected: sourceMode === 'configured' }">
+                <input v-model="sourceMode" type="radio" value="configured" class="dbw-src-radio" />
+                <div class="dbw-src-body">
+                  <div class="dbw-src-head">
+                    <span class="dbw-src-name">从已配置位置选择</span>
+                    <span class="dbw-src-desc">浏览已配置备份位置的远端备份包</span>
+                  </div>
+                  <div class="dbw-src-fields">
+                    <select v-model="selectedTargetId" class="form-input dbw-target-select" :disabled="targetsLoading">
+                      <option value="all">全部位置</option>
+                      <option v-for="t in targets" :key="t.id" :value="String(t.id)">
+                        {{ targetOptionLabel(t) }}
+                      </option>
+                    </select>
+                    <span v-if="targetsLoading" class="dbw-src-hint">位置加载中…</span>
+                    <span v-else-if="targets.length === 0" class="dbw-src-hint">尚未配置备份位置</span>
+                  </div>
+                </div>
+              </label>
+              <label class="dbw-src-option" :class="{ selected: sourceMode === 'manual' }">
+                <input v-model="sourceMode" type="radio" value="manual" class="dbw-src-radio" />
+                <div class="dbw-src-body">
+                  <div class="dbw-src-head">
+                    <span class="dbw-src-name">手动输入</span>
+                    <span class="dbw-src-desc">临时从任意主机 / 目录拉取备份包，不保存为配置（换机场景）</span>
+                  </div>
+                  <div class="dbw-src-fields dbw-src-manual">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">主机 <span class="required">*</span></label>
+                        <input v-model="target.host" type="text" class="form-input" placeholder="备份机地址" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">端口</label>
+                        <input
+                          v-model.number="target.port"
+                          type="number"
+                          class="form-input"
+                          min="1"
+                          max="65535"
+                          placeholder="22"
+                        />
+                      </div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">用户名 <span class="required">*</span></label>
+                        <input v-model="target.username" type="text" class="form-input" placeholder="root" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">认证方式</label>
+                        <select v-model="target.auth_type" class="form-input">
+                          <option value="password">密码认证</option>
+                          <option value="key">密钥认证</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div v-if="target.auth_type === 'password'" class="form-group">
+                      <label class="form-label">密码</label>
+                      <a-input-password
+                        v-model:value="target.password"
+                        placeholder="SSH 密码"
+                        autocomplete="new-password"
+                      />
+                    </div>
+                    <div v-else class="form-group">
+                      <label class="form-label">私钥路径</label>
+                      <input
+                        v-model="target.key_path"
+                        type="text"
+                        class="form-input"
+                        placeholder="/root/.ssh/id_ed25519"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">远端目录 <span class="required">*</span></label>
+                      <input v-model="target.remote_dir" type="text" class="form-input" placeholder="/srv/panshi-dr" />
+                      <div class="form-hint">备份包所在目录（备份配置中的 remote_dir）</div>
+                    </div>
+                  </div>
+                </div>
+              </label>
             </div>
             <div v-if="listError" class="dbw-error-text">{{ listError }}</div>
           </div>
@@ -91,6 +132,9 @@
               </div>
               <template v-else>
                 <div class="form-hint dbw-pkg-count">共 {{ packages.length }} 个备份包，选择一个后点击「校验此包」</div>
+                <div v-if="failedLocations.length" class="dbw-loc-fail">
+                  部分位置不可达：{{ failedLocations.join('、') }}——列表可能不完整，可在步骤 1 单独选择该位置重试
+                </div>
                 <div class="dbw-pkg-list">
                   <div
                     v-for="pkg in packages"
@@ -104,6 +148,18 @@
                       <div class="dbw-pkg-name">{{ pkg.name }}</div>
                       <div class="dbw-pkg-meta">
                         <span>{{ formatFileSize(pkg.size) }}</span>
+                        <span class="dbw-pkg-source">
+                          来源 {{ sourceText(pkg)
+                          }}<a-tag
+                            v-if="pkg.source_renamed"
+                            color="warning"
+                            title="包文件被手工改名（文件名与包内元数据不一致）"
+                            >已改名</a-tag
+                          >
+                        </span>
+                        <span v-if="pkg.locations && pkg.locations.length" class="dbw-pkg-locs"
+                          >存在位置：{{ pkg.locations.join('、') }}</span
+                        >
                         <span v-if="pkgMeta(pkg).created_at">备份于 {{ formatDateTime(pkgMeta(pkg).created_at) }}</span>
                         <span v-if="pkgMeta(pkg).app_version">版本 {{ pkgMeta(pkg).app_version }}</span>
                         <span v-if="pkgMeta(pkg).git_commit" class="dbw-pkg-commit">{{ pkgMeta(pkg).git_commit }}</span>
@@ -223,6 +279,10 @@
               <div class="dbw-success-row">
                 激活的数据库连接：<span class="dbw-mono">{{ executeResult.active_connection_id || '-' }}</span>
               </div>
+              <div v-if="restoredSourceName" class="dbw-success-row dbw-text-warning">
+                已继承来源标识「<span class="dbw-mono">{{ restoredSourceName }}</span
+                >」：若本机与旧机同时运行（双跑/迁移），请修改来源标识，避免两机互删共享目录中的备份。
+              </div>
               <div class="dbw-success-row dbw-text-warning">请刷新页面并重新登录，以使用恢复后的数据。</div>
             </div>
           </div>
@@ -267,8 +327,9 @@ import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { formatDateTime, formatFileSize } from '@/utils/format'
-import { listRestorePackages, verifyRestorePackage, executeDbRestore } from '@/api/dbBackup'
+import { getDbBackupConfig, listRestorePackages, verifyRestorePackage, executeDbRestore } from '@/api/dbBackup'
 import type {
+  DbBackupTarget,
   RestorePackageItem,
   RestorePackageMeta,
   RestoreTargetPayload,
@@ -301,6 +362,16 @@ const executeError = ref('')
 const busy = computed(() => listing.value || verifying.value || executing.value)
 const restoreDone = computed(() => executeResult.value !== null)
 
+/**
+ * 恢复完成提示用的继承来源标识（D7：恢复落位继承包内 source_name）。
+ * 文件名解析是来源标识的唯一事实来源（D5）；旧格式包无来源则不提示。
+ */
+const restoredSourceName = computed<string | null>(() => {
+  if (!executeResult.value) return null
+  const pkg = packages.value.find((p) => p.name === selected.value)
+  return pkg?.source || null
+})
+
 // 临时远端目标（独立于备份配置；在向导多次打开间保留，避免重复输入 SSH 信息）
 const target = reactive({
   host: '',
@@ -312,7 +383,41 @@ const target = reactive({
   remote_dir: '',
 })
 
-const targetReady = computed(() => !!(target.host.trim() && target.username.trim() && target.remote_dir.trim()))
+// ── 备份来源选择（多目标）：已配置位置 / 手动输入 ──
+type SourceMode = 'configured' | 'manual'
+const sourceMode = ref<SourceMode>('manual')
+/** 下拉值：'all' = 「全部位置」聚合；否则为目标 id 字符串 */
+const selectedTargetId = ref<string>('all')
+const targets = ref<DbBackupTarget[]>([])
+const targetsLoading = ref(false)
+/** 「全部位置」聚合视图下不可达的位置名称（降级标注，不阻断列表） */
+const failedLocations = ref<string[]>([])
+
+const targetReady = computed(() => {
+  if (sourceMode.value === 'configured') return targets.value.length > 0
+  return !!(target.host.trim() && target.username.trim() && target.remote_dir.trim())
+})
+
+/** 打开向导时读取备份配置中的位置列表；空配置机器默认手动输入路径 */
+async function loadTargets(): Promise<void> {
+  targetsLoading.value = true
+  try {
+    const res = await getDbBackupConfig()
+    targets.value = res.data.config?.targets || []
+  } catch {
+    // 读取失败（如权限/网络）不阻断向导：退回手动输入
+    targets.value = []
+  } finally {
+    targetsLoading.value = false
+  }
+  sourceMode.value = targets.value.length > 0 ? 'configured' : 'manual'
+  selectedTargetId.value = 'all'
+}
+
+/** 位置下拉项文案：名称（地址），停用位置追加标注 */
+function targetOptionLabel(t: DbBackupTarget): string {
+  return `${t.name}（${t.host}）${t.enabled ? '' : ' · 已停用'}`
+}
 
 /** B 类数据段标识 → 中文标签 */
 const B_SEGMENT_LABELS: Record<string, string> = {
@@ -354,6 +459,11 @@ function databasesText(pkg: RestorePackageItem): string {
   return dbs.length ? `包含库：${dbs.join('、')}` : ''
 }
 
+/** 来源列文本：旧格式包（文件名无来源标识）显示 — */
+function sourceText(pkg: RestorePackageItem): string {
+  return pkg.source || '—'
+}
+
 function targetPayload(): RestoreTargetPayload {
   const p: RestoreTargetPayload = {
     host: target.host.trim(),
@@ -377,16 +487,28 @@ function selectPkg(name: string): void {
   }
 }
 
+/** 列包 / 校验共用的来源载荷：已配置位置 → target_id（null = 全部位置聚合）；手输 → 连接字段 */
+function listPayload(): RestoreTargetPayload {
+  if (sourceMode.value === 'configured') {
+    return { target_id: selectedTargetId.value === 'all' ? null : Number(selectedTargetId.value) }
+  }
+  return targetPayload()
+}
+
 async function handleList(): Promise<void> {
   if (!targetReady.value) {
-    message.error('请填写主机、用户名与远端目录')
+    message.error(
+      sourceMode.value === 'configured' ? '尚未配置备份位置，请改用手动输入' : '请填写主机、用户名与远端目录',
+    )
     return
   }
   listing.value = true
   listError.value = ''
+  failedLocations.value = []
   try {
-    const res = await listRestorePackages(targetPayload())
+    const res = await listRestorePackages(listPayload())
     packages.value = res.data.packages
+    failedLocations.value = res.data.failed_locations || []
     selected.value = ''
     verifyResult.value = null
     verifyError.value = ''
@@ -403,7 +525,7 @@ async function handleVerify(): Promise<void> {
   verifying.value = true
   verifyError.value = ''
   try {
-    const res = await verifyRestorePackage({ target: targetPayload(), package_name: selected.value })
+    const res = await verifyRestorePackage({ target: listPayload(), package_name: selected.value })
     verifyResult.value = res.data
   } catch (err: unknown) {
     verifyResult.value = null
@@ -478,6 +600,7 @@ watch(
     step.value = 1
     packages.value = []
     listError.value = ''
+    failedLocations.value = []
     selected.value = ''
     verifying.value = false
     verifyResult.value = null
@@ -486,7 +609,10 @@ watch(
     executing.value = false
     executeResult.value = null
     executeError.value = ''
+    void loadTargets()
   },
+  // immediate：整页挂载即处于打开态（如 HMR / 直链恢复入口）时也要初始化
+  { immediate: true },
 )
 </script>
 
@@ -562,7 +688,92 @@ watch(
 /* ── 步骤 1 ── */
 .dbw-target-hint {
   margin-bottom: 14px;
+}
+
+/* ── 步骤 1：备份来源单选卡片 ── */
+.dbw-src-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dbw-src-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg, 8px);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.dbw-src-option:hover {
+  border-color: oklch(56% 0.16 210 / 50%);
+}
+.dbw-src-option.selected {
+  border-color: oklch(56% 0.16 210);
+  box-shadow: 0 0 0 3px oklch(56% 0.16 210 / 15%);
+  background: oklch(56% 0.16 210 / 4%);
+}
+.dbw-src-radio {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.dbw-src-body {
+  flex: 1;
+  min-width: 0;
+}
+.dbw-src-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dbw-src-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dbw-src-desc {
   font-size: 12px;
+  color: var(--muted);
+}
+.dbw-src-fields {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.15s;
+}
+.dbw-src-manual {
+  display: block;
+}
+/* 未选中的来源卡：内部字段降透明且不可交互（选中卡描边 + 光晕，未选组降透明联动） */
+.dbw-src-option:not(.selected) .dbw-src-fields {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.dbw-target-select {
+  max-width: 320px;
+}
+.dbw-src-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── 聚合视图降级标注 ── */
+.dbw-loc-fail {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid oklch(70% 0.15 85 / 40%);
+  border-radius: var(--radius-md, 6px);
+  background: oklch(70% 0.15 85 / 8%);
+  color: oklch(50% 0.13 85);
+  font-size: 12px;
+}
+.dbw-pkg-locs {
+  color: var(--muted);
 }
 
 /* ── 步骤 2：包列表 ── */
@@ -644,6 +855,11 @@ watch(
 }
 .dbw-pkg-commit {
   font-family: var(--font-mono);
+}
+.dbw-pkg-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .dbw-pkg-tags {
   display: flex;

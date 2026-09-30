@@ -148,6 +148,11 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("PUT", "/api/v1/db-backup/config"): ("db_backup", "update_config", False),
     ("POST", "/api/v1/db-backup/run"): ("db_backup", "manual_backup", False),
     ("POST", "/api/v1/db-backup/test"): ("db_backup", "test_connection", True),
+    # 位置 CRUD（db-backup-multi-target D9；删路由时手工清理——rule #37）
+    ("POST", "/api/v1/db-backup/targets"): ("db_backup", "create_target", False),
+    ("PUT", "/api/v1/db-backup/targets/{target_id}"): ("db_backup", "update_target", False),
+    ("DELETE", "/api/v1/db-backup/targets/{target_id}"): ("db_backup", "delete_target", False),
+    ("POST", "/api/v1/db-backup/targets/test"): ("db_backup", "test_target", True),
     ("POST", "/api/v1/db-backup/restore/list"): ("db_backup", "restore_list", True),
     ("POST", "/api/v1/db-backup/restore/verify"): ("db_backup", "restore_verify", True),
     ("POST", "/api/v1/db-backup/restore/execute"): ("db_backup", "restore_execute", False),

@@ -345,6 +345,7 @@ const navSections = computed<NavSection[]>(() => {
       visible:
         authStore.user?.role === 'admin' ||
         authStore.hasPermission('database_management') ||
+        authStore.hasPermission('db_backup') ||
         authStore.hasPermission('clickhouse_config') ||
         authStore.hasPermission('relay_gateway') ||
         (featuresStore.has('audit_log') && authStore.hasPermission('audit_logs')),
@@ -362,6 +363,12 @@ const navSections = computed<NavSection[]>(() => {
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg>',
           permission: 'database_management',
           feature: 'database_management',
+        },
+        {
+          label: '备份与容灾',
+          route: '/backup-management',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3z"/><path d="M5 5.5h1.5M2 8v7a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M7 11.5h4"/></svg>',
+          permission: 'db_backup',
         },
         {
           label: '审计日志',
@@ -492,6 +499,7 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/ansible-inventory') return name === 'AnsibleInventory'
   if (item.route === '/plugin-switches') return name === 'PluginSwitches'
   if (item.route === '/database-management') return name === 'DatabaseManagement'
+  if (item.route === '/backup-management') return name === 'BackupManagement'
   if (item.route === '/stream-proxies') return name === 'StreamProxyList'
   if (item.route === '/dns-proxies') return name === 'DnsUdpProxyList'
   if (item.route === '/edge-env') return name === 'EdgeEnv'

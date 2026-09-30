@@ -43,6 +43,12 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/db-backup/history"),
     ("post", "/api/v1/db-backup/run"),
     ("post", "/api/v1/db-backup/restore/list"),
+    # db-backup-multi-target：位置 CRUD/test 端点采样（rule #19）
+    ("get", "/api/v1/db-backup/targets"),
+    ("post", "/api/v1/db-backup/targets"),
+    ("put", "/api/v1/db-backup/targets/1"),
+    ("delete", "/api/v1/db-backup/targets/1"),
+    ("post", "/api/v1/db-backup/targets/test"),
     ("post", "/api/v1/clusters/99999/nodes/99999/reload"),
     ("post", "/api/v1/clusters/1/nodes/99999/install-openresty"),
     ("post", "/api/v1/clusters/1/nodes/99999/install-edge"),

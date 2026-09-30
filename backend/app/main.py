@@ -58,6 +58,10 @@ async def lifespan(app: FastAPI):
         await seed_data(session)
     from app.services.node_task_service import recover_interrupted_tasks
     await recover_interrupted_tasks()
+    # 存量单行备份配置 → 「默认位置」一次性迁移（幂等，设计 D7；
+    # GET /db-backup/config 首读另有兜底，双保险）
+    from app.services import db_backup_service
+    await db_backup_service.ensure_targets_migrated()
     # 中继区域注册快照预热（relay_gateway 关闭时加载也无副作用）
     from app.services import relay_registry
     await relay_registry.ensure_fresh()

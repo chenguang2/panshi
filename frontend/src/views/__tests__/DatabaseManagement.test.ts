@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 // Mock the database api module.
 const mocks = {
@@ -44,6 +45,16 @@ vi.mock('ant-design-vue', async (importOriginal) => {
     message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   }
 })
+
+// 备份摘要卡（DbBackupSummaryCard）数据源 mock：避免挂载时发真实请求
+const backupMocks = {
+  getConfig: vi.fn(),
+  getHistory: vi.fn(),
+}
+vi.mock('@/api/dbBackup', () => ({
+  getDbBackupConfig: (...a: any[]) => backupMocks.getConfig(...a),
+  getDbBackupHistory: (...a: any[]) => backupMocks.getHistory(...a),
+}))
 
 function cardStub() {
   return {
@@ -122,15 +133,24 @@ function conn(overrides: Record<string, any> = {}) {
 async function mountPage() {
   const DatabaseManagement = (await import('../DatabaseManagement.vue')).default
   const wrapper = mount(DatabaseManagement, {
-    global: { stubs: antStubs },
+    global: { stubs: { ...antStubs, teleport: true } },
   })
   await flushPromises()
   return wrapper
 }
 
+/** 种子登录态：admin（直通全部权限）或普通用户 + 权限列表 */
+function seedAuth(permissions: string[] = [], role = 'admin') {
+  localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role, permissions }))
+  localStorage.setItem('permissions', JSON.stringify(permissions))
+}
+
 describe('DatabaseManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setActivePinia(createPinia())
+    localStorage.clear()
+    seedAuth()
     mocks.getStatus.mockResolvedValue({ data: { active: conn(), connections_count: 1, version: 1 } })
     mocks.listConnections.mockResolvedValue({ data: [conn()] })
     mocks.getRunningTasks.mockResolvedValue({
@@ -141,6 +161,88 @@ describe('DatabaseManagement', () => {
     })
     mocks.getHistory.mockResolvedValue({ data: [] })
     mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
+    // 备份摘要卡数据源：单启用位置 + 最近一次 partial（1/2 目标）
+    backupMocks.getConfig.mockResolvedValue({
+      data: {
+        config: {
+          enabled: true,
+          interval_minutes: 5,
+          source_name: 'node-a',
+          include_static: false,
+          include_task_scripts: false,
+          include_task_logs: false,
+          last_run_at: '2026-09-30T07:42:43',
+          last_success_at: '2026-09-30T07:43:24',
+          last_status: 'partial',
+          last_error: '中心机房：连接超时',
+          updated_at: '2026-09-30T07:43:24',
+          targets: [
+            {
+              id: 1,
+              name: '局内DR',
+              host: '192.168.1.20',
+              port: 22,
+              username: 'root',
+              auth_type: 'password',
+              has_password: true,
+              key_path: null,
+              remote_dir: '/srv/dr',
+              retain_count: 7,
+              enabled: true,
+              created_at: null,
+              updated_at: null,
+            },
+            {
+              id: 2,
+              name: '中心机房',
+              host: '10.0.0.8',
+              port: 22,
+              username: 'root',
+              auth_type: 'password',
+              has_password: true,
+              key_path: null,
+              remote_dir: '/backup',
+              retain_count: 7,
+              enabled: true,
+              created_at: null,
+              updated_at: null,
+            },
+          ],
+        },
+        status: {
+          applicable: true,
+          reason: null,
+          in_progress: false,
+          next_run_at: null,
+          last_success_at: '2026-09-30T07:43:24',
+          last_status: 'partial',
+        },
+      },
+    })
+    backupMocks.getHistory.mockResolvedValue({
+      data: {
+        total: 12,
+        page: 1,
+        page_size: 1,
+        items: [
+          {
+            id: 30,
+            started_at: '2026-09-30T07:42:43',
+            finished_at: '2026-09-30T07:43:24',
+            status: 'partial',
+            trigger: 'scheduled',
+            package_name: 'panshi_backup_node-a_20260930_154243.tar.gz',
+            file_size: 30923190,
+            duration_ms: 41575,
+            error: '中心机房：连接超时',
+            targets: [
+              { target_id: 1, target_name: '局内DR', status: 'success', error: null, duration_ms: 3200 },
+              { target_id: 2, target_name: '中心机房', status: 'failed', error: '连接超时', duration_ms: 10000 },
+            ],
+          },
+        ],
+      },
+    })
     // Mock migrateDatabaseStream to return an AbortController and simulate success
     mocks.migrateDatabaseStream.mockImplementation((_sourceId: string, _targetId: string, options: any) => {
       // Simulate SSE events
@@ -471,6 +573,28 @@ describe('DatabaseManagement', () => {
 
       expect(wrapper.find('.history-cap-hint').exists()).toBe(true)
       expect(wrapper.find('.history-cap-hint').text()).toContain('100')
+    })
+  })
+
+  describe('SQLite 备份摘要卡', () => {
+    it('管理员可见摘要卡：四格统计 + 最近一次结果（partial + N/M）+ 双入口', async () => {
+      const wrapper = await mountPage()
+      const card = wrapper.findComponent({ name: 'DbBackupSummaryCard' })
+      expect(card.exists()).toBe(true)
+      expect(wrapper.text()).toContain('最近成功备份')
+      expect(wrapper.text()).toContain('部分成功')
+      expect(wrapper.text()).toContain('1/2 目标')
+      const enterBtn = wrapper.findAll('button').filter((b) => b.text() === '进入备份管理')
+      const drBtn = wrapper.findAll('button').filter((b) => b.text() === '灾难恢复')
+      expect(enterBtn.length).toBeGreaterThan(0)
+      expect(drBtn.length).toBeGreaterThan(0)
+    })
+
+    it('无 db_backup 权限的用户不渲染摘要卡（也不请求数据）', async () => {
+      seedAuth(['database_management'], 'user')
+      const wrapper = await mountPage()
+      expect(wrapper.findComponent({ name: 'DbBackupSummaryCard' }).exists()).toBe(false)
+      expect(backupMocks.getConfig).not.toHaveBeenCalled()
     })
   })
 })

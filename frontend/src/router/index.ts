@@ -138,6 +138,12 @@ const coreRoutes: RouteRecordRaw[] = [
         meta: { permission: 'relay_gateway' },
       },
       {
+        path: 'backup-management',
+        name: 'BackupManagement',
+        component: () => import('@/views/BackupManagement.vue'),
+        meta: { permission: 'db_backup' },
+      },
+      {
         path: 'central-management',
         name: 'CentralManagement',
         component: () => import('@/views/CentralList.vue'),
