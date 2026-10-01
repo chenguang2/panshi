@@ -95,17 +95,15 @@ test.describe('Edge Client Debug Page', () => {
       return
     }
     await page.click('.ant-tabs-nav >> text=路由')
-    // 节点调试查询在无可达 edge 节点时表格不渲染——环境守卫
-    const table = page.locator('.ant-table-header')
-    const hasTable = await table.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!hasTable) {
-      test.skip('节点查询无响应（edge 节点不可达）')
-      return
+    // 页面 8 个 Tab 各含一张常驻 a-table（AntD 保留非激活面板 DOM），表头必须限定到激活面板。
+    // 注意：a-table 未配 scroll.y 时渲染 thead.ant-table-thead，不存在 .ant-table-header 包裹层
+    // （历史用例正是据此 0 匹配 + .catch(() => false) 被吞成"环境 skip"，永久跳过）。
+    // 表头不可见属于被测行为失败，直接让断言失败，不再伪装成 skip。
+    const head = page.locator('.ant-tabs-tabpane-active .ant-table-thead')
+    await expect(head).toBeVisible({ timeout: 5000 })
+    for (const col of ['ID', '名称', 'URI', '方法']) {
+      await expect(head.locator('th').filter({ hasText: col })).toBeVisible()
     }
-    await expect(table.locator('text=ID').first()).toBeVisible()
-    await expect(table.locator('text=名称').first()).toBeVisible()
-    await expect(table.locator('text=URI').first()).toBeVisible()
-    await expect(table.locator('text=方法').first()).toBeVisible()
   })
 
   test('should show plugin list table with index', async ({ page }) => {
@@ -115,14 +113,11 @@ test.describe('Edge Client Debug Page', () => {
       return
     }
     await page.click('.ant-tabs-nav >> text=插件列表')
-    const table = page.locator('.ant-table-header')
-    const hasTable = await table.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!hasTable) {
-      test.skip('节点查询无响应（edge 节点不可达）')
-      return
-    }
-    await expect(table.locator('text=#').first()).toBeVisible()
-    await expect(table.locator('text=插件名称').first()).toBeVisible()
+    // 同上：限定激活面板的 thead（.ant-table-header 在本页 DOM 中不存在，见上）
+    const head = page.locator('.ant-tabs-tabpane-active .ant-table-thead')
+    await expect(head).toBeVisible({ timeout: 5000 })
+    await expect(head.locator('th').filter({ hasText: /^#$/ })).toBeVisible()
+    await expect(head.locator('th').filter({ hasText: '插件名称' })).toBeVisible()
   })
 
   test('should open add upstream modal', async ({ page }) => {

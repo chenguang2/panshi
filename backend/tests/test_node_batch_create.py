@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock
 from fastapi import HTTPException
+from pydantic import ValidationError
 from app.models.cluster import Cluster, Node
 from app.schemas.cluster import BatchCreateNodesRequest, NodeCreate
 
@@ -34,11 +35,11 @@ class TestBatchCreateNodesRequest:
 
     def test_request_rejects_more_than_1000_nodes(self):
         nodes = [_node_create(f"10.0.0.{i % 254 + 1}") for i in range(1001)]
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             BatchCreateNodesRequest(nodes=nodes)
 
     def test_node_create_rejects_invalid_status(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             NodeCreate(ip="10.0.0.1", edge_path="/edge/n1", status=5)
 
     def test_node_create_accepts_status_zero_or_one(self):

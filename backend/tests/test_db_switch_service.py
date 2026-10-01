@@ -69,9 +69,6 @@ class TestSwitchService:
         result = await db_switch_service.perform_switch("pg", test_db)
         assert db_config.load_config().active == "pg"
 
-    async def test_restart_flag_path_const(self, _isolate):
-        assert db_switch_service.RESTART_FLAG_PATH.endswith(".restart.flag")
-
 
 class TestStartupRollback:
     def test_rollback_when_active_unreachable(self, _isolate):

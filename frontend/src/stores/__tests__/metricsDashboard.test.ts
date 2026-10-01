@@ -68,18 +68,28 @@ describe('metricsDashboard store', () => {
   })
 
   it('handles partial failures gracefully', async () => {
-    vi.mocked(getMetricTimeSeries)
-      .mockResolvedValueOnce([mockDataPoint(1000, 50)]) // qps succeeds
-      .mockResolvedValueOnce([mockDataPoint(1000, 0)]) // errors succeeds
-      .mockRejectedValueOnce(new Error('fail')) // connections_active fails
-      .mockResolvedValueOnce([mockDataPoint(1000, 1)]) // connections_reading succeeds
-      .mockResolvedValueOnce([mockDataPoint(1000, 2)]) // connections_writing succeeds
-      .mockResolvedValueOnce([mockDataPoint(1000, 3)]) // connections_waiting succeeds
+    // URL 感知 mock（约定 #43）：按 metricName / label 分发，不依赖调用顺序。
+    // 与真实请求对应：getMetricTimeSeries(metricName, since, interval, label)，
+    // 连接状态 4 序列共享 metricName=edge_nginx_http_current_connections，以 label=state:* 区分。
+    const seriesValues: Record<string, number> = {
+      'state:reading': 1,
+      'state:writing': 2,
+      'state:waiting': 3,
+    }
+    vi.mocked(getMetricTimeSeries).mockImplementation(
+      async (_metricName: string, _since: string, _interval: string, label?: string) => {
+        if (label === 'state:active') throw new Error('fail') // connections_active 失败
+        return [mockDataPoint(1000, seriesValues[label ?? ''] ?? 50)]
+      },
+    )
     const store = useMetricsDashboardStore()
     await store.loadAllCharts()
     expect(store.chartDataMap['qps']).toHaveLength(1)
+    expect(store.errorMap['errors']).toBeNull()
     expect(store.chartDataMap['connections_active']).toHaveLength(0)
     expect(store.errorMap['connections_active']).toBeTruthy()
+    expect(store.chartDataMap['connections_reading']).toHaveLength(1)
+    expect(store.chartDataMap['connections_writing']).toHaveLength(1)
     expect(store.chartDataMap['connections_waiting']).toHaveLength(1)
     expect(store.loading).toBe(false)
   })

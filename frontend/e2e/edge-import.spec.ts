@@ -36,22 +36,6 @@ test.describe('Edge Import Page', () => {
     await expect(page.locator('button:has-text("下一步")').first()).toBeDisabled()
   })
 
-  test('should have next button disabled in step 1', async ({ page }) => {
-    await page.goto('/edge-import')
-
-    // Step 1 next button - depends on clusters loaded from backend
-    const nextBtn = page.locator('button:has-text("下一步"):not(:disabled)')
-    const nextBtnDisabled = page.locator('button:has-text("下一步"):disabled')
-    await expect(nextBtn.or(nextBtnDisabled)).toBeVisible()
-  })
-
-  test('should have step 2 title in wizard', async ({ page }) => {
-    await page.goto('/edge-import')
-
-    const step2Title = page.locator('.ant-steps-item-title').nth(1)
-    await expect(step2Title).toContainText('选择配置')
-  })
-
   test('should render preview sections layout', async ({ page }) => {
     await page.goto('/edge-import')
 

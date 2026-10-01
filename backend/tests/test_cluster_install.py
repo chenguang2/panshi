@@ -162,6 +162,8 @@ class TestInstallEdgeRouter:
     def test_install_edge_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/install-edge should exist."""
         resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/install-edge", json={"prefix": "/test"})
+        # Body 通过校验（prefix 为必填 str），进入 verify_node 后因节点不存在确定性 404
+        assert resp.status_code == 404
 
 
 class TestEdgePackListEndpoint:

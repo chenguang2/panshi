@@ -73,10 +73,6 @@ class TestMetricsAPI:
 
     # ── Feature gating ────────────────────────────────────
 
-    def test_metrics_router_registered(self, isolated_app):
-        resp = isolated_app.get("/api/v1/metrics/names")
-        assert resp.status_code in (200, 404)
-
 
 class TestMetricsAPINonBlocking:
     """ClickHouse 慢查询不得阻塞事件循环。

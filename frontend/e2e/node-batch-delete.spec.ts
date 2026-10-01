@@ -1,123 +1,121 @@
 import { test, expect } from '@playwright/test'
+import {
+  apiHeaders,
+  apiJson,
+  checkRowsByContent,
+  cleanupNodesByIps,
+  expectAntModal,
+  filterTableBySearch,
+  interceptBatchDelete,
+  openClusterTab,
+  skipIfNoCluster,
+  type ClusterRef,
+} from './helpers/destructiveFlow'
+import { login as uiLogin } from './helpers/navigation'
 
-test.describe('Node Batch Delete E2E', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'panshi123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL('/')
+// E2E 保留 IP 段（与 node-batch-import 的 10.99.99.x、node-batch-action 的 10.99.97.x 互不重叠）
+const SEGMENT = ['10.99.96.1', '10.99.96.2']
+
+test.describe('Node Batch Delete E2E（route 拦截：不触达真实删除）', () => {
+  let cluster: ClusterRef
+  let headers: Record<string, string>
+  let createdIds: number[]
+  let names: Map<number, string>
+
+  test.beforeEach(async ({ page, request }) => {
+    cluster = (await skipIfNoCluster(request)) as ClusterRef
+    if (!cluster) return
+    headers = await apiHeaders(request)
+    await uiLogin(page)
+
+    // 造数：本 spec 专属测试节点（teardown 清扫本段 IP，含历史遗留）
+    createdIds = []
+    names = new Map()
+    for (const ip of SEGMENT) {
+      const node = await apiJson<{ id: number; ip: string }>(
+        request,
+        'POST',
+        `/clusters/${cluster.id}/nodes`,
+        { ip, edge_path: `/e2e-node-${ip.split('.').pop()}`, service_port: 80 },
+        headers,
+      )
+      createdIds.push(node.id)
+      names.set(node.id, node.ip)
+    }
   })
 
-  async function openNodesTab(page: import('@playwright/test').Page) {
-    await page.waitForTimeout(1000)
-    await page.goto('/central-management')
-    await page.waitForTimeout(3000)
+  test.afterEach(async ({ request }) => {
+    if (!cluster) return
+    await cleanupNodesByIps(request, headers, SEGMENT)
+  })
 
-    const nodeStat = page
-      .locator('.cl-stat-link')
-      .filter({ has: page.locator('.cl-stat-label', { hasText: '节点' }) })
-      .first()
-    await expect(nodeStat).toBeVisible({ timeout: 10000 })
-    await nodeStat.click()
-    await page.waitForTimeout(2500)
+  test('batch delete flow: check own rows, confirm, intercepted payload + UI progress, zero backend effect', async ({
+    page,
+    request,
+  }) => {
+    const table = await openClusterTab(page, cluster, '节点')
+    await checkRowsByContent(table, SEGMENT)
 
-    const toolbar = page.locator('.node-actions')
-    await expect(toolbar).toBeVisible({ timeout: 10000 })
-
-    const nodeTable = page.locator('.tab-content .ant-table-tbody').first()
-    await expect(nodeTable).toBeVisible({ timeout: 10000 })
-    return nodeTable
-  }
-
-  test('batch delete flow: check 2+ rows, confirm, progress, selection cleared', async ({ page }) => {
-    const nodeTable = await openNodesTab(page)
-
-    const checkboxes = nodeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 2) {
-      test.skip('Not enough nodes to batch delete')
-      return
-    }
-
-    await checkboxes.nth(0).check()
-    await checkboxes.nth(1).check()
-    await page.waitForTimeout(300)
-
+    // 删除按钮显示勾选计数
     const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    await expect(deleteBtn).toBeVisible({ timeout: 5000 })
-    const btnText = await deleteBtn.textContent()
-    if (!btnText?.includes('(')) {
-      test.skip('Delete button does not show batch count — selection did not register')
-      return
-    }
+    await expect(deleteBtn).toContainText('(2)')
 
+    // 多选时单选操作按钮禁用
     const editBtn = page.locator('.node-actions button').filter({ hasText: '编辑' }).first()
-    if (await editBtn.isVisible()) {
-      await expect(editBtn).toBeDisabled()
-    }
+    await expect(editBtn).toBeDisabled()
+
+    // 拦截批量删除端点（DELETE /clusters/{id}/nodes 集合端点）
+    const captured = await interceptBatchDelete(page, cluster.id, 'nodes', {
+      idField: 'node_ids',
+      resultIdField: 'node_id',
+      resultNameField: 'node_ip',
+      label: '节点',
+      names,
+    })
 
     await deleteBtn.click()
-    await page.waitForTimeout(800)
+    const modal = await expectAntModal(page, /确认删除/, '删除确认弹窗')
+    await modal.locator('label').filter({ hasText: '数据库' }).first().locator('input[type="checkbox"]').check()
+    await modal.locator('button.ant-btn-dangerous').last().click()
 
-    const modal = page.locator('.ant-modal').last()
-    const modalVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!modalVisible) {
-      test.skip('Delete confirm modal did not appear')
-      return
+    // 进度弹窗按后端成功形状渲染逐节点日志 + 完成态
+    const progress = await expectAntModal(page, new RegExp(`批量删除节点: `), '批量删除进度弹窗')
+    for (const ip of SEGMENT) {
+      await expect(progress.locator('.ant-modal-body')).toContainText(`删除节点 ${ip}: 数据库✅`)
     }
+    await expect(progress.locator('.ant-modal-body')).toContainText('✅ 批量删除完成!')
 
-    const dbOption = modal.locator('label').filter({ hasText: '数据库' }).first()
-    await dbOption.locator('input[type="checkbox"]').check()
-    await page.waitForTimeout(300)
+    // 载荷断言：仅含被勾选的造数节点，未误伤真实节点；仅勾选了"数据库"
+    expect(captured).toHaveLength(1)
+    expect(captured[0].body.delete_db).toBe(true)
+    expect(captured[0].body.delete_edge).toBe(false)
+    expect([...((captured[0].body.node_ids as number[]) || [])].sort()).toEqual([...createdIds].sort())
 
-    const confirmBtn = modal.locator('button.ant-btn-dangerous').last()
-    await confirmBtn.click()
-    await page.waitForTimeout(2500)
-
-    const progressVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (progressVisible) {
-      await page.waitForTimeout(3000)
-    }
-
+    // 完成后选择被清空
     const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
     await expect(deleteBtnAfter).toBeVisible({ timeout: 5000 })
-    const textAfter = (await deleteBtnAfter.textContent()) || ''
-    expect(textAfter.includes('(')).toBe(false)
+    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
+
+    // 拦截生效证据：真实后端零副作用——两个测试节点仍然存在
+    const list = await apiJson<{ items: Array<{ ip: string }> }>(
+      request,
+      'GET',
+      `/clusters/${cluster.id}/nodes?page_size=100`,
+      undefined,
+      headers,
+    )
+    const ips = list.items.map((n) => n.ip)
+    for (const ip of SEGMENT) expect(ips, `拦截应阻止真实删除：${ip} 仍应在库`).toContain(ip)
   })
 
   test('search clears batch selection (D8)', async ({ page }) => {
-    const nodeTable = await openNodesTab(page)
-
-    const checkboxes = nodeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 1) {
-      test.skip('Not enough nodes')
-      return
-    }
-
-    await checkboxes.nth(0).check()
-    await page.waitForTimeout(300)
-
+    const table = await openClusterTab(page, cluster, '节点')
+    await checkRowsByContent(table, [SEGMENT[0]])
     const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    const btnText = (await deleteBtn.textContent()) || ''
-    if (!btnText.includes('(')) {
-      test.skip('Checkbox selection did not register')
-      return
-    }
+    await expect(deleteBtn).toContainText('(1)')
 
-    const searchInput = page.locator('.node-actions .ant-input').first()
-    if (await searchInput.isVisible().catch(() => false)) {
-      await searchInput.fill('__no_such_node__')
-      await searchInput.press('Enter')
-      await page.waitForTimeout(2500)
-    } else {
-      test.skip('Search input not visible')
-      return
-    }
-
+    await filterTableBySearch(page, table, '搜索节点', '__no_such_node__', false)
     const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    const textAfter = (await deleteBtnAfter.textContent()) || ''
-    expect(textAfter.includes('(')).toBe(false)
+    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 })

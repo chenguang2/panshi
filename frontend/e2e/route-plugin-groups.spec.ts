@@ -1,56 +1,48 @@
-import { test, expect } from '@playwright/test';
-import { login, gotoResourcePage } from './helpers/navigation';
+import { test, expect } from '@playwright/test'
+
+const API_BASE = 'http://localhost:9100/api/v1'
 
 test.describe('路由插件组 - 存盘验证', () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page);
-  });
+  // TC-RPG-01（typeof count === 'number' 恒真）与 TC-RPG-02（点击卡片零断言）为零判别力用例，已删除。
 
-  test('TC-RPG-01: 路由弹窗插件组 Tab 能显示卡片', async ({ page }) => {
-    await gotoResourcePage(page, '路由');
-    await expect(page.locator('.route-table')).toBeVisible({ timeout: 10000 });
-    await page.locator('button:has-text("新建路由")').click();
-    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' });
-    await expect(modal).toBeVisible();
+  test('TC-RPG-03: API 创建/更新路由 plugin_config_ids（测试后清理）', async ({ request }) => {
+    const login = await request.post(`${API_BASE}/auth/login`, { data: { username: 'admin', password: 'panshi123' } })
+    const token = (await login.json()).access_token
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 
-    await modal.locator('.tab-btn').filter({ hasText: '插件组' }).click();
-    await page.waitForTimeout(800);
+    let createdId: number | undefined
+    try {
+      const res = await request.post(`${API_BASE}/clusters/1/routes`, {
+        headers,
+        data: { name: 'e2e-test-pg', uri: '/e2e-pg', methods: 'GET', plugin_config_ids: ['uuid-1', 'uuid-2'] },
+      })
+      const data = await res.json()
+      createdId = data.id
+      expect(data.plugin_config_ids).toEqual(['uuid-1', 'uuid-2'])
 
-    // 插件组卡片渲染（数量无关，仅验证组件存在）
-    const cards = modal.locator('.plugin-config-card');
-    expect(typeof (await cards.count())).toBe('number');
-
-    await modal.locator('.modal-close').first().click();
-  });
-
-  test('TC-RPG-02: 路由弹窗插件组 Tab 可勾选卡片', async ({ page }) => {
-    await gotoResourcePage(page, '路由');
-    await expect(page.locator('.route-table')).toBeVisible({ timeout: 10000 });
-    await page.locator('button:has-text("新建路由")').click();
-    const modal = page.locator('.modal-overlay').filter({ hasText: '新建路由' });
-    await expect(modal).toBeVisible();
-
-    await modal.locator('.tab-btn').filter({ hasText: '插件组' }).click();
-    await page.waitForTimeout(800);
-
-    const firstCard = modal.locator('.plugin-config-card').first();
-    if (await firstCard.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await firstCard.click();
-      await page.waitForTimeout(300);
+      const update = await request.put(`${API_BASE}/clusters/1/routes/${data.id}`, {
+        headers,
+        data: { name: 'e2e-test-pg-upd', plugin_config_ids: ['uuid-3'] },
+      })
+      const updated = await update.json()
+      expect(updated.plugin_config_ids).toEqual(['uuid-3'])
+    } finally {
+      // teardown：删除本用例创建的路由及历史运行遗留的同名路由。
+      // delete_db=true 仅清库（RoutePlugin/版本记录随删），不触达 Edge 节点。
+      const list = await request.get(`${API_BASE}/clusters/1/routes?search=e2e-test-pg&page_size=100`, { headers })
+      const listData = (await list.json().catch(() => null)) || { items: [] }
+      const stale = (listData.items as Array<{ id: number; name?: string }>).filter((r) =>
+        (r.name || '').startsWith('e2e-test-pg'),
+      )
+      const ids = new Set<number>(stale.map((r) => r.id))
+      if (createdId) ids.add(createdId)
+      for (const id of ids) {
+        const del = await request.delete(`${API_BASE}/clusters/1/routes/${id}`, {
+          headers,
+          data: { delete_db: true, delete_edge: false },
+        })
+        expect(del.status(), `清理路由 ${id} 应成功`).toBe(200)
+      }
     }
-
-    await modal.locator('.modal-close').first().click();
-  });
-
-  test('TC-RPG-03: API 创建路由包含 plugin_config_ids', async ({ request }) => {
-    const login = await request.post('http://localhost:9100/api/v1/auth/login', { data: { username: 'admin', password: 'panshi123' } });
-    const token = (await login.json()).access_token;
-    const res = await request.post('http://localhost:9100/api/v1/clusters/1/routes', { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, data: { name: 'e2e-test-pg', uri: '/e2e-pg', methods: 'GET', plugin_config_ids: ['uuid-1', 'uuid-2'] } });
-    const data = await res.json();
-    expect(data.plugin_config_ids).toEqual(['uuid-1', 'uuid-2']);
-
-    const update = await request.put(`http://localhost:9100/api/v1/clusters/1/routes/${data.id}`, { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, data: { name: 'e2e-test-pg-upd', plugin_config_ids: ['uuid-3'] } });
-    const updated = await update.json();
-    expect(updated.plugin_config_ids).toEqual(['uuid-3']);
-  });
-});
+  })
+})

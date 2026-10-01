@@ -105,10 +105,21 @@ describe('StaticResourceList.vue', () => {
     await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
 
-    const buttons = wrapper.findAll('button')
-    // The second resource (id=2) has file_size=null, but we check all buttons
-    const viewBtns = buttons.filter((b) => b.text().includes('查看'))
-    expect(viewBtns.length).toBe(2) // one per card
+    // 组件绑定：查看按钮 :disabled="!sr.file_size"
+    const cards = wrapper.findAll('.sr-card')
+    expect(cards.length).toBe(2)
+    // docs（file_size=null）的查看按钮必须真实禁用
+    const noFileCard = cards.find((c) => c.text().includes('docs'))
+    expect(noFileCard).toBeDefined()
+    const disabledViewBtn = noFileCard!.findAll('button').find((b) => b.text().includes('查看'))
+    expect(disabledViewBtn).toBeDefined()
+    expect(disabledViewBtn!.attributes('disabled')).toBeDefined()
+    // static-files（file_size 有值）的查看按钮保持可用
+    const hasFileCard = cards.find((c) => c.text().includes('static-files'))
+    expect(hasFileCard).toBeDefined()
+    const enabledViewBtn = hasFileCard!.findAll('button').find((b) => b.text().includes('查看'))
+    expect(enabledViewBtn).toBeDefined()
+    expect(enabledViewBtn!.attributes('disabled')).toBeUndefined()
   })
 
   // ── Group Filter Tests ──

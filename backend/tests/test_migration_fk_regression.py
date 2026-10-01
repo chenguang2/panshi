@@ -8,8 +8,7 @@ from sqlalchemy import create_engine, inspect, text, Column, Integer, String, Fo
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.database import Base
-from app.services.db_migration_service import migrate_direct, target_is_empty
-from app.services.db_archive_service import import_archive
+from app.services.db_migration_service import migrate_direct
 from app.core.db_migration import tables_for_migration, DEPENDENCY_ORDER
 
 
@@ -102,13 +101,6 @@ class TestMigrationFkRegression:
         fk_cols = {c["name"] for c in insp.get_columns("sys_user_permission")}
         assert "user_id" in fk_cols
         tgt_engine.dispose()
-
-    def test_import_archive_fixes_broken_target(self):
-        """import_archive 也应自动 drop_all + create_all 修复残缺表。"""
-        # 归档导入涉及列匹配逻辑，此处仅验证 drop_all 逻辑被调用
-        # 完整列匹配测试需更复杂的 fixture，核心修复已在 migrate_direct 验证
-        import pytest
-        pytest.skip("Archive import column matching tested separately; core drop_all fix verified in migrate_direct test")
 
 
 if __name__ == "__main__":

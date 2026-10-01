@@ -141,11 +141,6 @@ class TestSslCertificateModel:
 class TestSslApi:
     """SSL certificate API tests."""
 
-    def test_ssl_router_has_routes(self):
-        from app.api.v1.cluster_ssl import router
-
-        assert len(router.routes) > 0
-
     def test_generate_route_registered(self):
         from app.api.v1.cluster_ssl import router
 

@@ -1,133 +1,107 @@
 import { test, expect } from '@playwright/test'
+import {
+  apiHeaders,
+  apiJson,
+  checkRowsByContent,
+  cleanupNodesByIps,
+  expectAntModal,
+  expectOverlayModal,
+  interceptNodeAction,
+  openClusterTab,
+  skipIfNoCluster,
+  type ClusterRef,
+} from './helpers/destructiveFlow'
+import { login as uiLogin } from './helpers/navigation'
 
-test.describe('Node Batch Action E2E', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'panshi123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL('/')
+// E2E 保留 IP 段（与 node-batch-delete 的 10.99.96.x、node-batch-import 的 10.99.99.x 互不重叠）
+const SEGMENT = ['10.99.97.1', '10.99.97.2']
+
+test.describe('Node Batch Action E2E（route 拦截：不触达真实节点/ansible）', () => {
+  let cluster: ClusterRef
+  let headers: Record<string, string>
+  let createdIds: number[]
+
+  test.beforeEach(async ({ page, request }) => {
+    cluster = (await skipIfNoCluster(request)) as ClusterRef
+    if (!cluster) return
+    headers = await apiHeaders(request)
+    await uiLogin(page)
+
+    // 造数：本 spec 专属测试节点（teardown 清扫本段 IP，含历史遗留）
+    createdIds = []
+    for (const ip of SEGMENT) {
+      const node = await apiJson<{ id: number }>(
+        request,
+        'POST',
+        `/clusters/${cluster.id}/nodes`,
+        { ip, edge_path: `/e2e-node-${ip.split('.').pop()}`, service_port: 80 },
+        headers,
+      )
+      createdIds.push(node.id)
+    }
   })
 
-  async function openNodesTab(page: import('@playwright/test').Page) {
-    await page.waitForTimeout(1000)
-    await page.goto('/central-management')
-    await page.waitForTimeout(3000)
+  test.afterEach(async ({ request }) => {
+    if (!cluster) return
+    await cleanupNodesByIps(request, headers, SEGMENT)
+  })
 
-    const nodeStat = page.locator('.cl-stat-link').filter({ has: page.locator('.cl-stat-label', { hasText: '节点' }) }).first()
-    await expect(nodeStat).toBeVisible({ timeout: 10000 })
-    await nodeStat.click()
-    await page.waitForTimeout(2500)
+  test('batch start flow: check own rows, confirm, intercepted per-node requests + UI progress, selection cleared', async ({
+    page,
+  }) => {
+    const table = await openClusterTab(page, cluster, '节点')
+    await checkRowsByContent(table, SEGMENT)
 
-    const toolbar = page.locator('.node-actions')
-    await expect(toolbar).toBeVisible({ timeout: 10000 })
-
-    const nodeTable = page.locator('.tab-content .ant-table-tbody').first()
-    await expect(nodeTable).toBeVisible({ timeout: 10000 })
-    return nodeTable
-  }
-
-  test('batch start flow: check 2+ rows, confirm, batch action, selection cleared', async ({ page }) => {
-    const nodeTable = await openNodesTab(page)
-
-    const checkboxes = nodeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 2) {
-      test.skip('Not enough nodes to batch action')
-      return
-    }
-
-    await checkboxes.nth(0).check()
-    await checkboxes.nth(1).check()
-    await page.waitForTimeout(300)
-
-    // Start button should show count suffix and be enabled
     const startBtn = page.locator('.node-actions button').filter({ hasText: '启动' }).first()
-    const btnText = (await startBtn.textContent()) || ''
-    if (!btnText.includes('(')) {
-      test.skip('Start button does not show batch count')
-      return
-    }
+    await expect(startBtn).toContainText('(2)')
 
-    // Edit button should remain disabled in batch mode
+    // 多选时单选操作按钮禁用
     const editBtn = page.locator('.node-actions button').filter({ hasText: '编辑' }).first()
-    if (await editBtn.isVisible()) {
-      await expect(editBtn).toBeDisabled()
-    }
+    await expect(editBtn).toBeDisabled()
 
-    // Open batch confirm dialog
+    // 拦截批量启动的逐节点请求（useClusterNodes.batchNodeAction 对每节点
+    // POST /clusters/{cid}/nodes/{nid}/start——fulfill _run_nginx_cmd 真实成功形状）
+    const startedNodeIds = await interceptNodeAction(page, cluster.id, 'start')
+
     await startBtn.click()
-    await page.waitForTimeout(500)
+    const confirmModal = await expectOverlayModal(page, /^确认批量启动节点$/, '批量启动确认弹窗')
+    await confirmModal.locator('button.btn-danger').last().click()
 
-    const confirmModal = page.locator('.modal-overlay').filter({ hasText: '确认批量启动' }).last()
-    const modalVisible = await confirmModal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!modalVisible) {
-      test.skip('Batch confirm dialog did not appear')
-      return
+    // 进度弹窗逐节点渲染（BatchActionProgressModal：折叠行 ✅<ip>成功）
+    const progressModal = await expectOverlayModal(page, /^批量启动节点$/, '批量启动进度弹窗')
+    for (const ip of SEGMENT) {
+      await expect(progressModal, `节点 ${ip} 应以成功态出现在进度弹窗`).toContainText(`✅${ip}成功`)
     }
 
-    // Confirm (executes batch action; nodes may succeed or fail - verify flow proceeds)
-    const confirmBtn = confirmModal.locator('button.btn-danger').last()
-    await confirmBtn.click()
-    await page.waitForTimeout(800)
+    // 载荷断言：恰好对本 spec 造的两个测试节点各发一次请求（无 Body，路径即载荷）
+    expect(startedNodeIds.sort()).toEqual([...createdIds].sort())
 
-    // Progress modal should appear with per-node rows (BatchActionProgressModal)
-    const progressModal = page.locator('.modal-overlay').filter({ hasText: '批量启动节点' }).last()
-    const progressVisible = await progressModal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (progressVisible) {
-      const progressText = (await progressModal.textContent()) || ''
-      expect(progressText).toContain('执行中')
-    }
-
-    await page.waitForTimeout(2500)
-
-    // Selection should be cleared after batch action
+    // 完成后选择被清空
     const startBtnAfter = page.locator('.node-actions button').filter({ hasText: '启动' }).first()
-    const textAfter = (await startBtnAfter.textContent()) || ''
-    expect(textAfter.includes('(')).toBe(false)
+    await expect(startBtnAfter).toBeVisible({ timeout: 10000 })
+    await expect.poll(async () => (await startBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 
-  test('batch status query opens confirm and executes', async ({ page }) => {
-    const nodeTable = await openNodesTab(page)
-
-    const checkboxes = nodeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 2) {
-      test.skip('Not enough nodes to batch status query')
-      return
-    }
-
-    await checkboxes.nth(0).check()
-    await checkboxes.nth(1).check()
-    await page.waitForTimeout(300)
+  test('batch status query: confirm, intercepted per-node statistic + results modal', async ({ page }) => {
+    const table = await openClusterTab(page, cluster, '节点')
+    await checkRowsByContent(table, SEGMENT)
 
     const statusBtn = page.locator('.node-actions button').filter({ hasText: '状态查询' }).first()
-    const btnText = (await statusBtn.textContent()) || ''
-    if (!btnText.includes('(')) {
-      test.skip('Status button does not show batch count')
-      return
-    }
+    await expect(statusBtn).toContainText('(2)')
+
+    const queriedNodeIds = await interceptNodeAction(page, cluster.id, 'statistic')
 
     await statusBtn.click()
-    await page.waitForTimeout(500)
+    const confirmModal = await expectOverlayModal(page, /^确认批量状态查询$/, '批量状态查询确认弹窗')
+    await confirmModal.locator('button.btn-danger').last().click()
 
-    const confirmModal = page.locator('.modal-overlay').filter({ hasText: '确认批量状态查询' }).last()
-    const modalVisible = await confirmModal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!modalVisible) {
-      test.skip('Batch status confirm dialog did not appear')
-      return
+    // 状态结果弹窗（showBatchStatusModal，AppModal）逐节点渲染
+    const statusModal = await expectAntModal(page, /^批量状态查询$/, '批量状态查询结果弹窗')
+    await expect(statusModal).toContainText('节点IP')
+    for (const ip of SEGMENT) {
+      await expect(statusModal, `节点 ${ip} 应出现在结果表`).toContainText(ip)
     }
 
-    const confirmBtn = confirmModal.locator('button.btn-danger').last()
-    await confirmBtn.click()
-    await page.waitForTimeout(2500)
-
-    // Status results modal (table) or message should appear - verify flow proceeds
-    const statusModal = page.locator('.modal-overlay').filter({ hasText: '批量状态查询' }).last()
-    const statusVisible = await statusModal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (statusVisible) {
-      // Verify table headers exist
-      expect(await statusModal.textContent()).toContain('节点IP')
-    }
+    expect(queriedNodeIds.sort()).toEqual([...createdIds].sort())
   })
 })

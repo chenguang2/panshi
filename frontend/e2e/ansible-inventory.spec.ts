@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 const BASE = 'http://localhost:12345'
+const API_BASE = `${BASE}/api/v1`
 
 async function login(page: import('@playwright/test').Page) {
   await page.goto(`${BASE}/login`)
@@ -10,9 +11,29 @@ async function login(page: import('@playwright/test').Page) {
   await page.waitForURL('**/')
 }
 
+/** 读取清单原文（只读，用于落盘守卫；绝不写回） */
+async function readRawInventory(page: import('@playwright/test').Page): Promise<string> {
+  const tokenRes = await page.request.post(`${API_BASE}/auth/login`, {
+    data: { username: 'admin', password: 'panshi123' },
+  })
+  const token = (await tokenRes.json()).access_token
+  const res = await page.request.get(`${API_BASE}/ansible/inventory`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  return (await res.json()).raw_text as string
+}
+
 test.describe('Ansible 主机清单 — 链路验证', () => {
   test('添加主机按钮、Enter 续录、批量导入、自定义字段列移除', async ({ page }) => {
     await login(page)
+
+    // ── 落盘守卫基线 ──
+    // 本用例新增的 10.0.0.99 / 10.0.0.1 / 10.0.0.2 主机只进入页面本地草稿（rows ref）：
+    // 仅「保存」按钮或 Ctrl+S 才会触发 PUT /ansible/inventory 写文件，本用例两者都不做，
+    // 后端 parse/render 端点为纯计算不落盘 → 清单文件不应有任何变化。
+    // 结束时比对原文一致性；若未来流程引入自动保存污染清单，此处立即报警
+    // （不做 PUT 式「恢复」——重写敏感清单文件本身才是最大风险；密码字段全程明文透传，约定 #10）。
+    const rawBefore = await readRawInventory(page)
 
     // 导航到 Ansible 主机清单页
     await page.goto(`${BASE}/ansible-inventory`)
@@ -80,5 +101,9 @@ test.describe('Ansible 主机清单 — 链路验证', () => {
 
     // 10. 底部「自定义字段」列已移除
     await expect(page.locator('th:has-text("自定义字段")')).toHaveCount(0)
+
+    // 11. 恢复原状验证：清单文件必须与用例开始前逐字节一致（草稿流程不落盘）
+    const rawAfter = await readRawInventory(page)
+    expect(rawAfter, '用例全程不应写入清单文件（无保存动作，草稿仅存于页面内存）').toBe(rawBefore)
   })
 })

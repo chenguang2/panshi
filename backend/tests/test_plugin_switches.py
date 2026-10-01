@@ -183,13 +183,4 @@ class TestPluginDisableWarning:
             db=test_db,
         )
         assert "warnings" not in result or result["warnings"] == []
-        from app.api.v1.plugin_switches import update_plugin_switches
-        test_db.add(PluginEnabled(plugin_name="cors", enabled=1))
-        await test_db.commit()
-
-        await update_plugin_switches([], db=test_db)
-
-        from sqlalchemy import select
-        r = await test_db.execute(select(PluginEnabled))
-        assert r.scalars().all() == []
 

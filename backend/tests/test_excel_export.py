@@ -36,15 +36,6 @@ class TestOpenpyxlAvailable:
         assert wb["测试"]["A1"].value == "Hello"
 
 
-class TestExportRouterExists:
-
-    def test_export_router_module_importable(self):
-        """Verify the cluster_export module can be imported and has a router."""
-        from app.api.v1.cluster_export import router
-        assert router is not None
-        assert hasattr(router, "routes")
-
-
 @pytest.fixture
 async def test_engine():
     from tests.conftest import _isolated_engine_factory, _prepare_isolated_db

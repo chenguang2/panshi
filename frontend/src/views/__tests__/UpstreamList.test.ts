@@ -13,7 +13,7 @@ vi.mock('@/api', () => ({
     put: (...args: any[]) => mockApiPut(...args),
     post: (...args: any[]) => mockApiPost(...args),
     delete: (...args: any[]) => mockApiDelete(...args),
-  }
+  },
 }))
 
 vi.mock('vue-router', () => ({
@@ -24,31 +24,65 @@ vi.mock('vue-router', () => ({
 
 const stubs = {
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
-  AButton: { template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>', props: ['type', 'size', 'loading'] },
-  AInputSearch: { template: '<div class="mock-search"><input class="mock-search-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" /></div>', props: ['value', 'placeholder'] },
-  ASelect: { template: '<div class="mock-select"><select :value="value" @change="$emit(\'update:value\', $event.target.value)"><slot /></select></div>', props: ['value'] },
+  AButton: {
+    template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>',
+    props: ['type', 'size', 'loading'],
+  },
+  AInputSearch: {
+    template:
+      '<div class="mock-search"><input class="mock-search-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" /></div>',
+    props: ['value', 'placeholder'],
+  },
+  ASelect: {
+    template:
+      '<div class="mock-select"><select :value="value" @change="$emit(\'update:value\', $event.target.value)"><slot /></select></div>',
+    props: ['value'],
+  },
   ASelectOption: { template: '<option :value="value"><slot /></option>', props: ['value'] },
-  ATable: { template: '<div class="mock-table"><template v-for="item in dataSource"><slot name="bodyCell" :column="{ key: \'name\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'cluster\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'load_balance\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'targets\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'scheme\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'version\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'created_at\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'actions\' }" :record="item" /></template><slot /></div>', props: ['columns', 'dataSource', 'loading', 'pagination', 'rowKey', 'size'] },
+  ATable: {
+    template:
+      '<div class="mock-table"><template v-for="item in dataSource"><slot name="bodyCell" :column="{ key: \'name\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'cluster\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'load_balance\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'targets\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'scheme\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'version\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'created_at\' }" :record="item" /><slot name="bodyCell" :column="{ key: \'actions\' }" :record="item" /></template><slot /></div>',
+    props: ['columns', 'dataSource', 'loading', 'pagination', 'rowKey', 'size'],
+  },
   ADropdown: { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>', props: ['trigger'] },
   AMenu: { template: '<div class="mock-menu"><slot /></div>' },
   AMenuItem: { template: '<div class="mock-menuitem" @click="$emit(\'click\')"><slot /></div>' },
   AMenuDivider: { template: '<hr class="mock-menudivider" />' },
-  AModal: { template: '<div class="mock-modal" :class="{ visible: open }"><slot /><slot name="footer" /></div>', props: ['open', 'title', 'width', 'confirmLoading'] },
+  AModal: {
+    template: '<div class="mock-modal" :class="{ visible: open }"><slot /><slot name="footer" /></div>',
+    props: ['open', 'title', 'width', 'confirmLoading'],
+  },
   AForm: { template: '<div><slot /></div>', props: ['model'] },
   AFormItem: { template: '<div><slot /></div>', props: ['label', 'name', 'rules'] },
-  AInput: { template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />', props: ['value', 'placeholder'] },
-  ATextarea: { template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />', props: ['value', 'rows'] },
-  AInputNumber: { template: '<input type="number" :value="value" @input="$emit(\'update:value\', parseInt($event.target.value) || 0)" />', props: ['value', 'min', 'max', 'placeholder', 'style'] },
+  AInput: {
+    template: '<input :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
+    props: ['value', 'placeholder'],
+  },
+  ATextarea: {
+    template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
+    props: ['value', 'rows'],
+  },
+  AInputNumber: {
+    template:
+      '<input type="number" :value="value" @input="$emit(\'update:value\', parseInt($event.target.value) || 0)" />',
+    props: ['value', 'min', 'max', 'placeholder', 'style'],
+  },
   ATag: { template: '<span class="mock-tag"><slot /></span>', props: ['color'] },
   ABadge: { template: '<span class="mock-badge"><slot /></span>' },
   ADivider: { template: '<hr />' },
   ATooltip: { template: '<span><slot /></span>' },
   APopover: { template: '<div><slot /><slot name="content" /></div>' },
-  ACheckbox: { template: '<input type="checkbox" :checked="checked" @change="$emit(\'update:checked\', $event.target.checked)" />', props: ['checked', 'value'] },
+  ACheckbox: {
+    template: '<input type="checkbox" :checked="checked" @change="$emit(\'update:checked\', $event.target.checked)" />',
+    props: ['checked', 'value'],
+  },
   ACheckboxGroup: { template: '<div><slot /></div>', props: ['value'] },
   ATabs: { template: '<div><slot /></div>', props: ['activeKey'] },
   ATabPane: { template: '<div v-if="activeKey === key"><slot /></div>', props: ['key', 'tab'] },
-  APagination: { template: '<div class="mock-pagination" />', props: ['current', 'pageSize', 'total', 'showSizeChanger', 'showTotal', 'pageSizeOptions', 'showQuickJumper'] },
+  APagination: {
+    template: '<div class="mock-pagination" />',
+    props: ['current', 'pageSize', 'total', 'showSizeChanger', 'showTotal', 'pageSizeOptions', 'showQuickJumper'],
+  },
   PublishConfirmModal: { template: '<div class="mock-publish-modal" />', props: ['visible', 'title', 'clusterId'] },
 }
 
@@ -57,9 +91,29 @@ const MOCK_UPSTREAMS = {
   page: 1,
   page_size: 20,
   items: [
-    { id: 1, name: 'user-service', description: '用户服务', cluster_id: 1, cluster_name: '生产集群', load_balance: 'weighted_roundrobin', targets: [{ target: '10.0.0.1:8080', weight: 100 }], current_version: 3, created_at: '2024-01-15T10:30:00Z' },
-    { id: 2, name: 'order-service', description: '订单服务', cluster_id: 2, cluster_name: '预发集群', load_balance: 'chash', targets: [{ target: '10.0.0.2:8080', weight: 80 }], current_version: 1, created_at: '2024-02-10T14:20:00Z' },
-  ]
+    {
+      id: 1,
+      name: 'user-service',
+      description: '用户服务',
+      cluster_id: 1,
+      cluster_name: '生产集群',
+      load_balance: 'weighted_roundrobin',
+      targets: [{ target: '10.0.0.1:8080', weight: 100 }],
+      current_version: 3,
+      created_at: '2024-01-15T10:30:00Z',
+    },
+    {
+      id: 2,
+      name: 'order-service',
+      description: '订单服务',
+      cluster_id: 2,
+      cluster_name: '预发集群',
+      load_balance: 'chash',
+      targets: [{ target: '10.0.0.2:8080', weight: 80 }],
+      current_version: 1,
+      created_at: '2024-02-10T14:20:00Z',
+    },
+  ],
 }
 
 describe('UpstreamList.vue', () => {
@@ -71,7 +125,14 @@ describe('UpstreamList.vue', () => {
         return Promise.resolve({ data: MOCK_UPSTREAMS })
       }
       if (url === '/clusters') {
-        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }, { id: 2, display_name: '预发集群', group_name: '预发' }] } })
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, display_name: '生产集群', group_name: '线上' },
+              { id: 2, display_name: '预发集群', group_name: '预发' },
+            ],
+          },
+        })
       }
       return Promise.reject(new Error('unknown url'))
     })
@@ -80,7 +141,7 @@ describe('UpstreamList.vue', () => {
   it('renders page header and filter bar', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
@@ -88,7 +149,7 @@ describe('UpstreamList.vue', () => {
   it('renders upstream table with data', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/upstreams', expect.any(Object))
   })
@@ -96,7 +157,7 @@ describe('UpstreamList.vue', () => {
   it('shows cluster filter dropdown', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/clusters', { params: {} })
   })
@@ -104,9 +165,12 @@ describe('UpstreamList.vue', () => {
   it('renders upstream count', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('2')
+    // 精确匹配计数节点文案「共 {{ totalCount }} 个上游」，避免任意含 2 的文本误命中
+    const countSpan = wrapper.findAll('span').find((s) => s.text().includes('个上游'))
+    expect(countSpan).toBeDefined()
+    expect(countSpan!.text()).toBe('共 2 个上游')
   })
 
   // ── Group Filter Tests ──
@@ -114,11 +178,11 @@ describe('UpstreamList.vue', () => {
   it('renders group filter select before cluster filter', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 200))
+    await new Promise((r) => setTimeout(r, 200))
     await wrapper.vm.$nextTick()
     const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex(s => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex(s => s.text().includes('全部集群'))
+    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
+    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
     expect(groupIdx).toBeGreaterThanOrEqual(0)
     expect(clusterIdx).toBeGreaterThanOrEqual(0)
     expect(groupIdx).toBeLessThan(clusterIdx)
@@ -127,12 +191,12 @@ describe('UpstreamList.vue', () => {
   it('populates group filter options from cluster group_names', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 200))
+    await new Promise((r) => setTimeout(r, 200))
     await wrapper.vm.$nextTick()
-    const groupSelect = wrapper.findAll('select').find(s => s.text().includes('全部分组'))
+    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     const options = groupSelect!.findAll('option')
-    const optionTexts = options.map(o => o.text())
+    const optionTexts = options.map((o) => o.text())
     expect(optionTexts).toContain('线上')
     expect(optionTexts).toContain('预发')
   })
@@ -140,7 +204,7 @@ describe('UpstreamList.vue', () => {
   it('always passes group_name in API request', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     await wrapper.vm.$nextTick()
     const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/upstreams')
     expect(calls.length).toBeGreaterThan(0)
@@ -158,10 +222,10 @@ describe('UpstreamList.vue copy', () => {
   it('操作菜单含「复制」项', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     // 表格行操作菜单渲染复制项
     const menuItems = wrapper.findAll('.mock-menuitem')
-    expect(menuItems.some(m => m.text().includes('复制'))).toBe(true)
+    expect(menuItems.some((m) => m.text().includes('复制'))).toBe(true)
   })
 })
 
@@ -173,7 +237,7 @@ describe('UpstreamList.vue handleAction copy', () => {
   it('handleAction copy 设 editingUpstream + copyingUpstream + 打开弹窗', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     const record = { id: 5, name: 'svc-a', cluster_id: 1 }
     ;(wrapper.vm as any).handleAction('copy', record)
     await wrapper.vm.$nextTick()
@@ -185,7 +249,7 @@ describe('UpstreamList.vue handleAction copy', () => {
   it('handleAction edit 复位 copyingUpstream', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 100))
     ;(wrapper.vm as any).copyingUpstream = true
     ;(wrapper.vm as any).handleAction('edit', { id: 5, name: 'svc-a', cluster_id: 1 })
     expect((wrapper.vm as any).copyingUpstream).toBe(false)

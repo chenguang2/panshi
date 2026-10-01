@@ -487,21 +487,6 @@ class TestCompareStreamProxyGracefulDegradation:
         r = _compare_stream_targets("not-json", {"x:1": 100})
         assert "status" in r  # 不抛异常即可，结果为 diff 是合理的
 
-    def test_list_stream_routes_empty_returns_empty_dict(self):
-        """模拟 list_stream_routes 返回空列表 → edge_stream_proxies = {}"""
-        raw = []
-        result = {sp.get("id", ""): sp for sp in raw}
-        assert result == {}
-
-    def test_list_stream_routes_none_does_not_crash(self):
-        """模拟 list_stream_routes 返回 None（已由 except Exception 兜底）"""
-        raw = None
-        try:
-            result = {_edge_val_fn(sp).get("id", ""): _edge_val_fn(sp) for sp in raw} if raw is not None else {}
-        except TypeError:
-            result = {}
-        assert result == {}
-
 
 def _compare_plugin_metadata_standalone(db_config: dict, edge_config: dict | None, rules) -> dict:
     """模拟 diff 端点的 plugin_metadata 对比逻辑（含 ignore_edge_fields 规则）"""
@@ -669,12 +654,6 @@ class TestComparePluginMetadata:
         db = {"logs": "logs/process.log"}
         r = _compare_plugin_metadata_standalone(db, None, self.rules)
         assert r["status"] == "only_in_db"
-
-
-def _edge_val_fn(item: dict) -> dict:
-    """模拟 _edge_val"""
-    v = item.get("value") if isinstance(item, dict) else None
-    return v if isinstance(v, dict) else (item if isinstance(item, dict) else {})
 
 
 class TestEquivalenceRules:
@@ -901,20 +880,8 @@ class TestHashOnEquivalence:
 
     def test_hash_on_none_edge_missing_is_match(self):
         """DB hash_on=None 且 Edge 没有 hash_on（非chash），应一致"""
-        db_raw = None
-        edge_v = None
         default = self.rules.get_field_default("upstream", "hash_on")
         assert default == "vars"
-        # raw value is None, edge missing → no diff (edge_v is None, db_raw is None)
-        assert db_raw is None  # the existence check passes cleanly
-
-    def test_hash_on_not_in_edge_type_roundrobin(self):
-        """模拟实际场景：type=roundrobin, Edge 不返回 hash_on"""
-        db_raw = None  # user never set hash_on
-        edge_v = None  # Edge doesn't have hash_on (not chash)
-        # This should NOT be a diff: raw DB value is None and Edge doesn't have it
-        should_report = db_raw is not None and db_raw != self.rules.get_field_default("upstream", "hash_on")
-        assert not should_report
 
 
 class TestChecksEquivalence:

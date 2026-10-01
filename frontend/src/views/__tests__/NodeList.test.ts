@@ -25,7 +25,7 @@ vi.mock('vue-router', () => ({
 const stubs = {
   'a-table': {
     template:
-      '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td></tr></tbody></table>',
+      '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
     props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size', 'scroll', 'rowSelection'],
   },
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
@@ -108,12 +108,20 @@ describe('NodeList.vue', () => {
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
-  it('renders cluster filter dropdown', async () => {
+  it('populates group and cluster filter dropdowns with expected options', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await new Promise((r) => setTimeout(r, 200))
-    const selects = wrapper.findAll('select')
-    expect(selects.length).toBeGreaterThanOrEqual(1)
+    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    const optionTexts = groupSelect!.findAll('option').map((o) => o.text())
+    // 组件结构：全部分组 + groupOptions（去重排序：线上 < 预发）+ 未分组 = 4 项
+    expect(optionTexts).toEqual(['全部分组', '线上', '预发', '未分组'])
+    // 集群筛选下拉：全部集群 + 3 个集群选项
+    const clusterSelect = wrapper.findAll('select').find((s) => s.text().includes('全部集群'))
+    expect(clusterSelect).toBeDefined()
+    const clusterOptionTexts = clusterSelect!.findAll('option').map((o) => o.text())
+    expect(clusterOptionTexts).toEqual(['全部集群', '生产集群', '预发集群', '开发集群'])
   })
 
   it('renders node table with data', async () => {
@@ -142,7 +150,9 @@ describe('NodeList.vue', () => {
     const source = (await import('../NodeList.vue')).default
     const wrapper = mount(source, { global: { stubs } })
     await new Promise((r) => setTimeout(r, 200))
-    expect(wrapper.find('button').text()).toBeDefined()
+    // 组件行内操作按钮文案为「⟳ reload」
+    const reloadBtn = wrapper.findAll('button').find((b) => b.text().includes('reload'))
+    expect(reloadBtn).toBeDefined()
   })
 
   it('renders detail in template', async () => {
@@ -173,18 +183,6 @@ describe('NodeList.vue', () => {
     expect(groupIdx).toBeGreaterThanOrEqual(0)
     expect(clusterIdx).toBeGreaterThanOrEqual(0)
     expect(groupIdx).toBeLessThan(clusterIdx)
-  })
-
-  it('populates group filter options from cluster group_names', async () => {
-    const NodeList = (await import('../NodeList.vue')).default
-    const wrapper = mount(NodeList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
-    expect(groupSelect).toBeDefined()
-    const options = groupSelect!.findAll('option')
-    const optionTexts = options.map((o) => o.text())
-    expect(optionTexts).toContain('线上')
-    expect(optionTexts).toContain('预发')
   })
 
   it('always passes group_name in API request', async () => {

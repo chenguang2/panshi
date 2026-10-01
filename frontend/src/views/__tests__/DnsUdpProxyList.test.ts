@@ -224,11 +224,13 @@ describe('DnsUdpProxyList.vue', () => {
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await new Promise((r) => setTimeout(r, 200))
     await wrapper.vm.$nextTick()
+    // 向导组件常驻渲染（:visible 而非 v-if），点击前 visible 必须为 false
+    expect(wrapper.findComponent('.mock-form-wizard').props('visible')).toBe(false)
     const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建 DNS 代理'))
     expect(createBtn).toBeDefined()
-    expect(wrapper.findAll('.mock-form-wizard').length).toBe(1)
-    // Check the wizard stub has visible=true after clicking (component stays rendered)
-    // The stub always exists because it uses :visible not v-if
+    await createBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findComponent('.mock-form-wizard').props('visible')).toBe(true)
   })
 })
 

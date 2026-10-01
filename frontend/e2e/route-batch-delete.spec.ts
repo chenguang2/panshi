@@ -1,159 +1,148 @@
 import { test, expect } from '@playwright/test'
+import {
+  apiHeaders,
+  apiJson,
+  checkRowsByContent,
+  cleanupRoutesByPrefix,
+  expectAntModal,
+  filterTableBySearch,
+  interceptBatchDelete,
+  openClusterTab,
+  skipIfNoCluster,
+  uniqueName,
+  type ClusterRef,
+} from './helpers/destructiveFlow'
+import { login as uiLogin } from './helpers/navigation'
 
-test.describe('Route Batch Delete E2E', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.fill('#username', 'admin')
-    await page.fill('#password', 'panshi123')
-    await page.click('button[type="submit"]')
-    await page.waitForURL('/')
+test.describe('Route Batch Delete E2E（route 拦截：不触达真实删除）', () => {
+  let cluster: ClusterRef
+  let headers: Record<string, string>
+  let prefix: string
+  let created: Array<{ id: number; name: string }>
+
+  test.beforeEach(async ({ page, request }) => {
+    cluster = (await skipIfNoCluster(request)) as ClusterRef
+    if (!cluster) return
+    headers = await apiHeaders(request)
+    await uiLogin(page)
+
+    // 造数：两条唯一名测试路由（demo 库路由 >1000 条，靠唯一前缀搜索锁定）
+    prefix = uniqueName('e2e-bd-r')
+    created = []
+    for (const suffix of ['-1', '-2']) {
+      const route = await apiJson<{ id: number; name: string }>(
+        request,
+        'POST',
+        `/clusters/${cluster.id}/routes`,
+        { name: `${prefix}${suffix}`, uri: `/e2e-bd${suffix}`, methods: 'GET' },
+        headers,
+      )
+      created.push(route)
+    }
   })
 
-  async function openRoutesTab(page: import('@playwright/test').Page) {
-    await page.waitForTimeout(1000)
-    // ClusterRoutes.vue 渲染在 CentralList.vue（/central-management）的集群展开视图中
-    await page.goto('/central-management')
-    await page.waitForTimeout(3000)
+  test.afterEach(async ({ request }) => {
+    if (!cluster) return
+    await cleanupRoutesByPrefix(request, headers, cluster.id, 'e2e-bd-r-')
+    await cleanupRoutesByPrefix(request, headers, cluster.id, 'e2e-dns-r-')
+  })
 
-    // 点击集群卡片上"路由"统计格 → 最大化集群并切换到路由 Tab
-    const routeStat = page
-      .locator('.cl-stat-link')
-      .filter({ has: page.locator('.cl-stat-label', { hasText: '路由' }) })
-      .first()
-    await expect(routeStat).toBeVisible({ timeout: 10000 })
-    await routeStat.click()
-    await page.waitForTimeout(2500)
+  test('batch delete flow: check own rows, confirm, intercepted payload + UI progress, zero backend effect', async ({
+    page,
+    request,
+  }) => {
+    const table = await openClusterTab(page, cluster, '路由')
+    await filterTableBySearch(page, table, '搜索路由', prefix)
+    await checkRowsByContent(
+      table,
+      created.map((r) => r.name),
+    )
 
-    // ClusterRoutes 工具栏（node-actions）出现即视图已加载
-    const toolbar = page.locator('.node-actions')
-    await expect(toolbar).toBeVisible({ timeout: 10000 })
+    // 删除按钮显示勾选计数；多选时单选操作按钮禁用
+    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除路由' }).first()
+    await expect(deleteBtn).toContainText('(2)')
+    const editBtn = page.locator('.node-actions button').filter({ hasText: '编辑路由' }).first()
+    await expect(editBtn).toBeDisabled()
 
-    const routeTable = page.locator('.ant-table-tbody')
-    await expect(routeTable).toBeVisible({ timeout: 10000 })
-    return routeTable
-  }
+    // 拦截批量删除端点（DELETE /clusters/{id}/routes 集合端点，cluster_routes.py:311）
+    const names = new Map(created.map((r) => [r.id, r.name]))
+    const captured = await interceptBatchDelete(page, cluster.id, 'routes', {
+      idField: 'route_ids',
+      resultIdField: 'route_id',
+      resultNameField: 'route_name',
+      label: '路由',
+      names,
+    })
 
-  test('batch delete flow: check 2+ rows, confirm, progress, selection cleared', async ({ page }) => {
-    const routeTable = await openRoutesTab(page)
-
-    // Need at least 2 rows with checkable checkboxes
-    const checkboxes = routeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 2) {
-      test.skip('Not enough routes to batch delete')
-      return
-    }
-
-    // Check the first two rows
-    await checkboxes.nth(0).check()
-    await checkboxes.nth(1).check()
-    await page.waitForTimeout(300)
-
-    // Toolbar delete button should show count (2)
-    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    await expect(deleteBtn).toBeVisible({ timeout: 5000 })
-    const btnText = await deleteBtn.textContent()
-    if (!btnText?.includes('(')) {
-      test.skip('Delete button does not show batch count — likely DNS rows blocked selection')
-      return
-    }
-
-    // Single-selection buttons should be disabled when 2+ checked (P2)
-    const editBtn = page.locator('.node-actions button').filter({ hasText: '编辑' }).first()
-    if (await editBtn.isVisible()) {
-      await expect(editBtn).toBeDisabled()
-    }
-
-    // Open delete confirm
     await deleteBtn.click()
-    await page.waitForTimeout(800)
+    const modal = await expectAntModal(page, /确认删除/, '删除确认弹窗')
+    await modal.locator('label').filter({ hasText: '数据库' }).first().locator('input[type="checkbox"]').check()
+    await modal.locator('button.ant-btn-dangerous').last().click()
 
-    // Confirm dialog should exist (custom modal with "确认删除")
-    const modal = page.locator('.ant-modal').last()
-    const modalVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!modalVisible) {
-      test.skip('Delete confirm modal did not appear')
-      return
+    const progress = await expectAntModal(page, new RegExp(`批量删除路由: `), '批量删除进度弹窗')
+    for (const r of created) {
+      await expect(progress.locator('.ant-modal-body')).toContainText(`删除路由 ${r.name}: 数据库✅`)
     }
+    await expect(progress.locator('.ant-modal-body')).toContainText('✅ 批量删除完成!')
 
-    // Check the "数据库" option to enable the confirm button
-    const dbOption = modal.locator('label').filter({ hasText: '数据库' }).first()
-    await dbOption.locator('input[type="checkbox"]').check()
-    await page.waitForTimeout(300)
+    // 载荷断言：仅含被勾选的两条造数路由，未误伤其余 1100+ 条真实路由
+    expect(captured).toHaveLength(1)
+    expect(captured[0].body.delete_db).toBe(true)
+    expect(captured[0].body.delete_edge).toBe(false)
+    expect([...((captured[0].body.route_ids as number[]) || [])].sort()).toEqual(created.map((r) => r.id).sort())
 
-    // Find the confirm button (btn-danger)
-    const confirmBtn = modal.locator('button.ant-btn-dangerous').last()
-    await confirmBtn.click()
-    await page.waitForTimeout(2500)
-
-    // Progress modal should appear and eventually complete
-    const progressVisible = await modal.isVisible({ timeout: 5000 }).catch(() => false)
-    if (progressVisible) {
-      await page.waitForTimeout(3000)
-    }
-
-    // Selection should be cleared after delete (checkboxes unchecked / delete btn no count)
-    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
+    // 完成后选择被清空
+    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除路由' }).first()
     await expect(deleteBtnAfter).toBeVisible({ timeout: 5000 })
-    // 等待选择清除（删除进度完成后按钮文案不再含数量）
     await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
+
+    // 拦截生效证据：真实后端零副作用——两条测试路由仍然存在
+    const list = await apiJson<{ items: Array<{ id: number }> }>(
+      request,
+      'GET',
+      `/clusters/${cluster.id}/routes?search=${encodeURIComponent(prefix)}&page_size=100`,
+      undefined,
+      headers,
+    )
+    expect(list.items.map((r) => r.id).sort(), '拦截应阻止真实删除').toEqual(created.map((r) => r.id).sort())
   })
 
   test('search clears batch selection (D9)', async ({ page }) => {
-    const routeTable = await openRoutesTab(page)
+    const table = await openClusterTab(page, cluster, '路由')
+    await filterTableBySearch(page, table, '搜索路由', prefix)
+    await checkRowsByContent(table, [created[0].name])
 
-    const checkboxes = routeTable.locator('input[type="checkbox"]')
-    const count = await checkboxes.count()
-    if (count < 1) {
-      test.skip('Not enough routes')
-      return
-    }
+    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除路由' }).first()
+    await expect(deleteBtn).toContainText('(1)')
 
-    await checkboxes.nth(0).check()
-    await page.waitForTimeout(300)
-
-    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
-    const btnText = (await deleteBtn.textContent()) || ''
-    if (!btnText.includes('(')) {
-      test.skip('Checkbox selection did not register')
-      return
-    }
-
-    // Perform a search
-    const searchInput = page.locator('.node-actions .ant-input').first()
-    if (await searchInput.isVisible().catch(() => false)) {
-      await searchInput.fill('__no_such_route__')
-      await searchInput.press('Enter')
-      await page.waitForTimeout(2500)
-    } else {
-      test.skip('Search input not visible')
-      return
-    }
-
-    // Selection should be cleared after search
-    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除' }).first()
+    await filterTableBySearch(page, table, '搜索路由', '__no_such_route__', false)
+    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除路由' }).first()
     await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 
-  test('DNS route checkbox is disabled', async ({ page }) => {
-    const routeTable = await openRoutesTab(page)
+  test('DNS route checkbox is disabled（自造 DNS 路由，不依赖共享遗留数据）', async ({ page, request }) => {
+    // 自造：路由 + 挂 dns_upstream 插件（PUT /routes/{id}/plugins，isDnsRoute 依据）
+    const dnsName = uniqueName('e2e-dns-r')
+    const dnsRoute = await apiJson<{ id: number; name: string }>(
+      request,
+      'POST',
+      `/clusters/${cluster.id}/routes`,
+      { name: dnsName, uri: `/e2e-dns`, methods: 'GET' },
+      headers,
+    )
+    await apiJson(
+      request,
+      'PUT',
+      `/clusters/${cluster.id}/routes/${dnsRoute.id}/plugins`,
+      { plugins: [{ plugin_name: 'dns_upstream', config: { servers: ['8.8.8.8'] } }] },
+      headers,
+    )
 
-    // 搜索 DNS 测试路由确保其在当前页可见（ClusterRoutes 无 DNS badge，按名称定位）
-    const searchInput = page.locator('.node-actions .ant-input').first()
-    if (await searchInput.isVisible().catch(() => false)) {
-      await searchInput.fill('e2e-dns-route')
-      await searchInput.press('Enter')
-      await page.waitForTimeout(2000)
-    }
+    const table = await openClusterTab(page, cluster, '路由')
+    await filterTableBySearch(page, table, '搜索路由', dnsName)
 
-    const dnsRow = routeTable.locator('tr', { hasText: 'e2e-dns-route' }).first()
-    const dnsVisible = await dnsRow.isVisible({ timeout: 5000 }).catch(() => false)
-    if (!dnsVisible) {
-      test.skip('No DNS route present in test data')
-      return
-    }
-
-    const dnsCheckbox = dnsRow.locator('input[type="checkbox"]')
-    await expect(dnsCheckbox).toBeDisabled()
+    const dnsRow = table.locator('tr', { hasText: dnsName }).first()
+    await expect(dnsRow).toBeVisible()
+    await expect(dnsRow.locator('input[type="checkbox"]'), 'DNS 路由复选框应禁用（不可批量删除）').toBeDisabled()
   })
 })

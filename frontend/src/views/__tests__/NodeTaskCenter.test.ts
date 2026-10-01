@@ -111,12 +111,20 @@ describe('NodeTaskCenter', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    const selects = wrapper.findAll('.filter-select')
-    if (selects.length > 0) {
-      await selects[0].trigger('change')
-      await flushPromises()
-    }
-    expect(api.get).toHaveBeenCalled()
+    // 状态筛选器必须存在：防止选择器被移除/改名时静默通过
+    const statusSelect = wrapper.find('.node-filter-bar select')
+    expect(statusSelect.exists()).toBe(true)
+    // 筛选 select 只绑 v-model，需点击「刷新」按钮触发 loadTasks(1)
+    await statusSelect.setValue('failed')
+    const callsBefore = vi.mocked(api.get).mock.calls.filter(([u]) => u === '/node-tasks').length
+    const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('刷新'))
+    expect(refreshBtn).toBeDefined()
+    await refreshBtn!.trigger('click')
+    await flushPromises()
+    const calls = vi.mocked(api.get).mock.calls.filter(([u]) => u === '/node-tasks')
+    expect(calls.length).toBeGreaterThan(callsBefore)
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall[1].params.status).toBe('failed')
     wrapper.unmount()
   })
 

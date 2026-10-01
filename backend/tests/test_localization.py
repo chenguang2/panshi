@@ -33,11 +33,6 @@ async def test_route_not_found_returns_chinese(async_authed_client):
 
 
 @pytest.mark.asyncio
-async def test_product_name_appears_as_磐石():
-    pass
-
-
-@pytest.mark.asyncio
 async def test_login_success_message(async_authed_client):
     response = await async_authed_client.post(
         "/api/v1/auth/login",

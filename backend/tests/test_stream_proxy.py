@@ -7,6 +7,7 @@ import json
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from app.models.cluster import StreamProxy
 
 
@@ -72,7 +73,7 @@ class TestStreamProxyModel:
 
         proxy2 = StreamProxy(cluster_id=1, name="proxy2", listen_port=9970)
         test_db.add(proxy2)
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrityError):
             await test_db.commit()
         await test_db.rollback()
 
@@ -341,9 +342,12 @@ class TestStreamProxyPublishProtocol:
 class TestStreamProxyAPI:
     """API endpoint tests."""
 
+    # 确定性端口序列：随机取值在同集群唯一约束下有跨用例碰撞概率
+    _port_seq = 30000
+
     def _unique_port(self):
-        import random
-        return random.randint(20000, 30000)
+        TestStreamProxyAPI._port_seq += 1
+        return TestStreamProxyAPI._port_seq
 
     async def _login(self, client):
         resp = await client.post("/api/v1/auth/login", json={"username": "admin", "password": "panshi123"})
@@ -497,9 +501,6 @@ class TestProxyTypeFilter:
 class TestDnsUdpProxyModule:
     """Tests for the new cluster_dns_proxies module (TDD: starts failing)."""
 
-    def test_module_importable(self):
-        """cluster_dns_proxies module should be importable."""
-        import app.api.v1.cluster_dns_proxies as mod  # noqa: F401
     def test_module_has_router_with_routes(self):
         """The module should expose a router with at least one route."""
         import app.api.v1.cluster_dns_proxies as mod

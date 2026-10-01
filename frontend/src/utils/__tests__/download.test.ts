@@ -20,10 +20,6 @@ describe('downloadPem', () => {
     vi.restoreAllMocks()
   })
 
-  it('should be defined', () => {
-    expect(downloadPem).toBeDefined()
-  })
-
   it('should create blob and trigger download', () => {
     downloadPem('-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----', 'test_cert.pem')
     expect(URL.createObjectURL).toHaveBeenCalled()
@@ -37,8 +33,12 @@ describe('downloadPem', () => {
       if (tag === 'a') {
         return {
           href: '',
-          set download(v: string) { captured = v },
-          get download() { return captured },
+          set download(v: string) {
+            captured = v
+          },
+          get download() {
+            return captured
+          },
           click: vi.fn(),
         } as unknown as HTMLElement
       }
@@ -85,10 +85,6 @@ describe('buildCertZip', () => {
     sign_key: '-----BEGIN PRIVATE KEY-----\nSIGNKEY\n-----END PRIVATE KEY-----',
   }
 
-  it('should be defined', () => {
-    expect(buildCertZip).toBeDefined()
-  })
-
   it('should return a Blob with zip type', async () => {
     const blob = await buildCertZip(mockCert, ['cert', 'key'])
     expect(blob).toBeInstanceOf(Blob)
@@ -116,8 +112,10 @@ describe('buildCertZip', () => {
     const buf = await blob.arrayBuffer()
     const zip = await JSZip.loadAsync(buf)
     expect(Object.keys(zip.files).sort()).toEqual([
-      'test-cert_cert.pem', 'test-cert_key.pem',
-      'test-cert_sign_cert.pem', 'test-cert_sign_key.pem',
+      'test-cert_cert.pem',
+      'test-cert_key.pem',
+      'test-cert_sign_cert.pem',
+      'test-cert_sign_key.pem',
     ])
   })
 })

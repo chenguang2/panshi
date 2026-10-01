@@ -12,14 +12,6 @@ from pathlib import Path
 class TestCertGeneratorModule:
     """Module-level tests."""
 
-    def test_module_imports(self):
-        from app.services import cert_generator
-        assert cert_generator is not None
-
-    def test_module_has_detect_openssl(self):
-        from app.services.cert_generator import detect_openssl
-        assert callable(detect_openssl)
-
 
 # ===== 2.2 detect_openssl() =====
 
@@ -521,12 +513,6 @@ class TestLocalProviderAlgorithm:
         from app.services.cert_generator import generate_ca_certificate
         return generate_ca_certificate(openssl_path, "LPCA", 3650, flavor)
 
-    def test_provider_has_generate_method(self):
-        from app.services.cert_generator import LocalProvider
-        provider = LocalProvider()
-        assert hasattr(provider, "generate_certificate")
-        assert callable(provider.generate_certificate)
-
     def test_generate_sm2_returns_dual(self):
         from app.services.cert_generator import LocalProvider
         provider = LocalProvider()
@@ -600,12 +586,6 @@ class TestLocalProviderAlgorithm:
 
 class TestLocalProvider:
     """Tests for LocalProvider."""
-
-    def test_provider_has_generate_dual(self):
-        from app.services.cert_generator import LocalProvider
-        provider = LocalProvider()
-        assert hasattr(provider, "generate_dual_certificates")
-        assert callable(provider.generate_dual_certificates)
 
     def test_provider_detects_openssl(self):
         from app.services.cert_generator import LocalProvider
@@ -786,10 +766,6 @@ class TestGeneratorReturnsLogs:
 
 class TestCommandLogEntry:
     """Tests for CommandLogEntry schema."""
-
-    def test_model_exists(self):
-        from app.schemas.ssl import CommandLogEntry
-        assert CommandLogEntry is not None
 
     def test_has_required_fields(self):
         from app.schemas.ssl import CommandLogEntry
