@@ -122,37 +122,39 @@
         <div class="modal-body">
           <div v-if="detailCluster">
             <table class="detail-table">
-              <tr>
-                <td class="dt-label">集群名称</td>
-                <td class="dt-value">{{ detailCluster.name }}</td>
-              </tr>
-              <tr>
-                <td class="dt-label">显示名称</td>
-                <td class="dt-value">{{ detailCluster.display_name || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="dt-label">分组</td>
-                <td class="dt-value">{{ detailCluster.group_name || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="dt-label">描述</td>
-                <td class="dt-value">{{ detailCluster.description || '-' }}</td>
-              </tr>
-              <tr>
-                <td class="dt-label">状态</td>
-                <td class="dt-value">
-                  <span v-if="detailCluster.status === 1" class="badge badge-success"
-                    ><span class="status-dot online"></span>运行中</span
-                  >
-                  <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-                </td>
-              </tr>
-              <tr>
-                <td class="dt-label">创建时间</td>
-                <td class="dt-value">
-                  {{ formatDateTime(detailCluster.created_at) }}
-                </td>
-              </tr>
+              <tbody>
+                <tr>
+                  <td class="dt-label">集群名称</td>
+                  <td class="dt-value">{{ detailCluster.name }}</td>
+                </tr>
+                <tr>
+                  <td class="dt-label">显示名称</td>
+                  <td class="dt-value">{{ detailCluster.display_name || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="dt-label">分组</td>
+                  <td class="dt-value">{{ detailCluster.group_name || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="dt-label">描述</td>
+                  <td class="dt-value">{{ detailCluster.description || '-' }}</td>
+                </tr>
+                <tr>
+                  <td class="dt-label">状态</td>
+                  <td class="dt-value">
+                    <span v-if="detailCluster.status === 1" class="badge badge-success"
+                      ><span class="status-dot online"></span>运行中</span
+                    >
+                    <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="dt-label">创建时间</td>
+                  <td class="dt-value">
+                    {{ formatDateTime(detailCluster.created_at) }}
+                  </td>
+                </tr>
+              </tbody>
             </table>
             <h3 class="detail-section-title">资源统计</h3>
             <div class="detail-stats-grid">
