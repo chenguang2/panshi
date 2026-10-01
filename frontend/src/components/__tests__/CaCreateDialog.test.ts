@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiPost = vi.fn()
 
 vi.mock('@/api', () => ({
-  default: { post: (...args: any[]) => mockApiPost(...args) }
+  default: { post: (...args: any[]) => mockApiPost(...args) },
 }))
 
 const stubs = {
@@ -17,6 +17,11 @@ describe('CaCreateDialog.vue', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    // URL 感知 mock：注册端点返回成功，其余一律 reject
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/ssl/ca') return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
   })
 
   it('has algorithm select defaulting to first option (rsa)', async () => {
@@ -40,7 +45,7 @@ describe('CaCreateDialog.vue', () => {
     wrapper.vm.form.name = 'Test CA'
     wrapper.vm.form.algorithm = 'rsa'
     await wrapper.vm.handleCreate()
-    await new Promise(r => setTimeout(r, 50))
+    await flushPromises()
     const call = mockApiPost.mock.calls.find((c: any[]) => c[0] === '/clusters/1/ssl/ca')
     expect(call).toBeDefined()
     expect(call[1].algorithm).toBe('rsa')

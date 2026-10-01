@@ -86,24 +86,21 @@ describe('RouteList.vue', () => {
   it('renders page header', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
   it('loads routes on mount', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(mockApiGet).toHaveBeenCalledWith('/routes', expect.any(Object))
   })
 
   it('renders method filter chips', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(wrapper.text()).toContain('GET')
     expect(wrapper.text()).toContain('POST')
   })
@@ -111,16 +108,14 @@ describe('RouteList.vue', () => {
   it('loads plugin options on mount', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(mockApiGet).toHaveBeenCalledWith('/plugins/builtin')
   })
 
   it('renders plugin dropdown in filter bar', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const pluginSelect = wrapper.find('select.plugin-filter')
     expect(pluginSelect.exists()).toBe(true)
     expect(pluginSelect.text()).toContain('限流')
@@ -130,16 +125,14 @@ describe('RouteList.vue', () => {
   it('passes plugin param when filter is selected', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // After mount, count how many /routes calls we had
     const mountRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
     // Simulate user selecting a plugin via DOM
     const select = wrapper.find('select.plugin-filter').element as HTMLSelectElement
     select.value = 'limit-req'
     select.dispatchEvent(new Event('change'))
-    await new Promise((r) => setTimeout(r, 300))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // There should be one more /routes call after the change
     const totalRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
     expect(totalRouteCalls).toBe(mountRouteCalls + 1)
@@ -206,8 +199,7 @@ describe('RouteList.vue', () => {
         },
       },
     })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // DNS 路由（plugins 含 dns_upstream）在名称列渲染 DNS 徽章
     const badge = wrapper.find('.dns-route-badge')
     expect(badge.exists()).toBe(true)

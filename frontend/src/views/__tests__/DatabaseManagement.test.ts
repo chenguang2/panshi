@@ -244,8 +244,8 @@ describe('DatabaseManagement', () => {
     })
     // Mock migrateDatabaseStream to return an AbortController and simulate success
     mocks.migrateDatabaseStream.mockImplementation((_sourceId: string, _targetId: string, options: any) => {
-      // Simulate SSE events
-      setTimeout(() => {
+      // Simulate SSE events（微任务即达：无真实计时器，消费方 flushPromises 确定性收敛）
+      void Promise.resolve().then(() => {
         options.onProgress?.({
           table_index: 1,
           total_tables: 22,
@@ -255,7 +255,7 @@ describe('DatabaseManagement', () => {
           skipped: false,
         })
         options.onComplete?.({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
-      }, 10)
+      })
       return new AbortController()
     })
   })

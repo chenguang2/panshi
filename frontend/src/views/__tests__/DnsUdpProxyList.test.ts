@@ -96,7 +96,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('renders page header with title and description', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const header = wrapper.find('.page-header')
     expect(header.exists()).toBe(true)
@@ -105,7 +105,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('has create button labelled "+ 新建 DNS 代理"', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建 DNS 代理'))
     expect(createBtn).toBeDefined()
@@ -114,7 +114,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('loads proxies on mount via global /stream-proxies endpoint', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/stream-proxies', expect.any(Object))
   })
@@ -133,7 +133,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('renders cards for DNS proxies with port info', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const cards = wrapper.findAll('.sp-card')
     expect(cards.length).toBe(2)
@@ -142,7 +142,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('displays DNS badge on cards', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const dnsBadges = wrapper.findAll('.dns-badge')
     expect(dnsBadges.length).toBe(2)
@@ -151,7 +151,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('shows action buttons on cards: 查看, 编辑, 删除, 发布, 版本管理', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const card = wrapper.find('.sp-card')
     expect(card.exists()).toBe(true)
@@ -165,7 +165,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('shows DNS domain info for proxy with dns_config hosts', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const firstCard = wrapper.findAll('.sp-card')[0]
     expect(firstCard.text()).toContain('example.com')
@@ -176,7 +176,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('shows "无 DNS 配置" for proxy without dns_config hosts', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const cards = wrapper.findAll('.sp-card')
     expect(cards.length).toBe(2)
@@ -187,7 +187,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('shows protocol label on cards (TCP/UDP)', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const cards = wrapper.findAll('.sp-card')
     expect(cards.length).toBe(2)
@@ -198,7 +198,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('count text shows total number of DNS proxies', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
     expect(countSpan).toBeDefined()
@@ -208,7 +208,7 @@ describe('DnsUdpProxyList.vue', () => {
   it('clicking create button toggles wizard visibility', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     // 向导组件常驻渲染（:visible 而非 v-if），点击前 visible 必须为 false
     expect(wrapper.findComponent('.mock-form-wizard').props('visible')).toBe(false)
@@ -242,7 +242,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
   it('页头有「批量管理」按钮（右侧），点击进入批量模式', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     const btn = wrapper.findAll('button').find((b) => b.text().includes('批量管理'))
@@ -261,7 +261,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
   it('勾选卡片后计数更新、批量删除按钮启用', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -282,7 +282,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
   it('批量模式下全选当前筛选结果 toggle', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -303,7 +303,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
   it('退出批量管理清空选择', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -349,12 +349,12 @@ describe('DnsUdpProxyList.vue 发布日志 · 经中继 / 直连 标注', () => 
   async function mountAndOpenPublish() {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs: publishStubs } })
-    await new Promise((r) => setTimeout(r, 120))
+    await flushPromises()
     const btn = wrapper.findAll('button').find((b) => b.text().trim() === '发布')
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     wrapper.findComponent({ name: 'PublishConfirmModal' }).vm.$emit('confirm', [1])
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     const { executePublish } = await import('@/composables/useClusterUtils')
     return vi.mocked(executePublish).mock.calls.at(-1)![0]
   }

@@ -108,7 +108,7 @@ describe('PluginMetadataList.vue', () => {
   it('renders page header', async () => {
     const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
     const wrapper = mount(PluginMetadataList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
@@ -116,14 +116,14 @@ describe('PluginMetadataList.vue', () => {
   it('loads items on mount', async () => {
     const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
     mount(PluginMetadataList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     expect(mockApiGet).toHaveBeenCalledWith('/plugin_metadata', expect.any(Object))
   })
 
   it('renders card grid with items', async () => {
     const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
     const wrapper = mount(PluginMetadataList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.pml-card').length).toBe(2)
     expect(wrapper.text()).toContain('jwt-auth')
@@ -186,7 +186,7 @@ describe('PluginMetadataList.vue', () => {
       return Promise.reject(new Error('unknown url'))
     })
     const wrapper = mount(PluginMetadataList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await (await import('vue')).nextTick()
     // Initially shows totalCount=2 from MOCK_DATA
     expect(wrapper.text()).toContain('共 2 个插件元数据')
@@ -194,7 +194,7 @@ describe('PluginMetadataList.vue', () => {
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     await groupSelect!.setValue('线上')
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await (await import('vue')).nextTick()
     // Must show totalCount=99 from server, NOT displayedItems.length=1
     expect(wrapper.text()).toContain('共 99 个插件元数据')
@@ -210,7 +210,7 @@ describe('PluginMetadataList.vue', () => {
     })
     const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
     const wrapper = mount(PluginMetadataList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('暂无插件元数据')
   })

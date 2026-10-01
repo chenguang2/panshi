@@ -91,7 +91,7 @@ describe('StreamProxyList.vue', () => {
   it('renders page header', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
@@ -147,7 +147,7 @@ describe('StreamProxyList.vue', () => {
     })
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const texts = wrapper.text()
     expect(texts).toContain('TCP')
@@ -158,7 +158,7 @@ describe('StreamProxyList.vue', () => {
   it('loads proxies on mount', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalled()
   })
@@ -180,7 +180,7 @@ describe('StreamProxyList.vue', () => {
   it('always uses global /stream-proxies endpoint with cluster_id param (not scoped endpoint)', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     // Simulate selecting a cluster
     const selects = wrapper.findAll('select')
@@ -189,7 +189,7 @@ describe('StreamProxyList.vue', () => {
     const selectEl = clusterSelect!.element as HTMLSelectElement
     selectEl.value = '1'
     selectEl.dispatchEvent(new Event('change'))
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     // All calls should go to /stream-proxies (global) with cluster_id param
     // NOT to /clusters/{id}/stream-proxies (scoped)
@@ -207,7 +207,7 @@ describe('StreamProxyList.vue', () => {
   it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const selects = wrapper.findAll('select')
     const groupSelect = selects.find((s) => s.text().includes('全部分组'))
@@ -215,7 +215,7 @@ describe('StreamProxyList.vue', () => {
     const selectEl = groupSelect!.element as HTMLSelectElement
     selectEl.value = '线上'
     selectEl.dispatchEvent(new Event('change'))
-    await new Promise((r) => setTimeout(r, 200))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
     expect(countSpan).toBeDefined()
@@ -245,7 +245,7 @@ describe('StreamProxyList.vue 批量管理', () => {
   it('点击「批量管理」进入批量模式，卡片浮现勾选框', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
@@ -262,7 +262,7 @@ describe('StreamProxyList.vue 批量管理', () => {
   it('勾选卡片后计数更新、批量删除按钮启用', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -286,7 +286,7 @@ describe('StreamProxyList.vue 批量管理', () => {
   it('批量模式下全选当前筛选结果 toggle', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -310,7 +310,7 @@ describe('StreamProxyList.vue 批量管理', () => {
   it('退出批量管理清空选择', async () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 150))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     await wrapper
@@ -356,12 +356,12 @@ describe('StreamProxyList.vue 发布日志 · 经中继 / 直连 标注', () => 
   async function mountAndOpenPublish() {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs: publishStubs } })
-    await new Promise((r) => setTimeout(r, 120))
+    await flushPromises()
     const btn = wrapper.findAll('button').find((b) => b.text().trim() === '发布')
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     wrapper.findComponent({ name: 'PublishConfirmModal' }).vm.$emit('confirm', [1])
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     const { executePublish } = await import('@/composables/useClusterUtils')
     return vi.mocked(executePublish).mock.calls.at(-1)![0]
   }

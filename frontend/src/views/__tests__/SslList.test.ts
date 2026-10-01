@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const mockGet = vi.fn()
 
 vi.mock('@/api', () => ({
-  default: { get: (...args: any[]) => mockGet(...args) }
+  default: { get: (...args: any[]) => mockGet(...args) },
 }))
 
 const stubs = {
@@ -20,9 +20,15 @@ const stubs = {
 
 function mockCert(overrides: Record<string, any> = {}) {
   return {
-    id: 1, name: 'srv', cluster_id: 1, cert_type: 'server',
-    sni: 'edge.local,api.example.com', cert: 'crt', key: 'key',
-    algorithm: 'rsa', ...overrides,
+    id: 1,
+    name: 'srv',
+    cluster_id: 1,
+    cert_type: 'server',
+    sni: 'edge.local,api.example.com',
+    cert: 'crt',
+    key: 'key',
+    algorithm: 'rsa',
+    ...overrides,
   }
 }
 
@@ -32,15 +38,14 @@ describe('SslList reserved SNI (edge.local)', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
       if (url === '/ssl') return Promise.resolve({ data: { items: [mockCert()] } })
-      return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
   })
 
   async function mountList() {
     const SslList = (await import('../SslList.vue')).default
     const wrapper = mount(SslList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 50))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     return wrapper
   }
 
@@ -52,9 +57,9 @@ describe('SslList reserved SNI (edge.local)', () => {
   it('annotates the edge.local tag but not other SNI tags', async () => {
     const wrapper = await mountList()
     const tags = wrapper.findAll('.ssl-card-row span.sni-tag')
-    const edgeTag = tags.find(t => t.text().includes('edge.local'))!
+    const edgeTag = tags.find((t) => t.text().includes('edge.local'))!
     expect(edgeTag.text()).toContain('系统保留')
-    const apiTag = tags.find(t => t.text().includes('api.example.com'))!
+    const apiTag = tags.find((t) => t.text().includes('api.example.com'))!
     expect(apiTag.text()).not.toContain('系统保留')
   })
 

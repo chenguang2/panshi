@@ -198,7 +198,7 @@ describe('SslGenerateDialog reserved SNI (edge.local)', () => {
     wrapper.vm.form.ca_cert_id = 1
     wrapper.vm.dnsTags.push('example.com')
     await wrapper.vm.handleGenerate()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     const payload = mockGenerate.mock.calls[0][1]
     expect(payload.dns_sans).toContain('edge.local')
     expect(payload.dns_sans).toContain('example.com')

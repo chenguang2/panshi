@@ -99,16 +99,14 @@ describe('PluginConfigList.vue', () => {
   it('renders page header', async () => {
     const PluginConfigList = (await import('../PluginConfigList.vue')).default
     const wrapper = mount(PluginConfigList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
   it('loads plugin configs on mount', async () => {
     const PluginConfigList = (await import('../PluginConfigList.vue')).default
     const wrapper = mount(PluginConfigList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(mockApiGet).toHaveBeenCalledWith('/plugin_configs', expect.any(Object))
   })
 
@@ -131,8 +129,7 @@ describe('PluginConfigList.vue', () => {
   it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
     const PluginConfigList = (await import('../PluginConfigList.vue')).default
     const wrapper = mount(PluginConfigList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // Select a specific group
     const selects = wrapper.findAll('select')
     const groupSelect = selects.find((s) => s.text().includes('全部分组'))
@@ -140,8 +137,7 @@ describe('PluginConfigList.vue', () => {
     const selectEl = groupSelect!.element as HTMLSelectElement
     selectEl.value = '线上'
     selectEl.dispatchEvent(new Event('change'))
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // The count text should contain totalCount from server, not displayedConfigs.length
     const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
     expect(countSpan).toBeDefined()

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { ref, computed } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Cluster, Node } from '@/types'
@@ -71,6 +72,13 @@ function makeCluster(overrides: Partial<Cluster> = {}): Cluster {
   } as Cluster
 }
 
+/** URL 感知注册：命中 match 的请求返回 data，其余一律 reject（防 mock 无差别吞掉错误 URL） */
+function apiOk(mock: ReturnType<typeof vi.fn>, match: (url: string) => boolean, data: unknown) {
+  mock.mockImplementation((url: string) =>
+    match(url) ? Promise.resolve(data) : Promise.reject(new Error(`unexpected API call: ${url}`)),
+  )
+}
+
 async function makeComposable(cluster: Cluster) {
   const { useClusterNodes } = await import('../useClusterNodes')
   const clusters = ref<Cluster[]>([cluster])
@@ -84,7 +92,7 @@ describe('useClusterNodes batch import', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 0, items: [] } })
     mockConcurrencyOf.mockImplementation((name: string, defaultVal: number) => defaultVal)
   })
 
@@ -117,8 +125,12 @@ describe('useClusterNodes batch import', () => {
     it('posts valid rows to batch endpoint and refreshes node_count', async () => {
       const cluster = makeCluster()
       const { importNodes } = await makeComposable(cluster)
-      mockApiPost.mockResolvedValue({ data: { message: '成功创建 2 条，失败 1 条', results: [] } })
-      mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
+      apiOk(mockApiPost, (u) => u.endsWith('/nodes/batch'), {
+        data: { message: '成功创建 2 条，失败 1 条', results: [] },
+      })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), {
+        data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] },
+      })
 
       await importNodes(cluster, [
         {
@@ -197,7 +209,7 @@ describe('useClusterNodes batch import', () => {
     it('shows batch result modal with failure reasons when some nodes fail', async () => {
       const cluster = makeCluster()
       const { importNodes } = await makeComposable(cluster)
-      mockApiPost.mockResolvedValue({
+      apiOk(mockApiPost, (u) => u.endsWith('/nodes/batch'), {
         data: {
           message: '成功创建 1 条，失败 1 条',
           results: [
@@ -206,7 +218,7 @@ describe('useClusterNodes batch import', () => {
           ],
         },
       })
-      mockApiGet.mockResolvedValue({ data: { total: 1, items: [makeNode()] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 1, items: [makeNode()] } })
 
       await importNodes(cluster, [
         {
@@ -240,7 +252,7 @@ describe('useClusterNodes batch import', () => {
     it('does not show result modal when all nodes succeed', async () => {
       const cluster = makeCluster()
       const { importNodes } = await makeComposable(cluster)
-      mockApiPost.mockResolvedValue({
+      apiOk(mockApiPost, (u) => u.endsWith('/nodes/batch'), {
         data: {
           message: '成功创建 2 条，失败 0 条',
           results: [
@@ -249,7 +261,9 @@ describe('useClusterNodes batch import', () => {
           ],
         },
       })
-      mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), {
+        data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] },
+      })
 
       await importNodes(cluster, [
         {
@@ -433,7 +447,7 @@ describe('useClusterNodes batch import', () => {
         }
         return Promise.reject(new Error('unexpected url: ' + url))
       })
-      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 2, items: [] } })
 
       await batchNodeAction(cluster, 'start', '启动')
 
@@ -477,12 +491,12 @@ describe('useClusterNodes batch import', () => {
           })
         })
       })
-      mockApiGet.mockResolvedValue({ data: { total: 6, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 6, items: [] } })
 
       const actionPromise = batchNodeAction(cluster, 'start', '启动')
 
       // 等待首批请求发出，断言并发被限制在 5 以内
-      await new Promise((r) => setTimeout(r, 100))
+      await flushPromises()
       expect(maxInFlight).toBeLessThanOrEqual(5)
       // 首批只应发出 5 个（并发上限），第 6 个排队
       expect(resolveFns.length).toBe(5)
@@ -491,7 +505,7 @@ describe('useClusterNodes batch import', () => {
       for (let round = 0; round < 6; round++) {
         const fn = resolveFns.shift()
         if (fn) fn()
-        await new Promise((r) => setTimeout(r, 30))
+        await flushPromises()
       }
       await actionPromise
 
@@ -532,11 +546,11 @@ describe('useClusterNodes batch import', () => {
           })
         })
       })
-      mockApiGet.mockResolvedValue({ data: { total: 5, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 5, items: [] } })
 
       const actionPromise = batchNodeAction(cluster, 'start', '启动')
 
-      await new Promise((r) => setTimeout(r, 100))
+      await flushPromises()
       // batch_action=10 但 max_playbooks=2 → 实际并发被 clamp 到 2
       expect(maxInFlight).toBeLessThanOrEqual(2)
       expect(resolveFns.length).toBe(2)
@@ -544,7 +558,7 @@ describe('useClusterNodes batch import', () => {
       for (let round = 0; round < 5; round++) {
         const fn = resolveFns.shift()
         if (fn) fn()
-        await new Promise((r) => setTimeout(r, 30))
+        await flushPromises()
       }
       await actionPromise
 
@@ -566,7 +580,7 @@ describe('useClusterNodes batch import', () => {
         if (url.endsWith('/2/start')) return Promise.reject({ response: { data: { detail: '连接超时' } } })
         return Promise.reject(new Error('unexpected'))
       })
-      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 2, items: [] } })
 
       await batchNodeAction(cluster, 'start', '启动')
 
@@ -605,7 +619,7 @@ describe('useClusterNodes batch import', () => {
         }
         return Promise.reject(new Error('unexpected url: ' + url))
       })
-      mockApiGet.mockResolvedValue({ data: { total: 2, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 2, items: [] } })
 
       await batchNodeStatus(cluster)
 
@@ -633,7 +647,7 @@ describe('useClusterNodes batch import', () => {
         selectedNodeKeys: [1],
       })
       const { batchNodeStatus } = await makeComposable(cluster)
-      mockApiPost.mockResolvedValue({
+      apiOk(mockApiPost, (u) => u.endsWith('/statistic'), {
         data: {
           rc: 4,
           statistic: {},
@@ -642,7 +656,7 @@ describe('useClusterNodes batch import', () => {
           command: 'cmd',
         },
       })
-      mockApiGet.mockResolvedValue({ data: { total: 1, items: [] } })
+      apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 1, items: [] } })
 
       await batchNodeStatus(cluster)
 

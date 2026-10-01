@@ -57,16 +57,14 @@ describe('EdgeEnv.vue', () => {
   it('renders page header', async () => {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
   it('renders group filter select', async () => {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const selects = wrapper.findAll('select')
     const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
     expect(groupIdx).toBeGreaterThanOrEqual(0)
@@ -75,8 +73,7 @@ describe('EdgeEnv.vue', () => {
   it('renders search input in filter bar', async () => {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const inputs = wrapper.findAll('input')
     const searchInput = inputs.find((i) => i.attributes('placeholder')?.includes('搜索'))
     expect(searchInput).toBeDefined()
@@ -85,8 +82,7 @@ describe('EdgeEnv.vue', () => {
   it('populates group filter from cluster group_names', async () => {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     const options = groupSelect!.findAll('option')
@@ -120,14 +116,12 @@ describe('EdgeEnv.vue publish node selection', () => {
   async function mountWithClusterAndNodes() {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     // 选中集群1
     const vm = wrapper.vm as any
     vm.selectedClusterId = 1
     await vm.onClusterChange()
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     return wrapper
   }
 
@@ -185,13 +179,12 @@ describe('EdgeEnv.vue 部署进度 · 经中继 / 直连 标注', () => {
   async function startDeploy() {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.selectedClusterId = 1
     vm.selectedPublishNodeIds = [10, 11]
     void vm.executePublish()
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     const handlers = mockInstallStart.mock.calls.at(-1)![2]
     return { wrapper, handlers }
   }
@@ -252,15 +245,14 @@ describe('EdgeEnv.vue 读取结果 · 经中继 / 直连 标注', () => {
   async function startRead() {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
     const wrapper = mount(EdgeEnv, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     vm.selectedClusterId = 1
     await vm.onClusterChange()
-    await new Promise((r) => setTimeout(r, 50))
+    await flushPromises()
     vm.editorContent = ''
     void vm.startReadTemplate()
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     const onEvent = mockReadStream.mock.calls.at(-1)![2]
     return { wrapper, onEvent }
   }

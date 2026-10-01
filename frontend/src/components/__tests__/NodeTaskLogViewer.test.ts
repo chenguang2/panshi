@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 describe('NodeTaskLogViewer', () => {
   beforeEach(() => {
@@ -66,7 +66,7 @@ describe('NodeTaskLogViewer', () => {
     box.scrollTop = 0
     box.dispatchEvent(new Event('scroll'))
     await wrapper.setProps({ logs: ['one', 'two'] })
-    await new Promise((r) => setTimeout(r, 10))
+    await flushPromises()
     // scrolled up => stays put, shows "回到最新"
     expect(wrapper.find('.back-to-latest').exists()).toBe(true)
     // click 回到最新 => scrolls to bottom and hides the button

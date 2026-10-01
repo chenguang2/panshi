@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const MOCK_CLUSTERS = [
   { id: 1, name: 'cluster-a', display_name: '集群A' },
@@ -11,12 +11,25 @@ describe('StreamProxyFormWizard.vue', () => {
     const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
     const wrapper = mount(StreamProxyFormWizard, {
       props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS },
-      global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] }
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
     })
     return wrapper.vm as any
   }
 
-    // ── validateHost ────────────────────────────────────
+  // ── validateHost ────────────────────────────────────
 
   describe('validateHost', () => {
     it('accepts valid IPv4', async () => {
@@ -136,17 +149,39 @@ describe('StreamProxyFormWizard.vue', () => {
         props: {
           visible: false,
           editingProxy: {
-            id: 1, edge_uuid: 'u', cluster_id: 1, name: 'legacy', listen_port: 9970,
-            scheme: 'tcp_udp', load_balance: 'weighted_roundrobin', status: 1,
-            proxy_type: 'normal', targets: [], retries: undefined, retry_timeout: 0,
+            id: 1,
+            edge_uuid: 'u',
+            cluster_id: 1,
+            name: 'legacy',
+            listen_port: 9970,
+            scheme: 'tcp_udp',
+            load_balance: 'weighted_roundrobin',
+            status: 1,
+            proxy_type: 'normal',
+            targets: [],
+            retries: undefined,
+            retry_timeout: 0,
           },
           clusters: MOCK_CLUSTERS,
         },
-        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+        global: {
+          stubs: [
+            'AModal',
+            'AForm',
+            'AFormItem',
+            'AInput',
+            'ASelect',
+            'ASelectOption',
+            'AButton',
+            'AInputNumber',
+            'ATable',
+            'HealthCheckForm',
+          ],
+        },
       })
       const vm = wrapper.vm as any
       await wrapper.setProps({ visible: true })
-      await new Promise(r => setTimeout(r, 50))
+      await flushPromises()
       expect(vm.form.scheme).toBe('tcp')
     })
 
@@ -156,17 +191,39 @@ describe('StreamProxyFormWizard.vue', () => {
         props: {
           visible: false,
           editingProxy: {
-            id: 2, edge_uuid: 'u2', cluster_id: 1, name: 'tls-p', listen_port: 9971,
-            scheme: 'tls', load_balance: 'weighted_roundrobin', status: 1,
-            proxy_type: 'normal', targets: [], retries: undefined, retry_timeout: 0,
+            id: 2,
+            edge_uuid: 'u2',
+            cluster_id: 1,
+            name: 'tls-p',
+            listen_port: 9971,
+            scheme: 'tls',
+            load_balance: 'weighted_roundrobin',
+            status: 1,
+            proxy_type: 'normal',
+            targets: [],
+            retries: undefined,
+            retry_timeout: 0,
           },
           clusters: MOCK_CLUSTERS,
         },
-        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+        global: {
+          stubs: [
+            'AModal',
+            'AForm',
+            'AFormItem',
+            'AInput',
+            'ASelect',
+            'ASelectOption',
+            'AButton',
+            'AInputNumber',
+            'ATable',
+            'HealthCheckForm',
+          ],
+        },
       })
       const vm = wrapper.vm as any
       await wrapper.setProps({ visible: true })
-      await new Promise(r => setTimeout(r, 50))
+      await flushPromises()
       expect(vm.form.scheme).toBe('tls')
     })
   })
@@ -178,18 +235,35 @@ describe('StreamProxyFormWizard.vue', () => {
       const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
       const wrapper = mount(StreamProxyFormWizard, {
         props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS },
-        global: { stubs: ['AModal', 'AForm', 'AFormItem', 'AInput', 'ASelect', 'ASelectOption', 'AButton', 'AInputNumber', 'ATable', 'HealthCheckForm'] },
+        global: {
+          stubs: [
+            'AModal',
+            'AForm',
+            'AFormItem',
+            'AInput',
+            'ASelect',
+            'ASelectOption',
+            'AButton',
+            'AInputNumber',
+            'ATable',
+            'HealthCheckForm',
+          ],
+        },
       })
       const vm = wrapper.vm as any
       vm.form.proxy_type = 'dns'
-      await new Promise(r => setTimeout(r, 50))
+      await flushPromises()
       return vm
     }
 
     function makeDomain(targets: any[] = [{ key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '' }]) {
       return {
-        key: 1, domain: 'qcg.com', lb_type: 'roundrobin', ttl: 10,
-        enableChecks: true, checksJson: '{}',
+        key: 1,
+        domain: 'qcg.com',
+        lb_type: 'roundrobin',
+        ttl: 10,
+        enableChecks: true,
+        checksJson: '{}',
         targets,
       }
     }
@@ -206,10 +280,12 @@ describe('StreamProxyFormWizard.vue', () => {
 
     it('buildDnsConfig assembles inline export_nodes when enabled', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
-        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
-      ])]
+      vm.form.dns_domains = [
+        makeDomain([
+          { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+          { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
+        ]),
+      ]
       vm.dnsEnableLog = false
       vm.dnsWanEnabled = true
       vm.dnsWanFilterInclude = ['10.158.40.51', '10.0.0.0/8']
@@ -228,10 +304,12 @@ describe('StreamProxyFormWizard.vue', () => {
 
     it('buildDnsConfig skips node without wan ip', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
-        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
-      ])]
+      vm.form.dns_domains = [
+        makeDomain([
+          { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+          { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
+        ]),
+      ]
       vm.dnsEnableLog = false
       vm.dnsWanEnabled = true
       const cfg = vm.buildDnsConfig()
@@ -242,29 +320,31 @@ describe('StreamProxyFormWizard.vue', () => {
 
     it('validateDnsWan rejects node without wan ip when enabled', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
-        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
-      ])]
+      vm.form.dns_domains = [
+        makeDomain([
+          { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+          { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '' },
+        ]),
+      ]
       vm.dnsWanEnabled = true
       expect(vm.validateDnsWan()).toBe(false)
     })
 
     it('validateDnsWan rejects invalid wan ip', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '999.1.1.1' },
-      ])]
+      vm.form.dns_domains = [makeDomain([{ key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '999.1.1.1' }])]
       vm.dnsWanEnabled = true
       expect(vm.validateDnsWan()).toBe(false)
     })
 
     it('validateDnsWan passes with all nodes filled', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
-        { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
-      ])]
+      vm.form.dns_domains = [
+        makeDomain([
+          { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
+          { key: 3, ip: '192.192.9.3', port: 16610, cidr: '', wan: '10.158.40.52' },
+        ]),
+      ]
       vm.dnsWanEnabled = true
       vm.dnsWanFilterInclude = ['10.158.40.51']
       expect(vm.validateDnsWan()).toBe(true)
@@ -302,9 +382,7 @@ describe('StreamProxyFormWizard.vue', () => {
 
     it('validateDnsWan rejects when no filter configured', async () => {
       const vm = await createDnsVm()
-      vm.form.dns_domains = [makeDomain([
-        { key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' },
-      ])]
+      vm.form.dns_domains = [makeDomain([{ key: 2, ip: '192.192.9.2', port: 16610, cidr: '', wan: '10.158.40.51' }])]
       vm.dnsWanEnabled = true
       vm.dnsWanFilterInclude = []
       vm.dnsWanFilterExclude = []

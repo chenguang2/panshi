@@ -1,17 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
 vi.mock('@/api', () => ({
-  default: { get: (...a: any[]) => mockApiGet(...a), post: (...a: any[]) => mockApiPost(...a), put: vi.fn(), delete: vi.fn() }
+  default: {
+    get: (...a: any[]) => mockApiGet(...a),
+    post: (...a: any[]) => mockApiPost(...a),
+    put: vi.fn(),
+    delete: vi.fn(),
+  },
 }))
 
 const mockExecutePublish = vi.fn()
 const mockModalInfo = vi.fn()
 vi.mock('@/composables/useClusterUtils', async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, any>
+  const actual = (await importOriginal()) as Record<string, any>
   return {
     ...actual,
     executePublish: (...a: any[]) => mockExecutePublish(...a),
@@ -19,7 +24,7 @@ vi.mock('@/composables/useClusterUtils', async (importOriginal) => {
   }
 })
 vi.mock('ant-design-vue', async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, any>
+  const actual = (await importOriginal()) as Record<string, any>
   const Modal = actual.Modal
   Modal.info = (...a: any[]) => mockModalInfo(...a)
   return { ...actual, Modal }
@@ -37,8 +42,13 @@ describe('PluginMetadata.vue 发布风格统一', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
-      if (url.includes('/plugin-metadata')) return Promise.resolve({ data: [{ id: 1, plugin_name: 'data_center', metadata: {}, version: 5, current_version: 5, is_published: true }] })
-      return Promise.resolve({ data: [] })
+      if (url.includes('/plugin-metadata'))
+        return Promise.resolve({
+          data: [
+            { id: 1, plugin_name: 'data_center', metadata: {}, version: 5, current_version: 5, is_published: true },
+          ],
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
   })
 
@@ -48,16 +58,15 @@ describe('PluginMetadata.vue 发布风格统一', () => {
       props: { clusterId: 1, nodes: [] },
       global: { stubs },
     })
-    await new Promise(r => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
 
     const vm = wrapper.vm as any
     const item = { plugin_name: 'data_center' } as any
     const promise = vm.publishPlugin(item)
-    await new Promise(r => setTimeout(r, 50))
+    await flushPromises()
     vm.handlePublishConfirm([1])
     await promise
-    await new Promise(r => setTimeout(r, 50))
+    await flushPromises()
 
     expect(mockExecutePublish).toHaveBeenCalled()
     expect(mockModalInfo).not.toHaveBeenCalled()

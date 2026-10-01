@@ -5,6 +5,19 @@ vi.mock('@/api', () => ({ default: { get: vi.fn(), post: vi.fn(), delete: vi.fn(
 
 import api from '@/api'
 
+/** URL 感知 GET 注册表：注册过的 url 返回 data，未注册一律 reject（约定 #43） */
+const apiGetRegistry = new Map<string, unknown>()
+
+/** URL 感知 GET 注册：仅命中 url（默认 /node-tasks）的请求返回 data，其余一律 reject */
+function apiGetOk(data: unknown, url = '/node-tasks') {
+  apiGetRegistry.set(url, data)
+  vi.mocked(api.get).mockImplementation((u: string) => {
+    const hit = apiGetRegistry.get(u)
+    if (hit !== undefined) return Promise.resolve(hit)
+    return Promise.reject(new Error('unexpected GET: ' + u))
+  })
+}
+
 function makeTask(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
@@ -78,11 +91,12 @@ const globalStubs = {
 describe('NodeTaskCenter', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    apiGetRegistry.clear()
     document.body.innerHTML = ''
   })
 
   it('renders task rows from the API', async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    apiGetOk({
       data: {
         total: 1,
         items: [makeTask({ started_at: '2026-08-02T10:00:00', finished_at: '2026-08-02T10:00:45' })],
@@ -106,7 +120,7 @@ describe('NodeTaskCenter', () => {
   })
 
   it('filters by status', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { total: 0, items: [] } })
+    apiGetOk({ data: { total: 0, items: [] } })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -161,10 +175,11 @@ describe('NodeTaskCenter', () => {
   })
 
   it('shows a confirmation dialog before retrying a task', async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    apiGetOk({
       data: { total: 1, items: [makeTask({ status: 'failed', failed_nodes: 1 })] },
     })
-    vi.mocked(api.post).mockResolvedValue({ data: {} })
+    // 本用例确认前不得发起任何 POST：未注册 URL 一律 reject 兜底
+    vi.mocked(api.post).mockImplementation((url: string) => Promise.reject(new Error('unexpected POST: ' + url)))
 
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
@@ -192,7 +207,7 @@ describe('NodeTaskCenter', () => {
   })
 
   it('shows delete button only for terminal tasks', async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    apiGetOk({
       data: {
         total: 2,
         items: [makeTask({ id: 1, status: 'success' }), makeTask({ id: 2, status: 'running' })],
@@ -209,10 +224,13 @@ describe('NodeTaskCenter', () => {
   })
 
   it('confirms before single delete and calls delete API', async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    apiGetOk({
       data: { total: 1, items: [makeTask({ id: 1, status: 'failed' })] },
     })
-    vi.mocked(api.delete).mockResolvedValue({ data: { deleted: [1] } })
+    vi.mocked(api.delete).mockImplementation((url: string) => {
+      if (url === '/node-tasks/1') return Promise.resolve({ data: { deleted: [1] } })
+      return Promise.reject(new Error('unexpected DELETE: ' + url))
+    })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -236,13 +254,16 @@ describe('NodeTaskCenter', () => {
   })
 
   it('batch deletes selected tasks after confirmation', async () => {
-    vi.mocked(api.get).mockResolvedValue({
+    apiGetOk({
       data: {
         total: 2,
         items: [makeTask({ id: 1, status: 'success' }), makeTask({ id: 2, status: 'failed' })],
       },
     })
-    vi.mocked(api.post).mockResolvedValue({ data: { deleted: [1, 2], skipped: [] } })
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/node-tasks/batch-delete') return Promise.resolve({ data: { deleted: [1, 2], skipped: [] } })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -254,7 +275,6 @@ describe('NodeTaskCenter', () => {
       ;(cb.element as HTMLInputElement).checked = true
       cb.element.dispatchEvent(new Event('change', { bubbles: true }))
       await flushPromises()
-      await new Promise((r) => setTimeout(r, 10))
     }
 
     const batchBtns = wrapper.findAll('button').map((b) => b.text().trim())
@@ -287,7 +307,9 @@ describe('NodeTaskCenter create-task flow', () => {
   })
 
   it('renders a 新建任务 button and opens the create modal', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { total: 0, items: [] } })
+    apiGetOk({ data: { total: 0, items: [] } })
+    // 打开新建弹窗会拉集群列表（openCreateModal → GET /clusters），一并注册
+    apiGetOk({ data: { items: [{ id: 1, name: 'prod', display_name: '生产集群' }] } }, '/clusters')
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, {
       global: { stubs: globalStubs },
@@ -318,7 +340,9 @@ describe('NodeTaskCenter create-task flow', () => {
           },
         })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, {
@@ -351,9 +375,15 @@ describe('NodeTaskCenter create-task flow', () => {
       if (url === '/clusters/1/nodes') {
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, {
       global: { stubs: globalStubs },
@@ -411,9 +441,15 @@ describe('NodeTaskCenter create-task flow', () => {
         // real backend returns { files: [...] }
         return Promise.resolve({ data: { files: [{ name: 'openresty-edge-26062608.tar.gz', size_display: '1.2M' }] } })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, {
       global: { stubs: globalStubs },
@@ -480,9 +516,15 @@ describe('NodeTaskCenter create-task flow', () => {
       if (url === '/clusters/1/nodes/edge-pack-files') {
         return Promise.resolve({ data: { files: [{ name: 'edge-pack-gm-26072208.tar.gz', size_display: '2.1M' }] } })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -541,9 +583,15 @@ describe('NodeTaskCenter create-task flow', () => {
       if (url === '/clusters/1/nodes/10/edge-pack-list') {
         return Promise.resolve({ data: { versions: [{ name: 'edge-26071508', current: false }] } })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -611,7 +659,9 @@ describe('NodeTaskCenter create-task flow', () => {
           },
         })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
@@ -675,7 +725,9 @@ describe('NodeTaskCenter create-task flow', () => {
       if (url === '/clusters/1/nodes/11/edge-pack-list') {
         return Promise.resolve({ data: { versions: [{ name: '3.1.4.26090809', current: true }] } })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
@@ -732,7 +784,9 @@ describe('NodeTaskCenter create-task node selection', () => {
             ],
           },
         })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
@@ -788,9 +842,15 @@ describe('NodeTaskCenter software_check flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -869,7 +929,9 @@ describe('NodeTaskCenter software_check flow', () => {
           },
         })
       }
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
@@ -1104,9 +1166,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1135,9 +1203,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1170,9 +1244,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1221,9 +1301,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1242,9 +1328,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1291,9 +1383,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
@@ -1331,9 +1429,15 @@ describe('NodeTaskCenter cmd_exec flow', () => {
       if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
       if (url === '/clusters/1/nodes')
         return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.10' }] } })
-      return Promise.resolve({ data: { total: 0, items: [] } })
+      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    vi.mocked(api.post).mockResolvedValue({ data: makeTask() })
+    vi.mocked(api.post).mockImplementation((url: string) =>
+      url === '/clusters/1/node-tasks'
+        ? Promise.resolve({ data: makeTask() })
+        : Promise.reject(new Error('unexpected POST: ' + url)),
+    )
     const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()

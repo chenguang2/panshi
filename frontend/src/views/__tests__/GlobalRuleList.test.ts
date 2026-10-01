@@ -71,16 +71,14 @@ describe('GlobalRuleList.vue', () => {
   it('renders page header', async () => {
     const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
     const wrapper = mount(GlobalRuleList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
 
   it('loads global rules on mount', async () => {
     const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
     const wrapper = mount(GlobalRuleList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
     expect(mockApiGet).toHaveBeenCalledWith('/global_rules', expect.any(Object))
   })
 
@@ -141,13 +139,11 @@ describe('GlobalRuleList.vue', () => {
 
     const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
     const wrapper = mount(GlobalRuleList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
 
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))!
     await groupSelect.setValue('线上')
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
+    await flushPromises()
 
     expect(wrapper.text()).toContain('99')
     expect(wrapper.findAll('.gr-card').length).toBe(1)

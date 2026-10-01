@@ -58,16 +58,22 @@ function makeEditingRoute(overrides: Record<string, unknown> = {}) {
 describe('RouteFormModal.vue（组件级提交载荷）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // URL 感知 mock + 兜底（约定 #43）
+    // URL 感知 mock + 未注册 reject（约定 #43）
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
       if (url.includes('/upstreams')) return Promise.resolve({ data: { items: [{ id: 7, name: 'up-1' }] } })
       if (url.includes('/plugin_configs')) return Promise.resolve({ data: { items: [] } })
       if (url.endsWith('/plugins')) return Promise.resolve({ data: { plugins: [] } })
-      return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
-    mockApiPost.mockResolvedValue({ data: { id: 99 } })
-    mockApiPut.mockResolvedValue({ data: {} })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/routes') return Promise.resolve({ data: { id: 99 } })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+    mockApiPut.mockImplementation((url: string) => {
+      if (/^\/clusters\/1\/routes\/\d+(\/plugins)?$/.test(url)) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected PUT: ' + url))
+    })
   })
 
   async function mountModal(extraProps: Record<string, unknown> = {}) {
@@ -108,18 +114,26 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     const w = await mountModal()
     const vm: any = w.vm
     fillBasics(vm)
-    await setCheckbox(w, '开启高级匹配', true)
+    // addRule/开关切换在生产代码里各挂 100ms isUserModifying 定时器：
+    // fake timers 必须在定时器被调度前接管（只 fake setTimeout，setImmediate 保持
+    // 真实 → flushPromises 在 fake 期间仍可用），advanceTimersByTimeAsync 确定性推进
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await setCheckbox(w, '开启高级匹配', true)
 
-    const adv = w.findComponent(RouteAdvancedMatch)
-    expect(adv.exists()).toBe(true)
-    adv.vm.addRule()
-    const rule = adv.vm.rules[0]
-    rule.type = 'query'
-    rule.key = 'version'
-    rule.operator = 'IN'
-    rule.value = ['a', 'b']
-    // addRule 有 100ms isUserModifying 定时器，结束并触发 deep watch 后才会 emit 给父组件
-    await new Promise((r) => setTimeout(r, 150))
+      const adv = w.findComponent(RouteAdvancedMatch)
+      expect(adv.exists()).toBe(true)
+      adv.vm.addRule()
+      const rule = adv.vm.rules[0]
+      rule.type = 'query'
+      rule.key = 'version'
+      rule.operator = 'IN'
+      rule.value = ['a', 'b']
+      // 定时器回调 triggerRef → deep watch → syncVars emit 给父组件
+      await vi.advanceTimersByTimeAsync(150)
+    } finally {
+      vi.useRealTimers()
+    }
     await flushPromises()
     expect(vm.form.advancedMatch.vars).toEqual([['arg_version', 'in', ['a', 'b']]])
 

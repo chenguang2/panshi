@@ -74,7 +74,7 @@ describe('StaticResourceList.vue', () => {
   it('renders page header', async () => {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
@@ -82,7 +82,7 @@ describe('StaticResourceList.vue', () => {
   it('loads resources on mount', async () => {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/static_resources', expect.any(Object))
   })
@@ -90,7 +90,7 @@ describe('StaticResourceList.vue', () => {
   it('shows view button when resource has file_size', async () => {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     const buttons = wrapper.findAll('button')
@@ -103,7 +103,7 @@ describe('StaticResourceList.vue', () => {
   it('disables view button when resource has no file_size', async () => {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     // 组件绑定：查看按钮 :disabled="!sr.file_size"
@@ -178,7 +178,7 @@ describe('StaticResourceList.vue', () => {
 
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     // Initially shows count from default mock (total=2)
@@ -188,7 +188,7 @@ describe('StaticResourceList.vue', () => {
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     await groupSelect!.setValue('线上')
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
 
     // Should show server total (99) not displayedResources.length (1)
@@ -221,12 +221,12 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
   async function mountAndOpenPublish() {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
     const wrapper = mount(StaticResourceList, { global: { stubs: publishStubs } })
-    await new Promise((r) => setTimeout(r, 120))
+    await flushPromises()
     const btn = wrapper.findAll('button').find((b) => b.text().trim() === '发布')
     expect(btn).toBeTruthy()
     await btn!.trigger('click')
     wrapper.findComponent({ name: 'PublishConfirmModal' }).vm.$emit('confirm', [1])
-    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
     const { executePublish } = await import('@/composables/useClusterUtils')
     return vi.mocked(executePublish).mock.calls.at(-1)![0]
   }

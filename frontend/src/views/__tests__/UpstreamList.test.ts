@@ -142,7 +142,7 @@ describe('UpstreamList.vue', () => {
   it('renders page header and filter bar', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.page-header').exists()).toBe(true)
   })
@@ -150,7 +150,7 @@ describe('UpstreamList.vue', () => {
   it('renders upstream table with data', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/upstreams', expect.any(Object))
   })
@@ -158,7 +158,7 @@ describe('UpstreamList.vue', () => {
   it('shows cluster filter dropdown', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     expect(mockApiGet).toHaveBeenCalledWith('/clusters', { params: {} })
   })
@@ -166,7 +166,7 @@ describe('UpstreamList.vue', () => {
   it('renders upstream count', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     await wrapper.vm.$nextTick()
     // 精确匹配计数节点文案「共 {{ totalCount }} 个上游」，避免任意含 2 的文本误命中
     const countSpan = wrapper.findAll('span').find((s) => s.text().includes('个上游'))
@@ -199,7 +199,7 @@ describe('UpstreamList.vue copy', () => {
   it('操作菜单含「复制」项', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     // 表格行操作菜单渲染复制项
     const menuItems = wrapper.findAll('.mock-menuitem')
     expect(menuItems.some((m) => m.text().includes('复制'))).toBe(true)
@@ -214,7 +214,7 @@ describe('UpstreamList.vue handleAction copy', () => {
   it('handleAction copy 设 editingUpstream + copyingUpstream + 打开弹窗', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     const record = { id: 5, name: 'svc-a', cluster_id: 1 }
     ;(wrapper.vm as any).handleAction('copy', record)
     await wrapper.vm.$nextTick()
@@ -226,7 +226,7 @@ describe('UpstreamList.vue handleAction copy', () => {
   it('handleAction edit 复位 copyingUpstream', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
+    await flushPromises()
     ;(wrapper.vm as any).copyingUpstream = true
     ;(wrapper.vm as any).handleAction('edit', { id: 5, name: 'svc-a', cluster_id: 1 })
     expect((wrapper.vm as any).copyingUpstream).toBe(false)

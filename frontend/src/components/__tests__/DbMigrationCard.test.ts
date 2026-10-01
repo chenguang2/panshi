@@ -95,6 +95,12 @@ function seedAuth(permissions: string[] = [], role = 'admin') {
   localStorage.setItem('permissions', JSON.stringify(permissions))
 }
 
+/** 捕获 migrateDatabaseStream 的 SSE 回调，由测试确定性驱动（不再依赖真实计时器） */
+let sseCapture: {
+  onProgress?: (data: unknown) => void
+  onComplete?: (data: unknown) => void
+} | null = null
+
 function seedDefaultMocks() {
   // 形状取自真实 GET /database/running-tasks 响应（含 progress: null 字段）
   mocks.getRunningTasks.mockResolvedValue({
@@ -104,19 +110,9 @@ function seedDefaultMocks() {
     },
   })
   mocks.getHistory.mockResolvedValue({ data: [] })
-  // Simulate SSE events（形状对齐 src/api/database.ts 的回调契约）
+  // Simulate SSE events（形状对齐 src/api/database.ts 的回调契约；回调由测试手动触发）
   mocks.migrateDatabaseStream.mockImplementation((_sourceId: string, _targetId: string, options: any) => {
-    setTimeout(() => {
-      options.onProgress?.({
-        table_index: 1,
-        total_tables: 22,
-        table_name: 'sys_user',
-        copied_rows: 100,
-        total_rows: 100,
-        skipped: false,
-      })
-      options.onComplete?.({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
-    }, 10)
+    sseCapture = options
     return new AbortController()
   })
 }
@@ -195,11 +191,19 @@ describe('DbMigrationCard', () => {
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
     await nextTick()
-    // 进行中：超时下拉禁用
+    // 进行中：超时下拉禁用（SSE 回调尚未触发）
     const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
     expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(true)
-    // SSE 完成后恢复可用 + 结果条出现
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // SSE 完成后恢复可用 + 结果条出现（手动驱动捕获到的回调，确定性等待）
+    sseCapture!.onProgress!({
+      table_index: 1,
+      total_tables: 22,
+      table_name: 'sys_user',
+      copied_rows: 100,
+      total_rows: 100,
+      skipped: false,
+    })
+    sseCapture!.onComplete!({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
     await flushPromises()
     expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(false)
     expect(wrapper.text()).toContain('迁移完成')
@@ -266,14 +270,13 @@ describe('DbMigrationCard', () => {
 
   it('迁移完成后「去切换数据库」向宿主发出 switch-connection（弹窗归连接注册表域）', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 22 张表',
-          tables_migrated: 22,
-          tables: [{ name: 'sys_user', columns: 5, rows: 1 }],
-          backup_path: '/tmp/migration_backup.zip',
-        })
-      }, 10)
+      // SSE 事件同步即达（无真实计时器），后续 flushPromises 确定性收敛
+      options.onComplete?.({
+        message: '迁移完成，共迁移 22 张表',
+        tables_migrated: 22,
+        tables: [{ name: 'sys_user', columns: 5, rows: 1 }],
+        backup_path: '/tmp/migration_backup.zip',
+      })
       return new AbortController()
     })
     const wrapper = await mountCard()
@@ -283,7 +286,6 @@ describe('DbMigrationCard', () => {
     vm.migrateForm.confirmed_clear = true
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
     const switchBtn = wrapper.findAll('button').find((b) => b.text().includes('去切换数据库'))
@@ -295,17 +297,16 @@ describe('DbMigrationCard', () => {
 
   it('迁移完成后只渲染紧凑结果条，明细按需在抽屉展开', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 22 张表',
-          tables_migrated: 22,
-          tables: [
-            { name: 'sys_user', columns: 5, rows: 1 },
-            { name: 'sys_audit_log', columns: 8, rows: 120 },
-          ],
-          backup_path: '/tmp/migration_backup.zip',
-        })
-      }, 10)
+      // SSE 事件同步即达（无真实计时器），后续 flushPromises 确定性收敛
+      options.onComplete?.({
+        message: '迁移完成，共迁移 22 张表',
+        tables_migrated: 22,
+        tables: [
+          { name: 'sys_user', columns: 5, rows: 1 },
+          { name: 'sys_audit_log', columns: 8, rows: 120 },
+        ],
+        backup_path: '/tmp/migration_backup.zip',
+      })
       return new AbortController()
     })
     const wrapper = await mountCard()
@@ -315,7 +316,6 @@ describe('DbMigrationCard', () => {
     vm.migrateForm.confirmed_clear = true
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
     expect(wrapper.find('.migrate-result-bar').exists()).toBe(true)
@@ -332,20 +332,19 @@ describe('DbMigrationCard', () => {
 
   it('迁移详情把日志表与非日志表分开显示（分组数据来自后端 kind 标记）', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 22 张表',
-          tables_migrated: 22,
-          tables: [
-            { name: 'sys_user', columns: 5, rows: 1, kind: 'business' },
-            { name: 'ps_route', columns: 6, rows: 3, kind: 'business' },
-            { name: 'sys_audit_log', columns: 8, rows: 120, kind: 'audit_log' },
-            { name: 'ps_import_log', columns: 3, rows: 5, kind: 'audit_log' },
-            { name: 'install_task', columns: 7, rows: 4, kind: 'task_log' },
-          ],
-          backup_path: '/tmp/migration_backup.zip',
-        })
-      }, 10)
+      // SSE 事件同步即达（无真实计时器），后续 flushPromises 确定性收敛
+      options.onComplete?.({
+        message: '迁移完成，共迁移 22 张表',
+        tables_migrated: 22,
+        tables: [
+          { name: 'sys_user', columns: 5, rows: 1, kind: 'business' },
+          { name: 'ps_route', columns: 6, rows: 3, kind: 'business' },
+          { name: 'sys_audit_log', columns: 8, rows: 120, kind: 'audit_log' },
+          { name: 'ps_import_log', columns: 3, rows: 5, kind: 'audit_log' },
+          { name: 'install_task', columns: 7, rows: 4, kind: 'task_log' },
+        ],
+        backup_path: '/tmp/migration_backup.zip',
+      })
       return new AbortController()
     })
     const wrapper = await mountCard()
@@ -355,7 +354,6 @@ describe('DbMigrationCard', () => {
     vm.migrateForm.confirmed_clear = true
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
     expect(vm.businessTables.map((t: any) => t.name)).toEqual(['sys_user', 'ps_route'])
@@ -372,14 +370,13 @@ describe('DbMigrationCard', () => {
 
   it('未勾选「包含日志数据」时不显示日志表分组，并给出提示', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
-      setTimeout(() => {
-        options.onComplete?.({
-          message: '迁移完成，共迁移 18 张表',
-          tables_migrated: 18,
-          tables: [{ name: 'sys_user', columns: 5, rows: 1, kind: 'business' }],
-          backup_path: '',
-        })
-      }, 10)
+      // SSE 事件同步即达（无真实计时器），后续 flushPromises 确定性收敛
+      options.onComplete?.({
+        message: '迁移完成，共迁移 18 张表',
+        tables_migrated: 18,
+        tables: [{ name: 'sys_user', columns: 5, rows: 1, kind: 'business' }],
+        backup_path: '',
+      })
       return new AbortController()
     })
     const wrapper = await mountCard()
@@ -390,7 +387,6 @@ describe('DbMigrationCard', () => {
     vm.migrateForm.includeLogs = false
     await nextTick()
     await wrapper.find('.migrate-btn').trigger('click')
-    await new Promise((resolve) => setTimeout(resolve, 50))
     await flushPromises()
 
     expect(vm.auditLogTables.length + vm.taskLogTables.length).toBe(0)

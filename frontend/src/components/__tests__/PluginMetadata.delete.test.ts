@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
@@ -36,11 +36,17 @@ const stubs = {
 
 async function runDelete(results: unknown[]) {
   captured.onOk = undefined
-  mockApiDelete.mockResolvedValue({ data: { message: '插件元数据已删除', results } })
+  // URL 感知 mock：注册删除端点返回 results，其余一律 reject
+  mockApiDelete.mockImplementation((url: string) => {
+    if (url === '/clusters/1/plugin-metadata/data_center') {
+      return Promise.resolve({ data: { message: '插件元数据已删除', results } })
+    }
+    return Promise.reject(new Error('unexpected DELETE: ' + url))
+  })
 
   const PluginMetadata = (await import('../PluginMetadata.vue')).default
   const wrapper = mount(PluginMetadata, { props: { clusterId: 1, nodes: [] }, global: { stubs } })
-  await new Promise((r) => setTimeout(r, 120))
+  await flushPromises()
 
   // AntDV 在单测中未全局注册，<a-button> 渲染为同名自定义元素（图标组件则在组件内导入、正常渲染）
   const delBtn = wrapper.find('a-button[title="删除"]')
@@ -68,7 +74,7 @@ describe('PluginMetadata.vue 删除日志 · 经中继 / 直连 标注', () => {
           },
         })
       }
-      return Promise.resolve({ data: [] })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
   })
 

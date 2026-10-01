@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const mockApiGet = vi.fn()
 
 vi.mock('@/api', () => ({
-  default: { get: (...args: any[]) => mockApiGet(...args) }
+  default: { get: (...args: any[]) => mockApiGet(...args) },
 }))
 
 let mockRouteQuery: Record<string, string> = {}
@@ -23,11 +23,35 @@ const stubs = {
 }
 
 const MOCK_ROUTES = {
-  total: 2, page: 1, page_size: 20,
+  total: 2,
+  page: 1,
+  page_size: 20,
   items: [
-    { id: 1, name: '用户API', uri: '/api/v1/users/*', methods: 'GET,POST', cluster_id: 1, cluster_name: '生产集群', priority: 0, current_version: 5, created_at: '2024-01-15T10:30:00Z', status: 1 },
-    { id: 2, name: '订单服务', uri: '/api/v1/orders/*', methods: 'GET,PUT', cluster_id: 1, cluster_name: '生产集群', priority: 0, current_version: 3, created_at: '2024-02-10T14:20:00Z', status: 1 },
-  ]
+    {
+      id: 1,
+      name: '用户API',
+      uri: '/api/v1/users/*',
+      methods: 'GET,POST',
+      cluster_id: 1,
+      cluster_name: '生产集群',
+      priority: 0,
+      current_version: 5,
+      created_at: '2024-01-15T10:30:00Z',
+      status: 1,
+    },
+    {
+      id: 2,
+      name: '订单服务',
+      uri: '/api/v1/orders/*',
+      methods: 'GET,PUT',
+      cluster_id: 1,
+      cluster_name: '生产集群',
+      priority: 0,
+      current_version: 3,
+      created_at: '2024-02-10T14:20:00Z',
+      status: 1,
+    },
+  ],
 }
 
 describe('RouteList.vue - cluster_id from query', () => {
@@ -44,8 +68,7 @@ describe('RouteList.vue - cluster_id from query', () => {
   it('无 cluster_id 时请求不传 cluster_id 参数', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     mount(RouteList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
-    await new Promise(r => setTimeout(r, 50))
+    await flushPromises()
 
     const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
     expect(calls.length).toBeGreaterThanOrEqual(1)
@@ -58,8 +81,7 @@ describe('RouteList.vue - cluster_id from query', () => {
 
     const RouteList = (await import('../RouteList.vue')).default
     mount(RouteList, { global: { stubs } })
-    await new Promise(r => setTimeout(r, 100))
-    await new Promise(r => setTimeout(r, 50))
+    await flushPromises()
 
     const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
     expect(calls.length).toBeGreaterThanOrEqual(1)
