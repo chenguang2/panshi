@@ -302,5 +302,34 @@
 - 后端全量 warnings 中的 aiosqlite "Event loop is closed" 为既有 teardown 噪音（warnings 级，非失败）。
 
 ### 9.5 后续批次状态
-- B2（P0 新守卫）：未开工。范围修正：F2-NEW-01 已随 Wave 2 落地，余 B2-NEW-01/05、B1-NEW-01、F2-NEW-02、B2-NEW-04。
+- B2（P0 新守卫）：见 §10。
 - B3（副本重写）、B4（合并/参数化、setTimeout→flushPromises）：未开工。
+
+---
+
+## 10. B2 批次执行结果（2026-10-01，B1 提交 aadbc56c 之后）
+
+### 10.1 产出（3 个并行 lane + 编排者落 GREEN）
+- **B2-NEW-01 JWT 密钥解析链**（新 `test_jwt_secret_chain.py`，15 例全绿）：持久化路径经 `monkeypatch.setattr(security, "__file__", …)` 注入 tmp 树（无需产品钩子），真实 `backend/data/.jwt_secret` 零触碰（mtime 复核）；覆盖四级链路 + 占位值拒绝 + 生产 fail-fast + 开发生成/0600 持久化/跨"重启"复用。
+- **B2-NEW-05 sshd-setup root 凭据零泄漏**（扩 `test_relay_sshd.py`，13 passed）：五维度断言——注入窗口内清单必含明文（防假绿）、ansible 参数序列化零明文、SSE 帧零明文、流后清单字节还原、fresh session 全表扫描零明文。未发现泄漏点。
+- **B1-NEW-01 非 admin 越权矩阵**（新 `test_cluster_permission_matrix.py`，10 例全绿）：403（publish/delete——router 级依赖先于 handler，资源存在性不可探测）/401/无业务痕迹（审计骨架随 401/403 事务回滚零落库，实测锚定）+ 授权对照组 + 兜底路由 404 锚定。**未发现真实越权**。语义差异（锚定非缺陷）：`clusters` 为容器级权限、无行级数据隔离。
+- **F2-NEW-02 会话过期 E2E**（新 `session-expiry.spec.ts`，3 passed）：401 → `clearSession()`（单一实现，localStorage 键 `token`/`user`/`permissions`）→ 跳 /login；无 token 直访被路由守卫拦回；清理后可重新登录。无白屏/死循环/pageerror。
+
+### 10.2 产品缺口修复（守卫 RED → 编排者落 GREEN，audit_hook.py 4 处）
+B2-NEW-04 守卫对真实 app 检出 16 个 offender，分两类均已修复：
+- **类 A（12 个误报，实现 bug）**：`get_mapping` 把 SKIP_PATHS 条目与无映射混为 None → `validate_route_map` 误报全部已注册 skip 路由。修复：validate_route_map 循环内先判 `path in SKIP_PATHS: continue`（与 docstring 语义对齐）。
+- **类 A'（连带死代码 bug）**：`infer_route_mapping` 第 227 行 `if (method, path_template) in SKIP_PATHS` ——元组对字符串集合恒 False（运行时靠 get_mapping 兜住未出事故）。已改为 `path_template in SKIP_PATHS`。
+- **类 B（4 个真实审计盲区）**：①`POST /system/operations/export`、`POST /system/operations/archive/preview`（读语义）入 SKIP_PATHS；②`POST /system/operations/archive` 映射 `("audit_log","archive")`；③`POST /relay/gateways/{id}/sshd-setup` 映射 `("relay_gateway","sshd_setup")`（此前该端点**完全不产生审计行**）。
+
+### 10.3 待决策的产品观察（未改动）
+- 401 拦截器对每个失败请求各弹一次"登录状态已失效"toast，并发 401 会叠多条（轻微 UX 冗余；用例已按实际行为锚定）。如需去重属产品改动。
+- `clusters` 权限为容器级、`sys_user_cluster` 分配表未被集群子资源校验（无行级数据隔离）——既有设计，已在越权矩阵 docstring 锚定。
+
+### 10.4 终验
+| 套件 | 结果 |
+|---|---|
+| `test_audit_hook.py`（含新守卫） | 10 passed（修复前 1 failed 按预案保持红） |
+| `pytest -k audit`（域回归，#51-④） | 33 passed |
+| PG 冒烟 + B2 三文件合集 | 45 passed |
+| **全量 `uv run pytest -q`** | **2109 passed / 11 skipped（PG opt-in）/ 0 failed**，4:45 |
+| e2e `session-expiry.spec.ts` | 3 passed（前端无产品改动，无需全量重跑） |

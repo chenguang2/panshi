@@ -43,6 +43,8 @@ SKIP_PATHS = {
     "/api/v1/clusters/{cluster_id}/test",
     "/api/v1/clusters/{cluster_id}/stream-proxies/detect-ports",
     "/api/v1/clusters/{cluster_id}/nodes/{node_id}/statistic",
+    "/api/v1/system/operations/export",  # 审计导出（建下载任务，读语义）
+    "/api/v1/system/operations/archive/preview",  # 归档预览（只读计算）
 }
 
 # ── 显式映射：核心业务 CRUD / 批量（design 的 ~30 条在此扩充） ──────────
@@ -55,6 +57,7 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("DELETE", "/api/v1/relay/gateways/{gateway_id}"): ("relay_gateway", "delete", False),
     ("POST", "/api/v1/relay/gateways/{gateway_id}/init"): ("relay_gateway", "init", False),
     ("POST", "/api/v1/relay/gateways/{gateway_id}/push-config"): ("relay_gateway", "push_config", False),
+    ("POST", "/api/v1/relay/gateways/{gateway_id}/sshd-setup"): ("relay_gateway", "sshd_setup", False),
     # 集群
     ("POST", "/api/v1/clusters"): ("cluster", "create", False),
     ("PUT", "/api/v1/clusters/{cluster_id}"): ("cluster", "update", False),
@@ -158,6 +161,8 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("POST", "/api/v1/db-backup/restore/execute"): ("db_backup", "restore_execute", False),
     ("POST", "/api/v1/database/history/cleanup"): ("db_migration_log", "cleanup", True),
     ("DELETE", "/api/v1/database/history/{log_id}"): ("db_migration_log", "delete", False),
+    # 审计/系统
+    ("POST", "/api/v1/system/operations/archive"): ("audit_log", "archive", False),
     # 用户
     ("POST", "/api/v1/admin/users"): ("user", "create", False),
     ("PUT", "/api/v1/admin/users/{user_id}"): ("user", "update", False),
@@ -224,7 +229,7 @@ def infer_route_mapping(method: str, path_template: str):
     主要兜底 edge-client 直连操作（PATCH/PUT /edge-client/nodes/...）与
     节点运维动作（install-edge 等显式表未覆盖的长尾）。
     """
-    if (method, path_template) in SKIP_PATHS:
+    if path_template in SKIP_PATHS:
         return None
     segs = [s for s in path_template.split("/") if s and s not in ("api", "v1")]
     literals = [s for s in segs if not s.startswith("{")]
@@ -362,6 +367,8 @@ def validate_route_map(app) -> list[tuple[str, str]]:
         if not path or not path.startswith("/api/v1/"):
             continue
         for method in sorted(methods & MUTATING_METHODS):
+            if path in SKIP_PATHS:
+                continue
             if get_mapping(method, path) is None:
                 missing.append((method, path))
     return missing

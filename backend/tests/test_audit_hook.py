@@ -220,6 +220,26 @@ def test_validate_route_map_reports_missing():
     assert ("DELETE", "/api/v1/things/{id}") in methods_paths
 
 
+def test_real_app_route_map_has_no_audit_blind_spots():
+    """B2-NEW-04 守卫：真实 app.main.app 上不允许存在审计盲区路由。
+
+    对全部已注册路由跑 validate_route_map：任何 /api/v1/ 下的 mutating 路由，
+    既无 ROUTE_MAP 显式映射、也无法由词汇表推断、又不在 SKIP_PATHS 时即漏报。
+    该守卫是约定 #19（新路由必须补审计采样/映射）的机器化执行——新增路由漏配
+    时本用例红， offender 列表即需增补的条目（修复动作在 audit_hook.ROUTE_MAP
+    或 SKIP_PATHS，不在本测试）。
+    """
+    from app.main import app
+
+    missing = validate_route_map(app)
+    offenders = "\n".join(f"  {method:6s} {path}" for method, path in missing)
+    assert not missing, (
+        "以下 mutating 路由既无 ROUTE_MAP 显式映射、也无法词汇推断（audit_start 会静默跳过，"
+        "操作不留审计痕迹）。请增补 audit_hook.ROUTE_MAP 显式映射；确认只读语义则加入 SKIP_PATHS：\n"
+        + offenders
+    )
+
+
 @pytest.mark.asyncio
 async def test_extract_resource_id_coerces_path_param_str_to_int():
     """path_params 恒为 str；resource_id 列为 Integer——PG 下 str 绑参会炸（2026-09-17 自启动 401 事故）。"""

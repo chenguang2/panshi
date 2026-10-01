@@ -6,10 +6,12 @@ import asyncio
 import json
 
 import pytest
+from sqlalchemy import select
 
 from app.main import app
 from app.core.database import get_db
 from app.models.relay import RelayGateway
+from app.models.system import AuditLog
 from app.services import relay_push, relay_sshd
 
 GATEWAYS_YAML = """\
@@ -190,6 +192,79 @@ def test_sshd_setup_endpoint_streams(test_db, test_db_factory, gateways_inv, mon
         assert '"rc": 0' in resp.text
     app.dependency_overrides.clear()
     relay._INFLIGHT.clear()
+
+
+ROOT_PASSWORD = "RootSecret#2026"
+
+
+def test_sshd_setup_root_password_never_persists(test_db, test_db_factory, gateways_inv, monkeypatch):
+    """B2-NEW-05 守卫：sshd-setup 全程后，明文 root 密码零出现（模块 docstring 的
+    "不落库、不进命令行、不打日志"契约的机器化）。
+
+    五个维度：
+    ① 注入窗口内清单文件必须含明文密码——证明流程真的走了临时注入，
+       防止"静默不注入"让后续断言空转假绿；
+    ② ansible 调用参数（playbook/extravars/清单路径）不含明文密码（不进命令行）；
+    ③ SSE 帧逐帧不含明文密码（不进回显）；
+    ④ 流结束后清单文件字节还原且不含密码；
+    ⑤ 全表扫描 sys_audit_log / relay_gateways 的每一行每一列不含明文密码（不落库）。
+    """
+    from app.api.v1 import relay
+
+    _seed_region(test_db)
+    relay._INFLIGHT.clear()
+    original = gateways_inv.read_text(encoding="utf-8")
+    window: dict[str, str] = {}
+
+    def fake_run(**kwargs):
+        window["inventory"] = gateways_inv.read_text(encoding="utf-8")
+        # ② 执行参数不得携带明文（event_handler 是函数不可 JSON 化，单独排除）
+        serializable = {k: v for k, v in kwargs.items() if k != "event_handler"}
+        blob = json.dumps(serializable, ensure_ascii=False, default=str)
+        assert ROOT_PASSWORD not in blob, f"明文密码进了 ansible 调用参数: {blob}"
+        return {"rc": 0, "status": "successful"}
+
+    monkeypatch.setattr(relay_sshd, "_run_ansible_sshd", fake_run)
+
+    client, lifespan = _client(test_db, test_db_factory)
+    try:
+        with lifespan, client as c:
+            resp = c.post("/api/v1/relay/gateways/1/sshd-setup",
+                          json={"root_user": "root", "root_password": ROOT_PASSWORD})
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers["content-type"]
+            body = resp.text
+
+        # ① 注入窗口真实发生（此刻窗口已关闭，应只在 window 快照里见到明文）
+        assert ROOT_PASSWORD in window.get("inventory", ""), \
+            "执行瞬间清单未注入 root 凭据——流程未按预期走临时注入，后续'零出现'断言空转"
+
+        # ③ SSE 帧逐帧扫描
+        frames = [f for f in body.split("\n\n") if f.strip()]
+        assert frames, "SSE 流应有事件输出"
+        for frame in frames:
+            assert ROOT_PASSWORD not in frame, f"SSE 帧泄漏明文密码: {frame!r}"
+        assert '"status": "successful"' in body
+
+        # ④ 清单文件字节还原（注入期外不存在明文）
+        assert gateways_inv.read_text(encoding="utf-8") == original
+        assert ROOT_PASSWORD not in gateways_inv.read_text(encoding="utf-8")
+
+        # ⑤ 全表扫描（fresh session 读请求会话落库后的最终状态）
+        async def _scan():
+            async with test_db_factory() as s:
+                audit_rows = [str(tuple(r)) for r in (await s.execute(select(AuditLog.__table__)))]
+                gw_rows = [str(tuple(r)) for r in (await s.execute(select(RelayGateway.__table__)))]
+                return audit_rows, gw_rows
+
+        audit_rows, gw_rows = asyncio.run(_scan())
+        for blob in audit_rows:
+            assert ROOT_PASSWORD not in blob, f"sys_audit_log 泄漏明文密码: {blob}"
+        for blob in gw_rows:
+            assert ROOT_PASSWORD not in blob, f"relay_gateways 泄漏明文密码: {blob}"
+    finally:
+        app.dependency_overrides.clear()
+        relay._INFLIGHT.clear()
 
 
 def test_sshd_setup_missing_group_400(test_db, test_db_factory, gateways_inv):
