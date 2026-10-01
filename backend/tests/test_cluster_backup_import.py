@@ -397,3 +397,39 @@ class TestImportApi:
         assert resp.status_code == 400
         assert "other-cluster" in resp.json()["detail"]["errors"][0] \
             or "已存在" in resp.json()["detail"]["errors"][0]
+
+class TestUnknownFieldForwardCompat:
+    """BAK-08：备份文档未知字段的前向兼容。
+
+    顶层未知字段已被容忍（实证）；本类钉住条目级——曾因 `_entity_kwargs`
+    不过滤未知键 → `Route(**kwargs)` 抛 `TypeError: invalid keyword argument`
+    → 整个导入回滚。新版本备份文件里的新增字段必须被静默忽略。
+    """
+
+    @pytest.mark.parametrize(
+        "section, extra_key, model",
+        [
+            ("routes", "future_entry_field", Route),
+            ("nodes", "future_node_field", Node),
+            ("upstreams", "future_upstream_field", Upstream),
+        ],
+        ids=["route", "node", "upstream"],
+    )
+    async def test_unknown_entry_fields_are_ignored(
+        self, import_db, source_doc, section, extra_key, model
+    ):
+        doc = json.loads(json.dumps(source_doc))
+        doc["unknown_top_level_field"] = {"note": "written by a newer version"}
+        doc["data"][section][0][extra_key] = "from-a-newer-version"
+
+        from app.services.cluster_backup import import_backup
+
+        session, _ = import_db
+        result = await import_backup(
+            session, doc, target_cluster_name="restored", creator_id=777)
+        cid = result["cluster_id"]
+
+        rows = (await session.execute(
+            select(model).where(model.cluster_id == cid))).scalars().all()
+        assert len(rows) == 1
+        assert not hasattr(rows[0], extra_key)

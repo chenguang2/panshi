@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
-from app.models.cluster import PluginConfig, ConfigVersion, Node
+from app.models.cluster import PluginConfig, ConfigVersion, Node, Route
 from app.models.user import User
 from app.schemas.cluster import (
     PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse,
@@ -89,6 +89,27 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     audit = getattr(request.state, "audit", None)
     if audit is not None:
         audit.detail = f"删除插件配置 {config.name}"
+
+    # PLG-07 前置校验（与 SSL CA 删除守卫行为对齐）：仍有路由引用时不允许
+    # 删除数据库记录，否则路由发布将携带失效引用。plugin_config_ids 存的是
+    # 插件组 edge_uuid（约定见 models/cluster.py）；畸形 JSON 按「不含引用」
+    # 处理（与 cluster_backup 导入期的清理语义一致），不阻断删除。
+    if body.delete_db:
+        routes = (await db.execute(select(Route).where(Route.cluster_id == cluster_id))).scalars().all()
+        referencing: list[str] = []
+        for r in routes:
+            try:
+                refs = json.loads(r.plugin_config_ids) if r.plugin_config_ids else []
+            except (json.JSONDecodeError, TypeError):
+                refs = []
+            if isinstance(refs, list) and config.edge_uuid in refs:
+                referencing.append(r.name)
+        if referencing:
+            shown = ", ".join(referencing[:3]) + ("等" if len(referencing) > 3 else "")
+            raise HTTPException(
+                status_code=400,
+                detail=f"插件组被 {len(referencing)} 条路由引用（{shown}），请先解除引用后再删除插件组",
+            )
 
     results = []
 

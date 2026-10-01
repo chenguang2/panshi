@@ -250,18 +250,29 @@ _DROP_KEYS = ("id", "cluster_id", "current_version", "created_at", "updated_at")
 _NESTED_KEYS = ("targets", "plugins", "content_base64")
 
 
-def _entity_kwargs(item: dict, cluster_id: int) -> dict:
-    """Backup row → ORM kwargs: drop platform-managed fields, retarget cluster."""
+def _entity_kwargs(item: dict, cluster_id: int, model: type | None = None) -> dict:
+    """Backup row → ORM kwargs: drop platform-managed fields, retarget cluster.
+
+    model 传入时按 ORM 属性键白名单过滤（BAK-08 前向兼容）：新版本备份
+    文件中本版本不认识的条目级字段直接丢弃，而非 `TypeError: invalid
+    keyword argument` 使整个导入回滚。白名单含列名（mapper.columns）——
+    SslCertificate.private_key 的列名是 "key"（约定 #23），须先以列名
+    通过白名单、再由 _ssl_kwargs 改名为属性名。
+    """
     kwargs = {k: v for k, v in item.items()
               if k not in _DROP_KEYS and k not in _NESTED_KEYS}
     kwargs["cluster_id"] = cluster_id
+    if model is not None:
+        mapper = sa_inspect(model)
+        allowed = set(mapper.attrs.keys()) | {c.name for c in mapper.columns}
+        kwargs = {k: v for k, v in kwargs.items() if k in allowed}
     return kwargs
 
 
 def _ssl_kwargs(item: dict, cluster_id: int) -> dict:
     """SSL 证书行：cert/private_key 列为 NOT NULL，内容缺失时以空串占位，
     行本身照常导入并进入需补齐清单（design D6 降级策略）。"""
-    kwargs = _entity_kwargs(item, cluster_id)
+    kwargs = _entity_kwargs(item, cluster_id, model=SslCertificate)
     # SSL 证书列名 → ORM 属性名差异（ps_ssl_certificate."key"）
     if "key" in kwargs:
         kwargs["private_key"] = kwargs.pop("key")
@@ -332,7 +343,7 @@ async def import_backup(
         # 节点：旧id → 新id；运行态重置为离线（D3 步骤6）
         node_map: dict[int, int] = {}
         for item in data["nodes"]:
-            row = Node(**_entity_kwargs(item, cid))
+            row = Node(**_entity_kwargs(item, cid, model=Node))
             row.status = 0
             db.add(row)
             await db.flush()
@@ -369,7 +380,7 @@ async def import_backup(
         # 上游 + 目标节点
         upstream_map: dict[int, int] = {}
         for item in data["upstreams"]:
-            row = Upstream(**_entity_kwargs(item, cid))
+            row = Upstream(**_entity_kwargs(item, cid, model=Upstream))
             db.add(row)
             await db.flush()
             upstream_map[item["id"]] = row.id
@@ -382,13 +393,13 @@ async def import_backup(
         # 插件组（edge_uuid 原值保留）
         pc_edge_uuids = {p.get("edge_uuid") for p in data["plugin_configs"]}
         for item in data["plugin_configs"]:
-            db.add(PluginConfig(**_entity_kwargs(item, cid)))
+            db.add(PluginConfig(**_entity_kwargs(item, cid, model=PluginConfig)))
         await db.flush()
 
         # 路由 + 路由插件
         route_map: dict[int, int] = {}
         for item in data["routes"]:
-            kwargs = _entity_kwargs(item, cid)
+            kwargs = _entity_kwargs(item, cid, model=Route)
             old_up = item.get("upstream_id")
             kwargs["upstream_id"] = upstream_map.get(old_up) if old_up else None
             ids_raw = item.get("plugin_config_ids")
@@ -415,13 +426,13 @@ async def import_backup(
                 db.add(RoutePlugin(**pkw))
 
         for item in data["global_rules"]:
-            db.add(GlobalRule(**_entity_kwargs(item, cid)))
+            db.add(GlobalRule(**_entity_kwargs(item, cid, model=GlobalRule)))
         for item in data["plugin_metadatas"]:
-            db.add(PluginMetadata(**_entity_kwargs(item, cid)))
+            db.add(PluginMetadata(**_entity_kwargs(item, cid, model=PluginMetadata)))
 
         # 四层代理：ref_node_id 重映射
         for item in data["stream_proxies"]:
-            kwargs = _entity_kwargs(item, cid)
+            kwargs = _entity_kwargs(item, cid, model=StreamProxy)
             old_ref = item.get("ref_node_id")
             if old_ref is not None:
                 if old_ref in node_map:
@@ -435,7 +446,7 @@ async def import_backup(
 
         # 静态资源：route_id 映射；有内容则落盘，无内容进需补齐清单
         for item in data["static_resources"]:
-            kwargs = _entity_kwargs(item, cid)
+            kwargs = _entity_kwargs(item, cid, model=StaticResource)
             old_rt = item.get("route_id")
             kwargs["route_id"] = route_map.get(old_rt) if old_rt else None
             content = item.get("content_base64")
