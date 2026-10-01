@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { message } from 'ant-design-vue'
+import { message, Tabs } from 'ant-design-vue'
 import { formatDateTime } from '@/utils/format'
 import DbBackupCard from '../DbBackupCard.vue'
 import DbBackupRestoreWizard from '../DbBackupRestoreWizard.vue'
@@ -30,9 +30,13 @@ vi.mock('@/composables/useOverlayModal', () => ({
   showOverlayModal: (...args: unknown[]) => mockShowOverlay(...args),
 }))
 
-vi.mock('ant-design-vue', () => ({
-  message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
-}))
+vi.mock('ant-design-vue', async () => {
+  const actual = await vi.importActual<typeof import('ant-design-vue')>('ant-design-vue')
+  return {
+    ...actual,
+    message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+  }
+})
 
 const stubs = {
   teleport: true,
@@ -126,7 +130,9 @@ async function mountCard(
     data: { config: makeConfig(configOverrides), status: makeStatus(statusOverrides) },
   })
   mockGetHistory.mockResolvedValue(history)
-  const wrapper = mount(DbBackupCard, { global: { stubs } })
+  const wrapper = mount(DbBackupCard, {
+    global: { stubs, components: { 'a-tabs': Tabs, 'a-tab-pane': Tabs.TabPane } },
+  })
   await flushPromises()
   await flushPromises()
   return wrapper
@@ -134,6 +140,11 @@ async function mountCard(
 
 function findButton(wrapper: ReturnType<typeof mount>, text: string) {
   return wrapper.findAll('button').filter((b) => b.text().includes(text))[0]
+}
+
+/** 作用域内按钮查找（常驻层/pane 局部断言用） */
+function btnIn(scope: { findAll(selector: string): Array<{ text(): string }> }, text: string) {
+  return scope.findAll('button').filter((b) => b.text().includes(text))[0]
 }
 
 function runConfirm(wrapper: ReturnType<typeof mount>) {
@@ -378,7 +389,9 @@ describe('M9 轮询静默降级与兜底轮询', () => {
         failing ? Promise.reject(new Error('network down')) : Promise.resolve(okResp),
       )
       mockGetHistory.mockResolvedValue(emptyHistory)
-      const wrapper = mount(DbBackupCard, { global: { stubs } })
+      const wrapper = mount(DbBackupCard, {
+        global: { stubs, components: { 'a-tabs': Tabs, 'a-tab-pane': Tabs.TabPane } },
+      })
       await tick(0)
       expect(wrapper.find('.dbb-poll-hint').exists()).toBe(false)
       failing = true
@@ -426,7 +439,9 @@ describe('M9 轮询静默降级与兜底轮询', () => {
       }
       mockGetConfig.mockResolvedValue(busyResp)
       mockGetHistory.mockResolvedValue(emptyHistory)
-      const wrapper = mount(DbBackupCard, { global: { stubs } })
+      const wrapper = mount(DbBackupCard, {
+        global: { stubs, components: { 'a-tabs': Tabs, 'a-tab-pane': Tabs.TabPane } },
+      })
       await tick(0)
       const cfgCalls = mockGetConfig.mock.calls.length
       // 执行中：5s 轮询每 5s 一次，61s 内约 12 次；若兜底叠加会明显多出（兜底单独 1 次）
@@ -612,15 +627,16 @@ describe('M10 行内停用确认（ux 补充：启用方向直通）', () => {
 })
 
 describe('M12 保存按钮贴近配置表单', () => {
-  it('保存按钮位于配置区标题行，操作区不再有保存按钮', async () => {
+  it('保存按钮位于策略区标题行，常驻层含主操作但不含保存（Tab 化收口）', async () => {
     const wrapper = await mountCard()
-    const titleRow = wrapper.find('.dbb-section-title.dbb-title-row')
+    const policyPane = wrapper.findAll('.ant-tabs-tabpane')[1]
+    const titleRow = policyPane.find('.dbb-section-title.dbb-title-row')
     expect(titleRow.exists()).toBe(true)
     expect(titleRow.text()).toContain('保存全局配置')
-    const actions = wrapper.find('.dbb-actions')
-    expect(actions.exists()).toBe(true)
-    expect(actions.text()).not.toContain('保存全局配置')
-    expect(actions.text()).toContain('立即备份')
+    const persistent = wrapper.find('.dbb-persistent')
+    expect(persistent.exists()).toBe(true)
+    expect(persistent.text()).not.toContain('保存全局配置')
+    expect(persistent.text()).toContain('立即备份')
   })
 })
 
@@ -797,5 +813,116 @@ describe('M5 筛选拉取受后端 page_size≤100 约束', () => {
     await selects[0].setValue('failed')
     await flushPromises()
     expect(wrapper.find('.dbb-target-empty').text()).toContain('没有匹配的备份记录')
+  })
+})
+
+// ═══════════ Tab 化改版（db-backup-page-tabs）组 1：常驻层与 Tabs 骨架 ═══════════
+
+describe('组1 常驻层与 Tabs 骨架', () => {
+  function tabBar(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findAll('.ant-tabs-tab')
+  }
+
+  async function clickTab(wrapper: ReturnType<typeof mount>, name: string): Promise<void> {
+    const tab = tabBar(wrapper).find((t) => t.text() === name)
+    expect(tab, `Tab「${name}」应存在`).toBeDefined()
+    await tab!.trigger('click')
+    await settle(wrapper)
+  }
+
+  it('1.1 三 Tab 命名正确且默认激活「备份位置」', async () => {
+    const wrapper = await mountCard()
+    expect(tabBar(wrapper).map((t) => t.text())).toEqual(['备份位置', '策略与保留', '备份历史'])
+    expect(wrapper.find('.ant-tabs-tab-active').text()).toBe('备份位置')
+  })
+
+  it('1.1 常驻层包含状态四格、立即备份、刷新、恢复数据主入口（不再有大标题）', async () => {
+    const wrapper = await mountCard()
+    const persistent = wrapper.find('.dbb-persistent')
+    expect(persistent.exists()).toBe(true)
+    expect(persistent.find('.dbb-stats').exists()).toBe(true)
+    expect(btnIn(persistent, '立即备份').exists()).toBe(true)
+    expect(btnIn(persistent, '刷新').exists()).toBe(true)
+    expect(btnIn(persistent, '恢复数据…').exists()).toBe(true)
+    expect(persistent.find('h3').exists()).toBe(false)
+  })
+
+  it('1.1 切到备份历史 Tab 后常驻层仍在，立即备份可直接执行', async () => {
+    const wrapper = await mountCard()
+    await clickTab(wrapper, '备份历史')
+    const persistent = wrapper.find('.dbb-persistent')
+    expect(persistent.find('.dbb-stats').exists()).toBe(true)
+    mockRunNow.mockResolvedValue({ data: { results: [], message: '备份完成' } })
+    await btnIn(persistent, '立即备份').trigger('click')
+    await settle(wrapper)
+    expect(mockRunNow).toHaveBeenCalled()
+  })
+
+  it('1.3 修改未保存 → 切历史再切回策略：输入保留、徽标仍在、无拦截弹窗', async () => {
+    const wrapper = await mountCard()
+    await clickTab(wrapper, '策略与保留')
+    await wrapper.find('input.dbb-interval-input').setValue('45')
+    expect(wrapper.find('.dbb-dirty-badge').exists()).toBe(true)
+    await clickTab(wrapper, '备份历史')
+    await clickTab(wrapper, '策略与保留')
+    expect((wrapper.find('input.dbb-interval-input').element as HTMLInputElement).value).toBe('45')
+    expect(wrapper.find('.dbb-dirty-badge').exists()).toBe(true)
+    expect(wrapper.find('.dbb-run-confirm').exists()).toBe(false)
+    expect(mockShowOverlay).not.toHaveBeenCalled()
+  })
+
+  it('1.3 防退化：访问过的 pane 签名内容常驻 DOM（不销毁）', async () => {
+    const wrapper = await mountCard()
+    await clickTab(wrapper, '备份历史')
+    expect(wrapper.find('.dbb-target-table').exists()).toBe(true)
+    expect(wrapper.find('input.dbb-interval-input').exists()).toBe(true)
+    expect(wrapper.find('.dbb-hist-filter').exists()).toBe(true)
+  })
+})
+
+// ═══════════ Tab 化改版（db-backup-page-tabs）组 2：徽标跳回与入口收口 ═══════════
+
+describe('组2 徽标跳回与入口收口', () => {
+  async function makeDirty(wrapper: ReturnType<typeof mount>): Promise<void> {
+    const tab = wrapper.findAll('.ant-tabs-tab').find((t) => t.text() === '策略与保留')
+    await tab!.trigger('click')
+    await settle(wrapper)
+    await wrapper.find('input.dbb-interval-input').setValue('45')
+  }
+
+  it('2.1 历史 Tab 下常驻层徽标可见，点击跳回「策略与保留」', async () => {
+    const wrapper = await mountCard()
+    await makeDirty(wrapper)
+    const histTab = wrapper.findAll('.ant-tabs-tab').find((t) => t.text() === '备份历史')
+    await histTab!.trigger('click')
+    await settle(wrapper)
+    const badge = wrapper.find('.dbb-persistent .dbb-dirty-badge')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('有未保存修改')
+    await badge.trigger('click')
+    await settle(wrapper)
+    expect(wrapper.find('.ant-tabs-tab-active').text()).toBe('策略与保留')
+  })
+
+  it('2.1 徽标不在 pane 内（已上提常驻层）', async () => {
+    const wrapper = await mountCard()
+    await makeDirty(wrapper)
+    expect(wrapper.find('.ant-tabs-tabpane .dbb-dirty-badge').exists()).toBe(false)
+    expect(wrapper.find('.dbb-persistent .dbb-dirty-badge').exists()).toBe(true)
+  })
+
+  it('2.2 常驻层「恢复数据…」点击打开恢复向导 modal（三入口语义不变）', async () => {
+    const wrapper = await mountCard()
+    await btnIn(wrapper.find('.dbb-persistent'), '恢复数据…').trigger('click')
+    await settle(wrapper)
+    const wizard = wrapper.findComponent(DbBackupRestoreWizard)
+    expect(wizard.props('visible')).toBe(true)
+  })
+
+  it('2.3 页面结构：Tab 容器为 a-tabs 且无手写 v-if Tab（D1 结构钉死）', async () => {
+    const wrapper = await mountCard()
+    expect(wrapper.find('.dbb-tabs').exists()).toBe(true)
+    expect(wrapper.findAll('.ant-tabs-tabpane').length).toBe(3)
+    // sticky 为样式表声明，jsdom 不加载组件 CSS——真实页面验收（3.3）核对
   })
 })

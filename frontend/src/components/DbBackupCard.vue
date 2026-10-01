@@ -1,22 +1,8 @@
 <template>
   <div class="card db-backup-card">
-    <div class="card-header">
-      <h3>SQLite 备份与容灾</h3>
-      <button class="btn btn-secondary btn-sm" :disabled="configLoading" @click="requestRefresh">
-        {{ configLoading ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-    <div class="card-body">
-      <!-- 适用性空态：注册表中无 SQLite 连接时整卡不适用 -->
-      <div v-if="loaded && !applicable" class="empty-state">
-        <div class="empty-state-icon">&#128190;</div>
-        <p>
-          不适用（无已注册的 SQLite 数据库）<template v-if="statusReason">——{{ statusReason }}</template>
-        </p>
-      </div>
-
-      <template v-else>
-        <!-- ═══ 状态区 ═══ -->
+    <!-- ═══ 常驻状态操作层（任何 Tab 可见；sticky 化，D2/D6：无大标题） ═══ -->
+    <div class="dbb-persistent">
+      <div class="dbb-persistent-main">
         <div class="dbb-stats">
           <div class="dbb-stat">
             <div class="dbb-stat-label">最近成功备份</div>
@@ -47,317 +33,352 @@
             </div>
           </div>
         </div>
-        <div v-if="statusHint" class="dbb-status-hint">{{ statusHint }}</div>
-        <div v-if="pollHint" class="dbb-poll-hint">{{ pollHint }}</div>
-
-        <!-- 上次错误（可折叠） -->
-        <div v-if="config?.last_error" class="dbb-error" :class="{ expanded: errorExpanded }">
-          <div
-            class="dbb-error-head"
-            role="button"
-            tabindex="0"
-            @click="toggleError"
-            @keydown.enter.prevent="toggleError"
-            @keydown.space.prevent="toggleError"
-          >
-            <span class="dbb-error-flag">&#9888;</span>
-            <span class="dbb-error-line">{{ errorHead }}</span>
-            <span class="dbb-error-toggle">{{ errorExpanded ? '收起' : '展开' }}</span>
-          </div>
-          <pre v-if="errorExpanded" class="dbb-error-detail">{{ config.last_error }}</pre>
-        </div>
-
-        <!-- ═══ 全局配置区（总开关 / 间隔 / 来源标识 / 内容段） ═══ -->
-        <div class="dbb-section-title dbb-title-row">
-          <span class="dbb-title-row-text">
-            备份配置（全局）
-            <span v-if="isDirty" class="dbb-dirty-badge">有未保存修改</span>
-          </span>
+        <div class="dbb-persistent-ops">
+          <span v-if="statusHint" class="dbb-status-hint">{{ statusHint }}</span>
+          <span v-if="pollHint" class="dbb-poll-hint">{{ pollHint }}</span>
           <button
-            class="btn btn-sm"
-            :class="isDirty ? 'btn-primary' : 'btn-secondary'"
-            :disabled="saving || configLoading"
-            @click="handleSave"
+            v-if="isDirty"
+            class="dbb-dirty-badge"
+            title="有未保存修改，点击返回「策略与保留」"
+            @click="goToPolicyTab"
           >
-            {{ saving ? '保存中…' : '保存全局配置' }}
+            有未保存修改
           </button>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">定时备份</label>
-            <div class="dbb-inline-fields">
-              <label class="toggle dbb-toggle">
-                <input type="checkbox" v-model="form.enabled" />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="dbb-enabled-text">{{ form.enabled ? '启用定时备份' : '停用定时备份' }}</span>
-              <span class="form-hint dbb-inline-hint">「立即备份」不依赖此开关</span>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">备份间隔（分钟）</label>
-            <input
-              v-model.number="form.interval_minutes"
-              type="number"
-              class="form-input dbb-interval-input"
-              min="1"
-              max="10080"
-              placeholder="60"
-            />
-            <div class="form-hint">建议 5–1440 分钟；上限 10080 分钟（7 天）</div>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">来源标识</label>
-            <a-input
-              v-model:value="form.source_name"
-              class="dbb-source-input"
-              :maxlength="64"
-              placeholder="留空自动解析（保存后回显）"
-            />
-            <div class="form-hint">
-              多机共享同一备份目录时，各机必须配置唯一标识；首字符须为字母或数字，可用 . _ -，最长 64 字符
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">附加数据段</label>
-            <div class="dbb-inline-fields dbb-segments-fields">
-              <label class="checkbox-label dbb-segment-check">
-                <input type="checkbox" v-model="form.include_static" />
-                <span>静态资源</span>
-              </label>
-              <label class="checkbox-label dbb-segment-check">
-                <input type="checkbox" v-model="form.include_task_scripts" />
-                <span>任务脚本</span>
-              </label>
-              <label class="checkbox-label dbb-segment-check">
-                <input type="checkbox" v-model="form.include_task_logs" />
-                <span>任务日志</span>
-              </label>
-            </div>
-            <div class="form-hint">勾选后一并打包，恢复时将覆盖本机对应目录</div>
-          </div>
-        </div>
-
-        <!-- ═══ 备份位置区 ═══ -->
-        <div class="dbb-section-title dbb-title-row">
-          <span class="dbb-title-row-text">
-            备份位置<span class="section-count">{{ targets.length }}</span>
-          </span>
-          <button class="btn btn-primary btn-sm" @click="openCreateTarget">＋ 新增位置</button>
-        </div>
-        <div class="dbb-zone-hint">每轮备份将同一备份包推送至所有启用位置；单个位置失败不影响其余位置</div>
-        <div v-if="targets.length === 0" class="dbb-target-empty">
-          尚未配置备份位置——点击「＋ 新增位置」添加第一个远端目标
-        </div>
-        <template v-else>
-          <div class="table-shell">
-            <table class="grid dbb-target-table">
-              <thead>
-                <tr>
-                  <th class="col-enable">启用</th>
-                  <th>名称</th>
-                  <th>地址 : 端口</th>
-                  <th>远端目录</th>
-                  <th>最近推送</th>
-                  <th class="num col-retain">保留份数</th>
-                  <th class="col-actions">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="t in targets" :key="t.id" :class="{ 'row-disabled': !t.enabled }">
-                  <td>
-                    <label
-                      class="toggle dbb-row-toggle"
-                      :title="t.enabled ? '停用后该位置不再接收新备份' : '启用后参与每轮备份推送'"
-                    >
-                      <input
-                        type="checkbox"
-                        :checked="t.enabled"
-                        :disabled="togglingId === t.id"
-                        @change="onTargetToggleChange(t, $event)"
-                      />
-                      <span class="toggle-slider"></span>
-                    </label>
-                  </td>
-                  <td class="dbb-tgt-name">{{ t.name }}</td>
-                  <td class="mono dbb-tgt-addr">{{ t.host }} : {{ t.port }}</td>
-                  <td class="mono dbb-tgt-dir" :title="t.remote_dir">{{ t.remote_dir }}</td>
-                  <td class="dbb-tgt-health">
-                    <span class="dbb-health-dot" :class="healthDotClass(t.name)" :title="healthTooltip(t.name)"></span>
-                    <span v-if="recentTestText(t.name)" class="cell-meta">测试 {{ recentTestText(t.name) }}</span>
-                    <span v-else class="cell-meta t-muted">测试 —</span>
-                  </td>
-                  <td class="num mono dbb-tgt-retain">{{ t.retain_count }}</td>
-                  <td>
-                    <div class="table-actions">
-                      <button class="btn btn-secondary btn-sm" @click="openEditTarget(t)">编辑</button>
-                      <button
-                        class="btn btn-secondary btn-sm"
-                        :disabled="rowTestingId === t.id"
-                        title="仅校验 SSH 连通与凭据，不含目录可写与磁盘空间"
-                        @click="testTargetRow(t)"
-                      >
-                        {{ rowTestingId === t.id ? '测试中…' : '测试' }}
-                      </button>
-                      <button class="btn btn-danger-outline btn-sm" @click="confirmDeleteTarget(t)">删除</button>
-                    </div>
-                    <!-- L2：行级测试结果与触发行视觉关联（沿用既有类名供测试断言） -->
-                    <div
-                      v-if="rowTestResult && rowTestResult.name === t.name"
-                      class="dbb-target-testbar"
-                      :class="rowTestResult.ok ? 'ok' : 'fail'"
-                    >
-                      「{{ t.name }}」{{ rowTestResult.ok ? '✓' : '✗' }} {{ rowTestResult.message }}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </template>
-
-        <!-- ═══ 操作区 ═══ -->
-        <div class="dbb-actions">
-          <button class="btn btn-primary" :disabled="runDisabled" @click="requestRunNow">
+          <button class="btn btn-secondary btn-sm" :disabled="configLoading" @click="requestRefresh">
+            {{ configLoading ? '刷新中…' : '刷新' }}
+          </button>
+          <button class="btn btn-primary btn-sm" :disabled="runDisabled" @click="requestRunNow">
             {{ running ? '备份中…' : '立即备份' }}
           </button>
-          <span v-if="running" class="form-hint dbb-run-expectation">
-            正在打包并推送到 {{ enabledTargetCount }} 个启用位置，约需 1–2 分钟，请勿离开页面
-          </span>
-          <button class="btn btn-secondary" @click="openWizard">恢复向导…</button>
-          <span class="form-hint dbb-actions-hint">位置的新增 / 编辑在抽屉内完成并独立保存</span>
+          <button class="btn btn-secondary btn-sm" @click="openWizard">恢复数据…</button>
         </div>
+      </div>
+      <div v-if="running" class="form-hint dbb-run-expectation">
+        正在打包并推送到 {{ enabledTargetCount }} 个启用位置，约需 1–2 分钟，请勿离开页面
+      </div>
+      <div v-if="config?.last_error" class="dbb-error" :class="{ expanded: errorExpanded }">
+        <div
+          class="dbb-error-head"
+          role="button"
+          tabindex="0"
+          @click="toggleError"
+          @keydown.enter.prevent="toggleError"
+          @keydown.space.prevent="toggleError"
+        >
+          <span class="dbb-error-flag">&#9888;</span>
+          <span class="dbb-error-line">{{ errorHead }}</span>
+          <span class="dbb-error-toggle">{{ errorExpanded ? '收起' : '展开' }}</span>
+        </div>
+        <pre v-if="errorExpanded" class="dbb-error-detail">{{ config.last_error }}</pre>
+      </div>
+    </div>
 
-        <!-- ═══ 历史区 ═══ -->
-        <div class="dbb-history">
-          <div class="dbb-history-header">
-            <h4>备份历史</h4>
-            <div class="dbb-hist-toolbar">
-              <span class="dbb-history-count">{{ historyCountText }}</span>
-              <select v-model="historyFilter.status" class="form-input dbb-hist-filter">
-                <option value="all">全部状态</option>
-                <option value="success">成功</option>
-                <option value="partial">部分成功</option>
-                <option value="failed">失败</option>
-              </select>
-              <select v-model="historyFilter.trigger" class="form-input dbb-hist-filter">
-                <option value="all">全部触发</option>
-                <option value="scheduled">定时</option>
-                <option value="manual">手动</option>
-              </select>
+    <div class="card-body">
+      <!-- 适用性空态：注册表中无 SQLite 连接时整卡不适用 -->
+      <div v-if="loaded && !applicable" class="empty-state">
+        <div class="empty-state-icon">&#128190;</div>
+        <p>
+          不适用（无已注册的 SQLite 数据库）<template v-if="statusReason">——{{ statusReason }}</template>
+        </p>
+      </div>
+
+      <template v-else>
+        <!-- ═══ Tab 化内容区（D1：a-tabs 默认行为 pane 不销毁；D4：默认「备份位置」，Tab 状态不进 URL） ═══ -->
+        <a-tabs v-model:activeKey="activeTab" class="dbb-tabs">
+          <a-tab-pane key="targets" tab="备份位置" force-render>
+            <!-- ═══ 备份位置 Tab（默认页） ═══ -->
+            <div class="dbb-section-title dbb-title-row">
+              <span class="dbb-title-row-text">
+                备份位置<span class="section-count">{{ targets.length }}</span>
+              </span>
+              <button class="btn btn-primary btn-sm" @click="openCreateTarget">＋ 新增位置</button>
             </div>
-          </div>
-          <div v-if="historyLoading" class="dbb-hist-loading">加载中…</div>
-          <div v-else-if="displayedHistory.length === 0" class="dbb-target-empty">
-            {{ filterActive ? '没有匹配的备份记录，请调整筛选条件' : '暂无备份历史' }}
-          </div>
-          <template v-else>
-            <div class="table-shell">
-              <table class="grid dbb-hist-table">
-                <thead>
-                  <tr>
-                    <th class="col-exp"></th>
-                    <th>开始时间</th>
-                    <th class="col-trigger">触发</th>
-                    <th>状态</th>
-                    <th>包名</th>
-                    <th class="num col-num">大小</th>
-                    <th class="num col-num">耗时</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-for="item in displayedHistory" :key="item.id">
+            <div class="dbb-zone-hint">每轮备份将同一备份包推送至所有启用位置；单个位置失败不影响其余位置</div>
+            <div v-if="targets.length === 0" class="dbb-target-empty">
+              尚未配置备份位置——点击「＋ 新增位置」添加第一个远端目标
+            </div>
+            <template v-else>
+              <div class="table-shell">
+                <table class="grid dbb-target-table">
+                  <thead>
                     <tr>
-                      <td>
-                        <button
-                          v-if="histExpandable(item)"
-                          class="exp-toggle"
-                          :class="{ open: isHistExpanded(item.id) }"
-                          :title="histSubCount(item) > 0 ? '展开详情' : '展开失败原因'"
-                          @click="toggleHistExpand(item.id)"
-                        >
-                          &#9654;
-                        </button>
-                      </td>
-                      <td class="mono t-muted">{{ formatDateTime(item.started_at) }}</td>
-                      <td>
-                        <span class="dbb-trigger">{{ item.trigger === 'scheduled' ? '定时' : '手动' }}</span>
-                      </td>
-                      <td class="dbb-hist-status">
-                        <span :class="statusBadgeClass(item.status)">{{ statusBadgeText(item.status) }}</span>
-                        <span v-if="histSubCount(item) > 0" class="cell-meta dbb-hist-counts"
-                          >{{ histOkCount(item) }}/{{ histSubCount(item) }} 目标</span
-                        >
-                      </td>
-                      <td>
-                        <span class="dbb-pkgname">{{ item.package_name || '-' }}</span>
-                        <button
-                          v-if="item.package_name && targets.length > 0"
-                          class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
-                          @click="openWizardForPackage(item)"
-                        >
-                          恢复此包
-                        </button>
-                      </td>
-                      <td class="num mono t-muted">
-                        {{ item.file_size != null ? formatFileSize(item.file_size) : '-' }}
-                      </td>
-                      <td class="num mono t-muted">{{ formatDurationMs(item.duration_ms) }}</td>
+                      <th class="col-enable">启用</th>
+                      <th>名称</th>
+                      <th>地址 : 端口</th>
+                      <th>远端目录</th>
+                      <th>最近推送</th>
+                      <th class="num col-retain">保留份数</th>
+                      <th class="col-actions">操作</th>
                     </tr>
-                    <tr v-if="isHistExpanded(item.id)" class="expand-row">
-                      <td :colspan="7">
-                        <div class="hist-expand">
-                          <template v-if="item.error">
-                            <div class="hist-expand-title">失败原因</div>
-                            <pre class="hist-error-detail">{{ item.error }}</pre>
-                          </template>
-                          <template v-if="histSubCount(item) > 0">
-                            <div class="hist-expand-title">分目标结果</div>
-                            <ul class="target-results">
-                              <li
-                                v-for="sub in item.targets || []"
-                                :key="sub.target_id ?? sub.target_name"
-                                :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
-                              >
-                                <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
-                                <span class="tr-name">{{ sub.target_name }}</span>
-                                <span class="tr-meta">{{ histSubMeta(sub) }}</span>
-                              </li>
-                            </ul>
-                          </template>
+                  </thead>
+                  <tbody>
+                    <tr v-for="t in targets" :key="t.id" :class="{ 'row-disabled': !t.enabled }">
+                      <td>
+                        <label
+                          class="toggle dbb-row-toggle"
+                          :title="t.enabled ? '停用后该位置不再接收新备份' : '启用后参与每轮备份推送'"
+                        >
+                          <input
+                            type="checkbox"
+                            :checked="t.enabled"
+                            :disabled="togglingId === t.id"
+                            @change="onTargetToggleChange(t, $event)"
+                          />
+                          <span class="toggle-slider"></span>
+                        </label>
+                      </td>
+                      <td class="dbb-tgt-name">{{ t.name }}</td>
+                      <td class="mono dbb-tgt-addr">{{ t.host }} : {{ t.port }}</td>
+                      <td class="mono dbb-tgt-dir" :title="t.remote_dir">{{ t.remote_dir }}</td>
+                      <td class="dbb-tgt-health">
+                        <span
+                          class="dbb-health-dot"
+                          :class="healthDotClass(t.name)"
+                          :title="healthTooltip(t.name)"
+                        ></span>
+                        <span v-if="recentTestText(t.name)" class="cell-meta">测试 {{ recentTestText(t.name) }}</span>
+                        <span v-else class="cell-meta t-muted">测试 —</span>
+                      </td>
+                      <td class="num mono dbb-tgt-retain">{{ t.retain_count }}</td>
+                      <td>
+                        <div class="table-actions">
+                          <button class="btn btn-secondary btn-sm" @click="openEditTarget(t)">编辑</button>
+                          <button
+                            class="btn btn-secondary btn-sm"
+                            :disabled="rowTestingId === t.id"
+                            title="仅校验 SSH 连通与凭据，不含目录可写与磁盘空间"
+                            @click="testTargetRow(t)"
+                          >
+                            {{ rowTestingId === t.id ? '测试中…' : '测试' }}
+                          </button>
+                          <button class="btn btn-danger-outline btn-sm" @click="confirmDeleteTarget(t)">删除</button>
+                        </div>
+                        <!-- L2：行级测试结果与触发行视觉关联（沿用既有类名供测试断言） -->
+                        <div
+                          v-if="rowTestResult && rowTestResult.name === t.name"
+                          class="dbb-target-testbar"
+                          :class="rowTestResult.ok ? 'ok' : 'fail'"
+                        >
+                          「{{ t.name }}」{{ rowTestResult.ok ? '✓' : '✗' }} {{ rowTestResult.message }}
                         </div>
                       </td>
                     </tr>
-                  </template>
-                </tbody>
-              </table>
-            </div>
-            <div class="dbb-hist-pager">
-              <select
-                v-if="!filterActive"
-                class="form-input dbb-hist-pagesize"
-                :value="historyPageSize"
-                @change="onPageSizeChange"
-              >
-                <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} 条/页</option>
-              </select>
-              <span v-else class="dbb-hist-pager-info">筛选视图 · {{ FILTER_PAGE_SIZE }} 条/页</span>
-              <button class="btn btn-secondary btn-sm" :disabled="displayPage <= 1 || historyLoading" @click="prevPage">
-                ‹ 上一页
-              </button>
-              <span class="dbb-hist-pager-info">第 {{ displayPage }} / {{ pageCount }} 页</span>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <div class="form-hint dbb-actions-hint">位置的新增 / 编辑在抽屉内完成并独立保存</div>
+          </a-tab-pane>
+          <a-tab-pane key="policy" tab="策略与保留" force-render>
+            <!-- ═══ 策略与保留（原全局配置区；dirty 徽标已上提常驻层） ═══ -->
+            <div class="dbb-section-title dbb-title-row">
+              <span class="dbb-title-row-text"> 备份配置（全局） </span>
               <button
-                class="btn btn-secondary btn-sm"
-                :disabled="displayPage >= pageCount || historyLoading"
-                @click="nextPage"
+                class="btn btn-sm"
+                :class="isDirty ? 'btn-primary' : 'btn-secondary'"
+                :disabled="saving || configLoading"
+                @click="handleSave"
               >
-                下一页 ›
+                {{ saving ? '保存中…' : '保存全局配置' }}
               </button>
             </div>
-          </template>
-        </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">定时备份</label>
+                <div class="dbb-inline-fields">
+                  <label class="toggle dbb-toggle">
+                    <input type="checkbox" v-model="form.enabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                  <span class="dbb-enabled-text">{{ form.enabled ? '启用定时备份' : '停用定时备份' }}</span>
+                  <span class="form-hint dbb-inline-hint">「立即备份」不依赖此开关</span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">备份间隔（分钟）</label>
+                <input
+                  v-model.number="form.interval_minutes"
+                  type="number"
+                  class="form-input dbb-interval-input"
+                  min="1"
+                  max="10080"
+                  placeholder="60"
+                />
+                <div class="form-hint">建议 5–1440 分钟；上限 10080 分钟（7 天）</div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">来源标识</label>
+                <a-input
+                  v-model:value="form.source_name"
+                  class="dbb-source-input"
+                  :maxlength="64"
+                  placeholder="留空自动解析（保存后回显）"
+                />
+                <div class="form-hint">
+                  多机共享同一备份目录时，各机必须配置唯一标识；首字符须为字母或数字，可用 . _ -，最长 64 字符
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">附加数据段</label>
+                <div class="dbb-inline-fields dbb-segments-fields">
+                  <label class="checkbox-label dbb-segment-check">
+                    <input type="checkbox" v-model="form.include_static" />
+                    <span>静态资源</span>
+                  </label>
+                  <label class="checkbox-label dbb-segment-check">
+                    <input type="checkbox" v-model="form.include_task_scripts" />
+                    <span>任务脚本</span>
+                  </label>
+                  <label class="checkbox-label dbb-segment-check">
+                    <input type="checkbox" v-model="form.include_task_logs" />
+                    <span>任务日志</span>
+                  </label>
+                </div>
+                <div class="form-hint">勾选后一并打包，恢复时将覆盖本机对应目录</div>
+              </div>
+            </div>
+            <div class="dbb-policy-note">
+              保留策略按位置生效：每个位置保留最近 N 份备份包，整体可回溯时间跨度 ≈ 份数 × 备份间隔。
+              停用位置不参与新推送，但其远端已存在的备份包不受影响。
+            </div>
+          </a-tab-pane>
+          <a-tab-pane key="history" tab="备份历史" force-render>
+            <!-- ═══ 历史区 ═══ -->
+            <div class="dbb-history">
+              <div class="dbb-history-header">
+                <h4>备份历史</h4>
+                <div class="dbb-hist-toolbar">
+                  <span class="dbb-history-count">{{ historyCountText }}</span>
+                  <select v-model="historyFilter.status" class="form-input dbb-hist-filter">
+                    <option value="all">全部状态</option>
+                    <option value="success">成功</option>
+                    <option value="partial">部分成功</option>
+                    <option value="failed">失败</option>
+                  </select>
+                  <select v-model="historyFilter.trigger" class="form-input dbb-hist-filter">
+                    <option value="all">全部触发</option>
+                    <option value="scheduled">定时</option>
+                    <option value="manual">手动</option>
+                  </select>
+                </div>
+              </div>
+              <div v-if="historyLoading" class="dbb-hist-loading">加载中…</div>
+              <div v-else-if="displayedHistory.length === 0" class="dbb-target-empty">
+                {{ filterActive ? '没有匹配的备份记录，请调整筛选条件' : '暂无备份历史' }}
+              </div>
+              <template v-else>
+                <div class="table-shell">
+                  <table class="grid dbb-hist-table">
+                    <thead>
+                      <tr>
+                        <th class="col-exp"></th>
+                        <th>开始时间</th>
+                        <th class="col-trigger">触发</th>
+                        <th>状态</th>
+                        <th>包名</th>
+                        <th class="num col-num">大小</th>
+                        <th class="num col-num">耗时</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <template v-for="item in displayedHistory" :key="item.id">
+                        <tr>
+                          <td>
+                            <button
+                              v-if="histExpandable(item)"
+                              class="exp-toggle"
+                              :class="{ open: isHistExpanded(item.id) }"
+                              :title="histSubCount(item) > 0 ? '展开详情' : '展开失败原因'"
+                              @click="toggleHistExpand(item.id)"
+                            >
+                              &#9654;
+                            </button>
+                          </td>
+                          <td class="mono t-muted">{{ formatDateTime(item.started_at) }}</td>
+                          <td>
+                            <span class="dbb-trigger">{{ item.trigger === 'scheduled' ? '定时' : '手动' }}</span>
+                          </td>
+                          <td class="dbb-hist-status">
+                            <span :class="statusBadgeClass(item.status)">{{ statusBadgeText(item.status) }}</span>
+                            <span v-if="histSubCount(item) > 0" class="cell-meta dbb-hist-counts"
+                              >{{ histOkCount(item) }}/{{ histSubCount(item) }} 目标</span
+                            >
+                          </td>
+                          <td>
+                            <span class="dbb-pkgname">{{ item.package_name || '-' }}</span>
+                            <button
+                              v-if="item.package_name && targets.length > 0"
+                              class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
+                              @click="openWizardForPackage(item)"
+                            >
+                              恢复此包
+                            </button>
+                          </td>
+                          <td class="num mono t-muted">
+                            {{ item.file_size != null ? formatFileSize(item.file_size) : '-' }}
+                          </td>
+                          <td class="num mono t-muted">{{ formatDurationMs(item.duration_ms) }}</td>
+                        </tr>
+                        <tr v-if="isHistExpanded(item.id)" class="expand-row">
+                          <td :colspan="7">
+                            <div class="hist-expand">
+                              <template v-if="item.error">
+                                <div class="hist-expand-title">失败原因</div>
+                                <pre class="hist-error-detail">{{ item.error }}</pre>
+                              </template>
+                              <template v-if="histSubCount(item) > 0">
+                                <div class="hist-expand-title">分目标结果</div>
+                                <ul class="target-results">
+                                  <li
+                                    v-for="sub in item.targets || []"
+                                    :key="sub.target_id ?? sub.target_name"
+                                    :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
+                                  >
+                                    <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
+                                    <span class="tr-name">{{ sub.target_name }}</span>
+                                    <span class="tr-meta">{{ histSubMeta(sub) }}</span>
+                                  </li>
+                                </ul>
+                              </template>
+                            </div>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="dbb-hist-pager">
+                  <select
+                    v-if="!filterActive"
+                    class="form-input dbb-hist-pagesize"
+                    :value="historyPageSize"
+                    @change="onPageSizeChange"
+                  >
+                    <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} 条/页</option>
+                  </select>
+                  <span v-else class="dbb-hist-pager-info">筛选视图 · {{ FILTER_PAGE_SIZE }} 条/页</span>
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    :disabled="displayPage <= 1 || historyLoading"
+                    @click="prevPage"
+                  >
+                    ‹ 上一页
+                  </button>
+                  <span class="dbb-hist-pager-info">第 {{ displayPage }} / {{ pageCount }} 页</span>
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    :disabled="displayPage >= pageCount || historyLoading"
+                    @click="nextPage"
+                  >
+                    下一页 ›
+                  </button>
+                </div>
+              </template>
+            </div>
+          </a-tab-pane>
+        </a-tabs>
       </template>
     </div>
   </div>
@@ -589,6 +610,14 @@ const config = ref<DbBackupConfig | null>(null)
 const configLoading = ref(false)
 const loaded = ref(false)
 const errorExpanded = ref(false)
+// ── Tab 化（D4）：页内三内容页，默认「备份位置」；Tab 状态不进 URL ──
+const activeTab = ref<'targets' | 'policy' | 'history'>('targets')
+
+/** D2：常驻层 dirty 徽标点击跳回「策略与保留」Tab（pane 不销毁，表单态保留，无拦截弹窗） */
+function goToPolicyTab(): void {
+  activeTab.value = 'policy'
+}
+
 const wizardOpen = ref(false)
 
 /** 全局表单（目标连接字段已迁移至位置表，此处仅全局策略） */
@@ -1716,18 +1745,57 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 500;
 }
-.dbb-actions {
+/* ── Tab 化：常驻状态操作层（sticky，D3：top = DefaultLayout .app-header 高度） ── */
+.dbb-persistent {
+  position: sticky;
+  top: 56px;
+  z-index: 20;
+  background: var(--surface);
+  padding: 12px 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dbb-persistent-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dbb-persistent-ops {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
   flex-wrap: wrap;
-  margin: 16px 0 4px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
 }
-.dbb-actions-hint {
-  margin-top: 0;
-  margin-left: 4px;
+.dbb-persistent-ops .dbb-status-hint,
+.dbb-persistent-ops .dbb-poll-hint {
+  margin: 0;
+}
+.dbb-persistent .dbb-dirty-badge {
+  cursor: pointer;
+}
+.dbb-persistent .dbb-run-expectation {
+  margin: 0;
+  padding: 2px 0 8px;
+}
+.dbb-persistent .dbb-error {
+  margin: 10px 0 12px;
+}
+
+/* ── Tab 化：内容区 Tabs 与策略说明 ── */
+.dbb-tabs {
+  margin-top: 4px;
+}
+.dbb-policy-note {
+  margin: 12px 0 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: oklch(0% 0 0 / 3%);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
 }
 
 /* ── 位置表格 ── */

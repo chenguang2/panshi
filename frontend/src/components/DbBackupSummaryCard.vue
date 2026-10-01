@@ -4,7 +4,7 @@
       <h3>SQLite 备份与容灾</h3>
       <div class="dbb-sum-header-actions">
         <button class="btn btn-primary btn-sm" @click="goManagement">进入备份管理</button>
-        <button class="btn btn-secondary btn-sm" @click="goRestore">灾难恢复</button>
+        <button class="btn btn-secondary btn-sm" @click="goRestore">恢复数据</button>
       </div>
     </div>
     <div class="card-body">

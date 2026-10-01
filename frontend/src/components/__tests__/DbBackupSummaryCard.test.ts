@@ -126,10 +126,10 @@ describe('DbBackupSummaryCard 摘要卡', () => {
     expect(wrapper.text()).toContain('1 个启用位置')
   })
 
-  it('双入口：「进入备份管理」与「灾难恢复」（直达恢复向导）', async () => {
+  it('双入口：「进入备份管理」与「恢复数据」（直达恢复向导，恢复数据系命名）', async () => {
     const wrapper = await mountCard()
     const enterBtn = wrapper.findAll('button').filter((b) => b.text() === '进入备份管理')
-    const drBtn = wrapper.findAll('button').filter((b) => b.text() === '灾难恢复')
+    const drBtn = wrapper.findAll('button').filter((b) => b.text() === '恢复数据')
     expect(enterBtn.length).toBeGreaterThan(0)
     expect(drBtn.length).toBeGreaterThan(0)
     await enterBtn[0].trigger('click')
