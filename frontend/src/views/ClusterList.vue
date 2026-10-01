@@ -150,7 +150,7 @@
               <tr>
                 <td class="dt-label">创建时间</td>
                 <td class="dt-value">
-                  {{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}
+                  {{ formatDateTime(detailCluster.created_at) }}
                 </td>
               </tr>
             </table>
@@ -278,6 +278,7 @@ import {
 } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { formatDateTime } from '@/utils/format'
 
 const authStore = useAuthStore()
 const featuresStore = useFeaturesStore()

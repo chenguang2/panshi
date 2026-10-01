@@ -430,5 +430,5 @@ B2-NEW-04 守卫对真实 app 检出 16 个 offender，分两类均已修复：
 | `npx playwright test` 全量 | **86 passed**，4.8m（3 文件合并 −2 重复、F2-NEW-06 +1） |
 
 ### 12.6 后续
-- 三个生产缺陷修复提交（§12.3 ①②③），修复后摘除 xfail / 补哨兵页。
+- 三个生产缺陷修复提交（§12.3 ①②③），修复后摘除 xfail / 补哨兵页。**已完成（2026-10-01）**：② listen_port/name 边界 → 46254ae3；① CSV/XLSX 公式注入中和 → 93d713fb；③ CentralList/ClusterList 详情抽屉时间改 formatDateTime 并入哨兵 → fix(ui) 提交。
 - 全仓仍有 ~18 测试文件 ~100 处 setTimeout 睡眠（审计仅点名 NodeList/ClusterListPage，已处理；余量为增量事项，其中 16 处已随工厂消除）。

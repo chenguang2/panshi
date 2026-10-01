@@ -639,7 +639,7 @@
                 <tr>
                   <td class="dt-label">创建时间</td>
                   <td class="dt-value">
-                    {{ detailCluster.created_at ? new Date(detailCluster.created_at).toLocaleString('zh-CN') : '-' }}
+                    {{ formatDateTime(detailCluster.created_at) }}
                   </td>
                 </tr>
               </tbody>
@@ -741,6 +741,7 @@ import {
 import { downloadBlob } from '@/utils/download'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import PluginMetadata from '@/components/PluginMetadata.vue'

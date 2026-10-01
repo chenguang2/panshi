@@ -11,8 +11,9 @@ import { setActivePinia, createPinia } from 'pinia'
  * 该确定值；违规页（new Date(x).toLocaleString() 直读）按本地墙钟渲染 naive 原值，
  * 永远渲染不出跨日 +8 结果，故断言与机器时区无关且具判别力。
  *
- * 当前违规页（本哨兵有意不覆盖，待整改后加入）：CentralList.vue 与 ClusterList.vue
- * 集群详情抽屉直读 `new Date(detailCluster.created_at).toLocaleString('zh-CN')`。
+ * 2026-10-01 整改跟进：原违规页 CentralList.vue 与 ClusterList.vue 集群详情抽屉
+ * （曾直读 `new Date(detailCluster.created_at).toLocaleString('zh-CN')`）已改为
+ * formatDateTime（utils/format），两页详情抽屉时间渲染已纳入本哨兵。
  */
 
 const responses = new Map<string, { data: unknown }>()
@@ -247,5 +248,78 @@ describe('时间哨兵 · SslList.vue（PublishStatusTag 发布时间）', () =>
     expect(dateEl.exists()).toBe(true)
     expect(dateEl.text()).toBe(SHANGHAI_SLASH_FULL)
     expect(dateEl.attributes('title')).toBe(`发布时间: ${SHANGHAI_SLASH_FULL}`)
+  })
+})
+
+// ── 集群详情抽屉（2026-10-01 整改：new Date().toLocaleString 直读 → formatDateTime） ──
+
+const DETAIL_CLUSTER = {
+  id: 1,
+  name: 'demo-cluster',
+  display_name: '演示集群',
+  group_name: '线上',
+  description: '',
+  status: 1,
+  created_at: NAIVE_UTC,
+  healthy_node_count: 1,
+  node_count: 2,
+  upstream_count: 3,
+  route_count: 4,
+  plugin_config_count: 5,
+  global_rule_count: 6,
+  static_resource_count: 7,
+  plugin_metadata_count: 8,
+  nodes: [],
+}
+
+/** 打开集群详情抽屉（modal-overlay 常驻 DOM，仅 display 切换，置 state 即可断言渲染） */
+async function openDetailDrawer(vm: Record<string, unknown>) {
+  vm.detailCluster = { ...DETAIL_CLUSTER }
+  vm.detailVisible = true
+}
+
+describe('时间哨兵 · CentralList.vue 集群详情抽屉', () => {
+  beforeEach(() => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'sentinel-token')
+    responses.set('/clusters', { data: { items: [{ ...DETAIL_CLUSTER }], total: 1 } })
+    responses.set('/clusters/1/nodes', { data: { items: [] } })
+    responses.set('/relay/gateways', { data: { items: [] } })
+  })
+
+  it('创建时间按 Asia/Shanghai 渲染（naive UTC 跨日 +8，含秒）', async () => {
+    const CentralList = (await import('../CentralList.vue')).default
+    const wrapper = mount(CentralList, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await openDetailDrawer(wrapper.vm as unknown as Record<string, unknown>)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain(SHANGHAI_SLASH_FULL)
+    // 整改前直读会渲染 naive 本地墙钟 2026/9/14 16:30:45，不应再出现
+    expect(wrapper.text()).not.toContain('2026/09/14 16:30:45')
+    wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+})
+
+describe('时间哨兵 · ClusterList.vue 集群详情抽屉', () => {
+  beforeEach(() => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'sentinel-token')
+    responses.set('/clusters', { data: { items: [{ ...DETAIL_CLUSTER }], total: 1 } })
+    responses.set('/relay/gateways', { data: { items: [] } })
+  })
+
+  it('创建时间按 Asia/Shanghai 渲染（naive UTC 跨日 +8，含秒）', async () => {
+    const ClusterList = (await import('../ClusterList.vue')).default
+    const wrapper = mount(ClusterList, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await openDetailDrawer(wrapper.vm as unknown as Record<string, unknown>)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain(SHANGHAI_SLASH_FULL)
+    expect(wrapper.text()).not.toContain('2026/09/14 16:30:45')
+    wrapper.unmount()
+    document.body.innerHTML = ''
   })
 })
