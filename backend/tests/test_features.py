@@ -169,84 +169,33 @@ class TestFeaturesModule:
         with pytest.raises(SystemExit):
             load_features(str(cfg))
 
-    # ── metrics feature ──────────────────────────────────
+    # ── known features: recognized + default enabled ─────
 
-    def test_metrics_feature_recognized(self, tmp_path: Path, monkeypatch):
-        """metrics is a known feature, should not cause SystemExit."""
+    @pytest.mark.parametrize(
+        ("feature_name", "default"),
+        [
+            pytest.param("metrics", True, id="metrics"),
+            pytest.param("ssl_cert", True, id="ssl_cert"),
+            pytest.param("dns_proxy_udp", True, id="dns_proxy_udp"),
+            pytest.param("dns_proxy_http", True, id="dns_proxy_http"),
+            pytest.param("task_center", True, id="task_center"),
+        ],
+    )
+    def test_known_feature_recognized_and_default_enabled(
+        self, tmp_path: Path, monkeypatch, feature_name: str, default: bool
+    ):
+        """已知功能名：显式配置 False 被识别（不 SystemExit）；未配置时回落默认值。"""
         from app.core.features import feature_enabled
 
         cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({
-            "features": {"metrics": False},
-        }))
+        cfg.write_text(yaml.dump({"features": {feature_name: False}}))
         _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("metrics") is False
+        assert feature_enabled(feature_name) is False
 
-    # ── ssl_cert feature ─────────────────────────────────
-
-    def test_ssl_cert_feature_recognized(self, tmp_path: Path, monkeypatch):
-        """ssl_cert is a known feature, should not cause SystemExit."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({
-            "features": {"ssl_cert": False},
-        }))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("ssl_cert") is False
-
-    def test_ssl_cert_feature_default_enabled(self, tmp_path: Path, monkeypatch):
-        """ssl_cert should default to enabled when not configured."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
+        # 未配置场景：重置缓存强制重读（同秒内两次写入 mtime 可能不变，不能依赖热重载）
         cfg.write_text(yaml.dump({"features": {}}))
         _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("ssl_cert") is True
-
-    # ── dns_proxy_udp feature ────────────────────────────
-
-    def test_dns_proxy_udp_feature_recognized(self, tmp_path: Path, monkeypatch):
-        """dns_proxy_udp is a known feature, should not cause SystemExit."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({
-            "features": {"dns_proxy_udp": False},
-        }))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("dns_proxy_udp") is False
-
-    def test_dns_proxy_udp_feature_default_enabled(self, tmp_path: Path, monkeypatch):
-        """dns_proxy_udp should default to enabled when not configured."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({"features": {}}))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("dns_proxy_udp") is True
-
-    # ── dns_proxy_http feature ───────────────────────────
-
-    def test_dns_proxy_http_feature_recognized(self, tmp_path: Path, monkeypatch):
-        """dns_proxy_http is a known feature, should not cause SystemExit."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({
-            "features": {"dns_proxy_http": False},
-        }))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("dns_proxy_http") is False
-
-    def test_dns_proxy_http_feature_default_enabled(self, tmp_path: Path, monkeypatch):
-        """dns_proxy_http should default to enabled when not configured."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({"features": {}}))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("dns_proxy_http") is True
+        assert feature_enabled(feature_name) is default
 
     # ── features not a dict ──────────────────────────────
 
@@ -378,28 +327,6 @@ class TestFeaturesModule:
 
         with pytest.raises(SystemExit):
             load_features(str(cfg))
-
-    # ── task_center feature ─────────────────────────────
-
-    def test_task_center_feature_recognized(self, tmp_path: Path, monkeypatch):
-        """task_center is a known feature, should not cause SystemExit."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({
-            "features": {"task_center": False},
-        }))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("task_center") is False
-
-    def test_task_center_feature_default_enabled(self, tmp_path: Path, monkeypatch):
-        """task_center should default to enabled when not configured."""
-        from app.core.features import feature_enabled
-
-        cfg = tmp_path / "features.yaml"
-        cfg.write_text(yaml.dump({"features": {}}))
-        _point_features_at(monkeypatch, cfg)
-        assert feature_enabled("task_center") is True
 
     # ── mtime hot-reload ─────────────────────────────────
 

@@ -237,3 +237,103 @@ async def test_archive_rejects_bad_date(async_authed_client, isolated_session, m
     assert r.status_code == 400
     r2 = await c.post("/api/v1/system/operations/archive/preview", json={})
     assert r2.status_code == 400
+
+
+# ── B2-NEW-09：审计导出公式注入中和 ─────────────────────────────────────
+# 真实缺陷（2026-10-01 审计）：_audit_csv / _audit_xlsx（api/v1/system.py）逐字段
+# 原样写入，未对前导 = + - @ 做任何中和。detail/ip_address 含用户可控内容
+# （审计 detail 带资源名、ip_address 来自请求头），Excel 双击打开即公式执行面。
+# 预期实现：危险前缀前加 `'`（或等效前缀/制表符）。
+# xfail(strict=True)：当前失败（已知缺陷）；修复落地后 XPASS 会转红，
+# 强制同步摘除标记。不许在本卡内改生产代码。
+
+_FORMULA_LEADS = ["=", "+", "-", "@"]
+
+
+def _parse_download_csv(text: str) -> list[list[str]]:
+    import csv as _csv
+    import io as _io
+
+    return list(_csv.reader(_io.StringIO(text.lstrip("﻿"))))
+
+
+def _danger_detail(lead: str) -> str:
+    return f"{lead}1+1|cmd|' /etc/passwd"
+
+
+def _assert_neutralized(cell: str) -> None:
+    assert not cell.startswith(("=", "+", "-", "@", "\t")), (
+        f"公式注入未中和：单元格原样以危险前导字符开头 {cell!r}"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="B2-NEW-09 真实缺陷：_audit_csv 未中和公式注入（detail/ip 原样写入）",
+)
+@pytest.mark.parametrize("lead", _FORMULA_LEADS)
+async def test_export_csv_neutralizes_formula_injection(
+    async_authed_client, isolated_session, monkeypatch, lead
+):
+    async with isolated_session() as s:
+        await s.execute(delete(AuditLog))
+        s.add(AuditLog(
+            action="route_create", resource="route", resource_id=1,
+            username="admin", user_id=1,
+            detail=_danger_detail(lead),
+            ip_address=f"{lead}HYPERLINK(\"http://evil\",\"x\")",
+        ))
+        await s.commit()
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.post("/api/v1/system/operations/export", json={"format": "csv"})
+    assert r.status_code == 200, r.text
+    dl = await c.get(f"/api/v1/system/operations/export/{r.json()['task_id']}/download")
+    assert dl.status_code == 200
+
+    rows = _parse_download_csv(dl.text)
+    assert len(rows) == 2, "应恰为表头 + 1 条记录（导出链路本身须正常）"
+    detail_cell = rows[1][6]
+    ip_cell = rows[1][7]
+    assert _danger_detail(lead).strip("'") not in detail_cell or not detail_cell.startswith(lead), (
+        "detail 列必须中和"
+    )
+    _assert_neutralized(detail_cell)
+    _assert_neutralized(ip_cell)
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="B2-NEW-09 真实缺陷：_audit_xlsx 未中和公式注入（openpyxl 逐字段原样 append）",
+)
+async def test_export_xlsx_neutralizes_formula_injection(
+    async_authed_client, isolated_session, monkeypatch
+):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    async with isolated_session() as s:
+        await s.execute(delete(AuditLog))
+        for lead in _FORMULA_LEADS:
+            s.add(AuditLog(
+                action="route_create", resource="route", resource_id=1,
+                username="admin", user_id=1,
+                detail=_danger_detail(lead),
+            ))
+        await s.commit()
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.post("/api/v1/system/operations/export", json={"format": "xlsx"})
+    assert r.status_code == 200, r.text
+    dl = await c.get(f"/api/v1/system/operations/export/{r.json()['task_id']}/download")
+    assert dl.status_code == 200
+
+    wb = load_workbook(BytesIO(dl.content))
+    ws = wb.active or wb.create_sheet()
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        _assert_neutralized(row[6])

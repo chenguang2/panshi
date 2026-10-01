@@ -92,7 +92,14 @@ describe('useClusterNodes batch import', () => {
     it('opens add modal with node fields pre-filled and ip cleared', async () => {
       const cluster = makeCluster()
       const { copyNode, nodeForm, nodeModalVisible, editingNode } = await makeComposable(cluster)
-      const source = makeNode({ id: 5, ip: '10.0.0.5', service_port: 8080, management_port: 9181, edge_path: '/edge/app', status: 0 })
+      const source = makeNode({
+        id: 5,
+        ip: '10.0.0.5',
+        service_port: 8080,
+        management_port: 9181,
+        edge_path: '/edge/app',
+        status: 0,
+      })
 
       copyNode(cluster, source)
 
@@ -114,15 +121,53 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1, valid: true },
-        { ip: '10.0.0.3', service_port: 80, management_port: 9180, edge_path: '/edge/c', openresty_path: '', status: 1, valid: false },
+        {
+          ip: '10.0.0.1',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/a',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
+        {
+          ip: '10.0.0.2',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/b',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
+        {
+          ip: '10.0.0.3',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/c',
+          openresty_path: '',
+          status: 1,
+          valid: false,
+        },
       ])
 
       expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/batch', {
         nodes: [
-          { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1 },
-          { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1 },
+          {
+            ip: '10.0.0.1',
+            service_port: 80,
+            management_port: 9180,
+            edge_path: '/edge/a',
+            openresty_path: '',
+            status: 1,
+          },
+          {
+            ip: '10.0.0.2',
+            service_port: 80,
+            management_port: 9180,
+            edge_path: '/edge/b',
+            openresty_path: '',
+            status: 1,
+          },
         ],
       })
       expect(mockMessageSuccess).toHaveBeenCalledWith(expect.stringContaining('成功创建 2 条'))
@@ -135,7 +180,15 @@ describe('useClusterNodes batch import', () => {
       const { importNodes } = await makeComposable(cluster)
 
       await importNodes(cluster, [
-        { ip: 'bad', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: false },
+        {
+          ip: 'bad',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/a',
+          openresty_path: '',
+          status: 1,
+          valid: false,
+        },
       ])
 
       expect(mockApiPost).not.toHaveBeenCalled()
@@ -156,8 +209,24 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 1, items: [makeNode()] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
+        {
+          ip: '10.0.0.1',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/a',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
+        {
+          ip: '10.0.0.2',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/a',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
       ])
 
       expect(mockShowBatchResultModal).toHaveBeenCalledTimes(1)
@@ -183,8 +252,24 @@ describe('useClusterNodes batch import', () => {
       mockApiGet.mockResolvedValue({ data: { total: 2, items: [makeNode(), makeNode({ id: 2, ip: '10.0.0.2' })] } })
 
       await importNodes(cluster, [
-        { ip: '10.0.0.1', service_port: 80, management_port: 9180, edge_path: '/edge/a', openresty_path: '', status: 1, valid: true },
-        { ip: '10.0.0.2', service_port: 80, management_port: 9180, edge_path: '/edge/b', openresty_path: '', status: 1, valid: true },
+        {
+          ip: '10.0.0.1',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/a',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
+        {
+          ip: '10.0.0.2',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge/b',
+          openresty_path: '',
+          status: 1,
+          valid: true,
+        },
       ])
 
       expect(mockShowBatchResultModal).not.toHaveBeenCalled()
@@ -252,7 +337,11 @@ describe('useClusterNodes batch import', () => {
 
     it('lists up to 3 node IPs in confirm title', async () => {
       const cluster = makeCluster({
-        nodes: [makeNode({ id: 1, ip: '10.0.0.1' }), makeNode({ id: 2, ip: '10.0.0.2' }), makeNode({ id: 3, ip: '10.0.0.3' })],
+        nodes: [
+          makeNode({ id: 1, ip: '10.0.0.1' }),
+          makeNode({ id: 2, ip: '10.0.0.2' }),
+          makeNode({ id: 3, ip: '10.0.0.3' }),
+        ],
         selectedNodeKeys: [1, 2, 3],
       })
       const { deleteNodes } = await makeComposable(cluster)
@@ -288,7 +377,10 @@ describe('useClusterNodes batch import', () => {
       expect(mockExecuteDeleteWithProgress).toHaveBeenCalledTimes(1)
       const progressOpts = mockExecuteDeleteWithProgress.mock.calls[0][0]
       expect(progressOpts.resourceKey).toEqual({
-        field: 'node_ids', label: '节点', nameField: 'node_ip', keys: [1, 2],
+        field: 'node_ids',
+        label: '节点',
+        nameField: 'node_ip',
+        keys: [1, 2],
       })
     })
   })
@@ -469,7 +561,8 @@ describe('useClusterNodes batch import', () => {
       })
       const { batchNodeAction, batchProgressItems } = await makeComposable(cluster)
       mockApiPost.mockImplementation((url: string) => {
-        if (url.endsWith('/1/start')) return Promise.resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'c' } })
+        if (url.endsWith('/1/start'))
+          return Promise.resolve({ data: { rc: 0, stdout: 'ok', stderr: '', command: 'c' } })
         if (url.endsWith('/2/start')) return Promise.reject({ response: { data: { detail: '连接超时' } } })
         return Promise.reject(new Error('unexpected'))
       })
@@ -501,7 +594,13 @@ describe('useClusterNodes batch import', () => {
       mockApiPost.mockImplementation((url: string) => {
         if (url.endsWith('/1/statistic') || url.endsWith('/2/statistic')) {
           return Promise.resolve({
-            data: { rc: 0, statistic: { edge_version: 'v1.2.3', nginx_running: true }, stdout: 's', stderr: '', command: 'c' },
+            data: {
+              rc: 0,
+              statistic: { edge_version: 'v1.2.3', nginx_running: true },
+              stdout: 's',
+              stderr: '',
+              command: 'c',
+            },
           })
         }
         return Promise.reject(new Error('unexpected url: ' + url))
@@ -598,5 +697,50 @@ describe('useClusterNodes ssh_port', () => {
     await handleNodeSubmit()
     const payload = mockPut.mock.calls[0][1]
     expect(payload.ssh_port).toBe(1122)
+  })
+})
+
+// ── F1-NEW-08：节点表单 IP 校验绑定真实 validateIP（替代 B1 删除的 CentralListValidation 副本） ──
+
+describe('useClusterNodes validateIP（真实实现非法输入分支）', () => {
+  let validateIPRef: NonNullable<Awaited<ReturnType<typeof makeComposable>>['validateIP']>
+
+  beforeAll(async () => {
+    const composable = await makeComposable(makeCluster())
+    validateIPRef = composable.validateIP
+  })
+
+  function runValidator(value: string) {
+    const cb = vi.fn()
+    validateIPRef({}, value, cb)
+    return cb
+  }
+
+  it.each([
+    ['256.1.1.1'],
+    ['1.2.3'],
+    ['10.0.0'],
+    ['abc'],
+    ['1.2.3.4.5'],
+    ['10.0.0.1 '],
+    ['192.168.1'],
+    ['999.999.999.999'],
+  ])('拒绝非法 IP：%j → 提示「请输入合法的IP地址」', (value) => {
+    const cb = runValidator(value)
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledWith('请输入合法的IP地址')
+  })
+
+  it('空值 → 提示「请输入IP地址」', () => {
+    const cb = runValidator('')
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledWith('请输入IP地址')
+  })
+
+  it.each(['0.0.0.0', '255.255.255.255', '192.168.1.100', '10.0.0.1'])('放行合法 IP：%j', (value) => {
+    const cb = runValidator(value)
+    // 合法时以无参形式 callback()（不携带错误信息）
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb.mock.calls[0]).toEqual([])
   })
 })

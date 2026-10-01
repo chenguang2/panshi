@@ -373,3 +373,62 @@ B2-NEW-04 守卫对真实 app 检出 16 个 offender，分两类均已修复：
 
 ### 11.5 后续批次状态
 - B4（§3.3 剩余合并/参数化，17 文件清单中除四胞胎外）：未开工。InstallOpenrestyDialog 的 flushPromises 与四胞胎合并已在 B3 提前消化。
+
+---
+
+## 12. B4 批次执行结果（2026-10-01，B3 提交 bcf9af26 之后）
+
+> 六条并行 lane 执行（后端合并 / 后端参数化 / 前端治理 / e2e 合并 / 后端卡片×2 / 前端卡片），每 lane 自带定向验证，编排方跑全量终验。
+
+### 12.1 合并/参数化清理（§3.3 收口）
+
+| 项 | 结果 |
+|---|---|
+| 后端 8 文件合并（32 例） | 全部并入域文件、源文件删除，**零去重损失**；websocket 三例扩入既有 `field_variants` 参数化表（15 行）；test_form_reset 按域拆入 test_auth_hardening + test_cluster（审计映射合理化偏离，已记录理由） |
+| test_features.py | recognized+default_enabled 同构 9 例 → (feature_name, default) 参数化 5 行（31→27） |
+| status_analysis / time_comparison | 同 mock 同请求两例各合回一例（5→4 ×2） |
+| test_maintenance.py | 删 POST 子集同构例（12→11；四方法 #32 守卫保留） |
+| 前端双份 auth store | 并入 `stores/__tests__/auth.test.ts`（9→8 例），删扁平文件 |
+| plugin-editor | 文件内两例合一（2→1） |
+| e2e 三文件合并 | route-advanced-match→route.spec（1 例并入、1 例为保留组 TC-CL 严格子集随删）、cluster-page→cluster.spec（2 例）、upstream.spec→cluster.spec（0 例并入——与既有用例逐字重复，按去重意图删除）；三个源 spec 删除 |
+| upstream-publish 两例合一 | **核实为 B1 已完成**（aadbc56c），审计项过时 |
+| metricsDashboard mockOnce | **核实为 B1 已完成**（aadbc56c），零改动 |
+| 分组筛选三件套共享工厂 | 核实为真（8 文件逐字复制、英文用例名——审计「7+ 文件」吻合）→ 新建 `views/__tests__/helpers/groupFilterSuite.ts`，9 文件入厂，工厂内置 flushPromises 顺带消灭 16 处真实睡眠；EdgeEnv 差异大有据排除 |
+| NodeList/ClusterListPage setTimeout | NodeList 12 处、ClusterListStatsLink 3 处 → flushPromises；ClusterListPage mock 改 URL 感知 |
+
+### 12.2 卡片落地（§5：后端 11 张 + 前端 6 张）
+
+| 卡 | 落位 | 例数 | 要点 |
+|---|---|---|---|
+| B1-NEW-04/05/06/10 | test_route_api.py、test_upstream.py | 21+7 | 并发双发布不竞态、radixtree uri 透传固化（#22）、vars 注入三段链路不透明、名称边界/跨集群同名 |
+| B1-NEW-07 | test_ssl.py | 5 | SNI 边界 + 发布 sni/snis 映射 HTTP 全栈 |
+| B1-NEW-08 | test_stream_proxy.py | 8 | listen_port 全边界；**PUT 路径暴露缺陷（§12.3-②）** |
+| B2-NEW-02/07 | test_migration_lock_real_app.py（新）、test_db_backup_api.py | 8+5 | 迁移锁 ×真实 app 写 503/读放行、备份/恢复×锁交叉含 scheduler_tick 跳过 |
+| B2-NEW-09 | test_audit_operations_api.py | 5 xfail | **CSV/XLSX 公式注入未中和（§12.3-①）** |
+| B2-NEW-10 | test_security_guard.py | 18 | 非 admin 403 抽样矩阵 15 资源 + export/download 粒度契约双向钉死 |
+| B2-NEW-11 | test_db_restore_service.py | 2 | restore → `ensure_fresh(force=True)` 事件序 spy（#50，实现正确非缺陷） |
+| F1-NEW-04 | TimezoneDisplaySentinel.test.ts（新） | 4 | 跨日值哨兵与机器时区无关；违规页列单（§12.3-③） |
+| F1-NEW-05/06/07/08、F2-NEW-08 | NodeList/PluginMetadataList/EdgeEnv/useClusterNodes+CentralList/RouteList | 3+4+3+14+3 | 搜索翻页重置链路、按钮→composable 接线、SSE 入口守卫、真实 validateIP 接线、100 条分页 |
+
+### 12.3 暴露的真实缺陷（测试先行固化，生产修复另行提交）
+
+1. **审计导出公式注入**（B2-NEW-09，5 例 xfail strict）：`system.py::_audit_csv/_audit_xlsx` 对前导 `=`/`+`/`-`/`@` 无中和，detail/ip_address 用户可控，Excel 打开即公式执行面。
+2. **StreamProxyUpdate.listen_port 越界**（B1-NEW-08，1 例 xfail）：Update schema 缺 `ge=1/le=65535`（Create 有），PUT 65536 → 落库后响应校验 500，**脏行持久化且该代理后续 GET 持续 500**。
+3. **时间显示违 #26**（哨兵列单，未造失败例）：`CentralList.vue:642`、`ClusterList.vue:153` 直读 `toLocaleString('zh-CN')`，naive UTC 少 8 小时，整改后应入哨兵。
+
+### 12.4 审计过时/不实项核实记录
+「5 组 10 例」实为 9 例（metrics 组无 default_enabled 例，合并时按 features.py:77 补了文档化默认行为断言）；upstream-publish 与 metricsDashboard 两项 B1 已做；validateIP 实现在 `composables/useClusterNodes.ts`（非审计所述 utils）；F2-NEW-08「选择清空」在 RouteList 无 rowSelection，按筛选清空语义落实。
+
+### 12.5 终验（2026-10-01）
+
+| 门 | 结果 |
+|---|---|
+| `uv run pytest -q` 全量 | **2181 passed / 11 skipped / 6 xfailed**，6:22（B3 后 2117→2181：合并净 −7、卡片 +71） |
+| PG 方言冒烟 | 7 passed |
+| `npx vitest run --maxWorkers=4` | **1031 passed**（1002→1031：治理 −2、卡片 +24、工厂净 +7） |
+| `npx vue-tsc -b` | exit 0 |
+| `npx playwright test` 全量 | **86 passed**，4.8m（3 文件合并 −2 重复、F2-NEW-06 +1） |
+
+### 12.6 后续
+- 三个生产缺陷修复提交（§12.3 ①②③），修复后摘除 xfail / 补哨兵页。
+- 全仓仍有 ~18 测试文件 ~100 处 setTimeout 睡眠（审计仅点名 NodeList/ClusterListPage，已处理；余量为增量事项，其中 16 处已随工厂消除）。

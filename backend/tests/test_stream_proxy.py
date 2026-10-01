@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from app.models.cluster import StreamProxy
+from app.models.cluster import StreamProxy, Cluster
 
 
 class TestStreamProxyModel:
@@ -585,3 +585,96 @@ class TestDnsUdpProxyModule:
                 headers=headers,
                 content='{"delete_db": true, "delete_edge": false}',
             )
+
+
+# ── 自 test_stream_proxy_list_api.py 并入（B4 合并）──
+# 全局列表端点（跨集群 /api/v1/stream-proxies）的分页结构与 group_name 过滤契约。
+
+
+class TestStreamProxyListAPI:
+
+    async def test_list_all_stream_proxies_returns_data(self, async_authed_client):
+        response = await async_authed_client.get("/api/v1/stream-proxies")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "items" in data
+
+    async def test_list_stream_proxies_group_filter(self, async_authed_client):
+        response = await async_authed_client.get(
+            "/api/v1/stream-proxies",
+            params={"group_name": "192.168.100.42", "page_size": 200}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        for item in data["items"]:
+            assert item["cluster_group_name"] == "192.168.100.42"
+
+
+# ── B4 lane A 新增边界卡片（docs/refactoring/test-case-audit-2026-10-01 §5.3）──
+# B1-NEW-08：listen_port 全边界经 HTTP API 校验（0/1/65535/65536/跨集群同名口）。
+
+
+class TestStreamProxyListenPortBoundary:
+    """listen_port 全边界经 API 校验：越界 422、极值放行、跨集群同口允许。"""
+
+    async def _create(self, client, port, name):
+        return await client.post(
+            "/api/v1/clusters/1/stream-proxies",
+            json={
+                "name": name,
+                "listen_port": port,
+                "targets": [{"target": "10.0.0.1:8080", "weight": 100}],
+            },
+        )
+
+    @pytest.mark.parametrize("port", [0, -1, 65536, 99999])
+    async def test_rejects_out_of_range_ports(self, async_authed_client, port):
+        """StreamProxyCreate ge=1/le=65535：越界端口一律 422。"""
+        resp = await self._create(async_authed_client, port, f"port-bad-{port}")
+        assert resp.status_code == 422, f"port={port}: {resp.text}"
+
+    @pytest.mark.parametrize("port", [1, 65535])
+    async def test_accepts_extreme_valid_ports(self, async_authed_client, port):
+        """边界值 1 与 65535 必须放行且回显精确值。"""
+        resp = await self._create(async_authed_client, port, f"port-edge-{port}")
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["listen_port"] == port
+
+    async def test_same_port_across_clusters_allowed(self, async_authed_client, isolated_session):
+        """唯一约束是 (cluster_id, listen_port)：同端口跨集群必须双双放行。"""
+        async with isolated_session() as s:
+            s.add(Cluster(id=21002, name="stream-port-second-cluster"))
+            await s.commit()
+
+        r1 = await self._create(async_authed_client, 37777, "port-cross-c1")
+        r2 = await async_authed_client.post(
+            "/api/v1/clusters/21002/stream-proxies",
+            json={
+                "name": "port-cross-c2",
+                "listen_port": 37777,
+                "targets": [{"target": "10.0.0.1:8080", "weight": 100}],
+            },
+        )
+        assert r1.status_code == 201, r1.text
+        assert r2.status_code == 201, r2.text
+        assert r1.json()["cluster_id"] == 1
+        assert r2.json()["cluster_id"] == 21002
+
+    @pytest.mark.xfail(
+        reason="卡片 B1-NEW-08 暴露缺陷（不改生产代码）：StreamProxyUpdate.listen_port "
+               "缺 ge=1/le=65535 边界，PUT 65536 通过输入校验且已 commit 落库，"
+               "随后 StreamProxyResponse 响应序列化失败 → 500；该行已带非法端口，"
+               "后续 GET 同样 500。修复方向：Update schema 补边界 + 端点拒绝后回滚。",
+    )
+    async def test_update_out_of_range_port_rejected(self, async_authed_client):
+        """创建侧 listen_port 有界（ge=1/le=65535），PUT 更新侧必须同等有界。"""
+        created = await self._create(async_authed_client, 37778, "port-update-boundary")
+        assert created.status_code == 201, created.text
+        proxy_id = created.json()["id"]
+
+        resp = await async_authed_client.put(
+            f"/api/v1/clusters/1/stream-proxies/{proxy_id}",
+            json={"listen_port": 65536},
+        )
+        assert resp.status_code == 422, f"PUT listen_port=65536 竟被接受: {resp.text}"

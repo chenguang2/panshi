@@ -299,3 +299,126 @@ def test_log_audit_writes_row():
 
     asyncio.run(_run())
     asyncio.run(teardown())
+
+
+# ── B2-NEW-10：已认证非 admin 的 403 抽样矩阵（与匿名 401 矩阵互补）──────
+# (方法, 路径, 所需权限资源) —— 资源键与 require_permission 工厂及前端权限键一致。
+# 契约：无该资源 UserPermission(enabled=1) 的普通用户 → 403，
+# detail 形如「没有权限访问该资源（需要: <resource>）」。
+PERMISSION_403_SAMPLES = [
+    ("get", "/api/v1/clusters/1/routes", "clusters"),            # 集群容器权限门控子资源
+    ("get", "/api/v1/routes", "routes"),
+    ("get", "/api/v1/upstreams", "upstreams"),
+    ("get", "/api/v1/ssl", "ssl_cert"),
+    ("get", "/api/v1/metrics/route-stats", "metrics"),
+    ("get", "/api/v1/node-tasks", "task_center"),
+    ("get", "/api/v1/edge-client/nodes", "edge_nodes"),
+    ("get", "/api/v1/plugin-switches", "plugin_management"),
+    ("get", "/api/v1/static_resources", "static_resources"),
+    ("get", "/api/v1/ansible/inventory", "ansible_inventory"),
+    ("get", "/api/v1/database/history", "database_management"),
+    ("get", "/api/v1/relay/gateways", "relay_gateway"),
+    ("get", "/api/v1/nodes/autostart/records", "edge_autostart"),
+    ("get", "/api/v1/clusters/1/edge-env", "edge_env"),
+    ("get", "/api/v1/db-backup/config", "db_backup"),
+]
+
+
+@pytest.mark.parametrize("method,path,resource", PERMISSION_403_SAMPLES)
+def test_authenticated_user_without_permission_gets_403(method, path, resource):
+    """零权限普通用户访问各资源端点 → 403，且 detail 标明所需资源（粒度契约）。"""
+    app, S, headers, teardown = _make_db_with_users([
+        {"id": 1, "username": "no_perm_user", "role": "user", "permissions": []},
+    ])
+    try:
+        with isolated_app_lifespan(), TestClient(app) as c:
+            resp = getattr(c, method)(path, headers=headers[1])
+            assert resp.status_code == 403, (
+                f"{method.upper()} {path} 无权限用户应 403，实际 {resp.status_code}"
+            )
+            detail = resp.json()["detail"]
+            assert resource in detail, (
+                f"{method.upper()} {path} 的 403 detail 应标明所需资源 {resource}，实际 {detail!r}"
+            )
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+
+        asyncio.run(teardown())
+
+
+def test_wrong_resource_permission_does_not_grant_access():
+    """权限按资源粒度隔离：持 routes 权限访问 upstreams 端点 → 仍 403。"""
+    app, S, headers, teardown = _make_db_with_users([
+        {"id": 1, "username": "routes_only_user", "role": "user", "permissions": ["routes"]},
+    ])
+    try:
+        with isolated_app_lifespan(), TestClient(app) as c:
+            resp = c.get("/api/v1/upstreams", headers=headers[1])
+            assert resp.status_code == 403
+            assert "upstreams" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+
+        asyncio.run(teardown())
+
+
+def test_matching_resource_permission_passes_403_gate():
+    """对照组：持 routes 权限的用户访问 /routes → 过权限门（200，非 403）。"""
+    app, S, headers, teardown = _make_db_with_users([
+        {"id": 1, "username": "routes_user", "role": "user", "permissions": ["routes"]},
+    ])
+    try:
+        with isolated_app_lifespan(), TestClient(app) as c:
+            resp = c.get("/api/v1/routes", headers=headers[1])
+            assert resp.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+
+        asyncio.run(teardown())
+
+
+def test_export_download_granularity_contract(monkeypatch):
+    """B2-NEW-10 导出/下载粒度契约：持 audit_logs 的非 admin 可触发导出，
+    但导出状态与下载是 admin-only（get_current_admin_user）→ 403；admin 可下载。
+    """
+    # 与仓库 features.yaml 当前值解耦：显式启用 audit_log
+    import app.core.features as features_mod
+
+    monkeypatch.setattr(
+        features_mod, "get_features",
+        lambda: {"features": {"audit_log": True}, "enabled_plugins": [], "concurrency": {}},
+    )
+    app, S, headers, teardown = _make_db_with_users([
+        {"id": 1, "username": "audit_user", "role": "user", "permissions": ["audit_logs"]},
+        {"id": 2, "username": "root_admin", "role": "admin"},
+    ])
+    try:
+        with isolated_app_lifespan(), TestClient(app) as c:
+            # 非 admin + audit_logs 权限：可触发导出
+            r = c.post(
+                "/api/v1/system/operations/export",
+                json={"format": "csv"},
+                headers=headers[1],
+            )
+            assert r.status_code == 200, r.text
+            task_id = r.json()["task_id"]
+
+            # 状态查询与下载：admin-only → 非 admin 403（即使持 audit_logs）
+            st = c.get(f"/api/v1/system/operations/export/{task_id}", headers=headers[1])
+            assert st.status_code == 403
+            assert st.json()["detail"] == "需要管理员权限"
+            dl = c.get(f"/api/v1/system/operations/export/{task_id}/download", headers=headers[1])
+            assert dl.status_code == 403
+            assert dl.json()["detail"] == "需要管理员权限"
+
+            # 对照：admin 下载同一任务 → 200
+            dl_admin = c.get(f"/api/v1/system/operations/export/{task_id}/download", headers=headers[2])
+            assert dl_admin.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+        import asyncio
+
+        asyncio.run(teardown())

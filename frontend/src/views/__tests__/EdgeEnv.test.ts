@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
@@ -289,6 +289,83 @@ describe('EdgeEnv.vue 读取结果 · 经中继 / 直连 标注', () => {
     expect(text).toContain('10.0.0.1')
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
+    wrapper.unmount()
+  })
+})
+
+// ── F1-NEW-07：入口守卫（未选集群 / 节点时不发起 SSE） ──
+
+describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
+  const responses = new Map<string, { data: unknown }>()
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    responses.clear()
+    responses.set('/clusters', { data: MOCK_CLUSTERS })
+    responses.set('/clusters/1/nodes', {
+      data: { items: [{ id: 10, ip: '10.0.0.1', management_port: 9180, status: 1 }] },
+    })
+    mockApiGet.mockImplementation((url: string) => {
+      const hit = responses.get(url)
+      if (!hit) return Promise.reject(new Error(`unexpected GET: ${url}`))
+      return Promise.resolve(hit)
+    })
+  })
+
+  async function mountPage() {
+    const EdgeEnv = (await import('../EdgeEnv.vue')).default
+    const wrapper = mount(EdgeEnv, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('startReadTemplate：未选集群或未选节点时不发起读取 SSE', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    // 两者都未选（挂载后的初始态）
+    await vm.startReadTemplate()
+    expect(mockReadStream).not.toHaveBeenCalled()
+    // 仅选节点、集群仍为空
+    vm.selectedNodeId = 10
+    await vm.startReadTemplate()
+    expect(mockReadStream).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('executePublish：未选集群或未选节点时不发起部署 SSE', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    // 集群未选
+    vm.selectedPublishNodeIds = [10]
+    vm.editorContent = 'deploy: {}'
+    await vm.executePublish()
+    expect(mockInstallStart).not.toHaveBeenCalled()
+    // 集群已选但节点选择为空
+    vm.selectedClusterId = 1
+    vm.selectedPublishNodeIds = []
+    await vm.executePublish()
+    expect(mockInstallStart).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('onPublishClick：未选集群或编辑器为空时不进入发布流程', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    // 未选集群：直接返回
+    vm.onPublishClick()
+    await wrapper.vm.$nextTick()
+    expect(vm.publishDiffVisible).toBe(false)
+    expect(mockInstallStart).not.toHaveBeenCalled()
+    // 选了集群但编辑器为空：提示告警，不弹 diff
+    vm.selectedClusterId = 1
+    vm.editorContent = ''
+    vm.onPublishClick()
+    await wrapper.vm.$nextTick()
+    expect(vm.alertVisible).toBe(true)
+    expect(vm.publishDiffVisible).toBe(false)
+    expect(mockInstallStart).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

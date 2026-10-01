@@ -139,3 +139,13 @@ def test_users_page_boundary_still_ok(isolated_app):
     """边界值仍然合法：page_size=500（上限）与缺省分页均应 200。"""
     assert isolated_app.get("/api/v1/admin/users?page=1&page_size=500").status_code == 200
     assert isolated_app.get("/api/v1/admin/users").status_code == 200
+
+
+# ── 自 test_form_reset.py 并入（B4 合并，users 域）──
+
+def test_create_user_with_empty_password_rejected(isolated_app):
+    resp = isolated_app.post(
+        "/api/v1/admin/users",
+        json={"username": "testuser", "password": "", "role": "user", "status": 1},
+    )
+    assert resp.status_code in [400, 422]

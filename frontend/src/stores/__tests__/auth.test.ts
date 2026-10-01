@@ -27,13 +27,54 @@ describe('auth store localStorage 崩溃保护', () => {
     expect(store.permissions).toEqual([])
     expect(store.hasPermission('clusters')).toBe(false)
   })
+})
 
-  it('正常 JSON 仍正确解析（回归保护）', () => {
-    localStorage.setItem('user', JSON.stringify({ id: 2, username: 'u', role: 'user', status: 1 }))
-    localStorage.setItem('permissions', JSON.stringify(['clusters', 'routes']))
+describe('auth store — Bug2: permissions 持久化到 localStorage', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+  })
+
+  it('初始化时从 localStorage 恢复 user 和 permissions', () => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'qcg', role: 'viewer' }))
+    localStorage.setItem('permissions', JSON.stringify(['plugin_groups', 'global_rules']))
     const store = useAuthStore()
-    expect(store.user?.username).toBe('u')
-    expect(store.hasPermission('clusters')).toBe(true)
-    expect(store.hasPermission('nodes')).toBe(false)
+    expect(store.user).toEqual({ id: 1, username: 'qcg', role: 'viewer' })
+    expect(store.permissions).toEqual(['plugin_groups', 'global_rules'])
+  })
+
+  it('没有 localStorage 数据时初始化为默认值', () => {
+    const store = useAuthStore()
+    expect(store.user).toBeNull()
+    expect(store.permissions).toEqual([])
+  })
+
+  it('hasPermission 正常判断已授予的权限', () => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'qcg', role: 'viewer' }))
+    localStorage.setItem('permissions', JSON.stringify(['plugin_groups']))
+    const store = useAuthStore()
+    expect(store.hasPermission('plugin_groups')).toBe(true)
+    expect(store.hasPermission('global_rules')).toBe(false)
+  })
+
+  it('admin 忽略 permissions 直接返回 true', () => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    const store = useAuthStore()
+    expect(store.hasPermission('plugin_groups')).toBe(true)
+    expect(store.hasPermission('global_rules')).toBe(true)
+  })
+
+  it('user 为 null 时 hasPermission 返回 false', () => {
+    const store = useAuthStore()
+    expect(store.hasPermission('plugin_groups')).toBe(false)
+  })
+
+  it('F5 刷新后插件组 tab 和全局规则 tab 应该可见', () => {
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'qcg', role: 'viewer' }))
+    localStorage.setItem('permissions', JSON.stringify(['plugin_groups', 'global_rules']))
+    const store = useAuthStore()
+    expect(store.hasPermission('plugin_groups')).toBe(true)
+    expect(store.hasPermission('global_rules')).toBe(true)
+    expect(store.hasPermission('edge_nodes')).toBe(false)
   })
 })

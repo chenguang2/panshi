@@ -731,3 +731,54 @@ class TestExportArchiveProgress:
         db_archive_service.export_archive(self._conn(source_db), output_path)
         assert os.path.exists(output_path)
         assert os.path.getsize(output_path) > 0
+
+
+# ── 自 test_db_migration_model.py 并入（B4 合并）──
+# ps_db_migration_log 模型：成功/失败两种日志的持久化 round-trip。
+
+
+class TestDbMigrationLogModel:
+    @pytest.mark.asyncio
+    async def test_create_log_persists(self, test_db):
+        log = DbMigrationLog(
+            direction="sqlite_to_postgres",
+            source_connection="local_sqlite",
+            target_connection="prod_pg",
+            mode="replace",
+            status="success",
+            include_logs=True,
+            tables_count=22,
+            backup_path="/data/backups/panshi-backup.zip",
+            error_message=None,
+        )
+        test_db.add(log)
+        await test_db.commit()
+        await test_db.refresh(log)
+
+        assert log.id is not None
+        assert log.direction == "sqlite_to_postgres"
+        assert log.source_connection == "local_sqlite"
+        assert log.target_connection == "prod_pg"
+        assert log.mode == "replace"
+        assert log.status == "success"
+        assert log.include_logs == 1
+        assert log.tables_count == 22
+        assert log.backup_path == "/data/backups/panshi-backup.zip"
+        assert log.error_message is None
+        assert log.created_at is not None
+
+    @pytest.mark.asyncio
+    async def test_create_failed_log(self, test_db):
+        log = DbMigrationLog(
+            direction="postgres_to_sqlite",
+            source_connection="prod_pg",
+            target_connection="local_sqlite",
+            mode="replace",
+            status="failed",
+            error_message="connection refused",
+        )
+        test_db.add(log)
+        await test_db.commit()
+        await test_db.refresh(log)
+        assert log.status == "failed"
+        assert log.error_message == "connection refused"

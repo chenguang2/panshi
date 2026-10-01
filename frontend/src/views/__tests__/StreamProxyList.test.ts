@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
+import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -162,42 +163,18 @@ describe('StreamProxyList.vue', () => {
     expect(mockApiGet).toHaveBeenCalled()
   })
 
-  it('renders group filter select before cluster filter', async () => {
-    const StreamProxyList = (await import('../StreamProxyList.vue')).default
-    const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
-    expect(groupIdx).toBeGreaterThanOrEqual(0)
-    expect(clusterIdx).toBeGreaterThanOrEqual(0)
-    expect(groupIdx).toBeLessThan(clusterIdx)
-  })
-
-  it('populates group filter options from cluster group_names', async () => {
-    const StreamProxyList = (await import('../StreamProxyList.vue')).default
-    const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
-    expect(groupSelect).toBeDefined()
-    const options = groupSelect!.findAll('option')
-    const optionTexts = options.map((o) => o.text())
-    expect(optionTexts).toContain('线上')
-    expect(optionTexts).toContain('预发')
-  })
-
-  it('always passes group_name in API request', async () => {
-    const StreamProxyList = (await import('../StreamProxyList.vue')).default
-    const wrapper = mount(StreamProxyList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/stream-proxies')
-    expect(calls.length).toBeGreaterThan(0)
-    for (const call of calls) {
-      expect(call[1].params.group_name).toBeDefined()
-    }
+  itGroupFilterSuite({
+    mountPage: async () => {
+      const StreamProxyList = (await import('../StreamProxyList.vue')).default
+      const wrapper = mount(StreamProxyList, { global: { stubs } })
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+      return wrapper
+    },
+    apiGet: mockApiGet,
+    listUrl: '/stream-proxies',
+    expectedGroups: ['线上', '预发'],
+    groupParamAssert: 'defined',
   })
 
   it('always uses global /stream-proxies endpoint with cluster_id param (not scoped endpoint)', async () => {

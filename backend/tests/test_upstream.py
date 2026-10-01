@@ -2,7 +2,7 @@ import pytest
 import json
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.models.cluster import Upstream, UpstreamTarget
+from app.models.cluster import Upstream, UpstreamTarget, Cluster
 from app.schemas.cluster import UpstreamCreate, UpstreamUpdate, UpstreamTargetSchema
 
 
@@ -279,3 +279,58 @@ class TestUpstreamChecksAPI:
             data = response.json()
             assert data["checks"]["active"]["http_path"] == "/health"
             assert data["checks"]["active"]["healthy"]["http_statuses"] == [200, 302, 403, 404]
+
+# ── B4 lane A 新增边界卡片（docs/refactoring/test-case-audit-2026-10-01 §5.3）──
+# B1-NEW-10（upstreams 半）：名称长度边界、特殊字符保真、跨集群同名允许。
+
+
+class TestUpstreamNameBoundary:
+
+    async def _create(self, client, name):
+        return await client.post(
+            "/api/v1/clusters/1/upstreams",
+            json={
+                "name": name,
+                "targets": [{"target": "192.168.1.10:8080", "weight": 100}],
+            },
+        )
+
+    @pytest.mark.parametrize("name, expected_status", [("u" * 100, 201), ("u" * 101, 422), ("", 422)])
+    async def test_name_length_boundary(self, async_authed_client, name, expected_status):
+        """UpstreamCreate.name min_length=1/max_length=100：100 放行、101/空 422。"""
+        resp = await self._create(async_authed_client, name)
+        assert resp.status_code == expected_status, resp.text
+        if expected_status == 201:
+            assert resp.json()["name"] == name
+
+    @pytest.mark.parametrize(
+        "name", ["中文-上游 & <池>", "name with spaces", "a-b_c.d~!@#$%^&*()"]
+    )
+    async def test_name_special_chars_stored_verbatim(self, async_authed_client, name):
+        """特殊字符名称逐字存储与回显（无 pattern 约束、无转义改写）。"""
+        resp = await self._create(async_authed_client, name)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["name"] == name
+
+        got = await async_authed_client.get(f"/api/v1/clusters/1/upstreams/{resp.json()['id']}")
+        assert got.status_code == 200
+        assert got.json()["name"] == name
+
+    async def test_same_name_across_clusters_allowed(self, async_authed_client, isolated_session):
+        """Upstream 唯一约束仅在 (cluster_id, edge_uuid)：名称跨集群可重复。"""
+        async with isolated_session() as s:
+            s.add(Cluster(id=21003, name="upstream-name-second-cluster"))
+            await s.commit()
+
+        r1 = await self._create(async_authed_client, "cross-cluster-dup-upstream")
+        r2 = await async_authed_client.post(
+            "/api/v1/clusters/21003/upstreams",
+            json={
+                "name": "cross-cluster-dup-upstream",
+                "targets": [{"target": "192.168.1.20:8080", "weight": 100}],
+            },
+        )
+        assert r1.status_code == 201, r1.text
+        assert r2.status_code == 201, r2.text
+        assert r1.json()["cluster_id"] == 1
+        assert r2.json()["cluster_id"] == 21003

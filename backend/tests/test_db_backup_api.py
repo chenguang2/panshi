@@ -342,6 +342,31 @@ class TestSchedulerTick:
         await _seed_target_async()
         assert await svc.scheduler_tick() is False
 
+    async def test_tick_skips_during_migration(self, async_authed_client, monkeypatch, tmp_path):
+        """B2-NEW-07：迁移进行中调度侧跳过备份（svc 级互斥，锁是唯一原因）。
+
+        同参数同数据下：锁置位 → False 且零远端调用；锁释放 → 到期触发 True。
+        """
+        cfg = _mkcfg(tmp_path)
+        monkeypatch.setattr(dbc, "load_config", lambda: cfg)
+        monkeypatch.setattr(svc, "_app_version_info", lambda: {"app_version": "t", "git_commit": "t"})
+        calls = []
+        _fake_remote_ok(monkeypatch, calls)
+        await _seed_config_async(enabled=True)
+        await _seed_target_async()
+
+        from app.core import maintenance
+
+        maintenance.set_migration_in_progress(True)
+        try:
+            assert await svc.scheduler_tick() is False
+            assert not calls, "迁移进行中不得触发备份推送"
+        finally:
+            maintenance.set_migration_in_progress(False)
+        # 对照：锁释放后同参数到期触发
+        assert await svc.scheduler_tick() is True
+        assert calls, "迁移结束后调度应恢复正常触发"
+
     async def test_tick_retry_after_full_interval_after_failure(
         self, async_authed_client, monkeypatch, tmp_path
     ):

@@ -111,7 +111,11 @@ describe('ClusterList.vue - 经中继 / 直连 徽章', () => {
     features.features = { relay_gateway: relayOn }
     features.loaded = true
 
-    mockApiGet.mockResolvedValue({ data: { items: clusters } })
+    // URL 感知 mock（约定 #43）：仅注册集群列表端点，未注册 URL 直接 reject
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: clusters } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
     if (relayFail) mockListRelayGateways.mockRejectedValue(new Error('403'))
     else mockListRelayGateways.mockResolvedValue({ data: regionNames })
 
@@ -193,7 +197,7 @@ describe('ClusterList.vue - 连接测试 · 经中继 / 直连 标注', () => {
           data: { items: [{ id: 10, ip: '192.168.0.14', management_port: 16620, service_port: 16610, status: 1 }] },
         })
       }
-      return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected GET: ' + url))
     })
     mockApiPost.mockResolvedValue({ data: { results } })
 

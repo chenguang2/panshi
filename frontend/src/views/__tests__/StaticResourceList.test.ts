@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
+import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 
 const mockApiGet = vi.fn()
 
@@ -124,43 +125,18 @@ describe('StaticResourceList.vue', () => {
 
   // ── Group Filter Tests ──
 
-  it('renders group filter select before cluster filter', async () => {
-    const StaticResourceList = (await import('../StaticResourceList.vue')).default
-    const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
-    expect(groupIdx).toBeGreaterThanOrEqual(0)
-    expect(clusterIdx).toBeGreaterThanOrEqual(0)
-    expect(groupIdx).toBeLessThan(clusterIdx)
-  })
-
-  it('populates group filter options from cluster group_names', async () => {
-    const StaticResourceList = (await import('../StaticResourceList.vue')).default
-    const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
-    expect(groupSelect).toBeDefined()
-    const options = groupSelect!.findAll('option')
-    const optionTexts = options.map((o) => o.text())
-    expect(optionTexts).toContain('线上')
-    expect(optionTexts).toContain('预发')
-  })
-
-  it('always passes group_name in API request', async () => {
-    const StaticResourceList = (await import('../StaticResourceList.vue')).default
-    const wrapper = mount(StaticResourceList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-
-    const staticResourcesCalls = mockApiGet.mock.calls.filter((args: any[]) => args[0] === '/static_resources')
-    expect(staticResourcesCalls.length).toBeGreaterThanOrEqual(1)
-    const params = staticResourcesCalls[0][1]?.params
-    expect(params).toBeDefined()
-    expect(params.group_name).toBe('__all__')
+  itGroupFilterSuite({
+    mountPage: async () => {
+      const StaticResourceList = (await import('../StaticResourceList.vue')).default
+      const wrapper = mount(StaticResourceList, { global: { stubs } })
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+      return wrapper
+    },
+    apiGet: mockApiGet,
+    listUrl: '/static_resources',
+    expectedGroups: ['线上', '预发'],
+    groupParamAssert: 'sentinel',
   })
 
   it('does not conditionally display count on group filter — always uses totalCount from server', async () => {

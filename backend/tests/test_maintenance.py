@@ -83,12 +83,6 @@ class TestMigrationState:
         assert state.source_id is None
         assert state.target_id is None
 
-    def test_middleware_still_blocks_writes(self):
-        """Middleware integration unchanged by MigrationState refactor."""
-        maintenance.set_migration_in_progress(True, source_id="s", target_id="t")
-        client = TestClient(_app())
-        assert client.post("/write").status_code == 503
-
     def test_middleware_allows_reads_with_metadata(self):
         maintenance.set_migration_in_progress(True, source_id="s", target_id="t")
         client = TestClient(_app())

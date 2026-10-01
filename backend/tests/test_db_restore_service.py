@@ -441,6 +441,64 @@ class TestExecuteRestore:
         assert "expired-one" not in rst._STAGED
 
 
+class TestRestoreRefreshesRelaySnapshot:
+    """B2-NEW-11（规则 #50）：恢复属于「无端点触发点的改动」，落位激活后必须
+    立即重载中继路由快照（relay_registry.ensure_fresh(force=True)）。
+
+    中继快照是进程内的（relay_registry），同步读取方（run_playbook 跳板注入、
+    EdgeClient）不判 TTL——恢复换库后若不刷新，路由最长滞留到 30s TTL 兜底
+    （main.py::_relay_refresh_loop），期间发布/节点任务可能打到旧库数据。
+    """
+
+    async def test_restore_calls_relay_ensure_fresh_force(self, tmp_path, monkeypatch):
+        """激活后按序调用 ensure_fresh(force=True)：引擎重载 → 快照强制刷新。"""
+        remote = FakeRemote(tmp_path / "remote")
+        pkg_info = await _mk_package(tmp_path / "remote", tmp_path)
+        monkeypatch.setattr(rst, "_run", remote)
+
+        events = []
+
+        async def _spy_ensure_fresh(*args, **kwargs):
+            events.append(("ensure_fresh", kwargs.get("force")))
+
+        monkeypatch.setattr("app.services.relay_registry.ensure_fresh", _spy_ensure_fresh)
+        monkeypatch.setattr(rst, "_engine_reload", lambda: events.append(("engine_reload", None)))
+
+        with isolated_app_lifespan():
+            result = await rst.verify_and_stage(_target(tmp_path / "remote"), pkg_info["name"])
+            from app.core.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as db:
+                out = await rst.execute_restore(result["verify_id"], confirmed=True, db=db)
+
+        assert out["activated"] is True
+        assert events == [("engine_reload", None), ("ensure_fresh", True)], (
+            f"恢复激活应先重载引擎再强制刷新中继快照，实际事件序 {events}"
+        )
+
+    async def test_restore_succeeds_even_if_snapshot_refresh_fails(self, tmp_path, monkeypatch):
+        """快照刷新失败不阻断恢复（logger.exception 分支）：激活结果不受影响。"""
+        remote = FakeRemote(tmp_path / "remote")
+        pkg_info = await _mk_package(tmp_path / "remote", tmp_path)
+        monkeypatch.setattr(rst, "_run", remote)
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError("模拟快照刷新失败")
+
+        monkeypatch.setattr("app.services.relay_registry.ensure_fresh", _boom)
+        monkeypatch.setattr(rst, "_engine_reload", lambda: None)
+
+        with isolated_app_lifespan():
+            result = await rst.verify_and_stage(_target(tmp_path / "remote"), pkg_info["name"])
+            from app.core.database import AsyncSessionLocal
+
+            async with AsyncSessionLocal() as db:
+                out = await rst.execute_restore(result["verify_id"], confirmed=True, db=db)
+
+        assert out["activated"] is True
+        assert out["restored_databases"] == ["main"]
+
+
 class MultiHostFakeRemote:
     """按 host 路由到不同 FakeRemote 实例；未注册 host = 不可达。"""
 

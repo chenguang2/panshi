@@ -944,3 +944,90 @@ class TestSslPublishPayload:
         assert "gm" not in edge_data
         assert "certs" not in edge_data
         assert "keys" not in edge_data
+
+
+class TestSslSniEndpointBoundary:
+    """B1-NEW-07 端点级（HTTP 全栈）SNI 边界 + 发布 sni/snis 映射。
+
+    与 TestSslPublishPayload（直调端点函数）互补：本类经真实 HTTP 路由
+    （async_authed_client）走 create → publish → history 全链路，断言
+    版本快照中的 sni/snis 键映射。集群无活跃节点时发布返回 status=error
+    （SSL 域 no_nodes_status 默认 error）但版本快照照常落库——
+    create_config_version 先于节点选择执行。
+    """
+
+    async def _create_cert(self, client, name, sni):
+        # 注意：SslCertificateBase.cluster_id 为必填 body 字段（与路径参数并存，
+        # 端点以路径参数覆写 body 值），故 payload 必须携带 cluster_id。
+        return await client.post(
+            "/api/v1/clusters/1/ssl",
+            json={"name": name, "sni": sni, "cert": "crt", "key": "key", "cluster_id": 1},
+        )
+
+    async def test_create_rejects_empty_sni(self, async_authed_client):
+        """SslCertificateCreate.sni min_length=1：空字符串必须 422。"""
+        resp = await self._create_cert(async_authed_client, "sni-empty-boundary", "")
+        assert resp.status_code == 422, resp.text
+
+    async def test_create_multi_domain_and_ip_sni_stored_verbatim(self, async_authed_client):
+        """多域名+IP 混合 sni 串创建时逐字存储（不做归一化/去重/合并保留域名）。"""
+        sni = "a.com,b.com,10.0.0.1"
+        resp = await self._create_cert(async_authed_client, "sni-verbatim-boundary", sni)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["sni"] == sni
+
+        got = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{resp.json()['id']}")
+        assert got.status_code == 200
+        assert got.json()["sni"] == sni
+
+    async def test_publish_single_sni_snapshot_uses_sni_key(self, async_authed_client):
+        """单值 sni 发布 → 版本快照映射为 `sni`（字符串），不出现 `snis`。"""
+        cert = await self._create_cert(async_authed_client, "sni-pub-single", "single.local")
+        assert cert.status_code == 201, cert.text
+        cert_id = cert.json()["id"]
+
+        pub = await async_authed_client.post(f"/api/v1/clusters/1/ssl/{cert_id}/publish")
+        assert pub.status_code == 200, pub.text
+        assert pub.json()["version"] == 1
+
+        hist = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{cert_id}/history")
+        assert hist.status_code == 200
+        items = hist.json()["items"]
+        assert len(items) == 1
+        snapshot = json.loads(items[0]["config"])
+        assert snapshot["sni"] == "single.local"
+        assert "snis" not in snapshot
+
+    async def test_publish_multi_sni_snapshot_uses_snisArray_key(self, async_authed_client):
+        """多值 sni 发布 → 版本快照映射为 `snis`（数组），不出现 `sni`。"""
+        cert = await self._create_cert(async_authed_client, "sni-pub-multi", "a.com,b.com")
+        assert cert.status_code == 201, cert.text
+        cert_id = cert.json()["id"]
+
+        pub = await async_authed_client.post(f"/api/v1/clusters/1/ssl/{cert_id}/publish")
+        assert pub.status_code == 200, pub.text
+        assert pub.json()["version"] == 1
+
+        hist = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{cert_id}/history")
+        assert hist.status_code == 200
+        items = hist.json()["items"]
+        assert len(items) == 1
+        snapshot = json.loads(items[0]["config"])
+        assert snapshot["snis"] == ["a.com", "b.com"]
+        assert "sni" not in snapshot
+
+    async def test_publish_without_sni_snapshot_has_neither_key(self, async_authed_client):
+        """sni 仅含空白/空片段 → 发布快照两键均不出现（空列表不产出 sni/snis）。"""
+        cert = await self._create_cert(async_authed_client, "sni-pub-blank", " , ")
+        assert cert.status_code == 201, cert.text
+        cert_id = cert.json()["id"]
+
+        pub = await async_authed_client.post(f"/api/v1/clusters/1/ssl/{cert_id}/publish")
+        assert pub.status_code == 200, pub.text
+        assert pub.json()["version"] == 1
+
+        hist = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{cert_id}/history")
+        assert hist.status_code == 200
+        snapshot = json.loads(hist.json()["items"][0]["config"])
+        assert "sni" not in snapshot
+        assert "snis" not in snapshot

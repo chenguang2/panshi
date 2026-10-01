@@ -391,3 +391,13 @@ async def test_update_cluster_without_admin_key_preserves_stored_value(test_db):
     assert resp.display_name == "改名不留空密钥"
     await test_db.refresh(cluster)
     assert cluster.admin_key == "stored-secret", "不传 admin_key 的更新不得清空已存密钥"
+
+
+# ── 自 test_form_reset.py 并入（B4 合并，clusters 域）──
+
+async def test_create_cluster_with_empty_fields(async_authed_client):
+    response = await async_authed_client.post(
+        "/api/v1/clusters",
+        json={"name": "", "admin_url": "", "admin_key": "", "status": 1},
+    )
+    assert response.status_code in [400, 422]

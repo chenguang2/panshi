@@ -1,4 +1,5 @@
 import pytest
+import json
 import os
 import tempfile
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
@@ -49,10 +50,15 @@ class TestConvertRouteToEdgeFormat:
                 {"plugin_name": "cors", "config": '{"allow_origins": "*"}'},
             ]}, "plugins", {"rate-limit": {"rejected_code": 429}, "cors": {"allow_origins": "*"}}),
             ({"plugins": []}, "plugins", _ABSENT),
+            # ── 自 test_dns_upstream_publish.py 并入（B4 合并，websocket 三例参数化）──
+            ({}, "enable_websocket", _ABSENT),
+            ({"enable_websocket": True}, "enable_websocket", True),
+            ({"enable_websocket": False}, "enable_websocket", _ABSENT),
         ],
         ids=["methods-str", "methods-list", "hosts-str", "hosts-list", "upstream",
              "priority-nonzero", "priority-one", "priority-zero-omitted",
-             "vars-json", "vars-invalid-omitted", "plugins-list", "plugins-empty-omitted"],
+             "vars-json", "vars-invalid-omitted", "plugins-list", "plugins-empty-omitted",
+             "websocket-default-omitted", "websocket-true", "websocket-false-omitted"],
     )
     def test_convert_route_field_variants(self, overrides, expect_key, expected):
         """单字段变体（合并 12 个逐字段用例）：字段按类型解析，空值/零值不输出。"""
@@ -73,6 +79,40 @@ class TestConvertRouteToEdgeFormat:
             assert expect_key not in result
         else:
             assert result[expect_key] == expected
+
+    # ── 自 test_dns_upstream_publish.py 并入（B4 合并）──
+    # dns_upstream 插件路由无 upstream_id 时应产出 dummy upstream；无插件时无 upstream。
+
+    def test_convert_route_no_upstream_no_plugin_produces_no_upstream(self):
+        """Route without upstream AND without plugin: no upstream in edge format."""
+        edge_data = EdgeClient.convert_route_to_edge_format(
+            edge_uuid="test-uuid", name="test", uri="/test",
+            methods=None, hosts=None,
+            upstream_edge_uuid=None, priority=0,
+            vars_json=None, plugins=None, status=1,
+        )
+        assert "upstream_id" not in edge_data
+        assert "upstream" not in edge_data
+
+    def test_convert_route_dns_upstream_no_upstream_has_dummy_upstream(self):
+        """Route with dns_upstream plugin but no upstream_id should get dummy upstream."""
+        plugins = [
+            type("RoutePlugin", (), {
+                "plugin_name": "dns_upstream",
+                "config": json.dumps({"hosts": {"example.com": {"nodes": {"10.0.0.1:80": []}}}})
+            })()
+        ]
+        edge_data = EdgeClient.convert_route_to_edge_format(
+            edge_uuid="test-uuid", name="dns-test", uri="/dns-query",
+            methods=None, hosts=None,
+            upstream_edge_uuid=None, priority=0,
+            vars_json=None, plugins=plugins, status=1,
+            plugin_config_ids=None,
+        )
+        assert "upstream_id" not in edge_data
+        assert "upstream" in edge_data
+        assert "nodes" in edge_data["upstream"]
+        assert "127.0.0.1:1" in edge_data["upstream"]["nodes"]
 
 
 class TestEdgeLoggerRouteOperation:

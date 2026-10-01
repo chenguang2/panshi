@@ -21,7 +21,10 @@ const stubs = {
     props: ['value'],
   },
   AButton: { template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>', props: ['type'] },
-  ASelect: { template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><slot /></select>', props: ['value'] },
+  ASelect: {
+    template: '<select :value="value" @change="$emit(\'update:value\', $event.target.value)"><slot /></select>',
+    props: ['value'],
+  },
   ASelectOption: { template: '<option :value="value"><slot /></option>', props: ['value'] },
   ATextarea: {
     template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
@@ -52,7 +55,8 @@ function mountDrawer() {
 }
 
 describe('PluginEditorDrawer 表单模式序列化回归', () => {
-  it('buildConfigFromForm 输出保持单层 JSON 字符串', async () => {
+  // 审计 §3.3：原两例逐行相同（仅输入常量不同），合并为一例
+  it('buildConfigFromForm 输出保持单层 JSON 字符串，一次 JSON.parse 得对象', async () => {
     const wrapper = mountDrawer()
     // 有 schema 字段 → 表单模式（isJsonMode=false）
     await wrapper.vm.$nextTick()
@@ -62,7 +66,7 @@ describe('PluginEditorDrawer 表单模式序列化回归', () => {
     await input.setValue('/api/new')
 
     // 点保存
-    const saveBtn = wrapper.findAll('button').filter(w => w.text().includes('保存'))
+    const saveBtn = wrapper.findAll('button').filter((w) => w.text().includes('保存'))
     expect(saveBtn.length).toBeGreaterThan(0)
     await saveBtn[0].trigger('click')
 
@@ -73,20 +77,5 @@ describe('PluginEditorDrawer 表单模式序列化回归', () => {
     const parsed = JSON.parse(config)
     expect(typeof parsed).toBe('object')
     expect(parsed).toEqual({ uri: '/api/new' })
-  })
-
-  it('表单模式保存的 config 可被一次 JSON.parse 得到对象', async () => {
-    const wrapper = mountDrawer()
-    await wrapper.vm.$nextTick()
-
-    const input = wrapper.find('input')
-    await input.setValue('/v2/users')
-
-    const saveBtn = wrapper.findAll('button').filter(w => w.text().includes('保存'))
-    await saveBtn[0].trigger('click')
-
-    const config = (wrapper.emitted('save') as unknown[][])[0][0] as string
-    expect(typeof JSON.parse(config)).toBe('object')
-    expect(JSON.parse(config)).toEqual({ uri: '/v2/users' })
   })
 })

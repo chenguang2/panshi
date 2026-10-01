@@ -125,3 +125,53 @@ describe('CentralList.vue - 连接测试 · 经中继 / 直连 标注', () => {
     expect(text).not.toContain('（直连）')
   })
 })
+
+// ── F1-NEW-08：节点表单 IP 校验接线（模板 :rules validator 绑定 composable 的真实 validateIP） ──
+
+describe('CentralList.vue 节点表单 IP 校验接线', () => {
+  it('表单绑定的 validateIP 拒绝非法 IP 并给出规范错误文案', async () => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [], total: 0 } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+    const wrapper = mount(CentralList, { global: { plugins: [router] } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // 打开添加节点弹窗（showAddNodeModal(cluster) 内部先 loadNodes），确认表单状态就绪
+    const vm = wrapper.vm as any
+    await vm.showAddNodeModal({ id: 1, name: 'demo-cluster', display_name: '演示集群', nodes: [] })
+    await flushPromises()
+    expect(vm.nodeModalVisible).toBe(true)
+    expect(typeof vm.validateIP).toBe('function')
+
+    // 非法输入：AntDV 校验器契约 —— callback(错误文案)
+    const invalid = vi.fn()
+    vm.validateIP({}, '999.1.1.1', invalid)
+    expect(invalid).toHaveBeenCalledTimes(1)
+    expect(invalid).toHaveBeenCalledWith('请输入合法的IP地址')
+
+    // 空值走必填分支文案
+    const empty = vi.fn()
+    vm.validateIP({}, '', empty)
+    expect(empty).toHaveBeenCalledWith('请输入IP地址')
+
+    // 合法输入：无参 callback()
+    const ok = vi.fn()
+    vm.validateIP({}, '10.0.0.1', ok)
+    expect(ok).toHaveBeenCalledTimes(1)
+    expect(ok.mock.calls[0]).toEqual([])
+
+    wrapper.unmount()
+  })
+})

@@ -807,6 +807,16 @@ class TestAllowedTags:
         from app.services.ansible_service import ALLOWED_TAGS
         assert "edge_autostart" in ALLOWED_TAGS
 
+    # ── 自 test_allowed_tags.py 并入（B4 合并）──
+
+    def test_edge_pack_list_is_allowed(self):
+        from app.services.ansible_service import ALLOWED_TAGS
+        assert "edge_pack_list" in ALLOWED_TAGS
+
+    def test_cmd_exec_run_is_allowed(self):
+        from app.services.ansible_service import ALLOWED_TAGS
+        assert "cmd_exec_run" in ALLOWED_TAGS
+
 
 class TestBuildEdgeServiceContent:
     """edge.service 内容模板生成（决策 1a，不含 Restart）。"""

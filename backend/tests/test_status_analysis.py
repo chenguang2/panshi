@@ -1,21 +1,15 @@
 """Tests for status analysis API endpoint."""
-import pytest
 from unittest.mock import patch
 
 
 class TestStatusAnalysisEndpoint:
     """Tests for GET /api/v1/metrics/status-analysis endpoint."""
 
-    def test_status_analysis_returns_200(self, isolated_app):
+    def test_status_analysis_returns_200_with_data_array(self, isolated_app):
         with patch("app.api.v1.metrics.query_status_analysis") as mock_query:
             mock_query.return_value = []
             response = isolated_app.get("/api/v1/metrics/status-analysis")
             assert response.status_code == 200
-
-    def test_status_analysis_returns_data_array(self, isolated_app):
-        with patch("app.api.v1.metrics.query_status_analysis") as mock_query:
-            mock_query.return_value = []
-            response = isolated_app.get("/api/v1/metrics/status-analysis")
             assert "data" in response.json()
 
     def test_status_analysis_default_since(self, isolated_app):

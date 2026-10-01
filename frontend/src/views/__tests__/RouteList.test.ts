@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
+import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 
 const mockApiGet = vi.fn()
 
@@ -150,30 +151,18 @@ describe('RouteList.vue', () => {
 
   // ── Group Filter Tests ──
 
-  it('renders group filter select before cluster filter', async () => {
-    const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
-    expect(groupIdx).toBeGreaterThanOrEqual(0)
-    expect(clusterIdx).toBeGreaterThanOrEqual(0)
-    expect(groupIdx).toBeLessThan(clusterIdx)
-  })
-
-  it('populates group filter options from cluster group_names', async () => {
-    const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 200))
-    await wrapper.vm.$nextTick()
-    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
-    expect(groupSelect).toBeDefined()
-    const options = groupSelect!.findAll('option')
-    const optionTexts = options.map((o) => o.text())
-    expect(optionTexts).toContain('线上')
-    expect(optionTexts).toContain('预发')
+  itGroupFilterSuite({
+    mountPage: async () => {
+      const RouteList = (await import('../RouteList.vue')).default
+      const wrapper = mount(RouteList, { global: { stubs } })
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+      return wrapper
+    },
+    apiGet: mockApiGet,
+    listUrl: '/routes',
+    expectedGroups: ['线上', '预发'],
+    groupParamAssert: 'defined',
   })
 
   it('loads DNS route data correctly', async () => {
@@ -224,16 +213,129 @@ describe('RouteList.vue', () => {
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('DNS')
   })
+})
 
-  it('always passes group_name in API request', async () => {
-    const RouteList = (await import('../RouteList.vue')).default
-    const wrapper = mount(RouteList, { global: { stubs } })
-    await new Promise((r) => setTimeout(r, 100))
-    await wrapper.vm.$nextTick()
-    const routeCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
-    expect(routeCalls.length).toBeGreaterThan(0)
-    for (const call of routeCalls) {
-      expect(call[1].params.group_name).toBeDefined()
+// ── F2-NEW-08：100 条大数据量渲染 / 分页 / 筛选清空 ──
+
+describe('RouteList.vue 100 条大数据量 / 分页 / 筛选清空', () => {
+  const TOTAL = 100
+  const responses = new Map<string, { data: unknown }>()
+
+  // 行形状取自本文件 MOCK_ROUTES 的真实 /routes 响应结构
+  function bulkRoute(id: number) {
+    return {
+      id,
+      name: `e2e-bulk-${String(id).padStart(3, '0')}`,
+      uri: `/bulk/api/${id}/*`,
+      methods: 'GET',
+      cluster_id: 1,
+      cluster_name: '生产集群',
+      priority: 0,
+      current_version: null,
+      created_at: '2026-09-14T16:30:45',
+      status: 1,
     }
+  }
+
+  function routesResponse(page: number) {
+    const start = (page - 1) * 20
+    return {
+      data: {
+        total: TOTAL,
+        page,
+        page_size: 20,
+        items: Array.from({ length: 20 }, (_, i) => bulkRoute(start + i + 1)),
+      },
+    }
+  }
+
+  const bulkStubs = {
+    ...stubs,
+    'a-table': {
+      template:
+        '<div class="mock-a-table"><div v-for="r in dataSource" :key="r.id" class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: \'name\' }" /></div><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></div>',
+      props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
+      emits: ['change'],
+    },
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    responses.clear()
+    responses.set('/clusters', {
+      data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] },
+    })
+    responses.set('/plugins/builtin', { data: { plugins: [] } })
+    responses.set('/clusters/1/upstreams', { data: { total: 1, items: [{ id: 7, name: 'demo-upstream' }] } })
+    mockApiGet.mockImplementation((url: string, config?: { params?: { page?: number } }) => {
+      if (url === '/routes') {
+        // 服务端分页：按请求 page 返回对应切片
+        return Promise.resolve(routesResponse(config?.params?.page ?? 1))
+      }
+      const hit = responses.get(url)
+      if (!hit) return Promise.reject(new Error(`unexpected GET: ${url}`))
+      return Promise.resolve(hit)
+    })
+  })
+
+  async function mountPage() {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs: bulkStubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  function rows(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+    return wrapper.findAll('.mock-row').map((r) => r.text())
+  }
+
+  it('默认渲染第 1 页 20 行，总数显示 100', async () => {
+    const wrapper = await mountPage()
+    expect(rows(wrapper).length).toBe(20)
+    expect(wrapper.text()).toContain('共 100 条路由')
+    expect(wrapper.text()).toContain('e2e-bulk-001')
+    expect(wrapper.text()).not.toContain('e2e-bulk-021')
+    wrapper.unmount()
+  })
+
+  it('翻页到第 2 页请求携带 page=2 并渲染第 2 批数据', async () => {
+    const wrapper = await mountPage()
+    await wrapper.find('.mock-goto-page2').trigger('click')
+    await flushPromises()
+    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+    const params = (calls[calls.length - 1][1] as { params: { page: number } }).params
+    expect(params.page).toBe(2)
+    const texts = rows(wrapper)
+    expect(texts.some((t) => t.includes('e2e-bulk-021'))).toBe(true)
+    expect(texts.some((t) => t.includes('e2e-bulk-001'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('第 2 页选择集群筛选重置回第 1 页；清空集群选择后不带 cluster_id', async () => {
+    const wrapper = await mountPage()
+    await wrapper.find('.mock-goto-page2').trigger('click')
+    await flushPromises()
+
+    // 选择集群 1：onClusterChange 重置 page=1，并携带 cluster_id + 拉取上游选项
+    const clusterSelect = wrapper.findAll('select').find((s) => s.text().includes('全部集群'))
+    expect(clusterSelect).toBeDefined()
+    await clusterSelect!.setValue('1')
+    await flushPromises()
+    let calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+    let params = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
+    expect(params.page).toBe(1)
+    expect(params.cluster_id).toBe(1)
+    expect(mockApiGet.mock.calls.some((c: unknown[]) => c[0] === '/clusters/1/upstreams')).toBe(true)
+
+    // 清空集群选择（选回「全部集群」）：page 保持 1，cluster_id 不再携带
+    await clusterSelect!.setValue('')
+    await flushPromises()
+    calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+    params = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
+    expect(params.page).toBe(1)
+    expect(params.cluster_id).toBeUndefined()
+    wrapper.unmount()
   })
 })

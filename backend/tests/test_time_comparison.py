@@ -1,21 +1,15 @@
 """Tests for time comparison API endpoint."""
-import pytest
 from unittest.mock import patch
 
 
 class TestTimeComparisonEndpoint:
     """Tests for GET /api/v1/metrics/time-comparison endpoint."""
 
-    def test_time_comparison_returns_200(self, isolated_app):
+    def test_time_comparison_returns_200_with_data(self, isolated_app):
         with patch("app.api.v1.metrics.query_time_comparison") as mock_query:
             mock_query.return_value = {}
             response = isolated_app.get("/api/v1/metrics/time-comparison")
             assert response.status_code == 200
-
-    def test_time_comparison_returns_data(self, isolated_app):
-        with patch("app.api.v1.metrics.query_time_comparison") as mock_query:
-            mock_query.return_value = {}
-            response = isolated_app.get("/api/v1/metrics/time-comparison")
             assert "data" in response.json()
 
     def test_time_comparison_default_type(self, isolated_app):
