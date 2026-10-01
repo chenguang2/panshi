@@ -65,6 +65,20 @@ def _iso_z(dt: datetime | None) -> str | None:
     return dt.isoformat() + "Z" if dt else None
 
 
+# 公式注入危险前导字符：= + - @ 及制表符/回车换行（CSV/Excel 打开即公式执行面）
+_FORMULA_LEAD_CHARS = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def _sanitize_csv_cell(value: object) -> object:
+    """公式注入中和：字符串单元格以危险前导字符开头时加 `'` 前缀。
+
+    仅处理 str；数值/None 原样返回，数值列不受影响。
+    """
+    if isinstance(value, str) and value.startswith(_FORMULA_LEAD_CHARS):
+        return "'" + value
+    return value
+
+
 def _audit_csv(rows: list[AuditLog]) -> str:
     """审计记录序列化为 CSV（与 /operations/export 同列头）。"""
     buf = io.StringIO()
@@ -73,14 +87,17 @@ def _audit_csv(rows: list[AuditLog]) -> str:
     for log in rows:
         writer.writerow(
             [
-                log.id,
-                log.created_at.isoformat() + "Z" if log.created_at else "",
-                log.username or "",
-                log.action or "",
-                log.resource or "",
-                log.resource_id if log.resource_id is not None else "",
-                log.detail or "",
-                log.ip_address or "",
+                _sanitize_csv_cell(v)
+                for v in (
+                    log.id,
+                    log.created_at.isoformat() + "Z" if log.created_at else "",
+                    log.username or "",
+                    log.action or "",
+                    log.resource or "",
+                    log.resource_id if log.resource_id is not None else "",
+                    log.detail or "",
+                    log.ip_address or "",
+                )
             ]
         )
     return buf.getvalue()
@@ -96,14 +113,17 @@ def _audit_xlsx(rows: list[AuditLog]) -> bytes:
     for log in rows:
         ws.append(
             [
-                log.id,
-                log.created_at.isoformat() + "Z" if log.created_at else "",
-                log.username or "",
-                log.action or "",
-                log.resource or "",
-                log.resource_id if log.resource_id is not None else "",
-                log.detail or "",
-                log.ip_address or "",
+                _sanitize_csv_cell(v)
+                for v in (
+                    log.id,
+                    log.created_at.isoformat() + "Z" if log.created_at else "",
+                    log.username or "",
+                    log.action or "",
+                    log.resource or "",
+                    log.resource_id if log.resource_id is not None else "",
+                    log.detail or "",
+                    log.ip_address or "",
+                )
             ]
         )
     buf = io.BytesIO()

@@ -243,9 +243,8 @@ async def test_archive_rejects_bad_date(async_authed_client, isolated_session, m
 # 真实缺陷（2026-10-01 审计）：_audit_csv / _audit_xlsx（api/v1/system.py）逐字段
 # 原样写入，未对前导 = + - @ 做任何中和。detail/ip_address 含用户可控内容
 # （审计 detail 带资源名、ip_address 来自请求头），Excel 双击打开即公式执行面。
-# 预期实现：危险前缀前加 `'`（或等效前缀/制表符）。
-# xfail(strict=True)：当前失败（已知缺陷）；修复落地后 XPASS 会转红，
-# 强制同步摘除标记。不许在本卡内改生产代码。
+# 修复（2026-10-01）：`_sanitize_csv_cell` 对危险前导字符串加 `'` 前缀，
+# 两条导出路径共用；xfail(strict=True) 标记已随修复摘除。
 
 _FORMULA_LEADS = ["=", "+", "-", "@"]
 
@@ -268,10 +267,6 @@ def _assert_neutralized(cell: str) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="B2-NEW-09 真实缺陷：_audit_csv 未中和公式注入（detail/ip 原样写入）",
-)
 @pytest.mark.parametrize("lead", _FORMULA_LEADS)
 async def test_export_csv_neutralizes_formula_injection(
     async_authed_client, isolated_session, monkeypatch, lead
@@ -305,10 +300,6 @@ async def test_export_csv_neutralizes_formula_injection(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="B2-NEW-09 真实缺陷：_audit_xlsx 未中和公式注入（openpyxl 逐字段原样 append）",
-)
 async def test_export_xlsx_neutralizes_formula_injection(
     async_authed_client, isolated_session, monkeypatch
 ):
