@@ -476,3 +476,18 @@ class TestMigrationHistoryCleanup:
     async def test_cleanup_preview_keep_last_must_be_positive(self, async_authed_client):
         resp = await async_authed_client.get("/api/v1/database/history/cleanup-preview?keep_last=0")
         assert resp.status_code in (400, 422)
+
+
+async def test_retired_sync_migrate_endpoint_returns_json_404(async_authed_client):
+    """DBM-05b：同步迁移端点 POST /database/migrate 已于 2026-09-16 下线
+    （约定 #31，唯一入口是 SSE /migrate-stream）。
+
+    守卫两点：① 未被意外重新注册——必须走 /api 兜底路由返回 JSON 404，
+    而非 200/405/HTML；② 泛化兜底行为已由 test_isolated_app_smoke.py
+    test_unknown_api_path_returns_json_404 覆盖，本例钉住真实历史路径。
+    """
+    resp = await async_authed_client.post("/api/v1/database/migrate")
+    assert resp.status_code == 404, resp.text
+    assert resp.headers["content-type"].startswith("application/json")
+    assert "<html" not in resp.text.lower()
+    assert resp.json()["detail"] == "Not Found"

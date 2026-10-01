@@ -232,3 +232,52 @@ describe('UpstreamList.vue handleAction copy', () => {
     expect((wrapper.vm as any).copyingUpstream).toBe(false)
   })
 })
+
+// ── SEC-04：XSS 渲染转义哨兵 ──────────────────────────────────────────────
+// 名称/备注（用户可控文本）注入脚本载荷后，必须以纯文本渲染（textContent 含字面量），
+// 不得产生真实 script 节点或 onerror 事件属性（TC-SEC-04）。
+// mock 形状取自真实后端 GET /upstreams（curl 核实：name/description/targets/current_version/created_at）。
+describe('UpstreamList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
+  const XSS_PAYLOADS = ['<script>alert(1)</script>', '<img src=x onerror=alert(1)>']
+
+  it.each(XSS_PAYLOADS)('名称与备注注入 %s → 纯文本渲染，无 script 节点 / onerror 属性', async (payload) => {
+    setActivePinia(createPinia())
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/upstreams') {
+        return Promise.resolve({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 1,
+                name: payload,
+                description: payload,
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                load_balance: 'weighted_roundrobin',
+                targets: [{ target: '10.0.0.1:8080', weight: 100 }],
+                current_version: 3,
+                created_at: '2024-01-15T10:30:00Z',
+              },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+
+    // 转义哨兵：字面量进入 textContent（Vue mustache 转义），未变成真实节点/事件属性
+    expect(wrapper.text()).toContain(payload)
+    expect(wrapper.element.querySelectorAll('script')).toHaveLength(0)
+    expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
+  })
+})

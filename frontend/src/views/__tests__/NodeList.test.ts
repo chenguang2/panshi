@@ -350,3 +350,34 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     wrapper.unmount()
   })
 })
+
+// ── SEC-04：XSS 渲染转义哨兵 ──────────────────────────────────────────────
+// 节点 ip / 所属集群名（用户可控文本）注入脚本载荷后，必须以纯文本渲染（TC-SEC-04）。
+// mock 形状取自真实后端 GET /nodes（curl 核实：ip/cluster_name/edge_path/status_detail/...）。
+describe('NodeList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
+  const XSS_PAYLOADS = ['<script>alert(1)</script>', '<img src=x onerror=alert(1)>']
+
+  it.each(XSS_PAYLOADS)('ip 与集群名注入 %s → 纯文本渲染，无 script 节点 / onerror 属性', async (payload) => {
+    setActivePinia(createPinia())
+    const poisoned = JSON.parse(JSON.stringify(MOCK_NODES))
+    poisoned.items[0].ip = payload
+    poisoned.items[0].cluster_name = payload
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: poisoned })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      if (url.startsWith('/clusters/') && url.endsWith('/stats')) {
+        return Promise.resolve({ data: { routes: 20, upstreams: 10, plugin_configs: 5, global_rules: 2 } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+
+    // 转义哨兵：字面量进入 textContent（Vue mustache 转义），未变成真实节点/事件属性
+    expect(wrapper.text()).toContain(payload)
+    expect(wrapper.element.querySelectorAll('script')).toHaveLength(0)
+    expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
+  })
+})

@@ -1,9 +1,10 @@
 """测试集群删除时 Edge 同步的调用顺序和错误处理。"""
 
 import pytest
+from sqlalchemy import select
 from unittest.mock import MagicMock
 from unittest.mock import patch as _patch
-from app.models.cluster import Cluster, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata, Node
+from app.models.cluster import Cluster, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata, Node, ConfigVersion
 from app.schemas.cluster import DeleteClusterRequest
 
 # EdgeClient 在 clusters.py 模块顶层 import（from app.services.edge_client import EdgeClient），
@@ -124,3 +125,59 @@ class TestClusterDeleteEdgeSync:
             result = await delete_cluster(cid, DeleteClusterRequest(delete_db=True, delete_edge=True), test_db)
 
         assert result["results"][0]["status"] == "failed"
+
+
+class TestDeleteUnpublishedClusterNoOrphans:
+    """CLU-14：未发布集群删除（delete_db）后无孤儿残留。
+
+    夹具播种 Node(status=0 禁用) + Route + ConfigVersion（发布尝试曾产生的
+    版本快照）——删除端点对 Edge 侧零依赖（无活跃节点），纯库内清理。
+    """
+
+    async def test_delete_db_removes_all_cluster_scoped_rows(
+        self, async_authed_client, isolated_session
+    ):
+        resp = await async_authed_client.post(
+            "/api/v1/clusters", json={"name": "clu14-unpublished"}
+        )
+        assert resp.status_code == 201, resp.text
+        cid = resp.json()["id"]
+
+        # 播种该集群的节点 / 路由 / 版本快照（含另一个集群的对照行）
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=cid, ip="10.77.0.14", edge_path="/edge", status=0))
+            route = Route(cluster_id=cid, name="clu14-route", uri="/clu14/*")
+            s.add(route)
+            await s.flush()
+            s.add(ConfigVersion(
+                cluster_id=cid, resource_type="route", resource_id=route.id,
+                version=1, config='{"name": "clu14-route"}',
+            ))
+            keeper = Route(cluster_id=1, name="clu14-keeper", uri="/keeper/*")
+            s.add(keeper)
+            await s.commit()
+            route_id, keeper_id = route.id, keeper.id
+
+        resp = await async_authed_client.request(
+            "DELETE", f"/api/v1/clusters/{cid}", json={"delete_db": True}
+        )
+        assert resp.status_code == 200, resp.text
+        db_result = next(
+            r for r in resp.json()["results"] if r["scope"] == "database"
+        )
+        assert db_result["status"] == "success"
+
+        async with isolated_session() as s:
+            assert await s.get(Cluster, cid) is None
+            for model in (Node, Route, ConfigVersion):
+                left = (
+                    await s.execute(select(model).where(model.cluster_id == cid))
+                ).scalars().all()
+                assert left == [], f"{model.__name__} 存在孤儿残留: {left}"
+            # 对照：其他集群数据不受牵连
+            keeper = await s.get(Route, keeper_id)
+            assert keeper is not None and keeper.id == keeper_id
+
+        # API 视角同样不可见
+        resp = await async_authed_client.get(f"/api/v1/clusters/{cid}")
+        assert resp.status_code == 404

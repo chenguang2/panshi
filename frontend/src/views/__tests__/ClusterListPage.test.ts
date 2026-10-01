@@ -265,3 +265,62 @@ describe('ClusterList.vue - 连接测试 · 经中继 / 直连 标注', () => {
     expect(text).not.toContain('（直连）')
   })
 })
+
+// ── SEC-04：XSS 渲染转义哨兵 ──────────────────────────────────────────────
+// 集群显示名（用户可控文本）注入脚本载荷后，必须以纯文本渲染于集群卡片（TC-SEC-04）。
+// mock 形状取自真实后端 GET /clusters（curl 核实字段集：display_name/name/description/
+// *_count/region_code/nodes/status/group_name/created_at）。
+describe('ClusterList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
+  const XSS_PAYLOADS = ['<script>alert(1)</script>', '<img src=x onerror=alert(1)>']
+
+  it.each(XSS_PAYLOADS)('显示名注入 %s → 纯文本渲染，无 script 节点 / onerror 属性', async (payload) => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                name: 'demo-cluster',
+                display_name: payload,
+                description: '',
+                group_name: '',
+                status: 1,
+                region_code: '',
+                node_count: 0,
+                healthy_node_count: 0,
+                upstream_count: 0,
+                route_count: 0,
+                plugin_config_count: 0,
+                global_rule_count: 0,
+                static_resource_count: 0,
+                plugin_metadata_count: 0,
+                nodes: [],
+              },
+            ],
+          },
+        })
+      }
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockListRelayGateways.mockResolvedValue({ data: [] })
+
+    const ClusterList = (await import('@/views/ClusterList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+    const wrapper = mount(ClusterList, { global: { plugins: [router] } })
+    await flushPromises()
+    await flushPromises()
+
+    // 转义哨兵：字面量进入 textContent（Vue mustache 转义），未变成真实节点/事件属性
+    expect(wrapper.text()).toContain(payload)
+    expect(wrapper.element.querySelectorAll('script')).toHaveLength(0)
+    expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
+  })
+})

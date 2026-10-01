@@ -887,3 +887,66 @@ class TestRouteNameBoundary:
         assert list2.status_code == 200
         assert list1.json()["total"] == 1
         assert list2.json()["total"] == 1
+
+
+class TestRouteSequentialRepublishIdempotent:
+    """RTE-09：同一路由顺序重复发布的幂等性（set/replace 语义）。
+
+    与 TestRouteConcurrentDoublePublish（并发版本完整性、无节点）互补：
+    本类钉住有活跃节点时 Edge 侧收到的载荷——两次发布必须携带同一
+    edge_uuid（PUT replace，不产生第二条路由），版本各 +1。
+    """
+
+    async def test_republish_sends_same_uuid_and_increments_version(
+        self, async_authed_client, isolated_session, monkeypatch
+    ):
+        from app.models.cluster import Node
+        from app.services import relay_registry
+
+        # 规则 #29：不依赖部署 features.yaml 的 relay 取值，显式钉住关闭
+        monkeypatch.setattr(relay_registry, "relay_enabled", lambda: False)
+
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.66", edge_path="/edge",
+                       management_port=9180, status=1))
+            await s.commit()
+
+        resp = await async_authed_client.post(
+            "/api/v1/clusters/1/routes",
+            json={"name": "rte09-republish", "uri": "/rte09/*"},
+        )
+        assert resp.status_code == 201, resp.text
+        route_id = resp.json()["id"]
+        edge_uuid = resp.json()["edge_uuid"]
+
+        seen_calls: list[tuple[str, dict]] = []
+
+        def _fake_update_route(self, uuid, data):
+            seen_calls.append((uuid, data))
+            return {"updated": True}
+
+        monkeypatch.setattr(EdgeClient, "update_route", _fake_update_route)
+
+        r1 = await async_authed_client.post(f"/api/v1/clusters/1/routes/{route_id}/publish")
+        assert r1.status_code == 200, r1.text
+        assert r1.json()["status"] == "ok", r1.text
+        v1 = r1.json()["version"]
+
+        r2 = await async_authed_client.post(f"/api/v1/clusters/1/routes/{route_id}/publish")
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["status"] == "ok", r2.text
+        v2 = r2.json()["version"]
+
+        # Edge 侧 set/replace：同一 edge_uuid 被发布两次，无第二条路由
+        assert len(seen_calls) == 2, f"Edge 应恰好收到 2 次 PUT，实际 {len(seen_calls)}"
+        assert {uuid for uuid, _ in seen_calls} == {edge_uuid}, (
+            f"两次发布 edge_uuid 必须一致（replace 语义），实际 {seen_calls}"
+        )
+        assert v2 == v1 + 1, f"重复发布版本应 +1，实际 {v1} -> {v2}"
+
+        hist = await async_authed_client.get(f"/api/v1/clusters/1/routes/{route_id}/history")
+        assert hist.status_code == 200
+        data = hist.json()
+        assert data["total"] == 2
+        assert sorted(item["version"] for item in data["items"]) == [v1, v2]
+        assert data["current_version"] == v2

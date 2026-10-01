@@ -1064,3 +1064,68 @@ class TestSslSniEndpointBoundary:
         snapshot = json.loads(hist.json()["items"][0]["config"])
         assert "sni" not in snapshot
         assert "snis" not in snapshot
+
+
+class TestSslDeleteReferenceGuard:
+    """SSL-07：被引用 SSL 证书删除的实际行为回归。
+
+    数据模型核对（2026-10-01）：Route 无任何引用证书的字段（route→SSL 引用
+    在库内不存在，发布时证书按 edge_uuid 独立下发）；库内唯一的引用关系是
+    CA → 其签发证书（SslCertificate.ca_cert_id）。契约（cluster_ssl.py:283-295）：
+    删除仍有签发证书的 CA → 400 阻断。
+    """
+
+    async def test_delete_ca_with_signed_cert_blocked_400(
+        self, async_authed_client, isolated_session
+    ):
+        ca = SslCertificate(
+            cluster_id=1, name="ssl07-ca", sni="ssl07-ca.local",
+            cert="-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----",
+            private_key="-----BEGIN PRIVATE KEY-----\nCAKEY\n-----END PRIVATE KEY-----",
+            is_ca=True,
+        )
+        signed = SslCertificate(
+            cluster_id=1, name="ssl07-signed", sni="ssl07-signed.local",
+            cert="-----BEGIN CERTIFICATE-----\nLEAF\n-----END CERTIFICATE-----",
+            private_key="-----BEGIN PRIVATE KEY-----\nLEAFKEY\n-----END PRIVATE KEY-----",
+            ca_cert_id=None,  # flush 后回填真实 id
+        )
+        async with isolated_session() as s:
+            s.add(ca)
+            await s.flush()
+            signed.ca_cert_id = ca.id
+            s.add(signed)
+            await s.commit()
+            ca_id = ca.id
+
+        resp = await async_authed_client.request(
+            "DELETE", f"/api/v1/clusters/1/ssl/{ca_id}", json={"delete_db": True}
+        )
+        assert resp.status_code == 400, resp.text
+        assert "存在签发的证书" in resp.json()["detail"]
+
+        # 阻断后 CA 仍存在（未被删除）
+        got = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{ca_id}")
+        assert got.status_code == 200
+
+    async def test_delete_ca_without_signed_cert_allowed(
+        self, async_authed_client, isolated_session
+    ):
+        """对照：无签发证书的 CA 可正常删除（同端点的放行分支）。"""
+        ca = SslCertificate(
+            cluster_id=1, name="ssl07-ca-free", sni="ssl07-ca-free.local",
+            cert="-----BEGIN CERTIFICATE-----\nCA2\n-----END CERTIFICATE-----",
+            private_key="-----BEGIN PRIVATE KEY-----\nCA2KEY\n-----END PRIVATE KEY-----",
+            is_ca=True,
+        )
+        async with isolated_session() as s:
+            s.add(ca)
+            await s.commit()
+            ca_id = ca.id
+
+        resp = await async_authed_client.request(
+            "DELETE", f"/api/v1/clusters/1/ssl/{ca_id}", json={"delete_db": True}
+        )
+        assert resp.status_code == 200, resp.text
+        got = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{ca_id}")
+        assert got.status_code == 404

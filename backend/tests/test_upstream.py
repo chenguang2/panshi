@@ -334,3 +334,28 @@ class TestUpstreamNameBoundary:
         assert r2.status_code == 201, r2.text
         assert r1.json()["cluster_id"] == 1
         assert r2.json()["cluster_id"] == 21003
+
+
+class TestUpstreamTargetWeightBoundaryAPI:
+    """UPS-07：target weight 边界经真实 API 验证（schema ge=1/le=1000，cluster.py:97）。
+
+    既有 TestUpstreamTargetSchema 仅覆盖合法值（100/500），无边界拒绝用例；
+    本类走 POST /clusters/{id}/upstreams 补 API 侧闭环。
+    """
+
+    @pytest.mark.parametrize(
+        "weight, expected",
+        [(0, 422), (-1, 422), (1001, 422), (1, 201), (1000, 201)],
+        ids=["zero", "negative", "above-max", "min-ok", "max-ok"],
+    )
+    async def test_weight_boundary(self, async_authed_client, weight, expected):
+        resp = await async_authed_client.post(
+            "/api/v1/clusters/1/upstreams",
+            json={
+                "name": f"ups07-weight-{weight}",
+                "targets": [{"target": "10.0.0.1:8080", "weight": weight}],
+            },
+        )
+        assert resp.status_code == expected, resp.text
+        if expected == 201:
+            assert resp.json()["targets"][0]["weight"] == weight
