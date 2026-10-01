@@ -39,13 +39,16 @@ class StreamProxyCreate(StreamProxyBase):
 
 
 class StreamProxyUpdate(BaseModel):
-    name: Optional[str] = None
+    # name/listen_port 边界必须与 StreamProxyBase（Create/Response 共用基类）对齐：
+    # Update 无界会让越界值经 PUT commit 落库，随后 StreamProxyResponse 响应校验
+    # 失败 → 500，且脏行持久化、后续 GET 持续 500（B1-NEW-08 实测缺陷）。
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     load_balance: Optional[str] = None
     hash_on: Optional[str] = None
     key: Optional[str] = None
     scheme: Optional[Literal["tcp", "udp", "tls"]] = None
-    listen_port: Optional[int] = None
+    listen_port: Optional[int] = Field(None, ge=1, le=65535)
     ref_node_id: Optional[int] = None
     targets: Optional[List[TargetSchema]] = None
     timeout: Optional[Dict[str, Any]] = None

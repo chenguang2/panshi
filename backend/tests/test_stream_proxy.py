@@ -661,14 +661,13 @@ class TestStreamProxyListenPortBoundary:
         assert r1.json()["cluster_id"] == 1
         assert r2.json()["cluster_id"] == 21002
 
-    @pytest.mark.xfail(
-        reason="卡片 B1-NEW-08 暴露缺陷（不改生产代码）：StreamProxyUpdate.listen_port "
-               "缺 ge=1/le=65535 边界，PUT 65536 通过输入校验且已 commit 落库，"
-               "随后 StreamProxyResponse 响应序列化失败 → 500；该行已带非法端口，"
-               "后续 GET 同样 500。修复方向：Update schema 补边界 + 端点拒绝后回滚。",
-    )
     async def test_update_out_of_range_port_rejected(self, async_authed_client):
-        """创建侧 listen_port 有界（ge=1/le=65535），PUT 更新侧必须同等有界。"""
+        """PUT 更新侧 listen_port 必须与创建侧同等有界（ge=1/le=65535）。
+
+        缺陷背景（B1-NEW-08，已修复）：Update schema 曾无界，65536 经 PUT
+        commit 落库后 StreamProxyResponse 序列化失败 → 500，脏行残留、
+        后续 GET 持续 500。
+        """
         created = await self._create(async_authed_client, 37778, "port-update-boundary")
         assert created.status_code == 201, created.text
         proxy_id = created.json()["id"]
@@ -678,3 +677,33 @@ class TestStreamProxyListenPortBoundary:
             json={"listen_port": 65536},
         )
         assert resp.status_code == 422, f"PUT listen_port=65536 竟被接受: {resp.text}"
+
+        # 修复面回归：合法端口仍可正常更新
+        ok = await async_authed_client.put(
+            f"/api/v1/clusters/1/stream-proxies/{proxy_id}",
+            json={"listen_port": 37779},
+        )
+        assert ok.status_code == 200, ok.text
+        assert ok.json()["listen_port"] == 37779
+
+    @pytest.mark.parametrize("bad_name", ["", "u" * 101])
+    async def test_update_out_of_range_name_rejected(self, async_authed_client, bad_name):
+        """PUT name 必须与创建侧同等约束（min_length=1/max_length=100）。
+
+        同款 Create/Update 不对称（与 listen_port 一起修复）：空名/超长名曾可
+        经 PUT 落库 → StreamProxyResponse 序列化 500 + 脏行残留。
+        """
+        created = await self._create(async_authed_client, 37780, "name-update-boundary")
+        assert created.status_code == 201, created.text
+        proxy_id = created.json()["id"]
+
+        resp = await async_authed_client.put(
+            f"/api/v1/clusters/1/stream-proxies/{proxy_id}",
+            json={"name": bad_name},
+        )
+        assert resp.status_code == 422, f"PUT name={bad_name!r} 竟被接受: {resp.text}"
+
+        # 校验拒绝后资源完好、原名未变（无半写状态）
+        got = await async_authed_client.get(f"/api/v1/clusters/1/stream-proxies/{proxy_id}")
+        assert got.status_code == 200
+        assert got.json()["name"] == "name-update-boundary"
