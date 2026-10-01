@@ -3,8 +3,7 @@
 import pytest
 import yaml
 from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from app.core.database import Base, get_db
+from app.core.database import get_db
 
 
 class TestPluginWhitelist:
@@ -28,9 +27,9 @@ class TestPluginWhitelist:
 
     @pytest.fixture
     def client(self):
-        import app.main
-        import importlib
-        importlib.reload(app.main)
+        # 白名单经 get_enabled_plugins() 请求时惰性读取（mtime 热重载），
+        # configure_features 已 monkeypatch _FEATURES_PATH —— 无需 importlib.reload
+        # 重建 app（历史遗留的双实例隐患，2026-10-01 移除）。
         from app.main import app
         from app.models.cluster import PluginEnabled
         from tests.conftest import _isolated_engine_factory, _prepare_isolated_db

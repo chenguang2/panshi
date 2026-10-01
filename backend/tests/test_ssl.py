@@ -4,9 +4,14 @@ TDD: Write failing test -> verify fail -> implement -> verify pass.
 """
 import pytest
 import json
+from unittest.mock import patch
 from pydantic import ValidationError
 from sqlalchemy import select
 from app.models.ssl import SslCertificate
+from app.models.cluster import Node
+from app.schemas.ssl import SslCertificateUpdate
+from app.api.v1.cluster_ssl import update_ssl_certificate, publish_ssl_certificate
+from app.services import edge_sync
 
 
 class TestSslCertificateModel:
@@ -592,10 +597,16 @@ class TestSslMtlsSchemaFields:
         assert req.skip_mtls_uri_regex == "/health,/metrics"
 
 
-class TestSslMtlsUpdateClear:
-    async def test_update_handler_clears_mtls_on_gm_false(self, test_db):
-        from app.schemas.ssl import SslCertificateUpdate
+class TestSslMtlsUpdateEndpoint:
+    """更新端点 mTLS 清理/写入行为 — 直调 update_ssl_certificate（AsyncSession + 真实 ORM 记录）。
 
+    契约（cluster_ssl.py::update_ssl_certificate）：
+    - 更新载荷含 gm=False → sign_cert/sign_key/client_ca/client_depth/skip_mtls_uri_regex 全部清空；
+    - 更新载荷不含 gm → mTLS 字段保持不变；
+    - 更新载荷含 mTLS 字段 → 写入库。
+    """
+
+    async def _seed_gm_mtls_cert(self, test_db):
         cert = SslCertificate(
             cluster_id=1, name="gm-mtls", sni="mtls.local",
             cert="crt", private_key="key",
@@ -605,47 +616,65 @@ class TestSslMtlsUpdateClear:
         test_db.add(cert)
         await test_db.commit()
         await test_db.refresh(cert)
+        return cert
 
-        update_data = SslCertificateUpdate(gm=False).model_dump(exclude_unset=True)
-        for k, v in update_data.items():
-            setattr(cert, k, v)
-        if "gm" in update_data and not update_data["gm"]:
-            cert.sign_cert = None
-            cert.sign_key = None
-            cert.client_ca = None
-            cert.client_depth = None
-            cert.skip_mtls_uri_regex = None
-        await test_db.commit()
-        await test_db.refresh(cert)
+    async def test_update_gm_false_clears_sign_and_mtls_fields(self, test_db):
+        cert = await self._seed_gm_mtls_cert(test_db)
 
-        assert cert.client_ca is None
-        assert cert.client_depth is None
-        assert cert.skip_mtls_uri_regex is None
-
-    async def test_mtls_persists_when_gm_unchanged(self, test_db):
-        from app.schemas.ssl import SslCertificateUpdate
-
-        cert = SslCertificate(
-            cluster_id=1, name="keep-mtls", sni="keep.local",
-            cert="crt", private_key="key",
-            gm=True, sign_cert="sc", sign_key="sk",
-            client_ca="ca-pem", client_depth=1, skip_mtls_uri_regex="/status",
+        resp = await update_ssl_certificate(
+            cluster_id=1, cert_id=cert.id,
+            data=SslCertificateUpdate(gm=False), db=test_db,
         )
-        test_db.add(cert)
-        await test_db.commit()
-        await test_db.refresh(cert)
 
-        update_data = SslCertificateUpdate(description="updated").model_dump(exclude_unset=True)
-        for k, v in update_data.items():
-            setattr(cert, k, v)
-        if "gm" in update_data and not update_data["gm"]:
-            cert.client_ca = None
-        await test_db.commit()
-        await test_db.refresh(cert)
+        assert resp.gm is False
+        assert resp.sign_cert is None
+        assert resp.sign_key is None
+        assert resp.client_ca is None
+        assert resp.client_depth is None
+        assert resp.skip_mtls_uri_regex is None
+        reloaded = await test_db.get(SslCertificate, cert.id)
+        assert reloaded.gm is False
+        assert reloaded.sign_cert is None
+        assert reloaded.sign_key is None
+        assert reloaded.client_ca is None
+        assert reloaded.client_depth is None
+        assert reloaded.skip_mtls_uri_regex is None
 
-        assert cert.client_ca == "ca-pem"
-        assert cert.client_depth == 1
-        assert cert.skip_mtls_uri_regex == "/status"
+    async def test_update_without_gm_change_persists_mtls(self, test_db):
+        cert = await self._seed_gm_mtls_cert(test_db)
+        cert.client_depth = 1
+        cert.skip_mtls_uri_regex = "/status"
+        await test_db.commit()
+
+        await update_ssl_certificate(
+            cluster_id=1, cert_id=cert.id,
+            data=SslCertificateUpdate(description="updated"), db=test_db,
+        )
+
+        reloaded = await test_db.get(SslCertificate, cert.id)
+        assert reloaded.gm is True
+        assert reloaded.client_ca == "ca-pem"
+        assert reloaded.client_depth == 1
+        assert reloaded.skip_mtls_uri_regex == "/status"
+
+    async def test_update_payload_with_mtls_fields_writes_them(self, test_db):
+        cert = await self._seed_gm_mtls_cert(test_db)
+
+        resp = await update_ssl_certificate(
+            cluster_id=1, cert_id=cert.id,
+            data=SslCertificateUpdate(
+                client_ca="new-ca", client_depth=3, skip_mtls_uri_regex="/metrics",
+            ),
+            db=test_db,
+        )
+
+        assert resp.client_ca == "new-ca"
+        assert resp.client_depth == 3
+        assert resp.skip_mtls_uri_regex == "/metrics"
+        reloaded = await test_db.get(SslCertificate, cert.id)
+        assert reloaded.client_ca == "new-ca"
+        assert reloaded.client_depth == 3
+        assert reloaded.skip_mtls_uri_regex == "/metrics"
 
 
 class TestSslCertificateMtlsFields:
@@ -779,169 +808,139 @@ class TestSslEdgeImportMtls:
         assert sc["skip_mtls_uri_regex"] is None
 
 
-class TestSslDiffMtlsComparison:
-    """Tests for mTLS field comparison in config diff (Task 5.1)."""
+class TestSslPublishPayload:
+    """发布端点 config_data 组装 — 直调 publish_ssl_certificate（真实发布编排 + mock Edge 网络）。
 
-    @staticmethod
-    def _compare_mtls_field(db_cert, edge_data, field_name, edge_key):
-        db_v = getattr(db_cert, field_name, None) or ""
-        edge_client = edge_data.get("client", {}) if isinstance(edge_data, dict) else {}
-        edge_v = edge_client.get(edge_key, "") or ""
-        equal = str(db_v) == str(edge_v)
-        return {"name": field_name, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"}
+    替换原测试文件内手写的 _publish_data 副本：真实契约（B1-NEW-07）为
+    DB sni 逗号分隔字符串 → 单值映射 `sni`（字符串）、多值映射 `snis`（数组）、
+    IP 原样保留、空 sni 两键均不出现；gm 证书带 certs/keys/gm 与可选 client 对象。
+    Edge 调用在 edge_sync.publish_to_nodes 处 mock（捕获端点真实组装的 edge_data），
+    版本快照/节点选择等编排保持真实（test_db 隔离库）。
+    """
 
-    def _make_fake_cert(self, **kwargs):
-        class FakeCert:
-            client_ca = ""
-            client_depth = None
-            skip_mtls_uri_regex = None
-        for k, v in kwargs.items():
-            setattr(FakeCert, k, v)
-        return FakeCert
+    async def _seed_active_node(self, test_db, cluster_id=1):
+        node = Node(cluster_id=cluster_id, ip="10.1.1.1", service_port=80,
+                    management_port=9180, edge_path="/edge", status=1)
+        test_db.add(node)
+        await test_db.commit()
+        await test_db.refresh(node)
+        return node
 
-    def test_mtls_client_ca_equal(self):
-        cert = self._make_fake_cert(client_ca="ca-pem")
-        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
-        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
-        assert result["status"] == "equal"
+    async def _seed_cert(self, test_db, **kwargs):
+        params = dict(
+            cluster_id=1, name="pub-cert", sni="pub.local",
+            cert="crt", private_key="key",
+        )
+        params.update(kwargs)
+        cert = SslCertificate(**params)
+        test_db.add(cert)
+        await test_db.commit()
+        await test_db.refresh(cert)
+        return cert
 
-    def test_mtls_client_ca_diff(self):
-        cert = self._make_fake_cert(client_ca="ca-pem-a")
-        edge = {"client": {"ca": "ca-pem-b", "depth": 2, "skip_mtls_uri_regex": "/health"}}
-        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
-        assert result["status"] == "diff"
+    async def _publish_capture_edge_data(self, test_db, cert):
+        captured: dict = {}
 
-    def test_mtls_client_depth_equal(self):
-        cert = self._make_fake_cert(client_depth=2)
-        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
-        result = self._compare_mtls_field(cert, edge, "client_depth", "depth")
-        assert result["status"] == "equal"
+        async def fake_publish_to_nodes(cluster_id, active_nodes, edge_data, **kwargs):
+            captured["edge_data"] = edge_data
+            captured["active_nodes"] = active_nodes
+            return [{"node": "10.1.1.1:9180", "scope": "edge", "status": "success"}], 1, 0
 
-    def test_mtls_skip_uri_regex_equal(self):
-        cert = self._make_fake_cert(skip_mtls_uri_regex="/health")
-        edge = {"client": {"ca": "ca-pem", "depth": 2, "skip_mtls_uri_regex": "/health"}}
-        result = self._compare_mtls_field(cert, edge, "skip_mtls_uri_regex", "skip_mtls_uri_regex")
-        assert result["status"] == "equal"
+        with patch.object(edge_sync, "publish_to_nodes", new=fake_publish_to_nodes):
+            resp = await publish_ssl_certificate(
+                cluster_id=1, cert_id=cert.id, req=None, db=test_db,
+            )
+        assert resp["status"] == "ok", f"发布编排未走通: {resp}"
+        return captured["edge_data"]
 
-    def test_mtls_no_client_on_edge(self):
-        cert = self._make_fake_cert(client_ca="ca-pem")
-        edge = {}
-        result = self._compare_mtls_field(cert, edge, "client_ca", "ca")
-        assert result["status"] == "diff"
-        assert result["db"] == "ca-pem"
-        assert result["edge"] == ""
+    # --- sni/snis 映射契约（B1-NEW-07） ---
 
+    async def test_single_sni_maps_to_sni_string(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(test_db, sni="pub.local")
 
-class TestSslPublishConfig:
-    """SSL publish config_data assembly logic."""
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
 
-    def _publish_data(self, cert) -> dict:
-        sni_list = [s.strip() for s in cert.sni.split(",") if s.strip()] if cert.sni else []
-        config = {"cert": cert.cert, "key": cert.private_key, "type": cert.cert_type}
-        if len(sni_list) == 1:
-            config["sni"] = sni_list[0]
-        elif len(sni_list) > 1:
-            config["snis"] = sni_list
-        if cert.gm:
-            config["certs"] = [cert.sign_cert]
-            config["keys"] = [cert.sign_key]
-            config["gm"] = True
-            if cert.client_ca:
-                client = {"ca": cert.client_ca}
-                if cert.client_depth is not None:
-                    client["depth"] = cert.client_depth
-                if cert.skip_mtls_uri_regex:
-                    client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
-                config["client"] = client
-        return config
+        assert edge_data["sni"] == "pub.local"
+        assert "snis" not in edge_data
 
-    def test_gm_publish_includes_sign_fields(self):
-        class FakeCert:
-            cert = "enc-pem"
-            private_key = "enc-key-pem"
-            cert_type = "server"
-            sni = "gm.local"
-            gm = True
-            sign_cert = "sign-pem"
-            sign_key = "sign-key-pem"
-            client_ca = ""
-            client_depth = None
-            skip_mtls_uri_regex = None
+    async def test_multi_sni_maps_to_snis_array(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(test_db, sni="a.com,b.com")
 
-        data = self._publish_data(FakeCert())
-        assert data["cert"] == "enc-pem"
-        assert data["key"] == "enc-key-pem"
-        assert data["certs"] == ["sign-pem"]
-        assert data["keys"] == ["sign-key-pem"]
-        assert data["gm"] is True
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
 
-    def test_gm_mtls_publish_includes_client_object(self):
-        """When gm=true and client_ca is set, publish data should include client object."""
-        class FakeCert:
-            cert = "enc-pem"
-            private_key = "enc-key-pem"
-            cert_type = "server"
-            sni = "mtls.local"
-            gm = True
-            sign_cert = "sign-pem"
-            sign_key = "sign-key-pem"
-            client_ca = "mtls-ca-pem"
-            client_depth = 2
-            skip_mtls_uri_regex = "/health"
+        assert edge_data["snis"] == ["a.com", "b.com"]
+        assert "sni" not in edge_data
 
-        data = self._publish_data(FakeCert())
-        assert data["client"]["ca"] == "mtls-ca-pem"
-        assert data["client"]["depth"] == 2
-        assert data["client"]["skip_mtls_uri_regex"] == "/health"
+    async def test_single_ip_sni_preserved_as_string(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(test_db, sni="192.168.1.5")
 
-    def test_gm_mtls_no_client_object_when_ca_empty(self):
-        """When gm=true but client_ca is empty, no client object in publish data."""
-        class FakeCert:
-            cert = "enc-pem"
-            private_key = "enc-key-pem"
-            cert_type = "server"
-            sni = "gm.local"
-            gm = True
-            sign_cert = "sign-pem"
-            sign_key = "sign-key-pem"
-            client_ca = ""
-            client_depth = None
-            skip_mtls_uri_regex = None
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
 
-        data = self._publish_data(FakeCert())
-        assert "client" not in data
+        assert edge_data["sni"] == "192.168.1.5"
+        assert "snis" not in edge_data
 
-    def test_non_gm_mtls_no_client_object(self):
-        """When gm=false, no client object even if client_ca is set."""
-        class FakeCert:
-            cert = "crt"
-            private_key = "key"
-            cert_type = "server"
-            sni = "test.local"
-            gm = False
-            sign_cert = ""
-            sign_key = ""
-            client_ca = "mtls-ca"
-            client_depth = 1
-            skip_mtls_uri_regex = "/status"
+    async def test_empty_sni_omits_both_keys(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(test_db, sni="")
 
-        data = self._publish_data(FakeCert())
-        assert "client" not in data
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
 
-    def test_normal_publish_no_gm_fields(self):
-        class FakeCert:
-            cert = "crt"
-            private_key = "key"
-            cert_type = "server"
-            sni = "test.local"
-            gm = False
-            sign_cert = ""
-            sign_key = ""
-            client_ca = ""
-            client_depth = None
-            skip_mtls_uri_regex = None
+        assert "sni" not in edge_data
+        assert "snis" not in edge_data
 
-        data = self._publish_data(FakeCert())
-        assert "certs" not in data
-        assert "keys" not in data
-        assert "gm" not in data
+    # --- gm / mTLS client 字段契约（原副本块断言的真实现版本） ---
+
+    async def test_gm_publish_includes_sign_fields(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(
+            test_db, gm=True, sign_cert="sign-pem", sign_key="sign-key-pem",
+        )
+
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
+
+        assert edge_data["cert"] == "crt"
+        assert edge_data["key"] == "key"
+        assert edge_data["certs"] == ["sign-pem"]
+        assert edge_data["keys"] == ["sign-key-pem"]
+        assert edge_data["gm"] is True
+
+    async def test_gm_mtls_publish_includes_client_object(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(
+            test_db, gm=True, sign_cert="sign-pem", sign_key="sign-key-pem",
+            client_ca="mtls-ca-pem", client_depth=2, skip_mtls_uri_regex="/health",
+        )
+
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
+
+        assert edge_data["client"]["ca"] == "mtls-ca-pem"
+        assert edge_data["client"]["depth"] == 2
+        assert edge_data["client"]["skip_mtls_uri_regex"] == "/health"
+
+    async def test_gm_without_client_ca_has_no_client_object(self, test_db):
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(
+            test_db, gm=True, sign_cert="sign-pem", sign_key="sign-key-pem",
+        )
+
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
+
+        assert "client" not in edge_data
+
+    async def test_non_gm_with_client_ca_has_no_client_object(self, test_db):
+        """非国密证书即使配了 client_ca 也不发布 client 对象（端点只在 gm 分支组装）。"""
+        await self._seed_active_node(test_db)
+        cert = await self._seed_cert(
+            test_db, gm=False, client_ca="mtls-ca", client_depth=1,
+            skip_mtls_uri_regex="/status",
+        )
+
+        edge_data = await self._publish_capture_edge_data(test_db, cert)
+
+        assert "client" not in edge_data
+        assert "gm" not in edge_data
+        assert "certs" not in edge_data
+        assert "keys" not in edge_data

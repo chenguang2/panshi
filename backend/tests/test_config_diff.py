@@ -1,118 +1,85 @@
-"""测试配置对比核心逻辑（纯函数，无需数据库）。"""
+"""测试配置对比核心逻辑（import 真实现 config_diff，纯函数无需数据库）。
+
+历史说明：本文件曾为每个用例手写"模拟端点逻辑"副本（端点实现变更不会让
+这些用例变红）；2026-10 起改为直接 import ``app.services.config_diff``
+的真实现——端点实现变更（字段增删、等价规则调整）现在会真实反映到这里。
+模型入参用 SimpleNamespace 模拟 ORM 对象（service 只做属性访问，无 IO）。
+"""
 
 import json
-import pytest
+from types import SimpleNamespace
 
-# 字段默认值（与 clusters.py diff 端点保持一致）
-_UPSTREAM_DEFAULTS = {"load_balance": "roundrobin", "scheme": "http", "pass_host": "pass", "hash_on": "vars"}
-
-
-def _compare_upstream(db_u: dict, edge_data: dict | None) -> dict:
-    """模拟 diff 端点的 upstream 对比逻辑（始终输出所有字段 + status 标记）"""
-    if not edge_data:
-        return {"name": db_u["name"], "id": db_u["edge_uuid"], "status": "only_in_db", "fields": []}
-    fields = []
-    for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
-        db_v = db_u.get(key)
-        edge_v = edge_data.get(key)
-        if edge_v is None:
-            is_diff = db_v is not None and db_v != _UPSTREAM_DEFAULTS.get(key)
-            fields.append({
-                "name": key,
-                "db": str(db_v) if is_diff else "(默认)",
-                "edge": "(未配置)",
-                "status": "diff" if is_diff else "equal",
-            })
-            continue
-        equal = str(db_v) == str(edge_v)
-        fields.append({
-            "name": key,
-            "db": str(db_v),
-            "edge": str(edge_v),
-            "status": "equal" if equal else "diff",
-        })
-    for jkey in ("checks", "timeout", "keepalive_pool"):
-        db_v = db_u.get(jkey)
-        edge_v = edge_data.get(jkey)
-        if db_v or edge_v:
-            try:
-                db_j = json.loads(db_v) if isinstance(db_v, str) else db_v or {}
-                edge_j = edge_v or {}
-                equal = json.dumps(db_j, sort_keys=True) == json.dumps(edge_j, sort_keys=True)
-                fields.append({
-                    "name": jkey,
-                    "db": json.dumps(db_j, indent=1),
-                    "edge": json.dumps(edge_j, indent=1),
-                    "status": "equal" if equal else "diff",
-                })
-            except (json.JSONDecodeError, TypeError):
-                equal = str(db_v) == str(edge_v)
-                fields.append({
-                    "name": jkey,
-                    "db": str(db_v),
-                    "edge": str(edge_v),
-                    "status": "equal" if equal else "diff",
-                })
-    return {"name": db_u["name"], "id": db_u["edge_uuid"], "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+from app.services.config_diff import EquivalenceRules
+from app.services.config_diff import (
+    add_group,
+    compare_plugin_metadata,
+    compare_ssl_certificate,
+    compare_stream_proxy,
+    compare_stream_targets,
+    compare_upstream,
+    find_only_in_edge,
+    new_summary,
+    normalize_edge_sni,
+    normalize_sni_csv,
+)
 
 
-def _find_only_in_edge(edge_dict: dict, db_items: list[dict]) -> list[dict]:
-    db_ids = {d.get("edge_uuid", "") for d in db_items}
-    result = []
-    for eid, edata in edge_dict.items():
-        if eid and eid not in db_ids:
-            result.append({"name": edata.get("name", eid), "id": eid, "status": "only_in_edge", "fields": []})
-    return result
+def _rules() -> EquivalenceRules:
+    return EquivalenceRules()
 
 
-def _build_summary(groups: list) -> dict:
-    s = {"total": 0, "match": 0, "mismatch": 0, "only_in_db": 0, "only_in_edge": 0}
-    for g in groups:
-        for it in g["items"]:
-            st = it["status"]
-            s["total"] += 1
-            if st in s:
-                s[st] += 1
-    return s
+def _ns(**kw) -> SimpleNamespace:
+    return SimpleNamespace(**kw)
+
+
+def _upstream(**kw) -> SimpleNamespace:
+    """db upstream（compare_upstream 经 id 关联 targets，其余按属性读取）。"""
+    kw.setdefault("id", 1)
+    return _ns(**kw)
+
+
+def _field(result: dict, name: str) -> dict:
+    return next(f for f in result["fields"] if f["name"] == name)
 
 
 class TestCompareUpstream:
 
     def test_match_when_identical(self):
-        db = {"name": "api-v1", "edge_uuid": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        edge = {"id": "u1", "name": "api-v1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        r = _compare_upstream(db, edge)
+        # DB weighted_roundrobin ≡ Edge roundrobin（value_mappings 等效归一化）
+        db = _upstream(name="api-v1", edge_uuid="u1", load_balance="weighted_roundrobin", scheme="http")
+        edge = {"id": "u1", "name": "api-v1", "type": "roundrobin", "scheme": "http"}
+        r = compare_upstream(db, edge, _rules())
         assert r["status"] == "match"
 
     def test_match_when_edge_missing_default(self):
-        db = {"name": "api-v1", "edge_uuid": "u1", "load_balance": "weighted_roundrobin", "scheme": "http", "pass_host": "pass"}
-        edge = {"id": "u1", "name": "api-v1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="api-v1", edge_uuid="u1", load_balance="weighted_roundrobin", scheme="http", pass_host="pass")
+        edge = {"id": "u1", "name": "api-v1", "type": "roundrobin", "scheme": "http"}
+        r = compare_upstream(db, edge, _rules())
         assert r["status"] == "match"
 
     def test_mismatch_when_field_differs(self):
-        db = {"name": "api-v1", "edge_uuid": "u1", "load_balance": "weighted_roundrobin"}
-        edge = {"id": "u1", "name": "api-v1", "load_balance": "roundrobin"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="api-v1", edge_uuid="u1", load_balance="chash")
+        edge = {"id": "u1", "name": "api-v1", "type": "roundrobin"}
+        r = compare_upstream(db, edge, _rules())
         assert r["status"] == "mismatch"
-        assert r["fields"][0]["name"] == "load_balance"
+        assert _field(r, "load_balance")["status"] == "diff"
 
     def test_only_in_db_when_no_edge_data(self):
-        db = {"name": "db-only", "edge_uuid": "u2"}
-        r = _compare_upstream(db, None)
+        db = _upstream(name="db-only", edge_uuid="u2")
+        r = compare_upstream(db, None, _rules())
         assert r["status"] == "only_in_db"
 
     def test_non_default_when_edge_missing(self):
-        db = {"name": "custom", "edge_uuid": "u3", "load_balance": "chash"}
+        db = _upstream(name="custom", edge_uuid="u3", load_balance="chash")
         edge = {"id": "u3", "name": "custom"}
-        r = _compare_upstream(db, edge)
+        r = compare_upstream(db, edge, _rules())
         assert r["status"] == "mismatch"
-        assert r["fields"][0]["name"] == "load_balance"
+        assert _field(r, "load_balance")["status"] == "diff"
 
     def test_mismatch_with_json_field(self):
-        db = {"name": "with-checks", "edge_uuid": "u4", "checks": '{"active":{"type":"http","timeout":1}}'}
+        db = _upstream(name="with-checks", edge_uuid="u4", checks='{"active":{"type":"http","timeout":1}}')
         edge = {"id": "u4", "name": "with-checks", "checks": '{"active":{"type":"http","timeout":5}}'}
-        r = _compare_upstream(db, edge)
+        r = compare_upstream(db, edge, _rules())
         assert r["status"] == "mismatch"
         assert any(f["name"] == "checks" for f in r["fields"])
 
@@ -121,71 +88,68 @@ class TestAllFieldsEmitted:
     """验证所有字段始终输出 + status 标记"""
 
     def test_all_scalar_fields_present_when_match(self):
-        db = {"name": "u", "edge_uuid": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        edge = {"id": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="u", edge_uuid="u1", load_balance="weighted_roundrobin", scheme="http")
+        edge = {"id": "u1", "type": "roundrobin", "scheme": "http"}
+        r = compare_upstream(db, edge, _rules())
         names = {f["name"] for f in r["fields"]}
         for key in ("load_balance", "scheme", "pass_host", "retries", "hash_on", "key"):
             assert key in names, f"{key} should be present even when equal"
 
     def test_all_scalar_fields_have_status(self):
-        db = {"name": "u", "edge_uuid": "u1", "load_balance": "weighted_roundrobin"}
-        edge = {"id": "u1", "load_balance": "roundrobin"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="u", edge_uuid="u1", load_balance="weighted_roundrobin")
+        edge = {"id": "u1", "type": "roundrobin"}
+        r = compare_upstream(db, edge, _rules())
         for f in r["fields"]:
             assert "status" in f, f"field {f['name']} missing status"
             assert f["status"] in ("equal", "diff"), f"field {f['name']} invalid status"
 
     def test_equal_fields_have_equal_status(self):
-        db = {"name": "u", "edge_uuid": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        edge = {"id": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="u", edge_uuid="u1", load_balance="weighted_roundrobin", scheme="http")
+        edge = {"id": "u1", "type": "roundrobin", "scheme": "http"}
+        r = compare_upstream(db, edge, _rules())
         for f in r["fields"]:
             if f["name"] in ("load_balance", "scheme"):
                 assert f["status"] == "equal", f"{f['name']} should be equal"
 
     def test_diff_fields_have_diff_status(self):
-        db = {"name": "u", "edge_uuid": "u1", "load_balance": "weighted_roundrobin"}
-        edge = {"id": "u1", "load_balance": "roundrobin"}
-        r = _compare_upstream(db, edge)
-        load = next(f for f in r["fields"] if f["name"] == "load_balance")
-        assert load["status"] == "diff"
+        db = _upstream(name="u", edge_uuid="u1", load_balance="chash")
+        edge = {"id": "u1", "type": "roundrobin"}
+        r = compare_upstream(db, edge, _rules())
+        assert _field(r, "load_balance")["status"] == "diff"
 
     def test_json_fields_always_emitted(self):
-        db = {"name": "u", "edge_uuid": "u1"}
+        db = _upstream(name="u", edge_uuid="u1")
         edge = {"id": "u1", "name": "u", "timeout": {"connect": 6, "send": 6, "read": 6}}
-        r = _compare_upstream(db, edge)
+        r = compare_upstream(db, edge, _rules())
         names = {f["name"] for f in r["fields"]}
         assert "timeout" in names, "timeout should be present"
         # checks/keepalive_pool 只在至少一方有值时发射，此处双方都无则跳过
 
     def test_json_fields_have_status(self):
-        db = {"name": "u", "edge_uuid": "u1"}
+        db = _upstream(name="u", edge_uuid="u1")
         edge = {"id": "u1", "name": "u", "timeout": {"connect": 6, "send": 6, "read": 6}}
-        r = _compare_upstream(db, edge)
+        r = compare_upstream(db, edge, _rules())
         for f in r["fields"]:
             if f["name"] in ("checks", "timeout", "keepalive_pool"):
                 assert "status" in f, f"{f['name']} missing status"
 
     def test_equal_json_has_equal_status(self):
-        db = {"name": "u", "edge_uuid": "u1", "timeout": '{"connect":6,"send":6,"read":6}'}
+        db = _upstream(name="u", edge_uuid="u1", timeout='{"connect":6,"send":6,"read":6}')
         edge = {"id": "u1", "timeout": {"connect": 6, "send": 6, "read": 6}}
-        r = _compare_upstream(db, edge)
-        t = next(f for f in r["fields"] if f["name"] == "timeout")
-        assert t["status"] == "equal"
+        r = compare_upstream(db, edge, _rules())
+        assert _field(r, "timeout")["status"] == "equal"
 
     def test_diff_json_has_diff_status(self):
-        db = {"name": "u", "edge_uuid": "u1", "timeout": '{"connect":5,"send":6,"read":6}'}
+        db = _upstream(name="u", edge_uuid="u1", timeout='{"connect":5,"send":6,"read":6}')
         edge = {"id": "u1", "timeout": {"connect": 6, "send": 6, "read": 6}}
-        r = _compare_upstream(db, edge)
-        t = next(f for f in r["fields"] if f["name"] == "timeout")
-        assert t["status"] == "diff"
+        r = compare_upstream(db, edge, _rules())
+        assert _field(r, "timeout")["status"] == "diff"
 
     def test_filtered_fields_show_diffs_only(self):
         """模拟前端 filteredFields(mode='diffs') 的逻辑"""
-        db = {"name": "u", "edge_uuid": "u1", "load_balance": "weighted_roundrobin", "scheme": "http"}
-        edge = {"id": "u1", "load_balance": "roundrobin", "scheme": "http"}
-        r = _compare_upstream(db, edge)
+        db = _upstream(name="u", edge_uuid="u1", load_balance="chash", scheme="http")
+        edge = {"id": "u1", "type": "roundrobin", "scheme": "http"}
+        r = compare_upstream(db, edge, _rules())
         diffs = [f for f in r["fields"] if f["status"] == "diff"]
         all_f = r["fields"]
         assert len(diffs) < len(all_f), "diffs should be subset of all fields"
@@ -197,32 +161,31 @@ class TestFindOnlyInEdge:
 
     def test_detects_edge_only(self):
         edge = {"uuid-1": {"name": "common"}, "edge-uuid": {"name": "edge-only"}}
-        db = [{"edge_uuid": "uuid-1"}]
-        result = _find_only_in_edge(edge, db)
+        db = [SimpleNamespace(edge_uuid="uuid-1")]
+        result = find_only_in_edge(edge, db)
         assert len(result) == 1
         assert result[0]["status"] == "only_in_edge"
         assert result[0]["name"] == "edge-only"
 
     def test_no_edge_only_when_all_match(self):
         edge = {"uuid-1": {"name": "a"}, "uuid-2": {"name": "b"}}
-        db = [{"edge_uuid": "uuid-1"}, {"edge_uuid": "uuid-2"}]
-        result = _find_only_in_edge(edge, db)
+        db = [SimpleNamespace(edge_uuid="uuid-1"), SimpleNamespace(edge_uuid="uuid-2")]
+        result = find_only_in_edge(edge, db)
         assert len(result) == 0
 
 
 class TestSummary:
 
     def test_counts_all_categories(self):
-        groups = [
-            {"type": "upstreams", "items": [
-                {"name": "a", "status": "match"},
-                {"name": "b", "status": "mismatch"},
-                {"name": "c", "status": "only_in_db"},
-                {"name": "d", "status": "only_in_edge"},
-            ]},
-            {"type": "routes", "items": [{"name": "e", "status": "match"}]},
-        ]
-        s = _build_summary(groups)
+        groups = []
+        s = new_summary()
+        add_group(groups, s, "上游服务", "upstreams", [
+            {"name": "a", "status": "match"},
+            {"name": "b", "status": "mismatch"},
+            {"name": "c", "status": "only_in_db"},
+            {"name": "d", "status": "only_in_edge"},
+        ])
+        add_group(groups, s, "路由规则", "routes", [{"name": "e", "status": "match"}])
         assert s["total"] == 5
         assert s["match"] == 2
         assert s["mismatch"] == 1
@@ -230,7 +193,7 @@ class TestSummary:
         assert s["only_in_edge"] == 1
 
     def test_empty_groups(self):
-        assert _build_summary([])["total"] == 0
+        assert new_summary()["total"] == 0
 
 
 # ── 四层代理对比测试 ──
@@ -262,82 +225,10 @@ _STREAM_PROXY_DB = {
 }
 
 
-def _compare_stream_targets(db_targets_json, edge_nodes):
-    """模拟 diff 端点的 stream proxy targets 对比逻辑"""
-    from app.services.config_diff import EquivalenceRules
-    EquivalenceRules._instance = None
-    db_dict = {}
-    if db_targets_json:
-        try:
-            targets = json.loads(db_targets_json) if isinstance(db_targets_json, str) else db_targets_json
-            for t in (targets or []):
-                db_dict[t.get("target", "")] = t.get("weight", 1)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    edge_dict = edge_nodes if isinstance(edge_nodes, dict) else {}
-    equal = json.dumps(db_dict, sort_keys=True, default=str) == json.dumps(edge_dict, sort_keys=True, default=str)
-    return {
-        "name": "targets",
-        "db": json.dumps(db_dict, indent=1, ensure_ascii=False) if db_dict else "{}",
-        "edge": json.dumps(edge_dict, indent=1, ensure_ascii=False) if edge_dict else "{}",
-        "status": "equal" if equal else "diff",
-    }
-
-
-def _compare_stream_proxy(db_sp: dict, edge_data: dict | None) -> dict:
-    """模拟 diff 端点的 stream proxy 对比逻辑"""
-    from app.services.config_diff import EquivalenceRules
-    EquivalenceRules._instance = None
-    rules = EquivalenceRules()
-
-    if not edge_data:
-        return {"name": db_sp["name"], "id": db_sp.get("edge_uuid", ""), "status": "only_in_db", "fields": []}
-    fields = []
-    edge_upstream = edge_data.get("upstream", {})
-
-    # listen_port
-    db_v = db_sp.get("listen_port")
-    edge_v = edge_data.get("server_port")
-    equal = str(db_v) == str(edge_v)
-    fields.append({"name": "listen_port", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
-
-    # load_balance → upstream.type
-    db_v = db_sp.get("load_balance", "")
-    edge_v = edge_upstream.get("type", "")
-    db_norm = rules.normalize_value("upstream", db_v, "load_balance") or db_v
-    equal = str(db_norm) == str(edge_v)
-    fields.append({"name": "load_balance", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
-
-    # scheme → upstream.scheme
-    db_v = db_sp.get("scheme", "tcp")
-    edge_v = edge_upstream.get("scheme", "tcp")
-    equal = str(db_v) == str(edge_v)
-    fields.append({"name": "scheme", "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
-
-    # targets
-    fields.append(_compare_stream_targets(db_sp.get("targets"), edge_upstream.get("nodes")))
-
-    # timeout / keepalive_pool
-    for jkey in ("timeout", "keepalive_pool"):
-        db_val = db_sp.get(jkey)
-        edge_val = edge_upstream.get(jkey)
-        if db_val or edge_val:
-            result = rules.compare_json_field(db_val, edge_val, rules.get_json_rules("upstream", jkey))
-            fields.append({
-                "name": jkey,
-                "db": result["db"] if result else (json.dumps(db_val, indent=1, ensure_ascii=False) if isinstance(db_val, dict) else str(db_val or "{}")),
-                "edge": result["edge"] if result else (json.dumps(edge_val, indent=1, ensure_ascii=False) if isinstance(edge_val, dict) else str(edge_val or "{}")),
-                "status": "equal" if not result else "diff",
-            })
-
-    # remote_addr / sni
-    for key in ("remote_addr", "sni"):
-        db_v = db_sp.get(key) or ""
-        edge_v = edge_data.get(key, "") or ""
-        equal = str(db_v) == str(edge_v)
-        fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
-
-    return {"name": db_sp["name"], "id": db_sp.get("edge_uuid", ""), "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
+def _stream_db(**over) -> SimpleNamespace:
+    base = dict(_STREAM_PROXY_DB)
+    base.update(over)
+    return _ns(**base)
 
 
 class TestCompareStreamProxyTargets:
@@ -345,33 +236,33 @@ class TestCompareStreamProxyTargets:
     def test_targets_match(self):
         db = '[{"target":"10.0.0.1:3306","weight":100}]'
         edge = {"10.0.0.1:3306": 100}
-        r = _compare_stream_targets(db, edge)
+        r = compare_stream_targets(db, edge)
         assert r["status"] == "equal"
 
     def test_targets_mismatch_weight(self):
         db = '[{"target":"10.0.0.1:3306","weight":100}]'
         edge = {"10.0.0.1:3306": 80}
-        r = _compare_stream_targets(db, edge)
+        r = compare_stream_targets(db, edge)
         assert r["status"] == "diff"
 
     def test_targets_db_empty_edge_empty(self):
-        assert _compare_stream_targets(None, {})["status"] == "equal"
-        assert _compare_stream_targets("[]", {})["status"] == "equal"
-        assert _compare_stream_targets(None, None)["status"] == "equal"
+        assert compare_stream_targets(None, {})["status"] == "equal"
+        assert compare_stream_targets("[]", {})["status"] == "equal"
+        assert compare_stream_targets(None, None)["status"] == "equal"
 
     def test_targets_db_empty_edge_has(self):
         edge = {"10.0.0.1:3306": 100}
-        r = _compare_stream_targets(None, edge)
+        r = compare_stream_targets(None, edge)
         assert r["status"] == "diff"
 
     def test_targets_missing_host_only(self):
         db = '[{"target":"10.0.0.1","weight":100}]'
         edge = {"10.0.0.1": 100}
-        r = _compare_stream_targets(db, edge)
+        r = compare_stream_targets(db, edge)
         assert r["status"] == "equal"
 
     def test_targets_field_has_db_edge_status(self):
-        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', {"x:1": 100})
+        r = compare_stream_targets('[{"target":"x:1","weight":100}]', {"x:1": 100})
         for key in ("name", "db", "edge", "status"):
             assert key in r, f"targets result missing {key}"
 
@@ -379,80 +270,46 @@ class TestCompareStreamProxyTargets:
 class TestCompareStreamProxy:
 
     def test_match_when_identical(self):
-        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        r = compare_stream_proxy(_stream_db(), _STREAM_PROXY_EDGE, _rules())
         assert r["status"] == "match"
 
     def test_load_balance_normalized(self):
         """weighted_roundrobin → roundrobin 归一化后应一致"""
-        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
-        lb = next(f for f in r["fields"] if f["name"] == "load_balance")
-        assert lb["status"] == "equal"
+        r = compare_stream_proxy(_stream_db(), _STREAM_PROXY_EDGE, _rules())
+        assert _field(r, "load_balance")["status"] == "equal"
 
     def test_listen_port_mismatch(self):
-        db = dict(_STREAM_PROXY_DB, listen_port=9999)
-        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        r = compare_stream_proxy(_stream_db(listen_port=9999), _STREAM_PROXY_EDGE, _rules())
         assert r["status"] == "mismatch"
-        lp = next(f for f in r["fields"] if f["name"] == "listen_port")
-        assert lp["status"] == "diff"
+        assert _field(r, "listen_port")["status"] == "diff"
 
     def test_scheme_mismatch(self):
-        db = dict(_STREAM_PROXY_DB, scheme="udp")
-        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        r = compare_stream_proxy(_stream_db(scheme="udp"), _STREAM_PROXY_EDGE, _rules())
         assert r["status"] == "mismatch"
-        sc = next(f for f in r["fields"] if f["name"] == "scheme")
-        assert sc["status"] == "diff"
+        assert _field(r, "scheme")["status"] == "diff"
 
     def test_targets_mismatch(self):
-        db = dict(_STREAM_PROXY_DB, targets=json.dumps([{"target": "10.0.0.1:3306", "weight": 999}]))
-        r = _compare_stream_proxy(db, _STREAM_PROXY_EDGE)
+        db = _stream_db(targets=json.dumps([{"target": "10.0.0.1:3306", "weight": 999}]))
+        r = compare_stream_proxy(db, _STREAM_PROXY_EDGE, _rules())
         assert r["status"] == "mismatch", "targets weight diff should cause mismatch"
-        tg = next(f for f in r["fields"] if f["name"] == "targets")
-        assert tg["status"] == "diff"
-
-    def test_remote_addr_diff(self):
-        edge = dict(_STREAM_PROXY_EDGE, remote_addr="10.0.0.0/8")
-        db = dict(_STREAM_PROXY_DB, remote_addr="192.168.0.0/16")
-        r = _compare_stream_proxy(db, edge)
-        assert r["status"] == "mismatch"
-        ra = next(f for f in r["fields"] if f["name"] == "remote_addr")
-        assert ra["status"] == "diff"
+        assert _field(r, "targets")["status"] == "diff"
 
     def test_only_in_db(self):
-        db = {"name": "db-only", "edge_uuid": "no-edge"}
-        r = _compare_stream_proxy(db, None)
+        r = compare_stream_proxy(_ns(name="db-only", edge_uuid="no-edge"), None, _rules())
         assert r["status"] == "only_in_db"
-
-    def test_timeout_json_diff(self):
-        db = dict(_STREAM_PROXY_DB, timeout='{"connect":5}')
-        edge = dict(_STREAM_PROXY_EDGE)
-        edge["upstream"] = dict(edge["upstream"], timeout={"connect": 60})
-        r = _compare_stream_proxy(db, edge)
-        assert r["status"] == "mismatch"
-        to = next((f for f in r["fields"] if f["name"] == "timeout"), None)
-        assert to is not None, "timeout field should be emitted"
-        assert to["status"] == "diff"
 
     def test_all_fields_emitted(self):
         """所有字段都应出现在 fields 列表中"""
-        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        r = compare_stream_proxy(_stream_db(), _STREAM_PROXY_EDGE, _rules())
         names = {f["name"] for f in r["fields"]}
-        expected = {"listen_port", "load_balance", "scheme", "targets", "remote_addr", "sni"}
-        for name in expected:
+        for name in ("listen_port", "name", "load_balance", "scheme", "targets"):
             assert name in names, f"{name} should be present"
 
     def test_all_fields_have_status(self):
-        r = _compare_stream_proxy(_STREAM_PROXY_DB, _STREAM_PROXY_EDGE)
+        r = compare_stream_proxy(_stream_db(), _STREAM_PROXY_EDGE, _rules())
         for f in r["fields"]:
             assert "status" in f, f"field {f['name']} missing status"
             assert f["status"] in ("equal", "diff"), f"field {f['name']} invalid status"
-
-    def test_sni_diff(self):
-        db = dict(_STREAM_PROXY_DB, sni="db.example.com")
-        edge = dict(_STREAM_PROXY_EDGE, sni="edge.example.com")
-        r = _compare_stream_proxy(db, edge)
-        assert r["status"] == "mismatch"
-        sni = next(f for f in r["fields"] if f["name"] == "sni")
-        assert sni["status"] == "diff"
 
 
 class TestCompareStreamProxyGracefulDegradation:
@@ -460,199 +317,155 @@ class TestCompareStreamProxyGracefulDegradation:
 
     def test_proxy_only_in_db_when_edge_data_none(self):
         """Edge 无数据时显示 only_in_db（模拟 list_stream_routes 失败）"""
-        db = {"name": "sp1", "edge_uuid": "u1", "listen_port": 19994, "load_balance": "weighted_roundrobin", "scheme": "tcp"}
-        r = _compare_stream_proxy(db, None)
+        db = _stream_db(name="sp1", edge_uuid="u1", listen_port=19994)
+        r = compare_stream_proxy(db, None, _rules())
         assert r["status"] == "only_in_db"
 
     def test_proxy_matches_when_edge_data_provided(self):
         """Edge 有数据时正常对比（验证 _edge_val 提取后的数据）"""
-        db = dict(_STREAM_PROXY_DB)
-        edge = dict(_STREAM_PROXY_EDGE)
-        r = _compare_stream_proxy(db, edge)
+        r = compare_stream_proxy(_stream_db(), dict(_STREAM_PROXY_EDGE), _rules())
         assert r["status"] == "match", f"expected match got {r['status']}: {[f for f in r['fields'] if f['status']=='diff']}"
 
     def test_targets_handles_null_edge_nodes(self):
         """targets 对比在 edge_nodes 为 None 时不抛异常"""
-        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', None)
+        r = compare_stream_targets('[{"target":"x:1","weight":100}]', None)
         assert r["status"] == "diff"
         assert "name" in r
 
     def test_targets_handles_non_dict_edge_nodes(self):
         """targets 对比在 edge_nodes 为非 dict 时不抛异常"""
-        r = _compare_stream_targets('[{"target":"x:1","weight":100}]', "invalid")
+        r = compare_stream_targets('[{"target":"x:1","weight":100}]', "invalid")
         assert r["status"] == "diff"
 
     def test_malformed_db_targets_does_not_crash(self):
         """DB targets 为非法 JSON 时不抛异常"""
-        r = _compare_stream_targets("not-json", {"x:1": 100})
+        r = compare_stream_targets("not-json", {"x:1": 100})
         assert "status" in r  # 不抛异常即可，结果为 diff 是合理的
-
-
-def _compare_plugin_metadata_standalone(db_config: dict, edge_config: dict | None, rules) -> dict:
-    """模拟 diff 端点的 plugin_metadata 对比逻辑（含 ignore_edge_fields 规则）"""
-    if edge_config is None:
-        return {"name": db_config.get("plugin_name", ""), "id": db_config.get("plugin_name", ""), "status": "only_in_db", "fields": []}
-    edge = dict(edge_config)
-    for fld in rules._res_type("plugin_metadata").get("ignore_edge_fields", []):
-        edge.pop(fld, None)
-    equal = json.dumps(db_config, sort_keys=True) == json.dumps(edge, sort_keys=True)
-    fields = [{"name": "config", "db": json.dumps(db_config, indent=1), "edge": json.dumps(edge, indent=1), "status": "equal" if equal else "diff"}]
-    return {"name": db_config.get("plugin_name", ""), "id": db_config.get("plugin_name", ""), "status": "match" if equal else "mismatch", "fields": fields}
-
-
-def _normalize_sni_csv(raw: str) -> str:
-    """归一化 SNI 逗号分隔字符串，统一去除逗号周围空格。"""
-    return ",".join(part.strip() for part in raw.split(",") if part.strip())
-
-
-def _normalize_edge_sni(edge_data: dict) -> str:
-    """模拟 diff 端点的 _normalize_edge_sni（含归一化）"""
-    if "snis" in edge_data:
-        snis = edge_data["snis"]
-        raw = ", ".join(snis) if isinstance(snis, list) else str(snis)
-    else:
-        raw = edge_data.get("sni", "")
-    return _normalize_sni_csv(raw)
-
-
-def _compare_ssl_certificate(db: dict, edge_data: dict | None) -> dict:
-    """模拟 diff 端点的 SSL 证书对比逻辑"""
-    if not edge_data:
-        return {"name": db.get("name", ""), "id": db.get("edge_uuid", ""), "status": "only_in_db", "fields": []}
-    fields = []
-
-    for key, ekey in [("name", "name"), ("sni", None), ("cert_type", "type"), ("cert", "cert"), ("private_key", "key"), ("status", "status")]:
-        db_v = _normalize_sni_csv(db.get(key, "")) if ekey is None else db.get(key, "")
-        edge_v = _normalize_edge_sni(edge_data) if ekey is None else edge_data.get(ekey, "")
-        equal = str(db_v) == str(edge_v)
-        fields.append({"name": key, "db": str(db_v), "edge": str(edge_v), "status": "equal" if equal else "diff"})
-
-    # gm
-    db_gm = db.get("gm", False)
-    edge_gm = edge_data.get("gm", False)
-    equal = str(db_gm) == str(edge_gm)
-    fields.append({"name": "gm", "db": str(db_gm), "edge": str(edge_gm), "status": "equal" if equal else "diff"})
-
-    # sign_cert ↔ Edge certs
-    db_sign = db.get("sign_cert", "")
-    edge_sign = (edge_data.get("certs") or [""])[0]
-    equal = str(db_sign) == str(edge_sign)
-    fields.append({"name": "sign_cert", "db": str(db_sign), "edge": str(edge_sign), "status": "equal" if equal else "diff"})
-
-    # sign_key ↔ Edge keys
-    db_sk = db.get("sign_key", "")
-    edge_sk = (edge_data.get("keys") or [""])[0]
-    equal = str(db_sk) == str(edge_sk)
-    fields.append({"name": "sign_key", "db": str(db_sk), "edge": str(edge_sk), "status": "equal" if equal else "diff"})
-
-    return {"name": db.get("name", ""), "id": db.get("edge_uuid", ""), "status": "mismatch" if any(f["status"] == "diff" for f in fields) else "match", "fields": fields}
 
 
 class TestNormalizeEdgeSni:
 
     def test_snis_array(self):
-        assert _normalize_edge_sni({"snis": ["a.com", "b.com"]}) == "a.com,b.com"
+        assert normalize_edge_sni({"snis": ["a.com", "b.com"]}) == "a.com,b.com"
 
     def test_sni_string(self):
-        assert _normalize_edge_sni({"sni": "example.com"}) == "example.com"
+        assert normalize_edge_sni({"sni": "example.com"}) == "example.com"
 
     def test_sni_prefers_snis(self):
-        assert _normalize_edge_sni({"sni": "old.com", "snis": ["a.com", "b.com"]}) == "a.com,b.com"
+        assert normalize_edge_sni({"sni": "old.com", "snis": ["a.com", "b.com"]}) == "a.com,b.com"
 
     def test_no_sni(self):
-        assert _normalize_edge_sni({}) == ""
+        assert normalize_edge_sni({}) == ""
 
     def test_normalize_sni_csv_removes_spaces(self):
-        assert _normalize_sni_csv("qcg.com, abc.com") == "qcg.com,abc.com"
-        assert _normalize_sni_csv("qcg.com,abc.com") == "qcg.com,abc.com"
-        assert _normalize_sni_csv("  a.com ,  b.com  ") == "a.com,b.com"
+        assert normalize_sni_csv("qcg.com, abc.com") == "qcg.com,abc.com"
+        assert normalize_sni_csv("qcg.com,abc.com") == "qcg.com,abc.com"
+        assert normalize_sni_csv("  a.com ,  b.com  ") == "a.com,b.com"
+
+
+def _ssl_cert(**kw) -> SimpleNamespace:
+    """db SSL 证书（compare_ssl_certificate 按属性读取全部对比字段）。"""
+    base = dict(
+        name="my-cert", edge_uuid="u1", is_ca=False, cert_type="server",
+        sni="", cert="", private_key="", status=1, gm=False,
+        sign_cert="", sign_key="", client_ca="", client_depth=None,
+        skip_mtls_uri_regex="",
+    )
+    base.update(kw)
+    return _ns(**base)
 
 
 class TestCompareSslCertificate:
 
     def test_match_when_identical(self):
-        db = {"name": "my-cert", "edge_uuid": "u1", "sni": "example.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        db = _ssl_cert(sni="example.com", cert="crt", private_key="k")
         edge = {"name": "my-cert", "sni": "example.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "match"
 
     def test_match_sni_ui_format_no_spaces(self):
         """DB storage from UI uses join(',') without spaces."""
-        db = {"name": "my-cert", "edge_uuid": "u1", "sni": "qcg.com,abc.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        db = _ssl_cert(sni="qcg.com,abc.com", cert="crt", private_key="k")
         edge = {"name": "my-cert", "snis": ["qcg.com", "abc.com"], "type": "server", "cert": "crt", "key": "k", "status": 1}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "match", f"expected match got {r['status']}: sni normalize should handle space diff"
 
     def test_match_sni_array(self):
-        db = {"name": "multi", "edge_uuid": "u2", "sni": "a.com,b.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        db = _ssl_cert(name="multi", edge_uuid="u2", sni="a.com,b.com", cert="crt", private_key="k")
         edge = {"name": "multi", "snis": ["a.com", "b.com"], "type": "server", "cert": "crt", "key": "k", "status": 1}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "match"
 
     def test_mismatch_when_field_differs(self):
-        db = {"name": "my-cert", "edge_uuid": "u3", "sni": "example.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        db = _ssl_cert(edge_uuid="u3", sni="example.com", cert="crt", private_key="k")
         edge = {"name": "my-cert", "sni": "other.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "mismatch"
 
     def test_only_in_db_when_no_edge_data(self):
-        db = {"name": "orphan", "edge_uuid": "u4", "sni": "", "cert_type": "server", "cert": "", "private_key": "", "status": 1}
-        r = _compare_ssl_certificate(db, None)
+        db = _ssl_cert(name="orphan", edge_uuid="u4")
+        r = compare_ssl_certificate(db, None, _rules())
         assert r["status"] == "only_in_db"
 
     def test_all_fields_emitted(self):
-        db = {"name": "full", "edge_uuid": "u5", "sni": "x.com", "cert_type": "server", "cert": "crt", "private_key": "k", "status": 1}
+        db = _ssl_cert(name="full", edge_uuid="u5", sni="x.com", cert="crt", private_key="k")
         edge = {"name": "full", "sni": "x.com", "type": "server", "cert": "crt", "key": "k", "status": 1}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         names = {f["name"] for f in r["fields"]}
         for key in ("name", "sni", "cert_type", "cert", "private_key", "status"):
             assert key in names, f"{key} should be present"
 
     def test_gm_fields_match(self):
-        db = {"name": "gm", "edge_uuid": "u6", "sni": "gm.local", "cert_type": "server", "cert": "enc", "private_key": "ek", "status": 1, "gm": True, "sign_cert": "sc", "sign_key": "sk"}
+        db = _ssl_cert(name="gm", edge_uuid="u6", sni="gm.local", cert="enc", private_key="ek", gm=True, sign_cert="sc", sign_key="sk")
         edge = {"name": "gm", "sni": "gm.local", "type": "server", "cert": "enc", "key": "ek", "status": 1, "gm": True, "certs": ["sc"], "keys": ["sk"]}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "match"
         names = {f["name"] for f in r["fields"]}
         for key in ("gm", "sign_cert", "sign_key"):
             assert key in names, f"{key} should be present"
 
     def test_gm_fields_mismatch(self):
-        db = {"name": "gm", "edge_uuid": "u7", "sni": "gm.local", "cert_type": "server", "cert": "enc", "private_key": "ek", "status": 1, "gm": True, "sign_cert": "old-sc", "sign_key": "sk"}
+        db = _ssl_cert(name="gm", edge_uuid="u7", sni="gm.local", cert="enc", private_key="ek", gm=True, sign_cert="old-sc", sign_key="sk")
         edge = {"name": "gm", "sni": "gm.local", "type": "server", "cert": "enc", "key": "ek", "status": 1, "gm": True, "certs": ["new-sc"], "keys": ["sk"]}
-        r = _compare_ssl_certificate(db, edge)
+        r = compare_ssl_certificate(db, edge, _rules())
         assert r["status"] == "mismatch"
+
+    def test_ca_cert_expected_only_in_db(self):
+        """CA 根证书不发布到 Edge，属预期 only_in_db（真实现分支，原副本未覆盖）"""
+        r = compare_ssl_certificate(_ssl_cert(name="root-ca", edge_uuid="u8", is_ca=True), None, _rules())
+        assert r["status"] == "expected_only_in_db"
+        assert "CA" in r["reason"]
+
+    def test_client_cert_expected_only_in_db(self):
+        """客户端证书不发布到 Edge，属预期 only_in_db（真实现分支，原副本未覆盖）"""
+        r = compare_ssl_certificate(_ssl_cert(name="client-cert", edge_uuid="u9", cert_type="client"), None, _rules())
+        assert r["status"] == "expected_only_in_db"
+        assert "客户端证书" in r["reason"]
 
 
 class TestComparePluginMetadata:
 
-    def setup_method(self):
-        from app.services.config_diff import EquivalenceRules
-        EquivalenceRules._instance = None
-        EquivalenceRules._rules = {}
-        self.rules = EquivalenceRules()
-
     def test_match_when_identical(self):
-        db = {"logs": "logs/process.log"}
+        db = _ns(plugin_name="log_process", config_data='{"logs": "logs/process.log"}')
         edge = {"id": "log_process", "logs": "logs/process.log"}
-        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        r = compare_plugin_metadata(db, edge, _rules())
         assert r["status"] == "match", f"expected match got {r['status']}: id should be ignored"
 
     def test_match_when_no_id_in_edge(self):
-        db = {"prefer_name": False}
+        db = _ns(plugin_name="monitor", config_data='{"prefer_name": false}')
         edge = {"prefer_name": False}
-        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        r = compare_plugin_metadata(db, edge, _rules())
         assert r["status"] == "match"
 
     def test_mismatch_when_config_differs(self):
-        db = {"rate": 10}
+        db = _ns(plugin_name="limit-req", config_data='{"rate": 10}')
         edge = {"id": "limit-req", "rate": 20}
-        r = _compare_plugin_metadata_standalone(db, edge, self.rules)
+        r = compare_plugin_metadata(db, edge, _rules())
         assert r["status"] == "mismatch"
 
     def test_only_in_db_when_no_edge_data(self):
-        db = {"logs": "logs/process.log"}
-        r = _compare_plugin_metadata_standalone(db, None, self.rules)
+        db = _ns(plugin_name="log_process", config_data='{"logs": "logs/process.log"}')
+        r = compare_plugin_metadata(db, None, _rules())
         assert r["status"] == "only_in_db"
 
 

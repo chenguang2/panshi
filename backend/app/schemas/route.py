@@ -50,6 +50,7 @@ class RouteResponse(RouteBase):
     created_at: Optional[str] = None
     plugins: Optional[List[Dict[str, Any]]] = None
     cluster_name: Optional[str] = None
+    cluster_group_name: Optional[str] = None  # response_model 默认剥离未声明字段；不加此行 routes.py 计算的分组名到不了响应
 
     @field_validator('created_at', mode='before')
     @classmethod

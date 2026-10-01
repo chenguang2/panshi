@@ -333,3 +333,43 @@ B2-NEW-04 守卫对真实 app 检出 16 个 offender，分两类均已修复：
 | PG 冒烟 + B2 三文件合集 | 45 passed |
 | **全量 `uv run pytest -q`** | **2109 passed / 11 skipped（PG opt-in）/ 0 failed**，4:45 |
 | e2e `session-expiry.spec.ts` | 3 passed（前端无产品改动，无需全量重跑） |
+
+---
+
+## 11. B3 批次执行结果（2026-10-01，B2 提交 c92e0d12 之后）
+
+### 11.1 产出
+- **端点自测副本剥离（config_diff 提取）**：`cluster_nodes.py` 内联的配置对比逻辑（约 460 行）提取为纯函数并入 `services/config_diff.py`（单一原子模块；曾临时创建 `config_diff_service.py`，同日并入并删除，全仓无残留引用）。`test_config_diff.py` 从手写"模拟端点逻辑"副本改为直接 import 真实现（SimpleNamespace 模拟 ORM 入参，service 只做属性访问无 IO）——端点实现变更现在会真实反映到用例（94→93 例，-1 为副本去重）。
+- **test_route.py / test_ssl.py 副本重写**：`TestRouteWebsocketConfigDiff` 走真实现；ssl 的 TestSslMtlsUpdateClear/TestSslDiffMtls/TestSslPublishConfig 副本剥离去重（67→66 例）。
+- **连带产品修复**：`schemas/route.py` RouteResponse 补 `cluster_group_name` 字段——response_model 默认剥离未声明字段，routes.py 计算的分组名此前根本到不了响应（副本对照时发现）。
+- **四胞胎合并（提前消化 B4 §3.3 一项）**：`test_{global_rule,plugin_config,plugin_metadata,static_resource}_list_api.py` 4 文件 12 例空转假绿（`for item in items: assert` 无种子零迭代）删除，合并为新 `test_resource_list_apis.py`——4 资源 × 5 行为参数化（20 个有效断言面）。
+- **list 空转种子**：test_route_list_api（9 例，+115 行）、test_upstream_list_api（5→6）、test_node_list_api（8→9）补种子数据，循环断言真实迭代。
+- **B1 漏项补齐（§3.1 P0 残留）**：`test_plugin_whitelist.py` 移除 `importlib.reload(app.main)` 双实例隐患——核实白名单经 `get_enabled_plugins()` **请求时惰性读取**（mtime 热重载），fixture 既有的 `_FEATURES_PATH` monkeypatch 已足够，无需重建 app（比审计建议的"改用 features monkeypatch 模式"更简：该模式本就在）；顺手清理未用 SQLAlchemy 导入。
+- **前端重写（B3 五件套余额 + F2-NEW-07）**：
+  - `SslFormDrawer.test.ts` / `SslGenerateDialog.test.ts` 组件化重写；
+  - `HealthCheckForm.test.ts`（15→14）：active/passive 逐字重复断言 `describe.each` 参数化、删 `mountPassive()` 死代码、新增真实 `update:checks` 载荷断言、修 `if (typeSelect)` 静默跳过型假信心；
+  - `InstallOpenrestyDialog.test.ts`（6→7）：`setTimeout(100ms)` 真实睡眠全换 `flushPromises`、文件选择走真实 radio 列表 UI 路径（组件选包控件非 `input[type=file]`，审计方案据实修正；不再直写 `vm.selectedFile`）、mock 改 URL 感知分发（MOCK_FILES 形状 curl 实测）；
+  - **F2-NEW-07 落地**：新增 `RouteFormModal.test.ts` 真组件提交载荷测试（补 B1 删除空洞）。
+
+### 11.2 中断点收尾（上会话 B3 半成品续作）
+- `cluster_nodes.py:23` 陈旧导入 `config_diff_service`（模块并入后未同步）→ `config_diff`，两处陈旧 docstring 同步；后端目标回归复绿。
+- fix-1 钉住的行为语义（非 bug）：HealthCheckForm 模式 radio 点击只 emit `update:modelMode`、section 不自行切换，需父组件回写 props——v-model 单向契约的正确实现。
+- 未发现真实组件缺陷；原被动块用例省略不健康间隔等字段与真实组件一致。
+
+### 11.3 终验（全绿）
+| 套件 | 结果 |
+|---|---|
+| 后端目标回归（B3 涉及 11 文件 + `test_publish_response` 守卫 + 节点批量写路径） | 253 passed |
+| **全量 `uv run pytest -q`** | **2117 passed / 11 skipped（PG opt-in）/ 0 failed**，5:47 |
+| PG 方言冒烟（PG_DSN=本机 PG16） | 7 passed，2.65s |
+| 前端目标三文件（SslFormDrawer/SslGenerateDialog/RouteFormModal） | 28 passed |
+| HealthCheckForm + InstallOpenrestyDialog（fix-1） | 21 passed + prettier 干净 |
+| **全量 `npx vitest run --maxWorkers=4`** | **106 文件 / 1002 用例全绿**，52s |
+| `npx vue-tsc -b` | exit 0 |
+
+### 11.4 工作区与备注
+- 非 B3 改动（提交时勿并入）：`backend/db_config.json`、`docs/other/prompt-*.txt`（会话前既有脏文件）。
+- B3 净例数：后端 2109→2117（+8），前端单测 997→1002（+5）。
+
+### 11.5 后续批次状态
+- B4（§3.3 剩余合并/参数化，17 文件清单中除四胞胎外）：未开工。InstallOpenrestyDialog 的 flushPromises 与四胞胎合并已在 B3 提前消化。

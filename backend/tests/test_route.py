@@ -1,5 +1,9 @@
 import pytest
+from types import SimpleNamespace
+
 from app.models.cluster import Route, RoutePlugin, ConfigVersion, Upstream
+from app.services.config_diff import EquivalenceRules
+from app.services.config_diff import compare_route
 from sqlalchemy import select
 
 
@@ -83,44 +87,50 @@ class TestRouteWebsocketEdgeImport:
 
 
 class TestRouteWebsocketConfigDiff:
-    """Tests for enable_websocket in config diff (Task 5.1)."""
+    """Tests for enable_websocket in config diff (Task 5.1).
+
+    打真实现 compare_route（原为文件内手写副本，端点实现变更不会变红）。
+    """
 
     @staticmethod
-    def _compare_field(db_r, edge_data, field_name):
-        db_v = getattr(db_r, field_name, None)
-        edge_v = edge_data.get(field_name)
-        equal = str(db_v or "") == str(edge_v or "")
-        return {"name": field_name, "db": str(db_v or ""), "edge": str(edge_v or ""), "status": "equal" if equal else "diff"}
+    def _make_route(**kwargs):
+        base = dict(id=1, name="ws-route", edge_uuid="r1",
+                    enable_websocket=False, vars=None, plugin_config_ids=None)
+        base.update(kwargs)
+        return SimpleNamespace(**base)
 
-    def _make_route(self, **kwargs):
-        from app.models.cluster import Route
-        return type("FakeRoute", (), {"enable_websocket": False, **kwargs})()
+    @staticmethod
+    def _websocket_field(result):
+        return next(f for f in result["fields"] if f["name"] == "enable_websocket")
 
     def test_websocket_equal_true(self):
         r = self._make_route(enable_websocket=True)
-        edge = {"enable_websocket": True}
-        result = self._compare_field(r, edge, "enable_websocket")
-        assert result["status"] == "equal"
+        edge = {"uri": "/ws/*", "enable_websocket": True}
+        result = compare_route(r, edge, EquivalenceRules())
+        assert self._websocket_field(result)["status"] == "equal"
 
-    def test_websocket_equal_false(self):
+    def test_websocket_both_off_field_not_emitted(self):
+        """双方均为 falsy（False/缺失）时真实现不发 enable_websocket 字段"""
         r = self._make_route(enable_websocket=False)
-        edge = {"enable_websocket": False}
-        result = self._compare_field(r, edge, "enable_websocket")
-        assert result["status"] == "equal"
+        edge = {"uri": "/ws/*", "enable_websocket": False}
+        result = compare_route(r, edge, EquivalenceRules())
+        assert not any(f["name"] == "enable_websocket" for f in result["fields"])
+        assert result["status"] == "match"
 
     def test_websocket_diff(self):
         r = self._make_route(enable_websocket=True)
-        edge = {"enable_websocket": False}
-        result = self._compare_field(r, edge, "enable_websocket")
-        assert result["status"] == "diff"
+        edge = {"uri": "/ws/*", "enable_websocket": False}
+        result = compare_route(r, edge, EquivalenceRules())
+        assert self._websocket_field(result)["status"] == "diff"
 
     def test_websocket_only_in_db(self):
         r = self._make_route(enable_websocket=True)
-        edge = {}
-        result = self._compare_field(r, edge, "enable_websocket")
-        assert result["status"] == "diff"
-        assert result["db"] == "True"
-        assert result["edge"] == ""
+        edge = {"uri": "/ws/*"}
+        result = compare_route(r, edge, EquivalenceRules())
+        field = self._websocket_field(result)
+        assert field["status"] == "diff"
+        assert field["db"] == "True"
+        assert field["edge"] == ""
 
 
 class TestRouteWebsocketMigration:
