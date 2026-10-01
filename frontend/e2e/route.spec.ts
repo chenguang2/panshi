@@ -7,12 +7,12 @@ test.describe('Route CRUD', () => {
   })
 
   test('should display clusters page', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 15000 })
   })
 
   test('should display cluster detail', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     const firstCard = page.locator('.cl-card').first()
     await expect(firstCard).toBeVisible({ timeout: 15000 })
     await firstCard.locator('button:has-text("详情")').click()
@@ -31,11 +31,10 @@ test.describe('Route CRUD', () => {
     await expect(modal).toBeVisible()
 
     await modal.locator('.btn-primary').filter({ hasText: '保存' }).click()
-    await page.waitForTimeout(500)
 
+    // 校验错误渲染由 toBeVisible 自动等待（原固定 sleep + count() 非自动等待）
     const validationMessages = modal.locator('.form-error')
-    const count = await validationMessages.count()
-    expect(count).toBeGreaterThan(0)
+    await expect(validationMessages.first()).toBeVisible()
 
     await modal.locator('.modal-close').first().click()
   })

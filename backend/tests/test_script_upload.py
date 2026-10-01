@@ -362,7 +362,12 @@ class TestTaskFiles:
 
 class TestCreateTaskWithScriptFile:
     def test_create_cmd_exec_with_script_file(self, client):
-        """POST /clusters/{id}/node-tasks with cmd_exec + script_file should succeed."""
+        """POST /clusters/{id}/node-tasks with cmd_exec + script_file should succeed.
+
+        夹具已播种 Node(id=1)；端点对缺失节点确定性 404（node_tasks.py
+        verify_node），故 201 是唯一合法结果——载荷断言必须无条件执行，
+        不得挂在状态码守卫下被静默跳过。
+        """
         # Upload a script
         resp = _upload_script(client, content=b"#!/bin/bash\necho script_exec_test")
         upload_id = resp.json()["upload_id"]
@@ -376,13 +381,11 @@ class TestCreateTaskWithScriptFile:
                 "params": {"script_file": upload_id, "security": "none", "timeout": 30},
             },
         )
-        # Should succeed (201) even if node doesn't exist in DB — the task is created
-        assert resp.status_code in (201, 404)
-        if resp.status_code == 201:
-            data = resp.json()
-            assert data["task_type"] == "cmd_exec"
-            # Verify script_file param is stored
-            assert "script_file" in data["params"]
+        assert resp.status_code == 201, resp.text
+        data = resp.json()
+        assert data["task_type"] == "cmd_exec"
+        # Verify script_file param is stored
+        assert "script_file" in data["params"]
 
     def test_create_cmd_exec_rejects_both_cmd_and_script(self, client):
         """cmd_exec with both cmd and script_file should return 400."""

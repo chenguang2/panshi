@@ -33,9 +33,7 @@ test.describe('Node Batch Import E2E', () => {
   })
 
   async function openNodesTab(page: import('@playwright/test').Page) {
-    await page.waitForTimeout(1000)
     await page.goto('/central-management')
-    await page.waitForTimeout(3000)
 
     const nodeStat = page
       .locator('.cl-stat-link')
@@ -43,7 +41,6 @@ test.describe('Node Batch Import E2E', () => {
       .first()
     await expect(nodeStat).toBeVisible({ timeout: 10000 })
     await nodeStat.click()
-    await page.waitForTimeout(2500)
 
     const toolbar = page.locator('.node-actions')
     await expect(toolbar).toBeVisible({ timeout: 10000 })
@@ -58,16 +55,14 @@ test.describe('Node Batch Import E2E', () => {
     const addBtn = toolbar.locator('button').filter({ hasText: '添加节点' }).first()
     await expect(addBtn).toBeVisible({ timeout: 5000 })
     await addBtn.click()
-    await page.waitForTimeout(1500)
-    // 遍历所有 overlay，返回可见的节点弹窗（页面残留多个隐藏 overlay；标题可能是 添加节点/批量导入节点）
-    const candidates = page.locator('.modal-overlay').filter({
-      has: page.locator('.modal-header h2', { hasText: '节点' }),
-    })
-    const count = await candidates.count()
-    for (let i = 0; i < count; i++) {
-      if (await candidates.nth(i).isVisible()) return candidates.nth(i)
-    }
-    throw new Error('节点弹窗未打开')
+    // 页面残留多个隐藏 overlay（display:none 常驻 DOM）：以 :visible 过滤出刚打开的节点弹窗
+    // （标题可能是 添加节点/批量导入节点），toBeVisible 自动等待替代固定 sleep + count/isVisible 轮询
+    const visibleModal = page
+      .locator('.modal-overlay:visible')
+      .filter({ has: page.locator('.modal-header h2', { hasText: '节点' }) })
+      .first()
+    await expect(visibleModal, '节点弹窗未打开').toBeVisible({ timeout: 5000 })
+    return visibleModal
   }
 
   test('batch import flow: paste IP range, parse, preview, create', async ({ page, request }) => {
@@ -78,17 +73,14 @@ test.describe('Node Batch Import E2E', () => {
       // Switch to batch import mode
       const batchBtn = modal.locator('button').filter({ hasText: '批量导入' }).first()
       await batchBtn.click()
-      await page.waitForTimeout(500)
 
       // Paste text into textarea
       const textarea = modal.locator('textarea').first()
       await textarea.fill('10.99.99.1\n10.99.99.2\n# comment line\n10.99.99.3-10.99.99.4')
-      await page.waitForTimeout(200)
 
       // Parse
       const parseBtn = modal.locator('button').filter({ hasText: '解析' }).first()
       await parseBtn.click()
-      await page.waitForTimeout(500)
 
       // Preview table should show 4 parsed nodes (comment line skipped)
       const previewRows = modal.locator('tbody tr')
@@ -128,11 +120,9 @@ test.describe('Node Batch Import E2E', () => {
 
     const batchBtn = modal.locator('button').filter({ hasText: '批量导入' }).first()
     await batchBtn.click()
-    await page.waitForTimeout(500)
 
     const csvTab = modal.locator('button').filter({ hasText: 'CSV 上传' }).first()
     await csvTab.click()
-    await page.waitForTimeout(300)
 
     const downloadBtn = modal.locator('button').filter({ hasText: '下载模板' }).first()
     await expect(downloadBtn).toBeVisible({ timeout: 5000 })

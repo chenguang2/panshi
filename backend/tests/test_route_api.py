@@ -565,63 +565,6 @@ class TestRouteAdvancedMatch:
         assert route_empty.vars == '[]'
 
 
-class TestRouteVarsEmptyArrayFix:
-
-    async def test_create_route_with_empty_vars_list(self, test_db):
-        import json
-        route = Route(
-            cluster_id=1,
-            name="route-empty-vars-api",
-            uri="/api/empty-api/*",
-            vars='[]',
-            status=1
-        )
-        test_db.add(route)
-        await test_db.commit()
-        await test_db.refresh(route)
-
-        assert route.id is not None
-        assert route.vars == '[]'
-        parsed_vars = json.loads(route.vars) if route.vars else None
-        assert parsed_vars == []
-
-    async def test_update_route_empty_vars_to_null(self, test_db):
-        route = Route(
-            cluster_id=1,
-            name="route-empty-to-null",
-            uri="/api/empty-null/*",
-            vars='[]',
-            status=1
-        )
-        test_db.add(route)
-        await test_db.commit()
-        await test_db.refresh(route)
-
-        route.vars = None
-        await test_db.commit()
-        await test_db.refresh(route)
-
-        assert route.vars is None
-
-    async def test_update_route_null_to_empty_vars(self, test_db):
-        route = Route(
-            cluster_id=1,
-            name="route-null-to-empty",
-            uri="/api/null-empty/*",
-            vars=None,
-            status=1
-        )
-        test_db.add(route)
-        await test_db.commit()
-        await test_db.refresh(route)
-
-        route.vars = '[]'
-        await test_db.commit()
-        await test_db.refresh(route)
-
-        assert route.vars == '[]'
-
-
 # ── 自 test_route_priority.py 并入（B4 合并）──
 # API 层：priority=0 的创建/更新边界与部分更新字段保留。
 
@@ -672,40 +615,6 @@ class TestRoutePriority:
                 }
             )
             assert response.status_code == 201
-            data = response.json()
-            assert data["priority"] == 0
-
-    async def test_update_priority_to_zero(self):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/auth/login",
-                json={"username": "admin", "password": "panshi123"}
-            )
-            token = response.json()["access_token"]
-            headers = {"Authorization": f"Bearer {token}"}
-
-            response = await client.post(
-                "/api/v1/clusters/1/routes",
-                headers=headers,
-                json={
-                    "name": "test-update-priority-zero",
-                    "uri": "/test-update-priority-zero/*",
-                    "priority": 100,
-                    "status": 1
-                }
-            )
-            assert response.status_code == 201
-            data = response.json()
-            assert data["priority"] == 100
-            route_id = data["id"]
-
-            response = await client.put(
-                f"/api/v1/clusters/1/routes/{route_id}",
-                headers=headers,
-                json={"priority": 0}
-            )
-            assert response.status_code == 200
             data = response.json()
             assert data["priority"] == 0
 

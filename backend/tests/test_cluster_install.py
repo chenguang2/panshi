@@ -148,12 +148,14 @@ class TestInstallOpenrestyRouter:
     def test_cancel_install_endpoint_exists(self, isolated_app):
         """POST /api/v1/clusters/{id}/nodes/{nid}/cancel-install should exist."""
         resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/cancel-install")
-        assert resp.status_code in (404, 422)
+        # cancel-install 无 body 参数，422 不可能；非存在节点确定性 404
+        assert resp.status_code == 404
 
     def test_install_openresty_without_body_returns_422(self, isolated_app):
         """Missing required body should return 422 validation error."""
         resp = isolated_app.post("/api/v1/clusters/1/nodes/1/install-openresty")
-        assert resp.status_code in (404, 422)
+        # body 必填，FastAPI 校验先于 handler
+        assert resp.status_code == 422
 
 
 class TestInstallEdgeRouter:
@@ -171,11 +173,13 @@ class TestEdgePackListEndpoint:
 
     def test_endpoint_exists(self, isolated_app):
         resp = isolated_app.get("/api/v1/clusters/99999/nodes/99999/edge-pack-list")
-        assert resp.status_code in (404, 422)
+        # GET 无 body 无必填 query，非存在节点确定性 404
+        assert resp.status_code == 404
 
     def test_edge_pack_files_endpoint_exists(self, isolated_app):
         resp = isolated_app.get("/api/v1/clusters/1/nodes/edge-pack-files")
-        assert resp.status_code in (200, 404)
+        # 路由真实存在；缺目录返回 [] 不抛错
+        assert resp.status_code == 200
 
 
 class TestParsePackVersions:
@@ -269,7 +273,8 @@ class TestEdgePackAddEndpoint:
             "/api/v1/clusters/99999/nodes/99999/edge-pack-add",
             json={"pack_file": "edge-pack-test.tgz"},
         )
-        assert resp.status_code in (404, 422)
+        # body 合法进 handler，verify_node 对非存在节点确定性 404
+        assert resp.status_code == 404
 
 
 class TestEdgePackRebaseEndpoint:
@@ -280,7 +285,8 @@ class TestEdgePackRebaseEndpoint:
             "/api/v1/clusters/99999/nodes/99999/edge-pack-rebase",
             json={"version": "2.7.6.26020421"},
         )
-        assert resp.status_code in (404, 422)
+        # body 合法进 handler，verify_node 对非存在节点确定性 404
+        assert resp.status_code == 404
 
 
 class TestAssociateNewOpenrestyRouter:
@@ -292,12 +298,14 @@ class TestAssociateNewOpenrestyRouter:
             "/api/v1/clusters/99999/nodes/99999/associate-new-openresty",
             json={"prefix": "/test"},
         )
-        assert resp.status_code in (404, 422)
+        # 无 body 参数，422 不可能；verify_node 对非存在节点确定性 404
+        assert resp.status_code == 404
 
     def test_endpoint_rejects_without_body(self, isolated_app):
         """POST associate-new-openresty without body to a non-existent node returns 404."""
         resp = isolated_app.post("/api/v1/clusters/99999/nodes/99999/associate-new-openresty")
-        assert resp.status_code in (404, 422)
+        # 无 body 参数，422 不可能；verify_node 对非存在节点确定性 404
+        assert resp.status_code == 404
 
 
 class TestInstallOpenrestyStreamSshPort:

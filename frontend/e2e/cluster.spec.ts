@@ -7,30 +7,30 @@ test.describe('Cluster Management', () => {
   })
 
   test('should navigate to clusters page', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await expect(page.locator('.page-header h1')).toContainText('集群管理')
   })
 
   test('should display cluster list', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await expect(page.locator('.cl-card').first()).toBeVisible()
   })
 
   test('should open add cluster modal', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await page.click('button:has-text("新建集群")')
     const modal = page.locator('.modal-overlay').filter({ hasText: '添加集群' })
     await expect(modal).toBeVisible()
   })
 
   test('should display add cluster button', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     const addBtn = page.locator('button:has-text("新建集群")')
     await expect(addBtn).toBeVisible()
   })
 
   test('should not contain admin_url and admin_key fields', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await page.click('button:has-text("新建集群")')
     const modal = page.locator('.modal-overlay').filter({ hasText: '添加集群' })
     await expect(modal).toBeVisible()
@@ -39,7 +39,7 @@ test.describe('Cluster Management', () => {
   })
 
   test('should show name validation helper', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     await page.click('button:has-text("新建集群")')
     const modal = page.locator('.modal-overlay').filter({ hasText: '添加集群' })
     await expect(modal).toBeVisible()
@@ -47,7 +47,7 @@ test.describe('Cluster Management', () => {
   })
 
   test('should have delete button in cluster card', async ({ page }) => {
-    await page.click('text=集群管理')
+    await page.goto('/clusters')
     const clusterCard = page.locator('.cl-card').first()
     await expect(clusterCard).toBeVisible()
     const deleteBtn = clusterCard.locator('button:has-text("删除")')

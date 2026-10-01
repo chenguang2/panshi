@@ -32,17 +32,32 @@ test.describe('Edge Client Debug Page', () => {
     const clusterLabel = clusterOpts.find((t) => t.trim() && !t.includes('选择集群'))
     if (!clusterLabel) return false
     await clusterSelect.selectOption({ label: clusterLabel })
-    await page.waitForTimeout(1200)
 
+    // 节点选项随集群选择异步加载（onClusterChange/watch 拉取节点列表），poll 等非占位符选项
     const nodeSelect = page.locator('select').nth(2)
+    try {
+      await expect
+        .poll(
+          async () => {
+            const opts = await nodeSelect.locator('option').allTextContents()
+            return opts.filter((t) => t.trim() && !t.includes('选择边缘节点'))
+          },
+          { timeout: 10000 },
+        )
+        .not.toHaveLength(0)
+    } catch {
+      return false
+    }
     const nodeOpts = await nodeSelect.locator('option').allTextContents()
     const nodeLabel = nodeOpts.find((t) => t.trim() && !t.includes('选择边缘节点'))
     if (!nodeLabel) return false
     await nodeSelect.selectOption({ label: nodeLabel })
-    await page.waitForTimeout(800)
 
+    // 选中节点触发 onNodeChange → loadAllData（查询按钮 :disabled="loading"），
+    // click 原生等待按钮 enabled，无需固定 sleep
     await page.locator('button.btn-primary').first().click()
-    await page.waitForTimeout(2000)
+    // 查询完成信号：loadAllData 完成置位 loadedNode，过滤条出现「已连接: <ip:port>」
+    await expect(page.getByText('已连接:')).toBeVisible({ timeout: 15000 })
     return true
   }
 
@@ -170,7 +185,6 @@ test.describe('Edge Client Debug Page', () => {
       return
     }
     await page.click('.ant-tabs-nav >> text=四层代理')
-    await page.waitForTimeout(1000)
 
     await expect(page.locator('.stream-route-add-btn')).toBeVisible()
 

@@ -40,9 +40,8 @@ test.describe('Database Management', () => {
     const typeOpts = await typeSelect.locator('option').allTextContents()
     const pgIndex = typeOpts.findIndex((t) => t.includes('PostgreSQL') || t === 'postgres')
     await typeSelect.selectOption({ index: pgIndex >= 0 ? pgIndex : 1 })
-    await page.waitForTimeout(300)
 
-    // 填写连接字段
+    // 填写连接字段（fill 原生自动等待，无需固定 sleep）
     await modal.locator('input[placeholder="连接名称"]').fill(CONN_NAME)
     await modal.locator('input[placeholder="localhost"]').fill('127.0.0.1')
     await modal.locator('input[placeholder="5432"]').fill('5432')

@@ -630,12 +630,9 @@ class TestRunOpensslEnhanced:
             pytest.skip("No openssl available")
 
         result = _run_openssl(["version"], openssl["path"])
-        assert hasattr(result, "command")
         assert "openssl" in result.command
         assert "version" in result.command
-        assert hasattr(result, "stdout")
-        assert hasattr(result, "stderr")
-        assert hasattr(result, "returncode")
+        assert result.stdout.strip()
         assert result.returncode == 0
 
 

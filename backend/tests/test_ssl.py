@@ -39,8 +39,8 @@ class TestSslCertificateModel:
         assert cert.cert_type == "server"
         assert cert.status == 1
         assert cert.created_at is not None
-        # algorithm field exists (may be None for old records)
-        assert hasattr(cert, "algorithm")
+        # algorithm nullable=True 且无 server_default：缺省必须落 None
+        assert cert.algorithm is None
 
     async def test_create_ssl_full(self, test_db):
         cert = SslCertificate(
@@ -146,23 +146,59 @@ class TestSslCertificateModel:
 class TestSslApi:
     """SSL certificate API tests."""
 
-    def test_generate_route_registered(self):
+    def test_generate_route_registered_accepts_post(self):
+        """generate 路径已注册且接受 POST（合并原 registered/accepts_post 形状对）。"""
         from app.api.v1.cluster_ssl import router
 
-        route_paths = [r.path for r in router.routes]
-        assert any("generate" in p for p in route_paths), (
-            f"No /generate route found in {route_paths}"
+        matches = [r for r in router.routes if "generate" in r.path]
+        assert matches, "No /generate route found"
+        for r in matches:
+            assert "POST" in r.methods, f"generate route {r.path} methods: {r.methods}"
+
+    def test_generate_endpoint_smoke_with_ca(self, isolated_app):
+        """真实 API 冒烟：POST /clusters/{id}/ssl/ca → POST /clusters/{id}/ssl/generate。
+
+        全链路走 _generate_local（LocalProvider openssl 探测 + 子进程真实签发），
+        RSA 算法不依赖 SM2 能力；无可用 openssl 时按仓库既有模式 skip。
+        """
+        from app.services.cert_generator import detect_openssl
+
+        openssl = detect_openssl()
+        if not openssl["path"]:
+            pytest.skip("No openssl available")
+
+        ca_resp = isolated_app.post(
+            "/api/v1/clusters/1/ssl/ca",
+            json={
+                "name": "smoke-ca",
+                "common_name": "smoke-ca.example.com",
+                "algorithm": "rsa",
+            },
         )
+        assert ca_resp.status_code == 201, ca_resp.text
+        ca = ca_resp.json()
+        assert ca["is_ca"] is True
+        ca_id = ca["id"]
 
-    def test_generate_route_accepts_post(self):
-        from app.api.v1.cluster_ssl import router
-
-        for r in router.routes:
-            if "generate" in r.path:
-                methods = r.methods
-                assert "POST" in methods, f"generate route {r.path} methods: {methods}"
-                return
-        raise AssertionError("No generate route found")
+        resp = isolated_app.post(
+            "/api/v1/clusters/1/ssl/generate",
+            json={
+                "name": "smoke-generated-cert",
+                "common_name": "smoke.example.com",
+                "dns_sans": ["smoke.example.com"],
+                "algorithm": "rsa",
+                "ca_cert_id": ca_id,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        server = data["server"]
+        assert "BEGIN CERTIFICATE" in server["cert"]
+        assert server["create_method"] == "local_generate"
+        assert server["algorithm"] == "rsa"
+        assert server["ca_cert_id"] == ca_id
+        # sni 由 dns_sans + 保留 SNI（edge.local 等）派生，非取自 common_name
+        assert "smoke.example.com" in server["sni"]
 
 
 class TestSslEdgeClient:
@@ -693,7 +729,6 @@ class TestSslCertificateMtlsFields:
         test_db.add(cert)
         await test_db.commit()
         await test_db.refresh(cert)
-        assert hasattr(cert, "client_ca")
         assert cert.client_ca is not None
         assert "MTLS_CA" in cert.client_ca
 
@@ -724,7 +759,6 @@ class TestSslCertificateMtlsFields:
         test_db.add(cert)
         await test_db.commit()
         await test_db.refresh(cert)
-        assert hasattr(cert, "client_depth")
         assert cert.client_depth == 2
 
     async def test_model_has_skip_mtls_uri_regex_field(self, test_db):
@@ -740,7 +774,6 @@ class TestSslCertificateMtlsFields:
         test_db.add(cert)
         await test_db.commit()
         await test_db.refresh(cert)
-        assert hasattr(cert, "skip_mtls_uri_regex")
         assert cert.skip_mtls_uri_regex == "/health"
 
 

@@ -9,97 +9,84 @@ import {
   type ClusterRef,
 } from './helpers/destructiveFlow'
 
-test.describe('Upstream Version Management', () => {
+// F9：Upstream 与 Route 的版本管理用例同构（被测弹窗同为 VersionManagementModal，
+// 差异仅入口页与表格选择器），用参数表 + openVersionModal 工厂收敛为单一实现。
+const VERSION_RESOURCES = [
+  { label: '上游', table: '.ant-table' },
+  { label: '路由', table: '.route-table' },
+] as const
+
+/**
+ * 进入资源列表并打开第一行的版本管理弹窗；空库返回 null（调用方以 if (!modal) return 收尾）。
+ * F2：AntD 空表默认渲染 tr.ant-table-placeholder 占位行——旧守卫 tbody tr.first().isVisible()
+ * 命中占位行恒真、从不触发 skip；改为等「数据行 or 占位行」出现后探测占位行，空库优雅跳过。
+ */
+async function openVersionModal(page: import('@playwright/test').Page, statLabel: string, tableSelector: string) {
+  await gotoResourcePage(page, statLabel)
+  const table = page.locator(tableSelector)
+  const placeholder = table.locator('.ant-table-placeholder')
+  const dataRow = table.locator('tbody tr:not(.ant-table-placeholder)').first()
+  await dataRow
+    .or(placeholder)
+    .first()
+    .waitFor({ state: 'visible', timeout: 10000 })
+    .catch(() => {})
+  if (await placeholder.isVisible()) {
+    test.skip(`无${statLabel}数据`)
+    return null
+  }
+  await dataRow.locator('.action-trigger-btn').click()
+  const menu = page.locator('.ant-dropdown:not(.ant-dropdown-hidden)')
+  await expect(menu).toBeVisible({ timeout: 5000 })
+  await menu.getByText('版本管理', { exact: true }).click()
+
+  const versionModal = page.locator('.version-management')
+  await expect(versionModal).toBeVisible({ timeout: 5000 })
+  return versionModal
+}
+
+/** 关闭版本管理弹窗（上游/路由共用同一 overlay 结构） */
+async function closeModal(page: import('@playwright/test').Page) {
+  const overlay = page.locator('.modal-overlay', { has: page.locator('.version-management') })
+  await overlay.locator('.modal-close').first().click()
+}
+
+test.describe('Version Management (上游/路由 参数化)', () => {
   test.beforeEach(async ({ page }) => {
     await login(page)
   })
 
-  /** 进入上游列表并打开第一行的版本管理弹窗 */
-  async function openVersionModal(page: import('@playwright/test').Page) {
-    await gotoResourcePage(page, '上游')
-    const table = page.locator('.ant-table-tbody')
-    const hasRow = await table
-      .locator('tr')
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-    if (!hasRow) {
-      test.skip('无上游数据')
-      return null
-    }
-    const firstRow = table.locator('tr').first()
-    await firstRow.locator('.action-trigger-btn').click()
-    const menu = page.locator('.ant-dropdown:not(.ant-dropdown-hidden)')
-    await expect(menu).toBeVisible({ timeout: 5000 })
-    await menu.getByText('版本管理', { exact: true }).click()
-
-    const versionModal = page.locator('.version-management')
-    await expect(versionModal).toBeVisible({ timeout: 5000 })
-    return versionModal
-  }
-
-  async function closeModal(page: import('@playwright/test').Page) {
-    const overlay = page.locator('.modal-overlay', { has: page.locator('.version-management') })
-    await overlay.locator('.modal-close').first().click()
-  }
-
-  test('should navigate to upstream list and open version modal', async ({ page }) => {
-    const versionModal = await openVersionModal(page)
-    if (!versionModal) return
-    await closeModal(page)
-  })
-
-  test('should display JSON in right panel when selecting version', async ({ page }) => {
-    const versionModal = await openVersionModal(page)
-    if (!versionModal) return
-
-    const versionItems = versionModal.locator('.version-item')
-    const itemCount = await versionItems.count()
-    if (itemCount === 0) {
+  for (const { label, table } of VERSION_RESOURCES) {
+    test(`opens version modal from ${label} page`, async ({ page }) => {
+      const versionModal = await openVersionModal(page, label, table)
+      if (!versionModal) return
       await closeModal(page)
-      test.skip('无历史版本')
-      return
-    }
+    })
 
-    await versionItems.first().click()
-    await page.waitForTimeout(500)
+    test(`displays JSON in right panel when selecting version on ${label} page`, async ({ page }) => {
+      const versionModal = await openVersionModal(page, label, table)
+      if (!versionModal) return
 
-    const jsonTextarea = page.locator('.json-textarea')
-    await expect(jsonTextarea).toBeVisible({ timeout: 3000 })
-    const jsonContent = await jsonTextarea.inputValue()
-    expect(jsonContent.length).toBeGreaterThan(0)
-    expect(jsonContent).toContain('{')
+      const versionItems = versionModal.locator('.version-item')
+      const itemCount = await versionItems.count()
+      if (itemCount === 0) {
+        await closeModal(page)
+        test.skip('无历史版本')
+        return
+      }
 
-    await closeModal(page)
-  })
+      await versionItems.first().click()
 
-  test('should show version comparison without errors', async ({ page }) => {
-    const versionModal = await openVersionModal(page)
-    if (!versionModal) return
+      // 选中版本后右栏渲染配置 JSON（toBeVisible 原生自动等待，替代固定 sleep）
+      const jsonTextarea = page.locator('.json-textarea')
+      await expect(jsonTextarea).toBeVisible({ timeout: 3000 })
+      const jsonContent = await jsonTextarea.inputValue()
+      expect(jsonContent.length).toBeGreaterThan(0)
+      expect(jsonContent).toContain('{')
 
-    const versionItems = versionModal.locator('.version-item')
-    const itemCount = await versionItems.count()
-    if (itemCount < 2) {
       await closeModal(page)
-      test.skip('历史版本少于 2 个，无法对比')
-      return
-    }
-
-    // 对比模式
-    await versionModal.locator('label.checkbox-label', { hasText: '对比模式' }).click()
-    await page.waitForTimeout(300)
-    await versionItems.nth(0).click()
-    await versionItems.nth(1).click()
-    await page.waitForTimeout(500)
-
-    // 对比视图出现且无报错
-    const diffArea = page.locator('.version-diff, .version-compare, .diff-view')
-    if ((await diffArea.count().catch(() => 0)) > 0) {
-      await expect(diffArea.first()).toBeVisible()
-    }
-
-    await closeModal(page)
-  })
+    })
+  }
 
   // F2-NEW-06（审计 §5）：版本对比模式真实 diff 断言（造数+清理）。
   // 造数经 API：两次发布产生两个版本——publish 的版本快照先于节点筛选落库
@@ -200,77 +187,5 @@ test.describe('Upstream Version Management', () => {
     } finally {
       await cleanupUpstreamsByPrefix(request, headers, cluster.id, 'e2e-diff-u-')
     }
-  })
-})
-
-test.describe('Route Version Management', () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page)
-  })
-
-  test('should open route version management modal', async ({ page }) => {
-    await gotoResourcePage(page, '路由')
-    const table = page.locator('.route-table')
-    const hasRow = await table
-      .locator('tbody tr')
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-    if (!hasRow) {
-      test.skip('无路由数据')
-      return
-    }
-    const firstRow = table.locator('tbody tr').first()
-    await firstRow.locator('.action-trigger-btn').click()
-    const menu = page.locator('.ant-dropdown:not(.ant-dropdown-hidden)')
-    await expect(menu).toBeVisible({ timeout: 5000 })
-    await menu.getByText('版本管理', { exact: true }).click()
-
-    const versionModal = page.locator('.version-management')
-    await expect(versionModal).toBeVisible({ timeout: 5000 })
-
-    const overlay = page.locator('.modal-overlay', { has: versionModal })
-    await overlay.locator('.modal-close').click()
-  })
-
-  test('should display JSON in right panel for route version', async ({ page }) => {
-    await gotoResourcePage(page, '路由')
-    const table = page.locator('.route-table')
-    const hasRow = await table
-      .locator('tbody tr')
-      .first()
-      .isVisible({ timeout: 5000 })
-      .catch(() => false)
-    if (!hasRow) {
-      test.skip('无路由数据')
-      return
-    }
-    const firstRow = table.locator('tbody tr').first()
-    await firstRow.locator('.action-trigger-btn').click()
-    const menu = page.locator('.ant-dropdown:not(.ant-dropdown-hidden)')
-    await expect(menu).toBeVisible({ timeout: 5000 })
-    await menu.getByText('版本管理', { exact: true }).click()
-
-    const versionModal = page.locator('.version-management')
-    await expect(versionModal).toBeVisible({ timeout: 5000 })
-
-    const versionItems = versionModal.locator('.version-item')
-    if ((await versionItems.count()) === 0) {
-      const overlay = page.locator('.modal-overlay', { has: versionModal })
-      await overlay.locator('.modal-close').click()
-      test.skip('无历史版本')
-      return
-    }
-
-    await versionItems.first().click()
-    await page.waitForTimeout(500)
-
-    const jsonTextarea = page.locator('.json-textarea')
-    await expect(jsonTextarea).toBeVisible({ timeout: 3000 })
-    const jsonContent = await jsonTextarea.inputValue()
-    expect(jsonContent.length).toBeGreaterThan(0)
-
-    const overlay = page.locator('.modal-overlay', { has: versionModal })
-    await overlay.locator('.modal-close').click()
   })
 })

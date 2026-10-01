@@ -107,10 +107,9 @@ def test_public_endpoints_stay_open(method, path, isolated_app):
 
 
 def test_secured_endpoint_passes_with_valid_token(isolated_app):
-    """带有效 token 应放行到业务层（此处期望 404 路由不存在，而非 401）。"""
+    """带有效 token 应放行到业务层：隔离库有 cluster-1 无该路由，get_or_404 确定性 404（非 401 即已过鉴权）。"""
     resp = isolated_app.get("/api/v1/clusters/1/routes/99999")
-    assert resp.status_code in (200, 404)
-    assert resp.status_code != 401
+    assert resp.status_code == 404
 
 
 def test_disabled_user_token_rejected():
@@ -209,7 +208,8 @@ def test_non_admin_with_permission_passes():
         with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/routes", headers=headers[1])
             assert resp.status_code != 403
-            assert resp.status_code in (200, 404, 422)
+            # query 全带默认值，空库返回空列表
+            assert resp.status_code == 200
     finally:
         app.dependency_overrides.clear()
         import asyncio
@@ -225,7 +225,8 @@ def test_require_any_permission_stream_proxy():
         with isolated_app_lifespan(), TestClient(app) as c:
             resp = c.get("/api/v1/stream-proxies?proxy_type=dns", headers=headers[1])
             assert resp.status_code != 403
-            assert resp.status_code in (200, 404, 422)
+            # proxy_type=dns 命中 pattern 校验，确定性 200
+            assert resp.status_code == 200
     finally:
         app.dependency_overrides.clear()
         import asyncio

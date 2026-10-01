@@ -6,27 +6,45 @@ vi.mock('@/api', () => ({ default: { get: vi.fn() } }))
 import api from '@/api'
 import { useFeaturesStore } from './features'
 
+const FEATURES_URL = '/system/features'
+
+/**
+ * URL 感知 mock（仓库约定：mock 必须 URL 感知兜底，禁止 mockResolvedValueOnce 顺序链）：
+ * 仅注册 GET /system/features——命中返回 axios 层形状 { data }（store 只读
+ * res.data.features / enabled_plugins / concurrency，与真实后端无漂移）；
+ * 传入 Error 实例则模拟该请求失败；未注册 URL 一律显式 reject，防止 mock 掩盖误调用。
+ */
+function mockFeaturesGet(data: unknown): void {
+  vi.mocked(api.get).mockImplementation(((url: string) => {
+    if (url !== FEATURES_URL) {
+      return Promise.reject(new Error(`features.test: 未注册的 API 调用 ${url}`))
+    }
+    return data instanceof Error ? Promise.reject(data) : Promise.resolve({ data })
+  }) as unknown as typeof api.get)
+}
+
 describe('features store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   it('load() fetches /system/features and caches result', async () => {
-    const mockResp = { data: { features: { edge_client: false }, enabled_plugins: ['proxy_rewrite'] } }
-    vi.mocked(api.get).mockResolvedValueOnce(mockResp)
+    mockFeaturesGet({ features: { edge_client: false }, enabled_plugins: ['proxy_rewrite'] })
 
     const store = useFeaturesStore()
     expect(store.loaded).toBe(false)
 
     await store.load()
 
+    expect(vi.mocked(api.get)).toHaveBeenCalledWith(FEATURES_URL)
     expect(store.loaded).toBe(true)
     expect(store.features).toEqual({ edge_client: false })
     expect(store.enabledPlugins).toEqual(['proxy_rewrite'])
   })
 
   it('load() does not re-fetch if already loaded', async () => {
-    vi.mocked(api.get).mockResolvedValue({ data: { features: {}, enabled_plugins: [] } })
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
 
     const store = useFeaturesStore()
     await store.load()
@@ -43,9 +61,7 @@ describe('features store', () => {
   })
 
   it('has() returns feature value after load', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: { features: { edge_client: false, tools: true }, enabled_plugins: [] }
-    })
+    mockFeaturesGet({ features: { edge_client: false, tools: true }, enabled_plugins: [] })
 
     const store = useFeaturesStore()
     await store.load()
@@ -55,9 +71,7 @@ describe('features store', () => {
   })
 
   it('has() returns true for unknown features after load', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: { features: { edge_client: false }, enabled_plugins: [] }
-    })
+    mockFeaturesGet({ features: { edge_client: false }, enabled_plugins: [] })
 
     const store = useFeaturesStore()
     await store.load()
@@ -66,7 +80,7 @@ describe('features store', () => {
   })
 
   it('load() propagates errors without swallowing', async () => {
-    vi.mocked(api.get).mockRejectedValueOnce(new Error('network error'))
+    mockFeaturesGet(new Error('network error'))
 
     const store = useFeaturesStore()
 
@@ -76,9 +90,7 @@ describe('features store', () => {
   })
 
   it('load() parses concurrency values from response', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: { features: {}, enabled_plugins: [], concurrency: { batch_action: 10, max_playbooks: 7 } }
-    })
+    mockFeaturesGet({ features: {}, enabled_plugins: [], concurrency: { batch_action: 10, max_playbooks: 7 } })
 
     const store = useFeaturesStore()
     await store.load()
@@ -87,9 +99,7 @@ describe('features store', () => {
   })
 
   it('concurrencyOf() returns configured value after load', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: { features: {}, enabled_plugins: [], concurrency: { batch_action: 10 } }
-    })
+    mockFeaturesGet({ features: {}, enabled_plugins: [], concurrency: { batch_action: 10 } })
 
     const store = useFeaturesStore()
     await store.load()
@@ -98,9 +108,7 @@ describe('features store', () => {
   })
 
   it('concurrencyOf() returns default when response has no concurrency field', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({
-      data: { features: {}, enabled_plugins: [] }
-    })
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
 
     const store = useFeaturesStore()
     await store.load()

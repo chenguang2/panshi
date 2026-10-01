@@ -156,7 +156,6 @@ async def test_route_enable_websocket_default_false(test_db):
     await test_db.commit()
     await test_db.refresh(route)
 
-    assert hasattr(route, "enable_websocket")
     assert route.enable_websocket is False
 
 
