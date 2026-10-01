@@ -97,6 +97,32 @@ describe('缺陷一：会话清理完整 + 登出容错', () => {
     expect(errorSpy).toHaveBeenCalled()
   })
 
+  it('②c 并发 401 只弹一次「登录状态已失效」（时间窗去重；清会话与跳转不受影响）', async () => {
+    seedSession()
+    const store = useAuthStore()
+    const pushSpy = vi.spyOn(router, 'push').mockImplementation(() => Promise.resolve(undefined))
+    const errorSpy = vi.spyOn(message, 'error')
+    fakeApiAdapter((url) => (url === '/clusters' ? { status: 401 } : { status: 200 }))
+    // 系统时间前推 60s，避开同文件前序 401 用例（②）在真实时间轴留下的去重窗
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.now() + 60_000)
+
+    try {
+      await Promise.allSettled([api.get('/clusters'), api.get('/clusters')])
+      // 动态 import 已就绪，微任务一拍即可冲刷完两条拦截器链
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // 清会话与跳转逐次执行（幂等），toast 只弹一次
+      expect(store.token).toBeNull()
+      expect(pushSpy).toHaveBeenCalledTimes(2)
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledWith('登录状态已失效，请重新登录')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('②b 非 401 错误不清本地会话', async () => {
     seedSession()
     const store = useAuthStore()

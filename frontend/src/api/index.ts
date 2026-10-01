@@ -11,6 +11,11 @@ const api: AxiosInstance = axios.create({
   },
 })
 
+// 会话失效 toast 时间窗去重：页面挂载期的并发 401 只弹一次提示
+// （clearSession 与跳转逐次执行不受影响；窗口过后的下次失效仍会正常提示）
+const SESSION_TOAST_WINDOW_MS = 3000
+let sessionToastAt = 0
+
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -34,7 +39,11 @@ api.interceptors.response.use(
       // 运行期模块已就绪，这里拿到的是同一 auth store 实例。
       return import('@/stores/auth').then(({ useAuthStore }) => {
         useAuthStore().clearSession()
-        message.error('登录状态已失效，请重新登录')
+        const now = Date.now()
+        if (now - sessionToastAt > SESSION_TOAST_WINDOW_MS) {
+          sessionToastAt = now
+          message.error('登录状态已失效，请重新登录')
+        }
         router.push('/login')
         return Promise.reject(error)
       })
