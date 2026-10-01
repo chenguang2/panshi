@@ -26,6 +26,21 @@ vi.mock('ant-design-vue', () => ({
   message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))
 
+// 捕获 axios 实例调用（importActual 取真实 api/dbBackup 实现时注入）
+const mockAxiosGet = vi.fn().mockResolvedValue({ data: {} })
+const mockAxiosPost = vi.fn().mockResolvedValue({ data: {} })
+const mockAxiosPut = vi.fn().mockResolvedValue({ data: {} })
+const mockAxiosDelete = vi.fn().mockResolvedValue({ data: {} })
+
+vi.mock('@/api/index', () => ({
+  default: {
+    get: (...args: unknown[]) => mockAxiosGet(...args),
+    post: (...args: unknown[]) => mockAxiosPost(...args),
+    put: (...args: unknown[]) => mockAxiosPut(...args),
+    delete: (...args: unknown[]) => mockAxiosDelete(...args),
+  },
+}))
+
 import BackupManagement from '../BackupManagement.vue'
 
 function makeConfig() {
@@ -105,5 +120,37 @@ describe('BackupManagement 页面', () => {
     const overlay = wrapper.find('.modal-overlay')
     expect(overlay.exists()).toBe(true)
     expect(overlay.attributes('style')).toContain('display: none')
+  })
+})
+
+describe('dbBackup API 超时契约（H3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockAxiosGet.mockResolvedValue({ data: {} })
+    mockAxiosPost.mockResolvedValue({ data: {} })
+    mockAxiosPut.mockResolvedValue({ data: {} })
+    mockAxiosDelete.mockResolvedValue({ data: {} })
+  })
+
+  it('executeDbRestore 显式超时 600000（暂存 TTL 的两倍）', async () => {
+    const actual = await vi.importActual<typeof import('@/api/dbBackup')>('@/api/dbBackup')
+    await actual.executeDbRestore({ verify_id: 'v-1', confirmed: true })
+    expect(mockAxiosPost).toHaveBeenCalledWith(
+      '/db-backup/restore/execute',
+      { verify_id: 'v-1', confirmed: true },
+      { timeout: 600000 },
+    )
+  })
+
+  it('verify 与 list 的既有长超时不回退（300s / 180s）', async () => {
+    const actual = await vi.importActual<typeof import('@/api/dbBackup')>('@/api/dbBackup')
+    await actual.verifyRestorePackage({ target: { target_id: 1 }, package_name: 'p.tar.gz' })
+    expect(mockAxiosPost).toHaveBeenCalledWith(
+      '/db-backup/restore/verify',
+      { target: { target_id: 1 }, package_name: 'p.tar.gz' },
+      { timeout: 300000 },
+    )
+    await actual.listRestorePackages({ target_id: null })
+    expect(mockAxiosPost).toHaveBeenCalledWith('/db-backup/restore/list', { target_id: null }, { timeout: 180000 })
   })
 })

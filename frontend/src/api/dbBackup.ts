@@ -25,6 +25,12 @@ const RESTORE_VERIFY_TIMEOUT = 300_000
 /** 列包耗时随 位置数 × 包数 增长（逐包 SSH 取 meta 摘要），聚合模式实测可达 1 分钟+，须覆盖全局 30s（约定 #29） */
 const RESTORE_LIST_TIMEOUT = 180_000
 
+/**
+ * 恢复执行（本地落位 + 引擎重载，无下载；正常秒级到数十秒）。
+ * 600s = 2 × 暂存 TTL（STAGE_TTL_SECONDS=600）保守上限；超时后前端按「后端可能仍在执行」文案防重复发起（H3）。
+ */
+const RESTORE_EXECUTE_TIMEOUT = 600_000
+
 /** 读取备份配置（全局字段 + 位置列表）与派生状态（适用性 / 下次预计 / 进行中标记） */
 export function getDbBackupConfig() {
   return api.get<DbBackupConfigResponse>('/db-backup/config')
@@ -86,7 +92,9 @@ export function verifyRestorePackage(data: RestoreVerifyPayload) {
   })
 }
 
-/** 恢复向导步骤 3：高危确认后落位激活（confirmed 必须为 true） */
+/** 恢复向导步骤 3：高危确认后落位激活（confirmed 必须为 true）；显式长超时防大库恢复被全局 30s 误断（H3） */
 export function executeDbRestore(data: RestoreExecutePayload) {
-  return api.post<RestoreExecuteResult>('/db-backup/restore/execute', data)
+  return api.post<RestoreExecuteResult>('/db-backup/restore/execute', data, {
+    timeout: RESTORE_EXECUTE_TIMEOUT,
+  })
 }

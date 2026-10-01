@@ -225,7 +225,7 @@ describe('DbBackupRestoreWizard 备份来源（多目标）', () => {
     expect(locs.text()).toBe('存在位置：局内DR、中心机房')
   })
 
-  it('全部位置校验：verify 载荷从包的 present_in 解析具体位置 target_id（null 会 422）', async () => {
+  it('全部位置校验：多位置副本先弹来源选择（默认首项），确认后 verify 载荷从包的 present_in 解析具体位置 target_id（null 会 422）', async () => {
     mockGetConfig.mockResolvedValue(configWithTargets([makeTarget(), makeTarget({ id: 2, name: '中心机房' })]))
     mockList.mockResolvedValue({
       data: {
@@ -255,10 +255,22 @@ describe('DbBackupRestoreWizard 备份来源（多目标）', () => {
       .filter((b) => b.text() === '校验此包')[0]
       .trigger('click')
     await flushPromises()
+    // H4：多位置副本先显式选择来源（默认首项），未确认前不发起校验
+    const chooser = wrapper.find('.dbw-verify-chooser')
+    expect(chooser.exists()).toBe(true)
+    expect(mockVerify).not.toHaveBeenCalled()
+    const radios = chooser.findAll('input[type="radio"]')
+    expect((radios[0].element as HTMLInputElement).checked).toBe(true)
+    await wrapper
+      .findAll('button')
+      .filter((b) => b.text() === '确认校验')[0]
+      .trigger('click')
+    await flushPromises()
     expect(mockVerify).toHaveBeenCalledWith({
       target: { target_id: 2 },
       package_name: 'panshi_backup_mainadmin_20260930_190439.tar.gz',
     })
+    expect(wrapper.find('.dbw-verify-src').text()).toContain('本次校验自「中心机房」')
   })
 
   it('指定位置校验：verify 载荷携带所选位置 target_id', async () => {

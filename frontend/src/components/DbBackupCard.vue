@@ -2,7 +2,7 @@
   <div class="card db-backup-card">
     <div class="card-header">
       <h3>SQLite 备份与容灾</h3>
-      <button class="btn btn-secondary btn-sm" :disabled="configLoading" @click="refreshAll">
+      <button class="btn btn-secondary btn-sm" :disabled="configLoading" @click="requestRefresh">
         {{ configLoading ? '刷新中…' : '刷新' }}
       </button>
     </div>
@@ -48,10 +48,18 @@
           </div>
         </div>
         <div v-if="statusHint" class="dbb-status-hint">{{ statusHint }}</div>
+        <div v-if="pollHint" class="dbb-poll-hint">{{ pollHint }}</div>
 
         <!-- 上次错误（可折叠） -->
         <div v-if="config?.last_error" class="dbb-error" :class="{ expanded: errorExpanded }">
-          <div class="dbb-error-head" @click="toggleError">
+          <div
+            class="dbb-error-head"
+            role="button"
+            tabindex="0"
+            @click="toggleError"
+            @keydown.enter.prevent="toggleError"
+            @keydown.space.prevent="toggleError"
+          >
             <span class="dbb-error-flag">&#9888;</span>
             <span class="dbb-error-line">{{ errorHead }}</span>
             <span class="dbb-error-toggle">{{ errorExpanded ? '收起' : '展开' }}</span>
@@ -60,7 +68,20 @@
         </div>
 
         <!-- ═══ 全局配置区（总开关 / 间隔 / 来源标识 / 内容段） ═══ -->
-        <div class="dbb-section-title">备份配置（全局）</div>
+        <div class="dbb-section-title dbb-title-row">
+          <span class="dbb-title-row-text">
+            备份配置（全局）
+            <span v-if="isDirty" class="dbb-dirty-badge">有未保存修改</span>
+          </span>
+          <button
+            class="btn btn-sm"
+            :class="isDirty ? 'btn-primary' : 'btn-secondary'"
+            :disabled="saving || configLoading"
+            @click="handleSave"
+          >
+            {{ saving ? '保存中…' : '保存全局配置' }}
+          </button>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">定时备份</label>
@@ -80,8 +101,10 @@
               type="number"
               class="form-input dbb-interval-input"
               min="1"
+              max="10080"
               placeholder="60"
             />
+            <div class="form-hint">建议 5–1440 分钟；上限 10080 分钟（7 天）</div>
           </div>
         </div>
         <div class="form-row">
@@ -137,6 +160,7 @@
                   <th>名称</th>
                   <th>地址 : 端口</th>
                   <th>远端目录</th>
+                  <th>最近推送</th>
                   <th class="num col-retain">保留份数</th>
                   <th class="col-actions">操作</th>
                 </tr>
@@ -144,18 +168,27 @@
               <tbody>
                 <tr v-for="t in targets" :key="t.id" :class="{ 'row-disabled': !t.enabled }">
                   <td>
-                    <label class="checkbox-label">
+                    <label
+                      class="toggle dbb-row-toggle"
+                      :title="t.enabled ? '停用后该位置不再接收新备份' : '启用后参与每轮备份推送'"
+                    >
                       <input
                         type="checkbox"
                         :checked="t.enabled"
                         :disabled="togglingId === t.id"
-                        @change="toggleTargetEnabled(t)"
+                        @change="onTargetToggleChange(t, $event)"
                       />
+                      <span class="toggle-slider"></span>
                     </label>
                   </td>
                   <td class="dbb-tgt-name">{{ t.name }}</td>
                   <td class="mono dbb-tgt-addr">{{ t.host }} : {{ t.port }}</td>
                   <td class="mono dbb-tgt-dir" :title="t.remote_dir">{{ t.remote_dir }}</td>
+                  <td class="dbb-tgt-health">
+                    <span class="dbb-health-dot" :class="healthDotClass(t.name)" :title="healthTooltip(t.name)"></span>
+                    <span v-if="recentTestText(t.name)" class="cell-meta">测试 {{ recentTestText(t.name) }}</span>
+                    <span v-else class="cell-meta t-muted">测试 —</span>
+                  </td>
                   <td class="num mono dbb-tgt-retain">{{ t.retain_count }}</td>
                   <td>
                     <div class="table-actions">
@@ -163,31 +196,37 @@
                       <button
                         class="btn btn-secondary btn-sm"
                         :disabled="rowTestingId === t.id"
+                        title="仅校验 SSH 连通与凭据，不含目录可写与磁盘空间"
                         @click="testTargetRow(t)"
                       >
                         {{ rowTestingId === t.id ? '测试中…' : '测试' }}
                       </button>
                       <button class="btn btn-danger-outline btn-sm" @click="confirmDeleteTarget(t)">删除</button>
                     </div>
+                    <!-- L2：行级测试结果与触发行视觉关联（沿用既有类名供测试断言） -->
+                    <div
+                      v-if="rowTestResult && rowTestResult.name === t.name"
+                      class="dbb-target-testbar"
+                      :class="rowTestResult.ok ? 'ok' : 'fail'"
+                    >
+                      「{{ t.name }}」{{ rowTestResult.ok ? '✓' : '✗' }} {{ rowTestResult.message }}
+                    </div>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div v-if="rowTestResult" class="dbb-target-testbar" :class="rowTestResult.ok ? 'ok' : 'fail'">
-            测试「{{ rowTestResult.name }}」{{ rowTestResult.ok ? '✓ ' : '✗ ' }}{{ rowTestResult.message }}
-          </div>
         </template>
 
         <!-- ═══ 操作区 ═══ -->
         <div class="dbb-actions">
-          <button class="btn btn-secondary" :disabled="saving || configLoading" @click="handleSave">
-            {{ saving ? '保存中…' : '保存全局配置' }}
-          </button>
-          <button class="btn btn-primary" :disabled="runDisabled" @click="handleRunNow">
+          <button class="btn btn-primary" :disabled="runDisabled" @click="requestRunNow">
             {{ running ? '备份中…' : '立即备份' }}
           </button>
-          <button class="btn btn-danger-outline" @click="openWizard">恢复向导…</button>
+          <span v-if="running" class="form-hint dbb-run-expectation">
+            正在打包并推送到 {{ enabledTargetCount }} 个启用位置，约需 1–2 分钟，请勿离开页面
+          </span>
+          <button class="btn btn-secondary" @click="openWizard">恢复向导…</button>
           <span class="form-hint dbb-actions-hint">位置的新增 / 编辑在抽屉内完成并独立保存</span>
         </div>
 
@@ -195,10 +234,25 @@
         <div class="dbb-history">
           <div class="dbb-history-header">
             <h4>备份历史</h4>
-            <span class="dbb-history-count">{{ history.total }} 条</span>
+            <div class="dbb-hist-toolbar">
+              <span class="dbb-history-count">{{ historyCountText }}</span>
+              <select v-model="historyFilter.status" class="form-input dbb-hist-filter">
+                <option value="all">全部状态</option>
+                <option value="success">成功</option>
+                <option value="partial">部分成功</option>
+                <option value="failed">失败</option>
+              </select>
+              <select v-model="historyFilter.trigger" class="form-input dbb-hist-filter">
+                <option value="all">全部触发</option>
+                <option value="scheduled">定时</option>
+                <option value="manual">手动</option>
+              </select>
+            </div>
           </div>
           <div v-if="historyLoading" class="dbb-hist-loading">加载中…</div>
-          <div v-else-if="history.items.length === 0" class="dbb-target-empty">暂无备份历史</div>
+          <div v-else-if="displayedHistory.length === 0" class="dbb-target-empty">
+            {{ filterActive ? '没有匹配的备份记录，请调整筛选条件' : '暂无备份历史' }}
+          </div>
           <template v-else>
             <div class="table-shell">
               <table class="grid dbb-hist-table">
@@ -214,14 +268,14 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <template v-for="item in history.items" :key="item.id">
+                  <template v-for="item in displayedHistory" :key="item.id">
                     <tr>
                       <td>
                         <button
-                          v-if="histSubCount(item) > 0"
+                          v-if="histExpandable(item)"
                           class="exp-toggle"
                           :class="{ open: isHistExpanded(item.id) }"
-                          title="展开分目标结果"
+                          :title="histSubCount(item) > 0 ? '展开详情' : '展开失败原因'"
                           @click="toggleHistExpand(item.id)"
                         >
                           &#9654;
@@ -232,36 +286,47 @@
                         <span class="dbb-trigger">{{ item.trigger === 'scheduled' ? '定时' : '手动' }}</span>
                       </td>
                       <td class="dbb-hist-status">
-                        <span :class="statusBadgeClass(item.status)" :title="item.error || ''">{{
-                          statusBadgeText(item.status)
-                        }}</span>
+                        <span :class="statusBadgeClass(item.status)">{{ statusBadgeText(item.status) }}</span>
                         <span v-if="histSubCount(item) > 0" class="cell-meta dbb-hist-counts"
                           >{{ histOkCount(item) }}/{{ histSubCount(item) }} 目标</span
                         >
                       </td>
                       <td>
                         <span class="dbb-pkgname">{{ item.package_name || '-' }}</span>
+                        <button
+                          v-if="item.package_name && targets.length > 0"
+                          class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
+                          @click="openWizardForPackage(item)"
+                        >
+                          恢复此包
+                        </button>
                       </td>
                       <td class="num mono t-muted">
                         {{ item.file_size != null ? formatFileSize(item.file_size) : '-' }}
                       </td>
                       <td class="num mono t-muted">{{ formatDurationMs(item.duration_ms) }}</td>
                     </tr>
-                    <tr v-if="isHistExpanded(item.id) && histSubCount(item) > 0" class="expand-row">
+                    <tr v-if="isHistExpanded(item.id)" class="expand-row">
                       <td :colspan="7">
                         <div class="hist-expand">
-                          <div class="hist-expand-title">分目标结果</div>
-                          <ul class="target-results">
-                            <li
-                              v-for="sub in item.targets || []"
-                              :key="sub.target_id ?? sub.target_name"
-                              :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
-                            >
-                              <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
-                              <span class="tr-name">{{ sub.target_name }}</span>
-                              <span class="tr-meta">{{ histSubMeta(sub) }}</span>
-                            </li>
-                          </ul>
+                          <template v-if="item.error">
+                            <div class="hist-expand-title">失败原因</div>
+                            <pre class="hist-error-detail">{{ item.error }}</pre>
+                          </template>
+                          <template v-if="histSubCount(item) > 0">
+                            <div class="hist-expand-title">分目标结果</div>
+                            <ul class="target-results">
+                              <li
+                                v-for="sub in item.targets || []"
+                                :key="sub.target_id ?? sub.target_name"
+                                :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
+                              >
+                                <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
+                                <span class="tr-name">{{ sub.target_name }}</span>
+                                <span class="tr-meta">{{ histSubMeta(sub) }}</span>
+                              </li>
+                            </ul>
+                          </template>
                         </div>
                       </td>
                     </tr>
@@ -270,17 +335,22 @@
               </table>
             </div>
             <div class="dbb-hist-pager">
-              <span class="dbb-hist-pager-info">共 {{ history.total }} 条</span>
-              <select class="form-input dbb-hist-pagesize" :value="historyPageSize" @change="onPageSizeChange">
+              <select
+                v-if="!filterActive"
+                class="form-input dbb-hist-pagesize"
+                :value="historyPageSize"
+                @change="onPageSizeChange"
+              >
                 <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} 条/页</option>
               </select>
-              <button class="btn btn-secondary btn-sm" :disabled="historyPage <= 1 || historyLoading" @click="prevPage">
+              <span v-else class="dbb-hist-pager-info">筛选视图 · {{ FILTER_PAGE_SIZE }} 条/页</span>
+              <button class="btn btn-secondary btn-sm" :disabled="displayPage <= 1 || historyLoading" @click="prevPage">
                 ‹ 上一页
               </button>
-              <span class="dbb-hist-pager-info">第 {{ historyPage }} / {{ totalPages }} 页</span>
+              <span class="dbb-hist-pager-info">第 {{ displayPage }} / {{ pageCount }} 页</span>
               <button
                 class="btn btn-secondary btn-sm"
-                :disabled="historyPage >= totalPages || historyLoading"
+                :disabled="displayPage >= pageCount || historyLoading"
                 @click="nextPage"
               >
                 下一页 ›
@@ -292,7 +362,11 @@
     </div>
   </div>
 
-  <DbBackupRestoreWizard v-model:visible="wizardOpen" @restored="handleRestored" />
+  <DbBackupRestoreWizard
+    v-model:visible="wizardOpen"
+    :preselect-package-name="preselectPkgName"
+    @restored="handleRestored"
+  />
 
   <!-- ═══ 新增 / 编辑位置抽屉（470px 右侧） ═══ -->
   <Teleport to="body">
@@ -390,6 +464,9 @@
             </div>
           </div>
           <div v-if="drawerError" class="dbb-drawer-error">{{ drawerError }}</div>
+          <div class="form-hint dbb-drawer-test-hint">
+            「测试连接」仅校验 SSH 连通与凭据正确性，不校验远端目录可写性与磁盘空间
+          </div>
           <div v-if="drawerTestResult" class="dbb-drawer-testbar" :class="drawerTestResult.ok ? 'ok' : 'fail'">
             {{ drawerTestResult.ok ? '✓ ' : '✗ ' }}{{ drawerTestResult.message }}
           </div>
@@ -404,6 +481,30 @@
           </button>
         </div>
       </aside>
+    </div>
+  </Teleport>
+
+  <!-- ═══ 立即备份三选确认（脏状态守卫 H2，视图级内联弹窗） ═══ -->
+  <Teleport to="body">
+    <div v-if="runConfirmOpen" class="modal-overlay dbb-runconfirm-overlay">
+      <div class="modal dbb-run-confirm">
+        <div class="modal-header">
+          <h2>有未保存的修改</h2>
+          <button class="modal-close" @click="cancelRunConfirm">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="dbb-run-confirm-desc">当前全局配置有未保存修改，「立即备份」按服务端已保存配置执行。请选择：</p>
+          <ul class="dbb-run-confirm-list">
+            <li>保存并备份——先保存当前修改，再按新配置执行</li>
+            <li>按已保存配置备份——忽略屏幕上的未保存修改</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="cancelRunConfirm">取消</button>
+          <button class="btn btn-secondary" :disabled="saving" @click="runWithSavedConfig">按已保存配置备份</button>
+          <button class="btn btn-primary" :disabled="saving" @click="saveThenRun">保存并备份</button>
+        </div>
+      </div>
     </div>
   </Teleport>
 
@@ -469,6 +570,7 @@ import {
 } from '@/api/dbBackup'
 import type {
   DbBackupConfig,
+  DbBackupHistoryItem,
   DbBackupHistoryPage,
   DbBackupHistoryTargetItem,
   DbBackupRunResult,
@@ -499,7 +601,30 @@ const form = reactive({
   include_task_logs: false,
 })
 
+/** 已保存快照（H1：状态区展示与 dirty 判定的唯一基准；applyConfigToForm 同步刷新） */
+const saved = reactive({
+  enabled: false,
+  interval_minutes: 60,
+  source_name: '',
+  include_static: false,
+  include_task_scripts: false,
+  include_task_logs: false,
+})
+
+/** H1/M12：dirty = 表单与已保存快照的归一化差异（来源标识 trim 后比较） */
+const isDirty = computed(() => {
+  return (
+    form.enabled !== saved.enabled ||
+    toInt(form.interval_minutes, -1) !== saved.interval_minutes ||
+    form.source_name.trim() !== saved.source_name ||
+    form.include_static !== saved.include_static ||
+    form.include_task_scripts !== saved.include_task_scripts ||
+    form.include_task_logs !== saved.include_task_logs
+  )
+})
+
 const targets = computed<DbBackupTarget[]>(() => config.value?.targets ?? [])
+const enabledTargetCount = computed(() => targets.value.filter((t) => t.enabled).length)
 
 const applicable = computed(() => status.value?.applicable ?? true)
 /** 状态区展示的是已保存的启用状态（表单开关是未保存的编辑值，两者分离） */
@@ -518,7 +643,8 @@ const statusHint = computed(() => {
 })
 
 const nextRunText = computed(() => {
-  if (!form.enabled) return '—'
+  // H1：状态区单一数据源——只读已保存配置与 status，不受未保存表单修改影响
+  if (!enabled.value) return '—'
   const next = status.value?.next_run_at
   if (next) return formatDateTime(next)
   return '启用后 30 秒内首备'
@@ -538,9 +664,14 @@ const expandedHistIds = ref<number[]>([])
 
 const totalPages = computed(() => Math.max(1, Math.ceil(history.value.total / historyPageSize.value)))
 
+/** 筛选/服务端两种分页口径的统一展示值（M5） */
+const displayPage = computed(() => (filterActive.value ? filteredPage.value : historyPage.value))
+const pageCount = computed(() => (filterActive.value ? filteredTotalPages.value : totalPages.value))
+
 // ── 操作进行中标记 ──
 const saving = ref(false)
 const runLoading = ref(false)
+const runConfirmOpen = ref(false)
 const status = ref<DbBackupStatusInfo | null>(null)
 
 // ── 位置抽屉 ──
@@ -620,6 +751,11 @@ function histSubCount(item: { targets?: DbBackupHistoryTargetItem[] | null }): n
   return item.targets?.length ?? 0
 }
 
+/** M5：有子结果或带失败原因的行均可展开（构建阶段失败不再只靠 hover title） */
+function histExpandable(item: DbBackupHistoryItem): boolean {
+  return histSubCount(item) > 0 || !!item.error
+}
+
 function histOkCount(item: { targets?: DbBackupHistoryTargetItem[] | null }): number {
   return (item.targets || []).filter((s) => s.status === 'success').length
 }
@@ -646,17 +782,20 @@ function toggleError(): void {
   errorExpanded.value = !errorExpanded.value
 }
 
-async function loadConfig(): Promise<void> {
-  configLoading.value = true
+async function loadConfig(opts: { silent?: boolean } = {}): Promise<boolean> {
+  if (!opts.silent) configLoading.value = true
   try {
     const res = await getDbBackupConfig()
     config.value = res.data.config
     status.value = res.data.status
     applyConfigToForm(res.data.config)
+    return true
   } catch (err: unknown) {
-    message.error(errDetail(err, '读取备份配置失败'))
+    // 静默模式（轮询）不弹 toast，由 pollHint 内联降级提示（M9）
+    if (!opts.silent) message.error(errDetail(err, '读取备份配置失败'))
+    return false
   } finally {
-    configLoading.value = false
+    if (!opts.silent) configLoading.value = false
     loaded.value = true
   }
 }
@@ -668,6 +807,13 @@ function applyConfigToForm(cfg: DbBackupConfig): void {
   form.include_static = !!cfg.include_static
   form.include_task_scripts = !!cfg.include_task_scripts
   form.include_task_logs = !!cfg.include_task_logs
+  // H1：同步已保存快照（状态区与 dirty 基准）
+  saved.enabled = !!cfg.enabled
+  saved.interval_minutes = cfg.interval_minutes ?? 60
+  saved.source_name = cfg.source_name || ''
+  saved.include_static = !!cfg.include_static
+  saved.include_task_scripts = !!cfg.include_task_scripts
+  saved.include_task_logs = !!cfg.include_task_logs
 }
 
 async function loadHistory(): Promise<void> {
@@ -682,18 +828,105 @@ async function loadHistory(): Promise<void> {
   }
 }
 
+// ── M5：历史筛选（后端无筛选参数；后端 page_size 上限 100，必要时翻页补齐至 200 上限） ──
+const FILTER_PAGE_SIZE = 20
+const FILTER_FETCH_LIMIT = 200
+const FILTER_PAGE_REQUEST = 100
+const historyFilter = reactive<{ status: string; trigger: string }>({ status: 'all', trigger: 'all' })
+const filteredPool = ref<DbBackupHistoryItem[] | null>(null)
+const filteredPage = ref(1)
+
+const filterActive = computed(() => historyFilter.status !== 'all' || historyFilter.trigger !== 'all')
+
+watch(
+  () => [historyFilter.status, historyFilter.trigger] as const,
+  () => {
+    historyPage.value = 1
+    filteredPage.value = 1
+    if (!filterActive.value) {
+      filteredPool.value = null
+      void loadHistory()
+      return
+    }
+    void loadFilteredHistory()
+  },
+)
+
+async function loadFilteredHistory(): Promise<void> {
+  historyLoading.value = true
+  try {
+    const first = await getDbBackupHistory(1, FILTER_PAGE_REQUEST)
+    const items = [...first.data.items]
+    const total = first.data.total
+    // 后端 page_size ≤ 100：total 超过单页时翻页补齐，总上限 200（与筛选视图性能预算一致）
+    const maxFetch = Math.min(total, FILTER_FETCH_LIMIT)
+    let page = 2
+    while (items.length < maxFetch) {
+      const res = await getDbBackupHistory(page, FILTER_PAGE_REQUEST)
+      if (!res.data.items.length) break
+      items.push(...res.data.items)
+      page += 1
+    }
+    filteredPool.value = items
+  } catch (err: unknown) {
+    message.error(errDetail(err, '读取备份历史失败'))
+    filteredPool.value = []
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+const filteredMatches = computed<DbBackupHistoryItem[]>(() => {
+  const items = filteredPool.value || []
+  return items.filter((it) => {
+    if (historyFilter.status !== 'all' && it.status !== historyFilter.status) return false
+    if (historyFilter.trigger !== 'all' && it.trigger !== historyFilter.trigger) return false
+    return true
+  })
+})
+
+const filteredTotalPages = computed(() => Math.max(1, Math.ceil(filteredMatches.value.length / FILTER_PAGE_SIZE)))
+
+/** 筛选视图：客户端分页展示匹配记录 */
+const displayedHistory = computed<DbBackupHistoryItem[]>(() => {
+  if (!filterActive.value) return history.value.items
+  const start = (filteredPage.value - 1) * FILTER_PAGE_SIZE
+  return filteredMatches.value.slice(start, start + FILTER_PAGE_SIZE)
+})
+
+const historyCountText = computed(() =>
+  filterActive.value ? `${filteredMatches.value.length} 条匹配` : `${history.value.total} 条`,
+)
+
+/** M8：从历史行发起恢复——记录预选包名并打开向导 */
+const preselectPkgName = ref<string | null>(null)
+
+function openWizardForPackage(item: DbBackupHistoryItem): void {
+  if (!item.package_name) return
+  preselectPkgName.value = item.package_name
+  wizardOpen.value = true
+}
+
 function refreshAll(): void {
   void loadConfig()
   void loadHistory()
 }
 
 function prevPage(): void {
+  if (filterActive.value) {
+    if (filteredPage.value > 1) filteredPage.value -= 1
+    return
+  }
   if (historyPage.value <= 1) return
   historyPage.value -= 1
   void loadHistory()
 }
 
 function nextPage(): void {
+  if (filterActive.value) {
+    if (filteredPage.value < filteredTotalPages.value) filteredPage.value += 1
+    return
+  }
   if (historyPage.value >= totalPages.value) return
   historyPage.value += 1
   void loadHistory()
@@ -706,11 +939,15 @@ function onPageSizeChange(e: Event): void {
   void loadHistory()
 }
 
-async function handleSave(): Promise<void> {
+async function performSave(): Promise<boolean> {
   const interval = toInt(form.interval_minutes, 0)
   if (interval < 1) {
     message.error('备份间隔必须为不小于 1 的分钟数')
-    return
+    return false
+  }
+  if (interval > 10080) {
+    message.error('备份间隔不能超过 10080 分钟（7 天）')
+    return false
   }
   saving.value = true
   try {
@@ -731,11 +968,53 @@ async function handleSave(): Promise<void> {
     if (res.data.config.enabled && !res.data.config.last_success_at) {
       message.info('已启用，30 秒内将自动执行首次备份')
     }
+    return true
   } catch (err: unknown) {
     message.error(errDetail(err, '保存失败，请检查配置'))
+    return false
   } finally {
     saving.value = false
   }
+}
+
+async function handleSave(): Promise<void> {
+  // M7：清空来源标识 = 后端强制重解析并变更身份，旧标识包脱离保留清理，需风险确认
+  if (needsSourceClearConfirm()) {
+    const ok = await new Promise<boolean>((resolve) => {
+      showOverlayModal({
+        title: '清空来源标识',
+        content: `保存后将重新自动解析来源标识（当前「${saved.source_name}」）。来源标识变更后，旧标识的历史备份包将脱离本机的保留清理（不再自动滚动删除），需要时请手工处理。确定继续保存？`,
+        okText: '继续保存',
+        okDanger: true,
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+    if (!ok) return
+  }
+  await performSave()
+}
+
+/** M7 触发条件：已保存过来源标识且表单被清空 */
+function needsSourceClearConfirm(): boolean {
+  return !!saved.source_name && form.source_name.trim() === ''
+}
+
+/** M6：存在未保存修改时刷新需确认丢弃 */
+function requestRefresh(): void {
+  if (isDirty.value) {
+    showOverlayModal({
+      title: '刷新将丢弃未保存修改',
+      content: '当前有未保存的全局配置修改，刷新后表单将恢复为已保存配置。确定刷新？',
+      okText: '丢弃并刷新',
+      okDanger: true,
+      onOk: () => {
+        refreshAll()
+      },
+    })
+    return
+  }
+  refreshAll()
 }
 
 // ── 位置抽屉逻辑 ──
@@ -879,6 +1158,56 @@ async function testTargetDrawer(): Promise<void> {
 
 // ── 位置行级操作 ──
 
+/** H5：位置健康信号——从已加载 history 的位置子结果按名称快照聚合（items 最新在前，首个出现 = 最新） */
+interface TargetHealth {
+  pushOk: boolean
+  pushAt: string | null
+  pushError: string | null
+}
+
+const targetHealth = computed<Map<string, TargetHealth>>(() => {
+  const map = new Map<string, TargetHealth>()
+  for (const item of history.value.items) {
+    for (const sub of item.targets || []) {
+      if (!map.has(sub.target_name)) {
+        map.set(sub.target_name, {
+          pushOk: sub.status === 'success',
+          pushAt: item.started_at,
+          pushError: sub.error,
+        })
+      }
+    }
+  }
+  return map
+})
+
+/** 最近一次行级测连结果（前端会话内暂存，按位置名） */
+const recentTests = ref<Map<string, { ok: boolean; message: string }>>(new Map())
+
+function healthDotClass(name: string): string {
+  const h = targetHealth.value.get(name)
+  if (!h) return 'none'
+  return h.pushOk ? 'ok' : 'fail'
+}
+
+function healthTooltip(name: string): string {
+  const h = targetHealth.value.get(name)
+  if (!h) return '最近推送：暂无记录（当前已加载历史内）'
+  const outcome = h.pushOk ? '成功' : `失败${h.pushError ? `：${h.pushError}` : ''}`
+  return `最近推送：${h.pushAt ? formatDateTime(h.pushAt) : '—'} · ${outcome}`
+}
+
+function recentTestText(name: string): string {
+  const e = recentTests.value.get(name)
+  return e ? `${e.ok ? '✓' : '✗'} ${e.message}` : ''
+}
+
+function recordRecentTest(name: string, ok: boolean, msg: string): void {
+  const next = new Map(recentTests.value)
+  next.set(name, { ok, message: msg })
+  recentTests.value = next
+}
+
 function targetToPayload(t: DbBackupTarget): DbBackupTargetCreate {
   return {
     name: t.name,
@@ -893,10 +1222,10 @@ function targetToPayload(t: DbBackupTarget): DbBackupTargetCreate {
   }
 }
 
-async function toggleTargetEnabled(t: DbBackupTarget): Promise<void> {
+async function toggleTargetEnabled(t: DbBackupTarget, enabled: boolean): Promise<void> {
   togglingId.value = t.id
   try {
-    await updateDbBackupTarget(t.id, { ...targetToPayload(t), enabled: !t.enabled })
+    await updateDbBackupTarget(t.id, { ...targetToPayload(t), enabled })
     await loadConfig()
   } catch (err: unknown) {
     message.error(errDetail(err, '切换启用状态失败'))
@@ -904,6 +1233,24 @@ async function toggleTargetEnabled(t: DbBackupTarget): Promise<void> {
   } finally {
     togglingId.value = null
   }
+}
+
+/** M10：停用位置 = 容灾能力降级，需确认；启用方向直通 */
+function onTargetToggleChange(t: DbBackupTarget, e: Event): void {
+  const checked = (e.target as HTMLInputElement).checked
+  if (t.enabled && !checked) {
+    showOverlayModal({
+      title: '停用备份位置',
+      content: `停用「${t.name}」后，该位置将不再接收新备份，容灾能力下降（远端已有的备份包不受影响）。确定停用？`,
+      okText: '停用',
+      okDanger: true,
+      onOk: () => {
+        void toggleTargetEnabled(t, false)
+      },
+    })
+    return
+  }
+  void toggleTargetEnabled(t, true)
 }
 
 async function testTargetRow(t: DbBackupTarget): Promise<void> {
@@ -919,8 +1266,11 @@ async function testTargetRow(t: DbBackupTarget): Promise<void> {
       remote_dir: t.remote_dir,
     })
     rowTestResult.value = { name: t.name, ok: res.data.ok, message: res.data.message }
+    recordRecentTest(t.name, res.data.ok, res.data.message)
   } catch (err: unknown) {
-    rowTestResult.value = { name: t.name, ok: false, message: errDetail(err, '测试失败') }
+    const msg = errDetail(err, '测试失败')
+    rowTestResult.value = { name: t.name, ok: false, message: msg }
+    recordRecentTest(t.name, false, msg)
   } finally {
     rowTestingId.value = null
   }
@@ -944,7 +1294,7 @@ function confirmDeleteTarget(t: DbBackupTarget): void {
   })
 }
 
-async function handleRunNow(): Promise<void> {
+async function doRunNow(): Promise<void> {
   runLoading.value = true
   try {
     const res = await runDbBackupNow()
@@ -952,11 +1302,41 @@ async function handleRunNow(): Promise<void> {
     await loadConfig()
     await loadHistory()
   } catch (err: unknown) {
-    message.error(errDetail(err, '备份失败'))
+    // 409 冲突等场景优先透传后端 detail（如「已有备份/恢复任务进行中，请稍后再试」），不静默
+    message.error(errDetail(err, '备份触发失败，请稍后重试'))
     await loadConfig()
   } finally {
     runLoading.value = false
   }
+}
+
+/** H2：立即备份守卫——存在未保存修改时先弹三选确认 */
+function requestRunNow(): void {
+  if (running.value || configLoading.value) return
+  if (isDirty.value) {
+    runConfirmOpen.value = true
+    return
+  }
+  void doRunNow()
+}
+
+function cancelRunConfirm(): void {
+  if (saving.value) return
+  runConfirmOpen.value = false
+}
+
+async function runWithSavedConfig(): Promise<void> {
+  if (saving.value) return
+  runConfirmOpen.value = false
+  message.info('将按服务端已保存配置执行备份，屏幕上的未保存修改不会生效')
+  await doRunNow()
+}
+
+async function saveThenRun(): Promise<void> {
+  if (saving.value) return
+  const ok = await performSave()
+  runConfirmOpen.value = false
+  if (ok) await doRunNow()
 }
 
 function closeRunResult(): void {
@@ -964,6 +1344,7 @@ function closeRunResult(): void {
 }
 
 function openWizard(): void {
+  preselectPkgName.value = null
   wizardOpen.value = true
 }
 
@@ -973,16 +1354,41 @@ function handleRestored(): void {
   void loadHistory()
 }
 
-// ── 进行中轮询：备份运行期间每 5s 刷新状态，结束时补刷历史 ──
+// ── 轮询策略（M9）：执行期 5s 静默降级轮询；空闲期 60s 兜底轻刷 status（两者互斥） ──
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let idleTimer: ReturnType<typeof setInterval> | null = null
+const pollFailCount = ref(0)
+const pollFailedNow = ref(false)
+const pollDegraded = ref(false)
+
+const pollHint = computed(() => {
+  if (pollDegraded.value) return '自动刷新已暂停（连续失败），请点击「刷新」手动更新'
+  if (pollFailedNow.value) return '状态刷新失败，正在重试…'
+  return ''
+})
+
+async function pollTick(): Promise<void> {
+  const ok = await loadConfig({ silent: true })
+  if (!ok) {
+    pollFailCount.value += 1
+    pollFailedNow.value = true
+    if (pollFailCount.value >= 3) {
+      stopPolling()
+      pollDegraded.value = true
+    }
+    return
+  }
+  pollFailCount.value = 0
+  pollFailedNow.value = false
+  if (!inProgress.value) {
+    await loadHistory()
+  }
+}
 
 function startPolling(): void {
   if (pollTimer) return
-  pollTimer = setInterval(async () => {
-    await loadConfig()
-    if (!inProgress.value) {
-      await loadHistory()
-    }
+  pollTimer = setInterval(() => {
+    void pollTick()
   }, 5000)
 }
 
@@ -990,6 +1396,27 @@ function stopPolling(): void {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+}
+
+/** 兜底轮询：仅页面可见且无执行中任务时轻刷 status，让定时备份完成自动反映 */
+async function idleTick(): Promise<void> {
+  if (document.visibilityState !== 'visible') return
+  if (inProgress.value || running.value) return
+  await loadConfig({ silent: true })
+}
+
+function startIdlePolling(): void {
+  if (idleTimer) return
+  idleTimer = setInterval(() => {
+    void idleTick()
+  }, 60000)
+}
+
+function stopIdlePolling(): void {
+  if (idleTimer) {
+    clearInterval(idleTimer)
+    idleTimer = null
   }
 }
 
@@ -1003,6 +1430,7 @@ watch(inProgress, (busy) => {
 
 onMounted(() => {
   refreshAll()
+  startIdlePolling()
   if (props.initialWizard) wizardOpen.value = true
 })
 
@@ -1016,6 +1444,7 @@ watch(
 
 onUnmounted(() => {
   stopPolling()
+  stopIdlePolling()
 })
 </script>
 
@@ -1075,6 +1504,108 @@ onUnmounted(() => {
   margin-top: 8px;
   font-size: 12px;
   color: var(--warning);
+}
+
+/* ── H1 dirty 徽标 / H2 运行预期 / M9 轮询提示 / H2 三选弹窗 ── */
+.dbb-dirty-badge {
+  font-size: 11px;
+  line-height: 1;
+  color: oklch(50% 0.13 85);
+  background: oklch(70% 0.15 85 / 12%);
+  border: 1px solid oklch(70% 0.15 85 / 45%);
+  border-radius: 999px;
+  padding: 3px 9px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+.dbb-run-expectation {
+  margin-left: 4px;
+}
+.dbb-poll-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dbb-run-confirm {
+  max-width: 480px;
+}
+.dbb-run-confirm-desc {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--fg);
+}
+.dbb-run-confirm-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── H5 健康列 ── */
+.dbb-tgt-health {
+  white-space: nowrap;
+}
+.dbb-health-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.dbb-health-dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px oklch(55% 0.15 145 / 15%);
+}
+.dbb-health-dot.fail {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px oklch(55% 0.18 28 / 15%);
+}
+.dbb-health-dot.none {
+  background: var(--border);
+}
+
+/* ── M5 历史筛选 / 失败原因展开 ── */
+.dbb-hist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dbb-error-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.dbb-hist-filter {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.hist-error-detail {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  background: oklch(55% 0.18 28 / 6%);
+  border: 1px solid oklch(55% 0.18 28 / 25%);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--danger);
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+}
+
+/* ── M8 恢复此包入口 ── */
+.dbb-restore-pkg-btn {
+  display: inline-flex;
+  margin-top: 4px;
+}
+
+/* ── M10 行内开关 ── */
+.dbb-row-toggle {
+  vertical-align: middle;
 }
 
 /* ── 上次错误（可折叠） ── */

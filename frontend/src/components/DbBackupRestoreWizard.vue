@@ -11,7 +11,7 @@
         <div class="dbw-steps">
           <div class="dbw-step" :class="{ active: step === 1, done: step > 1 }">
             <div class="dbw-circle"><span v-if="step > 1" class="dbw-check">&#10003;</span><span v-else>1</span></div>
-            <span class="dbw-label">临时远端目标</span>
+            <span class="dbw-label">选择备份来源</span>
           </div>
           <div class="dbw-connector" :class="{ done: step > 1 }"></div>
           <div class="dbw-step" :class="{ active: step === 2, done: step > 2 }">
@@ -93,11 +93,16 @@
                     </div>
                     <div v-if="target.auth_type === 'password'" class="form-group">
                       <label class="form-label">密码</label>
-                      <a-input-password
-                        v-model:value="target.password"
-                        placeholder="SSH 密码"
-                        autocomplete="new-password"
-                      />
+                      <div class="dbw-pass-row">
+                        <a-input-password
+                          v-model:value="target.password"
+                          placeholder="SSH 密码"
+                          autocomplete="new-password"
+                        />
+                        <button v-if="target.password" class="btn btn-secondary btn-sm" @click="clearPassword">
+                          清除
+                        </button>
+                      </div>
                     </div>
                     <div v-else class="form-group">
                       <label class="form-label">私钥路径</label>
@@ -132,20 +137,34 @@
               </div>
               <template v-else>
                 <div class="form-hint dbw-pkg-count">共 {{ packages.length }} 个备份包，选择一个后点击「校验此包」</div>
+                <div class="dbw-pkg-toolbar">
+                  <label class="checkbox-label dbw-latest-toggle">
+                    <input v-model="onlyLatest" type="checkbox" />
+                    <span>仅看每个来源的最新包</span>
+                  </label>
+                </div>
                 <div v-if="failedLocations.length" class="dbw-loc-fail">
                   部分位置不可达：{{ failedLocations.join('、') }}——列表可能不完整，可在步骤 1 单独选择该位置重试
                 </div>
                 <div class="dbw-pkg-list">
                   <div
-                    v-for="pkg in packages"
+                    v-for="pkg in visiblePackages"
                     :key="pkg.name"
                     class="dbw-pkg"
                     :class="{ selected: selected === pkg.name }"
+                    role="radio"
+                    :aria-checked="selected === pkg.name"
+                    tabindex="0"
                     @click="selectPkg(pkg.name)"
+                    @keydown.enter.prevent="selectPkg(pkg.name)"
+                    @keydown.space.prevent="selectPkg(pkg.name)"
                   >
                     <div class="dbw-pkg-radio"><span class="dbw-pkg-radio-dot"></span></div>
                     <div class="dbw-pkg-main">
-                      <div class="dbw-pkg-name">{{ pkg.name }}</div>
+                      <div class="dbw-pkg-name">
+                        {{ pkg.name }}
+                        <span v-if="isLatestPkg(pkg.name)" class="dbw-latest-tag">最新</span>
+                      </div>
                       <div class="dbw-pkg-meta">
                         <span>{{ formatFileSize(pkg.size) }}</span>
                         <span class="dbw-pkg-source">
@@ -179,12 +198,41 @@
                 </div>
 
                 <div v-if="verifying" class="dbw-loading">
-                  <span class="loading-spinner"></span> 正在下载备份包并校验（SHA256 + 完整性），大包可能需要数分钟…
+                  <span class="loading-spinner"></span> 正在从「{{ verifySourceLabel }}」下载备份包并校验完整性（SHA256
+                  + 逐库校验），大包可能需要数分钟，请勿关闭窗口…
                 </div>
                 <div v-if="verifyError" class="dbw-error-text">{{ verifyError }}</div>
 
+                <!-- H4：多位置副本校验来源显式选择（聚合视图下 present_in > 1 时弹出） -->
+                <div v-if="verifyChooserOpen" class="dbw-verify-chooser">
+                  <div class="dbw-chooser-title">选择校验来源位置</div>
+                  <div class="dbw-chooser-desc">
+                    该备份包存在于多个位置，各副本可能不一致；校验将从所选位置下载完整包。
+                  </div>
+                  <label v-for="opt in chooserOptions" :key="opt.target_id" class="dbw-chooser-opt">
+                    <input
+                      v-model.number="chosenVerifyTargetId"
+                      type="radio"
+                      name="dbw-verify-source"
+                      :value="opt.target_id"
+                    />
+                    <span>{{ opt.target_name }}</span>
+                  </label>
+                  <div class="dbw-chooser-actions">
+                    <button class="btn btn-secondary btn-sm" @click="cancelVerifyChooser">取消</button>
+                    <button class="btn btn-primary btn-sm" :disabled="verifying" @click="confirmVerifyChooser">
+                      {{ verifying ? '校验中…' : '确认校验' }}
+                    </button>
+                  </div>
+                </div>
+
                 <!-- 校验明细 -->
-                <div v-if="verifyResult" class="dbw-verify-detail">
+                <div
+                  v-if="verifyResult"
+                  class="dbw-verify-detail"
+                  :class="{ 'has-fail': !allChecksPassed(verifyResult) }"
+                >
+                  <div class="dbw-verify-src">本次校验自「{{ verifySourceLabel }}」</div>
                   <a-alert
                     v-if="verifyResult.version_note"
                     type="warning"
@@ -194,23 +242,43 @@
                   />
                   <div class="dbw-check-grid">
                     <div class="dbw-check">
-                      <span class="dbw-check-icon ok">&#10003;</span><span>压缩包完整性</span>
-                      <span class="dbw-check-val">{{ verifyResult.checks.tar_integrity }}</span>
+                      <span
+                        class="dbw-check-icon"
+                        :class="checkPassed(verifyResult.checks.tar_integrity) ? 'ok' : 'fail'"
+                        >{{ checkPassed(verifyResult.checks.tar_integrity) ? '✓' : '✗' }}</span
+                      ><span>压缩包完整性</span>
+                      <span class="dbw-check-val">{{ checkText(verifyResult.checks.tar_integrity) }}</span>
                     </div>
                     <div class="dbw-check">
-                      <span class="dbw-check-icon ok">&#10003;</span><span>SHA256 校验</span>
-                      <span class="dbw-check-val">{{ verifyResult.checks.sha256 }}</span>
+                      <span class="dbw-check-icon" :class="checkPassed(verifyResult.checks.sha256) ? 'ok' : 'fail'">{{
+                        checkPassed(verifyResult.checks.sha256) ? '✓' : '✗'
+                      }}</span
+                      ><span>SHA256 校验</span>
+                      <span class="dbw-check-val">{{ checkText(verifyResult.checks.sha256) }}</span>
                     </div>
                     <div class="dbw-check">
-                      <span class="dbw-check-icon ok">&#10003;</span><span>关键表存在性</span>
-                      <span class="dbw-check-val">{{ verifyResult.checks.key_tables }}</span>
+                      <span
+                        class="dbw-check-icon"
+                        :class="checkPassed(verifyResult.checks.key_tables) ? 'ok' : 'fail'"
+                        >{{ checkPassed(verifyResult.checks.key_tables) ? '✓' : '✗' }}</span
+                      ><span>关键表存在性</span>
+                      <span class="dbw-check-val">{{ checkText(verifyResult.checks.key_tables) }}</span>
                     </div>
                     <div v-for="(v, k) in verifyResult.checks.db_integrity" :key="k" class="dbw-check">
-                      <span class="dbw-check-icon ok">&#10003;</span><span>库 {{ k }}</span>
-                      <span class="dbw-check-val">integrity {{ v }}</span>
+                      <span class="dbw-check-icon" :class="checkPassed(v) ? 'ok' : 'fail'">{{
+                        checkPassed(v) ? '✓' : '✗'
+                      }}</span
+                      ><span>库 {{ k }}</span>
+                      <span class="dbw-check-val">完整性校验 {{ checkText(v) }}</span>
                     </div>
                   </div>
-                  <div class="dbw-verify-ok-hint">校验通过，可进入下一步执行恢复</div>
+                  <div class="dbw-verify-ok-hint">
+                    {{
+                      allChecksPassed(verifyResult)
+                        ? '校验通过，可进入下一步执行恢复'
+                        : '存在未通过的检查项，请更换备份包或来源位置后重新校验'
+                    }}
+                  </div>
                 </div>
               </template>
             </template>
@@ -283,6 +351,27 @@
                 已继承来源标识「<span class="dbw-mono">{{ restoredSourceName }}</span
                 >」：若本机与旧机同时运行（双跑/迁移），请修改来源标识，避免两机互删共享目录中的备份。
               </div>
+              <div class="dbw-success-row">
+                请核对各备份位置的可达性与适用性（恢复继承包内来源标识后，共享目录中的清理归属可能变化）。
+              </div>
+              <div class="dbw-success-row dbw-restart">
+                <span>完成后请重启后端服务（恢复已落位，重启以重载引擎）：</span>
+                <span class="dbw-restart-item">
+                  开发 <code>develop/linux/start.sh</code>
+                  <button class="btn btn-secondary btn-sm" @click="copyRestartCommand('develop/linux/start.sh')">
+                    复制
+                  </button>
+                </span>
+                <span class="dbw-restart-item">
+                  生产 <code>sh stop.sh &amp;&amp; sh start.sh</code>
+                  <button class="btn btn-secondary btn-sm" @click="copyRestartCommand('sh stop.sh && sh start.sh')">
+                    复制
+                  </button>
+                </span>
+              </div>
+              <div v-if="expiresText" class="dbw-success-row" :class="{ 'dbw-text-warning': expiresSoon }">
+                暂存有效期至 {{ expiresText }}<template v-if="expiresSoon">（即将过期，请尽快刷新页面）</template>
+              </div>
               <div class="dbw-success-row dbw-text-warning">请刷新页面并重新登录，以使用恢复后的数据。</div>
             </div>
           </div>
@@ -296,10 +385,10 @@
               {{ listing ? '连接中…' : '连接并列出备份包' }}
             </button>
             <template v-else-if="step === 2">
-              <button v-if="verifyResult" class="btn btn-secondary" :disabled="verifying" @click="handleVerify">
+              <button v-if="verifyResult" class="btn btn-secondary" :disabled="verifying" @click="requestVerify">
                 重新校验
               </button>
-              <button class="btn btn-primary" :disabled="!selected || verifying" @click="handleVerify">
+              <button class="btn btn-primary" :disabled="!selected || verifying" @click="requestVerify">
                 {{ verifying ? '校验中…' : verifyResult ? '重新校验此包' : '校验此包' }}
               </button>
               <button class="btn btn-primary" :disabled="!verifyResult || verifying" @click="nextStep">下一步</button>
@@ -313,7 +402,7 @@
               >
                 {{ executing ? '恢复中…' : '执行恢复' }}
               </button>
-              <button v-else class="btn btn-primary" @click="reloadPage">刷新页面并重新登录</button>
+              <button v-else class="btn btn-primary" @click="reloadPage">已完成，刷新页面</button>
             </template>
           </div>
         </div>
@@ -326,7 +415,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
-import { formatDateTime, formatFileSize } from '@/utils/format'
+import { formatDateTime, formatFileSize, parseBackendDate } from '@/utils/format'
 import { getDbBackupConfig, listRestorePackages, verifyRestorePackage, executeDbRestore } from '@/api/dbBackup'
 import type {
   DbBackupTarget,
@@ -339,6 +428,8 @@ import type {
 
 const props = defineProps<{
   visible: boolean
+  /** M8：从备份历史「恢复此包」进入时预选的包名（列包成功后自动选中，consumed in 5.4） */
+  preselectPackageName?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -358,6 +449,13 @@ const confirmed = ref(false)
 const executing = ref(false)
 const executeResult = ref<RestoreExecuteResult | null>(null)
 const executeError = ref('')
+
+// ── H4：多位置副本校验来源显式选择 ──
+const verifyChooserOpen = ref(false)
+const chooserOptions = ref<Array<{ target_id: number; target_name: string }>>([])
+const chosenVerifyTargetId = ref<number | null>(null)
+/** 本次校验实际使用的来源位置标注（「本次校验自 X」/下载提示共用） */
+const verifySourceLabel = ref('')
 
 const busy = computed(() => listing.value || verifying.value || executing.value)
 const restoreDone = computed(() => executeResult.value !== null)
@@ -459,6 +557,49 @@ function databasesText(pkg: RestorePackageItem): string {
   return dbs.length ? `包含库：${dbs.join('、')}` : ''
 }
 
+// ── 5.3：校验检查项按值渲染（后端 'ok' = 通过；其余按失败呈现，杜绝失败仍绿勾） ──
+function checkPassed(v: string): boolean {
+  return v === 'ok'
+}
+
+function checkText(v: string): string {
+  return checkPassed(v) ? '通过' : '失败'
+}
+
+function allChecksPassed(r: RestoreVerifyResult): boolean {
+  const simple = [r.checks.tar_integrity, r.checks.sha256, r.checks.key_tables].every(checkPassed)
+  const dbs = Object.values(r.checks.db_integrity || {}).every(checkPassed)
+  return simple && dbs
+}
+
+// ── 5.4：「仅看最新」与来源最新标记（列表为最新在前，首个出现即该来源最新） ──
+const onlyLatest = ref(false)
+
+const latestPkgNames = computed<Set<string>>(() => {
+  const seen = new Set<string>()
+  const latest = new Set<string>()
+  for (const p of packages.value) {
+    const key = p.source || p.name
+    if (!seen.has(key)) {
+      seen.add(key)
+      latest.add(p.name)
+    }
+  }
+  return latest
+})
+
+const visiblePackages = computed<RestorePackageItem[]>(() =>
+  onlyLatest.value ? packages.value.filter((p) => latestPkgNames.value.has(p.name)) : packages.value,
+)
+
+function isLatestPkg(name: string): boolean {
+  return latestPkgNames.value.has(name)
+}
+
+function clearPassword(): void {
+  target.password = ''
+}
+
 /** 来源列文本：旧格式包（文件名无来源标识）显示 — */
 function sourceText(pkg: RestorePackageItem): string {
   return pkg.source || '—'
@@ -496,13 +637,60 @@ function listPayload(): RestoreTargetPayload {
 }
 
 /** 校验载荷：必须落到一个具体位置下载。「全部位置」时从选中包的 present_in 取
- * 第一个列包成功的位置（后端 target_id null 会 422——包行必带 ≥1 个存在位置）。 */
+ * 第一个列包成功的位置（后端 target_id null 会 422——包行必带 ≥1 个存在位置）。
+ * 多位置时改走 requestVerify 的显式选择（H4），本函数仅作单位置/指定位置兜底。 */
 function verifyTarget(): RestoreTargetPayload {
   if (sourceMode.value !== 'configured') return targetPayload()
   if (selectedTargetId.value !== 'all') return { target_id: Number(selectedTargetId.value) }
   const found = packages.value.find((p) => p.name === selected.value)
   const tid = found?.present_in?.[0]?.target_id
   return { target_id: tid != null ? Number(tid) : null }
+}
+
+/** H4：聚合视图下选中包的多位置选项（≤1 个时无需选择） */
+function resolveChooserOptions(): Array<{ target_id: number; target_name: string }> {
+  if (sourceMode.value !== 'configured') return []
+  if (selectedTargetId.value !== 'all') return []
+  const found = packages.value.find((p) => p.name === selected.value)
+  return (found?.present_in || []).map((p) => ({ target_id: p.target_id, target_name: p.target_name }))
+}
+
+/** 校验来源位置标注：已配置位置 → 位置名；手输 → 手动输入（主机） */
+function sourceLabelFor(targetId: number | null): string {
+  if (sourceMode.value !== 'configured') {
+    return `手动输入（${target.host.trim() || '未填写主机'}）`
+  }
+  if (targetId != null) {
+    const t = targets.value.find((x) => x.id === targetId)
+    if (t) return t.name
+    const opt = chooserOptions.value.find((o) => o.target_id === targetId)
+    if (opt) return opt.target_name
+  }
+  return '已配置位置'
+}
+
+/** 校验入口：聚合视图 + 多位置副本 → 先显式选择来源；其余静默沿用 */
+function requestVerify(): void {
+  if (!selected.value || verifying.value) return
+  const opts = resolveChooserOptions()
+  if (opts.length > 1) {
+    chooserOptions.value = opts
+    chosenVerifyTargetId.value = opts[0].target_id
+    verifyChooserOpen.value = true
+    return
+  }
+  void doVerify(verifyTarget())
+}
+
+function cancelVerifyChooser(): void {
+  if (verifying.value) return
+  verifyChooserOpen.value = false
+}
+
+function confirmVerifyChooser(): void {
+  if (chosenVerifyTargetId.value == null || verifying.value) return
+  verifyChooserOpen.value = false
+  void doVerify({ target_id: chosenVerifyTargetId.value })
 }
 
 async function handleList(): Promise<void> {
@@ -520,6 +708,10 @@ async function handleList(): Promise<void> {
     packages.value = res.data.packages
     failedLocations.value = res.data.failed_locations || []
     selected.value = ''
+    // M8/5.4：历史「恢复此包」预选——命中时自动选中，用户从校验步骤继续
+    if (props.preselectPackageName && packages.value.some((p) => p.name === props.preselectPackageName)) {
+      selected.value = props.preselectPackageName
+    }
     verifyResult.value = null
     verifyError.value = ''
     step.value = 2
@@ -530,12 +722,13 @@ async function handleList(): Promise<void> {
   }
 }
 
-async function handleVerify(): Promise<void> {
+async function doVerify(target: RestoreTargetPayload): Promise<void> {
   if (!selected.value || verifying.value) return
   verifying.value = true
   verifyError.value = ''
+  verifySourceLabel.value = sourceLabelFor(target.target_id ?? null)
   try {
-    const res = await verifyRestorePackage({ target: verifyTarget(), package_name: selected.value })
+    const res = await verifyRestorePackage({ target, package_name: selected.value })
     verifyResult.value = res.data
   } catch (err: unknown) {
     verifyResult.value = null
@@ -543,6 +736,30 @@ async function handleVerify(): Promise<void> {
   } finally {
     verifying.value = false
   }
+}
+
+/**
+ * H3：恢复执行失败文案分类——超时必须警示「后端可能仍在执行」防重复发起；
+ * 409 两种形态（暂存过期 / 并发冲突——并发拒绝时会顺带删除本次 verify_id 暂存）都必须引导重新校验。
+ */
+function classifyExecuteError(err: unknown): string {
+  const e = err as {
+    code?: string
+    message?: string
+    response?: { status?: number; data?: { detail?: unknown } }
+  }
+  const isTimeout = e?.code === 'ECONNABORTED' || /timeout/i.test(e?.message || '')
+  if (isTimeout) {
+    return '恢复请求超时：后端可能仍在执行恢复（落位与引擎重载进行中），请勿重复发起；请刷新页面并核对当前活动数据库'
+  }
+  const detail = typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : ''
+  if (e?.response?.status === 409 && detail.includes('过期')) {
+    return '校验会话已过期（暂存有效期 10 分钟），请返回上一步重新校验后再执行恢复'
+  }
+  if (e?.response?.status === 409) {
+    return `${detail || '已有备份/恢复任务进行中，请稍后再试'}；本次校验暂存已失效，冲突解除后需重新校验`
+  }
+  return detail || '恢复失败，请稍后重试'
 }
 
 async function handleExecute(): Promise<void> {
@@ -554,11 +771,51 @@ async function handleExecute(): Promise<void> {
     executeResult.value = res.data
     emit('restored')
   } catch (err: unknown) {
-    executeError.value = errDetail(err, '恢复失败，请稍后重试')
+    executeError.value = classifyExecuteError(err)
   } finally {
     executing.value = false
   }
 }
+
+/** H6：完成闭环——重启命令复制（clipboard 优先，execCommand 降级） */
+async function copyRestartCommand(cmd: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(cmd)
+      message.success('已复制重启命令')
+      return
+    }
+  } catch {
+    // 降级到 execCommand
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = cmd
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    message.success('已复制重启命令')
+  } catch {
+    message.info(cmd)
+  }
+}
+
+const expiresText = computed(() => {
+  const exp = verifyResult.value?.meta?.expires_at
+  return exp ? formatDateTime(exp) : ''
+})
+
+/** M13：暂存剩余 <2 分钟时警示即将过期 */
+const expiresSoon = computed(() => {
+  const exp = verifyResult.value?.meta?.expires_at
+  if (!exp) return false
+  try {
+    return parseBackendDate(exp).getTime() - Date.now() < 2 * 60 * 1000
+  } catch {
+    return false
+  }
+})
 
 function nextStep(): void {
   if (step.value === 2 && !verifyResult.value) return
@@ -590,7 +847,7 @@ function requestClose(): void {
   if (step.value > 1 || packages.value.length > 0) {
     showOverlayModal({
       title: '关闭恢复向导',
-      content: '已填写的连接信息与校验结果将丢失，确定要关闭吗？（连接信息会在下次打开时保留）',
+      content: '已列出的备份包与校验结果将丢弃；连接信息会保留，下次打开无需重填。确定关闭？',
       okText: '关闭向导',
       okDanger: true,
       onOk: () => {
@@ -619,6 +876,10 @@ watch(
     executing.value = false
     executeResult.value = null
     executeError.value = ''
+    verifyChooserOpen.value = false
+    chooserOptions.value = []
+    chosenVerifyTargetId.value = null
+    verifySourceLabel.value = ''
     void loadTargets()
   },
   // immediate：整页挂载即处于打开态（如 HMR / 直链恢复入口）时也要初始化
@@ -894,9 +1155,77 @@ watch(
 .dbw-verify-detail {
   margin-top: 14px;
   padding: 14px 16px;
-  border: 1px solid #b7eb8f;
+  border: 1px solid oklch(55% 0.15 145 / 35%);
   border-radius: 8px;
-  background: #f6ffed;
+  background: oklch(55% 0.15 145 / 6%);
+}
+.dbw-verify-detail.has-fail {
+  border-color: oklch(55% 0.18 28 / 35%);
+  background: oklch(55% 0.18 28 / 6%);
+}
+/* ── H4 校验来源选择 / 来源标注 ── */
+.dbw-verify-chooser {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid oklch(56% 0.16 210 / 40%);
+  border-radius: 8px;
+  background: oklch(56% 0.16 210 / 5%);
+}
+.dbw-chooser-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.dbw-chooser-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.dbw-chooser-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.dbw-chooser-opt input {
+  accent-color: var(--accent);
+}
+/* ── L4 键盘可达性焦点样式 ── */
+.dbw-pkg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dbw-chooser-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.dbw-verify-src {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+/* ── H6 完成闭环：重启命令 / 暂存有效期 ── */
+.dbw-restart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dbw-restart-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dbw-restart-item code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: oklch(0% 0 0 / 6%);
+  font-size: 12px;
+  font-family: var(--font-mono);
 }
 .dbw-check-grid {
   display: flex;
@@ -923,6 +1252,35 @@ watch(
 }
 .dbw-check-icon.ok {
   background: var(--success);
+}
+.dbw-check-icon.fail {
+  background: var(--danger);
+}
+/* ── 5.4 仅看最新工具行 / 最新标记 ── */
+.dbw-pkg-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.dbw-latest-tag {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 10%);
+  border: 1px solid oklch(55% 0.15 145 / 35%);
+  vertical-align: middle;
+}
+/* ── L7 密码清除 ── */
+.dbw-pass-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dbw-pass-row > :first-child {
+  flex: 1;
 }
 .dbw-check-val {
   margin-left: auto;
@@ -1025,9 +1383,9 @@ watch(
 .dbw-success-box {
   margin-top: 16px;
   padding: 14px 16px;
-  border: 1px solid #b7eb8f;
+  border: 1px solid oklch(55% 0.15 145 / 35%);
   border-radius: 8px;
-  background: #f6ffed;
+  background: oklch(55% 0.15 145 / 6%);
   display: flex;
   flex-direction: column;
   gap: 6px;

@@ -10,6 +10,7 @@ const mockCreateTarget = vi.fn()
 const mockUpdateTarget = vi.fn()
 const mockDeleteTarget = vi.fn()
 const mockTestTarget = vi.fn()
+const mockShowOverlay = vi.fn()
 
 vi.mock('@/api/dbBackup', () => ({
   getDbBackupConfig: (...args: any[]) => mockGetConfig(...args),
@@ -20,6 +21,10 @@ vi.mock('@/api/dbBackup', () => ({
   updateDbBackupTarget: (...args: any[]) => mockUpdateTarget(...args),
   deleteDbBackupTarget: (...args: any[]) => mockDeleteTarget(...args),
   testDbBackupTarget: (...args: any[]) => mockTestTarget(...args),
+}))
+
+vi.mock('@/composables/useOverlayModal', () => ({
+  showOverlayModal: (...args: any[]) => mockShowOverlay(...args),
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -122,12 +127,23 @@ describe('DbBackupCard 来源标识字段（全局表单）', () => {
       expect(Object.keys(payload)).not.toContain(k)
     }
 
-    // 清空后保存 → null（自动解析）
+    // 清空后保存 → M7 风险确认 → 确认后发送 null（自动解析）
     await wrapper.find('input.dbb-source-input').setValue('')
     mockUpdateConfig.mockResolvedValue({
       data: { config: makeConfig({ source_name: 'auto-resolved' }), status: statusInfo },
     })
     await findSaveButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(mockUpdateConfig).toHaveBeenCalledTimes(1) // 确认前不提交
+    const confirmOpts = mockShowOverlay.mock.calls[mockShowOverlay.mock.calls.length - 1][0] as {
+      title?: string
+      content?: string
+      onOk?: () => void
+    }
+    expect(confirmOpts.title).toContain('清空来源标识')
+    expect(confirmOpts.content).toContain('host-1.primary')
+    confirmOpts.onOk?.()
+    await flushPromises()
     await flushPromises()
     expect(mockUpdateConfig.mock.calls[1][0].source_name).toBeNull()
   })

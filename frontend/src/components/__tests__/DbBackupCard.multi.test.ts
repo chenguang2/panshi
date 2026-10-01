@@ -10,6 +10,7 @@ const mockCreateTarget = vi.fn()
 const mockUpdateTarget = vi.fn()
 const mockDeleteTarget = vi.fn()
 const mockTestTarget = vi.fn()
+const mockShowOverlay = vi.fn()
 
 vi.mock('@/api/dbBackup', () => ({
   getDbBackupConfig: (...args: any[]) => mockGetConfig(...args),
@@ -20,6 +21,10 @@ vi.mock('@/api/dbBackup', () => ({
   updateDbBackupTarget: (...args: any[]) => mockUpdateTarget(...args),
   deleteDbBackupTarget: (...args: any[]) => mockDeleteTarget(...args),
   testDbBackupTarget: (...args: any[]) => mockTestTarget(...args),
+}))
+
+vi.mock('@/composables/useOverlayModal', () => ({
+  showOverlayModal: (...args: any[]) => mockShowOverlay(...args),
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -137,10 +142,19 @@ describe('DbBackupCard 位置表格', () => {
     expect(rows[1].classes()).toContain('row-disabled')
   })
 
-  it('行内启用开关切换调用 PUT（enabled 取反）', async () => {
+  it('行内启用开关：停用先弹确认，确认后 PUT enabled=false（M10）', async () => {
     const wrapper = await mountCard()
     mockUpdateTarget.mockResolvedValue({ data: makeTarget({ enabled: false }) })
     await rowOf(wrapper, 0).find('input[type="checkbox"]').setValue(false)
+    await flushPromises()
+    // 停用属于容灾能力降级，必须先确认
+    expect(mockUpdateTarget).not.toHaveBeenCalled()
+    expect(mockShowOverlay).toHaveBeenCalledTimes(1)
+    const opts = mockShowOverlay.mock.calls[0][0] as { title?: string; content?: string; onOk?: () => void }
+    expect(opts.title).toContain('停用备份位置')
+    expect(opts.content).toContain('局内DR')
+    opts.onOk?.()
+    await flushPromises()
     await flushPromises()
     expect(mockUpdateTarget).toHaveBeenCalledWith(1, expect.objectContaining({ enabled: false, name: '局内DR' }))
   })

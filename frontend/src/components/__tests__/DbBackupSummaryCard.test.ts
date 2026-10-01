@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { formatDateTime } from '@/utils/format'
 
 const mockGetConfig = vi.fn()
 const mockGetHistory = vi.fn()
@@ -87,8 +88,14 @@ const lastRun = {
   },
 }
 
-async function mountCard(configOverrides: Record<string, unknown> = {}, history = lastRun) {
-  mockGetConfig.mockResolvedValue({ data: { config: makeConfig(configOverrides), status: statusInfo } })
+async function mountCard(
+  configOverrides: Record<string, unknown> = {},
+  history = lastRun,
+  statusOverrides: Record<string, unknown> = {},
+) {
+  mockGetConfig.mockResolvedValue({
+    data: { config: makeConfig(configOverrides), status: { ...statusInfo, ...statusOverrides } },
+  })
   mockGetHistory.mockResolvedValue(history)
   const wrapper = mount(DbBackupSummaryCard)
   await flushPromises()
@@ -144,5 +151,37 @@ describe('DbBackupSummaryCard 摘要卡', () => {
       { data: { total: 0, page: 1, page_size: 1, items: [] } },
     )
     expect(wrapper.text()).toContain('从未备份')
+  })
+})
+
+// ═══════════ 组 6：状态口径对齐（6.1） ═══════════
+
+describe('DbBackupSummaryCard 6.1 状态口径对齐主卡', () => {
+  it('下一轮预计显示具体时间（status.next_run_at）而非间隔', async () => {
+    const wrapper = await mountCard({}, lastRun, { next_run_at: '2026-10-01T03:00:00' })
+    const stats = wrapper.find('.dbb-sum-stats').text()
+    expect(stats).toContain(formatDateTime('2026-10-01T03:00:00'))
+    expect(stats).not.toContain('间隔')
+  })
+
+  it('已启用但无 next_run_at 时显示「启用后 30 秒内首备」', async () => {
+    const wrapper = await mountCard()
+    expect(wrapper.find('.dbb-sum-stats').text()).toContain('启用后 30 秒内首备')
+  })
+
+  it('未启用定时调度时显示「未启用定时」而非 —', async () => {
+    const wrapper = await mountCard({ enabled: false })
+    expect(wrapper.find('.dbb-sum-stats').text()).toContain('未启用定时')
+  })
+
+  it('备份进行中：最近状态显示「备份中」（读 status.in_progress）', async () => {
+    const wrapper = await mountCard({}, lastRun, { in_progress: true })
+    expect(wrapper.find('.dbb-sum-stats').text()).toContain('备份中')
+  })
+
+  it('running 状态徽章显示「进行中」而非英文原文', async () => {
+    const wrapper = await mountCard({ last_status: 'running' }, lastRun, { last_status: 'running' })
+    expect(wrapper.find('.dbb-sum-stats').text()).toContain('进行中')
+    expect(wrapper.find('.dbb-sum-stats').text()).not.toContain('running')
   })
 })
