@@ -88,8 +88,10 @@
     <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页；无 db_backup 权限整卡不渲染，避免 403） -->
     <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup')" />
 
-    <!-- 数据迁移摘要卡：纯导航入口（完整迁移 UI 在独立页 /db-migration；无权限整卡不渲染，避免 403） -->
-    <DbMigrationSummaryCard v-if="authStore.hasPermission('database_management')" />
+    <!-- 数据迁移摘要卡：纯导航入口（完整迁移 UI 在独立页 /db-migration）。
+         门控对齐目标页权限 db_migration：只持 database_management 的用户看不到入口卡，
+         避免点【开始迁移】被 /db-migration 路由权限拦截 403。 -->
+    <DbMigrationSummaryCard v-if="authStore.hasPermission('db_migration')" />
 
     <!-- 连接编辑 Modal（新增/编辑 4.3） -->
     <div class="modal-overlay" :style="{ display: connModal.open ? 'flex' : 'none' }">

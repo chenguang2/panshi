@@ -365,8 +365,10 @@ describe('DatabaseManagement', () => {
       expect(wrapper.find('.migration-history-table').exists()).toBe(false)
     })
 
-    it('无 database_management 权限的用户不渲染摘要卡（也不发迁移状态请求）', async () => {
-      seedAuth([], 'user')
+    it('无 db_migration 权限的用户不渲染摘要卡（也不发迁移状态请求）', async () => {
+      // 持 database_management 而无 db_migration：页面可进，但入口卡不得渲染
+      // （否则点【开始迁移】会被 /db-migration 路由权限拦截 403）
+      seedAuth(['database_management'], 'user')
       const wrapper = await mountPage()
       expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(false)
       // 摘要卡是 running-tasks 的唯一消费方：不发请求即整卡未挂载
