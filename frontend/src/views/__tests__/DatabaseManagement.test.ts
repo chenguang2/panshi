@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { useFeaturesStore } from '@/stores/features'
 
 // Mock the database api module.
 const mocks = {
@@ -144,12 +145,19 @@ function seedAuth(permissions: string[] = [], role = 'admin') {
   localStorage.setItem('permissions', JSON.stringify(permissions))
 }
 
+/** 种子功能开关：模拟 /system/features 已加载（未列出 = 启用，与后端缺省一致） */
+function seedFeatures(features: Record<string, boolean> = {}) {
+  const store = useFeaturesStore()
+  store.$patch({ features, loaded: true })
+}
+
 describe('DatabaseManagement', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
     localStorage.clear()
     seedAuth()
+    seedFeatures()
     mocks.getStatus.mockResolvedValue({ data: { active: conn(), connections_count: 1, version: 1 } })
     mocks.listConnections.mockResolvedValue({ data: [conn()] })
     mocks.getRunningTasks.mockResolvedValue({
@@ -335,6 +343,14 @@ describe('DatabaseManagement', () => {
       expect(wrapper.findComponent({ name: 'DbBackupSummaryCard' }).exists()).toBe(false)
       expect(backupMocks.getConfig).not.toHaveBeenCalled()
     })
+
+    it('db_backup 功能关闭时不渲染摘要卡（即使持权管理员）', async () => {
+      // 对齐菜单/路由的 feature 门控：开关关掉后不留「可见但不可达」死入口
+      seedFeatures({ db_backup: false })
+      const wrapper = await mountPage()
+      expect(wrapper.findComponent({ name: 'DbBackupSummaryCard' }).exists()).toBe(false)
+      expect(backupMocks.getConfig).not.toHaveBeenCalled()
+    })
   })
 
   describe('数据迁移摘要卡', () => {
@@ -372,6 +388,14 @@ describe('DatabaseManagement', () => {
       const wrapper = await mountPage()
       expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(false)
       // 摘要卡是 running-tasks 的唯一消费方：不发请求即整卡未挂载
+      expect(mocks.getRunningTasks).not.toHaveBeenCalled()
+    })
+
+    it('db_migration 功能关闭时不渲染摘要卡（即使持权管理员）', async () => {
+      // 对齐菜单/路由的 feature 门控：开关关掉后不留「可见但不可达」死入口
+      seedFeatures({ db_migration: false })
+      const wrapper = await mountPage()
+      expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(false)
       expect(mocks.getRunningTasks).not.toHaveBeenCalled()
     })
   })

@@ -85,13 +85,14 @@
       </div>
     </div>
 
-    <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页；无 db_backup 权限整卡不渲染，避免 403） -->
-    <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup')" />
+    <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页）：需 db_backup 权限且功能开关开启，
+         任一不满足整卡不渲染（避免无权限 403 / 功能未注册路由的死入口） -->
+    <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup') && featuresStore.has('db_backup')" />
 
     <!-- 数据迁移摘要卡：纯导航入口（完整迁移 UI 在独立页 /db-migration）。
-         门控对齐目标页权限 db_migration：只持 database_management 的用户看不到入口卡，
-         避免点【开始迁移】被 /db-migration 路由权限拦截 403。 -->
-    <DbMigrationSummaryCard v-if="authStore.hasPermission('db_migration')" />
+         需 db_migration 权限且功能开关开启：门控对齐目标页（权限/路由注册均按 db_migration），
+         只持 database_management 或功能关闭的用户不渲染入口卡，避免点击后被拦截 403/404。 -->
+    <DbMigrationSummaryCard v-if="authStore.hasPermission('db_migration') && featuresStore.has('db_migration')" />
 
     <!-- 连接编辑 Modal（新增/编辑 4.3） -->
     <div class="modal-overlay" :style="{ display: connModal.open ? 'flex' : 'none' }">
@@ -219,13 +220,15 @@ import {
   switchDatabase,
 } from '@/api/database'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 import type { DbConnection, DbStatus } from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
 
-// 摘要卡权限门控：无 db_backup 权限时整卡不渲染（避免无权限请求 403）
+// 摘要卡门控：权限 + 功能开关双条件（对齐菜单/路由口径，关掉的功能不留死入口）
 const authStore = useAuthStore()
+const featuresStore = useFeaturesStore()
 
 const connectionColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
