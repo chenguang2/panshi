@@ -4,7 +4,8 @@
       <h3>SQLite 备份与容灾</h3>
       <div class="dbb-sum-header-actions">
         <button class="btn btn-primary btn-sm" @click="goManagement">进入备份管理</button>
-        <button class="btn btn-secondary btn-sm" @click="goRestore">恢复数据</button>
+        <!-- 危险流入口：与备份页常驻层「恢复数据…」同款红色描边 -->
+        <button class="btn btn-danger-outline btn-sm" @click="goRestore">恢复数据</button>
       </div>
     </div>
     <div class="card-body">

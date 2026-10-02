@@ -427,6 +427,23 @@ describe('5.4 历史预选包与「仅看最新」', () => {
     expect(rows[0].classes()).not.toContain('selected')
   })
 
+  it('preselectTargetId 直达：开门即按该位置自动列包并预选包，免手动选来源', async () => {
+    const nameB = 'panshi_backup_node-a_20260929_154243.tar.gz'
+    mockGetConfig.mockResolvedValue(configWithTargets([makeTarget({ id: 7, name: '异地A' })]))
+    mockList.mockResolvedValue({ data: { packages: [pkg(), pkg({ name: nameB })], failed_locations: null } })
+    const wrapper = mount(DbBackupRestoreWizard, {
+      props: { visible: true, preselectTargetId: 7, preselectPackageName: nameB },
+      global: { stubs },
+    })
+    await flushAll()
+    expect(mockList).toHaveBeenCalledTimes(1)
+    expect(mockList).toHaveBeenCalledWith({ target_id: 7 })
+    const rows = wrapper.findAll('.dbw-pkg')
+    expect(rows.length).toBe(2)
+    expect(rows[1].classes()).toContain('selected')
+    expect(rows[0].classes()).not.toContain('selected')
+  })
+
   it('preselectPackageName 未命中时不选中', async () => {
     const wrapper = await mountAndListPkgList([pkg()], 'panshi_backup_missing_20260101_000000.tar.gz')
     const rows = wrapper.findAll('.dbw-pkg')

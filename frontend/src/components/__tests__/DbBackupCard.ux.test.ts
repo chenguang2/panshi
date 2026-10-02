@@ -671,6 +671,7 @@ describe('M8 从备份历史发起恢复', () => {
     expect(wizard.exists()).toBe(true)
     expect(wizard.props('visible')).toBe(true)
     expect(wizard.props('preselectPackageName')).toBe('panshi_backup_node-a_20260930_154243.tar.gz')
+    expect(wizard.props('preselectTargetId')).toBe(1)
   })
 })
 

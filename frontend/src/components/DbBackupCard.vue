@@ -50,7 +50,8 @@
           <button class="btn btn-primary btn-sm" :disabled="runDisabled" @click="requestRunNow">
             {{ running ? '备份中…' : '立即备份' }}
           </button>
-          <button class="btn btn-secondary btn-sm" @click="openWizard">恢复数据…</button>
+          <!-- 危险流入口：红色描边（向导内最终「执行恢复」为 btn-danger 实心，形成入口→确认的递进） -->
+          <button class="btn btn-danger-outline btn-sm" @click="openWizard">恢复数据…</button>
         </div>
       </div>
       <div v-if="running" class="form-hint dbb-run-expectation">
@@ -386,6 +387,7 @@
   <DbBackupRestoreWizard
     v-model:visible="wizardOpen"
     :preselect-package-name="preselectPkgName"
+    :preselect-target-id="preselectTargetId"
     @restored="handleRestored"
   />
 
@@ -929,10 +931,13 @@ const historyCountText = computed(() =>
 
 /** M8：从历史行发起恢复——记录预选包名并打开向导 */
 const preselectPkgName = ref<string | null>(null)
+/** 历史直达：该包首个成功位置 id（向导开门即自动列包；null = 通用入口 */
+const preselectTargetId = ref<number | null>(null)
 
 function openWizardForPackage(item: DbBackupHistoryItem): void {
   if (!item.package_name) return
   preselectPkgName.value = item.package_name
+  preselectTargetId.value = item.targets?.find((t) => t.status === 'success')?.target_id ?? null
   wizardOpen.value = true
 }
 
@@ -1374,6 +1379,7 @@ function closeRunResult(): void {
 
 function openWizard(): void {
   preselectPkgName.value = null
+  preselectTargetId.value = null
   wizardOpen.value = true
 }
 

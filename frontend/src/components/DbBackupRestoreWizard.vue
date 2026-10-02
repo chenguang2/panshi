@@ -430,6 +430,9 @@ const props = defineProps<{
   visible: boolean
   /** M8：从备份历史「恢复此包」进入时预选的包名（列包成功后自动选中，consumed in 5.4） */
   preselectPackageName?: string | null
+  /** 历史直达：预选的已配置位置 id——开门即切「已配置位置」模式、选中该位置并自动列包，
+   *  与 preselectPackageName 叠加后用户直接落在第 2 步（仍需手动「校验此包」，安全闸保留） */
+  preselectTargetId?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -880,11 +883,28 @@ watch(
     chooserOptions.value = []
     chosenVerifyTargetId.value = null
     verifySourceLabel.value = ''
-    void loadTargets()
+    void initSource()
   },
   // immediate：整页挂载即处于打开态（如 HMR / 直链恢复入口）时也要初始化
   { immediate: true },
 )
+
+/** 开门初始化：通用入口仅加载位置列表；历史「恢复此包」直达（preselectTargetId）
+ *  切已配置位置模式、选中该位置并自动列包——位置已被删除时回退「全部位置」聚合。
+ *  列包成功后由既有 preselectPackageName 逻辑自动选中目标包并进入第 2 步。 */
+async function initSource(): Promise<void> {
+  const directId = props.preselectTargetId
+  if (directId == null) {
+    void loadTargets()
+    return
+  }
+  // loadTargets 会把 sourceMode/selectedTargetId 复位（'all' 或手动），预选须在其后应用
+  await loadTargets()
+  if (targets.value.some((t) => t.id === directId)) {
+    selectedTargetId.value = String(directId)
+  }
+  if (targetReady.value) await handleList()
+}
 </script>
 
 <style scoped>
