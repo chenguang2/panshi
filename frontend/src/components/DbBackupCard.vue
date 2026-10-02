@@ -1751,7 +1751,8 @@ onUnmounted(() => {
   top: 56px;
   z-index: 20;
   background: var(--surface);
-  padding: 12px 20px 0;
+  /* 底部留呼吸空间：统计条/提示行与常驻层分割条不再贴死（wrap 换行时同理） */
+  padding: 12px 20px 12px;
   border-bottom: 1px solid var(--border);
 }
 .dbb-persistent-main {
@@ -1777,15 +1778,88 @@ onUnmounted(() => {
 }
 .dbb-persistent .dbb-run-expectation {
   margin: 0;
-  padding: 2px 0 8px;
+  padding: 2px 0 4px;
 }
 .dbb-persistent .dbb-error {
-  margin: 10px 0 12px;
+  margin: 10px 0 0;
 }
 
 /* ── Tab 化：内容区 Tabs 与策略说明 ── */
 .dbb-tabs {
   margin-top: 4px;
+}
+
+/* ── Tab 头部 folder 风格（视觉对齐 SslList 的 .dtabs/.dt；保 a-tabs 结构，pane 仍常驻挂载） ──
+   几何：停用 AntDV 自带分隔线（.ant-tabs-nav::before）与墨条（ink-bar），分隔线改画在
+   .ant-tabs-nav 的 border-bottom 上；每个 tab 底边下探 1px（margin-bottom: -1px）压住分隔线——
+   非激活 tab 底边用 --border 与分隔线无缝衔接，激活 tab 底边用 --surface 盖住分隔线形成 folder 效果。 */
+.dbb-tabs :deep(.ant-tabs-nav) {
+  margin: 0 0 16px;
+  padding: 8px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.dbb-tabs :deep(.ant-tabs-nav::before) {
+  display: none;
+}
+/* 激活页签需下探 1px 叠住分隔线，不能被 wrap 裁剪（三枚短页签无横向溢出，滚动遮罩不受影响） */
+.dbb-tabs :deep(.ant-tabs-nav-wrap) {
+  overflow: visible;
+}
+.dbb-tabs :deep(.ant-tabs-ink-bar) {
+  display: none;
+}
+.dbb-tabs :deep(.ant-tabs-tab) {
+  margin: 0 0 -1px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  position: relative;
+  user-select: none;
+  transition: all 0.2s;
+}
+.dbb-tabs :deep(.ant-tabs-tab + .ant-tabs-tab) {
+  margin-left: 4px;
+}
+.dbb-tabs :deep(.ant-tabs-tab .ant-tabs-tab-btn) {
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+.dbb-tabs :deep(.ant-tabs-tab:hover .ant-tabs-tab-btn) {
+  color: var(--accent);
+}
+.dbb-tabs :deep(.ant-tabs-tab:hover) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+}
+.dbb-tabs :deep(.ant-tabs-tab.ant-tabs-tab-active) {
+  color: var(--accent);
+  background: var(--surface);
+  border-color: var(--border);
+  border-bottom: 1px solid var(--surface);
+  font-weight: 600;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.04);
+  z-index: 1;
+}
+.dbb-tabs :deep(.ant-tabs-tab.ant-tabs-tab-active)::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 0 1px 1px;
+}
+.dbb-tabs :deep(.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: var(--accent);
+  font-weight: 600;
 }
 .dbb-policy-note {
   margin: 12px 0 4px;
