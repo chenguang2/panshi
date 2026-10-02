@@ -444,6 +444,33 @@ describe('5.4 历史预选包与「仅看最新」', () => {
     expect(rows[0].classes()).not.toContain('selected')
   })
 
+  it('预选命中后自动滚动到选中行（长列表不迷路）', async () => {
+    const nameLast = 'panshi_backup_node-a_20261002_090000.tar.gz'
+    const proto = Element.prototype as { scrollIntoView?: () => void }
+    const had = 'scrollIntoView' in proto
+    const orig = proto.scrollIntoView
+    const scrollSpy = vi.fn()
+    proto.scrollIntoView = scrollSpy
+    try {
+      mockGetConfig.mockResolvedValue(configWithTargets([makeTarget({ id: 7 })]))
+      mockList.mockResolvedValue({
+        data: { packages: [pkg(), pkg(), pkg(), pkg({ name: nameLast })], failed_locations: null },
+      })
+      const wrapper = mount(DbBackupRestoreWizard, {
+        props: { visible: true, preselectTargetId: 7, preselectPackageName: nameLast },
+        global: { stubs },
+      })
+      await flushAll()
+      const rows = wrapper.findAll('.dbw-pkg')
+      expect(rows[3].classes()).toContain('selected')
+      expect(scrollSpy).toHaveBeenCalledTimes(1)
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' })
+    } finally {
+      if (had) proto.scrollIntoView = orig
+      else delete proto.scrollIntoView
+    }
+  })
+
   it('preselectPackageName 未命中时不选中', async () => {
     const wrapper = await mountAndListPkgList([pkg()], 'panshi_backup_missing_20260101_000000.tar.gz')
     const rows = wrapper.findAll('.dbw-pkg')

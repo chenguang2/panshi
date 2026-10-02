@@ -146,7 +146,7 @@
                 <div v-if="failedLocations.length" class="dbw-loc-fail">
                   部分位置不可达：{{ failedLocations.join('、') }}——列表可能不完整，可在步骤 1 单独选择该位置重试
                 </div>
-                <div class="dbw-pkg-list">
+                <div ref="listRef" class="dbw-pkg-list">
                   <div
                     v-for="pkg in visiblePackages"
                     :key="pkg.name"
@@ -412,7 +412,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { formatDateTime, formatFileSize, parseBackendDate } from '@/utils/format'
@@ -445,6 +445,8 @@ const listing = ref(false)
 const listError = ref('')
 const packages = ref<RestorePackageItem[]>([])
 const selected = ref('')
+/** 包列表容器（预选命中后在其内查找选中行并滚动到可视区） */
+const listRef = ref<HTMLElement | null>(null)
 const verifying = ref(false)
 const verifyResult = ref<RestoreVerifyResult | null>(null)
 const verifyError = ref('')
@@ -706,6 +708,7 @@ async function handleList(): Promise<void> {
   listing.value = true
   listError.value = ''
   failedLocations.value = []
+  let preselectHit = false
   try {
     const res = await listRestorePackages(listPayload())
     packages.value = res.data.packages
@@ -714,6 +717,7 @@ async function handleList(): Promise<void> {
     // M8/5.4：历史「恢复此包」预选——命中时自动选中，用户从校验步骤继续
     if (props.preselectPackageName && packages.value.some((p) => p.name === props.preselectPackageName)) {
       selected.value = props.preselectPackageName
+      preselectHit = true
     }
     verifyResult.value = null
     verifyError.value = ''
@@ -722,6 +726,13 @@ async function handleList(): Promise<void> {
     listError.value = errDetail(err, '连接远端失败，请检查目标与凭据')
   } finally {
     listing.value = false
+  }
+  // 预选命中后滚到选中行——长列表中选中行在视口外会让用户误以为没选中。
+  // 必须在 listing=false（步骤 2 的 v-else 分支挂载列表容器）之后的下一拍再查；
+  // jsdom 无 scrollIntoView，可选链守卫（测试侧以 spy 断言）
+  if (preselectHit) {
+    await nextTick()
+    listRef.value?.querySelector('.dbw-pkg.selected')?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
   }
 }
 
