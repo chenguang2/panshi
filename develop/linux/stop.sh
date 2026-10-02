@@ -1,4 +1,9 @@
 #!/bin/bash
+# `sh stop.sh` 兼容守卫：/bin/sh 是 dash；当前脚本 dash 可解析，守卫保证未来
+# 引入 bash 语法（数组 / [[ ]]）时 `sh stop.sh` 仍可用。
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
 # 停止开发环境（后端 12344 / 前端 12345）。
 # 身份守卫（spec: start-stop-scripts）：只终止 cmdline 可确认属于本项目的进程；
 # 逐 PID 读取 /proc/$PID/cmdline 校验，多 PID 共享端口（reloader + worker）逐个击杀；

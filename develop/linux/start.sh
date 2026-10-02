@@ -1,4 +1,9 @@
 #!/bin/bash
+# `sh start.sh` 兼容守卫（2026-10-02 用户实测）：/bin/sh 是 dash，`sh start.sh`
+# 会绕过 shebang 并在 bash 数组处解析炸（`local pids=()`）；交回 bash 重执行。
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+fi
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

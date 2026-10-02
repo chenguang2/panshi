@@ -564,3 +564,53 @@ class TestStartScript:
             self._track_pid_files(tmp_path)
         finally:
             _ensure_dead(dummy)
+
+
+class TestShInvocationGuard:
+    """`sh start.sh` 误用兼容守卫（2026-10-02 用户实测）。
+
+    /bin/sh 在本机是 dash：`sh start.sh` 绕过 shebang，dash 增量解析到 bash
+    数组（`local pids=()`，start.sh:40）即 exit 2——脚本必须在 dash 下把执行权
+    交回 bash（`exec bash "$0" "$@"`）。用「不匹配占用 → pre-check 拒绝」这条
+    廉价路径验证 sh 调用能完整到达业务逻辑，而非死在解析期。
+    """
+
+    @pytest.mark.usefixtures("ensure_safe_scripts")
+    def test_start_script_invokable_via_sh_reaches_precheck(self, tmp_path):
+        """sh 调用 start.sh：不匹配占用时走 pre-check 拒绝（而非 dash 解析炸）。"""
+        backend, frontend = _free_port(), _free_port()
+        dummy = _spawn_http_server(backend)  # 无伪造身份 → 不匹配，start.sh 应回避
+        try:
+            _wait_listening(backend)
+            env = _script_env(backend, frontend, tmp_path)
+            out_file = tmp_path / ".start_sh.out"
+            err_file = tmp_path / ".start_sh.err"
+            with open(out_file, "w") as fo, open(err_file, "w") as fe:
+                proc = subprocess.run(
+                    ["sh", str(START_SH)], env=env, stdout=fo, stderr=fe, timeout=60
+                )
+            result = SimpleNamespace(
+                returncode=proc.returncode,
+                stdout=out_file.read_text(),
+                stderr=err_file.read_text(),
+            )
+            assert result.returncode != 0, "不匹配占用应拒绝启动"
+            assert "不相关进程" in (result.stdout + result.stderr), (
+                result.stdout + result.stderr
+            )
+            assert dummy.poll() is None, "不匹配进程不得被击杀"
+        finally:
+            _ensure_dead(dummy)
+
+    @pytest.mark.usefixtures("ensure_safe_scripts")
+    def test_stop_script_invokable_via_sh(self, tmp_path):
+        """sh 调用 stop.sh：无占用时干净空转（pin 住「可被 sh 调用」契约）。"""
+        backend, frontend = _free_port(), _free_port()
+        env = _script_env(backend, frontend, tmp_path)
+        out_file = tmp_path / ".stop_sh.out"
+        err_file = tmp_path / ".stop_sh.err"
+        with open(out_file, "w") as fo, open(err_file, "w") as fe:
+            proc = subprocess.run(
+                ["sh", str(STOP_SH)], env=env, stdout=fo, stderr=fe, timeout=60
+            )
+        assert proc.returncode == 0, err_file.read_text()
