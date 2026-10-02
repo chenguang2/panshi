@@ -1129,3 +1129,41 @@ class TestSslDeleteReferenceGuard:
         assert resp.status_code == 200, resp.text
         got = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{ca_id}")
         assert got.status_code == 404
+
+
+class TestSslListPublishedAt:
+    """列表响应回填 published_at（对齐 dns/流代理/插件组的 ConfigVersion 回查模式）。
+
+    根因：SslCertificate 模型无 published_at 列，且两个列表端点均未从
+    ConfigVersion 回查发布时间 → 前端 PublishStatusTag 拿不到 publishedAt，
+    所有已发布证书恒显示「vN · 未同步」（2026-10-02 用户实测 uapm 证书）。
+    修复后：已发布证书的列表项含 published_at（ISO+Z），未发布证书为 None。
+    """
+
+    async def _create_cert(self, client, name):
+        return await client.post(
+            "/api/v1/clusters/1/ssl",
+            json={"name": name, "sni": "pub-at.local", "cert": "crt", "key": "key", "cluster_id": 1},
+        )
+
+    @pytest.mark.parametrize("list_url", ["/api/v1/ssl", "/api/v1/clusters/1/ssl"])
+    async def test_list_stamps_published_at_from_config_version(self, async_authed_client, list_url):
+        """统一列表与集群内列表都须回填：发布过的证书带 published_at，未发布的为 None。"""
+        pub = await self._create_cert(async_authed_client, "pub-at-published")
+        unp = await self._create_cert(async_authed_client, "pub-at-unpublished")
+        assert pub.status_code == 201, pub.text
+        assert unp.status_code == 201, unp.text
+        pub_id, unp_id = pub.json()["id"], unp.json()["id"]
+
+        resp = await async_authed_client.post(f"/api/v1/clusters/1/ssl/{pub_id}/publish")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["version"] == 1  # 版本快照已落 ConfigVersion
+
+        listing = await async_authed_client.get(list_url)
+        assert listing.status_code == 200, listing.text
+        items = {c["id"]: c for c in listing.json()["items"]}
+
+        assert "published_at" in items[pub_id], "列表响应缺少 published_at 字段"
+        assert items[pub_id]["published_at"] is not None
+        assert items[pub_id]["published_at"].endswith("Z")
+        assert items[unp_id]["published_at"] is None

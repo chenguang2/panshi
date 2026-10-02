@@ -98,6 +98,8 @@ class SslCertificateResponse(SslCertificateBase):
     edge_uuid: str
     cluster_id: int
     current_version: Optional[int] = None
+    # 最近发布时间（ConfigVersion 回查回填，非模型列；None=从未发布）
+    published_at: Optional[str] = None
     status: int = 1
     generate_log: Optional[list[CommandLogEntry]] = None
     created_at: Optional[str] = None

@@ -24,6 +24,8 @@ from app.services import edge_sync
 from app.services.edge_client import EdgeClient
 
 from app.core.deps import require_permission
+# ConfigVersion 回查发布时间（与 dns/流代理/插件组列表同模式）
+from app.api.v1.cluster_stream_proxies import _build_publish_map
 
 router = APIRouter(prefix="/clusters/{cluster_id}/ssl", tags=["ssl"], dependencies=[Depends(require_permission('clusters'))])
 global_router = APIRouter(prefix="/ssl", tags=["ssl"], dependencies=[Depends(require_permission('ssl_cert'))])
@@ -192,9 +194,16 @@ async def list_all_ssl_certificates(
     query = query.order_by(SslCertificate.id).limit(page_size)
     result = await db.execute(query)
     items = result.scalars().all()
+    pub_map = await _build_publish_map(db, [c.id for c in items], "ssl")
+    payload = []
+    for c in items:
+        resp = SslCertificateResponse.model_validate(c)
+        ts = pub_map.get(c.id)
+        resp.published_at = ts.isoformat() + "Z" if ts else None
+        payload.append(resp.model_dump())
     return {
         "total": total,
-        "items": [SslCertificateResponse.model_validate(c).model_dump() for c in items],
+        "items": payload,
     }
 
 
@@ -209,9 +218,16 @@ async def list_ssl_certificates(
         .order_by(SslCertificate.id)
     )
     items = result.scalars().all()
+    pub_map = await _build_publish_map(db, [c.id for c in items], "ssl")
+    payload = []
+    for c in items:
+        resp = SslCertificateResponse.model_validate(c)
+        ts = pub_map.get(c.id)
+        resp.published_at = ts.isoformat() + "Z" if ts else None
+        payload.append(resp.model_dump())
     return {
         "total": len(items),
-        "items": [SslCertificateResponse.model_validate(c).model_dump() for c in items],
+        "items": payload,
     }
 
 
