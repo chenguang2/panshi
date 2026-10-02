@@ -467,6 +467,7 @@ const permissionKeyToLabel: Record<string, string> = {
   ansible_inventory: 'Ansible 主机清单',
   task_center: '节点任务',
   database_management: '数据库管理',
+  db_migration: '数据迁移',
   db_backup: '备份与容灾',
   clickhouse_config: 'ClickHouse 配置',
   audit_logs: '审计日志',
@@ -526,6 +527,9 @@ const permissionFeatureMap: Record<string, string> = {
   metrics: 'metrics',
   task_center: 'task_center',
   audit_logs: 'audit_log',
+  database_management: 'database_management',
+  db_migration: 'db_migration',
+  db_backup: 'db_backup',
 }
 
 interface PermItem {
@@ -570,6 +574,7 @@ const permissionGroups = computed(() => {
       title: '系统管理',
       items: [
         { key: 'database_management', label: '数据库管理' },
+        { key: 'db_migration', label: '数据迁移' },
         { key: 'db_backup', label: '备份与容灾' },
         { key: 'clickhouse_config', label: 'ClickHouse 配置' },
         { key: 'audit_logs', label: '审计日志' },

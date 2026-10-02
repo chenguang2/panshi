@@ -64,7 +64,10 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/system/operations/archive"),
     # 任务留档文件删除（2026-09-12 task-files 端点）
     ("delete", "/api/v1/node-tasks/task-files/1/some-file"),
-    # 迁移历史清理（2026-09-16，database_management 权限）
+    # 数据迁移独立权限域（2026-10，db_migration 键）采样
+    ("post", "/api/v1/database/migrate-stream"),
+    ("get", "/api/v1/database/running-tasks"),
+    # 迁移历史清理（2026-09-16 新增；2026-10 起随 db_migration 独立权限域）
     ("get", "/api/v1/database/history/cleanup-preview?keep_last=10"),
     ("post", "/api/v1/database/history/cleanup"),
     ("delete", "/api/v1/database/history/1"),
@@ -317,7 +320,7 @@ PERMISSION_403_SAMPLES = [
     ("get", "/api/v1/plugin-switches", "plugin_management"),
     ("get", "/api/v1/static_resources", "static_resources"),
     ("get", "/api/v1/ansible/inventory", "ansible_inventory"),
-    ("get", "/api/v1/database/history", "database_management"),
+    ("get", "/api/v1/database/history", "db_migration"),
     ("get", "/api/v1/relay/gateways", "relay_gateway"),
     ("get", "/api/v1/nodes/autostart/records", "edge_autostart"),
     ("get", "/api/v1/clusters/1/edge-env", "edge_env"),

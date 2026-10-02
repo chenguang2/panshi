@@ -24,6 +24,7 @@ from sqlalchemy import select
 from app.core import db_config, maintenance
 from app.core.database import get_db, build_sync_engine_for, AsyncSessionLocal
 from app.core.db_config import ConnectionConfig, DbConfig, encrypt_password
+from app.core.features import feature_enabled
 from app.services.audit import enrich_audit, log_audit
 from app.core.deps import require_permission as require_db_admin
 from app.models.user import User
@@ -43,6 +44,18 @@ from app.services.db_migration_service import MigrationCancelled
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/database", tags=["database"])
+
+
+def _require_migration_feature():
+    """db_migration 功能总闸（对齐 system.py::_require_audit_feature 模式）。
+
+    在 handler 体首句调用：require_db_admin 权限依赖先解析（FastAPI 依赖注入
+    顺序），无权限者先得 403，404「模块未启用」不泄露模块存在性；持权者请求期
+    实时读 features.yaml（mtime 热加载），关闸即 404。仅覆盖数据迁移域端点；
+    连接注册表/状态/切换随 database_management 注册级门控，不经此检查。
+    """
+    if not feature_enabled("db_migration"):
+        raise HTTPException(status_code=404, detail="数据迁移模块未启用")
 
 
 def _get_config() -> DbConfig:
@@ -129,9 +142,10 @@ async def get_status(current_user: User = Depends(require_db_admin('database_man
 @router.get("/running-tasks")
 async def get_running_tasks(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
 ):
     """聚合返回迁移锁状态 + 进行中的节点任务列表。"""
+    _require_migration_feature()
     from app.models.node_task import NodeTask
     from app.models.cluster import Cluster
 
@@ -317,9 +331,10 @@ async def migrate_database_stream(
     body: MigrateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
 ):
     """SSE streaming migration endpoint with real-time progress."""
+    _require_migration_feature()
     cfg = _get_config()
     source = cfg.get_connection(body.source_id)
     target = cfg.get_connection(body.target_id)
@@ -601,9 +616,10 @@ async def migrate_database_stream(
 async def export_archive(
     body: ExportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
     request: Request = None,
 ):
+    _require_migration_feature()
     cfg = _get_config()
     source = cfg.get_connection(body.source_id)
     if not source:
@@ -623,9 +639,10 @@ async def export_archive(
 async def import_archive(
     body: ImportRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
     request: Request = None,
 ):
+    _require_migration_feature()
     cfg = _get_config()
     target = cfg.get_connection(body.target_id)
     if not target:
@@ -662,8 +679,9 @@ async def import_archive(
 @router.get("/history")
 async def migration_history(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
 ):
+    _require_migration_feature()
     result = await db.execute(
         select(DbMigrationLog).order_by(DbMigrationLog.id.desc()).limit(100)
     )
@@ -691,12 +709,13 @@ async def migration_history(
 async def cleanup_migration_history_preview(
     keep_last: int = Query(..., ge=1, le=100000, description="保留最新 N 条"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
 ) -> dict[str, int]:
     """清理影响预览（只读）：库内总数、将删除、将保留。
 
     列表接口只返回最近 100 条，条数上限内无法推出真实总数，故由服务端按真实判据计算。
     """
+    _require_migration_feature()
     total, will_delete, will_keep = await db_migration_service.preview_cleanup(db, keep_last)
     return {"total": total, "will_delete": will_delete, "will_keep": will_keep}
 
@@ -705,13 +724,14 @@ async def cleanup_migration_history_preview(
 async def cleanup_migration_history(
     body: HistoryCleanupRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
     request: Request = None,
 ) -> dict[str, int]:
     """按「保留最近 keep_last 条」清理**当前活动库**的迁移历史（running 记录不删）。
 
     大表清理不需要分页：`ps_db_migration_log` 为操作元数据，行数在千级以内。
     """
+    _require_migration_feature()
     deleted, remaining = await db_migration_service.cleanup_migration_logs(db, body.keep_last)
     # service 有意不 commit：审计骨架与本操作须同事务，否则 detail 合并失败
     enrich_audit(
@@ -729,10 +749,11 @@ async def cleanup_migration_history(
 async def delete_migration_history(
     log_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_db_admin('database_management')),
+    current_user: User = Depends(require_db_admin('db_migration')),
     request: Request = None,
 ) -> dict[str, int]:
     """删除单条迁移历史记录（running 记录受保护）。前端暂未暴露入口。"""
+    _require_migration_feature()
     # 只读状态列，避免把 ORM 实体放进 identity map 后再被 Core DELETE 变更
     row_status = (
         await db.execute(select(DbMigrationLog.status).where(DbMigrationLog.id == log_id))

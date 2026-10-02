@@ -32,6 +32,8 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "dns_proxy_http",
     "task_center",
     "database_management",
+    "db_migration",
+    "db_backup",
     "edge_autostart",
     "ansible_inventory",
     "clickhouse_config",

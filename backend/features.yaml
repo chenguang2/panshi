@@ -13,6 +13,10 @@ features:
   dns_proxy_http: true
   task_center: true
   database_management: true
+  # 数据迁移（迁移/归档导入导出独立权限域，与数据库管理分离）
+  db_migration: true
+  # 备份与容灾（db_backup 权限对应的功能开关）
+  db_backup: true
   edge_autostart: true
   ansible_inventory: true
   clickhouse_config: true

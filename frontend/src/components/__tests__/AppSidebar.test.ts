@@ -170,7 +170,7 @@ describe('AppSidebar 分组折叠与活动项定位', () => {
   })
 })
 
-describe('AppSidebar 数据迁移菜单项（database_management 权限键沿用）', () => {
+describe('AppSidebar 数据迁移菜单项（db_migration 独立权限键）', () => {
   function makeRouter() {
     return createRouter({
       history: createWebHistory(),
@@ -193,9 +193,9 @@ describe('AppSidebar 数据迁移菜单项（database_management 权限键沿用
     Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
   })
 
-  it('持有 database_management 权限的用户可见「数据迁移」入口', async () => {
+  it('持有 db_migration 权限的用户可见「数据迁移」入口', async () => {
     localStorage.setItem('user', JSON.stringify({ id: 2, username: 'op', role: 'user' }))
-    localStorage.setItem('permissions', JSON.stringify(['database_management']))
+    localStorage.setItem('permissions', JSON.stringify(['db_migration']))
     const r = makeRouter()
     const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
     await r.isReady()
@@ -204,14 +204,58 @@ describe('AppSidebar 数据迁移菜单项（database_management 权限键沿用
     expect(item!.attributes('href')).toBe('/db-migration')
   })
 
-  it('无 database_management 权限的普通用户不可见', async () => {
+  it('无 db_migration 权限的普通用户不可见（即使持 database_management）', async () => {
     localStorage.setItem('user', JSON.stringify({ id: 3, username: 'viewer', role: 'user' }))
-    localStorage.setItem('permissions', JSON.stringify(['clusters']))
+    localStorage.setItem('permissions', JSON.stringify(['database_management', 'clusters']))
     const r = makeRouter()
     const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
     await r.isReady()
     expect(findNavItem(wrapper, '数据迁移')).toBeUndefined()
-    expect(findNavItem(wrapper, '数据库管理')).toBeUndefined()
+    expect(findNavItem(wrapper, '数据库管理')).toBeDefined()
+  })
+})
+
+describe('AppSidebar 备份与容灾 feature 门控（db_backup）', () => {
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Dashboard', component: { template: '<div />' } },
+        { path: '/backup-management', name: 'BackupManagement', component: { template: '<div />' } },
+      ],
+    })
+  }
+
+  function findNavItem(wrapper: ReturnType<typeof mount>, label: string) {
+    return wrapper.findAll('.nav-item').find((w) => w.find('.nav-label').text() === label)
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    useFeaturesStore().$patch({ loaded: true })
+    Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
+  })
+
+  it('feature 开启 + 持 db_backup 权限的普通用户可见「备份与容灾」', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 4, username: 'backup_op', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['db_backup']))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const item = findNavItem(wrapper, '备份与容灾')
+    expect(item).toBeDefined()
+    expect(item!.attributes('href')).toBe('/backup-management')
+  })
+
+  it('featuresStore 无 db_backup（显式 false）时菜单项隐藏（即使持权限）', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 5, username: 'backup_view', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['db_backup']))
+    useFeaturesStore().$patch({ loaded: true, features: { db_backup: false } })
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(findNavItem(wrapper, '备份与容灾')).toBeUndefined()
   })
 })
 

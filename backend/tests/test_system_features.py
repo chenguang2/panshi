@@ -79,3 +79,33 @@ class TestFeatureRoutersDict:
         """dns_proxy_http not yet added (will be added in Task 5)."""
         from app.api.v1 import feature_routers
         assert "dns_proxy_http" not in feature_routers
+
+
+class TestDbMigrationAndBackupFeatureKeys:
+    """db_migration / db_backup 独立功能键：KNOWN_FEATURES 校验 + 真实
+    features.yaml 经 GET /system/features 返回 true（opt-in 显式列出）。"""
+
+    def test_known_features_contain_new_keys(self):
+        from app.core.features import KNOWN_FEATURES
+        assert "db_migration" in KNOWN_FEATURES
+        assert "db_backup" in KNOWN_FEATURES
+
+    def test_real_features_yaml_enables_new_keys(self):
+        """仓库 backend/features.yaml（pytest CWD=backend）必须显式开启两键。"""
+        import yaml
+        cfg = yaml.safe_load(Path("features.yaml").read_text(encoding="utf-8"))
+        assert cfg["features"]["db_migration"] is True
+        assert cfg["features"]["db_backup"] is True
+
+    def test_endpoint_reports_new_keys_true(self, isolated_app):
+        """GET /system/features（无鉴权端点）按真实 features.yaml 返回 true。"""
+        import app.core.features as fmod
+        fmod._features = None
+        try:
+            resp = isolated_app.get("/api/v1/system/features")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["features"]["db_migration"] is True
+            assert data["features"]["db_backup"] is True
+        finally:
+            fmod._features = None

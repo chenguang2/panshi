@@ -95,20 +95,24 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/NodeTaskCenter.vue'),
     meta: { permission: 'task_center' },
   },
-  database_management: [
-    {
-      path: 'database-management',
-      name: 'DatabaseManagement',
-      component: () => import('@/views/DatabaseManagement.vue'),
-      meta: { permission: 'database_management' },
-    },
-    {
-      path: 'db-migration',
-      name: 'DbMigration',
-      component: () => import('@/views/DbMigrationPage.vue'),
-      meta: { permission: 'database_management' },
-    },
-  ],
+  database_management: {
+    path: 'database-management',
+    name: 'DatabaseManagement',
+    component: () => import('@/views/DatabaseManagement.vue'),
+    meta: { permission: 'database_management' },
+  },
+  db_migration: {
+    path: 'db-migration',
+    name: 'DbMigration',
+    component: () => import('@/views/DbMigrationPage.vue'),
+    meta: { permission: 'db_migration' },
+  },
+  db_backup: {
+    path: 'backup-management',
+    name: 'BackupManagement',
+    component: () => import('@/views/BackupManagement.vue'),
+    meta: { permission: 'db_backup' },
+  },
   audit_log: {
     path: 'audit-log',
     name: 'AuditLog',
@@ -144,12 +148,6 @@ const coreRoutes: RouteRecordRaw[] = [
         name: 'RelayGateways',
         component: () => import('@/views/RelayGateways.vue'),
         meta: { permission: 'relay_gateway' },
-      },
-      {
-        path: 'backup-management',
-        name: 'BackupManagement',
-        component: () => import('@/views/BackupManagement.vue'),
-        meta: { permission: 'db_backup' },
       },
       {
         path: 'central-management',

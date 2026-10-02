@@ -232,6 +232,153 @@ class TestMigrationEndpoints:
         assert resp.status_code == 400
 
 
+class TestDbMigrationPermissionMatrix:
+    """db_migration 独立权限键：仅授予 db_migration 的用户可访问迁移域端点，
+    但不能访问连接注册表（database_management 域）；零权限两者均 403
+    （零权限既有用例见 TestDatabaseAPI.test_non_admin_forbidden /
+    TestRunningTasksEndpoint.test_non_admin_forbidden）。"""
+
+    async def _create_user_with_perms(self, client, permissions: list[str]) -> dict:
+        import uuid
+        username = f"db_mig_perm_{uuid.uuid4().hex[:6]}"
+        created = await client.post("/api/v1/admin/users", json={
+            "username": username, "password": "pass123", "role": "user", "status": 1,
+        })
+        assert created.status_code in (200, 201), created.text
+        uid = created.json()["id"]
+        resp = await client.put(f"/api/v1/admin/users/{uid}/permissions", json={
+            "permissions": permissions,
+        })
+        assert resp.status_code in (200, 201), resp.text
+        login = await client.post("/api/v1/auth/login",
+            json={"username": username, "password": "pass123"})
+        assert login.status_code == 200
+        return {
+            "id": uid,
+            "headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
+        }
+
+    async def test_db_migration_only_can_access_running_tasks(self, async_authed_client):
+        user = await self._create_user_with_perms(async_authed_client, ["db_migration"])
+        try:
+            resp = await async_authed_client.get(
+                "/api/v1/database/running-tasks", headers=user["headers"])
+            assert resp.status_code == 200
+        finally:
+            await async_authed_client.delete(f"/api/v1/admin/users/{user['id']}")
+
+    async def test_db_migration_only_cannot_access_connections(self, async_authed_client):
+        user = await self._create_user_with_perms(async_authed_client, ["db_migration"])
+        try:
+            resp = await async_authed_client.get(
+                "/api/v1/database/connections", headers=user["headers"])
+            assert resp.status_code == 403
+        finally:
+            await async_authed_client.delete(f"/api/v1/admin/users/{user['id']}")
+
+
+def _point_features_at(monkeypatch, path):
+    """让 feature_enabled/get_features 读取指定 yaml（同 test_features.py 机制）。
+
+    get_features() 按 mtime 热重载 _FEATURES_PATH，必须 patch 路径本身并清缓存。
+    """
+    import app.core.features as fmod
+    fmod._features = None
+    fmod._features_mtime = 0.0
+    monkeypatch.setattr(fmod, "_FEATURES_PATH", path)
+
+
+class TestDbMigrationFeatureGate:
+    """db_migration 端点级 feature 门控（对齐 system.py _require_audit_feature 模式）。
+
+    - feature 关（db_migration: false）→ 8 个迁移端点 404「数据迁移模块未启用」
+    - 权限在前、feature 在后（handler 体首句）：404 不泄露给无权限者（先 403）
+    - feature 开（仓库真实 features.yaml）→ 行为不变，由本文件既有 173 条回归守卫
+    - 路由注册发生在 app import 期（main.py 消费 feature_routers dict），测试进程内
+      无法 API 级测「注册级关闭」；端点级门控是请求期实时检查，可 API 级覆盖。
+    """
+
+    @pytest.fixture()
+    def feature_off(self, monkeypatch, tmp_path):
+        import yaml
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {"db_migration": False}}), encoding="utf-8")
+        _point_features_at(monkeypatch, cfg)
+        yield
+        import app.core.features as fmod
+        fmod._features = None
+        fmod._features_mtime = 0.0
+
+    FEATURE_OFF_404 = "数据迁移模块未启用"
+
+    async def test_running_tasks_404_when_feature_off(self, async_authed_client, feature_off):
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_history_404_when_feature_off(self, async_authed_client, feature_off):
+        resp = await async_authed_client.get("/api/v1/database/history")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_migrate_stream_404_when_feature_off(self, async_authed_client, feature_off):
+        # 合法形状请求体（同源同目标）：feature 关时必须在进入迁移校验前 404
+        resp = await async_authed_client.post("/api/v1/database/migrate-stream", json={
+            "source_id": "local_sqlite", "target_id": "local_sqlite", "mode": "replace",
+        })
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_export_404_when_feature_off(self, async_authed_client, feature_off):
+        # 现状（无门控）该请求是 404「连接不存在」；断言 detail 以区分端点级门控 404
+        resp = await async_authed_client.post("/api/v1/database/export", json={"source_id": "nope"})
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_import_404_when_feature_off(self, async_authed_client, feature_off):
+        resp = await async_authed_client.post("/api/v1/database/import", json={
+            "archive_path": "/tmp/nope.zip", "target_id": "nope",
+        })
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_cleanup_endpoints_404_when_feature_off(self, async_authed_client, feature_off):
+        resp = await async_authed_client.get("/api/v1/database/history/cleanup-preview?keep_last=5")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+        resp = await async_authed_client.post("/api/v1/database/history/cleanup", json={"keep_last": 5})
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+        resp = await async_authed_client.delete("/api/v1/database/history/1")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == self.FEATURE_OFF_404
+
+    async def test_feature_off_404_not_leaked_to_permissionless_user(self, async_authed_client, feature_off):
+        """权限在前：零权限用户 feature 关时仍 403（而非 404），不泄露模块存在性。"""
+        import uuid
+        username = f"db_mig_gate_{uuid.uuid4().hex[:6]}"
+        created = await async_authed_client.post("/api/v1/admin/users", json={
+            "username": username, "password": "pass123", "role": "user", "status": 1,
+        })
+        assert created.status_code in (200, 201), created.text
+        uid = created.json()["id"]
+        try:
+            login = await async_authed_client.post("/api/v1/auth/login",
+                json={"username": username, "password": "pass123"})
+            headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+            resp = await async_authed_client.get("/api/v1/database/running-tasks", headers=headers)
+            assert resp.status_code == 403
+        finally:
+            await async_authed_client.delete(f"/api/v1/admin/users/{uid}")
+
+    async def test_feature_on_keeps_endpoints_alive(self, async_authed_client):
+        """feature 开（真实 features.yaml：db_migration: true）→ 行为不变。"""
+        resp = await async_authed_client.get("/api/v1/database/running-tasks")
+        assert resp.status_code == 200
+        resp = await async_authed_client.get("/api/v1/database/history")
+        assert resp.status_code == 200
+
+
 class TestMigrateResultAndBackup:
     """任务 3.6/4.5/5.2：迁移返回每表明细 + 清空前自动备份与保留策略。"""
 

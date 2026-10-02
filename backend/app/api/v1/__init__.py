@@ -62,11 +62,11 @@ node_task_router = APIRouter()
 node_task_router.include_router(node_tasks.router)
 node_task_router.include_router(node_tasks.global_router)
 
-# ── Combined router for database management (page + SQLite 备份/DR) ──
-# db_backup 与数据库管理页同域同门（features.database_management）。
+# ── Combined router for database management (连接注册表/状态/切换) ──
+# 数据迁移端点同挂本 router（db_migration 端点级 feature 门控在 database.py 内）；
+# db_backup 已拆出独立 feature_routers["db_backup"] 注册键（总闸互不牵连）。
 database_mgmt_router = APIRouter()
 database_mgmt_router.include_router(database.router)
-database_mgmt_router.include_router(db_backup.router)
 
 # ── Feature-gated routers (conditionally registered in main.py) ────
 # References kept here so main.py can import and conditionally include them.
@@ -83,6 +83,7 @@ feature_routers: dict[str, APIRouter] = {
     "ssl_cert": ssl_router,
     "task_center": node_task_router,
     "database_management": database_mgmt_router,
+    "db_backup": db_backup.router,
     "edge_autostart": edge_autostart.router,
     "ansible_inventory": ansible_inventory.router,
 }

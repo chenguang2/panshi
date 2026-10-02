@@ -670,3 +670,35 @@ class TestRestoreVerifyTargetId:
             "package_name": "panshi_backup_a_20260930_120000.tar.gz",
         })
         assert r.status_code == 422, r.text
+
+
+class TestDbBackupFeatureRouterSplit:
+    """db_backup.router 从 database_mgmt_router 拆出独立 feature 注册键。
+
+    main.py 以 `for name, router in feature_routers.items(): if feature_enabled(name):
+    include_router(...)` 泛型消费 dict（无硬编码清单），dict 加条目即自动生效：
+    - feature_routers["db_backup"] → db_backup.router
+    - database_mgmt_router 只挂 database.router（不再含 /db-backup 路由）
+    - 语义：总闸关 database_management 时 db_backup 仍按自身键注册，反之亦然
+    """
+
+    def test_feature_routers_has_db_backup_key(self):
+        from app.api.v1 import feature_routers
+        from app.api.v1 import db_backup as db_backup_module
+        assert feature_routers["db_backup"] is db_backup_module.router
+
+    def test_database_mgmt_router_no_longer_carries_db_backup(self):
+        from app.api.v1 import database_mgmt_router
+        paths = {getattr(r, "path", "") for r in database_mgmt_router.routes}
+        assert any(p.startswith("/database") for p in paths), "数据库管理路由应保留"
+        assert not any(p.startswith("/db-backup") for p in paths), \
+            f"db_backup 路由应已拆出，实际仍挂载: {sorted(p for p in paths if p.startswith('/db-backup'))}"
+
+    def test_registration_semantics_follow_each_own_key(self):
+        """按 main.py 的注册循环语义断言：两键独立判定（仓库真实 yaml 双 true）。"""
+        from app.api.v1 import feature_routers
+        from app.core.features import feature_enabled
+        assert "database_management" in feature_routers
+        assert "db_backup" in feature_routers
+        assert feature_enabled("database_management") is True
+        assert feature_enabled("db_backup") is True

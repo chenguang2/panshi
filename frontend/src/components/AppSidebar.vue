@@ -346,10 +346,11 @@ const navSections = computed<NavSection[]>(() => {
     },
     {
       title: '系统管理',
-      // 管理员始终可见；普通用户持有 database_management 权限时可见数据库管理
+      // 管理员始终可见；普通用户持有任一系统管理子模块权限时可见
       visible:
         authStore.user?.role === 'admin' ||
         authStore.hasPermission('database_management') ||
+        authStore.hasPermission('db_migration') ||
         authStore.hasPermission('db_backup') ||
         authStore.hasPermission('clickhouse_config') ||
         authStore.hasPermission('relay_gateway') ||
@@ -373,14 +374,15 @@ const navSections = computed<NavSection[]>(() => {
           label: '数据迁移',
           route: '/db-migration',
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M12 12h5m0 0-2-2m2 2-2 2"/></svg>',
-          permission: 'database_management',
-          feature: 'database_management',
+          permission: 'db_migration',
+          feature: 'db_migration',
         },
         {
           label: '备份与容灾',
           route: '/backup-management',
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3z"/><path d="M5 5.5h1.5M2 8v7a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M7 11.5h4"/></svg>',
           permission: 'db_backup',
+          feature: 'db_backup',
         },
         {
           label: '审计日志',

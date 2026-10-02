@@ -23,22 +23,28 @@ describe('Router', () => {
     expect(found).toBe(true)
   })
 
-  it('has /backup-management route with db_backup permission meta (static registration)', async () => {
-    const routes = (await import('../index')).default.getRoutes()
-    const route = routes.find((r: any) => r.path === '/backup-management')
+  it('has /backup-management route in feature route map with db_backup permission (dynamic registration)', async () => {
+    const { featureRouteMap } = await import('../index')
+    const route = featureRouteMap.db_backup as { name?: string; path?: string; meta?: { permission?: string } }
     expect(route).toBeDefined()
     expect(route?.name).toBe('BackupManagement')
+    expect(route?.path).toBe('backup-management')
     expect(route?.meta?.permission).toBe('db_backup')
   })
 
-  it('has /db-migration route in feature route map with database_management permission (dynamic registration)', async () => {
+  it('has /db-migration route in dedicated db_migration feature map with db_migration permission (dynamic registration)', async () => {
     const { featureRouteMap } = await import('../index')
-    const route = (
-      featureRouteMap.database_management as { name?: string; path?: string; meta?: { permission?: string } }[]
-    ).find((r) => r.name === 'DbMigration')
+    const route = featureRouteMap.db_migration as { name?: string; path?: string; meta?: { permission?: string } }
     expect(route).toBeDefined()
+    expect(route?.name).toBe('DbMigration')
     expect(route?.path).toBe('db-migration')
-    expect(route?.meta?.permission).toBe('database_management')
+    expect(route?.meta?.permission).toBe('db_migration')
+    // 不再挂在 database_management 下
+    expect(featureRouteMap.database_management).toBeDefined()
+    const dmRoutes = Array.isArray(featureRouteMap.database_management)
+      ? featureRouteMap.database_management
+      : [featureRouteMap.database_management]
+    expect(dmRoutes.some((r) => r.name === 'DbMigration')).toBe(false)
   })
 
   it('registers /db-migration in navMeta search index (section + page name)', async () => {
