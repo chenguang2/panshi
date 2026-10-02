@@ -58,10 +58,11 @@
           <div>类型：{{ dbStatus?.active?.type === 'postgres' ? 'PostgreSQL' : 'SQLite' }}</div>
           <div>地址：{{ dbStatus?.active?.display_address || '-' }}</div>
           <div>连接数：{{ dbStatus?.connections_count }}</div>
+          <div v-if="dbPendingRestart">切换待重启生效，数据仍来自旧库</div>
           <div v-if="dbFeatureOn" style="margin-top: 2px; opacity: 0.7">点击进入数据库管理</div>
         </template>
         <div class="sidebar-db-row" :class="{ collapsed, linkable: dbFeatureOn }" @click="goDatabaseManagement">
-          <span class="sidebar-db-dot"></span>
+          <span class="sidebar-db-dot" :class="{ pending: dbPendingRestart }"></span>
           <span v-show="!collapsed" class="sidebar-db-text">{{ dbStatusLabel }}</span>
         </div>
       </a-tooltip>
@@ -99,11 +100,15 @@ const collapsed = computed(() => themeStore.sidebarCollapsed)
 const dbStatus = ref<DbStatus | null>(null)
 const dbFeatureOn = computed(() => featuresStore.has('database_management'))
 
+// 切换待重启生效：配置已写、引擎未重启，数据仍来自旧库（D5 语义）
+const dbPendingRestart = computed(() => dbStatus.value?.pending_restart === true)
+
 const dbStatusLabel = computed(() => {
   const active = dbStatus.value?.active
   if (!active) return ''
   const typeLabel = active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
-  return `${typeLabel} · ${active.name || active.display_address || ''}`
+  const label = `${typeLabel} · ${active.name || active.display_address || ''}`
+  return dbPendingRestart.value ? `${label}（待重启）` : label
 })
 
 function goDatabaseManagement() {
@@ -737,6 +742,11 @@ function isActive(item: NavItem): boolean {
   border-radius: 50%;
   background: #52c41a;
   flex-shrink: 0;
+}
+
+/* 待重启生效：叠加警示色状态点（不改变连接状态语义） */
+.sidebar-db-dot.pending {
+  background: #faad14;
 }
 
 .sidebar-db-text {

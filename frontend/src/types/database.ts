@@ -43,6 +43,8 @@ export interface DbStatus {
   active: DbConnection | null
   connections_count: number
   version: number
+  /** 切换已写配置但需重启才生效（.restart.flag 存在）；可选以兼容旧后端响应 */
+  pending_restart?: boolean
 }
 
 export interface DbTestResult {

@@ -43,9 +43,12 @@ elif command -v lsof >/dev/null 2>&1; then
     PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 fi
 if [ -n "$PRE_PID" ]; then
-    if tr '\0' ' ' < "/proc/$PRE_PID/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
-        kill -9 "$PRE_PID" 2>/dev/null || true
-    fi
+    # 逐 PID 校验（lsof 可能返回多行 PID；拼进单个 /proc 路径会让守卫失效）
+    for pid in $PRE_PID; do
+        if tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "app\.main:app"; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
 fi
 sleep 1
 

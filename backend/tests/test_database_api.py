@@ -141,6 +141,30 @@ class TestDatabaseAPI:
         assert resp.status_code == 400
         assert "不可达" in resp.json()["detail"]
 
+
+class TestStatusPendingRestart:
+    """db-switch-restart-completion 组1：status 接口暴露切换待重启标记。
+
+    D5 语义：切换只写配置 + ./data/.restart.flag，重启后才生效。接口必须返回
+    pending_restart，否则前端把「待生效配置」当「已生效连接」展示。
+    """
+
+    async def test_pending_restart_false_when_no_flag(self, async_authed_client, tmp_path, monkeypatch):
+        from app.services import db_switch_service
+        monkeypatch.setattr(db_switch_service, "RESTART_FLAG_PATH", str(tmp_path / ".restart.flag"))
+        resp = await async_authed_client.get("/api/v1/database/status")
+        assert resp.status_code == 200
+        assert resp.json()["pending_restart"] is False
+
+    async def test_pending_restart_true_when_flag_exists(self, async_authed_client, tmp_path, monkeypatch):
+        from app.services import db_switch_service
+        flag = tmp_path / ".restart.flag"
+        flag.write_text("1")
+        monkeypatch.setattr(db_switch_service, "RESTART_FLAG_PATH", str(flag))
+        resp = await async_authed_client.get("/api/v1/database/status")
+        assert resp.status_code == 200
+        assert resp.json()["pending_restart"] is True
+
 class TestMigrationEndpoints:
     async def _add_sqlite(self, client, name, path):
         resp = await client.post("/api/v1/database/connections", json={

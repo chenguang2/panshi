@@ -324,7 +324,7 @@ describe('DatabaseManagement', () => {
       expect(wrapper.text()).toContain('部分成功')
       expect(wrapper.text()).toContain('1/2 目标')
       const enterBtn = wrapper.findAll('button').filter((b) => b.text() === '进入备份管理')
-      const drBtn = wrapper.findAll('button').filter((b) => b.text() === '灾难恢复')
+      const drBtn = wrapper.findAll('button').filter((b) => b.text() === '恢复数据')
       expect(enterBtn.length).toBeGreaterThan(0)
       expect(drBtn.length).toBeGreaterThan(0)
     })
@@ -371,6 +371,35 @@ describe('DatabaseManagement', () => {
       expect(wrapper.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(false)
       // 摘要卡是 running-tasks 的唯一消费方：不发请求即整卡未挂载
       expect(mocks.getRunningTasks).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('切换待重启标记（db-switch-restart-completion）', () => {
+    it('pending_restart=true：当前数据库卡显示「待重启生效」警示标记与重启指引', async () => {
+      mocks.getStatus.mockResolvedValue({
+        data: { active: conn(), connections_count: 1, version: 1, pending_restart: true },
+      })
+      const wrapper = await mountPage()
+      const badge = wrapper.find('.pending-restart-badge')
+      expect(badge.exists()).toBe(true)
+      expect(badge.text()).toContain('待重启生效')
+      // 与既有重启指引联动：说明数据仍来自旧库，引导完成重启
+      expect(wrapper.find('.pending-restart-hint').text()).toContain('数据仍来自旧库')
+    })
+
+    it('pending_restart=false 或缺省：不显示待重启标记', async () => {
+      mocks.getStatus.mockResolvedValue({
+        data: { active: conn(), connections_count: 1, version: 1, pending_restart: false },
+      })
+      const wrapper = await mountPage()
+      expect(wrapper.find('.pending-restart-badge').exists()).toBe(false)
+      expect(wrapper.find('.pending-restart-hint').exists()).toBe(false)
+
+      mocks.getStatus.mockResolvedValue({
+        data: { active: conn(), connections_count: 1, version: 1 },
+      })
+      const wrapper2 = await mountPage()
+      expect(wrapper2.find('.pending-restart-badge').exists()).toBe(false)
     })
   })
 })

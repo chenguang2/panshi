@@ -22,8 +22,13 @@
                   status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
                 }}</a-tag>
                 <span class="name">{{ status.active.name }}</span>
+                <a-tag v-if="status.pending_restart" color="warning" class="pending-restart-badge">待重启生效</a-tag>
               </div>
               <div class="active-address">{{ status.active.display_address || status.active.host }}</div>
+              <div v-if="status.pending_restart" class="pending-restart-hint">
+                切换待重启生效，当前页面数据仍来自旧库；请按提示完成后端重启（开发环境运行
+                <code>develop/linux/start.sh</code>，生产环境执行 <code>sh stop.sh; sh start.sh</code>）。
+              </div>
             </div>
           </template>
           <a-empty v-else description="未配置活动数据库" />
@@ -442,6 +447,22 @@ defineExpose({
   color: var(--muted);
   font-size: 13px;
   margin-top: 2px;
+}
+/* 切换待重启生效警示（与切换弹窗内的重启指引同一套文案口径） */
+.pending-restart-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #ad6800;
+  background: rgba(250, 173, 20, 0.12);
+  border: 1px solid rgba(250, 173, 20, 0.45);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+.pending-restart-hint code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 12px;
 }
 
 /* ── 连接列表表格（与列表页 table-container 口径一致） ── */

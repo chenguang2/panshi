@@ -37,11 +37,13 @@ BACKEND_LOG="$PROJECT_ROOT/backend.log"
 
 # ---------- 停止已有进程（带进程名双重确认）----------
 PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null)
-if [ -n "$PRE_PID" ]; then
-    if ps -p "$PRE_PID" -o command= 2>/dev/null | grep -q "app\.main:app"; then
-        kill -9 "$PRE_PID" 2>/dev/null || true
+# 逐 PID 校验（lsof 可能返回多行 PID；多行一起传给 ps 会让守卫失效）
+for pid in $PRE_PID; do
+    [ -z "$pid" ] && continue
+    if ps -p "$pid" -o command= 2>/dev/null | grep -q "app\.main:app"; then
+        kill -9 "$pid" 2>/dev/null || true
     fi
-fi
+done
 sleep 1
 
 # ---------- 写入端口文件 ----------

@@ -26,9 +26,12 @@ elif command -v lsof >/dev/null 2>&1; then
     FALLBACK_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 fi
 if [ -n "$FALLBACK_PID" ]; then
-    if tr '\0' ' ' < "/proc/$FALLBACK_PID/cmdline" 2>/dev/null |  grep -q "app\.main:app\|npm\|vite\|python"; then
-        kill -9 "$FALLBACK_PID" 2>/dev/null || true
-    fi
+    # 逐 PID 校验（lsof 可能返回多行 PID；拼进单个 /proc 路径会让守卫失效）
+    for pid in $FALLBACK_PID; do
+        if tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "app\.main:app\|npm\|vite\|python"; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
 fi
 
 # 清理端口文件

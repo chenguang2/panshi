@@ -21,11 +21,13 @@ fi
 
 # 通过端口强制停止（兜底，带进程名双重确认）
 LSOF_PID=$(lsof -ti:"$PORT" 2>/dev/null)
-if [ -n "$LSOF_PID" ]; then
-    if ps -p "$LSOF_PID" -o command= 2>/dev/null | grep -q "app\.main:app"; then
-        kill -9 "$LSOF_PID" 2>/dev/null || true
+# 逐 PID 校验（lsof 可能返回多行 PID；多行一起传给 ps 会让守卫失效）
+for pid in $LSOF_PID; do
+    [ -z "$pid" ] && continue
+    if ps -p "$pid" -o command= 2>/dev/null | grep -q "app\.main:app"; then
+        kill -9 "$pid" 2>/dev/null || true
     fi
-fi
+done
 
 # 清理端口文件
 rm -f "$PORT_FILE"

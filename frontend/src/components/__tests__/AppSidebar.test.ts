@@ -1,10 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import AppSidebar from '../AppSidebar.vue'
 import { useFeaturesStore } from '@/stores/features'
+
+// db-switch-restart-completion：数据库状态接口 mock（其余用例不受影响——
+// 未配置时 onMounted 的 try/catch 静默忽略，徽标行不渲染）
+const dbApiMocks = {
+  getDatabaseStatus: vi.fn(),
+}
+
+vi.mock('@/api/database', () => ({
+  getDatabaseStatus: (...a: any[]) => dbApiMocks.getDatabaseStatus(...a),
+}))
 
 const mockStorage: Record<string, string> = {}
 
@@ -202,5 +212,71 @@ describe('AppSidebar 数据迁移菜单项（database_management 权限键沿用
     await r.isReady()
     expect(findNavItem(wrapper, '数据迁移')).toBeUndefined()
     expect(findNavItem(wrapper, '数据库管理')).toBeUndefined()
+  })
+})
+
+describe('AppSidebar 数据库徽标待重启态（db-switch-restart-completion）', () => {
+  // a-tooltip 在 jsdom 未注册：用 stub 同时渲染 #title 与默认插槽，便于断言 tooltip 内容
+  const tooltipStub = {
+    template: '<div class="tooltip-wrap"><div class="tooltip-title"><slot name="title" /></div><slot /></div>',
+  }
+
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  function statusPayload(pendingRestart: boolean) {
+    return {
+      data: {
+        active: {
+          id: 'conn_1',
+          type: 'sqlite',
+          name: '本地 SQLite',
+          display_address: './data/panshi.db',
+        },
+        connections_count: 1,
+        version: 1,
+        pending_restart: pendingRestart,
+      },
+    }
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    useFeaturesStore().$patch({ loaded: true })
+    Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
+    dbApiMocks.getDatabaseStatus.mockReset()
+  })
+
+  it('pending_restart=false：徽标文案不含待重启标记，tooltip 无旧库说明', async () => {
+    dbApiMocks.getDatabaseStatus.mockResolvedValue(statusPayload(false))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r], stubs: { 'a-tooltip': tooltipStub } } })
+    await r.isReady()
+    await flushPromises()
+
+    const label = wrapper.find('.sidebar-db-text')
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toContain('SQLite')
+    expect(label.text()).not.toContain('待重启')
+    expect(wrapper.find('.tooltip-title').text()).not.toContain('数据仍来自旧库')
+    expect(wrapper.find('.sidebar-db-dot.pending').exists()).toBe(false)
+  })
+
+  it('pending_restart=true：徽标追加（待重启），tooltip 说明数据仍来自旧库，状态点警示色', async () => {
+    dbApiMocks.getDatabaseStatus.mockResolvedValue(statusPayload(true))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r], stubs: { 'a-tooltip': tooltipStub } } })
+    await r.isReady()
+    await flushPromises()
+
+    expect(wrapper.find('.sidebar-db-text').text()).toContain('（待重启）')
+    expect(wrapper.find('.tooltip-title').text()).toContain('切换待重启生效，数据仍来自旧库')
+    expect(wrapper.find('.sidebar-db-dot.pending').exists()).toBe(true)
   })
 })

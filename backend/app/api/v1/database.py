@@ -115,10 +115,14 @@ def _spawn_migration_bg_task(coro) -> asyncio.Task:
 async def get_status(current_user: User = Depends(require_db_admin('database_management'))):
     cfg = _get_config()
     active = cfg.get_active()
+    # pending_restart：切换已写配置但需重启才生效（db_switch_service D5 语义），
+    # 前端据此区分「待生效配置」与「运行中连接」，不得混同展示。
+    from app.services import db_switch_service
     return {
         "active": active.public_dict() if active else None,
         "connections_count": len(cfg.connections),
         "version": cfg.version,
+        "pending_restart": db_switch_service.restart_flag_exists(),
     }
 
 
