@@ -27,12 +27,43 @@ const ONLY = argOf('--only')
 const STATE_FILE = resolve(FRONTEND_ROOT, 'node_modules/.manual-auth-state.json')
 const VIEWPORT = { width: 1600, height: 900 } // 统一视口
 
-/** 截图清单：name = 输出文件名（不含扩展名），path = 登录后访问的路由。 */
+/** 截图清单：name = 输出文件名（不含扩展名），path = 登录后访问的路由。
+ *  可选字段：
+ *   - actions: [{ click: '选择器' }] 登录进入页面后依次点击（切 Tab、开抽屉/弹窗等）
+ *   - viewportShot: true 只截视口（弹窗/抽屉为 fixed 覆盖层，fullPage 会错位）
+ */
 const SHOTS = [
   { name: '00-01-login', path: '/login', preLogin: true },
   { name: '00-02-dashboard-empty', path: '/' },
   { name: '00-03-db-management', path: '/database-management' },
-  // 按章节补充：{ name: '02-01-cluster-list', path: '/clusters' },
+  // ── 第 18 章 数据库管理（含顶部迁移/备份摘要入口卡） ──
+  { name: '18-new-01', path: '/database-management' },
+  // ── 第 19 章 数据迁移（独立页） ──
+  { name: '19-migration-01', path: '/db-migration' },
+  // ── 第 20 章 备份与容灾（独立页，三个 Tab + 抽屉 + 恢复向导） ──
+  { name: '20-backup-01', path: '/backup-management' },
+  {
+    name: '20-backup-02',
+    path: '/backup-management',
+    actions: [{ click: '.ant-tabs-tab:has-text("策略与保留")' }],
+  },
+  {
+    name: '20-backup-03',
+    path: '/backup-management',
+    actions: [{ click: '.ant-tabs-tab:has-text("备份历史")' }],
+  },
+  {
+    name: '20-backup-04',
+    path: '/backup-management',
+    viewportShot: true,
+    actions: [{ click: 'button:has-text("新增位置")' }],
+  },
+  {
+    name: '20-backup-05',
+    path: '/backup-management',
+    viewportShot: true,
+    actions: [{ click: 'button:has-text("恢复数据")' }],
+  },
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
@@ -73,8 +104,14 @@ for (const shot of SHOTS) {
     await page.goto(`${BASE_URL}${shot.path}`, { waitUntil: 'networkidle' })
   }
   await page.waitForTimeout(500) // 等待渲染稳定
+  for (const act of shot.actions || []) {
+    if (act.click) {
+      await page.locator(act.click).first().click()
+      await page.waitForTimeout(500) // 等待 Tab/抽屉/弹窗切换完成
+    }
+  }
   const file = resolve(OUT_DIR, `${shot.name}.png`)
-  await page.screenshot({ path: file, fullPage: true })
+  await page.screenshot({ path: file, fullPage: !shot.viewportShot })
   console.log('已截图:', file)
   count++
 }

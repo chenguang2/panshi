@@ -48,7 +48,7 @@
 | 12 | DNS 代理 | [12-dns-proxy.md](12-dns-proxy.md) |
 | 13 | 绑定域名并验证 | [13-domain-verify.md](13-domain-verify.md) |
 
-## 第二篇 · 进阶与运维（第 14-28 章，覆盖左侧菜单剩余项）
+## 第二篇 · 进阶与运维（第 14-31 章，覆盖左侧菜单剩余项）
 
 | 章 | 内容（菜单项） | 文件 |
 | --- | --- | --- |
@@ -57,17 +57,19 @@
 | 16 | DNS代理[HTTP] | [16-dns-http.md](16-dns-http.md) |
 | 17 | 插件开关 | [17-plugin-switches.md](17-plugin-switches.md) |
 | 18 | 数据库管理 | [18-database-management.md](18-database-management.md) |
-| 19 | ClickHouse 配置 | [19-clickhouse-config.md](19-clickhouse-config.md) |
-| 20 | 用户管理 | [20-users.md](20-users.md) |
-| 21 | 统一管理 | [21-central-management.md](21-central-management.md) |
-| 22 | 指标总览与指标查询 | [22-metrics.md](22-metrics.md) |
-| 23 | Edge 直连 | [23-edge-client.md](23-edge-client.md) |
-| 24 | 数据导入 | [24-data-import.md](24-data-import.md) |
-| 25 | 工具箱 | [25-tools.md](25-tools.md) |
-| 26 | 自启动管理 | [26-autostart.md](26-autostart.md) |
-| 27 | Ansible 主机清单 | [27-ansible-inventory.md](27-ansible-inventory.md) |
-| 28 | 节点任务 | [28-node-tasks.md](28-node-tasks.md) |
-| 29 | 审计日志 | [29-audit-log.md](29-audit-log.md) |
+| 19 | 数据迁移 | [19-db-migration.md](19-db-migration.md) |
+| 20 | 备份与容灾 | [20-backup-management.md](20-backup-management.md) |
+| 21 | ClickHouse 配置 | [21-clickhouse-config.md](21-clickhouse-config.md) |
+| 22 | 用户管理 | [22-users.md](22-users.md) |
+| 23 | 统一管理 | [23-central-management.md](23-central-management.md) |
+| 24 | 指标总览与指标查询 | [24-metrics.md](24-metrics.md) |
+| 25 | Edge 直连 | [25-edge-client.md](25-edge-client.md) |
+| 26 | 数据导入 | [26-data-import.md](26-data-import.md) |
+| 27 | 工具箱 | [27-tools.md](27-tools.md) |
+| 28 | 自启动管理 | [28-autostart.md](28-autostart.md) |
+| 29 | Ansible 主机清单 | [29-ansible-inventory.md](29-ansible-inventory.md) |
+| 30 | 节点任务 | [30-node-tasks.md](30-node-tasks.md) |
+| 31 | 审计日志 | [31-audit-log.md](31-audit-log.md) |
 
 ## 附录（客户端环境配置）
 
