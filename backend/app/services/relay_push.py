@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import AsyncGenerator
 
+import yaml
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -137,12 +139,48 @@ def _run_ansible_push(**kwargs) -> dict:
     return {"rc": getattr(result, "rc", -1), "status": getattr(result, "status", "failed")}
 
 
-def ensure_gateway_inventory() -> None:
-    """网关清单存在性校验（端点前置：错误需在 SSE 流开始前以 HTTP 错误返回）。"""
+def gateway_hosts(hosts_pattern: str, inventory_path: str | None = None) -> list[str]:
+    """解析网关清单里 ``<hosts_pattern>.hosts`` 的主机名（IP）列表。
+
+    ``inventory_path`` 缺省取本模块 ``_GATEWAYS_INVENTORY``（调用时解析，便于测试
+    monkeypatch）；relay_init 侧传自己的同名全局，两处补丁互不串扰。"""
+    path = inventory_path or _GATEWAYS_INVENTORY
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+    except (FileNotFoundError, yaml.YAMLError):
+        return []
+    group = data.get(hosts_pattern) or {}
+    return list((group.get("hosts") or {}).keys())
+
+
+def gateway_group_missing_message(hosts_pattern: str, ssh_jump: str | None) -> str:
+    """缺组报错文案：附可照抄的 YAML 片段（ssh_jump 可解析时预填账号/地址）。"""
+    user, _, host = (ssh_jump or "").partition("@")
+    host_hint = host.strip() or "<网关IP>"
+    user_hint = user.strip() or "<SSH用户>"
+    return (
+        f"网关清单缺少主机组 {hosts_pattern}（{_GATEWAYS_INVENTORY}，D1 装机时创建）。"
+        f"请在该文件追加（凭据按该局实际填写）：\n"
+        f"{hosts_pattern}:\n"
+        f"  hosts:\n"
+        f"    {host_hint}:\n"
+        f"      ansible_user: {user_hint}\n"
+        f"      ansible_ssh_pass: <密码>\n"
+    )
+
+
+def ensure_gateway_inventory(region_code: str, ssh_jump: str | None = None) -> None:
+    """网关清单前置校验：文件存在 + 该局主机组非空（缺组时错误附可照抄 YAML 片段）。
+
+    端点在 SSE 流开始前调用，错误以 HTTP 错误返回（AGENTS #21②：空匹配 rc=0 假成功）。"""
     if not Path(_GATEWAYS_INVENTORY).exists():
         raise RelayPushError(
             f"网关清单不存在: {_GATEWAYS_INVENTORY}（D1 装机时创建 inventory/gateways）"
         )
+    pattern = f"gateways_{region_code}"
+    if not gateway_hosts(pattern):
+        raise RelayPushError(gateway_group_missing_message(pattern, ssh_jump))
 
 
 async def stream_push_region(
@@ -180,5 +218,6 @@ async def stream_push_region(
         _call,
         initial_line="正在下发白名单到网关机...",
         final_extra={"hosts_pattern": extravars["hosts_pattern"]},
+        fail_on_empty_hosts=True,  # 空匹配 rc=0 假成功守卫（AGENTS #21②）
     ):
         yield event

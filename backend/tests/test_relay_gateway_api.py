@@ -148,7 +148,7 @@ class TestRelayGatewayApi:
         from app.services import relay_init, relay_push
 
         inv = tmp_path / "gateways"
-        inv.write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
+        inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
         monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
         monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
         return inv
@@ -335,3 +335,36 @@ class TestRelayHealthEndpoint:
         assert body["region"] == "luju"
         assert len(body["segments"]) == 3
         assert [s["name"] for s in body["segments"]] == ["网关HTTP腿", "SSH跳板", "抽样节点两腿"]
+
+    def test_list_regions_flags_missing_inventory_group(self, client, monkeypatch, tmp_path):
+        """列表暴露清单漂移：区域已注册但 inventory 缺组 → inventory_group_missing=True。"""
+        from app.services import relay_push
+
+        inv = tmp_path / "gateways"
+        inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
+        monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
+        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B"})
+        rows = {r["code"]: r for r in client.get("/api/v1/relay/gateways").json()}
+        assert rows["luju"]["inventory_group_missing"] is False
+        assert rows["tianjin"]["inventory_group_missing"] is True
+
+    def test_create_and_update_strip_whitespace_on_path_fields(self, client):
+        """路径/URL 类字段保存前 strip：前导空格曾让 init 的 nginx 探测静默失败（2026-10-03 kjc 实发）。"""
+        created = client.post(
+            "/api/v1/relay/gateways",
+            json={
+                "code": "kjc",
+                "name": "路局K",
+                "openresty_prefix": " /work/jboss/tunnel/openresty-1.21.4.1/nginx ",
+                "http_base_url": " https://192.168.0.13:8443 ",
+            },
+        ).json()
+        assert created["openresty_prefix"] == "/work/jboss/tunnel/openresty-1.21.4.1/nginx"
+        assert created["http_base_url"] == "https://192.168.0.13:8443"
+
+        updated = client.put(
+            f"/api/v1/relay/gateways/{created['id']}",
+            json={"ssh_jump": " jboss@192.168.0.13 "},
+        ).json()
+        assert updated["ssh_jump"] == "jboss@192.168.0.13"

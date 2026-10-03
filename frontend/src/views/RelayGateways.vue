@@ -39,6 +39,13 @@
               <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
                 {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
               </span>
+              <!-- 清单漂移：区域已注册但 ansible inventory/gateways 缺该局主机组（init/push 前置会拦并给补齐片段） -->
+              <a-tag
+                v-if="record.inventory_group_missing"
+                color="warning"
+                title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截"
+                >清单缺组</a-tag
+              >
             </template>
             <template v-else-if="column.key === 'actions'">
               <div class="table-actions">

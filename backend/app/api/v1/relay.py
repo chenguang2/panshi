@@ -71,7 +71,13 @@ async def _refresh_routing() -> None:
 @router.get("/gateways", response_model=list[RelayGatewayOut])
 async def list_gateways(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RelayGateway).order_by(RelayGateway.id))
-    return [RelayGatewayOut.model_validate(g) for g in result.scalars()]
+    out: list[RelayGatewayOut] = []
+    for g in result.scalars():
+        row = RelayGatewayOut.model_validate(g)
+        # 清单漂移标记：区域已注册但 inventory 缺该局主机组（init/push 前置会拦并给补齐片段）
+        row.inventory_group_missing = not relay_push.gateway_hosts(f"gateways_{g.code}")
+        out.append(row)
+    return out
 
 
 @router.post("/gateways", response_model=RelayGatewayOut)
@@ -141,7 +147,7 @@ async def init_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
     try:
-        relay_init.ensure_gateway_inventory()
+        relay_init.ensure_gateway_inventory(gateway.code, gateway.ssh_jump)
     except RelayInitError as e:
         raise HTTPException(status_code=503, detail=str(e))
     _acquire_region(gateway.code)
@@ -167,7 +173,7 @@ async def push_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
     try:
-        relay_push.ensure_gateway_inventory()
+        relay_push.ensure_gateway_inventory(gateway.code, gateway.ssh_jump)
     except RelayPushError as e:
         raise HTTPException(status_code=503, detail=str(e))
     _acquire_region(gateway.code)

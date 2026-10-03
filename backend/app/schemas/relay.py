@@ -32,6 +32,15 @@ class RelayGatewayCreate(BaseModel):
             raise ValueError("status 仅允许 enabled/disabled")
         return v
 
+    @field_validator("http_base_url", "ssh_jump", "openresty_prefix")
+    @classmethod
+    def strip_path_fields(cls, v: Optional[str]) -> Optional[str]:
+        """路径/URL 字段去首尾空白：前导空格曾让 init 的 nginx 探测静默失败（2026-10-03 kjc 实发）。"""
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
 
 class RelayGatewayUpdate(BaseModel):
     """code 字段存在仅为显式拒绝修改（必须与现值一致）；其余字段按提交更新。"""
@@ -57,6 +66,15 @@ class RelayGatewayUpdate(BaseModel):
             raise ValueError("status 仅允许 enabled/disabled")
         return v
 
+    @field_validator("http_base_url", "ssh_jump", "openresty_prefix")
+    @classmethod
+    def strip_path_fields(cls, v: Optional[str]) -> Optional[str]:
+        """同 Create：路径/URL 字段去首尾空白（None 透传，空串归 None）。"""
+        if v is None:
+            return None
+        v = v.strip()
+        return v or None
+
 
 class RelayStatusUpdate(BaseModel):
     status: str
@@ -79,6 +97,8 @@ class RelayGatewayOut(BaseModel):
     status: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # 清单漂移标记（列表端点计算注入，非库列）：True = inventory/gateways 缺该局主机组
+    inventory_group_missing: Optional[bool] = None
 
     class Config:
         from_attributes = True

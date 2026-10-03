@@ -51,15 +51,27 @@ def test_listen_port_of():
 def test_ensure_gateway_inventory_missing(monkeypatch):
     monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", "/nonexistent/gateways")
     with pytest.raises(relay_init.RelayInitError) as ei:
-        relay_init.ensure_gateway_inventory()
+        relay_init.ensure_gateway_inventory("luju")
     assert "网关清单" in str(ei.value)
 
 
 def test_ensure_gateway_inventory_ok(monkeypatch, tmp_path):
     inv = tmp_path / "gateways"
-    inv.write_text("[gateways_luju]\n10.10.1.1\n", encoding="utf-8")
+    inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
     monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
-    relay_init.ensure_gateway_inventory()  # 不抛
+    relay_init.ensure_gateway_inventory("luju")  # 不抛：文件在且组有主机
+
+
+def test_ensure_gateway_inventory_requires_group(monkeypatch, tmp_path):
+    """文件存在但缺该局主机组：报错并给出可照抄的 YAML 片段（含 ssh_jump 提示）。"""
+    inv = tmp_path / "gateways"
+    inv.write_text("gateways_other:\n  hosts:\n    10.0.0.9: {}\n", encoding="utf-8")
+    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+    with pytest.raises(relay_init.RelayInitError) as ei:
+        relay_init.ensure_gateway_inventory("area-test", ssh_jump="jboss@192.168.0.13")
+    msg = str(ei.value)
+    assert "gateways_area-test" in msg
+    assert "jboss" in msg and "192.168.0.13" in msg  # ssh_jump 拆出的账号/地址进提示
 
 
 def test_init_stream_emits_lines_and_final(monkeypatch, tmp_path):
@@ -117,3 +129,28 @@ def test_init_stream_reports_failure(monkeypatch, tmp_path):
         )
     )
     assert events[-1]["rc"] == 2
+
+
+def test_init_stream_empty_match_is_failure(monkeypatch, tmp_path):
+    """空匹配（no hosts matched）rc=0 必须判失败——AGENTS #21② 假成功守卫。"""
+    inv = tmp_path / "gateways"
+    inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
+    monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+
+    def fake_run(**kw):
+        handler = kw["event_handler"]
+        handler({"stdout": "[WARNING]: Could not match supplied host pattern, ignoring: gateways_luju"})
+        handler({"stdout": "skipping: no hosts matched"})
+        return {"rc": 0, "status": "successful"}
+
+    monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
+    events = _collect(
+        relay_init.stream_init_region(
+            region_code="luju", listen_port=8443, openresty_prefix="/opt/nginx",
+            edge_targets_conf="",
+        )
+    )
+    final = events[-1]
+    assert final["rc"] == 0
+    assert final["status"] == "failed"
+    assert "gateways_luju" in (final.get("error") or "")

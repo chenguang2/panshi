@@ -118,6 +118,37 @@ def test_inject_missing_host_is_noop(gateways_inv):
     assert gateways_inv.read_text(encoding="utf-8") == original
 
 
+def test_inject_covers_duplicate_host_in_two_groups(gateways_inv):
+    """同一网关机出现在两个组：注入必须覆盖**全部**块（行级变量跨组合并，漏一块即败）。
+
+    2026-10-03 实发：aoh 网关同时充当中继测试区网关，root 只注入第一个块 → 未注入块的
+    ``ansible_user: jboss`` 在合并中胜出 → sshd-setup 以 jboss 连接 → 备份
+    /etc/ssh/sshd_config 报 not readable；还原也只改首个匹配行，root 凭据会残留在第二块。
+    """
+    two_groups = (
+        "gateways_aoh:\n"
+        "  hosts:\n"
+        "    192.168.0.13:\n"
+        "      ansible_user: jboss\n"
+        "      ansible_ssh_pass: jboss-a\n"
+        "gateways_areatest:\n"
+        "  hosts:\n"
+        "    192.168.0.13:\n"
+        "      ansible_user: jboss\n"
+        "      ansible_ssh_pass: jboss-b\n"
+    )
+    gateways_inv.write_text(two_groups, encoding="utf-8")
+
+    assert relay_sshd.inject_gateway_creds("192.168.0.13", "root", "r00t#pwd") is True
+    injected = gateways_inv.read_text(encoding="utf-8")
+    assert injected.count("ansible_user: root") == 2  # 两个块都得是 root
+    assert injected.count("ansible_ssh_pass: r00t#pwd") == 2
+    assert "jboss-a" not in injected and "jboss-b" not in injected
+
+    relay_sshd.restore_gateway_creds("192.168.0.13")
+    assert gateways_inv.read_text(encoding="utf-8") == two_groups
+
+
 # ── SSE 流：执行期注入、结束后还原 ────────────────────────────
 
 def test_stream_injects_root_creds_then_restores(gateways_inv, monkeypatch):

@@ -352,6 +352,7 @@ systemctl is-active --quiet sshd || exit 1
 ```
 
 - 下发动作复用现有 ansible 域能力——**网关本身就是路局第一台受管主机**（进 inventory，专用 group）
+- **清单缺组防呆（2026-10-03 落地）**：`inventory/gateways` 是 D1 装机手工产物，平台注册区域**不会**写它——缺组时 init/push 曾以 ansible 空匹配 WARNING + rc=0 假成功收场（2026-10-02 area-test 实发）。现三层防呆：① init/push 端点前置校验该局主机组存在（解析单一实现 `relay_push.gateway_hosts`；缺组报错附可照抄 YAML 片段，ssh_jump 可解析时预填账号/地址）；② `_stream_ansible_events(fail_on_empty_hosts=True)` 流内空匹配守卫：rc=0 + 「no hosts matched」改判 failed 并附 error（AGENTS #21②）；③ 网关列表行注入 `inventory_group_missing` 漂移标记（界面状态列显示「清单缺组」tag）。
 - **冷启动顺序**：首次装机时防火墙规则尚未批准，网关初始配置由路局侧运维手工放置（装机手册给出渲染脚本离线版）；规则生效后转为平台自动下发
 - 下发失败必须显式告警并阻塞相关节点的发布操作（宁可失败，不可静默漂移）
 

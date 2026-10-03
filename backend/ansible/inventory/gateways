@@ -11,3 +11,17 @@ gateways_aoh:
   vars:
     ansible_user: jboss
     ansible_ssh_pass: linux123!@#
+
+
+gateways_areatest:
+  hosts:
+    192.168.0.13:
+      ansible_user: jboss
+      ansible_ssh_pass: linux123!@#
+
+
+gateways_kjc:
+  hosts:
+    192.168.0.13:
+      ansible_user: jboss
+      ansible_ssh_pass: linux123!@#

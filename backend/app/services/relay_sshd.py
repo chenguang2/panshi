@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _SSHD_PLAYBOOK = "relay_sshd.yml"
 
 _CRED_LOCK = threading.Lock()
-_CRED_BACKUP: dict[str, dict[str, str | None]] = {}
+_CRED_BACKUP: dict[str, list[dict[str, str | None]]] = {}
 
 
 def _scalar_line(indent: int, key: str, value: str) -> str:
@@ -38,37 +38,38 @@ def _scalar_line(indent: int, key: str, value: str) -> str:
 
 
 def _gateway_hosts(hosts_pattern: str) -> list[str]:
-    """解析网关清单里 ``<hosts_pattern>.hosts`` 的主机名（IP）列表。"""
-    try:
-        with open(relay_push._GATEWAYS_INVENTORY) as f:
-            data = yaml.safe_load(f) or {}
-    except (FileNotFoundError, yaml.YAMLError):
-        return []
-    group = data.get(hosts_pattern) or {}
-    return list((group.get("hosts") or {}).keys())
+    """解析网关清单里 ``<hosts_pattern>.hosts`` 的主机名（IP）列表。
+
+    委派 relay_push.gateway_hosts 单一实现（init/push 前置校验与列表漂移标记同源，
+    避免两份解析漂移）。"""
+    return relay_push.gateway_hosts(hosts_pattern)
 
 
-def _host_block(lines: list[str], ip: str) -> tuple[int, int] | None:
-    """返回 *ip* 主机行索引与其块结束索引（不含），找不到返回 None。"""
-    start = None
+def _host_blocks(lines: list[str], ip: str) -> list[tuple[int, int]]:
+    """返回 *ip* 全部主机块 ``(主机行索引, 块结束索引)``（不含）。
+
+    同一网关机可出现在多个区域组（如 aoh 网关同时充当中继测试区网关）：行级
+    ``ansible_user`` 跨组合并，凭据注入必须覆盖**全部**块——漏一块则未注入块的
+    原身份变量胜出（2026-10-03 实发：root 流程以 jboss 连接，报
+    ``/etc/ssh/sshd_config not readable``）。
+    """
+    blocks: list[tuple[int, int]] = []
     for i, line in enumerate(lines):
-        if line.rstrip("\n").strip() == f"{ip}:":
-            start = i
-            break
-    if start is None:
-        return None
-    host_indent = len(lines[start]) - len(lines[start].lstrip())
-    end = start + 1
-    while end < len(lines):
-        raw = lines[end]
-        if raw.strip() and (len(raw) - len(raw.lstrip())) <= host_indent:
-            break
-        end += 1
-    return start, end
+        if line.rstrip("\n").strip() != f"{ip}:":
+            continue
+        host_indent = len(lines[i]) - len(lines[i].lstrip())
+        end = i + 1
+        while end < len(lines):
+            raw = lines[end]
+            if raw.strip() and (len(raw) - len(raw.lstrip())) <= host_indent:
+                break
+            end += 1
+        blocks.append((i, end))
+    return blocks
 
 
 def inject_gateway_creds(ip: str, user: str, password: str) -> bool:
-    """为网关 *ip* 临时写入 ``ansible_user``/``ansible_ssh_pass``（行级，保留注释）。
+    """为网关 *ip* 的**所有**主机块临时写入 ``ansible_user``/``ansible_ssh_pass``（行级，保留注释）。
 
     Returns:
         True 表示已注入（``restore_gateway_creds`` 可还原）；False 表示该 ip 不在清单中。
@@ -79,51 +80,58 @@ def inject_gateway_creds(ip: str, user: str, password: str) -> bool:
                 lines = f.readlines()
         except (FileNotFoundError, OSError):
             return False
-        block = _host_block(lines, ip)
-        if block is None:
+        blocks = _host_blocks(lines, ip)
+        if not blocks:
             logger.warning("relay sshd: 网关 %s 不在清单 %s 中", ip, relay_push._GATEWAYS_INVENTORY)
             return False
-        start, end = block
-        indent = (len(lines[start]) - len(lines[start].lstrip())) + 2
-        backup: dict[str, str | None] = {}
-        for key, value in (("ansible_user", user), ("ansible_ssh_pass", password)):
-            idx = next(
-                (j for j in range(start + 1, end) if lines[j].lstrip().startswith(f"{key}:")),
-                None,
-            )
-            if idx is None:
-                backup[key] = None
-                lines.insert(end, _scalar_line(indent, key, value))
-                end += 1
-            else:
-                backup[key] = lines[idx]
-                lines[idx] = _scalar_line(indent, key, value)
-        _CRED_BACKUP[ip] = backup
+        backups: list[dict[str, str | None]] = [{} for _ in blocks]
+        # 倒序改写：块内插入会使后续行位移，先改后面的块可保持前面块的索引有效；
+        # backups 与 blocks 升序一一对应（还原按尾部配对）。
+        for (start, end), backup in zip(reversed(blocks), reversed(backups)):
+            indent = (len(lines[start]) - len(lines[start].lstrip())) + 2
+            for key, value in (("ansible_user", user), ("ansible_ssh_pass", password)):
+                idx = next(
+                    (j for j in range(start + 1, end) if lines[j].lstrip().startswith(f"{key}:")),
+                    None,
+                )
+                if idx is None:
+                    backup[key] = None
+                    lines.insert(end, _scalar_line(indent, key, value))
+                    end += 1
+                else:
+                    backup[key] = lines[idx]
+                    lines[idx] = _scalar_line(indent, key, value)
+        _CRED_BACKUP[ip] = backups
         with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
             f.writelines(lines)
         return True
 
 
 def restore_gateway_creds(ip: str) -> None:
-    """还原 ``inject_gateway_creds`` 对 *ip* 的改动（逐行还原，无备份时不动）。"""
+    """还原 ``inject_gateway_creds`` 对 *ip* 全部块的改动（块内定位逐行还原，无备份时不动）。"""
     with _CRED_LOCK:
-        backup = _CRED_BACKUP.pop(ip, None)
-        if backup is None:
+        backups = _CRED_BACKUP.pop(ip, None)
+        if not backups:
             return
         try:
             with open(relay_push._GATEWAYS_INVENTORY) as f:
                 lines = f.readlines()
-            for key, original in backup.items():
-                idx = next(
-                    (j for j, ln in enumerate(lines) if ln.lstrip().startswith(f"{key}:")),
-                    None,
-                )
-                if idx is None:
-                    continue
-                if original is None:
-                    del lines[idx]
-                else:
-                    lines[idx] = original
+            blocks = _host_blocks(lines, ip)
+            # 尾部配对 + 倒序还原：块内删除只影响尾部已处理块的位移；清单若在注入后
+            # 被手工增删块，多出的块不动（未注入），缺失的块跳过（无从还原）。
+            for (start, end), backup in zip(reversed(blocks), reversed(backups)):
+                for key, original in backup.items():
+                    idx = next(
+                        (j for j in range(start + 1, end) if lines[j].lstrip().startswith(f"{key}:")),
+                        None,
+                    )
+                    if idx is None:
+                        continue
+                    if original is None:
+                        del lines[idx]
+                        end -= 1
+                    else:
+                        lines[idx] = original
             with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
                 f.writelines(lines)
         except (FileNotFoundError, OSError) as e:

@@ -14,6 +14,7 @@ from typing import AsyncGenerator
 from urllib.parse import urlparse
 
 from app.services.ansible_service import PRIVATE_DATA_DIR, _stream_ansible_events
+from app.services.relay_push import gateway_group_missing_message, gateway_hosts
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +59,17 @@ def listen_port_of(http_base_url: str | None) -> int:
     return urlparse(http_base_url or "").port or 8443
 
 
-def ensure_gateway_inventory() -> None:
-    """网关清单存在性校验（端点前置：错误需在 SSE 流开始前以 HTTP 错误返回）。"""
+def ensure_gateway_inventory(region_code: str, ssh_jump: str | None = None) -> None:
+    """网关清单前置校验：文件存在 + 该局主机组非空（缺组时错误附可照抄 YAML 片段）。
+
+    端点在 SSE 流开始前调用，错误以 HTTP 错误返回（AGENTS #21②：空匹配 rc=0 假成功）。"""
     if not Path(_GATEWAYS_INVENTORY).exists():
         raise RelayInitError(
             f"网关清单不存在: {_GATEWAYS_INVENTORY}（D1 装机时创建 inventory/gateways）"
         )
+    pattern = f"gateways_{region_code}"
+    if not gateway_hosts(pattern, inventory_path=_GATEWAYS_INVENTORY):
+        raise RelayInitError(gateway_group_missing_message(pattern, ssh_jump))
 
 
 def _run_ansible_init(**kwargs) -> dict:
@@ -118,5 +124,6 @@ async def stream_init_region(
         _call,
         initial_line="正在连接网关机并执行初始化（首次装机约 10–60 秒）...",
         final_extra={"hosts_pattern": extravars["hosts_pattern"], "listen_port": listen_port},
+        fail_on_empty_hosts=True,  # 空匹配 rc=0 假成功守卫（AGENTS #21②）
     ):
         yield event

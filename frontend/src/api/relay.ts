@@ -11,6 +11,8 @@ export interface RelayGateway {
   ssh_jump: string | null
   openresty_prefix: string | null
   status: 'enabled' | 'disabled' | string
+  /** 清单漂移标记（后端列表计算注入，非库列）：true = ansible inventory 缺该局主机组，init/push 前置会拦 */
+  inventory_group_missing?: boolean | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -80,10 +82,9 @@ export interface RelaySshdSetupRequest {
 
 export function relayHealthCheck(region?: string) {
   const query = region ? `?region=${encodeURIComponent(region)}` : ''
-  return api.get<RelayHealthResult | { regions: RelayHealthResult[] }>(
-    `/relay/health-check${query}`,
-    { timeout: RELAY_LONG_TIMEOUT },
-  )
+  return api.get<RelayHealthResult | { regions: RelayHealthResult[] }>(`/relay/health-check${query}`, {
+    timeout: RELAY_LONG_TIMEOUT,
+  })
 }
 
 /** 只读预览该区域将写入网关机的配置文件内容（供界面复制 / ansible 不可用时手工配置）。 */

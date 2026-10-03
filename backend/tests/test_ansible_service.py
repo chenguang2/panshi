@@ -1222,3 +1222,29 @@ class TestSshControlPathEscaping:
         from app.services.ansible_service import SSH_CONTROL_PATH
         assert self._as_ssh_sees(SSH_CONTROL_PATH) == self._as_ssh_sees(self._read_cfg_control_path())
         assert "%%" not in self._as_ssh_sees(SSH_CONTROL_PATH)
+
+
+def test_stream_ansible_events_empty_match_guard_is_opt_in():
+    """fail_on_empty_hosts 默认关（不动既有消费方）；开启后 rc=0 + 空匹配判失败。"""
+    import asyncio
+    import json as _json
+
+    from app.services.ansible_service import _stream_ansible_events
+
+    async def fake_runner(handler):
+        handler({"stdout": "[WARNING]: Could not match supplied host pattern, ignoring: gateways_x"})
+        handler({"stdout": "skipping: no hosts matched"})
+        return {"rc": 0, "status": "successful"}
+
+    async def _collect(agen):
+        return [_json.loads(e.removeprefix("data: ").strip()) async for e in agen]
+
+    default_events = asyncio.run(_collect(_stream_ansible_events(fake_runner)))
+    assert default_events[-1]["status"] == "successful"
+
+    guarded_events = asyncio.run(
+        _collect(_stream_ansible_events(fake_runner, fail_on_empty_hosts=True))
+    )
+    final = guarded_events[-1]
+    assert final["status"] == "failed"
+    assert "no hosts matched" in (final.get("error") or "")

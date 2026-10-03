@@ -766,6 +766,7 @@ async def _stream_ansible_events(
     run_with_handler,
     initial_line: str = "正在连接远程主机并启动 Ansible...",
     final_extra: dict[str, Any] | None = None,
+    fail_on_empty_hosts: bool = False,
 ) -> AsyncGenerator[str, None]:
     """把一次 ansible 执行转成 SSE 事件流（实时 stdout 行 + 进度 + 终态）。
 
@@ -774,6 +775,9 @@ async def _stream_ansible_events(
             执行 ansible 并返回 ``{"rc", "status"}``。
         initial_line: 首个事件行（确认连接建立）。
         final_extra: 合并进终态事件的附加字段（如 hosts_pattern / listen_port）。
+        fail_on_empty_hosts: 空匹配守卫（默认关）。开启后若 rc=0 但输出中出现
+            「Could not match supplied host pattern」/「no hosts matched」（AGENTS #21②：
+            ansible 对空匹配以 rc=0 退出的假成功陷阱），终态改判 failed 并附 error 说明。
 
     Yields:
         ``data: {"line": "...", "percent": N}\n\n``
@@ -781,6 +785,7 @@ async def _stream_ansible_events(
     """
     q: queue.Queue = queue.Queue()
     line_count = 0
+    emitted: list[str] = []
 
     def event_handler(event_data: dict) -> None:
         # Ansible display line (e.g. "TASK [edge : Build edge server]")
@@ -812,6 +817,8 @@ async def _stream_ansible_events(
         if line is _SENTINEL:
             break
         line_count += 1
+        if fail_on_empty_hosts:
+            emitted.append(line)
         pct = min(int(line_count / 200 * 100), 99) if line_count < 200 else min(50 + int((line_count - 200) / 20), 99)
         yield f"data: {json.dumps({'line': line, 'percent': pct})}\n\n"
 
@@ -819,6 +826,20 @@ async def _stream_ansible_events(
     final: dict[str, Any] = {"rc": result.get("rc", -1), "status": result.get("status", "failed"), "percent": 100}
     if final_extra:
         final.update(final_extra)
+    if (
+        fail_on_empty_hosts
+        and final["rc"] == 0
+        and any(
+            ("Could not match supplied host pattern" in ln) or ("no hosts matched" in ln)
+            for ln in emitted
+        )
+    ):
+        pattern = final.get("hosts_pattern") or "<未知>"
+        final["status"] = "failed"
+        final["error"] = (
+            f"Ansible 空匹配（no hosts matched）：主机组 {pattern} 在网关清单中不存在或为空，"
+            "未对任何主机执行（rc=0 假成功守卫，AGENTS #21②）"
+        )
     yield f"data: {json.dumps(final)}\n\n"
 
 

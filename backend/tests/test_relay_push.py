@@ -84,8 +84,45 @@ def test_disabled_node_in_sshd_whitelist_but_not_nginx_map(test_db):
 def test_ensure_gateway_inventory_missing(monkeypatch):
     monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", "/nonexistent/gateways")
     with pytest.raises(relay_push.RelayPushError) as ei:
-        relay_push.ensure_gateway_inventory()
+        relay_push.ensure_gateway_inventory("luju")
     assert "网关清单" in str(ei.value)
+
+
+def test_ensure_gateway_inventory_requires_group(monkeypatch, tmp_path):
+    """缺该局主机组：报错并给可照抄的 YAML 片段（无 ssh_jump 时通用占位）。"""
+    inv = tmp_path / "gateways"
+    inv.write_text("gateways_other:\n  hosts:\n    10.0.0.9: {}\n", encoding="utf-8")
+    monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
+    with pytest.raises(relay_push.RelayPushError) as ei:
+        relay_push.ensure_gateway_inventory("area-test")
+    assert "gateways_area-test" in str(ei.value)
+
+
+def test_push_stream_empty_match_is_failure(monkeypatch, tmp_path):
+    """空匹配（no hosts matched）rc=0 必须判失败——AGENTS #21② 假成功守卫。"""
+    inv = tmp_path / "gateways"
+    inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
+    monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
+
+    def fake_run(**kw):
+        handler = kw["event_handler"]
+        handler({"stdout": "[WARNING]: Could not match supplied host pattern, ignoring: gateways_luju"})
+        handler({"stdout": "skipping: no hosts matched"})
+        return {"rc": 0, "status": "successful"}
+
+    monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+    events = _collect(
+        relay_push.stream_push_region(
+            region_code="luju",
+            openresty_prefix="/work/openresty/nginx",
+            edge_targets_conf="",
+            relay_sshd_conf="",
+        )
+    )
+    final = events[-1]
+    assert final["rc"] == 0
+    assert final["status"] == "failed"
+    assert "gateways_luju" in (final.get("error") or "")
 
 
 def test_push_stream_emits_lines_and_final(monkeypatch, tmp_path):
