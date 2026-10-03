@@ -103,7 +103,7 @@ Write-Host "[3/4] 安装后端依赖..."
 $env:PYTHONHOME = $targetPythonDir
 $pip = Join-Path $venvDir "Scripts\pip.exe"
 Write-Host "  使用清华 PyPI 镜像..."
-& $pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$ProjectRoot\backend"
+& $pip install -i https://mirrors.aliyun.com/pypi/simple/ -e "$ProjectRoot\backend"
 Remove-Item Env:PYTHONHOME -ErrorAction SilentlyContinue
 Write-Host "  后端依赖安装完成"
 

@@ -44,6 +44,9 @@ product/linux/panshi/
 product/linux/panshi-*/
 product/mac/panshi/
 
+# PyPI wheel 本地落盘缓存（product/tools/vendor-wheels.sh 生成，可随时重建）
+product/wheels/
+
 # Tongsuo openssl 二进制（国密证书生成）
 product/linux/tongsuo/bin/openssl
 

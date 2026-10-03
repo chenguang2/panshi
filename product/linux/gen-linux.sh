@@ -90,8 +90,10 @@ echo ""
 echo "[4/5] 安装后端依赖..."
 # standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 强制指向拷贝后的 Python
 export PYTHONHOME="$TARGET_PYTHON_DIR"
-echo "  使用清华 PyPI 镜像..."
-"$TARGET_DIR/backend/.venv/bin/pip" install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$TARGET_DIR/backend"
+# 依赖安装统一入口（product/tools/install-backend-deps.sh）：uv 优先（缓存激进）/
+# pip 退化；导出 WHEELS_DIR=<repo>/product/wheels 则完全离线（由 vendor-wheels.sh 落盘）。
+# 镜像默认 aliyun（tuna 对本机出口渐进式 403，2026-10-03 实测），可经 PIP_INDEX_URL 覆盖。
+"$PROJECT_ROOT/product/tools/install-backend-deps.sh" "$TARGET_DIR"
 unset PYTHONHOME
 echo "  后端依赖安装完成"
 

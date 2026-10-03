@@ -85,7 +85,7 @@ echo "[4/5] 安装后端依赖..."
 # standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 强制指向拷贝后的 Python
 export PYTHONHOME="$TARGET_PYTHON_DIR"
 echo "  使用清华 PyPI 镜像..."
-"$TARGET_DIR/backend/.venv/bin/pip" install -i https://pypi.tuna.tsinghua.edu.cn/simple -e "$TARGET_DIR/backend"
+"$TARGET_DIR/backend/.venv/bin/pip" install -i https://mirrors.aliyun.com/pypi/simple/ -e "$TARGET_DIR/backend"
 unset PYTHONHOME
 echo "  后端依赖安装完成"
 
