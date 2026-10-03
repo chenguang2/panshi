@@ -18,7 +18,10 @@ set -euo pipefail
 TARGET_DIR="${1:?用法: install-backend-deps.sh <TARGET_DIR> [含 backend/ 的产品目录]}"
 BACKEND="$TARGET_DIR/backend"
 VENV_PY="$BACKEND/.venv/bin/python"
-MIRROR="${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 镜像优先级：PIP_INDEX_URL 环境变量 > switch-pypi-mirror.sh 落盘的 .mirror > aliyun 兜底
+MIRROR="${PIP_INDEX_URL:-$(cat "$SCRIPT_DIR/.mirror" 2>/dev/null || true)}"
+MIRROR="${MIRROR:-https://mirrors.aliyun.com/pypi/simple/}"
 
 # 覆盖机器环境的镜像变量（本机 UV_INDEX_URL 指向已限流的 tuna，2026-10-03 实测）：
 # 进程树内所有 uv/pip 调用统一走 MIRROR，新旧变量名双保险。

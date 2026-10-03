@@ -47,6 +47,9 @@ product/mac/panshi/
 # PyPI wheel 本地落盘缓存（product/tools/vendor-wheels.sh 生成，可随时重建）
 product/wheels/
 
+# 镜像选择本地态（switch-pypi-mirror.sh 写入，helper/vendor 读取）
+product/tools/.mirror
+
 # Tongsuo openssl 二进制（国密证书生成）
 product/linux/tongsuo/bin/openssl
 

@@ -19,8 +19,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 WHEELS_DIR="${WHEELS_DIR:-$REPO_ROOT/product/wheels}"
-MIRROR="${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
 PY_VER="${PY_VER:-3.11}"
+# 镜像优先级：PIP_INDEX_URL 环境变量 > switch-pypi-mirror.sh 落盘的 .mirror > aliyun 兜底
+MIRROR="${PIP_INDEX_URL:-$(cat "$SCRIPT_DIR/.mirror" 2>/dev/null || true)}"
+MIRROR="${MIRROR:-https://mirrors.aliyun.com/pypi/simple/}"
 
 # 机器环境可能把 UV_INDEX_URL 指向已限流镜像（本机 tuna 渐进式 403，2026-10-03 实测，
 # uv venv --seed 无显式 index 时继承它而挂）——进程树内统一覆盖为 MIRROR，新旧变量名双保险。

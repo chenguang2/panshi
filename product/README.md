@@ -26,7 +26,7 @@
 | 场景 | 怎么做 |
 |---|---|
 | **A · 日常打包**（99% 的情况） | `bash product/linux/gen-linux.sh` —— 什么都不用改，依赖自动走 aliyun 镜像 + uv 加速 |
-| **B · 换镜像**（aliyun 也不可用时） | `./product/tools/switch-pypi-mirror.sh https://mirrors.cloud.tencent.com/pypi/simple`，换源后照常打包。平时不用跑（aliyun 已配置生效） |
+| **B · 换镜像**（aliyun 也不可用时） | `./product/tools/switch-pypi-mirror.sh` 运行后**菜单选择**国内镜像（也可 `... tencent` 名称直选），换源后照常打包。平时不用跑（aliyun 已配置生效） |
 | **C · 完全离线**（打包机断网 / 镜像全被限流） | ① 有网时跑一次：`./product/tools/vendor-wheels.sh`（全量包落盘 `product/wheels/`）<br>② 之后每次打包：`WHEELS_DIR=<repo>/product/wheels bash product/linux/gen-linux.sh`，全程不联网<br>注意：`backend/pyproject.toml` 改过依赖后须重跑 ①，否则离线装的是旧包 |
 
 `install-backend-deps.sh` **无需手动执行**——它是 gen 脚本第 4 步内部调用的安装器，单独运行仅用于排查依赖问题。
@@ -77,10 +77,25 @@ Python 依赖默认走 **aliyun 镜像**（2026-10-03 实测清华 tuna 对本�
 ### 5.1 短期：换镜像
 
 ```bash
-./product/tools/switch-pypi-mirror.sh [镜像URL]   # 缺省 aliyun
+./product/tools/switch-pypi-mirror.sh            # 交互菜单选择（推荐）
+./product/tools/switch-pypi-mirror.sh tencent    # 按名称直选
+./product/tools/switch-pypi-mirror.sh 2          # 按序号直选
+./product/tools/switch-pypi-mirror.sh https://…  # 自定义源（完整 URL 原样使用）
 ```
 
-一键把三个打包脚本里硬编码的 `-i <镜像>` 换成目标源，幂等可重复执行。当前三处均已为 aliyun。
+预置国内镜像（无需手输地址）：
+
+| # | 名称 | 地址 | 2026-10-03 包级实测 |
+|---|---|---|---|
+| 1 | aliyun（阿里云） | `https://mirrors.aliyun.com/pypi/simple/` | ✅ 200（当前缺省） |
+| 2 | tencent（腾讯云） | `https://mirrors.cloud.tencent.com/pypi/simple/` | ✅ 200 |
+| 3 | ustc（中科大） | `https://mirrors.ustc.edu.cn/pypi/simple/` | ✅ 200 |
+| 4 | huawei（华为云） | `https://repo.huaweicloud.com/repository/pypi/simple` | ✅ 200 |
+| 5 | tsinghua（清华 tuna） | `https://pypi.tuna.tsinghua.edu.cn/simple` | ⚠️ 本机出口 403（其他机器可用） |
+
+- 脚本会改写 mac/win 打包脚本里硬编码的 `-i <镜像>`，并把选择持久化到 `product/tools/.mirror`——`install-backend-deps.sh`（gen-linux 走它）与 `vendor-wheels.sh` 都读它作缺省镜像，**三平台一致生效**；
+- 幂等可重复执行；`PIP_INDEX_URL` 环境变量仍可单次覆盖；
+- 镜像可用性随时间/出口 IP 漂移，切换前可快速自测：`curl -s -o /dev/null -w '%{http_code}' <镜像地址>/simple/six/`（pip 实际只访问包级路径，根索引 403/429 不代表不可用）。
 
 ### 5.2 中期：统一安装入口（已接线）
 
