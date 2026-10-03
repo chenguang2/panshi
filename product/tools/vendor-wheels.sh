@@ -35,8 +35,11 @@ uv pip compile "$REPO_ROOT/backend/pyproject.toml" \
     -o "$WHEELS_DIR/requirements.lock.txt"
 
 echo "[2/3] 准备落盘用 pip（uv venv --seed，自带 pip）"
-PIP_VENV="$(mktemp -d /tmp/opencode/vendor-pip.XXXXXX)"
-trap 'rm -rf "$PIP_VENV"' EXIT
+# 勿硬编码不存在的父目录：mktemp 不会自建父级（曾写死 /tmp/opencode 导致用户环境必挂）
+TMP_BASE="${TMPDIR:-/tmp}"
+PIP_VENV="$(mktemp -d "$TMP_BASE/vendor-pip.XXXXXX")"
+DL_LOG="$TMP_BASE/vendor-dl.$$.log"
+trap 'rm -rf "$PIP_VENV"; rm -f "$DL_LOG"' EXIT
 uv venv --python "$PY_VER" --seed "$PIP_VENV" >/dev/null
 PIP_BIN="$PIP_VENV/bin/pip"
 
@@ -45,9 +48,9 @@ echo "[3/3] 下载全量 wheel → $WHEELS_DIR（镜像: $MIRROR）"
 # setuptools 离线构建，setuptools/wheel 已在落盘集里）
 if ! "$PIP_BIN" download -r "$WHEELS_DIR/requirements.lock.txt" \
         -d "$WHEELS_DIR" --index-url "$MIRROR" \
-        --python-version "$PY_VER" --only-binary=:all: 2>/tmp/opencode/vendor-dl.log; then
+        --python-version "$PY_VER" --only-binary=:all: 2>"$DL_LOG"; then
     echo "  [提示] 存在仅 sdist 的依赖，回退允许源码包（离线构建依赖 setuptools 已落盘）"
-    cat /tmp/opencode/vendor-dl.log | tail -5 >&2
+    tail -5 "$DL_LOG" >&2
     "$PIP_BIN" download -r "$WHEELS_DIR/requirements.lock.txt" \
         -d "$WHEELS_DIR" --index-url "$MIRROR" --python-version "$PY_VER"
 fi
