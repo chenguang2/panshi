@@ -226,10 +226,14 @@
             <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
           </div>
           <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="formData.statusCheck" />
-              <span>{{ formData.statusCheck ? '启用' : '停用' }}</span>
-            </label>
+            <label class="form-label">状态</label>
+            <select class="form-input" v-model="formData.statusCheck">
+              <option :value="true">启用</option>
+              <option :value="false">停用</option>
+            </select>
+            <div class="form-hint">
+              停用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询
+            </div>
           </div>
         </div>
         <div class="modal-footer">
