@@ -222,4 +222,17 @@ describe('ClusterCard - 页面差异 slot', () => {
     })
     expect(w.find('.card-extra').exists()).toBe(true)
   })
+
+  it('主标题悬停 tooltip 携带集群名与数字 ID（#id 尾注删除后的保底露出面）', () => {
+    const withName = mount(ClusterCard, {
+      props: { cluster: makeCluster(), routeBadge: null },
+      global: { plugins: [router] },
+    })
+    expect(withName.find('.cl-card-name').attributes('title')).toBe('集群名: 生产集群 · ID: 5')
+    const fallback = mount(ClusterCard, {
+      props: { cluster: makeCluster({ display_name: undefined }), routeBadge: null },
+      global: { plugins: [router] },
+    })
+    expect(fallback.find('.cl-card-name').attributes('title')).toBe('集群名: prod-cluster · ID: 5')
+  })
 })

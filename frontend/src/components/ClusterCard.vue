@@ -7,7 +7,7 @@
     </div>
     <div class="cl-card-header">
       <div class="cl-card-info">
-        <div class="cl-card-name">{{ cluster.display_name || cluster.name }}</div>
+        <div class="cl-card-name" :title="nameTitle">{{ cluster.display_name || cluster.name }}</div>
         <div v-if="subtitle" class="cl-card-desc">{{ subtitle }}</div>
       </div>
       <div class="cl-card-meta">
@@ -90,6 +90,11 @@ const subtitle = computed<string | null>(() => {
   if (c.display_name) return `集群标识: ${c.name}`
   return null
 })
+
+/** 悬停保底：主标题 tooltip 携带数字 ID（#id 尾注删除后全 UI 唯一露出面） */
+const nameTitle = computed(
+  () => `集群名: ${props.cluster.display_name || props.cluster.name} · ID: ${props.cluster.id}`,
+)
 
 /** 节点 tag 最多展示前 3 个 */
 const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])

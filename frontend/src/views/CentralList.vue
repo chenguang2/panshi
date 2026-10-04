@@ -150,8 +150,6 @@
                     >
                       删除
                     </button>
-                    <span style="flex: 1"></span>
-                    <span class="cl-card-id">#{{ cluster.id }}</span>
                   </template>
                 </ClusterCard>
               </TransitionGroup>
@@ -243,8 +241,6 @@
                     >
                       删除
                     </button>
-                    <span style="flex: 1"></span>
-                    <span class="cl-card-id">#{{ cluster.id }}</span>
                   </template>
                 </ClusterCard>
               </TransitionGroup>
@@ -1565,12 +1561,6 @@ onMounted(async () => {
   margin-top: auto;
   padding: 10px 20px 16px;
   border-top: 1px solid var(--border);
-}
-/* .cl-card-id：actions slot 内容（编译于本页作用域） */
-.cl-card-id {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--font-mono);
 }
 
 /* Expanded area action buttons */

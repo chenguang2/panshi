@@ -22,6 +22,12 @@ describe('集群卡片组件化统一 · 组件存在性', () => {
     expect(s).toContain('cl-route-badge')
     expect(s).toContain('title="健康节点 / 节点总数"')
     expect(s).toContain('集群标识: ')
+    expect(s).toContain('集群名: ')
+  })
+
+  it('#id 尾注已删除：CentralList 不再渲染 cl-card-id，数字 ID 仅经主标题 tooltip 露出', () => {
+    expect(src('views/CentralList.vue')).not.toMatch(/cl-card-id/)
+    expect(src('components/ClusterCard.vue')).toMatch(/ID: \$\{props\.cluster\.id\}/)
   })
 })
 
