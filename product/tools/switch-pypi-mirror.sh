@@ -99,7 +99,10 @@ for f in "${TARGET_FILES[@]}"; do
         echo "  [异常] $f 仍有 $stale 处非目标镜像，请人工检查" >&2
         exit 1
     fi
-    echo "  [已替换] $f：$count 处 → 全部为目标镜像"
+    # 提示语跟随实际镜像（整行重写、幂等：生成行仍匹配本模式；URL 无 &/| 等 sed 元字符）
+    sed -i "s|^echo \"[^\"]*PyPI 镜像[^\"]*\"|echo \"  使用 PyPI 镜像: $TARGET_MIRROR\"|" "$f"
+    sed -i "s|^Write-Host \"[^\"]*PyPI 镜像[^\"]*\"|Write-Host \"  使用 PyPI 镜像: $TARGET_MIRROR\"|" "$f"
+    echo "  [已替换] $f：$count 处 → 全部为目标镜像，提示语已同步"
     total=$((total + count))
 done
 echo "完成：共改写 $total 处。验证："

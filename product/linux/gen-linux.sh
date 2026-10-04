@@ -175,7 +175,7 @@ echo "  已修正 $SHEBANG_FIX_COUNT 个脚本 shebang"
 echo ""
 echo "[5/5] 构建前端..."
 cd "$PROJECT_ROOT/frontend"
-echo "  使用清华 npm 镜像..."
+echo "  使用 npmmirror 国内 npm 镜像（阿里）..."
 npm install --registry=https://registry.npmmirror.com
 npm run build
 # 将构建产物拷贝到部署目录

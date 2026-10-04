@@ -93,7 +93,7 @@ Python 依赖默认走 **aliyun 镜像**（2026-10-03 实测清华 tuna 对本�
 | 4 | huawei（华为云） | `https://repo.huaweicloud.com/repository/pypi/simple` | ✅ 200 |
 | 5 | tsinghua（清华 tuna） | `https://pypi.tuna.tsinghua.edu.cn/simple` | ⚠️ 本机出口 403（其他机器可用） |
 
-- 脚本会改写 mac/win 打包脚本里硬编码的 `-i <镜像>`，并把选择持久化到 `product/tools/.mirror`——`install-backend-deps.sh`（gen-linux 走它）与 `vendor-wheels.sh` 都读它作缺省镜像，**三平台一致生效**；
+- 脚本会改写 mac/win 打包脚本里硬编码的 `-i <镜像>` **及相邻提示语**（提示跟随实际镜像，杜绝「嘴上清华、实际 aliyun」的漂移），并把选择持久化到 `product/tools/.mirror`——`install-backend-deps.sh`（gen-linux 走它）与 `vendor-wheels.sh` 都读它作缺省镜像，**三平台一致生效**；
 - 幂等可重复执行；`PIP_INDEX_URL` 环境变量仍可单次覆盖；
 - 镜像可用性随时间/出口 IP 漂移，切换前可快速自测：`curl -s -o /dev/null -w '%{http_code}' <镜像地址>/simple/six/`（pip 实际只访问包级路径，根索引 403/429 不代表不可用）。
 
