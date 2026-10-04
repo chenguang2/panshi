@@ -93,6 +93,7 @@
                   :key="cluster.id"
                   :cluster="cluster"
                   :route-badge="routeBadge(cluster)"
+                  :stat-click="(key: string) => openStatTab(cluster, key)"
                 >
                   <template #topbar>
                     <span>{{ cluster.group_name || '未分组' }}</span>
@@ -184,6 +185,7 @@
                   :key="cluster.id"
                   :cluster="cluster"
                   :route-badge="routeBadge(cluster)"
+                  :stat-click="(key: string) => openStatTab(cluster, key)"
                 >
                   <template #topbar>
                     <span>{{ cluster.group_name || '未分组' }}</span>
@@ -804,6 +806,25 @@ const onClusterSaved = () => {
 function switchTab(cluster: Cluster, key: string) {
   cluster.activeTab = key
   handleTabClick(cluster, key)
+}
+
+// ── 统计格点击接管（方案 A）：统计格直切本页集群多 Tab 资源浏览器，不跳全局列表页 ──
+
+/** 统计格 key（ClusterCard 契约）→ 本页 Tab key：仅「插件元数据」两者命名不同（cell=pluginMetadata / Tab=globalPlugins），标签文案一致 */
+const STAT_TAB_KEYS: Record<string, string> = {
+  nodes: 'nodes',
+  upstreams: 'upstreams',
+  routes: 'routes',
+  pluginConfigs: 'pluginConfigs',
+  globalRules: 'globalRules',
+  pluginMetadata: 'globalPlugins',
+  staticResources: 'staticResources',
+}
+
+/** 打开该集群的多 Tab 资源浏览器（最大化）并直切对应 Tab；未知 key 兜底节点 Tab */
+function openStatTab(cluster: Cluster, key: string) {
+  maximizeCluster(cluster)
+  switchTab(cluster, STAT_TAB_KEYS[key] || 'nodes')
 }
 
 const handleTabClick = async (cluster: Cluster, key: string) => {

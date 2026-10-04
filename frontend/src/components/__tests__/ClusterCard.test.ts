@@ -1,7 +1,7 @@
 // 集群卡片组件（ClusterCard）守卫 —— 档位 C：共享组件 + 回退式二显副标题。
 // 组件为纯展示：routeBadge 由页面计算传入（null = 不渲染），组件内不发任何请求。
 // 主标题 display_name || name；副标题 description 优先 → 回退「集群标识: name」（仅 display_name 存在时）→ 无。
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import ClusterCard from '@/components/ClusterCard.vue'
@@ -234,5 +234,60 @@ describe('ClusterCard - 页面差异 slot', () => {
       global: { plugins: [router] },
     })
     expect(fallback.find('.cl-card-name').attributes('title')).toBe('集群名: prod-cluster · ID: 5')
+  })
+})
+
+describe('ClusterCard - 统计格点击接管（statClick prop · 方案 A）', () => {
+  function mountWithStat(cb: (key: string) => void) {
+    return mount(ClusterCard, {
+      props: { cluster: makeCluster(), routeBadge: null, statClick: cb },
+      global: { plugins: [router] },
+    })
+  }
+
+  it('传入 statClick：7 个统计格不再是 router-link（div 承载，样式类不变）', () => {
+    const w = mountWithStat(vi.fn())
+    expect(w.findAll('a.cl-stat-link').length).toBe(0)
+    expect(w.findAll('.cl-stat-cell.cl-stat-link').length).toBe(7)
+  })
+
+  it('点击「上游」格 → 回调收到 upstreams，路由不跳转', async () => {
+    const cb = vi.fn()
+    const w = mountWithStat(cb)
+    await w.findAll('.cl-stat-cell.cl-stat-link')[1].trigger('click')
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledWith('upstreams')
+    expect(router.currentRoute.value.path).toBe('/')
+  })
+
+  it('点击「节点」格 → 回调收到 nodes，健康/总数 title 保留', async () => {
+    const cb = vi.fn()
+    const w = mountWithStat(cb)
+    const cell = w.findAll('.cl-stat-cell.cl-stat-link')[0]
+    expect(cell.attributes('title')).toBe('健康节点 / 节点总数')
+    await cell.trigger('click')
+    expect(cb).toHaveBeenCalledWith('nodes')
+  })
+
+  it('7 格 key 依序正确（含插件元数据格 → pluginMetadata）', async () => {
+    const cb = vi.fn()
+    const w = mountWithStat(cb)
+    for (const cell of w.findAll('.cl-stat-cell.cl-stat-link')) {
+      await cell.trigger('click')
+    }
+    expect(cb.mock.calls.map((c) => c[0])).toEqual([
+      'nodes',
+      'upstreams',
+      'routes',
+      'pluginConfigs',
+      'globalRules',
+      'pluginMetadata',
+      'staticResources',
+    ])
+  })
+
+  it('不传 statClick → 保持默认 router-link 行为（7 个 a 链接）', () => {
+    const w = mountCard(makeCluster())
+    expect(w.findAll('a.cl-stat-link').length).toBe(7)
   })
 })

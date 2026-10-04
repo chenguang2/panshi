@@ -18,7 +18,37 @@
         <span v-if="routeBadge" class="badge cl-route-badge" :class="routeBadge.cls">{{ routeBadge.label }}</span>
       </div>
     </div>
-    <div class="cl-card-stats">
+    <div v-if="statClick" class="cl-card-stats">
+      <div class="cl-stat-cell cl-stat-link" title="健康节点 / 节点总数" @click="onStatClick('nodes')">
+        <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
+        <div class="cl-stat-label">节点</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('upstreams')">
+        <div class="cl-stat-value">{{ cluster.upstream_count }}</div>
+        <div class="cl-stat-label">上游</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('routes')">
+        <div class="cl-stat-value">{{ cluster.route_count }}</div>
+        <div class="cl-stat-label">路由</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('pluginConfigs')">
+        <div class="cl-stat-value">{{ cluster.plugin_config_count }}</div>
+        <div class="cl-stat-label">插件组</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('globalRules')">
+        <div class="cl-stat-value">{{ cluster.global_rule_count }}</div>
+        <div class="cl-stat-label">全局规则</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('pluginMetadata')">
+        <div class="cl-stat-value">{{ cluster.plugin_metadata_count }}</div>
+        <div class="cl-stat-label">插件元数据</div>
+      </div>
+      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('staticResources')">
+        <div class="cl-stat-value">{{ cluster.static_resource_count }}</div>
+        <div class="cl-stat-label">静态资源</div>
+      </div>
+    </div>
+    <div v-else class="cl-card-stats">
       <router-link
         :to="{ path: '/nodes', query: { cluster_id: cluster.id } }"
         class="cl-stat-cell cl-stat-link"
@@ -81,7 +111,14 @@ import type { Cluster } from '@/types'
 const props = defineProps<{
   cluster: Cluster
   routeBadge?: { label: string; cls: string } | null
+  /** 统计格点击接管（方案 A）：传入时统计格不再跳全局列表页，改由页面处理（如直切本页集群 Tab） */
+  statClick?: (key: string) => void
 }>()
+
+/** 统计格点击转发（约定 #25：模板 handler 提取为函数）；仅在 statClick 分支渲染 */
+function onStatClick(key: string) {
+  props.statClick?.(key)
+}
 
 /** 回退式二显副标题：description 优先 → 回退「集群标识: name」（仅 display_name 存在时）→ 无 */
 const subtitle = computed<string | null>(() => {

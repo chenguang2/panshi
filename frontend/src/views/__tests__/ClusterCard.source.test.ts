@@ -65,3 +65,20 @@ describe('集群卡片组件化统一 · 两页接入', () => {
     )
   })
 })
+
+describe('集群卡片 · 统计格点击接管（方案 A）', () => {
+  it('ClusterCard 契约：可选 statClick 函数 prop + 分支渲染（有 prop → div 格 + onStatClick；无 → router-link）', () => {
+    const s = src('components', 'ClusterCard.vue')
+    expect(s).toContain('statClick?: (key: string) => void')
+    expect(s).toContain('v-if="statClick"')
+    expect(s).toContain('@click="onStatClick(')
+  })
+
+  it('统一管理两处卡片（分组 + 未分组）均传入 :stat-click', () => {
+    expect((src('views', 'CentralList.vue').match(/:stat-click="/g) || []).length).toBe(2)
+  })
+
+  it('集群管理未传 stat-click —— 统计格保持跳全局列表的默认 router-link 行为', () => {
+    expect(src('views', 'ClusterList.vue')).not.toContain(':stat-click')
+  })
+})
