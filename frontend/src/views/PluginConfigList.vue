@@ -378,6 +378,10 @@ onUnmounted(() => {
   font-weight: 600;
 }
 .pc-card-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;

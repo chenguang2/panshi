@@ -102,7 +102,7 @@
               <span v-if="c.nodes.length > 3" class="node-more">...还有 {{ c.nodes.length - 3 }} 个</span>
             </div>
             <div class="cl-card-actions">
-              <button class="btn btn-ghost btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
+              <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" style="color: var(--danger)" @click="deleteCluster(c)">

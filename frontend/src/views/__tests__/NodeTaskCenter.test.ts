@@ -38,6 +38,10 @@ function makeTask(overrides: Record<string, unknown> = {}) {
 
 const globalStubs = {
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  'a-button': {
+    template: `<button type="button" class="a-btn-stub" @click="$emit('click')"><slot /></button>`,
+    emits: ['click'],
+  },
   'a-dropdown': {
     inheritAttrs: false,
     template: `

@@ -68,7 +68,7 @@
           </template>
 
           <template v-if="column.key === 'openresty_path'">
-            <span class="text-sm">{{ record.openresty_path || '（同Edge安装路径）' }}</span>
+            <span class="text-sm">{{ record.openresty_path || '（同 Edge 安装路径）' }}</span>
           </template>
 
           <template v-if="column.key === 'status'">
@@ -204,7 +204,7 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">OpenResty安装路径 <span class="required">*</span></label>
+            <label class="form-label">OpenResty 安装路径 <span class="required">*</span></label>
             <input
               v-model="formData.openresty_path"
               type="text"
@@ -215,7 +215,7 @@
             <span class="form-error" v-if="formErrors.openresty_path">{{ formErrors.openresty_path }}</span>
           </div>
           <div class="form-group">
-            <label class="form-label">Edge安装路径 <span class="required">*</span></label>
+            <label class="form-label">Edge 安装路径 <span class="required">*</span></label>
             <input
               v-model="formData.edge_path"
               type="text"
@@ -258,10 +258,10 @@
             <div class="nd-value">{{ detailNode.service_port }}</div>
             <div class="nd-label">管理端口</div>
             <div class="nd-value">{{ detailNode.management_port }}</div>
-            <div class="nd-label">Edge安装路径</div>
+            <div class="nd-label">Edge 安装路径</div>
             <div class="nd-value">{{ detailNode.edge_path }}</div>
-            <div class="nd-label">OpenResty安装路径</div>
-            <div class="nd-value">{{ detailNode.openresty_path || '（同Edge安装路径）' }}</div>
+            <div class="nd-label">OpenResty 安装路径</div>
+            <div class="nd-value">{{ detailNode.openresty_path || '（同 Edge 安装路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
               <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
@@ -489,12 +489,12 @@ const columns = [
     sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0),
   },
   {
-    title: 'Edge安装路径',
+    title: 'Edge 安装路径',
     key: 'edge_path',
     sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || ''),
   },
   {
-    title: 'OpenResty安装路径',
+    title: 'OpenResty 安装路径',
     key: 'openresty_path',
     sorter: (a: any, b: any) => (a.openresty_path || '').localeCompare(b.openresty_path || ''),
   },

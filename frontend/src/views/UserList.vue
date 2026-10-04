@@ -129,11 +129,11 @@
 
           <!-- 操作列 -->
           <template v-if="column.key === 'actions' && isAdmin">
+            <a-button type="link" size="small" @click="editUser(record)">编辑</a-button>
             <a-dropdown :trigger="['click']">
               <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item @click="editUser(record)">编辑</a-menu-item>
                   <a-menu-item @click="toggleUserStatus(record)">
                     {{ record.status === 1 ? '禁用' : '启用' }}
                   </a-menu-item>

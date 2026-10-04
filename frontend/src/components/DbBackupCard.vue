@@ -7,7 +7,7 @@
           <div class="dbb-stat">
             <div class="dbb-stat-label">最近成功备份</div>
             <div class="dbb-stat-value" :class="{ 'dbb-muted': !lastSuccessAt }">
-              {{ lastSuccessAt ? formatDateTime(lastSuccessAt) : '从未备份' }}
+              {{ lastSuccessAt ? formatDateTime(lastSuccessAt) : '从未备份（建议在「策略与保留」中开启自动调度）' }}
             </div>
           </div>
           <div class="dbb-stat">

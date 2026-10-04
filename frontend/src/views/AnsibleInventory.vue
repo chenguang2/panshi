@@ -2,7 +2,7 @@
   <div class="inventory-page">
     <PageHeader
       title="Ansible 主机清单"
-      description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启"
+      description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启；SSH 密码以明文存储与展示（脱敏占位曾被误写回清单覆盖真实密码，故不做掩码）"
     >
       <template #actions>
         <a-tag v-if="dirty" color="warning" class="dirty-tag">有未保存修改</a-tag>

@@ -27,6 +27,7 @@
           <label class="login-field-label" for="username">用户名</label>
           <a-input
             id="username"
+            autofocus
             v-model:value="formState.username"
             placeholder="请输入管理员账号"
             autocomplete="username"
@@ -59,7 +60,7 @@
 
         <div class="login-options">
           <a-checkbox v-model:checked="formState.remember">记住我</a-checkbox>
-          <a href="#" class="forgot-link" tabindex="-1">忘记密码?</a>
+          <a href="#" class="forgot-link" tabindex="-1">忘记密码？</a>
         </div>
 
         <a-button type="primary" html-type="submit" :loading="submitting" block size="large" class="login-btn">

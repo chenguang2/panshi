@@ -73,11 +73,11 @@
             {{ durationText(record) }}
           </template>
           <template v-else-if="column.key === 'actions'">
+            <a-button type="link" size="small" @click="openDetail(record)">详情</a-button>
             <a-dropdown :trigger="['click']">
               <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item @click="openDetail(record)">详情</a-menu-item>
                   <a-menu-item
                     v-if="record.status === 'running' || record.status === 'pending'"
                     @click="handleCancel(record)"
