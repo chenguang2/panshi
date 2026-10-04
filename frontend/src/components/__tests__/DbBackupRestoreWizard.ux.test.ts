@@ -161,6 +161,25 @@ function executeFixture() {
   }
 }
 
+/**
+ * D6 载荷契约（db-restore-schema-reconcile，向后兼容：新字段六件套全量给出；
+ * 形状取自 design.md D4，旧响应缺省形态沿用上方 executeFixture）。
+ */
+function executeFixtureD6(o: Record<string, unknown> = {}) {
+  return {
+    data: {
+      ...executeFixture().data,
+      schema_reconciled: false,
+      tables_added: 0,
+      columns_added: 0,
+      key_changed: false,
+      restart_recommended: false,
+      schema_migration_error: null,
+      ...o,
+    },
+  }
+}
+
 async function flushAll(): Promise<void> {
   await flushPromises()
   await flushPromises()
@@ -298,6 +317,71 @@ describe('H6/M13 恢复完成指引闭环', () => {
     await clickButton(wrapper, '执行恢复')
     await flushAll()
     expect(wrapper.find('.dbw-success-box').text()).toContain('即将过期')
+  })
+})
+
+describe('D6 schema 补齐计数与重启建议条件化展示', () => {
+  async function driveToSuccess(executePayload: unknown) {
+    const wrapper = await driveToConfirmed('panshi_backup_node-a_20260930_154243.tar.gz')
+    mockExecute.mockResolvedValue(executePayload)
+    await clickButton(wrapper, '执行恢复')
+    await flushAll()
+    return wrapper
+  }
+
+  it('补齐计数行：schema_reconciled 且计数>0 → 展示「已自动补齐 N 张表 / M 列」，无重启建议时不出现建议行', async () => {
+    const wrapper = await driveToSuccess(
+      executeFixtureD6({ schema_reconciled: true, tables_added: 3, columns_added: 7 }),
+    )
+    const note = wrapper.find('.dbw-schema-note')
+    expect(note.exists()).toBe(true)
+    expect(note.text()).toContain('已自动补齐 3 张表 / 7 列')
+    expect(note.text()).toContain('当前版本')
+    expect(wrapper.find('.dbw-restart-advice').exists()).toBe(false)
+  })
+
+  it('重启建议行：restart_recommended（密钥随包变更）→ 高亮说明密钥已更新、重启后完全生效；补齐零新增不出计数行', async () => {
+    const wrapper = await driveToSuccess(
+      executeFixtureD6({
+        schema_reconciled: true,
+        tables_added: 0,
+        columns_added: 0,
+        key_changed: true,
+        restart_recommended: true,
+      }),
+    )
+    const advice = wrapper.find('.dbw-restart-advice')
+    expect(advice.exists()).toBe(true)
+    expect(advice.text()).toContain('密钥')
+    expect(advice.text()).toContain('随备份包更新')
+    expect(advice.text()).toContain('重启后端后完全生效')
+    expect(wrapper.find('.dbw-schema-note').exists()).toBe(false)
+  })
+
+  it('补齐失败形态：schema_migration_error 非空 → 建议行提示重启后自动重试补齐，计数行照常展示', async () => {
+    const wrapper = await driveToSuccess(
+      executeFixtureD6({
+        schema_reconciled: true,
+        tables_added: 2,
+        columns_added: 0,
+        restart_recommended: true,
+        schema_migration_error: 'column c already exists',
+      }),
+    )
+    expect(wrapper.find('.dbw-schema-note').text()).toContain('已自动补齐 2 张表 / 0 列')
+    const advice = wrapper.find('.dbw-restart-advice')
+    expect(advice.text()).toContain('补齐未能完成')
+    expect(advice.text()).toContain('重试补齐')
+  })
+
+  it('两者均无（旧响应缺省新字段）→ 不渲染任何额外行', async () => {
+    const wrapper = await driveToSuccess(executeFixture())
+    const success = wrapper.find('.dbw-success-box')
+    expect(success.exists()).toBe(true)
+    expect(wrapper.find('.dbw-schema-note').exists()).toBe(false)
+    expect(wrapper.find('.dbw-restart-advice').exists()).toBe(false)
+    expect(success.text()).not.toContain('已自动补齐')
+    expect(success.text()).not.toContain('完全生效')
   })
 })
 

@@ -75,6 +75,44 @@ def _engine_reload() -> None:
     _reload_active_engine()
 
 
+async def _reconcile_schema() -> dict:
+    """恢复激活后对恢复库执行与启动期相同的 schema 补齐（设计 D1/D2）。
+
+    镜像 database.init_db：create_all（经 conn.run_sync）+ run_migrations，作用于
+    call-time 解析的活动引擎（模块级 _async_engine / create_sync_engine）——不在
+    恢复服务里另写 DDL。先检（Base.metadata 与恢复库实际表/列的落差计数）后补（D2）。
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.core.database import Base, _async_engine, create_sync_engine
+    from app.core.migrate import COLUMN_MIGRATIONS, run_migrations
+
+    counts = {"tables_added": 0, "columns_added": 0}
+    sync_engine = create_sync_engine()
+    try:
+        insp = sa_inspect(sync_engine)
+        existing_tables = set(insp.get_table_names())
+        counts["tables_added"] = len(set(Base.metadata.tables.keys()) - existing_tables)
+        col_cache: dict = {}
+        for table, column, _col_type in COLUMN_MIGRATIONS:
+            if table not in existing_tables:
+                continue  # 整表缺失由 create_all 补建，列随表齐
+            cols = col_cache.get(table)
+            if cols is None:
+                cols = {c["name"] for c in insp.get_columns(table)}
+                col_cache[table] = cols
+            if column not in cols:
+                counts["columns_added"] += 1
+
+        # 补齐（D1）：与 init_db 完全同路径
+        async with _async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        run_migrations(sync_engine)
+    finally:
+        sync_engine.dispose()
+    return counts
+
+
 def _utcnow() -> datetime:
     return datetime.utcnow()
 
@@ -470,9 +508,12 @@ async def _find_running_tasks(db=None) -> list:
 
 
 async def execute_restore(verify_id: str, confirmed: bool, db=None) -> dict:
-    """落位激活：高危确认 → 互斥 → 运行中任务检查 → 分段落位 → 引擎重载。
+    """落位激活：高危确认 → 互斥 → 运行中任务检查 → 分段落位 → 引擎重载 → schema 补齐。
 
-    返回 {"activated": True, "active_connection_id": ..., "restored_databases": [...]}
+    返回 {"activated": True, "active_connection_id": ..., "restored_databases": [...],
+          "schema_reconciled": bool, "tables_added": int, "columns_added": int,
+          "key_changed": bool, "restart_recommended": bool,
+          "schema_migration_error": str | None}
     """
     from app.core import db_config as dbc
     from app.core.database import AsyncSessionLocal
@@ -519,10 +560,24 @@ async def execute_restore(verify_id: str, confirmed: bool, db=None) -> dict:
                         pass
 
         restored_files = {}
+        # 0.5) 密钥变更预读（设计 D4/D5：落盘前先留恢复前快照；「存在且字节相同」
+        #      才算相同，任一侧不存在即视为变更）
+        key_changed = False
+        key_src = extract / "config" / ".jwt_secret"
+        pre_jwt_path = root / "data" / ".jwt_secret"
+        pkg_jwt = key_src.read_bytes() if key_src.exists() else None
+        pre_jwt = pre_jwt_path.read_bytes() if pre_jwt_path.exists() else None
+        if pkg_jwt is not None and pkg_jwt != pre_jwt:
+            key_changed = True
+        for env_file in (extract / "config").glob(".env.*"):
+            env_dest = root / env_file.name
+            pre_env = env_dest.read_bytes() if env_dest.exists() else None
+            if env_file.read_bytes() != pre_env:
+                key_changed = True
+
         # 1) key 文件（600 权限）。.jwt_secret 源自 backend/data/.jwt_secret（security.py
         #    开发态密钥文件）；Fernet 无模块级缓存（_fernet() 每次按 env 重建），恢复的
         #    db_config 密码立即可用；JWT 模块常量在重启后完全切换。
-        key_src = extract / "config" / ".jwt_secret"
         if key_src.exists():
             data_dir = root / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -593,6 +648,19 @@ async def execute_restore(verify_id: str, confirmed: bool, db=None) -> dict:
 
         # 6) 引擎重载激活（不热替换在用文件——新库独立落盘，仅指针切换）
         _engine_reload()
+
+        # 6.5) schema 补齐（设计 D1–D3）：跨版本恢复即时对齐，不依赖用户重启；
+        #      失败不阻断恢复（库已激活），错误写入载荷并强化重启建议
+        #      （重启后启动期 init_db 重试同一路径）
+        reconcile = {"schema_reconciled": False, "tables_added": 0, "columns_added": 0}
+        schema_error = None
+        try:
+            reconcile.update(await _reconcile_schema())
+            reconcile["schema_reconciled"] = True
+        except Exception as exc:
+            logger.exception("恢复后 schema 补齐失败（不阻断恢复，重启后 init_db 重试同一路径）")
+            schema_error = str(exc)
+        restart_recommended = key_changed or schema_error is not None
         try:
             from app.services import relay_registry
 
@@ -621,6 +689,12 @@ async def execute_restore(verify_id: str, confirmed: bool, db=None) -> dict:
             "active_connection_id": active_id,
             "restored_databases": sorted(restored_files.keys()),
             "pre_restore_file": str(pre_restore) if pre_restore else None,
+            "schema_reconciled": reconcile["schema_reconciled"],
+            "tables_added": reconcile["tables_added"],
+            "columns_added": reconcile["columns_added"],
+            "key_changed": key_changed,
+            "restart_recommended": restart_recommended,
+            "schema_migration_error": schema_error,
             "message": "恢复完成并已激活，当前已工作在恢复后的数据上",
         }
     finally:

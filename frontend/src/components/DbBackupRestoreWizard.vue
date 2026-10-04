@@ -347,6 +347,7 @@
               <div class="dbw-success-row">
                 激活的数据库连接：<span class="dbw-mono">{{ executeResult.active_connection_id || '-' }}</span>
               </div>
+              <div v-if="schemaReconcileNote" class="dbw-success-row dbw-schema-note">{{ schemaReconcileNote }}</div>
               <div v-if="restoredSourceName" class="dbw-success-row dbw-text-warning">
                 已继承来源标识「<span class="dbw-mono">{{ restoredSourceName }}</span
                 >」：若本机与旧机同时运行（双跑/迁移），请修改来源标识，避免两机互删共享目录中的备份。
@@ -354,6 +355,7 @@
               <div class="dbw-success-row">
                 请核对各备份位置的可达性与适用性（恢复继承包内来源标识后，共享目录中的清理归属可能变化）。
               </div>
+              <div v-if="restartAdviceNote" class="dbw-success-row dbw-restart-advice">{{ restartAdviceNote }}</div>
               <div class="dbw-success-row dbw-restart">
                 <span>完成后请重启后端服务（恢复已落位，重启以重载引擎）：</span>
                 <span class="dbw-restart-item">
@@ -473,6 +475,32 @@ const restoredSourceName = computed<string | null>(() => {
   if (!executeResult.value) return null
   const pkg = packages.value.find((p) => p.name === selected.value)
   return pkg?.source || null
+})
+
+/**
+ * D6 schema 补齐计数行：报告了补齐且计数 > 0 时展示。
+ * 旧响应缺省字段（schema_reconciled 为 undefined）→ 不展示，向后兼容。
+ */
+const schemaReconcileNote = computed<string | null>(() => {
+  const r = executeResult.value
+  if (!r?.schema_reconciled) return null
+  const tables = r.tables_added ?? 0
+  const columns = r.columns_added ?? 0
+  if (tables + columns <= 0) return null
+  return `备份包 schema 较旧，已自动补齐 ${tables} 张表 / ${columns} 列（对齐当前版本，无需手动处理）。`
+})
+
+/**
+ * D6 重启建议高亮行：密钥随包变更或补齐未完成时提示重启后端后完全生效。
+ * 补齐失败（schema_migration_error 非空）时说明重启后会自动重试补齐；密钥变更时说明旧会话渐进切换。
+ */
+const restartAdviceNote = computed<string | null>(() => {
+  const r = executeResult.value
+  if (!r?.restart_recommended) return null
+  if (r.schema_migration_error) {
+    return '自动补齐未能完成（恢复库已激活可用）：重启后端后将自动重试补齐，请尽快重启以完全对齐。'
+  }
+  return '包内密钥与恢复前不同（已随备份包更新落位）：重启后端后完全生效，重启前当前登录会话仍有效。'
 })
 
 // 临时远端目标（独立于备份配置；在向导多次打开间保留，避免重复输入 SSH 信息）
@@ -1391,6 +1419,19 @@ async function initSource(): Promise<void> {
 }
 .dbw-text-warning {
   color: var(--warning);
+}
+/* D6 schema 补齐计数行：信息级（区别于警示行） */
+.dbw-schema-note {
+  color: var(--info);
+}
+/* D6 重启建议高亮行：警示底色框，紧邻重启命令行 */
+.dbw-restart-advice {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid oklch(75% 0.14 85 / 45%);
+  background: oklch(75% 0.14 85 / 10%);
+  color: var(--warning);
+  font-weight: 600;
 }
 .dbw-confirm-row {
   margin-top: 16px;

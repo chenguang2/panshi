@@ -249,4 +249,17 @@ export interface RestoreExecuteResult {
   active_connection_id: string | null
   restored_databases: Record<string, unknown>[]
   message: string
+  /** 以下为 db-restore-schema-reconcile 新增契约字段（向后兼容：旧响应可能缺省，消费方按可选处理） */
+  /** 本次恢复是否执行了 schema 补齐（检测有落差或空跑均算执行） */
+  schema_reconciled?: boolean
+  /** 补建表数 */
+  tables_added?: number
+  /** 补列数（含 COLUMN_MIGRATIONS 命中项） */
+  columns_added?: number
+  /** 包内 .jwt_secret / .env.* 与恢复前内容不一致（任一即 true） */
+  key_changed?: boolean
+  /** 密钥变更或补齐失败时 true（重启后端后完全生效） */
+  restart_recommended?: boolean
+  /** 补齐失败原因（补齐失败不阻断恢复，库已激活） */
+  schema_migration_error?: string | null
 }

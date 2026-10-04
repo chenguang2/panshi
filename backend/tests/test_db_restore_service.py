@@ -93,25 +93,33 @@ class CountingFakeRemote(FakeRemote):
         return await super().__call__(argv, env, timeout)
 
 
-async def _mk_package(remote_dir: Path, tmp: Path, backup_source_name: str = None) -> dict:
+async def _mk_package(
+    remote_dir: Path, tmp: Path, backup_source_name: str = None, old_schema: bool = False
+) -> dict:
     """构造一个真实小包并放进「远端」。
 
     backup_source_name：包内站点库 ps_db_backup_config 行携带的来源标识
     （模拟旧机备份配置，验证恢复继承语义）。
+    old_schema：构造「上一版本」schema 的库（全模型建表后缺 1 表 + 1 列），
+    供跨版本恢复 schema 补齐用例使用。
     """
     db_path = tmp / "panshi.db"
     import sqlite3
 
-    con = sqlite3.connect(db_path)
-    con.execute("CREATE TABLE sys_user (id INTEGER PRIMARY KEY, username TEXT)")
-    con.execute("INSERT INTO sys_user VALUES (1, 'restored-admin')")
-    con.execute("CREATE TABLE ps_cluster (id INTEGER PRIMARY KEY, name TEXT)")
-    con.execute("INSERT INTO ps_cluster VALUES (1, 'restored-cluster')")
-    if backup_source_name is not None:
-        con.execute("CREATE TABLE ps_db_backup_config (id INTEGER PRIMARY KEY, source_name TEXT)")
-        con.execute("INSERT INTO ps_db_backup_config VALUES (1, ?)", (backup_source_name,))
-    con.commit()
-    con.close()
+    if old_schema:
+        _missing = _build_old_schema_db(db_path)
+        assert _missing == (1, 1), f"旧 schema 夹具应恰好缺 1 表 1 列，实际 {_missing}"
+    else:
+        con = sqlite3.connect(db_path)
+        con.execute("CREATE TABLE sys_user (id INTEGER PRIMARY KEY, username TEXT)")
+        con.execute("INSERT INTO sys_user VALUES (1, 'restored-admin')")
+        con.execute("CREATE TABLE ps_cluster (id INTEGER PRIMARY KEY, name TEXT)")
+        con.execute("INSERT INTO ps_cluster VALUES (1, 'restored-cluster')")
+        if backup_source_name is not None:
+            con.execute("CREATE TABLE ps_db_backup_config (id INTEGER PRIMARY KEY, source_name TEXT)")
+            con.execute("INSERT INTO ps_db_backup_config VALUES (1, ?)", (backup_source_name,))
+        con.commit()
+        con.close()
     workdir = tmp / "wd"
     workdir.mkdir()
     snapshots = [
@@ -153,6 +161,34 @@ async def _mk_package(remote_dir: Path, tmp: Path, backup_source_name: str = Non
 
     shutil.copyfile(pkg, remote_dir / Path(pkg).name)
     return {"name": Path(pkg).name, "meta": meta, "fake_root": fake_root}
+
+
+def _build_old_schema_db(path: Path) -> tuple:
+    """构造「上一版本」schema 的 sqlite 库：按当前全部模型建表后去掉 1 表 + 1 列。
+
+    返回 (缺失表数, 缺失列数)。去掉的表为 ps_route（补齐时由 create_all 重建），
+    去掉的列 ps_cluster.current_version 属 COLUMN_MIGRATIONS（补齐时由 run_migrations
+    补回）——保证补齐可完整收敛到与模型一致，计数恰为 (1, 1)。
+    """
+    import app.main  # noqa: F401  确保全部模型已注册（与 init_db 同等 metadata 完整性）
+
+    from sqlalchemy import create_engine as sa_create_engine
+    from sqlalchemy import text
+
+    from app.core.database import Base
+
+    engine = sa_create_engine(f"sqlite:///{path}")
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE ps_route"))
+        conn.execute(text("ALTER TABLE ps_cluster DROP COLUMN current_version"))
+        # 种子一行：验证补齐（create_all 跳过已存在表 / ALTER 加列）不损数据
+        # （status 为模型 NOT NULL 列，裸 SQL 需显式给值）
+        conn.execute(
+            text("INSERT INTO ps_cluster (id, name, status) VALUES (1, 'restored-cluster', 1)")
+        )
+    engine.dispose()
+    return 1, 1
 
 
 def monkey_backend_root(root: Path, monkeypatch=None):
@@ -439,6 +475,128 @@ class TestExecuteRestore:
         }
         assert rst.get_staged("expired-one") is None
         assert "expired-one" not in rst._STAGED
+
+
+class TestSchemaReconcileOnRestore:
+    """恢复后 schema 补齐 + 密钥变更检测（db-restore-schema-reconcile，D1–D5）。
+
+    测试世界：真实 _engine_reload 会把模块级活动引擎重指到恢复库；这里用
+    _patch_reload_world 同步模拟——_async_engine 与 create_sync_engine 都指向
+    .restored-<ts> 文件，使补齐作用于真实恢复库而非隔离库。
+    """
+
+    def _patch_reload_world(self, monkeypatch, fake_root, created):
+        from app.core import database
+
+        def _restored_path():
+            matches = sorted((fake_root / "data").glob("panshi.db.restored-*"))
+            assert matches, "恢复库应已落盘"
+            return matches[-1]
+
+        def _fake_reload():
+            from sqlalchemy.ext.asyncio import create_async_engine
+
+            eng = create_async_engine(f"sqlite+aiosqlite:///{_restored_path()}")
+            created.append(eng)
+            monkeypatch.setattr(database, "_async_engine", eng)
+
+        def _fake_sync_engine():
+            # sync 引擎由 _reconcile_schema 的 finally 自行 dispose，无需登记
+            from sqlalchemy import create_engine
+
+            return create_engine(f"sqlite:///{_restored_path()}")
+
+        monkeypatch.setattr(rst, "_engine_reload", _fake_reload)
+        monkeypatch.setattr(database, "create_sync_engine", _fake_sync_engine)
+
+    async def _restore_old_schema_pkg(self, tmp_path, monkeypatch, pre_secret=None):
+        remote = FakeRemote(tmp_path / "remote")
+        pkg_info = await _mk_package(tmp_path / "remote", tmp_path, old_schema=True)
+        monkeypatch.setattr(rst, "_run", remote)
+        fake_root = pkg_info["fake_root"]
+        if pre_secret is not None:
+            # 构造「恢复前密钥与包内不同」：包在构建时已固化 test-secret-key
+            (fake_root / "data" / ".jwt_secret").write_text(pre_secret)
+
+        created: list = []
+        with isolated_app_lifespan():
+            result = await rst.verify_and_stage(_target(tmp_path / "remote"), pkg_info["name"])
+            self._patch_reload_world(monkeypatch, fake_root, created)
+            from app.core.database import AsyncSessionLocal
+
+            try:
+                async with AsyncSessionLocal() as db:
+                    out = await rst.execute_restore(result["verify_id"], confirmed=True, db=db)
+            finally:
+                for eng in created:
+                    await eng.dispose()
+        return out, fake_root
+
+    async def test_cross_version_restore_reconciles_schema(self, tmp_path, monkeypatch):
+        """①跨版本恢复自动补齐：缺 1 表 1 列 → 激活后 inspect 齐了 + 计数正确。"""
+        out, fake_root = await self._restore_old_schema_pkg(tmp_path, monkeypatch)
+
+        assert out["activated"] is True
+        assert out["schema_reconciled"] is True
+        assert out["tables_added"] == 1
+        assert out["columns_added"] == 1
+        assert out["schema_migration_error"] is None
+        # 密钥未变（包内 = 恢复前）→ 无需重启
+        assert out["key_changed"] is False
+        assert out["restart_recommended"] is False
+
+        # 激活后恢复库 schema 与模型收敛：全表在 + COLUMN_MIGRATIONS 列在
+        import app.main  # noqa: F401
+
+        from sqlalchemy import create_engine, inspect, text
+
+        from app.core.database import Base
+        from app.core.migrate import COLUMN_MIGRATIONS
+
+        restored = sorted((fake_root / "data").glob("panshi.db.restored-*"))[-1]
+        eng = create_engine(f"sqlite:///{restored}")
+        try:
+            insp = inspect(eng)
+            tables = set(insp.get_table_names())
+            assert set(Base.metadata.tables.keys()) <= tables, "恢复库应包含全部模型表"
+            for table, column, _t in COLUMN_MIGRATIONS:
+                cols = {c["name"] for c in insp.get_columns(table)}
+                assert column in cols, f"{table}.{column} 应由补齐回填"
+            # 数据在补齐中存活
+            row = eng.connect().execute(
+                text("SELECT name FROM ps_cluster WHERE id = 1")
+            ).fetchone()
+            assert row == ("restored-cluster",)
+        finally:
+            eng.dispose()
+
+    async def test_key_changed_when_package_secret_differs(self, tmp_path, monkeypatch):
+        """②包内密钥与恢复前不同 → key_changed=true + restart_recommended=true。"""
+        out, _ = await self._restore_old_schema_pkg(tmp_path, monkeypatch, pre_secret="rotated-key")
+        assert out["activated"] is True
+        assert out["key_changed"] is True
+        assert out["restart_recommended"] is True
+
+    async def test_key_unchanged_when_identical(self, tmp_path, monkeypatch):
+        """②同机同密钥恢复 → key_changed=false、无需重启。"""
+        out, _ = await self._restore_old_schema_pkg(tmp_path, monkeypatch)
+        assert out["key_changed"] is False
+        assert out["restart_recommended"] is False
+
+    async def test_reconcile_failure_does_not_fail_restore(self, tmp_path, monkeypatch):
+        """③补齐失败容错：迁移抛错 → 恢复仍成功 + 错误载荷 + 强化重启建议。"""
+
+        def _boom(engine):
+            raise RuntimeError("模拟迁移失败")
+
+        monkeypatch.setattr("app.core.migrate.run_migrations", _boom)
+        out, _ = await self._restore_old_schema_pkg(tmp_path, monkeypatch)
+
+        assert out["activated"] is True, "库已激活，迁移失败不得让恢复失败"
+        assert out["schema_migration_error"] is not None
+        assert "模拟迁移失败" in out["schema_migration_error"]
+        assert out["restart_recommended"] is True
+        assert out["schema_reconciled"] is False
 
 
 class TestRestoreRefreshesRelaySnapshot:
