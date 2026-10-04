@@ -1,0 +1,20 @@
+# ClickHouse 连接配置模板（初始样例，随包分发）
+#
+# 运行时优先读取 backend/clickhouse.yaml（由「系统管理 → ClickHouse 配置」页维护，
+# 保存后自动生成并免重启生效）；该文件存在时本模板不会被读取。
+# 在配置页完成首次保存之前，本模板作为初始连接参数生效。
+#
+# 说明：
+# - port 为 clickhouse-driver 的 native 协议端口（默认 9000；HTTP 端口 8123 不适用于本平台）
+# - 口令请经配置页录入（以 password_enc 加密存储），模板不携带任何口令字段
+# - 旧格式（顶层 host/port/database/user/password 明文字段）同样兼容读取，不推荐新部署使用
+
+active: ck_default
+connections:
+  - id: ck_default
+    name: 默认连接（示例）
+    host: 127.0.0.1
+    port: 9000
+    database: esapm_metrics
+    user: default
+    connect_timeout: 5

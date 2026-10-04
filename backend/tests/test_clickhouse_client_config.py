@@ -33,6 +33,37 @@ def _write(path: Path, data: dict) -> Path:
     return path
 
 
+class TestShippedTemplate:
+    """仓库随包模板（app/config/clickhouse.yaml）守卫。
+
+    2026-10-04 发现：legacy 候选路径的模板文件从未入库 → 产品机两条候选路径全空，
+    ClickHouse 配置只能靠 UI 首次保存生成（与 db_config.json 的启动自愈行为不一致）。
+    模板路径从 ch.__file__ 推导，不读被 _reset 补丁过的模块常量。
+    """
+
+    def _template_path(self) -> Path:
+        return Path(ch.__file__).resolve().parent.parent / "config" / "clickhouse.yaml"
+
+    def test_template_exists_and_parses(self):
+        p = self._template_path()
+        assert p.exists(), "缺少随包模板 app/config/clickhouse.yaml"
+        raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+        assert isinstance(raw, dict)
+
+    def test_template_shape_and_placeholder_values(self):
+        raw = yaml.safe_load(self._template_path().read_text(encoding="utf-8"))
+        conns = raw.get("connections")
+        assert isinstance(conns, list) and conns
+        active = next(
+            (c for c in conns if isinstance(c, dict) and c.get("id") == raw.get("active")), None
+        )
+        assert active is not None, "active 指向的连接必须存在"
+        for k in ("name", "host", "port", "database", "user", "connect_timeout"):
+            assert active.get(k) is not None, f"模板连接缺 {k}"
+        assert active["host"] == "127.0.0.1", "模板必须是占位地址，不得携带真实内网主机"
+        assert "password_enc" not in active and "password" not in active, "模板不得携带任何口令"
+
+
 class _FakeClient:
     """记录构造参数的假 Client。"""
 

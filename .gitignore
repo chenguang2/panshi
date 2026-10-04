@@ -39,6 +39,10 @@ backend/.venv/
 backend/python/
 backend/.python-version
 
+# 运行时配置（启动自生成/配置页维护；ClickHouse 模板见 app/config/clickhouse.yaml）
+backend/db_config.json
+backend/clickhouse.yaml
+
 # 部署生成包
 product/linux/panshi/
 product/linux/panshi-*/
