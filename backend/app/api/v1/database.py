@@ -297,7 +297,7 @@ async def test_connection(
     return {"success": ok, "detail": detail}
 
 
-async def _do_test(conn: ConnectionConfig):
+def _do_test_sync(conn: ConnectionConfig):
     try:
         engine = build_sync_engine_for(conn)
         with engine.connect() as c:
@@ -306,6 +306,12 @@ async def _do_test(conn: ConnectionConfig):
         return True, "连接成功"
     except Exception as e:
         return False, str(e)
+
+
+async def _do_test(conn: ConnectionConfig):
+    # 同步引擎探测必须卸载到工作线程：协程内无 await 点时
+    # asyncio.wait_for(3.0) 无法取消，PG 不可达会阻塞事件循环分钟级（S3）
+    return await asyncio.to_thread(_do_test_sync, conn)
 
 
 @router.post("/switch")

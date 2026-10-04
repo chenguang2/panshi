@@ -5,6 +5,7 @@ Handles importing upstreams, routes, plugin configs, and global rules
 from an PANSHI Edge node into the panshi admin database.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -875,7 +876,8 @@ class EdgeImportService:
         return conflicts
 
     async def preview_import(self) -> dict:
-        edge_data = self.fetch_edge_data()
+        # 同步 httpx（多资源串行请求）卸载到工作线程，避免冻结事件循环（S2）
+        edge_data = await asyncio.to_thread(self.fetch_edge_data)
 
         converted_upstreams = [
             self.convert_upstream(eu)
@@ -1091,7 +1093,8 @@ class EdgeImportService:
         session: Any,
     ) -> dict:
         try:
-            edge_data = self.fetch_edge_data()
+            # 同步 httpx（多资源串行请求）卸载到工作线程，避免冻结事件循环（S2）
+            edge_data = await asyncio.to_thread(self.fetch_edge_data)
 
             # Convert all data first (no DB queries)
             converted_plugin_metadata = [

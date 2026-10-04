@@ -8,7 +8,13 @@ User=root
 WorkingDirectory=/opt/panshi/backend
 Environment="PATH=/opt/panshi/backend/venv/bin"
 Environment="DATABASE_URL=postgresql://panshi:panshi123@localhost:5432/panshi"
-Environment="JWT_SECRET_KEY=your-production-secret-key"
+# 生产密钥经环境文件注入（0600，勿入库）：
+#   install -m 600 /dev/null /etc/panshi/secrets.env
+#   echo 'JWT_SECRET_KEY=<随机密钥>' > /etc/panshi/secrets.env
+# 注意：该密钥同时用于 JWT 签名与数据库连接密码加密（Fernet），丢失已存密码不可解。
+# 缺失该文件时 systemd 拒启（或后端以 production 模式 fail-fast），杜绝占位/弱密钥静默生效。
+EnvironmentFile=/etc/panshi/secrets.env
+Environment="APP_ENV=production"
 ExecStart=/opt/panshi/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5

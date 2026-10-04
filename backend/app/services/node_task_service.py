@@ -699,6 +699,14 @@ class NodeTaskService:
         stderr = result.get("stderr", "")
         stdout = result.get("stdout", "")
 
+        # 假成功守卫（镜像 _run_item 单节点腿）：rc==0 但 playbook 实际未匹配
+        # 任何主机（节点不在清单）时，按全体失败落库，不得假成功（S4）
+        if rc == 0 and items:
+            fs_err = _ansible_false_success_error(result, ", ".join(i.ip for i in items))
+            if fs_err:
+                rc = -1
+                stderr = fs_err
+
         # Parse per-node results from ansible output
         # ansible with_together gives per-node output lines prefixed with [ip]
         node_results = _parse_distribute_results(stdout, stderr, items, rc)

@@ -11,6 +11,9 @@ import bcrypt
 _PLACEHOLDER_SECRETS = {
     "your-super-secret-key-change-in-production",
     "your-production-secret-key-must-be-changed",
+    # deployment/panshi-backend.service 历史内置变体（code-review-2026-10-04 S1：
+    # 曾绕过黑名单静默生效，该密钥兼 JWT 签名与 Fernet 双角色）
+    "your-production-secret-key",
 }
 
 

@@ -354,6 +354,36 @@ class TestDistributeBatch:
             assert item.status == "success"
 
     @pytest.mark.asyncio
+    async def test_batch_false_success_marks_all_failed(self, test_db, batch_env, tmp_path):
+        """节点不在清单（no hosts matched，rc=0）：批量腿必须按全体失败落库。
+
+        回归 code-review-2026-10-04 S4：批量分发腿曾绕过单节点腿的
+        _ansible_false_success_error 守卫，rc==0 即把全部节点标 success——
+        文件未送达却报成功的数据完整性缺陷。
+        """
+        from unittest.mock import AsyncMock
+
+        items_spec = [(10, "10.0.0.10"), (20, "10.0.0.20")]
+        params = {"srcpath": "temp/abc-uuid", "destpath": "/tmp/", "srcfilename": "3.csv"}
+        task, items = await self._seed_task(test_db, items_spec, params)
+
+        src_file = tmp_path / str(task.id) / "abc-uuid"
+        src_file.parent.mkdir(parents=True)
+        src_file.write_text("hello", encoding="utf-8")
+
+        svc, mock_ansible = batch_env("distribute_file", items_spec, params)
+        mock_ansible.run_playbook = AsyncMock(return_value={
+            "rc": 0, "status": "successful",
+            "stdout": "PLAY [edge] ***\nskipping: no hosts matched\nPLAY RECAP ****\n",
+            "stderr": "",
+        })
+        await svc._execute_distribute_batch(test_db, task, items, params, None)
+
+        for item in items:
+            assert item.status == "failed", "no hosts matched（rc=0）不得假成功"
+            assert "主机清单" in (item.stderr or ""), "须落友好错误文案定位清单缺失"
+
+    @pytest.mark.asyncio
     async def test_batch_dest_falls_back_to_stored_name_without_srcfilename(self, test_db, batch_env, tmp_path):
         """params 无 srcfilename 时（旧任务兼容），dest 回退为存储名（UUID）。"""
         items_spec = [(10, "10.0.0.10")]

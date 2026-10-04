@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +31,8 @@ async def test_connection(
         db_session=db,
         admin_key=body.admin_key,
     )
-    result = {**service.test_connection(), **service.route_info}
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：同步网络 IO 前结束事务）
+    result = {**await asyncio.to_thread(service.test_connection), **service.route_info}
     return result
 
 
@@ -44,6 +47,7 @@ async def preview_import(
         db_session=db,
         admin_key=body.admin_key,
     )
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：长网络 IO 前结束事务）
     result = {**await service.preview_import(), **service.route_info}
     return result
 
@@ -60,10 +64,11 @@ async def execute_import(
         db_session=db,
         admin_key=body.admin_key,
     )
+    enrich_audit(request, detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：长网络 IO 前结束事务）
     result = {**await service.execute_import(
         selections=body.selections,
         session=db,
     ), **service.route_info}
-    enrich_audit(request, detail=f"从节点 {body.node_id} 导入集群 {body.cluster_id}")
-    await db.commit()  # 持久化审计骨架
+    await db.commit()  # 持久化导入写入
     return result
