@@ -60,7 +60,7 @@
 
         <div class="login-options">
           <a-checkbox v-model:checked="formState.remember">记住我</a-checkbox>
-          <a href="#" class="forgot-link" tabindex="-1">忘记密码？</a>
+          <a href="#" class="forgot-link" tabindex="-1" @click.prevent="handleForgotPassword">忘记密码？</a>
         </div>
 
         <a-button type="primary" html-type="submit" :loading="submitting" block size="large" class="login-btn">
@@ -91,6 +91,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
@@ -148,6 +149,16 @@ async function handleLogin() {
   } finally {
     submitting.value = false
   }
+}
+
+// 忘记密码：本平台无自助改密流程（用户由管理员维护），提示联系管理员重置
+function handleForgotPassword() {
+  showOverlayModal({
+    title: '忘记密码',
+    content: '请联系系统管理员重置密码，管理员可在「系统管理 → 用户管理」中重置。',
+    showCancel: false,
+    okText: '知道了',
+  })
 }
 </script>
 
