@@ -13,7 +13,8 @@ HTTP 层的 DNS 代理路由独立管理功能，提供专用卡片列表视图�
 - **AND** 用户点击侧边栏「DNS代理[HTTP]」
 - **THEN** 页面 SHALL 调用 `GET /api/v1/routes?plugin=dns_upstream`
 - **AND** 每张卡片 SHALL 展示：URI（顶栏）、DNS 标签、路由名称、所属集群、域名映射列表（每个域名显示算法/TTL/健康检查类型/IP:Port 列表）、发布状态/版本
-- **AND** PageHeader 标题显示「DNS 查询」
+- **AND** PageHeader 标题显示「DNS 代理（HTTP）」，description 说明基于 dns_upstream 插件实现域名解析转发
+- **AND** 页面标题 SHALL 与侧边栏菜单术语一致（不再使用旧标题「DNS 查询」）
 
 #### Scenario: 功能禁用时隐藏
 - **WHEN** `dns_proxy_http` feature 为 `false`

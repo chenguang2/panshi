@@ -24,7 +24,8 @@ The system SHALL provide a `product/mac/gen-mac.sh` script that prepares an offl
 
 #### Scenario: Script installs backend dependencies
 - **WHEN** running gen-mac.sh step 4
-- **THEN** the script installs all Python dependencies from PyPI (Tsinghua mirror) into the `.venv`
+- **THEN** the script installs all Python dependencies into the `.venv` through the PyPI mirror configured in the script (default `https://mirrors.aliyun.com/pypi/simple/`)
+- **AND** the mirror SHALL remain switchable via `product/tools/switch-pypi-mirror.sh`, which idempotently rewrites the `-i <mirror>` literals in all three gen scripts (linux/mac/windows) and validates that the residual non-target mirror count is 0
 
 #### Scenario: Script installs Ansible collections
 - **WHEN** running gen-mac.sh step 4.6
@@ -37,6 +38,11 @@ The system SHALL provide a `product/mac/gen-mac.sh` script that prepares an offl
 #### Scenario: Script builds frontend
 - **WHEN** running gen-mac.sh step 5
 - **THEN** the script builds the frontend via `npm install && npm run build` and copies `dist/` to `panshi/frontend/dist/`
+
+#### Scenario: npm registry hint matches the actual mirror
+- **WHEN** gen-mac.sh prints the frontend build hint about the npm registry
+- **THEN** the hint SHALL name npmmirror（阿里运营的国内 npm 镜像，原淘宝源）with the actual registry `registry.npmmirror.com`
+- **AND** the hint SHALL NOT claim a different provider (e.g. 清华/Tsinghua)
 
 #### Scenario: Script copies start/stop scripts with corrected paths
 - **WHEN** running gen-mac.sh final step

@@ -43,10 +43,10 @@ The system SHALL display stream proxies in a card-grid layout with two separate 
 - **AND** page header description SHALL 说明该视图覆盖 TCP/UDP/TLS 三种四层转发协议
 
 #### Scenario: List DNS proxies
-- **WHEN** user clicks "DNS代理" in sidebar
+- **WHEN** user clicks "DNS代理[UDP]" in sidebar
 - **THEN** the system navigates to `/stream-proxies?type=dns`
 - **AND** displays only `proxy_type=dns` proxies as cards
-- **AND** page title SHALL be "DNS 代理"
+- **AND** page title SHALL be "DNS 代理（UDP）"（与侧边栏菜单术语一致）
 
 #### Scenario: Switch between 四层代理/DNS views
 - **WHEN** user clicks the other proxy type in the sidebar
@@ -55,10 +55,16 @@ The system SHALL display stream proxies in a card-grid layout with two separate 
 #### Scenario: Filter by cluster
 - **WHEN** user selects a cluster from the filter dropdown
 - **THEN** the system shows only stream proxies belonging to that cluster
-
 #### Scenario: Search by name
+
 - **WHEN** user types a search keyword
 - **THEN** the system filters stream proxies whose name matches the keyword
+
+#### Scenario: Target weight display syntax
+
+- **WHEN** a stream proxy card renders target nodes with weights
+- **THEN** the weight SHALL display in full-width parentheses「（100）」
+- **AND** SHALL NOT use the colon syntax「:100」（与上游列表权重语法统一）
 
 ### Requirement: 共享 composable
 StreamProxy 列表页的 script 逻辑 SHALL 抽取为 `useStreamProxyList(proxyType)` composable，两个视图共享。

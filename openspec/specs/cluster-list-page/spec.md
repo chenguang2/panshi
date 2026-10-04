@@ -2,7 +2,7 @@
 
 ## Purpose
 
-集群管理列表页面，位于 `/clusters` 路由，以卡片网格展示所有集群的统计信息和状态，支持分组展示、搜索筛选、CRUD 操作。与集中管理页面（CentralList.vue）完全独立。
+集群管理列表页面，位于 `/clusters` 路由，以卡片网格展示所有集群的统计信息和状态，支持分组展示、搜索筛选、CRUD 操作。与集中管理页面（CentralList.vue）为独立页面，但两者共享 `ClusterCard.vue` 卡片组件（卡片解剖一致，页面级布局与交互各自独立）。
 
 ## Requirements
 
@@ -56,6 +56,11 @@ Each cluster card SHALL display essential information.
 #### Scenario: Node tags
 - **WHEN** a cluster card is rendered and the cluster has nodes
 - **THEN** the card SHALL display node tags (IP:port) with online/offline status indicators
+
+#### Scenario: Shared component rendering
+- **WHEN** a cluster card is rendered on the cluster management page or the unified management page
+- **THEN** the card SHALL be rendered by the shared `ClusterCard.vue` component
+- **AND** both pages SHALL present identical card anatomy, including the relay/direct path badge
 
 ### Requirement: Cluster search and filter
 
