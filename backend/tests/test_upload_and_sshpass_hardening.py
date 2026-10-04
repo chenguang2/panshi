@@ -148,14 +148,15 @@ class TestSshpassEnvOnly:
     def test_build_ssh_cmd_uses_e_and_env(
         self, relay_off, no_sshpass_env,
     ):
-        """密码腿：argv 为 sshpass -e 且不含明文密码；SSHPASS 进父进程环境。"""
+        """密码腿：argv 为 sshpass -e 且不含明文密码；不污染父进程环境（M21）。"""
         cmd = ansible_service._build_ssh_cmd(
             "10.0.0.1", "jboss", "ls -la", password="secret123",
         )
         assert cmd[0] == "sshpass"
         assert cmd[1] == "-e"
         assert "secret123" not in cmd, f"明文密码出现在 argv: {cmd}"
-        assert os.environ.get("SSHPASS") == "secret123"
+        # M21 后 SSHPASS 只经子进程级 env_extra 注入，命令构造不得碰全局环境
+        assert os.environ.get("SSHPASS") is None
         # ssh 与目标、远端命令仍就位
         assert "ssh" in cmd
         assert "jboss@10.0.0.1" in cmd
@@ -173,11 +174,11 @@ class TestSshpassEnvOnly:
     async def test_password_leg_spawns_without_plaintext_argv(
         self, relay_off, no_sshpass_env, monkeypatch,
     ):
-        """_run_ssh_with_fallback 密码回退腿：spawn 时 argv 无明文、env 有 SSHPASS。"""
-        calls: list[tuple[list[str], str | None]] = []
+        """密码回退腿：spawn 时 argv 无明文、SSHPASS 经子进程级 env_extra（全局不落地）。"""
+        calls: list[tuple[list[str], dict | None]] = []
 
-        async def fake_run_subprocess(cmd):
-            calls.append((list(cmd), os.environ.get("SSHPASS")))
+        async def fake_run_subprocess(cmd, env_extra=None):
+            calls.append((list(cmd), env_extra))
             if cmd[0] == "sshpass":
                 return 0, "ok", ""
             return 255, "", "Permission denied (publickey)"
@@ -193,7 +194,8 @@ class TestSshpassEnvOnly:
         pass_argv, pass_env = calls[1]
         assert pass_argv[0] == "sshpass" and "-e" in pass_argv
         assert "secret123" not in pass_argv, f"明文密码出现在 argv: {pass_argv}"
-        assert pass_env == "secret123", "spawn 时子进程应能从环境取到 SSHPASS"
+        assert pass_env == {"SSHPASS": "secret123"}, "子进程应经 env_extra 取到 SSHPASS"
+        assert os.environ.get("SSHPASS") is None, "全局环境不得残留 SSHPASS"
 
     def test_source_guard_no_sshpass_dash_p_argument(self):
         """源码守卫：命令构造不再出现 `sshpass -p <密码>` 参数形态。"""

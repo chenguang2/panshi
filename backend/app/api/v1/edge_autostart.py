@@ -227,4 +227,5 @@ async def node_autostart(
 
         yield f"data: {json.dumps({'rc': rc, 'status': status, 'command': command, 'percent': 100})}\n\n"
 
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：流内 SSH 期间不再持事务）
     return StreamingResponse(event_stream(), media_type="text/event-stream")

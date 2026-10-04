@@ -174,6 +174,7 @@ async def deploy_edge_env(
 
         yield f"data: {json.dumps({'type': 'complete', 'version': new_version, 'status': overall_status, 'node_results': node_results})}\n\n"
 
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：流内 ansible 期间不再持事务）
     return StreamingResponse(
         deploy_stream(),
         media_type="text/event-stream",

@@ -104,6 +104,7 @@ def inject_gateway_creds(ip: str, user: str, password: str) -> bool:
         _CRED_BACKUP[ip] = backups
         with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
             f.writelines(lines)
+        relay_push.ensure_gateways_perms()  # M23：写入凭据后立即收权 0600
         return True
 
 
@@ -134,6 +135,7 @@ def restore_gateway_creds(ip: str) -> None:
                         lines[idx] = original
             with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
                 f.writelines(lines)
+            relay_push.ensure_gateways_perms()  # M23：还原写回后同样收权
         except (FileNotFoundError, OSError) as e:
             logger.warning("relay sshd: 还原网关 %s 凭据失败: %s", ip, e)
 

@@ -192,12 +192,11 @@ def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None
     ``sshpass -p <密码>`` 会把密码暴露在 ``ps`` / ``/proc/<pid>/cmdline``
     （world-readable）；环境变量只出现在 ``/proc/<pid>/environ``（0400，仅属主）。
 
-    SSHPASS 在此写入父进程环境（子进程默认继承）：密码腿有多个 spawn 点
-    （本模块 _run_subprocess/_run_subprocess_stream 与 cluster_install 的自有
-    流式执行器），统一在命令构造处就位，调用方无需改动。每次构建覆盖旧值；
-    残留值仅属主进程内可见（清单密码明文本就是已接受的 #10）。
-    已知残余竞态：并发两条不同密码的密码腿交错时，子进程可能拿到对方的
-    SSHPASS → 认证失败可见报错，不会静默串权限。
+    SSHPASS 经子进程级 env 注入（code-review-2026-10-04 M21）：调用方在
+    spawn 时以 env 参数叠加（本模块 _run_subprocess*/cluster_install 执行器
+    均支持 env_extra），**不再写全局 os.environ**——父进程环境外溢会传给
+    之后所有子进程，且并发不同密码的密码腿曾可能互相串值。本函数只负责
+    构造 argv，不产生任何环境副作用。
     """
     base_opts = [
         "-o", "ConnectTimeout=30",
@@ -213,7 +212,6 @@ def _build_ssh_cmd(ip: str, ssh_user: str, cmd: str, password: str | None = None
         if jump:
             base_opts += ["-J", jump, *_relay_key_args()]
     if password:
-        os.environ["SSHPASS"] = password
         return [
             "sshpass", "-e", "ssh",
             *base_opts,
@@ -232,12 +230,48 @@ def _sshpass_available() -> bool:
     return shutil.which("sshpass") is not None
 
 
-async def _run_subprocess(cmd: list[str]) -> tuple[int, str, str]:
-    """Run a subprocess, return (rc, stdout, stderr)."""
+# ansible-runner artifacts 保留策略（code-review-2026-10-04 M22）：artifacts 无
+# 自动清理，曾累积 1182 份 / 83MB 运行工件（command 文件含 env 落盘），按
+# mtime 倒序保留最新 N 份。
+ARTIFACTS_KEEP_DEFAULT = int(os.getenv("PANSHI_ANSIBLE_ARTIFACTS_KEEP", "100"))
+
+
+def cleanup_artifacts(keep: int | None = None, artifacts_dir: str | Path | None = None) -> int:
+    """Prune ansible-runner artifacts run dirs, keep newest ``keep`` by mtime.
+
+    Returns removed count. Never raises for missing dir (fresh envs).
+    """
+    keep_n = ARTIFACTS_KEEP_DEFAULT if keep is None else keep
+    base = Path(artifacts_dir) if artifacts_dir else Path(PRIVATE_DATA_DIR) / "artifacts"
+    if not base.is_dir():
+        return 0
+    entries = [p for p in base.iterdir() if p.is_dir()]
+    entries.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    removed = 0
+    for stale in entries[keep_n:]:
+        shutil.rmtree(stale, ignore_errors=True)
+        removed += 1
+    return removed
+
+
+def _prune_artifacts_safe() -> None:
+    """Best-effort artifacts 清理：失败只记 debug，绝不影响业务流。"""
+    try:
+        cleanup_artifacts()
+    except Exception:
+        logger.debug("ansible artifacts 清理失败", exc_info=True)
+
+
+async def _run_subprocess(cmd: list[str], env_extra: dict[str, str] | None = None) -> tuple[int, str, str]:
+    """Run a subprocess, return (rc, stdout, stderr).
+
+    env_extra 叠加注入子进程环境（如 SSHPASS），不污染父进程全局环境（M21）。
+    """
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env={**os.environ, **env_extra} if env_extra else None,
     )
     stdout, stderr = await proc.communicate()
     rc = proc.returncode or 0
@@ -247,17 +281,20 @@ async def _run_subprocess(cmd: list[str]) -> tuple[int, str, str]:
 async def _run_subprocess_stream(
     cmd: list[str],
     on_line: Callable[[dict], None] | None = None,
+    env_extra: dict[str, str] | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess, streaming stdout/stderr lines to ``on_line`` as they arrive.
 
     Unlike ``_run_subprocess`` (which blocks until the process exits via
     ``communicate()``), this reads stdout line-by-line and invokes ``on_line``
     for each line in real time. Returns (rc, full_stdout, full_stderr).
+    env_extra 叠加注入子进程环境（如 SSHPASS），不污染父进程全局环境（M21）。
     """
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env={**os.environ, **env_extra} if env_extra else None,
     )
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
@@ -336,10 +373,12 @@ async def _run_ssh_with_fallback(
     if status_callback:
         await status_callback("免密登录失败，正在尝试密码认证...")
     pass_cmd = _build_ssh_cmd(ip, ssh_user, cmd, password=password, port=port)
+    # SSHPASS 只进密码腿子进程环境，不写全局 os.environ（M21）
+    pass_env: dict[str, str] = {"SSHPASS": password}
     if on_line is not None:
-        rc2, stdout2, stderr2 = await _run_subprocess_stream(pass_cmd, on_line)
+        rc2, stdout2, stderr2 = await _run_subprocess_stream(pass_cmd, on_line, env_extra=pass_env)
     else:
-        rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd)
+        rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd, env_extra=pass_env)
     if rc2 == 0:
         return rc2, stdout2, stderr2
 
@@ -909,6 +948,8 @@ class AnsibleRunnerService:
         self._semaphore = asyncio.Semaphore(get_concurrency("max_playbooks", MAX_CONCURRENT_PLAYBOOKS))
         # Ensure SSH ControlPath directory exists for ControlMaster sockets
         _ensure_control_path_dir()
+        # 启动即清理一次 artifacts（M22：长驻进程没有别的触发点）
+        _prune_artifacts_safe()
 
     # ── public API ──────────────────────────────────────────────
 
@@ -1049,6 +1090,7 @@ class AnsibleRunnerService:
                     _inventory_restore_port(ip, inject_port)
                 for _rip in relay_injected_ips:
                     _inventory_restore_relay(_rip)
+                _prune_artifacts_safe()  # M22：每次运行后按保留策略清理 artifacts
 
         _raw_stdout = getattr(result, "stdout", "")
         _raw_stderr = getattr(result, "stderr", "")

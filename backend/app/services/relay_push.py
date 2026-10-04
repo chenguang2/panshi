@@ -10,6 +10,7 @@
 """
 import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -25,6 +26,17 @@ logger = logging.getLogger(__name__)
 
 _GATEWAYS_INVENTORY = str(Path(PRIVATE_DATA_DIR) / "inventory" / "gateways")
 _PUSH_PLAYBOOK = "relay_push.yml"
+
+
+def ensure_gateways_perms(path: str | None = None) -> None:
+    """网关清单含 SSH 凭据，落盘后必须 0600（与 host 清单同款；M23）。
+
+    文件不存在时静默跳过（fresh 环境尚未 D1 装机）。
+    """
+    try:
+        os.chmod(path or _GATEWAYS_INVENTORY, 0o600)
+    except FileNotFoundError:
+        pass
 
 
 class RelayPushError(RuntimeError):

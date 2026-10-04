@@ -88,7 +88,7 @@ unit 自带 `Environment="JWT_SECRET_KEY=your-production-secret-key"`，而 `_PL
 | M24 | api/v1/cluster_nodes.py:99-122 | 节点直连 ansible 操作（nginx 启停/edge_statistic）缺假成功守卫，节点不在清单 rc=0 即成功甚至置 status=1 | 假成功守卫下沉 run_playbook 出口（连 S4） |
 | M25 | roles/edge/tasks/master_copy_to_slaves.yml:12-16 | 分发腿 `failed_when: false` 吞 copy 失败 → 磁盘满/权限时假成功 | 删 failed_when: false |
 | M26 | api/v1/clusters.py:334-380 | 删集群手动清理漏 4 张子表（static_resource/user_cluster/import_log/node_autostart）；async SQLite 无 FK pragma，孤儿行仅 SQLite 产生、PG 靠 CASCADE → 双库行为分叉 | 优选：async 引擎挂 sqlite connect 事件 `foreign_keys=ON`，两库收敛 CASCADE 语义 |
-| M27 | core/migrate.py:82-83 | `PRAGMA foreign_keys=OFF` 在隐式事务内执行是 SQLite 文档明确的 no-op → 表重建期 FK 实际仍开，DROP 旧表连坐删子表行 | pragma 提前 + AUTOCOMMIT 连接执行 |
+| M27 | core/migrate.py:82-83 | `PRAGMA foreign_keys=OFF` 在隐式事务内执行是 SQLite 文档明确的 no-op → 表重建期 FK 实际仍开，DROP 旧表连坐删子表行**〔2026-10-04 勘误：不成立，实证见文末〕** | pragma 提前 + AUTOCOMMIT 连接执行 |
 | M28 | models/cluster.py:128-138 | ps_config_version 无 (cluster_id,resource_type,resource_id) 索引；每次发布插一行永不清理，全部列表页 GROUP BY 聚合——全库增长最快表逐步退化为顺序扫描 | 模型加 Index + `_ensure_index` 补建；评估版本保留策略 |
 
 ## 四、🟡 建议（34）
@@ -181,3 +181,8 @@ unit 自带 `Environment="JWT_SECRET_KEY=your-production-secret-key"`，而 `_PL
 ## 附录：泳道原报告
 
 四条泳道完整原报告（含逐条代码证据片段）存于本次会话记录；本报告为其去重合成版，所有行号经编排者抽验（22 项 21 实锤）。
+
+## 勘误（2026-10-04，P1 修复期实证）
+
+- **M27（migrate.py PRAGMA 事务内 no-op）不成立**：TDD 行为测试（`tests/test_code_review_p1.py::TestM27MigratePragma`）与驱动层探针实证——SQLAlchemy 2.0 pysqlite 方言对隐式事务不发 driver 层 BEGIN（defer-to-DML），:83 的 `PRAGMA foreign_keys=OFF` 执行时仍处 autocommit 态、实际生效；表重建后引用表（ON DELETE CASCADE 子行）幸存。行为测试留作不变量守卫（未来 SA 升级改变 defer 行为时变红）。不修代码，原条目撤回。
+- **M26 取「优选」半**：async 引擎挂 `_configure_sqlite_connection`（WAL/FK/busy_timeout）已落地；报告同条提到的「删集群手动清理补 4 张子表」未随批做（FK=ON+CASCADE 后孤儿行不再产生，手动清理清单留作 P2 加固项）。

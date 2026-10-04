@@ -630,7 +630,7 @@ def test_ssh_conn_failure_retried_once_when_relay_on(test_db, relay_env, monkeyp
     key_calls = {"n": 0}
     pass_calls = {"n": 0}
 
-    async def fake_run_subprocess(cmd):
+    async def fake_run_subprocess(cmd, env_extra=None):
         if cmd[0] == "sshpass":
             pass_calls["n"] += 1
             return 255, "", "Permission denied"
@@ -657,7 +657,7 @@ def test_ssh_conn_failure_no_retry_when_relay_off(monkeypatch):
     key_calls = {"n": 0}
     pass_calls = {"n": 0}
 
-    async def fake_run_subprocess(cmd):
+    async def fake_run_subprocess(cmd, env_extra=None):
         if cmd[0] == "sshpass":
             pass_calls["n"] += 1
             return 255, "", "Permission denied"

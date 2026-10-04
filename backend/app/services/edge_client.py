@@ -680,6 +680,10 @@ class EdgeClient:
         headers = {
             "X-API-KEY": self.api_key,
         }
+        # 经中继网关时必须携带目标头（与 raw_put 对齐），否则删除请求打到
+        # 网关默认 vhost 而 404（code-review-2026-10-04 M9）。
+        if self.relay_target:
+            headers["X-Edge-Target"] = self.relay_target
 
         url = f"{self.edge_url}{path}"
 
@@ -689,6 +693,9 @@ class EdgeClient:
             raise EdgeConnectionError(f"Request to {url} timed out: {e}") from e
         except httpx.ConnectError as e:
             raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
+
+        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
+            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
 
         if response.status_code not in (200, 201, 204):
             try:

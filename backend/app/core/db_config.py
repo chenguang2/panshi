@@ -23,6 +23,8 @@ from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from app.core import security
+
 # ── Paths (overridable in tests) ───────────────────────────────────────────
 # 锚定 backend 根（app/core/db_config.py → parents[2]），与进程 CWD 无关：
 # 产品环境曾以非 backend/ 工作目录启动 → ./data/panshi.db 解析漂移 → unable to open
@@ -49,14 +51,54 @@ DEFAULT_ACTIVE_ID = "local_sqlite"
 
 
 def _fernet() -> Fernet:
-    """Build a Fernet instance keyed from JWT_SECRET_KEY (stable across runs)."""
-    secret = os.getenv("JWT_SECRET_KEY", "your-super-secret-key-change-in-production")
+    """Build a Fernet instance keyed from JWT_SECRET_KEY (stable across runs).
+
+    密钥单源（code-review-2026-10-04 M5）：引用 app.core.security 的解析结果
+    （显式 env → .env 文件 → 开发态生成并持久化），本模块不再自带公开占位
+    兜底——公开常量派生的加密等于无加密。
+    """
+    secret = security.JWT_SECRET_KEY
     # Fernet requires a 32-byte urlsafe base64 key; derive deterministically.
     import base64
     import hashlib
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
     key = base64.urlsafe_b64encode(digest)
     return Fernet(key)
+
+
+def _legacy_fernet() -> Fernet:
+    """历史密钥派生（env 未设时落到公开占位常量）——仅用于存量密文迁移。"""
+    secret = os.getenv("JWT_SECRET_KEY", "your-super-secret-key-change-in-production")
+    import base64
+    import hashlib
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def _migrate_legacy_passwords(cfg: "DbConfig") -> bool:
+    """存量密文迁移：新钥解不开、旧钥解得开 → 以新钥重加密。
+
+    覆盖：历史上 JWT_SECRET_KEY 未显式配置的部署，数据库连接密码用公开
+    占位常量派生密钥加密（M5 修复前形态）。env 显式配置的部署新旧钥一致，
+    本迁移空跑。返回是否发生改写（调用方据此回盘）。
+    """
+    changed = False
+    for conn in cfg.connections:
+        enc = conn.password_enc
+        if not enc:
+            continue
+        try:
+            _fernet().decrypt(enc.encode("utf-8"))
+            continue  # 新钥可解，无需迁移
+        except Exception:
+            pass
+        try:
+            plain = _legacy_fernet().decrypt(enc.encode("utf-8")).decode("utf-8")
+        except Exception:
+            continue  # 旧钥也解不开（密钥已换/数据损坏），保持原样不误伤
+        conn.password_enc = encrypt_password(plain)
+        changed = True
+    return changed
 
 
 def encrypt_password(plain: str) -> str:
@@ -306,13 +348,16 @@ def ensure_config(path: Optional[str] = None) -> DbConfig:
     if not target.exists():
         _migrate_legacy_config(target)
     if target.exists():
-        return load_config(path=path)
-    env_url = os.getenv("DATABASE_URL")
-    if env_url:
-        cfg = config_from_env(env_url)
+        cfg = load_config(path=path)
     else:
-        cfg = default_config()
-    save_config(cfg, path=path)
+        env_url = os.getenv("DATABASE_URL")
+        if env_url:
+            cfg = config_from_env(env_url)
+        else:
+            cfg = default_config()
+        save_config(cfg, path=path)
+    if _migrate_legacy_passwords(cfg):
+        save_config(cfg, path=path)
     return cfg
 
 

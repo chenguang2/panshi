@@ -227,12 +227,16 @@ async def _install_openresty_stream(
 
         _ssh_result: list[int] = []
 
-        async def _stream_ssh(cmd_parts: list[str]) -> AsyncGenerator[str, None]:
-            """Run cmd via subprocess and yield stdout as SSE lines, storing rc in _ssh_result."""
+        async def _stream_ssh(cmd_parts: list[str], env_extra: dict[str, str] | None = None) -> AsyncGenerator[str, None]:
+            """Run cmd via subprocess and yield stdout as SSE lines, storing rc in _ssh_result.
+
+            env_extra 叠加注入子进程环境（如 SSHPASS），不污染父进程全局环境（M21）。
+            """
             proc = await asyncio.create_subprocess_exec(
                 *cmd_parts,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env={**os.environ, **env_extra} if env_extra else None,
             )
             nonlocal ssh_proc
             ssh_proc = proc
@@ -288,7 +292,7 @@ async def _install_openresty_stream(
                 cmd_parts = _build_ssh_cmd(node.ip, ssh_user, build_cmd, password=ssh_password, port=ssh_port)
                 yield f"data: {json.dumps({'line': f'$ {shlex.join(cmd_parts)}', 'percent': 40})}\n\n"
                 _ssh_result.clear()
-                async for event in _stream_ssh(cmd_parts):
+                async for event in _stream_ssh(cmd_parts, {"SSHPASS": ssh_password or ""}):
                     yield event
                 rc = _ssh_result[0] if _ssh_result else -1
 
@@ -347,6 +351,7 @@ async def install_openresty_stream(
     prefix = node.openresty_path or body.prefix
     srcpath = f"{PRIVATE_DATA_DIR}/soft"
     destpath = str(Path(prefix).parent) + "/"
+    await db.commit()  # 落审计骨架 + 释放写锁（#29：流内 ansible 期间不再持事务）
     return StreamingResponse(
         _install_openresty_stream(_ansible_service, node, prefix, srcpath, destpath, request, openresty_file=body.openresty_file),
         media_type="text/event-stream",

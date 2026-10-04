@@ -60,7 +60,14 @@ def build_sync_engine_for(conn: ConnectionConfig):
 def build_async_engine_for(conn: ConnectionConfig):
     """Build an async engine for an arbitrary connection (used by migration service)."""
     url = build_async_engine_url(conn)
-    return _create_async_engine(url)
+    engine = _create_async_engine(url)
+    if is_sqlite(url):
+        # async 引擎与同步引擎同款连接级 pragma（code-review-2026-10-04 M26）：
+        # 此前 async 腿 FK 关闭，删父行会留孤儿行（与 PG CASCADE 语义分叉）。
+        # async 引擎的 connect 事件挂在 sync_engine 上（aiosqlite 经 greenlet
+        # 适配，监听器内同步 cursor 可用；conftest 测试引擎同款做法已验证）。
+        event.listen(engine.sync_engine, "connect", _configure_sqlite_connection)
+    return engine
 
 
 def _active_async_engine():
