@@ -35,6 +35,11 @@ CONFIG_BAK_PATH = str(BACKEND_ROOT / "db_config.json.bak")
 LEGACY_CONFIG_PATH = str(BACKEND_ROOT / "data" / "db_config.json")
 DEFAULT_SQLITE_PATH = str(BACKEND_ROOT / "data" / "panshi.db")
 
+# 存储形态：写进 db_config.json 的默认连接路径。保持相对——可移植（目录迁移/整树复制
+# 后仍指向本树数据）；锚定只发生在解析期（resolve_sqlite_path / build_engine_url），
+# 不得把锚定后的绝对路径落盘（否则迁移后静默指向旧位置并在那里新建空库）。
+DEFAULT_SQLITE_STORED_PATH = "./data/panshi.db"
+
 CONFIG_VERSION = 1
 MASKED_PASSWORD = "********"
 
@@ -184,7 +189,7 @@ def default_config() -> DbConfig:
                 id=DEFAULT_ACTIVE_ID,
                 type="sqlite",
                 name="本地 SQLite",
-                path=DEFAULT_SQLITE_PATH,
+                path=DEFAULT_SQLITE_STORED_PATH,
             )
         ],
     )
@@ -197,7 +202,7 @@ def config_from_env(url: str) -> DbConfig:
             version=CONFIG_VERSION,
             active="local_sqlite",
             connections=[
-                ConnectionConfig(id="local_sqlite", type="sqlite", name="本地 SQLite", path=DEFAULT_SQLITE_PATH)
+                ConnectionConfig(id="local_sqlite", type="sqlite", name="本地 SQLite", path=DEFAULT_SQLITE_STORED_PATH)
             ],
         )
     # postgresql://user:pass@host:port/db

@@ -15,6 +15,7 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(db_config, "CONFIG_PATH", str(tmp_path / "db_config.json"))
     monkeypatch.setattr(db_config, "CONFIG_BAK_PATH", str(tmp_path / "db_config.json.bak"))
     monkeypatch.setattr(db_config, "DEFAULT_SQLITE_PATH", str(tmp_path / "panshi.db"))
+    monkeypatch.setattr(db_config, "DEFAULT_SQLITE_STORED_PATH", str(tmp_path / "panshi.db"), raising=False)
     monkeypatch.setattr(db_switch_service, "RESTART_FLAG_PATH", str(tmp_path / ".restart.flag"))
     yield tmp_path
 
