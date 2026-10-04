@@ -147,6 +147,18 @@
           <div class="ssl-card-row" v-if="cert.ssl_protocols">
             <label>协议</label><span>{{ cert.ssl_protocols }}</span>
           </div>
+          <div class="ssl-card-row" v-if="cert.expire_at">
+            <label>有效期</label
+            ><span class="ssl-expire-text"
+              >{{ fmtDateOnly(cert.expire_at)
+              }}<span
+                v-if="cert.expire_days !== null && cert.expire_days !== undefined"
+                class="ssl-expire-badge"
+                :class="expireBadgeClass(cert.expire_days)"
+                >{{ expireBadgeText(cert.expire_days) }}</span
+              ></span
+            >
+          </div>
         </div>
         <div class="ssl-card-actions">
           <button class="btn btn-ghost btn-sm ssl-action-btn" @click="viewCert(cert)">查看</button>
@@ -229,7 +241,7 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { isReservedSni, splitSniString } from '@/utils/sniTags'
-import { formatDateTime as formatDate } from '@/utils/format'
+import { formatDateTime as formatDate, formatDate as fmtDateOnly } from '@/utils/format'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const certs = ref<any[]>([])
@@ -303,6 +315,18 @@ function onSearch() {
 function onGroupChange() {
   clusterFilter.value = ''
   loadCerts()
+}
+
+// ux-review H2：证书到期徽章（<0 已过期 / ≤30 天临期 / 其余正常）
+function expireBadgeClass(days: number): string {
+  if (days < 0) return 'danger'
+  if (days <= 30) return 'warn'
+  return 'neutral'
+}
+
+function expireBadgeText(days: number): string {
+  if (days < 0) return '已过期'
+  return `剩余 ${days} 天`
 }
 
 async function loadCerts() {
@@ -606,6 +630,34 @@ onMounted(() => {
   padding: 0 4px;
   border-radius: 8px;
   margin-left: 2px;
+}
+.ssl-expire-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+}
+.ssl-expire-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.ssl-expire-badge.danger {
+  background: oklch(55% 0.19 25 / 14%);
+  color: oklch(45% 0.2 25);
+  border: 1px solid oklch(55% 0.19 25 / 32%);
+}
+.ssl-expire-badge.warn {
+  background: oklch(72% 0.14 70 / 20%);
+  color: oklch(45% 0.12 70);
+  border: 1px solid oklch(72% 0.14 70 / 38%);
+}
+.ssl-expire-badge.neutral {
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--muted);
+  border: 1px solid var(--border);
 }
 .ssl-card-actions {
   display: flex;

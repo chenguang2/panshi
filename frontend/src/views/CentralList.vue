@@ -150,7 +150,11 @@
                     </div>
                   </div>
                   <div class="cl-card-stats">
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')">
+                    <div
+                      class="cl-stat-cell cl-stat-link"
+                      title="健康节点 / 节点总数"
+                      @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"
+                    >
                       <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
                       <div class="cl-stat-label">节点</div>
                     </div>
@@ -296,7 +300,11 @@
                     </div>
                   </div>
                   <div class="cl-card-stats">
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'nodes')">
+                    <div
+                      class="cl-stat-cell cl-stat-link"
+                      title="健康节点 / 节点总数"
+                      @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"
+                    >
                       <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
                       <div class="cl-stat-label">节点</div>
                     </div>
@@ -1678,7 +1686,8 @@ onMounted(async () => {
 }
 
 .cl-card-stats {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   background: oklch(50% 0 0 / 4%);
   border-radius: var(--radius-md);
   overflow: hidden;

@@ -1,6 +1,6 @@
 <template>
   <div class="dq-page">
-    <PageHeader title="DNS 查询" description="管理 DNS 查询路由规则，基于 dns_upstream 插件实现域名解析转发">
+    <PageHeader title="DNS 代理（HTTP）" description="管理 DNS 查询路由规则，基于 dns_upstream 插件实现域名解析转发">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateForm">+ 新建 DNS 查询</button>
       </template>

@@ -104,6 +104,9 @@ class SslCertificateResponse(SslCertificateBase):
     generate_log: Optional[list[CommandLogEntry]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    # 证书到期信息（ux-review H2：序列化期从 cert PEM 解析，非模型列；None=解析失败如国密双证书）
+    expire_at: Optional[str] = None
+    expire_days: Optional[int] = None
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod
@@ -127,6 +130,34 @@ class SslCertificateResponse(SslCertificateBase):
         """Mask private_key for CA certificates in responses."""
         if self.is_ca:
             self.private_key = ""
+        return self
+
+    @model_validator(mode="after")
+    def derive_expiry(self):
+        """ux-review H2：从 cert PEM 解析 notAfter，输出 expire_at/expire_days。
+
+        解析失败（国密双证书等非标准 PEM）优雅降级为 None，不影响响应。
+        """
+        if self.expire_at is not None:
+            return self
+        pem = getattr(self, "cert", None)
+        if not isinstance(pem, str) or "BEGIN CERTIFICATE" not in pem:
+            return self
+        try:
+            from cryptography import x509
+
+            parsed = x509.load_pem_x509_certificate(pem.encode())
+            not_after = getattr(parsed, "not_valid_after_utc", None)
+            if not_after is not None:
+                not_after = not_after.replace(tzinfo=None)
+            else:
+                # cryptography<42 只有 naive UTC 版本
+                not_after = parsed.not_valid_after
+            self.expire_at = not_after.strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.expire_days = (not_after - datetime.utcnow()).days
+        except Exception:
+            self.expire_at = None
+            self.expire_days = None
         return self
 
     class Config:

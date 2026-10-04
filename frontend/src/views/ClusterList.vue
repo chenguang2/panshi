@@ -49,7 +49,10 @@
               </div>
             </div>
             <div class="cl-card-stats">
-              <router-link :to="{ path: '/nodes', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"
+              <router-link
+                :to="{ path: '/nodes', query: { cluster_id: c.id } }"
+                class="cl-stat-cell cl-stat-link"
+                title="健康节点 / 节点总数"
                 ><div class="cl-stat-value">{{ c.healthy_node_count }}/{{ c.node_count }}</div>
                 <div class="cl-stat-label">节点</div></router-link
               >
@@ -745,13 +748,12 @@ onMounted(() => {
 
 .cl-card-stats {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
   gap: 4px;
   padding: 8px 16px;
 }
 .cl-stat-cell {
   text-align: center;
-  min-width: 0;
 }
 .cl-stat-value {
   font-family: var(--font-mono);

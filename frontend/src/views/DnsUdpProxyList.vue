@@ -1,6 +1,6 @@
 <template>
   <div class="sp-page">
-    <PageHeader title="DNS 代理" description="管理集群级的 DNS 代理规则">
+    <PageHeader title="DNS 代理（UDP）" description="管理集群级的 DNS 代理规则">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateWizard">+ 新建 DNS 代理</button>
         <button class="btn btn-secondary" @click="toggleBatchMode">
