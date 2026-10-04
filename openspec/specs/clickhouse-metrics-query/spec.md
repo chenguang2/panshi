@@ -94,7 +94,7 @@ The API SHALL provide an endpoint `GET /api/v1/metrics/{metric_name}` for queryi
 
 The response SHALL contain an array of buckets with `timestamp`, `avg`, `max`, `min`, `sample_count` fields.
 
-The data source SHALL be `otel_metrics_gauge` for Gauge metrics. Sum/Counter metrics SHALL use `otel_metrics_sum`.
+The data source SHALL be `otel_metrics_gauge` for Gauge metrics. Sum/Counter metrics SHALL use `otel_metrics_sum`. The `label` filter's key SHALL be validated against a server-side whitelist of allowed label keys; keys outside the whitelist SHALL be rejected (400) instead of being interpolated into ClickHouse SQL.
 
 #### Scenario: Query with default parameters
 - **WHEN** a GET request is sent to `/api/v1/metrics/edge_http_requests_total`
@@ -109,6 +109,11 @@ The data source SHALL be `otel_metrics_gauge` for Gauge metrics. Sum/Counter met
 - **WHEN** a GET request is sent to `/api/v1/metrics/edge_nginx_http_current_connections?label=state:active`
 - **THEN** the response SHALL only include data points where the `state` label equals `active`
 - **AND** the filter SHALL use the `Attributes` Map syntax: `Attributes['state'] = 'active'`
+
+#### Scenario: Label key whitelist
+
+- **WHEN** a query carries a `label` filter whose key is not in the server-side whitelist of allowed label keys
+- **THEN** the API SHALL reject the request with 400 instead of interpolating the key into ClickHouse SQL
 
 #### Scenario: Counter auto-detection
 - **WHEN** a query is executed

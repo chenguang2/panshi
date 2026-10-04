@@ -74,7 +74,7 @@ The detail drawer SHALL render resource names as clickable links to correspondin
 - **THEN** drawer automatically renders link for plugin_config resources
 
 ### Requirement: Export to CSV/Excel with large dataset support
-The page SHALL provide "导出" button exporting filtered results to CSV or Excel. For large datasets (>5000 rows), backend SHALL generate file asynchronously and provide download link to avoid frontend OOM/timeout.
+The page SHALL provide "导出" button exporting filtered results to CSV or Excel. For large datasets (>5000 rows), backend SHALL generate file asynchronously and provide download link to avoid frontend OOM/timeout. Exported cell values SHALL be neutralized against spreadsheet formula injection: a value whose first character is one of `=`, `+`, `-`, `@` (or a tab/CR) SHALL receive a leading single-quote prefix before being written, for both CSV and XLSX exports.
 
 #### Scenario: Export current filtered results (small dataset)
 - **WHEN** admin clicks "导出 CSV" and filtered count ≤ 5000
@@ -89,6 +89,11 @@ The page SHALL provide "导出" button exporting filtered results to CSV or Exce
 #### Scenario: Export Excel
 - **WHEN** admin clicks "导出 Excel"
 - **THEN** downloads .xlsx with proper column widths and headers (same async logic for large datasets)
+
+#### Scenario: Export neutralizes formula injection
+- **WHEN** an exported cell value (e.g. a description field) begins with `=`, `+`, `-` or `@`
+- **THEN** the cell SHALL be written with a leading single-quote prefix so spreadsheets treat it as text
+- **AND** the neutralization SHALL apply to both CSV and XLSX exports, verified by export round-trip tests
 
 ### Requirement: Reuse existing export utility for small datasets
 For datasets ≤ 5000 rows, export SHALL reuse `frontend/utils/export.ts` utility for consistent formatting.

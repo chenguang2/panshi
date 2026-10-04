@@ -82,7 +82,7 @@ The system SHALL display the full configuration of a stream proxy in a read-only
 - **THEN** the system opens a modal showing all proxy details including name, cluster, port, protocol, targets, load balance, timeout, keepalive, hash key, health check, retries
 
 ### Requirement: User can edit a stream proxy
-The system SHALL allow editing an existing stream proxy's configuration.
+The system SHALL allow editing an existing stream proxy's configuration. Update payload field boundaries SHALL align with the create base schema: `name` SHALL be 1-100 characters and `listen_port` SHALL be 1-65535; out-of-range values MUST be rejected at validation time (4xx) and MUST NOT be persisted, so a rejected update can never leave a row that fails response validation.
 
 #### Scenario: Edit proxy name and targets
 - **WHEN** user clicks "编辑" and modifies the proxy name and upstream targets
@@ -91,6 +91,11 @@ The system SHALL allow editing an existing stream proxy's configuration.
 #### Scenario: Cannot edit listen port
 - **WHEN** user edits a stream proxy
 - **THEN** the listen port field is read-only (port change requires delete and recreate)
+
+#### Scenario: Update with out-of-range values is rejected without dirty rows
+- **WHEN** a PUT update carries `listen_port` outside 1-65535 or `name` outside 1-100 characters
+- **THEN** the API SHALL reject the request with a validation error (4xx) before any database write
+- **AND** the existing row SHALL remain unchanged and readable (no 500 on subsequent GET)
 
 ### Requirement: User can delete a stream proxy
 The system SHALL support deleting a stream proxy from the database and/or Edge nodes, both individually and in batch.

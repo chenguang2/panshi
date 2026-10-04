@@ -234,11 +234,25 @@
 - **THEN** 顶栏右侧 SHALL 显示当前数据库状态徽标（类型+地址+状态圆点），绿点表示连接正常、红点表示连接异常，悬停显示完整连接信息，点击跳转数据库管理页
 
 ### Requirement: 权限控制
-数据库管理所有接口 SHALL 仅对拥有 `database_management` 权限的管理员开放，迁移与切换操作需二次确认。
+
+数据库管理连接注册表与状态/切换接口 SHALL 仅对拥有 `database_management` 权限的管理员开放；数据迁移域端点（迁移/导出/导入/迁移历史）SHALL 改挂独立的 `db_migration` 权限并受 `db_migration` 功能开关门控（关闭时返回 404「数据迁移模块未启用」，不泄露模块存在性）；迁移与切换操作需二次确认。`db_backup` 为独立注册的权限键与功能开关，MUST NOT 被 `database_management` 总闸牵连（反之亦然）。
 
 #### Scenario: 无权限访问
+
 - **WHEN** 非管理员或无 `database_management` 权限的用户访问数据库管理接口
 - **THEN** 系统 SHALL 拒绝访问并返回 403
+
+#### Scenario: 仅持 database_management 权限无法访问迁移域
+
+- **WHEN** 持有 `database_management` 但无 `db_migration` 权限的用户请求数据迁移域端点
+- **THEN** 系统 SHALL 拒绝并返回 403
+- **AND** 连接注册表/状态/切换端点 SHALL 正常可用（权限已拆分、互不牵连）
+
+#### Scenario: db_migration 功能关闭时隐藏不泄露
+
+- **WHEN** `features.yaml` 中 `db_migration` 为 `false`
+- **THEN** 数据迁移域端点 SHALL 返回 404「数据迁移模块未启用」
+- **AND** 数据库管理页迁移区块 SHALL 隐藏，摘要卡迁移入口与区块同门控
 
 ### Requirement: 迁移历史清理
 
