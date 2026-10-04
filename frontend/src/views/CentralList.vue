@@ -583,9 +583,14 @@
             >
               <a-input v-model:value="nodeForm.openresty_path" placeholder="留空则与Edge路径相同" />
             </a-form-item>
-            <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+            <a-form-item
+              label="状态"
+              name="status"
+              :rules="[{ required: true, message: '请选择状态' }]"
+              extra="禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询"
+            >
               <a-select v-model:value="nodeForm.status">
-                <a-select-option :value="1">正常</a-select-option>
+                <a-select-option :value="1">启用</a-select-option>
                 <a-select-option :value="0">禁用</a-select-option>
               </a-select>
             </a-form-item>

@@ -72,6 +72,9 @@
           </template>
 
           <template v-if="column.key === 'status'">
+            <span v-if="record.status === 0" class="badge badge-danger"
+              ><span class="status-dot offline"></span>已禁用</span
+            >
             <span v-if="nginxRunning(record)" class="badge badge-success"
               ><span class="status-dot online"></span>运行中</span
             >
@@ -229,10 +232,10 @@
             <label class="form-label">状态</label>
             <select class="form-input" v-model="formData.statusCheck">
               <option :value="true">启用</option>
-              <option :value="false">停用</option>
+              <option :value="false">禁用</option>
             </select>
             <div class="form-hint">
-              停用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询
+              禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询
             </div>
           </div>
         </div>
