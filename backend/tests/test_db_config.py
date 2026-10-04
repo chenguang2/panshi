@@ -190,8 +190,10 @@ class TestLegacyPathMigration:
 
 class TestBuildEngineUrl:
     def test_sqlite_url(self):
+        # 相对 path 锚定 backend 根（CWD 无关，2026-10-04 产品事故收敛）
         conn = ConnectionConfig(id="l", type="sqlite", name="L", path="./data/panshi.db")
-        assert build_engine_url(conn) == "sqlite:///./data/panshi.db"
+        expected = "sqlite:///" + (Path(db_config.BACKEND_ROOT) / "data" / "panshi.db").as_posix()
+        assert build_engine_url(conn) == expected
 
     def test_postgres_url(self):
         conn = ConnectionConfig(

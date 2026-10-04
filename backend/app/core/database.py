@@ -10,7 +10,8 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core import db_config
 from app.core.db_config import ConnectionConfig, build_async_engine_url, build_engine_url
 
-DEFAULT_DATABASE_URL = "sqlite:///./data/panshi.db"
+# 缺省 SQLite 路径锚定 backend 根（db_config.BACKEND_ROOT），与进程 CWD 无关（2026-10-04 产品事故）
+DEFAULT_DATABASE_URL = f"sqlite:///{db_config.DEFAULT_SQLITE_PATH}"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
 
 logger = logging.getLogger(__name__)

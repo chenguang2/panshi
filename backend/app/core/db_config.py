@@ -24,11 +24,16 @@ from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 
 # ── Paths (overridable in tests) ───────────────────────────────────────────
-CONFIG_PATH = "./db_config.json"
-CONFIG_BAK_PATH = "./db_config.json.bak"
+# 锚定 backend 根（app/core/db_config.py → parents[2]），与进程 CWD 无关：
+# 产品环境曾以非 backend/ 工作目录启动 → ./data/panshi.db 解析漂移 → unable to open
+# database file（2026-10-04）。同款锚定先例：clickhouse_client._CONFIG_PATH、
+# db_backup_service.resolve_db_path。
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = str(BACKEND_ROOT / "db_config.json")
+CONFIG_BAK_PATH = str(BACKEND_ROOT / "db_config.json.bak")
 # Pre-relocation location; auto-migrated to CONFIG_PATH on first startup.
-LEGACY_CONFIG_PATH = "./data/db_config.json"
-DEFAULT_SQLITE_PATH = "./data/panshi.db"
+LEGACY_CONFIG_PATH = str(BACKEND_ROOT / "data" / "db_config.json")
+DEFAULT_SQLITE_PATH = str(BACKEND_ROOT / "data" / "panshi.db")
 
 CONFIG_VERSION = 1
 MASKED_PASSWORD = "********"
@@ -192,7 +197,7 @@ def config_from_env(url: str) -> DbConfig:
             version=CONFIG_VERSION,
             active="local_sqlite",
             connections=[
-                ConnectionConfig(id="local_sqlite", type="sqlite", name="本地 SQLite", path="./data/panshi.db")
+                ConnectionConfig(id="local_sqlite", type="sqlite", name="本地 SQLite", path=DEFAULT_SQLITE_PATH)
             ],
         )
     # postgresql://user:pass@host:port/db
@@ -309,13 +314,28 @@ def ensure_config(path: Optional[str] = None) -> DbConfig:
 # ── URL building ───────────────────────────────────────────────────────────
 
 
+def resolve_sqlite_path(path: Optional[str]) -> str:
+    """SQLite 路径解析：相对路径锚定 backend 根（与 CWD 无关），并自建父目录。
+
+    父目录创建失败（只读根/权限不足）时静默跳过，交由 sqlite 报错——错误更接近真实原因。
+    """
+    p = Path(path) if path else Path(DEFAULT_SQLITE_PATH)
+    if not p.is_absolute():
+        p = BACKEND_ROOT / p
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return p.as_posix()
+
+
 def build_engine_url(conn: ConnectionConfig) -> str:
     """Build a SQLAlchemy sync engine URL for a connection."""
     if conn.type in ("postgres", "postgresql"):
         pw = conn.get_password()
         cred = f"{conn.username}:{pw}@" if conn.username else ""
         return f"postgresql://{cred}{conn.host}:{conn.port or 5432}/{conn.database}"
-    return f"sqlite:///{conn.path}"
+    return f"sqlite:///{resolve_sqlite_path(conn.path)}"
 
 
 def build_async_engine_url(conn: ConnectionConfig) -> str:
