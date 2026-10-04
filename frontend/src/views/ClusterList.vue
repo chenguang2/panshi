@@ -13,7 +13,7 @@
       </div>
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0">
         <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g === '' ? '__ung__' : g">{{ g || '未分类' }}</option>
+        <option v-for="g in groupOptions" :key="g" :value="g === '' ? '__ung__' : g">{{ g || '未分组' }}</option>
       </select>
       <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
       <button v-if="hasCollapsed" class="btn btn-secondary btn-sm" @click="expandAllGroups">全部展开</button>
@@ -29,12 +29,12 @@
       <div v-for="group in groupedClusters" :key="group.name" class="cl-group">
         <div class="cl-group-header" @click="toggleGroup(group.name)">
           <span class="cl-group-arrow">{{ expandedGroups[group.name] ? '▾' : '▸' }}</span>
-          <span class="cl-group-name">{{ group.name || '未分类' }}</span>
+          <span class="cl-group-name">{{ group.name || '未分组' }}</span>
           <span class="cl-group-count">(共{{ group.clusters.length }}个)</span>
         </div>
         <div v-show="expandedGroups[group.name]" class="cl-grid">
           <div v-for="c in group.clusters" :key="c.id" class="cl-card">
-            <div class="cl-card-topbar">{{ c.group_name || '未分类' }}</div>
+            <div class="cl-card-topbar">{{ c.group_name || '未分组' }}</div>
             <div class="cl-card-header">
               <div class="cl-card-info">
                 <div class="cl-card-name">{{ c.display_name || c.name }}</div>

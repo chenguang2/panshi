@@ -116,3 +116,24 @@ describe('SslList 证书有效期展示（ux-review H2）', () => {
     expect(wrapper.text()).not.toContain('有效期')
   })
 })
+
+describe('SslList 类型信息行分行（ux-review M5）', () => {
+  it('算法徽章独立成「算法」行，类型行不再堆叠全部徽章', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      if (url === '/ssl')
+        return Promise.resolve({
+          data: { items: [mockCert({ algorithm: 'rsa', create_method: 'local_generate' })] },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const SslList = (await import('../SslList.vue')).default
+    const wrapper = mount(SslList, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('算法')
+    expect(wrapper.text()).toContain('国际 RSA')
+    // 类型行的 label 与算法行分离后，同一行不再并排出现「类型server🌐 国际」直拼
+    const typeRow = wrapper.findAll('.ssl-card-row').find((r) => r.text().startsWith('类型'))
+    expect(typeRow?.text()).not.toContain('国际 RSA')
+  })
+})

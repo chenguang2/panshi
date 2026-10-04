@@ -5,7 +5,7 @@
       description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">+ 添加连接</button>
+        <button class="btn btn-primary" @click="openCreateModal">+ 新建连接</button>
       </template>
     </PageHeader>
 
@@ -98,7 +98,7 @@
     <div class="modal-overlay" :style="{ display: connModal.open ? 'flex' : 'none' }">
       <div class="modal">
         <div class="modal-header">
-          <h2>{{ connModal.editing ? '编辑连接' : '添加连接' }}</h2>
+          <h2>{{ connModal.editing ? '编辑连接' : '新建连接' }}</h2>
           <button class="modal-close" @click="connModal.open = false">&times;</button>
         </div>
         <div class="modal-body">

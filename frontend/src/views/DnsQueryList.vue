@@ -27,6 +27,7 @@
     <div v-else-if="routes.length === 0" class="dq-empty">
       <div class="dq-empty-icon">&#9635;</div>
       <div class="dq-empty-text">暂无 DNS 查询路由</div>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 查询路由</button>
     </div>
     <div v-else class="dq-grid">
       <div v-for="r in sortedRoutes" :key="r.id" class="dq-card" :style="getCardBorderStyle(r.cluster_group_name)">

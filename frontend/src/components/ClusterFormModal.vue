@@ -72,7 +72,7 @@
           </select>
           <span class="form-hint">跨中心中继：挂接区域后，该集群节点经对应路局网关执行</span>
         </div>
-        <div class="form-group">
+        <div class="form-group" v-if="editingCluster">
           <label class="form-label">状态</label>
           <select class="form-input" v-model="form.status">
             <option value="1">正常</option>

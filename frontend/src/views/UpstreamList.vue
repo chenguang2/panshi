@@ -68,7 +68,9 @@
           </template>
 
           <template v-if="column.key === 'version'">
-            <span class="text-mono text-sm">v{{ record.current_version || '-' }}</span>
+            <span class="text-mono text-sm" :class="{ 'text-muted': !record.current_version }">{{
+              record.current_version ? 'v' + record.current_version : '未发布'
+            }}</span>
           </template>
 
           <template v-if="column.key === 'created_at'">

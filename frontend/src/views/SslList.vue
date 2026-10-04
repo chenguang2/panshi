@@ -102,45 +102,25 @@
             ><span
               >{{ cert.cert_type
               }}<span
-                v-if="cert.is_ca && cert.algorithm === 'sm2'"
-                class="badge algo-sm"
-                style="margin-left: 6px; font-size: 11px"
-                >CA 根证书 SM2</span
-              ><span
-                v-if="cert.is_ca && cert.algorithm === 'rsa'"
-                class="badge algo-international"
-                style="margin-left: 6px; font-size: 11px"
-                >CA 根证书 RSA</span
-              ><span
-                v-if="cert.is_ca && cert.algorithm === 'ecc'"
-                class="badge algo-international"
-                style="margin-left: 6px; font-size: 11px"
-                >CA 根证书 ECC</span
-              ><span
-                v-else-if="cert.algorithm === 'sm2' && cert.sign_cert"
-                class="badge algo-sm"
-                style="margin-left: 6px; font-size: 11px"
-                >🇨🇳 国密 SM2 双证书</span
-              ><span
-                v-else-if="cert.algorithm === 'sm2'"
-                class="badge algo-sm"
-                style="margin-left: 6px; font-size: 11px"
-                >🇨🇳 国密 SM2 单证书</span
-              ><span
-                v-else-if="cert.algorithm === 'rsa'"
-                class="badge algo-international"
-                style="margin-left: 6px; font-size: 11px"
-                >🌐 国际 RSA 2048</span
-              ><span
-                v-else-if="cert.algorithm === 'ecc'"
-                class="badge algo-international"
-                style="margin-left: 6px; font-size: 11px"
-                >🌐 国际 ECC P-256</span
-              ><span
                 v-if="cert.create_method === 'local_generate'"
                 class="badge badge-secondary"
                 style="margin-left: 4px; font-size: 11px"
                 >本地生成</span
+              ></span
+            >
+          </div>
+          <div class="ssl-card-row" v-if="cert.algorithm">
+            <label>算法</label
+            ><span
+              ><span v-if="cert.is_ca && cert.algorithm === 'sm2'" class="badge algo-sm">CA 根证书 SM2</span
+              ><span v-if="cert.is_ca && cert.algorithm === 'rsa'" class="badge algo-international">CA 根证书 RSA</span
+              ><span v-if="cert.is_ca && cert.algorithm === 'ecc'" class="badge algo-international">CA 根证书 ECC</span
+              ><span v-else-if="cert.algorithm === 'sm2' && cert.sign_cert" class="badge algo-sm"
+                >🇨🇳 国密 SM2 双证书</span
+              ><span v-else-if="cert.algorithm === 'sm2'" class="badge algo-sm">🇨🇳 国密 SM2 单证书</span
+              ><span v-else-if="cert.algorithm === 'rsa'" class="badge algo-international">🌐 国际 RSA 2048</span
+              ><span v-else-if="cert.algorithm === 'ecc'" class="badge algo-international"
+                >🌐 国际 ECC P-256</span
               ></span
             >
           </div>

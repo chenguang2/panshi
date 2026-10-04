@@ -93,7 +93,24 @@
           </template>
 
           <template v-if="column.key === 'methods'">
-            <span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span>
+            <a-tooltip
+              v-if="(record.methods || '').split(',').length > 3"
+              :title="(record.methods || '').split(',').join(' ')"
+            >
+              <span class="method-tags-wrap">
+                <span
+                  v-for="m in (record.methods || '').split(',').slice(0, 3)"
+                  :key="m"
+                  class="method-tag"
+                  :class="m"
+                  >{{ m }}</span
+                >
+                <span class="method-tag method-more">+{{ (record.methods || '').split(',').length - 3 }}</span>
+              </span>
+            </a-tooltip>
+            <template v-else>
+              <span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span>
+            </template>
           </template>
 
           <template v-if="column.key === 'upstream'">
@@ -518,6 +535,14 @@ onUnmounted(() => {
   margin-right: 2px;
   background: var(--bg);
   border: 1px solid var(--border);
+}
+.method-tags-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+.method-tag.method-more {
+  background: oklch(0% 0 0 / 6%);
+  color: var(--muted);
 }
 .method-tag.GET {
   border-color: oklch(55% 0.15 145 / 30%);

@@ -52,6 +52,9 @@
     </div>
     <div v-else class="ee-editor-area">
       <MonacoEditor v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
+      <div v-if="!editorContent && !readStreaming" class="ee-empty-hint">
+        选择集群与节点后点击「获取配置模板」读取当前配置，或直接在编辑器中输入内容
+      </div>
     </div>
 
     <!-- Read Template Progress Modal -->
@@ -718,6 +721,17 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 </script>
 
 <style scoped>
+.ee-editor-area {
+  position: relative;
+}
+.ee-empty-hint {
+  position: absolute;
+  top: 14px;
+  left: 64px;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
 .ee-toolbar {
   display: flex;
   align-items: center;

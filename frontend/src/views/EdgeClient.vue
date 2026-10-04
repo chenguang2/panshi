@@ -82,6 +82,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -135,6 +138,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -192,6 +198,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -244,6 +253,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -305,6 +317,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -342,6 +357,9 @@
             :pagination="false"
             :row-key="(_record: any, index: number) => index"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -379,6 +397,9 @@
             :pagination="false"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
                 <span class="text-muted">{{ index + 1 }}</span>
@@ -451,6 +472,9 @@
             size="small"
             rowKey="key"
           >
+            <template #emptyText>
+              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+            </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">{{ index + 1 }}</template>
               <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>

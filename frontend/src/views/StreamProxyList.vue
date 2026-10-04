@@ -100,7 +100,7 @@
           </div>
           <div class="sp-card-targets">
             <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag"
-              >{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span
+              >{{ t.target }}<span class="sp-target-wt">（{{ t.weight }}）</span></span
             >
             <span v-if="!p.targets || p.targets.length === 0" class="sp-no-targets">无目标</span>
           </div>
