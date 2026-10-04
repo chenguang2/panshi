@@ -33,75 +33,8 @@
           <span class="cl-group-count">(共{{ group.clusters.length }}个)</span>
         </div>
         <div v-show="expandedGroups[group.name]" class="cl-grid">
-          <div v-for="c in group.clusters" :key="c.id" class="cl-card">
-            <div class="cl-card-topbar">{{ c.group_name || '未分组' }}</div>
-            <div class="cl-card-header">
-              <div class="cl-card-info">
-                <div class="cl-card-name">{{ c.display_name || c.name }}</div>
-                <div v-if="c.description" class="cl-card-desc">{{ c.description }}</div>
-              </div>
-              <div class="cl-card-meta">
-                <span v-if="c.status === 1" class="badge badge-success"
-                  ><span class="status-dot online"></span>运行中</span
-                >
-                <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-                <span class="badge cl-route-badge" :class="routeBadge(c).cls">{{ routeBadge(c).label }}</span>
-              </div>
-            </div>
-            <div class="cl-card-stats">
-              <router-link
-                :to="{ path: '/nodes', query: { cluster_id: c.id } }"
-                class="cl-stat-cell cl-stat-link"
-                title="健康节点 / 节点总数"
-                ><div class="cl-stat-value">{{ c.healthy_node_count }}/{{ c.node_count }}</div>
-                <div class="cl-stat-label">节点</div></router-link
-              >
-              <router-link :to="{ path: '/upstreams', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.upstream_count }}</div>
-                <div class="cl-stat-label">上游</div></router-link
-              >
-              <router-link :to="{ path: '/routes', query: { cluster_id: c.id } }" class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.route_count }}</div>
-                <div class="cl-stat-label">路由</div></router-link
-              >
-              <router-link
-                :to="{ path: '/plugin-configs', query: { cluster_id: c.id } }"
-                class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.plugin_config_count }}</div>
-                <div class="cl-stat-label">插件组</div></router-link
-              >
-              <router-link
-                :to="{ path: '/global-rules', query: { cluster_id: c.id } }"
-                class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.global_rule_count }}</div>
-                <div class="cl-stat-label">全局规则</div></router-link
-              >
-              <router-link
-                :to="{ path: '/plugin-metadata', query: { cluster_id: c.id } }"
-                class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.plugin_metadata_count }}</div>
-                <div class="cl-stat-label">插件元数据</div></router-link
-              >
-              <router-link
-                :to="{ path: '/static-resources', query: { cluster_id: c.id } }"
-                class="cl-stat-cell cl-stat-link"
-                ><div class="cl-stat-value">{{ c.static_resource_count }}</div>
-                <div class="cl-stat-label">静态资源</div></router-link
-              >
-            </div>
-            <div v-if="c.nodes && c.nodes.length > 0" class="cl-card-nodes">
-              <span
-                v-for="n in c.nodes.length <= 3 ? c.nodes : c.nodes.slice(0, 3)"
-                :key="n.id"
-                class="cl-node-tag"
-                :class="n.status === 1 ? 'online' : 'offline'"
-              >
-                <span class="status-dot" :class="n.status === 1 ? 'online' : 'offline'"></span>
-                {{ n.ip }}:{{ n.service_port }}
-              </span>
-              <span v-if="c.nodes.length > 3" class="node-more">...还有 {{ c.nodes.length - 3 }} 个</span>
-            </div>
-            <div class="cl-card-actions">
+          <ClusterCard v-for="c in group.clusters" :key="c.id" :cluster="c" :route-badge="routeBadge(c)">
+            <template #actions>
               <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
@@ -109,8 +42,8 @@
                 删除
               </button>
               <span style="flex: 1"></span>
-            </div>
-          </div>
+            </template>
+          </ClusterCard>
         </div>
       </div>
     </div>
@@ -271,6 +204,7 @@ import { ref, computed, onMounted, watchEffect } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
+import ClusterCard from '@/components/ClusterCard.vue'
 import api from '@/api'
 import { listRelayGateways } from '@/api/relay'
 import { useAuthStore } from '@/stores/auth'
@@ -682,130 +616,8 @@ onMounted(() => {
   gap: 16px;
 }
 
-.cl-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.cl-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.cl-card-topbar {
-  padding: 4px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-}
-
-.cl-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  padding: 12px 20px 0;
-}
-.cl-card-info {
-  flex: 1;
-  min-width: 0;
-}
-.cl-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cl-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cl-card-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-.cl-route-badge {
-  white-space: nowrap;
-}
-
-.cl-card-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-  gap: 4px;
-  padding: 8px 16px;
-}
-.cl-stat-cell {
-  text-align: center;
-}
-.cl-stat-value {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1.3;
-}
-.cl-stat-link {
-  text-decoration: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  border-radius: var(--radius-md);
-  padding: 4px 2px;
-  transition: background 0.15s;
-  cursor: pointer;
-}
-.cl-stat-link:hover {
-  background: oklch(100% 0 0 / 6%);
-}
-.cl-stat-link:hover .cl-stat-value {
-  color: var(--accent);
-}
-.cl-stat-link:hover .cl-stat-label {
-  color: var(--accent);
-  text-decoration: underline;
-}
-.cl-stat-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  margin-top: 1px;
-}
-.cl-card-id {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-
-.cl-card-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: auto;
-  padding: 10px 20px 16px;
-  border-top: 1px solid var(--border);
-}
+/* 卡片解剖样式（卡片容器/头部/统计条/节点区等）已收敛至
+   components/ClusterCard.vue（档位 C 统一实现），本页仅保留页面专属规则。 */
 .cl-action-btn {
   background: none !important;
   background-color: transparent !important;
@@ -814,13 +626,7 @@ onMounted(() => {
   background: var(--bg) !important;
 }
 
-/* Node tags */
-.cl-card-nodes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 20px 8px;
-}
+/* Node tags（集群详情弹窗仍使用；卡片内渲染归 ClusterCard） */
 .cl-node-tag {
   display: inline-flex;
   align-items: center;
@@ -837,11 +643,6 @@ onMounted(() => {
 }
 .cl-node-tag.offline {
   border-color: oklch(55% 0.18 28 / 25%);
-}
-.node-more {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 2px 4px;
 }
 
 .test-nodes-select {

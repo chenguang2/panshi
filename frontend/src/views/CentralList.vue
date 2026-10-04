@@ -88,8 +88,13 @@
             </div>
             <div v-if="expandedGroups[group.name] !== false" class="group-body">
               <TransitionGroup name="grid" tag="div" class="cluster-grid">
-                <div v-for="cluster in group.clusters" :key="cluster.id" class="cl-card">
-                  <div class="cl-card-topbar">
+                <ClusterCard
+                  v-for="cluster in group.clusters"
+                  :key="cluster.id"
+                  :cluster="cluster"
+                  :route-badge="routeBadge(cluster)"
+                >
+                  <template #topbar>
                     <span>{{ cluster.group_name || '未分组' }}</span>
                     <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -133,70 +138,8 @@
                       </svg>
                       <span>最大化</span>
                     </div>
-                  </div>
-                  <div class="cl-card-header">
-                    <div class="cl-card-info" style="display: flex; align-items: center; gap: 8px">
-                      <span class="status-dot" :class="cluster.status === 1 ? 'online' : 'offline'"></span>
-                      <div>
-                        <div class="cl-card-name">{{ cluster.display_name || cluster.name }}</div>
-                        <div v-if="cluster.display_name" class="cl-card-desc">集群标识: {{ cluster.name }}</div>
-                      </div>
-                    </div>
-                    <div class="cl-card-meta">
-                      <span v-if="cluster.status === 1" class="badge badge-success"
-                        ><span class="status-dot online"></span>运行中</span
-                      >
-                      <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-                    </div>
-                  </div>
-                  <div class="cl-card-stats">
-                    <div
-                      class="cl-stat-cell cl-stat-link"
-                      title="健康节点 / 节点总数"
-                      @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"
-                    >
-                      <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
-                      <div class="cl-stat-label">节点</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')">
-                      <div class="cl-stat-value">{{ cluster.upstream_count }}</div>
-                      <div class="cl-stat-label">上游</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'routes')">
-                      <div class="cl-stat-value">{{ cluster.route_count }}</div>
-                      <div class="cl-stat-label">路由</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')">
-                      <div class="cl-stat-value">{{ cluster.plugin_config_count }}</div>
-                      <div class="cl-stat-label">插件组</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')">
-                      <div class="cl-stat-value">{{ cluster.global_rule_count }}</div>
-                      <div class="cl-stat-label">全局规则</div>
-                    </div>
-                    <div
-                      class="cl-stat-cell cl-stat-link"
-                      @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"
-                    >
-                      <div class="cl-stat-value">{{ cluster.static_resource_count }}</div>
-                      <div class="cl-stat-label">静态资源</div>
-                    </div>
-                  </div>
-                  <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
-                    <span
-                      v-for="n in cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3)"
-                      :key="n.id"
-                      class="cl-node-tag"
-                      :class="n.status === 1 ? 'online' : 'offline'"
-                    >
-                      <span class="node-ndot" :class="n.status === 1 ? 'green' : 'red'"></span>
-                      {{ n.ip }}:{{ n.service_port }}
-                    </span>
-                    <span v-if="cluster.nodes.length > 3" class="node-more"
-                      >...还有 {{ cluster.nodes.length - 3 }} 个</span
-                    >
-                  </div>
-                  <div class="cl-card-actions">
+                  </template>
+                  <template #actions>
                     <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
@@ -209,8 +152,8 @@
                     </button>
                     <span style="flex: 1"></span>
                     <span class="cl-card-id">#{{ cluster.id }}</span>
-                  </div>
-                </div>
+                  </template>
+                </ClusterCard>
               </TransitionGroup>
             </div>
           </div>
@@ -238,8 +181,13 @@
             </div>
             <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
               <TransitionGroup name="grid" tag="div" class="cluster-grid">
-                <div v-for="cluster in group.clusters" :key="cluster.id" class="cl-card">
-                  <div class="cl-card-topbar">
+                <ClusterCard
+                  v-for="cluster in group.clusters"
+                  :key="cluster.id"
+                  :cluster="cluster"
+                  :route-badge="routeBadge(cluster)"
+                >
+                  <template #topbar>
                     <span>{{ cluster.group_name || '未分组' }}</span>
                     <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
@@ -283,70 +231,8 @@
                       </svg>
                       <span>最大化</span>
                     </div>
-                  </div>
-                  <div class="cl-card-header">
-                    <div class="cl-card-info" style="display: flex; align-items: center; gap: 8px">
-                      <span class="status-dot" :class="cluster.status === 1 ? 'online' : 'offline'"></span>
-                      <div>
-                        <div class="cl-card-name">{{ cluster.display_name || cluster.name }}</div>
-                        <div v-if="cluster.display_name" class="cl-card-desc">集群标识: {{ cluster.name }}</div>
-                      </div>
-                    </div>
-                    <div class="cl-card-meta">
-                      <span v-if="cluster.status === 1" class="badge badge-success"
-                        ><span class="status-dot online"></span>运行中</span
-                      >
-                      <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-                    </div>
-                  </div>
-                  <div class="cl-card-stats">
-                    <div
-                      class="cl-stat-cell cl-stat-link"
-                      title="健康节点 / 节点总数"
-                      @click.stop="maximizeAndSwitchTab(cluster, 'nodes')"
-                    >
-                      <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
-                      <div class="cl-stat-label">节点</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'upstreams')">
-                      <div class="cl-stat-value">{{ cluster.upstream_count }}</div>
-                      <div class="cl-stat-label">上游</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'routes')">
-                      <div class="cl-stat-value">{{ cluster.route_count }}</div>
-                      <div class="cl-stat-label">路由</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'pluginConfigs')">
-                      <div class="cl-stat-value">{{ cluster.plugin_config_count }}</div>
-                      <div class="cl-stat-label">插件组</div>
-                    </div>
-                    <div class="cl-stat-cell cl-stat-link" @click.stop="maximizeAndSwitchTab(cluster, 'globalRules')">
-                      <div class="cl-stat-value">{{ cluster.global_rule_count }}</div>
-                      <div class="cl-stat-label">全局规则</div>
-                    </div>
-                    <div
-                      class="cl-stat-cell cl-stat-link"
-                      @click.stop="maximizeAndSwitchTab(cluster, 'staticResources')"
-                    >
-                      <div class="cl-stat-value">{{ cluster.static_resource_count }}</div>
-                      <div class="cl-stat-label">静态资源</div>
-                    </div>
-                  </div>
-                  <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
-                    <span
-                      v-for="n in cluster.nodes.length <= 3 ? cluster.nodes : cluster.nodes.slice(0, 3)"
-                      :key="n.id"
-                      class="cl-node-tag"
-                      :class="n.status === 1 ? 'online' : 'offline'"
-                    >
-                      <span class="node-ndot" :class="n.status === 1 ? 'green' : 'red'"></span>
-                      {{ n.ip }}:{{ n.service_port }}
-                    </span>
-                    <span v-if="cluster.nodes.length > 3" class="node-more"
-                      >...还有 {{ cluster.nodes.length - 3 }} 个</span
-                    >
-                  </div>
-                  <div class="cl-card-actions">
+                  </template>
+                  <template #actions>
                     <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
@@ -359,8 +245,8 @@
                     </button>
                     <span style="flex: 1"></span>
                     <span class="cl-card-id">#{{ cluster.id }}</span>
-                  </div>
-                </div>
+                  </template>
+                </ClusterCard>
               </TransitionGroup>
             </div>
           </div>
@@ -740,7 +626,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, h, nextTick } from 'vue'
+import { ref, reactive, computed, watch, watchEffect, onMounted, h, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
@@ -753,12 +639,15 @@ import {
 } from '@/composables/useClusterUtils'
 import { downloadBlob } from '@/utils/download'
 import api from '@/api'
+import { listRelayGateways } from '@/api/relay'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
+import ClusterCard from '@/components/ClusterCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
@@ -777,10 +666,49 @@ import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
 
 const authStore = useAuthStore()
+const featuresStore = useFeaturesStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const statusFilter = ref<string>('all')
+
+// ── 经中继 / 直连 徽章（与集群管理页同款计算：页面算好传给 ClusterCard）──
+// 中继总开关在 features.yaml 中是显式 opt-in（缺失即关闭），故直接读原始值，
+// 不使用 featuresStore.has()（那是「未列出即启用」的 opt-out 语义）。
+const relayFeatureOn = computed(() => featuresStore.features.relay_gateway === true)
+const regionNames = ref<Record<string, string>>({})
+/** 只有成功拉到区域列表才算「中继可用」；拉取失败（功能关闭常见 404/403）按未启用处理 */
+const relayUsable = ref(false)
+let relayFetchStarted = false
+
+watchEffect(() => {
+  if (!relayFeatureOn.value) {
+    relayUsable.value = false
+    return
+  }
+  if (relayFetchStarted) return
+  // 没有任何集群挂接区域时无需拉取区域名
+  if (!clusters.value.some((c) => !!c.region_code)) return
+  relayFetchStarted = true
+  Promise.resolve()
+    .then(() => listRelayGateways())
+    .then((res) => {
+      const map: Record<string, string> = {}
+      for (const g of res.data) map[g.code] = g.name
+      regionNames.value = map
+      relayUsable.value = true
+    })
+    .catch(() => {
+      relayUsable.value = false
+    })
+})
+
+/** 集群卡片右上角的路径徽章：经中继（品牌/成功色）或直连（中性色） */
+function routeBadge(c: Cluster): { label: string; cls: string } {
+  if (!relayUsable.value || !c.region_code) return { label: '直连', cls: 'badge-neutral' }
+  const name = regionNames.value[c.region_code] || c.region_code
+  return { label: `经中继 · ${name}`, cls: 'badge-success' }
+}
 
 // PublishConfirmModal state
 const publishModalVisible = ref(false)
@@ -842,12 +770,6 @@ function switchMaximizedCluster(clusterId: number) {
   const cluster = clusters.value.find((c) => c.id === clusterId)
   if (!cluster) return
   maximizeCluster(cluster)
-}
-
-function maximizeAndSwitchTab(cluster: Cluster, tab: string) {
-  cluster.activeTab = tab
-  maximizeCluster(cluster)
-  handleTabClick(cluster, tab)
 }
 
 function toggleExpand(clusterId: number) {
@@ -1632,102 +1554,9 @@ onMounted(async () => {
   z-index: 1;
 }
 
-/* ── Card style matching ClusterList ── */
-.cl-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.cl-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.cl-card-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 3px 12px 3px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-}
-
-.cl-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  padding: 12px 20px 0;
-}
-.cl-card-info {
-  flex: 1;
-  min-width: 0;
-}
-.cl-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cl-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.5;
-}
-.cl-card-meta {
-  text-align: right;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-
-.cl-card-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-  background: oklch(50% 0 0 / 4%);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  flex-shrink: 0;
-  margin: 4px 16px;
-}
-.cl-stat-cell {
-  text-align: center;
-  cursor: pointer;
-  padding: 5px 12px;
-  transition: all 0.15s;
-  flex: 1;
-}
-.cl-stat-cell + .cl-stat-cell {
-  border-left: 1px solid var(--border);
-}
-.cl-stat-cell:hover {
-  background: oklch(100% 0 0 / 6%);
-}
-.cl-stat-value {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1.3;
-}
-.cl-stat-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  margin-top: 2px;
-}
-
+/* ── 卡片解剖样式（卡片容器/头部/统计条/节点区等）已收敛至
+   components/ClusterCard.vue（档位 C 统一实现），本页仅保留页面专属规则 ── */
+/* .cl-card-actions：展开区名称行（expanded-name-row）复用该布局类 */
 .cl-card-actions {
   display: flex;
   gap: 6px;
@@ -1737,52 +1566,11 @@ onMounted(async () => {
   padding: 10px 20px 16px;
   border-top: 1px solid var(--border);
 }
+/* .cl-card-id：actions slot 内容（编译于本页作用域） */
 .cl-card-id {
   font-size: 11px;
   color: var(--muted);
   font-family: var(--font-mono);
-}
-
-.cl-card-nodes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 20px 8px;
-}
-.cl-node-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
-}
-.cl-node-tag.online {
-  border-color: oklch(55% 0.15 145 / 25%);
-}
-.cl-node-tag.offline {
-  border-color: oklch(55% 0.18 28 / 25%);
-}
-.node-ndot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.node-ndot.green {
-  background: var(--success);
-}
-.node-ndot.red {
-  background: var(--danger);
-}
-.node-more {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 2px 4px;
 }
 
 /* Expanded area action buttons */
