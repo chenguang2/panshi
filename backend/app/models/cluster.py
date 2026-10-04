@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, Column, UniqueConstraint
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, ForeignKey, Column, UniqueConstraint, Index
 from datetime import datetime
 import uuid
 from app.core.database import Base
@@ -127,6 +127,11 @@ class Node(Base):
 
 class ConfigVersion(Base):
     __tablename__ = "ps_config_version"
+    # M28：(cluster_id, resource_type, resource_id) 复合索引——全库增长最快的表，
+    # 所有集群域列表页按它 GROUP BY 取最新发布时间，无索引随增长退化为顺序扫描。
+    __table_args__ = (
+        Index("idx_config_version_resource", "cluster_id", "resource_type", "resource_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     cluster_id = Column(Integer, ForeignKey("ps_cluster.id", ondelete="CASCADE"), nullable=False)

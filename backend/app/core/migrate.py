@@ -279,6 +279,10 @@ def run_migrations(engine: Engine) -> None:
     # Ensure index on ps_cluster(group_name) for JOIN performance
     _ensure_index(engine, "ps_cluster", "idx_cluster_group_name", ["group_name"])
 
+    # M28: config_version composite index — every cluster-domain list page GROUP BYs
+    # this fastest-growing table for latest publish time
+    _ensure_index(engine, "ps_config_version", "idx_config_version_resource", ["cluster_id", "resource_type", "resource_id"])
+
     # Unique (task_id, node_id) on install_task_node (dedup first)
     _ensure_unique_index(engine, "install_task_node", "uq_install_task_node_task_node", ["task_id", "node_id"])
 

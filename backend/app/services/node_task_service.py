@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node_task import NodeTask, NodeTaskItem
 from app.services import task_log_store
+from app.services.ansible_service import _ansible_false_success_error  # noqa: F401 — P2① 守卫已下沉至 run_playbook 出口，此名保留供本模块与既有测试引用
 from app.config.script_upload import TASK_SCRIPTS_DIR
 
 logger = logging.getLogger(__name__)
@@ -895,26 +896,6 @@ def _cmd_exec_result_from_playbook(result: dict) -> dict:
     if parsed["status"] == "ok":
         return {"rc": 0, "status": "successful", "stdout": parsed["stdout"], "command": command}
     return {"rc": -1, "status": "failed", "stdout": parsed["stdout"], "stderr": parsed["error"], "command": command}
-
-
-def _ansible_false_success_error(result: dict, ip: str) -> str | None:
-    """ansible rc==0 但 playbook 实际未执行目标主机时，返回友好错误信息。
-
-    修复 Bug 3（任务 6 排查）：节点 IP 不在 ansible inventory 时 playbook 输出
-    "Could not match supplied host pattern / skipping: no hosts matched"，
-    ansible-playbook 仍以 rc=0 退出——旧逻辑会误报 success。本函数在 rc==0
-    时扫描输出标记，命中即返回对应错误文案（镜像 cluster_edge_env.py 的防护）。
-    """
-    raw = "\n".join(
-        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
-    ).lower()
-    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
-        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
-    if "unreachable!" in raw or '"unreachable": true' in raw:
-        return f"节点 {ip} 无法连接，请检查网络和 SSH 配置"
-    if "permission denied" in raw:
-        return f"节点 {ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
-    return None
 
 
 def parse_cmd_exec_output(raw: str, rc: int = 0) -> dict:

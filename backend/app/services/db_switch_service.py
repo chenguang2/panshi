@@ -8,7 +8,9 @@ Design (see openspec/changes/support-postgres-database/design.md D2/D5, G5/G6/G9
 - G9: config corruption / failed active connection rolls back to .bak at startup.
 """
 
+import asyncio
 import os
+from pathlib import Path
 from typing import Optional
 
 from fastapi import HTTPException, status
@@ -19,7 +21,8 @@ from app.core import db_config
 from app.core.database import build_sync_engine_for
 from app.models.node_task import NodeTask
 
-RESTART_FLAG_PATH = "./data/.restart.flag"
+# T4：__file__ 锚定 backend 根（services → parents[2]），CWD 无关（建议 32）
+RESTART_FLAG_PATH = str(Path(__file__).resolve().parents[2] / "data" / ".restart.flag")
 INTERRUPTED_STATUS = "interrupted"
 
 
@@ -62,7 +65,7 @@ async def perform_switch(target_conn_id: str, db: AsyncSession) -> dict:
             f"有任务正在运行（{task_list}），请等待完成或取消后再切换",
         )
 
-    _verify_reachable(target)
+    await asyncio.to_thread(_verify_reachable, target)
 
     # Persist switch state (G9: keep .bak for rollback)
     db_config.backup_current_config()

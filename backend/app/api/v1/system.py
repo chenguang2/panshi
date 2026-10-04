@@ -23,6 +23,15 @@ router = APIRouter(prefix="/system", tags=["system"])
 
 # 导出任务登记（内存态；文件落 data/exports/，进程重启后失效）
 _export_tasks: dict[str, dict] = {}
+_EXPORT_TASKS_KEEP = 100  # P2-⑤：只增不减的内存驻留收口（5 万行 CSV 也曾常驻进程）
+
+
+def _remember_export_task(task_id: str, entry: dict) -> None:
+    """登记导出任务并按容量截断（保留最新 KEEP 条，淘汰最旧）。"""
+    _export_tasks[task_id] = entry
+    while len(_export_tasks) > _EXPORT_TASKS_KEEP:
+        oldest = next(iter(_export_tasks))
+        _export_tasks.pop(oldest)
 
 # 审计归档留存目录（backend/data/archives/，运行时数据不入库）
 _ARCHIVE_DIR = os.path.join(
@@ -239,7 +248,7 @@ async def operations_export(
 
     task_id = uuid.uuid4().hex
     content: str | bytes = _audit_csv(rows) if fmt == "csv" else _audit_xlsx(rows)
-    _export_tasks[task_id] = {"status": "ready", "format": fmt, "content": content}
+    _remember_export_task(task_id, {"status": "ready", "format": fmt, "content": content})
     return {"task_id": task_id, "status": "ready", "rows": len(rows)}
 
 
@@ -293,7 +302,7 @@ async def archive_operations(
         f.write(content)
 
     task_id = uuid.uuid4().hex
-    _export_tasks[task_id] = {"status": "ready", "format": "csv", "content": content}
+    _remember_export_task(task_id, {"status": "ready", "format": "csv", "content": content})
 
     detail = (
         f"归档清理 {len(rows)} 条审计记录（{oldest.isoformat()} ~ {newest.isoformat()}），"

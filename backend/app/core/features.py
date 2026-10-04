@@ -52,7 +52,8 @@ KNOWN_CONCURRENCY_KEYS: frozenset[str] = frozenset({
 _features: dict | None = None
 _features_mtime: float = 0.0
 
-_FEATURES_PATH = Path("features.yaml")
+# T4/M6：锚定 backend 根，与进程 CWD 无关（features.yaml 位于 backend/ 下）
+_FEATURES_PATH = Path(__file__).resolve().parents[2] / "features.yaml"
 
 
 # ── Public helpers ─────────────────────────────────────────────────────

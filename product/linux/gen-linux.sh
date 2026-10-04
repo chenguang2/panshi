@@ -224,6 +224,17 @@ else
     echo "警告: 未找到 $PROJECT_ROOT/backend/db_config.json，跳过（目标机首次启动将生成默认配置）"
 fi
 
+# 拷贝 .jwt_secret（JWT 签名 + Fernet 加密双角色密钥；db_config.json 已随包时
+# 缺它目标机将重新生成密钥 → 包内已加密的数据库连接密码全部不可解，建议 34）
+if [ -f "$PROJECT_ROOT/backend/data/.jwt_secret" ]; then
+    echo "拷贝 .jwt_secret..."
+    cp "$PROJECT_ROOT/backend/data/.jwt_secret" "$TARGET_DIR/backend/data/"
+    chmod 600 "$TARGET_DIR/backend/data/.jwt_secret"
+    echo "  .jwt_secret 已拷贝到: $TARGET_DIR/backend/data/"
+else
+    echo "警告: 未找到 backend/data/.jwt_secret（开发态自动生成物），跳过"
+fi
+
 # 创建 data/.gitkeep（空目录占位）
 touch "$TARGET_DIR/backend/data/.gitkeep"
 

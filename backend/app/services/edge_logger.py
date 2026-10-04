@@ -2,11 +2,20 @@ import json
 import os
 import base64
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+
+# T4：日志根锚定 backend（建议 18），与进程 CWD 无关
+_BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_log_path(p: str) -> str:
+    """相对日志路径锚定 backend 根；绝对路径原样返回。"""
+    return p if os.path.isabs(p) else str(_BACKEND_ROOT / p)
 
 
 class EdgeLogger:
-    LOG_DIR = "logs/edge"
+    LOG_DIR = str(_BACKEND_ROOT / "logs" / "edge")
 
     RESOURCE_LOG_CONFIG: dict[str, dict[str, Any]] = {
         "upstream": {"file": "logs/edge/upstream.log", "label": "Upstream:{name} (ID:{id})"},
@@ -68,7 +77,7 @@ class EdgeLogger:
         sm4_key = os_module.getenv('EDGE_SM4_KEY', 'a16bc20453da220f').encode()
         # Allow instance-level attribute override (used in tests)
         attr_name = f"{resource_type.upper()}_LOG_FILE"
-        log_file = (
+        log_file = _resolve_log_path(
             getattr(self, attr_name, None)
             or getattr(self, "LOG_FILE", None)
             or self.RESOURCE_LOG_CONFIG.get(resource_type, {}).get("file", "logs/edge/upstream.log")

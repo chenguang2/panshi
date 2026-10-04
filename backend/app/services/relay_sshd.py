@@ -31,10 +31,43 @@ _CRED_LOCK = threading.Lock()
 _CRED_BACKUP: dict[str, list[dict[str, str | None]]] = {}
 
 
-def _scalar_line(indent: int, key: str, value: str) -> str:
-    """生成一行 ``key: <yaml 标量>``（借助 yaml 处理含特殊字符的密码）。"""
+def _scalar_line(indent: int, key: str, value: str, tag: bool = False) -> str:
+    """生成一行 ``key: <yaml 标量>``（借助 yaml 处理含特殊字符的密码）。
+
+    tag=True 时行尾追加 ``# panshi-injected`` 标记（P2⑥：崩溃后启动清扫的依据）。
+    """
     rendered = yaml.safe_dump({key: value}, allow_unicode=True, default_flow_style=False)
-    return " " * indent + rendered.strip() + "\n"
+    line = " " * indent + rendered.strip()
+    if tag:
+        line += "  # panshi-injected"
+    return line + "\n"
+
+
+def sweep_injected_creds() -> int:
+    """启动清扫：移除崩溃残留的打标凭据行（P2⑥）。
+
+    relay_sshd 注入的 root 凭据正常由流 finally 还原；进程崩溃时内存
+    ``_CRED_BACKUP`` 丢失，``# panshi-injected`` 打标行成为唯一线索。
+    清扫移除打标行并收权文件；被替换的原生行原值不可恢复（备份在内存），
+    删除后回退清单默认身份，日志提示运维复核。返回移除行数。
+    """
+    try:
+        with open(relay_push._GATEWAYS_INVENTORY) as f:
+            lines = f.readlines()
+    except (FileNotFoundError, OSError):
+        return 0
+    kept = [ln for ln in lines if "panshi-injected" not in ln]
+    removed = len(lines) - len(kept)
+    if removed:
+        with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
+            f.writelines(kept)
+        relay_push.ensure_gateways_perms()
+        logger.warning(
+            "relay sshd: 清扫 %d 行崩溃残留的临时凭据（原行值不可恢复，请复核网关清单 %s）",
+            removed,
+            relay_push._GATEWAYS_INVENTORY,
+        )
+    return removed
 
 
 def _gateway_hosts(hosts_pattern: str) -> list[str]:
@@ -96,11 +129,11 @@ def inject_gateway_creds(ip: str, user: str, password: str) -> bool:
                 )
                 if idx is None:
                     backup[key] = None
-                    lines.insert(end, _scalar_line(indent, key, value))
+                    lines.insert(end, _scalar_line(indent, key, value, tag=True))
                     end += 1
                 else:
                     backup[key] = lines[idx]
-                    lines[idx] = _scalar_line(indent, key, value)
+                    lines[idx] = _scalar_line(indent, key, value, tag=True)
         _CRED_BACKUP[ip] = backups
         with open(relay_push._GATEWAYS_INVENTORY, "w") as f:
             f.writelines(lines)

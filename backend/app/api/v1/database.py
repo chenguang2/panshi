@@ -477,7 +477,8 @@ async def migrate_database_stream(
         try:
             # Auto-backup before clear migration
             if body.confirmed_clear:
-                backup_dir = Path("./data/backups")
+                # T4：__file__ 锚定（与 _archive_output_path 同款），CWD 无关（建议 33）
+                backup_dir = Path(__file__).resolve().parents[3] / "data" / "backups"
                 backup_dir.mkdir(parents=True, exist_ok=True)
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 backup_path = str(backup_dir / f"migration_{body.source_id}_to_{body.target_id}_{ts}.zip")

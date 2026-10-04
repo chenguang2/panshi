@@ -229,8 +229,7 @@ class EdgeClient:
             "X-API-KEY": self.api_key,
             "Content-Type": "application/json"
         }
-        if self.relay_target:
-            headers["X-Edge-Target"] = self.relay_target
+        headers = self._relay_aware_headers(headers)
 
         url = f"{self.edge_url}{path}"
 
@@ -257,8 +256,7 @@ class EdgeClient:
 
         # 网关白名单拦截（网关对白名单外目标 return 403，body 非 Edge JSON 错误结构）：
         # 映射为可定位提示，避免运维把"忘下发配置"当 Edge 故障排障（G11）。
-        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
-            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
+        self._check_relay_whitelist_403(response)
 
         if response.status_code not in (200, 201, 204):
             try:
@@ -300,6 +298,17 @@ class EdgeClient:
             return False
         return isinstance(data, dict) and "error_msg" in data
 
+    def _relay_aware_headers(self, headers: dict[str, str]) -> dict[str, str]:
+        """经中继网关时统一补目标头（P2① 唯一赋值点；M9 教训：raw_delete 曾漏带）。"""
+        if self.relay_target:
+            headers["X-Edge-Target"] = self.relay_target
+        return headers
+
+    def _check_relay_whitelist_403(self, response) -> None:
+        """403 且非 Edge 自身报错 → 统一转译白名单提示（P2① 文案唯一出处）。"""
+        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
+            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
+
     def raw_put(
         self,
         path: str,
@@ -323,8 +332,7 @@ class EdgeClient:
             "X-API-KEY": self.api_key,
             "Content-Type": "application/octet-stream",
         }
-        if self.relay_target:
-            headers["X-Edge-Target"] = self.relay_target
+        headers = self._relay_aware_headers(headers)
 
         url = f"{self.edge_url}{path}"
 
@@ -335,8 +343,7 @@ class EdgeClient:
         except httpx.ConnectError as e:
             raise EdgeConnectionError(self._conn_error_msg(f"Failed to connect to {url}: {e}")) from e
 
-        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
-            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
+        self._check_relay_whitelist_403(response)
 
         if response.status_code not in (200, 201, 204):
             try:
@@ -682,8 +689,7 @@ class EdgeClient:
         }
         # 经中继网关时必须携带目标头（与 raw_put 对齐），否则删除请求打到
         # 网关默认 vhost 而 404（code-review-2026-10-04 M9）。
-        if self.relay_target:
-            headers["X-Edge-Target"] = self.relay_target
+        headers = self._relay_aware_headers(headers)
 
         url = f"{self.edge_url}{path}"
 
@@ -694,8 +700,7 @@ class EdgeClient:
         except httpx.ConnectError as e:
             raise EdgeConnectionError(f"Failed to connect to {url}: {e}") from e
 
-        if response.status_code == 403 and self.relay_target and not self._looks_like_edge_error(response.text):
-            raise EdgeAPIError(403, "目标不在该局网关白名单，请执行配置下发")
+        self._check_relay_whitelist_403(response)
 
         if response.status_code not in (200, 201, 204):
             try:

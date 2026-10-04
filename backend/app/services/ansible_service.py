@@ -262,6 +262,28 @@ def _prune_artifacts_safe() -> None:
         logger.debug("ansible artifacts 清理失败", exc_info=True)
 
 
+def _ansible_false_success_error(result: dict, ip: str) -> str | None:
+    """ansible rc==0 但 playbook 实际未执行目标主机时，返回友好错误信息。
+
+    #21②：节点 IP 不在 ansible inventory 时 playbook 输出
+    "Could not match supplied host pattern / skipping: no hosts matched"，
+    ansible-playbook 仍以 rc=0 退出——rc=0 ≠ 执行成功。本函数在 rc==0 时扫描
+    输出标记，命中即返回对应错误文案。
+    P2①：自 node_task_service 下沉至此——由 run_playbook 唯一出口统一调用，
+    新调用方自动免疫（调用侧逐点补守卫会漏，S4/M24 两次实证）。
+    """
+    raw = "\n".join(
+        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
+    ).lower()
+    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
+        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    if "unreachable!" in raw or '"unreachable": true' in raw:
+        return f"节点 {ip} 无法连接，请检查网络和 SSH 配置"
+    if "permission denied" in raw:
+        return f"节点 {ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
+    return None
+
+
 async def _run_subprocess(cmd: list[str], env_extra: dict[str, str] | None = None) -> tuple[int, str, str]:
     """Run a subprocess, return (rc, stdout, stderr).
 
@@ -1149,6 +1171,18 @@ class AnsibleRunnerService:
             # slurp module: content is base64-encoded in res.content
             if res.get("content"):
                 slurp_content = res["content"]
+
+        # P2①（#21② 根治版）：假成功守卫下沉到唯一出口——rc=0 但输出含
+        # 「no hosts matched / unreachable / permission denied」标记时按失败归档。
+        # 此前守卫散在各调用侧，新调用方（S4 批量腿、M24 cluster_nodes）会绕过。
+        if rc == 0:
+            fs_err = _ansible_false_success_error(
+                {"stdout": stdout, "stderr": stderr}, ip or "<全部主机>"
+            )
+            if fs_err:
+                rc = -1
+                status = "failed"
+                stderr = f"{stderr}\n{fs_err}".strip()
 
         return {
             "rc": rc,

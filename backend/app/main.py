@@ -58,6 +58,12 @@ async def lifespan(app: FastAPI):
         await seed_data(session)
     from app.services.node_task_service import recover_interrupted_tasks
     await recover_interrupted_tasks()
+    # P2⑥：清扫崩溃残留的网关 root 凭据（relay_sshd 注入打标行）
+    try:
+        from app.services import relay_sshd
+        relay_sshd.sweep_injected_creds()
+    except Exception:
+        pass
     # 存量单行备份配置 → 「默认位置」一次性迁移（幂等，设计 D7；
     # GET /db-backup/config 首读另有兜底，双保险）
     from app.services import db_backup_service
