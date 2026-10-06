@@ -38,12 +38,12 @@
         <option :value="1">启用</option>
         <option :value="0">禁用</option>
       </select>
-      <span class="text-muted text-sm">共 {{ filteredUsers.length }} 个用户</span>
+      <span class="text-muted text-sm">共 {{ totalCount }} 个用户</span>
     </div>
 
     <div class="table-container">
       <a-table
-        :data-source="pagedUsers"
+        :data-source="users"
         :columns="columns"
         :row-key="(record: User) => record.id"
         :pagination="paginationProps"
@@ -346,9 +346,11 @@ import {
   updateUserClusters,
   updateUserPassword,
   deleteUser as deleteUserApi,
+  type ListUsersParams,
 } from '@/api/users'
 import { listClusters } from '@/api/clusters'
 import type { User } from '@/types'
+import { PAGE_SIZE_TABLE } from '@/constants'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
 import PageHeader from '@/components/PageHeader.vue'
@@ -364,42 +366,20 @@ interface UserWithExt extends User {
   cluster_ids?: number[]
 }
 
-const allUsers = ref<UserWithExt[]>([])
+const users = ref<UserWithExt[]>([])
 const loading = ref(false)
 const searchText = ref('')
 const roleFilter = ref('')
 const statusFilter = ref<number | string>('')
 
-// Pagination — <a-table> 自己管理 page/pageSize，我们只需维护 total
+// 分页 — 真后端分页（对齐 UpstreamList 范式）：page/pageSize 回写 + total 来自后端
 const currentPage = ref(1)
-const pageSize = ref(10)
-
-const filteredUsers = computed(() => {
-  let list = allUsers.value
-  if (searchText.value) {
-    const q = searchText.value.toLowerCase()
-    list = list.filter((u) => u.username.toLowerCase().includes(q))
-  }
-  if (roleFilter.value) {
-    list = list.filter((u) => u.role === roleFilter.value)
-  }
-  if (statusFilter.value !== '') {
-    list = list.filter((u) => u.status === statusFilter.value)
-  }
-  return list
-})
-
-const pagedUsers = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredUsers.value.slice(start, start + pageSize.value)
-})
+const pageSize = ref(PAGE_SIZE_TABLE)
+const totalCount = ref(0)
 
 // a-table 分页配置（统一走 usePagination 工厂）
 const paginationProps = computed<TablePaginationConfig>(() =>
-  buildTablePagination(
-    { page: currentPage.value, pageSize: pageSize.value, total: filteredUsers.value.length },
-    '个用户',
-  ),
+  buildTablePagination({ page: currentPage.value, pageSize: pageSize.value, total: totalCount.value }, '个用户'),
 )
 
 // 表格列定义
@@ -437,10 +417,12 @@ const columns = computed(() => {
 function handleTableChange(pagination: TablePaginationConfig) {
   currentPage.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
+  loadUsers()
 }
 
 function onFilterChange() {
   currentPage.value = 1
+  loadUsers()
 }
 
 // ── Columns 辅助数据 ──────────────────────────────────────────────────────
@@ -850,15 +832,30 @@ async function handleResetPassword() {
 // ── Utils ─────────────────────────────────────────────────────────────────
 
 // ── Load ──────────────────────────────────────────────────────────────────
+// 组装后端查询参数：空值不传（后端按缺省处理）
+function buildListParams(): ListUsersParams {
+  const params: ListUsersParams = { page: currentPage.value, page_size: pageSize.value }
+  if (searchText.value) params.keyword = searchText.value
+  if (roleFilter.value) params.role = roleFilter.value
+  if (statusFilter.value !== '') params.status = Number(statusFilter.value)
+  return params
+}
+
 async function loadUsers() {
   loading.value = true
   try {
     const [userRes, clusterRes] = await Promise.all([
-      isAdmin.value ? listUsers() : getMyProfile(),
+      isAdmin.value ? listUsers(buildListParams()) : getMyProfile(),
       listClusters().catch(() => ({ data: { items: [] } })),
     ])
     const userData = userRes.data
-    allUsers.value = 'items' in userData ? userData.items || [] : [userData]
+    if ('items' in userData) {
+      users.value = userData.items || []
+      totalCount.value = userData.total || 0
+    } else {
+      users.value = [userData]
+      totalCount.value = 1
+    }
     clusters.value = clusterRes.data.items || []
   } catch {
     message.error('加载用户列表失败')

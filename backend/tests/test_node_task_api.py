@@ -147,6 +147,16 @@ class TestNodeTaskApi:
         resp = client.get("/api/v1/clusters/1/node-tasks")
         assert resp.status_code == 200
 
+    def test_list_tasks_accepts_max_page_size(self, client):
+        """GET /node-tasks?page_size=500 应被接受（上限 MAX_PAGE_SIZE，le=100 时代会 422）。"""
+        resp = client.get("/api/v1/node-tasks", params={"page": 1, "page_size": 500})
+        assert resp.status_code == 200, resp.text
+
+    def test_cluster_tasks_accepts_max_page_size(self, client):
+        """GET /clusters/1/node-tasks?page_size=500 应被接受（上限 MAX_PAGE_SIZE）。"""
+        resp = client.get("/api/v1/clusters/1/node-tasks", params={"page": 1, "page_size": 500})
+        assert resp.status_code == 200, resp.text
+
     def test_task_detail_not_found(self, client):
         """GET /node-tasks/999999 should return 404."""
         resp = client.get("/api/v1/node-tasks/999999")

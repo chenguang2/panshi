@@ -459,16 +459,10 @@
         <div class="table-container">
           <a-table
             :columns="sslColumns"
-            :data-source="
-              sslSearch
-                ? sslList.filter(
-                    (s) =>
-                      (s.value?.id || '').includes(sslSearch) || (s.value?.snis || []).join(' ').includes(sslSearch),
-                  )
-                : sslList
-            "
+            :data-source="sslDisplay"
             :loading="loading"
-            :pagination="{ pageSize: 20 }"
+            :pagination="sslPagination"
+            @change="handleSslTableChange"
             size="small"
             rowKey="key"
           >
@@ -976,7 +970,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TablePaginationConfig } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { paginationProps } from '@/composables/usePagination'
+import { PAGE_SIZE_TABLE } from '@/constants'
 import {
   ReloadOutlined,
   PlusOutlined,
@@ -1069,6 +1066,34 @@ const pluginMetadataSearch = ref('')
 const streamRouteSearch = ref('')
 const sslList = ref<any[]>([])
 const sslSearch = ref('')
+// SSL 证书表分页（客户端全量数组本地切片，参照 UserList 的 page/pageSize refs + change 写回模式；
+// 分页配置统一走 paginationProps 工厂，默认每页 PAGE_SIZE_TABLE）
+const sslPage = ref(1)
+const sslPageSize = ref(PAGE_SIZE_TABLE)
+const sslFiltered = computed(() =>
+  sslSearch.value
+    ? sslList.value.filter(
+        (s) =>
+          (s.value?.id || '').includes(sslSearch.value) || (s.value?.snis || []).join(' ').includes(sslSearch.value),
+      )
+    : sslList.value,
+)
+const sslDisplay = computed(() =>
+  sslFiltered.value.slice((sslPage.value - 1) * sslPageSize.value, sslPage.value * sslPageSize.value),
+)
+const sslPagination = computed(() =>
+  paginationProps({ page: sslPage.value, pageSize: sslPageSize.value, total: sslFiltered.value.length }, '张证书'),
+)
+
+function handleSslTableChange(pagination: TablePaginationConfig): void {
+  sslPage.value = pagination.current || 1
+  if (pagination.pageSize) sslPageSize.value = pagination.pageSize
+}
+
+// 搜索条件变化后回到第 1 页（避免命中结果落在前几页时停在超出范围的页码）
+watch(sslSearch, () => {
+  sslPage.value = 1
+})
 
 const upstreamModalVisible = ref(false)
 const upstreamModalMode = ref<'create' | 'edit'>('create')

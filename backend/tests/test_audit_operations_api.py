@@ -78,6 +78,29 @@ async def test_operations_filters_and_pagination(async_authed_client, isolated_s
 
 
 @pytest.mark.asyncio
+async def test_operations_accepts_max_page_size(async_authed_client, isolated_session, monkeypatch):
+    """page_size=500 被接受且响应回显 500（手动 clamp 200 时代会缩水到 200）。"""
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations", params={"page": 1, "page_size": 500})
+    assert r.status_code == 200, r.text
+    assert r.json()["page_size"] == 500  # 不缩水
+
+
+@pytest.mark.asyncio
+async def test_operations_rejects_page_size_over_max(async_authed_client, isolated_session, monkeypatch):
+    """page_size=501 → 422（手动 clamp 时代无校验，返回 200）。"""
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations", params={"page": 1, "page_size": 501})
+    assert r.status_code == 422, r.text
+
+
+@pytest.mark.asyncio
 async def test_operations_meta(async_authed_client, isolated_session, monkeypatch):
     await _seed_default(isolated_session)
     _patch_features(monkeypatch)

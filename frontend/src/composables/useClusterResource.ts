@@ -60,37 +60,26 @@ function setState(c: Cluster, key: string, value: unknown): void {
   ;(c as unknown as Record<string, unknown>)[key] = value
 }
 
-/**
- * 集群子资源的通用 CRUD 骨架：加载(搜索/排序/分页)、选择、删除(单条/批量)、发布、版本管理。
- *
- * 各资源 composable 保留表单模型、校验、编辑/复制表单填充等真实差异，
- * 删除/发布/版本十件套由 useClusterResourceCore 共享实现（Phase 4 合并）。
- * 导出函数名在各资源内保持原名，视图层零改动。
- */
-export function useClusterResource<T extends { id: number; name: string; edge_uuid?: string }>(
-  config: ClusterResourceConfig<T>,
-  deps: ClusterResourceDeps,
-) {
-  const { noun, endpoint, versionType, keys } = config
+interface ClusterListCoreConfig {
+  /** 资源中文名，如 '路由' / '节点'（用于加载失败与未选择提示） */
+  noun: string
+  /** API 端点段，如 'routes' / 'nodes' */
+  endpoint: string
+  /** Cluster 上的状态键名 */
+  keys: ResourceStateKeys
+  /** 表格排序字段映射（列 key → 后端 sort_by） */
+  sortFieldMap?: Record<string, string>
+}
 
-  const core = useClusterResourceCore(
-    {
-      noun,
-      endpoint,
-      versionType,
-      getSelected: (c) => getState<T>(c, keys.selected) ?? null,
-      setSelected: (c, item) => setState(c, keys.selected, item),
-      getSelectedKeys: (c) => getState<number[]>(c, keys.selectedKeys) || [],
-      setSelectedKeys: (c, k) => setState(c, keys.selectedKeys, k),
-      refresh: (c) => load(c),
-      batchResourceKey: config.batchResourceKey,
-      batchItems: (c) => getState<T[]>(c, keys.items) || [],
-      deleteGuard: config.deleteGuard,
-      deleteGuardLevel: config.deleteGuardLevel,
-      batchFilter: config.batchFilter,
-    },
-    deps,
-  )
+/**
+ * 集群子表分页列表的共享胶水：加载(搜索/排序/分页/同参去重)、表格翻页排序、单选/多选。
+ *
+ * useClusterResource（上游/路由等分页资源）与 useClusterNodes（节点子表）共用，
+ * 仅以 noun/endpoint/keys/sortFieldMap 参数化；lastQuery 去重与「翻页保勾选、
+ * 搜索/排序变化清勾选」语义在此单点实现。参数形状取自 ant table @change 事件。
+ */
+export function useClusterListCore<T>(config: ClusterListCoreConfig) {
+  const { noun, endpoint, keys } = config
 
   // 同一查询条件去重（搜索/排序变化时清空勾选）
   const lastQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
@@ -145,19 +134,15 @@ export function useClusterResource<T extends { id: number; name: string; edge_uu
     }
   }
 
-  function handleTableChange(
-    cluster: Cluster,
-    pag: { current: number; pageSize: number },
-    sorter: { field?: string; order?: string },
-  ) {
+  function handleTableChange(cluster: Cluster, pag: Record<string, unknown>, sorter: Record<string, unknown> | null) {
     const pagination = getState<{ page: number; pageSize: number }>(cluster, keys.pagination)
     if (pagination) {
-      pagination.page = pag.current
-      pagination.pageSize = pag.pageSize
+      pagination.page = pag.current as number
+      pagination.pageSize = pag.pageSize as number
     }
     if (sorter && sorter.field) {
       const fieldMap = config.sortFieldMap || {}
-      setState(cluster, keys.sortBy, fieldMap[sorter.field] || sorter.field)
+      setState(cluster, keys.sortBy, fieldMap[sorter.field as string] || (sorter.field as string))
       setState(cluster, keys.sortOrder, sorter.order === 'ascend' ? 'asc' : 'desc')
       // 排序改变数据集，清除批量勾选与单选（D9）
       setState(cluster, keys.selectedKeys, [])
@@ -199,6 +184,56 @@ export function useClusterResource<T extends { id: number; name: string; edge_uu
     selectMany,
     requireSelected,
     getActionButtonTitle,
+  }
+}
+
+/**
+ * 集群子资源的通用 CRUD 骨架：加载(搜索/排序/分页)、选择、删除(单条/批量)、发布、版本管理。
+ *
+ * 各资源 composable 保留表单模型、校验、编辑/复制表单填充等真实差异，
+ * 列表骨架（load/翻页/选择）委托 useClusterListCore 共享实现，
+ * 删除/发布/版本十件套由 useClusterResourceCore 共享实现（Phase 4 合并）。
+ * 导出函数名在各资源内保持原名，视图层零改动。
+ */
+export function useClusterResource<T extends { id: number; name: string; edge_uuid?: string }>(
+  config: ClusterResourceConfig<T>,
+  deps: ClusterResourceDeps,
+) {
+  const { noun, endpoint, versionType, keys } = config
+
+  const list = useClusterListCore<T>({
+    noun,
+    endpoint,
+    keys,
+    sortFieldMap: config.sortFieldMap,
+  })
+
+  const core = useClusterResourceCore(
+    {
+      noun,
+      endpoint,
+      versionType,
+      getSelected: (c) => getState<T>(c, keys.selected) ?? null,
+      setSelected: (c, item) => setState(c, keys.selected, item),
+      getSelectedKeys: (c) => getState<number[]>(c, keys.selectedKeys) || [],
+      setSelectedKeys: (c, k) => setState(c, keys.selectedKeys, k),
+      refresh: (c) => list.load(c),
+      batchResourceKey: config.batchResourceKey,
+      batchItems: (c) => getState<T[]>(c, keys.items) || [],
+      deleteGuard: config.deleteGuard,
+      deleteGuardLevel: config.deleteGuardLevel,
+      batchFilter: config.batchFilter,
+    },
+    deps,
+  )
+
+  return {
+    load: list.load,
+    handleTableChange: list.handleTableChange,
+    selectOne: list.selectOne,
+    selectMany: list.selectMany,
+    requireSelected: list.requireSelected,
+    getActionButtonTitle: list.getActionButtonTitle,
     deleteSelected: core.deleteSelected,
     deleteByRecord: core.deleteByRecord,
     deleteMany: core.deleteMany,

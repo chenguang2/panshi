@@ -6,12 +6,13 @@ import os
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, Response
 from openpyxl import Workbook
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.core.deps import get_current_admin_user, require_permission
 from app.core.features import get_features, feature_enabled
@@ -154,7 +155,7 @@ async def get_system_features():
 async def list_recent_operations(
     request: Request,
     page: int = 1,
-    page_size: int = 20,
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     user: str | None = None,
     action: str | None = None,
     resource: str | None = None,
@@ -181,7 +182,6 @@ async def list_recent_operations(
         raise HTTPException(status_code=400, detail="时间格式非法（ISO 格式）")
 
     total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
-    page_size = max(1, min(page_size, 200))
     rows = (await db.execute(
         stmt.order_by(AuditLog.id.desc()).offset((max(page, 1) - 1) * page_size).limit(page_size)
     )).scalars().all()

@@ -289,6 +289,14 @@ class TestBackupEndpoints:
         assert r.status_code == 200
         assert set(r.json()) == {"total", "page", "page_size", "items"}
 
+    async def test_history_accepts_max_page_size(self, async_authed_client, monkeypatch, tmp_path):
+        """page_size 上限 = MAX_PAGE_SIZE(500)：500 必须被接受并原样回显（le=100 时代 422）。"""
+        cfg = _mkcfg(tmp_path)
+        monkeypatch.setattr(dbc, "load_config", lambda: cfg)
+        r = await async_authed_client.get("/api/v1/db-backup/history?page=1&page_size=500")
+        assert r.status_code == 200, r.text
+        assert r.json()["page_size"] == 500
+
     async def test_test_endpoint_uses_body_not_saved(self, async_authed_client, monkeypatch, tmp_path):
         calls = []
         _fake_remote_ok(monkeypatch, calls)

@@ -17,8 +17,17 @@ interface UserCreatePayload {
   status: number
 }
 
-export function listUsers() {
-  return api.get<{ items: User[] }>('/admin/users')
+/** 列表查询参数：全部可选；空值由调用方决定是否传（后端忽略缺省项） */
+export interface ListUsersParams {
+  page?: number
+  page_size?: number
+  keyword?: string
+  role?: string
+  status?: number
+}
+
+export function listUsers(params?: ListUsersParams) {
+  return api.get<{ total: number; items: User[] }>('/admin/users', { params })
 }
 
 export function getMyProfile() {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
+import { PAGE_SIZE_TABLE } from '@/constants'
 
 // Mock the database api module（仅迁移段消费的五个函数）
 const mocks = {
@@ -29,7 +30,8 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 
 function tableStub() {
   return {
-    props: ['dataSource', 'columns', 'rowKey'],
+    props: ['dataSource', 'columns', 'rowKey', 'pagination'],
+    emits: ['change'],
     template: `
       <div class="ant-table">
         <div v-for="r in dataSource" :key="r[rowKey]" class="table-row">
@@ -37,6 +39,15 @@ function tableStub() {
           <slot name="bodyCell" :record="r" :column="{ key: 'mode' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'status' }" />
           <span class="row-name">{{ r.source_connection }} → {{ r.target_connection }}</span>
+        </div>
+        <div v-if="pagination" class="stub-pagination">
+          <span class="stub-total">{{ pagination.showTotal ? pagination.showTotal(pagination.total) : '' }}</span>
+          <span class="stub-pagesize">{{ pagination.pageSize }}</span>
+          <span class="stub-current">{{ pagination.current }}</span>
+          <span class="stub-options">{{ (pagination.pageSizeOptions || []).join(',') }}</span>
+          <button class="stub-goto-page2" @click="$emit('change', { current: 2, pageSize: pagination.pageSize })">
+            去第2页
+          </button>
         </div>
       </div>
     `,
@@ -465,6 +476,45 @@ describe('DbMigrationCard', () => {
 
       expect(wrapper.find('.history-cap-hint').exists()).toBe(true)
       expect(wrapper.find('.history-cap-hint').text()).toContain('100')
+    })
+  })
+
+  describe('迁移历史分页（paginationProps 工厂 + 客户端切片）', () => {
+    function historyRowsFor(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        direction: 'sqlite_to_postgres',
+        source_connection: 'local_sqlite',
+        target_connection: 'prod_pg',
+        mode: 'replace',
+        status: 'success',
+        tables_count: 22,
+        created_at: '2026-09-16T02:00:00',
+      }))
+    }
+
+    it('分页走共享工厂：默认每页 PAGE_SIZE_TABLE、页大小选项含 100、showTotal 为「共 X 条」', async () => {
+      mocks.getHistory.mockResolvedValue({ data: historyRowsFor(25) })
+      const wrapper = await mountCard()
+
+      const pag = wrapper.find('.migration-history-table .stub-pagination')
+      expect(pag.exists()).toBe(true)
+      // 原内联配置未设 pageSize（antd 默认 10），统一后应为 PAGE_SIZE_TABLE=20
+      expect(pag.find('.stub-pagesize').text()).toBe(String(PAGE_SIZE_TABLE))
+      // 原文案为「共 25 条记录」，工厂统一为「共 X 条」
+      expect(pag.find('.stub-total').text()).toBe('共 25 条')
+      // 原选项为 ['10','20','50']，工厂统一为 10/20/50/100
+      expect(pag.find('.stub-options').text().split(',')).toContain('100')
+    })
+
+    it('客户端切片：25 条时首页渲染 20 行，翻页事件写回页码后渲染剩余 5 行', async () => {
+      mocks.getHistory.mockResolvedValue({ data: historyRowsFor(25) })
+      const wrapper = await mountCard()
+
+      expect(wrapper.find('.migration-history-table').findAll('.table-row')).toHaveLength(20)
+      await wrapper.find('.migration-history-table .stub-goto-page2').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.migration-history-table').findAll('.table-row')).toHaveLength(5)
     })
   })
 })

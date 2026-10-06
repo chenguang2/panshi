@@ -270,112 +270,73 @@
                 {{ filterActive ? '没有匹配的备份记录，请调整筛选条件' : '暂无备份历史' }}
               </div>
               <template v-else>
-                <div class="table-shell">
-                  <table class="grid dbb-hist-table">
-                    <thead>
-                      <tr>
-                        <th class="col-exp"></th>
-                        <th>开始时间</th>
-                        <th class="col-trigger">触发</th>
-                        <th>状态</th>
-                        <th>包名</th>
-                        <th class="num col-num">大小</th>
-                        <th class="num col-num">耗时</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <template v-for="item in displayedHistory" :key="item.id">
-                        <tr>
-                          <td>
-                            <button
-                              v-if="histExpandable(item)"
-                              class="exp-toggle"
-                              :class="{ open: isHistExpanded(item.id) }"
-                              :title="histSubCount(item) > 0 ? '展开详情' : '展开失败原因'"
-                              @click="toggleHistExpand(item.id)"
-                            >
-                              &#9654;
-                            </button>
-                          </td>
-                          <td class="mono t-muted">{{ formatDateTime(item.started_at) }}</td>
-                          <td>
-                            <span class="dbb-trigger">{{ item.trigger === 'scheduled' ? '定时' : '手动' }}</span>
-                          </td>
-                          <td class="dbb-hist-status">
-                            <span :class="statusBadgeClass(item.status)">{{ statusBadgeText(item.status) }}</span>
-                            <span v-if="histSubCount(item) > 0" class="cell-meta dbb-hist-counts"
-                              >{{ histOkCount(item) }}/{{ histSubCount(item) }} 目标</span
-                            >
-                          </td>
-                          <td>
-                            <span class="dbb-pkgname">{{ item.package_name || '-' }}</span>
-                            <button
-                              v-if="item.package_name && targets.length > 0"
-                              class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
-                              @click="openWizardForPackage(item)"
-                            >
-                              恢复此包
-                            </button>
-                          </td>
-                          <td class="num mono t-muted">
-                            {{ item.file_size != null ? formatFileSize(item.file_size) : '-' }}
-                          </td>
-                          <td class="num mono t-muted">{{ formatDurationMs(item.duration_ms) }}</td>
-                        </tr>
-                        <tr v-if="isHistExpanded(item.id)" class="expand-row">
-                          <td :colspan="7">
-                            <div class="hist-expand">
-                              <template v-if="item.error">
-                                <div class="hist-expand-title">失败原因</div>
-                                <pre class="hist-error-detail">{{ item.error }}</pre>
-                              </template>
-                              <template v-if="histSubCount(item) > 0">
-                                <div class="hist-expand-title">分目标结果</div>
-                                <ul class="target-results">
-                                  <li
-                                    v-for="sub in item.targets || []"
-                                    :key="sub.target_id ?? sub.target_name"
-                                    :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
-                                  >
-                                    <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
-                                    <span class="tr-name">{{ sub.target_name }}</span>
-                                    <span class="tr-meta">{{ histSubMeta(sub) }}</span>
-                                  </li>
-                                </ul>
-                              </template>
-                            </div>
-                          </td>
-                        </tr>
+                <a-table
+                  class="dbb-hist-table"
+                  size="small"
+                  :data-source="displayedHistory"
+                  :columns="histColumns"
+                  row-key="id"
+                  :pagination="historyPagination"
+                  :row-expandable="histExpandable"
+                  @change="onHistoryTableChange"
+                >
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.key === 'started_at'">
+                      <span class="mono t-muted">{{ formatDateTime(record.started_at) }}</span>
+                    </template>
+                    <template v-else-if="column.key === 'trigger'">
+                      <span class="dbb-trigger">{{ record.trigger === 'scheduled' ? '定时' : '手动' }}</span>
+                    </template>
+                    <template v-else-if="column.key === 'status'">
+                      <span class="dbb-hist-status">
+                        <span :class="statusBadgeClass(record.status)">{{ statusBadgeText(record.status) }}</span>
+                        <span v-if="histSubCount(record) > 0" class="cell-meta dbb-hist-counts"
+                          >{{ histOkCount(record) }}/{{ histSubCount(record) }} 目标</span
+                        >
+                      </span>
+                    </template>
+                    <template v-else-if="column.key === 'package_name'">
+                      <span class="dbb-pkgname">{{ record.package_name || '-' }}</span>
+                      <button
+                        v-if="record.package_name && targets.length > 0"
+                        class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
+                        @click="openWizardForPackage(record)"
+                      >
+                        恢复此包
+                      </button>
+                    </template>
+                    <template v-else-if="column.key === 'file_size'">
+                      <span class="mono t-muted">
+                        {{ record.file_size != null ? formatFileSize(record.file_size) : '-' }}
+                      </span>
+                    </template>
+                    <template v-else-if="column.key === 'duration_ms'">
+                      <span class="mono t-muted">{{ formatDurationMs(record.duration_ms) }}</span>
+                    </template>
+                  </template>
+                  <template #expandedRowRender="{ record }">
+                    <div class="hist-expand">
+                      <template v-if="record.error">
+                        <div class="hist-expand-title">失败原因</div>
+                        <pre class="hist-error-detail">{{ record.error }}</pre>
                       </template>
-                    </tbody>
-                  </table>
-                </div>
-                <div class="dbb-hist-pager">
-                  <select
-                    v-if="!filterActive"
-                    class="form-input dbb-hist-pagesize"
-                    :value="historyPageSize"
-                    @change="onPageSizeChange"
-                  >
-                    <option v-for="s in [10, 20, 50]" :key="s" :value="s">{{ s }} 条/页</option>
-                  </select>
-                  <span v-else class="dbb-hist-pager-info">筛选视图 · {{ FILTER_PAGE_SIZE }} 条/页</span>
-                  <button
-                    class="btn btn-secondary btn-sm"
-                    :disabled="displayPage <= 1 || historyLoading"
-                    @click="prevPage"
-                  >
-                    ‹ 上一页
-                  </button>
-                  <span class="dbb-hist-pager-info">第 {{ displayPage }} / {{ pageCount }} 页</span>
-                  <button
-                    class="btn btn-secondary btn-sm"
-                    :disabled="displayPage >= pageCount || historyLoading"
-                    @click="nextPage"
-                  >
-                    下一页 ›
-                  </button>
-                </div>
+                      <template v-if="histSubCount(record) > 0">
+                        <div class="hist-expand-title">分目标结果</div>
+                        <ul class="target-results">
+                          <li
+                            v-for="sub in record.targets || []"
+                            :key="sub.target_id ?? sub.target_name"
+                            :class="sub.status === 'success' ? 'tr-ok' : 'tr-fail'"
+                          >
+                            <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
+                            <span class="tr-name">{{ sub.target_name }}</span>
+                            <span class="tr-meta">{{ histSubMeta(sub) }}</span>
+                          </li>
+                        </ul>
+                      </template>
+                    </div>
+                  </template>
+                </a-table>
               </template>
             </div>
           </a-tab-pane>
@@ -578,8 +539,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TablePaginationConfig } from 'ant-design-vue'
 import DbBackupRestoreWizard from '@/components/DbBackupRestoreWizard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { paginationProps } from '@/composables/usePagination'
+import { PAGE_SIZE_TABLE } from '@/constants'
 import { formatDateTime, formatFileSize } from '@/utils/format'
 import {
   getDbBackupConfig,
@@ -686,18 +650,21 @@ const errorHead = computed(() => {
   return err.length > 120 ? err.slice(0, 120) + '…' : err
 })
 
-// ── 备份历史（服务端分页） ──
-const history = ref<DbBackupHistoryPage>({ total: 0, page: 1, page_size: 10, items: [] })
+// ── 备份历史（a-table + paginationProps 工厂；无筛选=后端分页，筛选=池化本地切片） ──
+const history = ref<DbBackupHistoryPage>({ total: 0, page: 1, page_size: PAGE_SIZE_TABLE, items: [] })
 const historyLoading = ref(false)
 const historyPage = ref(1)
-const historyPageSize = ref(10)
-const expandedHistIds = ref<number[]>([])
+const historyPageSize = ref(PAGE_SIZE_TABLE)
 
-const totalPages = computed(() => Math.max(1, Math.ceil(history.value.total / historyPageSize.value)))
-
-/** 筛选/服务端两种分页口径的统一展示值（M5） */
-const displayPage = computed(() => (filterActive.value ? filteredPage.value : historyPage.value))
-const pageCount = computed(() => (filterActive.value ? filteredTotalPages.value : totalPages.value))
+/** 备份历史列定义（列内容与改造前原生表一致；大小/耗时右对齐） */
+const histColumns = [
+  { title: '开始时间', key: 'started_at', width: 175 },
+  { title: '触发', key: 'trigger', width: 70 },
+  { title: '状态', key: 'status', width: 150 },
+  { title: '包名', key: 'package_name' },
+  { title: '大小', key: 'file_size', width: 90, align: 'right' as const },
+  { title: '耗时', key: 'duration_ms', width: 90, align: 'right' as const },
+]
 
 // ── 操作进行中标记 ──
 const saving = ref(false)
@@ -799,16 +766,6 @@ function runOkCount(r: DbBackupRunResult): number {
   return (r.targets || []).filter((s) => s.status === 'success').length
 }
 
-function isHistExpanded(id: number): boolean {
-  return expandedHistIds.value.includes(id)
-}
-
-function toggleHistExpand(id: number): void {
-  expandedHistIds.value = isHistExpanded(id)
-    ? expandedHistIds.value.filter((i) => i !== id)
-    : [...expandedHistIds.value, id]
-}
-
 function toggleError(): void {
   errorExpanded.value = !errorExpanded.value
 }
@@ -860,7 +817,6 @@ async function loadHistory(): Promise<void> {
 }
 
 // ── M5：历史筛选（后端无筛选参数；后端 page_size 上限 100，必要时翻页补齐至 200 上限） ──
-const FILTER_PAGE_SIZE = 20
 const FILTER_FETCH_LIMIT = 200
 const FILTER_PAGE_REQUEST = 100
 const historyFilter = reactive<{ status: string; trigger: string }>({ status: 'all', trigger: 'all' })
@@ -916,14 +872,33 @@ const filteredMatches = computed<DbBackupHistoryItem[]>(() => {
   })
 })
 
-const filteredTotalPages = computed(() => Math.max(1, Math.ceil(filteredMatches.value.length / FILTER_PAGE_SIZE)))
-
-/** 筛选视图：客户端分页展示匹配记录 */
+/**
+ * 双模式数据源：无筛选=当前页 items（后端分页）；筛选=池化匹配数组全量交给 a-table 本地切片。
+ */
 const displayedHistory = computed<DbBackupHistoryItem[]>(() => {
   if (!filterActive.value) return history.value.items
-  const start = (filteredPage.value - 1) * FILTER_PAGE_SIZE
-  return filteredMatches.value.slice(start, start + FILTER_PAGE_SIZE)
+  return filteredMatches.value
 })
+
+/** a-table 内置分页（paginationProps 工厂）：total 随模式取后端总数或池长度 */
+const historyPagination = computed<TablePaginationConfig>(() =>
+  paginationProps(
+    filterActive.value
+      ? { page: filteredPage.value, pageSize: historyPageSize.value, total: filteredMatches.value.length }
+      : { page: historyPage.value, pageSize: historyPageSize.value, total: history.value.total },
+  ),
+)
+
+/** 分页变化：筛选视图仅同步受控页码（数据已池化在本地）；否则写回页码/条数并重新请求后端 */
+function onHistoryTableChange(pagination: TablePaginationConfig): void {
+  if (pagination.pageSize) historyPageSize.value = pagination.pageSize
+  if (filterActive.value) {
+    filteredPage.value = pagination.current || 1
+    return
+  }
+  historyPage.value = pagination.current || 1
+  void loadHistory()
+}
 
 const historyCountText = computed(() =>
   filterActive.value ? `${filteredMatches.value.length} 条匹配` : `${history.value.total} 条`,
@@ -943,33 +918,6 @@ function openWizardForPackage(item: DbBackupHistoryItem): void {
 
 function refreshAll(): void {
   void loadConfig()
-  void loadHistory()
-}
-
-function prevPage(): void {
-  if (filterActive.value) {
-    if (filteredPage.value > 1) filteredPage.value -= 1
-    return
-  }
-  if (historyPage.value <= 1) return
-  historyPage.value -= 1
-  void loadHistory()
-}
-
-function nextPage(): void {
-  if (filterActive.value) {
-    if (filteredPage.value < filteredTotalPages.value) filteredPage.value += 1
-    return
-  }
-  if (historyPage.value >= totalPages.value) return
-  historyPage.value += 1
-  void loadHistory()
-}
-
-function onPageSizeChange(e: Event): void {
-  const val = Number((e.target as HTMLSelectElement).value)
-  historyPageSize.value = Number.isFinite(val) && val > 0 ? val : 10
-  historyPage.value = 1
   void loadHistory()
 }
 
@@ -1962,15 +1910,6 @@ tr.row-disabled td {
 .col-actions {
   width: 200px;
 }
-.col-exp {
-  width: 36px;
-}
-.col-trigger {
-  width: 70px;
-}
-.col-num {
-  width: 84px;
-}
 .dbb-tgt-name {
   font-weight: 500;
 }
@@ -2046,36 +1985,12 @@ tr.row-disabled td {
 .dbb-hist-counts {
   white-space: nowrap;
 }
-.exp-toggle {
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm, 4px);
-  font-size: 12px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+/* a-table 展开行：内容区留白与浅底（图标列缩进由 ant-table-expanded-row 自带） */
+.dbb-hist-table :deep(.ant-table-expanded-row) {
+  background: var(--bg);
 }
-.exp-toggle:hover {
-  background: oklch(56% 0.16 210 / 10%);
-  color: var(--accent);
-}
-.exp-toggle.open {
-  transform: rotate(90deg);
-  color: var(--accent);
-}
-tr.expand-row td {
-  padding: 0 !important;
-  background: var(--bg) !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-tr.expand-row .hist-expand {
-  padding: 12px 16px 12px 42px;
+.hist-expand {
+  padding: 4px 8px;
 }
 .hist-expand-title {
   font-size: 11px;
@@ -2127,25 +2042,6 @@ tr.expand-row .hist-expand {
 }
 .tr-fail .tr-meta {
   color: var(--danger);
-}
-.dbb-hist-pager {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.dbb-hist-pager-info {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.dbb-hist-pagesize {
-  width: auto;
-  height: 28px;
-  padding: 0 8px;
-  font-size: 12px;
 }
 
 /* ── 编辑抽屉 ── */

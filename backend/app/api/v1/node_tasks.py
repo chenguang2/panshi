@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.models.node_task import NodeTask, NodeTaskItem
 from app.services.node_task_service import get_node_task_service
@@ -537,7 +538,7 @@ async def list_cluster_tasks(
     cluster_id: int,
     status: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(NodeTask).where(NodeTask.cluster_id == cluster_id)
@@ -559,7 +560,7 @@ async def list_all_tasks(
     status: Optional[str] = Query(default=None),
     task_type: Optional[str] = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
 ):
     stmt = select(NodeTask)

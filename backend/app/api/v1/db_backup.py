@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import MAX_PAGE_SIZE
 from app.core.deps import require_permission
 from app.core.database import get_db
 from app.schemas.db_backup import (
@@ -360,7 +361,7 @@ async def run_backup_now(
 @router.get("/history")
 async def list_backup_history(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_db_admin(PERM_DB_BACKUP)),
 ):

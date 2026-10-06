@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import DbBackupCard from '../DbBackupCard.vue'
+import { aTableStub } from './helpers/aTableStub'
 
 const mockGetConfig = vi.fn()
 const mockUpdateConfig = vi.fn()
@@ -104,7 +105,7 @@ const emptyHistory = { data: { total: 0, page: 1, page_size: 10, items: [] } }
 async function mountCard(configOverrides: Record<string, unknown> = {}, history = emptyHistory) {
   mockGetConfig.mockResolvedValue({ data: { config: makeConfig(configOverrides), status: statusInfo } })
   mockGetHistory.mockResolvedValue(history)
-  const wrapper = mount(DbBackupCard, { global: { stubs } })
+  const wrapper = mount(DbBackupCard, { global: { stubs: { ...stubs, 'a-table': aTableStub } } })
   await flushPromises()
   await flushPromises()
   return wrapper
@@ -302,7 +303,7 @@ describe('DbBackupCard 历史三态与展开行', () => {
       {},
       { data: { total: 1, page: 1, page_size: 10, items: [histItem({ status: 'partial' })] } },
     )
-    const statusCell = wrapper.find('.dbb-hist-table tbody tr .dbb-hist-status')
+    const statusCell = wrapper.find('.dbb-hist-table .ant-table-tbody tr.ant-table-row .dbb-hist-status')
     expect(statusCell.find('.badge-warning').exists()).toBe(true)
     expect(statusCell.text()).toContain('部分成功')
     expect(statusCell.find('.dbb-hist-counts').text()).toBe('1/2 目标')
@@ -310,9 +311,10 @@ describe('DbBackupCard 历史三态与展开行', () => {
 
   it('展开行显示分位置子结果（✓/✗、失败原因、耗时）', async () => {
     const wrapper = await mountCard({}, { data: { total: 1, page: 1, page_size: 10, items: [histItem()] } })
-    const toggle = wrapper.find('.dbb-hist-table .exp-toggle')
+    const toggle = wrapper.find('.dbb-hist-table .ant-table-row-expand-icon-collapsed')
     expect(toggle.exists()).toBe(true)
     await toggle.trigger('click')
+    await flushPromises()
     const items = wrapper.findAll('.dbb-hist-table .target-results li')
     expect(items.length).toBe(2)
     expect(items[0].classes()).toContain('tr-ok')
@@ -334,7 +336,9 @@ describe('DbBackupCard 历史三态与展开行', () => {
         },
       },
     )
-    expect(wrapper.find('.dbb-hist-table .exp-toggle').exists()).toBe(false)
+    // rowExpandable=false 的行渲染为占位图标（spaced），不提供可点击的展开态
+    expect(wrapper.find('.dbb-hist-table .ant-table-row-expand-icon-collapsed').exists()).toBe(false)
+    expect(wrapper.find('.dbb-hist-table .ant-table-row-expand-icon-spaced').exists()).toBe(true)
   })
 })
 

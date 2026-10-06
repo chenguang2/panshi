@@ -198,6 +198,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 52. **集群卡片解剖唯一实现 = `components/ClusterCard.vue`** — 集群管理（ClusterList）与统一管理（CentralList 分组/未分组两处）的集群卡片统一渲染该组件（2026-10-04 档位 C 收敛；此前三份拷贝各自漂移：路径徽章有无、副标题语义、结构均不一致）。契约：props `cluster` + `routeBadge`（`{label, cls} | null`，页面用自家 relay 拉取算好传入，组件内不发请求）+ slots `topbar`/`actions`/`footer`（页面差异经 slot 注入）；卡片解剖样式（`.cl-card*` 族）只存在于组件内，**禁止在页面重新内联卡片模板或复制其样式**。副标题为回退式二显：`description` 优先 → `display_name` 存在时回退「集群标识: name」→ 无。统一管理页统计格因此从 6 格 @click 最大化改为 7 格 router-link 跳转（与集群管理一致，最大化入口保留在 topbar 按钮）。源码守卫 `ClusterCard.source.test.ts` 机械化拦截回归。
 53. **openspec 归档合并的替换块必须取自当下读取的主 spec 现文** — MODIFIED 全块替换与 edit oldString 同理，不得凭记忆/归档样本/上下文压缩重建「原内容」（2026-10-04 两轮实测共 6 处漂移：既有场景集与记忆版完全不同是常态）；同批多份变更改同一需求块时按 created 日期顺序合并，后到者基于前份合并后的文本手工合成单一最终块。openspec CLI 本机挂起（Windows shim 跨 WSL 超时），建档/合并/归档走手工流（样本格式见 `changes/archive/`）。
 
+54. **全站列表分页统一标准（2026-10-06 收敛，5 项改造落地）** — 有分页 UI 的列表一律 a-table 内置 pagination + `usePagination.paginationProps` 工厂（默认 `PAGE_SIZE_TABLE`=20、选项 10/20/50/100、sizeChanger + 快速跳页 + showTotal「共 X {单位}」），机制默认后端分页（`page`/`page_size`）；后端 `page_size` 上限一律 `MAX_PAGE_SIZE=500`（db_backup/node_tasks 由 100、system 由手动 clamp 200 放宽统一，501 → 422）。合法例外白名单（不纳入统一）：卡片网格全量页（`PAGE_SIZE_CARD_GRID`=500、无 pager）、小表 `:pagination="false"`、metrics Top-N limit。集群子表列表胶水单点在 `useClusterResource.ts` 导出的 `useClusterListCore`（上游/路由/节点共用，节点 keys 为 nodes* 族），**禁止再复制 loadNodes/handleTableChange 同构实现**；组件测试挂 a-table 须用 `__tests__/helpers/aTableStub.ts` 桩（jsdom 无 matchMedia，真实 Table 会 Unhandled Rejection 连挂）。UserList 走真后端分页（users 端点支持 keyword/role/status），**禁回 allUsers+slice 内存切片**——后端默认只回 20 条，切片会让第 21+ 个用户静默消失（本次修复的原始 bug）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

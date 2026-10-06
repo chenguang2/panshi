@@ -27,6 +27,7 @@ async def get_current_user_info(
 async def list_users(
     keyword: Optional[str] = None,
     role: Optional[str] = None,
+    status: Optional[int] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
     db: AsyncSession = Depends(get_db),
@@ -38,6 +39,8 @@ async def list_users(
         query = query.where(User.username.contains(keyword))
     if role:
         query = query.where(User.role == role)
+    if status is not None:
+        query = query.where(User.status == status)
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

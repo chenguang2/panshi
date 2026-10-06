@@ -669,6 +669,95 @@ describe('useClusterNodes batch import', () => {
   })
 })
 
+// ── loadNodes 请求参数与分页回写（列表骨架行为锚点） ──
+
+describe('useClusterNodes loadNodes 请求参数与分页回写', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  async function loadWith(cluster: Cluster, data: unknown) {
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data })
+    const { loadNodes } = await makeComposable(cluster)
+    await loadNodes(cluster)
+  }
+
+  it('默认发送 page=1/page_size=20 并回写 pagination 与 items', async () => {
+    const cluster = makeCluster()
+    await loadWith(cluster, { total: 101, page: 1, page_size: 20, items: [makeNode({ id: 3 })] })
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/nodes', { params: { page: 1, page_size: 20 } })
+    expect(cluster.nodes).toEqual([makeNode({ id: 3 })])
+    expect(cluster.nodesPagination).toEqual({ total: 101, page: 1, pageSize: 20 })
+  })
+
+  it('沿用 nodesPagination 现值作为 page/page_size', async () => {
+    const cluster = makeCluster({ nodesPagination: { total: 0, page: 2, pageSize: 50 } })
+    await loadWith(cluster, { total: 101, page: 2, page_size: 50, items: [] })
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/nodes', { params: { page: 2, page_size: 50 } })
+  })
+
+  it('有搜索词时发送 search/search_field', async () => {
+    const cluster = makeCluster({ nodesSearch: '10.0', nodesSearchField: 'ip' })
+    await loadWith(cluster, { total: 0, page: 1, page_size: 20, items: [] })
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/nodes', {
+      params: { page: 1, page_size: 20, search: '10.0', search_field: 'ip' },
+    })
+  })
+
+  it('搜索字段为空时只发送 search', async () => {
+    const cluster = makeCluster({ nodesSearch: '10.0' })
+    await loadWith(cluster, { total: 0, page: 1, page_size: 20, items: [] })
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/nodes', {
+      params: { page: 1, page_size: 20, search: '10.0' },
+    })
+  })
+
+  it('有排序时发送 sort_by/sort_order', async () => {
+    const cluster = makeCluster({ nodesSortBy: 'ip', nodesSortOrder: 'desc' })
+    await loadWith(cluster, { total: 0, page: 1, page_size: 20, items: [] })
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/nodes', {
+      params: { page: 1, page_size: 20, sort_by: 'ip', sort_order: 'desc' },
+    })
+  })
+
+  it('handleNodeTableChange 回写分页并按排序参数重载', async () => {
+    const cluster = makeCluster({ nodesPagination: { total: 50, page: 1, pageSize: 20 } })
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 50, page: 3, page_size: 10, items: [] } })
+    const { handleNodeTableChange } = await makeComposable(cluster)
+
+    handleNodeTableChange(cluster, { current: 3, pageSize: 10 }, { field: 'ip', order: 'descend' })
+    await flushPromises()
+
+    expect(cluster.nodesPagination).toEqual({ total: 50, page: 3, pageSize: 10 })
+    expect(mockApiGet).toHaveBeenLastCalledWith('/clusters/1/nodes', {
+      params: { page: 3, page_size: 10, sort_by: 'ip', sort_order: 'desc' },
+    })
+  })
+
+  it('翻页（sorter 为空）时重置排序且不带 sort 参数', async () => {
+    const cluster = makeCluster({
+      nodesSortBy: 'ip',
+      nodesSortOrder: 'desc',
+      nodesPagination: { total: 50, page: 1, pageSize: 20 },
+    })
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 50, page: 2, page_size: 20, items: [] } })
+    const { handleNodeTableChange } = await makeComposable(cluster)
+
+    handleNodeTableChange(cluster, { current: 2, pageSize: 20 }, {})
+    await flushPromises()
+
+    expect(cluster.nodesSortBy).toBe('')
+    expect(cluster.nodesSortOrder).toBe('asc')
+    expect(mockApiGet).toHaveBeenLastCalledWith('/clusters/1/nodes', { params: { page: 2, page_size: 20 } })
+  })
+})
+
 describe('useClusterNodes ssh_port', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

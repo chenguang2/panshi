@@ -24,6 +24,7 @@ import {
 } from './useClusterUtils'
 import { stripAnsi } from '@/utils/ansi'
 import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImport'
+import { useClusterListCore } from './useClusterResource'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
@@ -211,10 +212,35 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     }
     callback()
   }
-  const getNodeActionButtonTitle = (key: string) => {
-    const btn = allNodeActionButtons.find((b) => b.key === key)
-    return btn?.title || key
-  }
+  // 列表骨架（加载/翻页排序/选择）复用集群子表共享胶水，节点差异仅以 keys/endpoint 参数化
+  const listCore = useClusterListCore<Node>({
+    noun: '节点',
+    endpoint: 'nodes',
+    keys: {
+      items: 'nodes',
+      pagination: 'nodesPagination',
+      loading: 'nodesLoading',
+      search: 'nodesSearch',
+      searchField: 'nodesSearchField',
+      sortBy: 'nodesSortBy',
+      sortOrder: 'nodesSortOrder',
+      selected: 'selectedNode',
+      selectedKeys: 'selectedNodeKeys',
+    },
+    sortFieldMap: {
+      ip: 'ip',
+      service_port: 'service_port',
+      management_port: 'management_port',
+      status: 'status',
+      created_at: 'created_at',
+    },
+  })
+  const loadNodes = listCore.load
+  const handleNodeTableChange = listCore.handleTableChange
+  const selectNode = listCore.selectOne
+  const selectNodes = listCore.selectMany
+
+  const getNodeActionButtonTitle = (key: string) => listCore.getActionButtonTitle(key, allNodeActionButtons)
 
   const handleNodeAction = (cluster: Cluster, record: Node, action: string) => {
     switch (action) {
@@ -242,95 +268,6 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
         diffDrawerVisible.value = true
         break
     }
-  }
-
-  const handleNodeTableChange = (
-    cluster: Cluster,
-    pag: Record<string, unknown>,
-    sorter: Record<string, unknown> | null,
-  ) => {
-    if (cluster.nodesPagination) {
-      cluster.nodesPagination.page = pag.current as number
-      cluster.nodesPagination.pageSize = pag.pageSize as number
-    }
-    if (sorter && sorter.field) {
-      const fieldMap: Record<string, string> = {
-        ip: 'ip',
-        service_port: 'service_port',
-        management_port: 'management_port',
-        status: 'status',
-        created_at: 'created_at',
-      }
-      cluster.nodesSortBy = fieldMap[sorter.field as string] || (sorter.field as string)
-      cluster.nodesSortOrder = sorter.order === 'ascend' ? 'asc' : 'desc'
-      // 排序改变数据集，清除批量勾选与单选（D8）
-      cluster.selectedNodeKeys = []
-      cluster.selectedNode = null
-    } else {
-      cluster.nodesSortBy = ''
-      cluster.nodesSortOrder = 'asc'
-    }
-    loadNodes(cluster)
-  }
-
-  const lastNodeQuery = new WeakMap<Cluster, { search: string; field: string; sortBy: string; sortOrder: string }>()
-
-  const loadNodes = async (cluster: Cluster) => {
-    const prev = lastNodeQuery.get(cluster)
-    const next = {
-      search: cluster.nodesSearch || '',
-      field: cluster.nodesSearchField || '',
-      sortBy: cluster.nodesSortBy || '',
-      sortOrder: cluster.nodesSortOrder || '',
-    }
-    if (
-      prev &&
-      (prev.search !== next.search ||
-        prev.field !== next.field ||
-        prev.sortBy !== next.sortBy ||
-        prev.sortOrder !== next.sortOrder)
-    ) {
-      cluster.selectedNodeKeys = []
-      cluster.selectedNode = null
-    }
-    lastNodeQuery.set(cluster, next)
-    cluster.nodesLoading = true
-    try {
-      const params: Record<string, unknown> = {
-        page: cluster.nodesPagination?.page || 1,
-        page_size: cluster.nodesPagination?.pageSize || 20,
-      }
-      if (cluster.nodesSearch) {
-        params.search = cluster.nodesSearch
-        if (cluster.nodesSearchField) {
-          params.search_field = cluster.nodesSearchField
-        }
-      }
-      if (cluster.nodesSortBy) {
-        params.sort_by = cluster.nodesSortBy
-        params.sort_order = cluster.nodesSortOrder
-      }
-      const res = await api.get(`/clusters/${cluster.id}/nodes`, { params })
-      cluster.nodes = res.data.items
-      cluster.nodesPagination = {
-        total: res.data.total,
-        page: res.data.page,
-        pageSize: res.data.page_size,
-      }
-    } catch (error) {
-      message.error('加载节点列表失败')
-    } finally {
-      cluster.nodesLoading = false
-    }
-  }
-
-  const selectNode = (cluster: Cluster, node: Node | undefined) => {
-    cluster.selectedNode = node || null
-  }
-
-  const selectNodes = (cluster: Cluster, keys: number[] | (string | number)[], rows: Node[]) => {
-    cluster.selectedNodeKeys = keys as number[]
-    cluster.selectedNode = keys.length === 1 ? (rows[0] ?? null) : null
   }
 
   const showAddNodeModal = async (cluster: Cluster) => {

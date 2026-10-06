@@ -290,16 +290,11 @@
           <button class="btn btn-secondary btn-sm history-cleanup-btn" @click="openCleanupModal">清理历史</button>
         </div>
         <a-table
-          :data-source="migrationHistory"
+          :data-source="pagedHistory"
           :columns="historyColumns"
           row-key="id"
-          :pagination="{
-            total: migrationHistory.length,
-            showTotal: (total: number) => `共 ${total} 条记录`,
-            showSizeChanger: true,
-            pageSizeOptions: ['10', '20', '50'],
-            showQuickJumper: true,
-          }"
+          :pagination="historyPagination"
+          @change="handleHistoryTableChange"
           size="middle"
           class="migration-history-table"
         >
@@ -397,7 +392,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
+import type { TablePaginationConfig } from 'ant-design-vue'
 import { formatDateTime, parseBackendDate } from '@/utils/format'
+import { paginationProps } from '@/composables/usePagination'
+import { PAGE_SIZE_TABLE } from '@/constants'
 import {
   migrateDatabaseStream,
   cleanupMigrationHistory,
@@ -454,6 +452,25 @@ const historyLoading = ref(false)
 /** 后端列表单页上限（GET /database/history 固定 limit=100）：达上限时提示"仅显示最近 100 条" */
 const HISTORY_PAGE_LIMIT = 100
 const historyCapped = computed(() => migrationHistory.value.length >= HISTORY_PAGE_LIMIT)
+
+// ── 迁移历史分页（客户端全量数组本地切片，参照 UserList 的 page/pageSize refs + change 写回模式；
+//    分页配置统一走 paginationProps 工厂，默认每页 PAGE_SIZE_TABLE） ──
+const historyPage = ref(1)
+const historyPageSize = ref(PAGE_SIZE_TABLE)
+const pagedHistory = computed(() =>
+  migrationHistory.value.slice(
+    (historyPage.value - 1) * historyPageSize.value,
+    historyPage.value * historyPageSize.value,
+  ),
+)
+const historyPagination = computed(() =>
+  paginationProps({ page: historyPage.value, pageSize: historyPageSize.value, total: migrationHistory.value.length }),
+)
+
+function handleHistoryTableChange(pagination: TablePaginationConfig): void {
+  historyPage.value = pagination.current || 1
+  if (pagination.pageSize) historyPageSize.value = pagination.pageSize
+}
 
 /** 清理弹窗：保留最近 N 条，其余删除（预览数字由服务端按库内真实总数计算） */
 const CLEANUP_DEFAULT_KEEP = 10

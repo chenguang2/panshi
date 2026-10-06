@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import DbBackupCard from '../DbBackupCard.vue'
 
 const mockGetConfig = vi.fn()
@@ -157,5 +159,39 @@ describe('DbBackupCard 来源标识字段（全局表单）', () => {
     await flushPromises()
     const input = wrapper.find('input.dbb-source-input')
     expect((input.element as HTMLInputElement).value).toBe('10.0.0.8')
+  })
+})
+
+// ═══════════ 备份历史表格实现守卫（a-table 化改造 2026-10） ═══════════
+// 防回潮：历史表格必须走全站标准 a-table + paginationProps 工厂，
+// 手写分页器（dbb-hist-pager）与原生 <table> 渲染历史一律禁止。
+
+describe('DbBackupCard 备份历史表格实现守卫', () => {
+  function sfc(): string {
+    return readFileSync(resolve(process.cwd(), 'src', 'components', 'DbBackupCard.vue'), 'utf-8')
+  }
+
+  it('历史表格为 a-table 且分页走 paginationProps 工厂', () => {
+    const s = sfc()
+    expect(s).toMatch(/<a-table[^>]*class="dbb-hist-table"/)
+    expect(s).toContain(':pagination="historyPagination"')
+    expect(s).toContain('@change="onHistoryTableChange"')
+    expect(s).toContain('paginationProps(')
+  })
+
+  it('禁止手写分页器与原生历史表回潮', () => {
+    const s = sfc()
+    expect(s).not.toContain('dbb-hist-pager')
+    expect(s).not.toContain('dbb-hist-pagesize')
+    expect(s).not.toContain('<table class="grid dbb-hist-table">')
+    expect(s).not.toContain('exp-toggle')
+  })
+
+  it('默认分页条数统一 PAGE_SIZE_TABLE，池化拉取策略保持不变（page_size=100、上限 200）', () => {
+    const s = sfc()
+    expect(s).toContain('historyPageSize = ref(PAGE_SIZE_TABLE)')
+    expect(s).not.toContain('historyPageSize = ref(10)')
+    expect(s).toContain('const FILTER_FETCH_LIMIT = 200')
+    expect(s).toContain('const FILTER_PAGE_REQUEST = 100')
   })
 })

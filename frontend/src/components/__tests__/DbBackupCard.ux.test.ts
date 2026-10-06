@@ -4,6 +4,7 @@ import { message, Tabs } from 'ant-design-vue'
 import { formatDateTime } from '@/utils/format'
 import DbBackupCard from '../DbBackupCard.vue'
 import DbBackupRestoreWizard from '../DbBackupRestoreWizard.vue'
+import { aTableStub } from './helpers/aTableStub'
 
 const mockGetConfig = vi.fn()
 const mockUpdateConfig = vi.fn()
@@ -131,7 +132,7 @@ async function mountCard(
   })
   mockGetHistory.mockResolvedValue(history)
   const wrapper = mount(DbBackupCard, {
-    global: { stubs, components: { 'a-tabs': Tabs, 'a-tab-pane': Tabs.TabPane } },
+    global: { stubs: { ...stubs, 'a-table': aTableStub }, components: { 'a-tabs': Tabs, 'a-tab-pane': Tabs.TabPane } },
   })
   await flushPromises()
   await flushPromises()
@@ -499,7 +500,7 @@ describe('M5 历史筛选与失败原因内联展开', () => {
     const wrapper = await mountCard({}, mixed)
     const table = wrapper.find('.dbb-hist-table')
     expect(table.text()).not.toContain('打包失败：磁盘空间不足')
-    const toggles = table.findAll('.exp-toggle')
+    const toggles = table.findAll('.ant-table-row-expand-icon-collapsed')
     expect(toggles.length).toBe(3)
     await toggles[1].trigger('click')
     await flushPromises()
@@ -508,7 +509,7 @@ describe('M5 历史筛选与失败原因内联展开', () => {
 
   it('有子结果的行展开后同时显示失败原因与分目标结果', async () => {
     const wrapper = await mountCard({}, mixed)
-    const toggles = wrapper.find('.dbb-hist-table').findAll('.exp-toggle')
+    const toggles = wrapper.find('.dbb-hist-table').findAll('.ant-table-row-expand-icon-collapsed')
     await toggles[2].trigger('click')
     await flushPromises()
     const text = wrapper.find('.dbb-hist-table').text()
@@ -525,15 +526,15 @@ describe('M5 历史筛选与失败原因内联展开', () => {
     await selects[0].setValue('failed')
     await flushPromises()
     expect(mockGetHistory).toHaveBeenCalledWith(1, 100)
-    expect(wrapper.findAll('.dbb-hist-table tbody tr').length).toBe(2)
+    expect(wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row').length).toBe(2)
     await selects[1].setValue('manual')
     await flushPromises()
-    let rows = wrapper.findAll('.dbb-hist-table tbody tr')
+    let rows = wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row')
     expect(rows.length).toBe(1)
     expect(wrapper.find('.dbb-hist-table').text()).toContain('pkg_2.tar.gz')
     await selects[0].setValue('all')
     await flushPromises()
-    rows = wrapper.findAll('.dbb-hist-table tbody tr')
+    rows = wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row')
     expect(rows.length).toBe(1)
     expect(wrapper.find('.dbb-hist-table').text()).toContain('pkg_2.tar.gz')
   })
@@ -547,7 +548,7 @@ describe('M5 历史筛选与失败原因内联展开', () => {
     await selects[1].setValue('all')
     await flushPromises()
     const calls = mockGetHistory.mock.calls
-    expect(calls[calls.length - 1]).toEqual([1, 10])
+    expect(calls[calls.length - 1]).toEqual([1, 20])
   })
 })
 
@@ -664,7 +665,7 @@ describe('M8 从备份历史发起恢复', () => {
       },
     }
     const wrapper = await mountCard({}, history)
-    const row = wrapper.findAll('.dbb-hist-table tbody tr')[0]
+    const row = wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row')[0]
     await row.find('.dbb-restore-pkg-btn').trigger('click')
     await flushPromises()
     const wizard = wrapper.findComponent(DbBackupRestoreWizard)
@@ -814,6 +815,76 @@ describe('M5 筛选拉取受后端 page_size≤100 约束', () => {
     await selects[0].setValue('failed')
     await flushPromises()
     expect(wrapper.find('.dbb-target-empty').text()).toContain('没有匹配的备份记录')
+  })
+})
+
+// ═══════════ 分页双模式接线（a-table change 事件 + paginationProps 工厂） ═══════════
+
+describe('备份历史分页双模式接线', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  /** 构造一页后端历史响应（形状对齐真实后端 {total,page,page_size,items}） */
+  function page(n: number, ids: number[], total = 45, status = 'success') {
+    return {
+      data: {
+        total,
+        page: n,
+        page_size: 20,
+        items: ids.map((id) => ({
+          id,
+          started_at: `2026-09-30T10:00:${String(id).padStart(2, '0')}`,
+          finished_at: null,
+          status,
+          trigger: 'scheduled',
+          package_name: `pkg_${String(id).padStart(3, '0')}.tar.gz`,
+          file_size: 1,
+          duration_ms: 1,
+          error: null,
+          targets: [],
+        })),
+      },
+    }
+  }
+
+  it('无筛选翻页走后端：a-table change 写回页码并按新页请求（page=2, page_size=20）', async () => {
+    const wrapper = await mountCard({}, page(1, [1]))
+    mockGetHistory.mockImplementation((p: number) =>
+      Promise.resolve(p === 1 ? page(1, [1]) : p === 2 ? page(2, [2]) : page(3, [3])),
+    )
+    await wrapper
+      .findAll('.ant-pagination-item')
+      .find((i) => i.text() === '2')!
+      .trigger('click')
+    await flushPromises()
+    await flushPromises()
+    expect(mockGetHistory).toHaveBeenLastCalledWith(2, 20)
+    expect(wrapper.find('.dbb-hist-table').text()).toContain('pkg_002.tar.gz')
+  })
+
+  it('筛选翻页本地切片：change 只同步受控页码，不重发历史请求', async () => {
+    const big = page(
+      1,
+      Array.from({ length: 50 }, (_, i) => i + 1),
+      50,
+      'failed',
+    )
+    const wrapper = await mountCard()
+    mockGetHistory.mockResolvedValue(big)
+    await wrapper.findAll('.dbb-hist-filter')[0].setValue('failed')
+    await flushPromises()
+    // 池 50 条全部命中筛选 → a-table 本地 20/页 切片
+    expect(wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row').length).toBe(20)
+    const callsAfterPool = mockGetHistory.mock.calls.length
+    await wrapper
+      .findAll('.ant-pagination-item')
+      .find((i) => i.text() === '2')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('.dbb-hist-table .ant-table-tbody tr.ant-table-row').length).toBe(20)
+    expect(wrapper.find('.dbb-hist-table').text()).toContain('pkg_021.tar.gz')
+    expect(mockGetHistory.mock.calls.length).toBe(callsAfterPool)
   })
 })
 
