@@ -31,6 +31,9 @@
           <span class="cl-group-arrow">{{ expandedGroups[group.name] ? '▾' : '▸' }}</span>
           <span class="cl-group-name">{{ group.name || '未分组' }}</span>
           <span class="cl-group-count">(共{{ group.clusters.length }}个)</span>
+          <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup(group.name)">
+            {{ expandedGroups[group.name] ? '收起' : '展开' }}
+          </a-button>
         </div>
         <div v-show="expandedGroups[group.name]" class="cl-grid">
           <ClusterCard v-for="c in group.clusters" :key="c.id" :cluster="c" :route-badge="routeBadge(c)">
@@ -586,19 +589,25 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 8px 12px;
   cursor: pointer;
   border-radius: var(--radius-md);
+  background: oklch(94.5% 0.008 240);
+  transition: background 0.15s;
   user-select: none;
 }
 .cl-group-header:hover {
-  background: oklch(100% 0 0 / 4%);
+  background: var(--accent-bg);
 }
 .cl-group-arrow {
   font-size: 12px;
   color: var(--muted);
   width: 14px;
   flex-shrink: 0;
+}
+.expand-group-btn {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .cl-group-name {
   font-size: 14px;

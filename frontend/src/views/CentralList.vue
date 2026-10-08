@@ -1444,7 +1444,7 @@ onMounted(async () => {
   margin-bottom: 8px;
   cursor: pointer;
   border-radius: 6px;
-  background: var(--bg);
+  background: oklch(94.5% 0.008 240);
   transition: background 0.15s;
   user-select: none;
 }
@@ -1550,13 +1550,6 @@ onMounted(async () => {
 }
 .scell:hover .snum {
   color: var(--accent);
-}
-.ungrouped-hdr {
-  cursor: default;
-  opacity: 0.7;
-}
-.ungrouped-hdr:hover {
-  background: var(--bg);
 }
 
 .group-body {
