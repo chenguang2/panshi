@@ -1051,6 +1051,30 @@ class TestIsNodeInInventory:
         with patch.object(mod, "_INVENTORY_PATH", inv):
             assert mod.is_node_in_inventory("10.9.9.9") is False
 
+    def test_bare_key_host_with_group_vars_is_present(self, tmp_path):
+        """裸键主机（host: 后无内联变量、凭据在组级 vars）是合法 inventory 写法，
+        必须判定为在清单内。PC2 部署即此形态：曾因 isinstance(hosts.get(ip), dict)
+        把 None 值判为「未在清单」，自启动查询/下发误报 400（2026-10 实测）。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        10.5.12.96:\n"
+            "        10.5.12.118:\n"
+            "        10.5.12.152:\n"
+            "      vars:\n"
+            "        ansible_ssh_user: jboss\n"
+            "        ansible_ssh_pass: 'LSguotie@2025'\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory("10.5.12.96") is True
+            assert mod.is_node_in_inventory("10.5.12.152") is True
+            # 同一清单下不在册 IP 仍须判 False（防改过头）
+            assert mod.is_node_in_inventory("10.9.9.9") is False
+
 
 class TestParseAutostartStatusStderr:
     """systemctl is-enabled 错误输出到 stderr 时也应识别为 not_configured。"""

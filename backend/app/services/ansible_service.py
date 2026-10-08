@@ -455,6 +455,10 @@ def is_node_in_inventory(ip: str) -> bool:
 
     Used as a pre-check before autostart enable/disable: root-credential
     injection relies on the host already being present in the inventory.
+
+    裸键写法（``10.5.12.96:`` 无内联变量、凭据放组级 vars）是合法 ansible
+    inventory 形态（PC2 部署即此形态），与 ``get_ssh_password`` 的容忍口径
+    保持一致：判定的是「键是否存在」，不要求值为 dict（2026-10 实测修复）。
     """
     try:
         with open(_INVENTORY_PATH) as f:
@@ -468,7 +472,7 @@ def is_node_in_inventory(ip: str) -> bool:
             .get("edge_cluster", {})
             .get("hosts", {})
         )
-        return isinstance(hosts.get(ip), dict)
+        return ip in hosts
     except (AttributeError, TypeError):
         return False
 
