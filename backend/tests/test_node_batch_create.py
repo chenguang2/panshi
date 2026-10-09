@@ -47,6 +47,38 @@ class TestBatchCreateNodesRequest:
         assert NodeCreate(ip="10.0.0.2", edge_path="/edge/n2", status=1).status == 1
 
 
+class TestNodeIpStrip:
+    """节点 IP 首尾空白在 schema 层剥离（2026-10）。
+
+    清单键是干净的，存量脏数据（Node.ip 无 trim 历史）按原值精确比对会
+    假性「未在 ansible inventory」→ 自启动 400。剥离只做 strip，不新增
+    其它规则。
+    """
+
+    def test_node_create_strips_ip(self):
+        assert _node_create(" 10.0.0.1 ").ip == "10.0.0.1"
+
+    def test_node_update_strips_ip(self):
+        from app.schemas.cluster import NodeUpdate
+        assert NodeUpdate(ip=" 10.0.0.1 ").ip == "10.0.0.1"
+        assert NodeUpdate(ip="\t10.0.0.1\n").ip == "10.0.0.1"
+        # None 原样返回（NodeUpdate.ip 可选）
+        assert NodeUpdate(ip=None).ip is None
+
+    async def test_create_node_persists_stripped_ip(self, test_db):
+        cid = await _setup_cluster(test_db)
+        from sqlalchemy import select
+        from app.api.v1.cluster_nodes import create_nodes_batch
+
+        await create_nodes_batch(
+            cid,
+            BatchCreateNodesRequest(nodes=[_node_create(" 10.0.0.7 ")]),
+            test_db,
+        )
+        row = (await test_db.execute(select(Node).where(Node.cluster_id == cid))).scalars().one()
+        assert row.ip == "10.0.0.7"
+
+
 class TestBatchCreateNodesEndpoint:
 
     async def test_create_multiple_nodes_success(self, test_db):

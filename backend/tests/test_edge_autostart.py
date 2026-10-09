@@ -118,15 +118,58 @@ def test_autostart_enable_requires_root_password(db_env):
             assert "root 密码" in resp.json()["detail"]
 
 
-def test_autostart_node_not_in_inventory(db_env):
+def test_autostart_node_not_in_inventory(db_env, tmp_path):
     app, _, AUTH = db_env
     import app.api.v1.edge_autostart as mod
+    from app.services import ansible_service as asn_mod
 
-    with patch.object(mod, "is_node_in_inventory", return_value=False):
+    # 不读开发机真实清单：指向 tmp 清单（不含节点 ip，describe 会附现有主机）
+    inv = tmp_path / "host"
+    inv.write_text(
+        "all:\n"
+        "  children:\n"
+        "    edge_cluster:\n"
+        "      hosts:\n"
+        "        10.5.12.96:\n"
+    )
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=False),
+        patch.object(asn_mod, "_INVENTORY_PATH", inv),
+    ):
         with AuthedTestClient(app, headers=AUTH) as c:
             resp = c.post("/api/v1/nodes/1/autostart", json={"action": "enable", "root_password": "x"})
             assert resp.status_code == 400
             assert "inventory" in resp.json()["detail"]
+
+
+def test_autostart_not_in_inventory_detail_lists_existing_hosts(db_env, tmp_path):
+    """400 detail 应携带可诊断原因：清单 edge_cluster.hosts 现有主机列表（2026-10）。"""
+    from app.services import ansible_service as asn_mod
+
+    app, _, AUTH = db_env
+    import app.api.v1.edge_autostart as mod
+
+    inv = tmp_path / "host"
+    inv.write_text(
+        "all:\n"
+        "  children:\n"
+        "    edge_cluster:\n"
+        "      hosts:\n"
+        "        10.5.12.96:\n"
+        "        10.5.12.118:\n"
+    )
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=False),
+        patch.object(asn_mod, "_INVENTORY_PATH", inv),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post("/api/v1/nodes/1/autostart", json={"action": "enable", "root_password": "x"})
+            assert resp.status_code == 400
+            detail = resp.json()["detail"]
+            assert "inventory" in detail
+            assert "现有主机" in detail
+            assert "10.5.12.96" in detail
+            assert "10.5.12.118" in detail
 
 
 def test_autostart_status_uses_ssh_and_streams(db_env):

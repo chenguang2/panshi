@@ -21,6 +21,7 @@ from app.models.autostart import NodeAutostart
 from app.services.ansible_service import (
     AnsibleRunnerService,
     build_edge_service_content,
+    describe_inventory_membership,
     get_default_run_user,
     is_node_in_inventory,
     sanitize_command_for_store,
@@ -126,9 +127,10 @@ async def node_autostart(
     node = await _get_node(node_id, db)
 
     if not is_node_in_inventory(node.ip):
+        reason = describe_inventory_membership(node.ip)
         raise HTTPException(
             status_code=400,
-            detail="节点未在 ansible inventory 中，无法下发自启动配置",
+            detail="节点未在 ansible inventory 中，无法下发自启动配置" + (f"。{reason}" if reason else ""),
         )
 
     edge_path = body.edge_path or node.edge_path or ""

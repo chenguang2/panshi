@@ -450,6 +450,45 @@ def get_ssh_password(ip: str) -> str | None:
     return None
 
 
+def _load_edge_hosts() -> tuple[dict | None, str | None]:
+    """Read ``all.children.edge_cluster.hosts`` from the inventory file.
+
+    Returns ``(hosts_dict, None)`` on success; ``(None, reason)`` when the
+    file is missing, unparseable as YAML, or lacks the expected structure.
+    ``reason`` 总是携带实际路径，便于运维确认后端读取的就是自己编辑的文件
+    （2026-10：自启动前置校验的四种静默失败入口需要可诊断）。
+    """
+    path = str(_INVENTORY_PATH)
+
+    def _missing_structure() -> tuple[None, str]:
+        return None, (
+            f"清单缺少 all.children.edge_cluster.hosts 结构（清单: {path}；"
+            "若与你编辑的文件不一致，说明后端读取的不是同一文件）"
+        )
+
+    try:
+        with open(_INVENTORY_PATH) as f:
+            data = yaml.safe_load(f)
+    except FileNotFoundError:
+        return None, f"清单文件不存在: {path}（请确认编辑的是后端实际读取的清单）"
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        loc = f"第 {mark.line + 1} 行" if mark is not None else "未知位置"
+        problem = getattr(exc, "problem", None) or str(exc)
+        return None, f"清单无法按 YAML 解析（{loc}）: {problem}（清单: {path}）"
+
+    if not isinstance(data, dict):
+        return _missing_structure()
+    node = data.get("all")
+    for key in ("children", "edge_cluster", "hosts"):
+        if not isinstance(node, dict) or key not in node:
+            return _missing_structure()
+        node = node[key]
+    if not isinstance(node, dict):
+        return _missing_structure()
+    return node, None
+
+
 def is_node_in_inventory(ip: str) -> bool:
     """Return True if *ip* exists under ``edge_cluster.hosts`` in the inventory.
 
@@ -459,22 +498,35 @@ def is_node_in_inventory(ip: str) -> bool:
     裸键写法（``10.5.12.96:`` 无内联变量、凭据放组级 vars）是合法 ansible
     inventory 形态（PC2 部署即此形态），与 ``get_ssh_password`` 的容忍口径
     保持一致：判定的是「键是否存在」，不要求值为 dict（2026-10 实测修复）。
+
+    查找按 ``ip.strip()`` 匹配：存量 Node.ip 可能带首尾空白（schema 无 trim
+    的历史遗留），清单键是干净的，按原值精确比对会假性「未在清单」；读取
+    失败/未命中时可经 :func:`describe_inventory_membership` 取得诊断（2026-10）。
     """
-    try:
-        with open(_INVENTORY_PATH) as f:
-            data = yaml.safe_load(f)
-    except (FileNotFoundError, yaml.YAMLError):
+    hosts, _reason = _load_edge_hosts()
+    if hosts is None:
         return False
-    try:
-        hosts = (
-            data.get("all", {})
-            .get("children", {})
-            .get("edge_cluster", {})
-            .get("hosts", {})
-        )
-        return ip in hosts
-    except (AttributeError, TypeError):
-        return False
+    return ip.strip() in hosts
+
+
+def describe_inventory_membership(ip: str) -> str:
+    """Return ``""`` when *ip* is a member of the inventory, else a diagnostic.
+
+    诊断组合：清单读取失败原因（如有）+ ``edge_cluster.hosts`` 现有主机列表
+    （如清单可读）+ 首尾空白提示（如 ip 带空白）。供自启动 400 响应携带
+    可行动信息（2026-10）。
+    """
+    hosts, reason = _load_edge_hosts()
+    if hosts is not None and ip.strip() in hosts:
+        return ""
+    parts: list[str] = []
+    if reason:
+        parts.append(reason)
+    if hosts is not None:
+        parts.append(f"清单 edge_cluster.hosts 现有主机: {'、'.join(str(k) for k in hosts)}")
+    if ip != ip.strip():
+        parts.append(f"注意节点 IP {ip!r} 带首尾空格")
+    return "；".join(parts)
 
 
 def ip_sort_key(ip: str):

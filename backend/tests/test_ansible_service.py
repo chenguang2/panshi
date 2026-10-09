@@ -1075,6 +1075,96 @@ class TestIsNodeInInventory:
             # 同一清单下不在册 IP 仍须判 False（防改过头）
             assert mod.is_node_in_inventory("10.9.9.9") is False
 
+    def test_ip_with_surrounding_whitespace_matches_clean_key(self, tmp_path):
+        """节点 IP 带首尾空格也应命中干净清单键（容忍存量脏数据，2026-10）。
+
+        实测：Node.ip 无 trim 校验时可能存成 " 10.5.3.55"，按原值精确比对
+        会假性「未在清单」→ 自启动 400。
+        """
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "          ansible_ssh_user: rocksware\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory(" 192.168.0.24 ") is True
+
+    def test_yaml_parse_failure_describe_reports_reason_and_path(self, tmp_path):
+        """YAML 解析失败：membership 仍为 False，但 describe 给出可诊断原因与路径。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        # 行首 tab → yaml.YAMLError（scanner "found character '\\t'"）
+        inv.write_text(
+            "all:\n"
+            "\tchildren:\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory("192.168.0.24") is False
+            reason = mod.describe_inventory_membership("192.168.0.24")
+            assert "无法按 YAML 解析" in reason
+            assert str(inv) in reason
+
+    def test_describe_reports_missing_file(self, tmp_path):
+        from app.services import ansible_service as mod
+        missing = tmp_path / "no-such-inventory"
+        with patch.object(mod, "_INVENTORY_PATH", missing):
+            assert mod.is_node_in_inventory("192.168.0.24") is False
+            reason = mod.describe_inventory_membership("192.168.0.24")
+            assert "清单文件不存在" in reason
+            assert str(missing) in reason
+
+    def test_describe_reports_missing_structure(self, tmp_path):
+        """空结构（如只有 all: {}）应报告缺 all.children.edge_cluster.hosts。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text("all: {}\n")
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.is_node_in_inventory("192.168.0.24") is False
+            reason = mod.describe_inventory_membership("192.168.0.24")
+            assert "缺少 all.children.edge_cluster.hosts" in reason
+            assert str(inv) in reason
+
+    def test_describe_unknown_ip_lists_existing_hosts_and_whitespace_hint(self, tmp_path):
+        """IP 不在清单：describe 列出现有主机；IP 带空格时附空白提示。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+            "        10.5.12.96:\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            reason = mod.describe_inventory_membership("10.9.9.9")
+            assert "现有主机" in reason
+            assert "192.168.0.24" in reason
+            assert "10.5.12.96" in reason
+
+            reason_ws = mod.describe_inventory_membership(" 10.9.9.9 ")
+            assert "带首尾空格" in reason_ws
+
+    def test_describe_returns_empty_when_member(self, tmp_path):
+        """IP 命中时 describe 返回空串（无诊断信息）。"""
+        from app.services import ansible_service as mod
+        inv = tmp_path / "host"
+        inv.write_text(
+            "all:\n"
+            "  children:\n"
+            "    edge_cluster:\n"
+            "      hosts:\n"
+            "        192.168.0.24:\n"
+        )
+        with patch.object(mod, "_INVENTORY_PATH", inv):
+            assert mod.describe_inventory_membership("192.168.0.24") == ""
+            assert mod.describe_inventory_membership(" 192.168.0.24 ") == ""
+
 
 class TestParseAutostartStatusStderr:
     """systemctl is-enabled 错误输出到 stderr 时也应识别为 not_configured。"""

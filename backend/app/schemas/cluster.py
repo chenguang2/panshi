@@ -193,6 +193,12 @@ class NodeBase(BaseModel):
     openresty_path: Optional[str] = Field(None, max_length=255)
     status: int = Field(default=1)
 
+    @field_validator('ip')
+    @classmethod
+    def strip_ip(cls, v: str) -> str:
+        # 清单键是干净的，存量脏数据（首尾空白）会假性「未在 ansible inventory」
+        return v.strip()
+
     @field_validator('edge_path')
     @classmethod
     def validate_edge_path(cls, v: str) -> str:
@@ -293,6 +299,12 @@ class NodeUpdate(BaseModel):
     edge_path: Optional[str] = Field(None, max_length=255)
     openresty_path: Optional[str] = Field(None, max_length=255)
     status: Optional[int] = None
+
+    @field_validator('ip')
+    @classmethod
+    def strip_ip(cls, v: Optional[str]) -> Optional[str]:
+        # 与 NodeBase.strip_ip 同口径；ip 可选，None 原样返回
+        return v.strip() if v is not None else v
 
     @field_validator('edge_path')
     @classmethod
