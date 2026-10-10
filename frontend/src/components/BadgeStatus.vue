@@ -8,7 +8,7 @@
 <script setup lang="ts">
 defineProps<{
   text: string
-  status: 'online' | 'offline' | 'warning' | 'info'
+  status: 'online' | 'offline' | 'warning' | 'info' | 'neutral'
 }>()
 </script>
 
@@ -21,10 +21,22 @@ defineProps<{
   font-weight: 500;
 }
 
-.badge-online { color: var(--success); }
-.badge-offline { color: var(--danger); }
-.badge-warning { color: var(--warning); }
-.badge-info { color: var(--info); }
+.badge-online {
+  color: var(--success);
+}
+.badge-offline {
+  color: var(--danger);
+}
+.badge-warning {
+  color: var(--warning);
+}
+.badge-info {
+  color: var(--info);
+}
+/* 中性灰：未知/未检测等「非健康也非故障」的第三态（概览页节点未检测，overview-page-ux D2/D5） */
+.badge-neutral {
+  color: var(--muted);
+}
 
 .status-dot {
   display: inline-block;
@@ -34,8 +46,24 @@ defineProps<{
   flex-shrink: 0;
 }
 
-.status-dot.online { background: var(--success); box-shadow: 0 0 6px color-mix(in srgb, var(--success) 50%, transparent); }
-.status-dot.offline { background: var(--danger); box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent); }
-.status-dot.warning { background: var(--warning); box-shadow: 0 0 6px color-mix(in srgb, var(--warning) 50%, transparent); }
-.status-dot.info { background: var(--info); box-shadow: 0 0 6px color-mix(in srgb, var(--info) 50%, transparent); }
+.status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--success) 50%, transparent);
+}
+.status-dot.offline {
+  background: var(--danger);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent);
+}
+.status-dot.warning {
+  background: var(--warning);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--warning) 50%, transparent);
+}
+.status-dot.info {
+  background: var(--info);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--info) 50%, transparent);
+}
+.status-dot.neutral {
+  background: var(--muted);
+  box-shadow: none;
+}
 </style>
