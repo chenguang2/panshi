@@ -1,10 +1,6 @@
-# cluster-list-page Specification
+# cluster-list-page Delta
 
-## Purpose
-
-集群管理列表页面，位于 `/clusters` 路由，以卡片网格展示所有集群的统计信息和状态，支持分组展示、搜索筛选、CRUD 操作。与集中管理页面（CentralList.vue）为独立页面，但两者共享 `ClusterCard.vue` 卡片组件（卡片解剖一致，页面级布局与交互各自独立）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Cluster list page with card grid
 
@@ -167,6 +163,8 @@ The page SHALL support creating, editing, testing, and deleting clusters.
 - **AND** SHALL execute deletion with a progress modal
 - **AND** the delete flow SHALL reuse `showDeleteConfirm` and `executeDeleteWithProgress` from `useClusterUtils`
 - **AND** 节点/统计接口失败时 SHALL NOT 降级删除语义（确认弹窗照常弹出并照常执行删除，详见 `cluster-delete-stats` 能力）
+
+## ADDED Requirements
 
 ### Requirement: 集群表单交互保护
 

@@ -65,6 +65,8 @@ class ClusterResponse(BaseModel):
     status: int = 1
     group_name: Optional[str] = None
     region_code: Optional[str] = None
+    # 集群配置（edge.env）版本；子资源发布不推进此版本（cluster-ux-close-loop 3.1 透传）
+    current_version: Optional[int] = None
     created_at: Optional[str] = None
     node_count: int = 0
     healthy_node_count: int = 0

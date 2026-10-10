@@ -12,14 +12,25 @@
       </div>
       <div class="cl-card-meta">
         <span v-if="cluster.status === 1" class="badge badge-success"
-          ><span class="status-dot online"></span>运行中</span
+          ><span class="status-dot online"></span>已启用</span
         >
         <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
+        <span
+          class="cl-version-chip"
+          :class="versionChip.published ? 'is-published' : 'is-unpublished'"
+          :title="VERSION_CHIP_TOOLTIP"
+          >{{ versionChip.text }}</span
+        >
         <span v-if="routeBadge" class="badge cl-route-badge" :class="routeBadge.cls">{{ routeBadge.label }}</span>
       </div>
     </div>
     <div v-if="statClick" class="cl-card-stats">
-      <div class="cl-stat-cell cl-stat-link" title="健康节点 / 节点总数" @click="onStatClick('nodes')">
+      <div
+        class="cl-stat-cell cl-stat-link"
+        :class="healthCls"
+        title="健康节点 / 节点总数"
+        @click="onStatClick('nodes')"
+      >
         <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
         <div class="cl-stat-label">节点</div>
       </div>
@@ -52,6 +63,7 @@
       <router-link
         :to="{ path: '/nodes', query: { cluster_id: cluster.id } }"
         class="cl-stat-cell cl-stat-link"
+        :class="healthCls"
         title="健康节点 / 节点总数"
         ><div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
         <div class="cl-stat-label">节点</div></router-link
@@ -133,6 +145,22 @@ const nameTitle = computed(
   () => `集群名: ${props.cluster.display_name || props.cluster.name} · ID: ${props.cluster.id}`,
 )
 
+/** 发布状态微标（cluster-ux-close-loop 3.2）：独立迷你徽章，不复用 PublishStatusTag */
+const VERSION_CHIP_TOOLTIP = '集群配置（edge.env）版本；子资源发布不推进此版本'
+const versionChip = computed(() => ({
+  text: props.cluster.current_version ? `配置 v${props.cluster.current_version}` : '未发布',
+  published: !!props.cluster.current_version,
+}))
+
+/** 健康节点格分级（cluster-ux-close-loop 3.3）：0 健康红 / 不足橙 / 全健康默认（无节点不告警） */
+const healthCls = computed(() => {
+  const total = props.cluster.node_count || 0
+  const healthy = props.cluster.healthy_node_count || 0
+  if (total > 0 && healthy === 0) return 'is-danger'
+  if (healthy < total) return 'is-warning'
+  return ''
+})
+
 /** 节点 tag 最多展示前 3 个 */
 const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
 </script>
@@ -208,6 +236,23 @@ const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
 .cl-route-badge {
   white-space: nowrap;
 }
+.cl-version-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--bg);
+  white-space: nowrap;
+}
+.cl-version-chip.is-published {
+  color: var(--success);
+  border-color: oklch(55% 0.15 145 / 35%);
+  background: oklch(55% 0.15 145 / 10%);
+}
 
 .cl-card-stats {
   display: grid;
@@ -243,6 +288,12 @@ const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
   letter-spacing: 0.04em;
   white-space: nowrap;
   margin-top: 2px;
+}
+.cl-stat-cell.is-danger .cl-stat-value {
+  color: var(--danger);
+}
+.cl-stat-cell.is-warning .cl-stat-value {
+  color: var(--warning);
 }
 .cl-stat-link {
   text-decoration: none;

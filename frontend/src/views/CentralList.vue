@@ -11,7 +11,8 @@
       :visible="backupDialogVisible"
       :mode="backupDialogMode"
       :cluster="backupTargetCluster"
-      @close="backupDialogVisible = false"
+      @imported="onBackupImported"
+      @close="onBackupDialogClose"
     />
 
     <div class="cl-header-actions">
@@ -21,8 +22,8 @@
       </div>
       <select v-model="statusFilter" class="form-input" style="width: 110px; flex-shrink: 0">
         <option value="all">全部状态</option>
-        <option value="healthy">健康</option>
-        <option value="offline">离线</option>
+        <option value="enabled">已启用</option>
+        <option value="disabled">已禁用</option>
       </select>
       <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
       <button
@@ -141,7 +142,7 @@
                     </div>
                   </template>
                   <template #actions>
-                    <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+                    <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
                     <button
@@ -233,7 +234,7 @@
                     </div>
                   </template>
                   <template #actions>
-                    <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+                    <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
                     <button
@@ -299,7 +300,7 @@
           <span class="cname">{{ cluster.display_name || cluster.name }}</span>
           <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
           <div class="cl-card-actions">
-            <button class="btn btn-ghost btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+            <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
             <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
             <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
             <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(cluster)">导出 Excel</button>
@@ -407,7 +408,10 @@
     </TransitionGroup>
 
     <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
-      <a-empty description="暂无集群" />
+      <!-- 空状态两分支（cluster-ux-close-loop B6.4）：从未创建 vs 筛选无结果 -->
+      <a-empty :description="hasActiveFilters ? '没有符合筛选条件的集群' : '还没有集群'" />
+      <button v-if="hasActiveFilters" class="btn btn-secondary" @click="clearFilters">清除筛选</button>
+      <button v-else class="btn btn-primary" @click="showAddModal">新建集群</button>
     </div>
 
     <ClusterFormModal
@@ -498,85 +502,8 @@
     />
 
     <!-- Cluster Detail Modal -->
-    <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>集群详情</h2>
-          <button class="modal-close" @click="detailVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="detailCluster">
-            <table class="detail-table">
-              <tbody>
-                <tr>
-                  <td class="dt-label">集群名称</td>
-                  <td class="dt-value">{{ detailCluster.name }}</td>
-                </tr>
-                <tr>
-                  <td class="dt-label">显示名称</td>
-                  <td class="dt-value">{{ detailCluster.display_name || '-' }}</td>
-                </tr>
-                <tr>
-                  <td class="dt-label">分组</td>
-                  <td class="dt-value">{{ detailCluster.group_name || '-' }}</td>
-                </tr>
-                <tr>
-                  <td class="dt-label">描述</td>
-                  <td class="dt-value">{{ detailCluster.description || '-' }}</td>
-                </tr>
-                <tr>
-                  <td class="dt-label">状态</td>
-                  <td class="dt-value">
-                    <span v-if="detailCluster.status === 1" class="badge badge-success"
-                      ><span class="status-dot online"></span>运行中</span
-                    >
-                    <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="dt-label">创建时间</td>
-                  <td class="dt-value">
-                    {{ formatDateTime(detailCluster.created_at) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <h3 class="detail-section-title">资源统计</h3>
-            <div class="detail-stats-grid">
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">节点</div>
-                <div class="detail-stat-value">
-                  {{ detailCluster.healthy_node_count }}/{{ detailCluster.node_count }}
-                </div>
-              </div>
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">上游</div>
-                <div class="detail-stat-value">{{ detailCluster.upstream_count }}</div>
-              </div>
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">路由</div>
-                <div class="detail-stat-value">{{ detailCluster.route_count }}</div>
-              </div>
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">插件组</div>
-                <div class="detail-stat-value">{{ detailCluster.plugin_config_count }}</div>
-              </div>
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">全局规则</div>
-                <div class="detail-stat-value">{{ detailCluster.global_rule_count }}</div>
-              </div>
-              <div class="detail-stat-card">
-                <div class="detail-stat-label">静态资源</div>
-                <div class="detail-stat-value">{{ detailCluster.static_resource_count }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="detailVisible = false">关闭</button>
-        </div>
-      </div>
-    </div>
+    <!-- 集群详情弹窗：共享组件唯一实现（cluster-ux-close-loop 3.6） -->
+    <ClusterDetailModal :cluster="detailCluster" :visible="detailVisible" @close="detailVisible = false" />
 
     <!-- Test Connection Modal -->
     <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }">
@@ -588,7 +515,7 @@
         <div class="modal-body">
           <div v-if="!testRunning && testLogs.length === 0">
             <div style="margin-bottom: 12px; font-size: 13px; color: var(--muted)">
-              将要对下列节点进行 TCP 端口连接测试：
+              将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：
             </div>
             <div v-if="testNodes.length > 0" class="test-nodes-list">
               <div v-for="n in testNodes" :key="n.id" class="test-node-row">
@@ -607,8 +534,16 @@
                 <span v-else-if="log.status === 'success'" class="log-icon">✓</span>
                 <span v-else-if="log.status === 'error'" class="log-icon log-error">✗</span>
                 <span class="log-msg">{{ log.msg }}</span>
+                <button
+                  v-if="log.status === 'error' && log.whitelist && canPushGatewayConfig"
+                  class="test-action-link"
+                  @click="goRelayGateways"
+                >
+                  去下发网关配置
+                </button>
               </div>
             </div>
+            <div v-if="!testRunning" class="test-status-hint">测试结果将更新节点的在线状态标记</div>
           </div>
         </div>
         <div class="modal-footer">
@@ -630,14 +565,14 @@ import { message } from 'ant-design-vue'
 import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import {
   showDeleteConfirm,
-  buildDeleteProgressContent,
   executeDeleteWithProgress,
-  showNameConfirm,
   routeLabel,
+  deleteClusterWithConfirm,
 } from '@/composables/useClusterUtils'
 import { downloadBlob } from '@/utils/download'
 import api from '@/api'
-import { listRelayGateways } from '@/api/relay'
+import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
+import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
@@ -664,49 +599,23 @@ import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
 
 const authStore = useAuthStore()
-const featuresStore = useFeaturesStore()
 const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const statusFilter = ref<string>('all')
 
-// ── 经中继 / 直连 徽章（与集群管理页同款计算：页面算好传给 ClusterCard）──
-// 中继总开关在 features.yaml 中是显式 opt-in（缺失即关闭），故直接读原始值，
-// 不使用 featuresStore.has()（那是「未列出即启用」的 opt-out 语义）。
-const relayFeatureOn = computed(() => featuresStore.features.relay_gateway === true)
-const regionNames = ref<Record<string, string>>({})
-/** 只有成功拉到区域列表才算「中继可用」；拉取失败（功能关闭常见 404/403）按未启用处理 */
-const relayUsable = ref(false)
-let relayFetchStarted = false
+/** 筛选是否有生效条件（空状态两分支判定，cluster-ux-close-loop B6.4） */
+const hasActiveFilters = computed(() => filterText.value.trim() !== '' || statusFilter.value !== 'all')
 
-watchEffect(() => {
-  if (!relayFeatureOn.value) {
-    relayUsable.value = false
-    return
-  }
-  if (relayFetchStarted) return
-  // 没有任何集群挂接区域时无需拉取区域名
-  if (!clusters.value.some((c) => !!c.region_code)) return
-  relayFetchStarted = true
-  Promise.resolve()
-    .then(() => listRelayGateways())
-    .then((res) => {
-      const map: Record<string, string> = {}
-      for (const g of res.data) map[g.code] = g.name
-      regionNames.value = map
-      relayUsable.value = true
-    })
-    .catch(() => {
-      relayUsable.value = false
-    })
-})
-
-/** 集群卡片右上角的路径徽章：经中继（品牌/成功色）或直连（中性色） */
-function routeBadge(c: Cluster): { label: string; cls: string } {
-  if (!relayUsable.value || !c.region_code) return { label: '直连', cls: 'badge-neutral' }
-  const name = regionNames.value[c.region_code] || c.region_code
-  return { label: `经中继 · ${name}`, cls: 'badge-success' }
+function clearFilters() {
+  filterText.value = ''
+  statusFilter.value = 'all'
 }
+
+// ── 经中继 / 直连 徽章 ──
+// 唯一实现在 useClusterRouteBadge composable（cluster-ux-close-loop 3.5）：
+// 中继关闭 / 区域数据缺失 / 未绑区域 → null（不渲染徽章，直连是缺省态）。
+const { routeBadge } = useClusterRouteBadge(clusters)
 
 // PublishConfirmModal state
 const publishModalVisible = ref(false)
@@ -871,8 +780,8 @@ const filteredClusters = computed(() => {
       const matchKey = c.name.toLowerCase().includes(text)
       if (!matchName && !matchKey) return false
     }
-    if (statusFilter.value === 'healthy') return c.status === 1
-    if (statusFilter.value === 'offline') return c.status !== 1
+    if (statusFilter.value === 'enabled') return c.status === 1
+    if (statusFilter.value === 'disabled') return c.status !== 1
     return true
   })
 })
@@ -1196,7 +1105,16 @@ function viewClusterDetail(cluster: Cluster) {
 const testVisible = ref(false)
 const testRunning = ref(false)
 const testNodes = ref<{ id: number; ip: string; service_port: number; management_port: number; status: number }[]>([])
-const testLogs = ref<{ status: 'pending' | 'success' | 'error'; msg: string }[]>([])
+const testLogs = ref<{ status: 'pending' | 'success' | 'error'; msg: string; whitelist?: boolean }[]>([])
+
+/** 白名单 403 快捷动作仅对具备 relay_gateway 权限的用户渲染（与侧边栏菜单权限键同源） */
+const canPushGatewayConfig = computed(() => authStore.hasPermission('relay_gateway'))
+const testNavRouter = useRouter()
+
+function goRelayGateways() {
+  resetTest()
+  void testNavRouter.push('/relay-gateways')
+}
 
 /** POST /clusters/{id}/test 的逐节点结果 */
 interface ConnectionTestResult {
@@ -1270,14 +1188,20 @@ async function runTest() {
           testLogs.value[idx] = { status: 'success', msg: `${label} 连接成功${routeSuffix}` }
         } else {
           failCount++
-          testLogs.value[idx] = { status: 'error', msg: `${label} 连接失败 — ${r.msg}${routeSuffix}` }
+          testLogs.value[idx] = {
+            status: 'error',
+            msg: `${label} 连接失败 — ${r.msg}${routeSuffix}`,
+            whitelist: !!(r.msg && r.msg.includes('白名单')),
+          }
         }
       }
     }
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+    const failNote =
+      failCount > 0 ? ` ⚠ 存在 ${failCount} 个失败节点，请检查失败原因（白名单 403 需先下发网关配置）` : ''
     testLogs.value.push({
-      status: 'success',
-      msg: `测试完成 — 共 ${results.length} 个节点，成功 ${successCount}，失败 ${failCount}，耗时 ${elapsed}s`,
+      status: failCount > 0 ? 'error' : 'success',
+      msg: `测试完成 — 共 ${results.length} 个节点，成功 ${successCount}，失败 ${failCount}，耗时 ${elapsed}s${failNote}`,
     })
   } catch (e: any) {
     for (let i = 0; i < testLogs.value.length; i++) {
@@ -1289,63 +1213,35 @@ async function runTest() {
         }
       }
     }
-    testLogs.value.push({ status: 'error', msg: `测试异常终止` })
+    const elapsedErr = ((Date.now() - startTime) / 1000).toFixed(1)
+    testLogs.value.push({ status: 'error', msg: `测试异常终止，耗时 ${elapsedErr}s` })
   }
   testRunning.value = false
   await loadClusters()
 }
 
-const deleteCluster = async (cluster: Cluster) => {
-  const clusterName = cluster.display_name || cluster.name
-
-  // 获取节点列表（用于第一个界面的节点选择）
-  let availableNodes: { id: number; ip: string; management_port: number }[] = []
-  try {
-    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
-    availableNodes = res.data.items || []
-  } catch (e) {
-    console.error('[删除集群] 加载节点列表失败', e)
-  }
-
-  // 加载资源统计
-  let stats: Record<string, number> = {}
-  try {
-    const res = await api.get(`/clusters/${cluster.id}/stats`)
-    stats = res.data
-  } catch {
-    /* 统计加载失败时不阻塞，显示空计数 */
-  }
-
-  showDeleteConfirm({
-    title: `确定要删除集群 "${clusterName}" 吗？`,
-    apiEndpoint: `/clusters/${cluster.id}`,
-    showResourceStats: true,
-    stats,
-    nodes: availableNodes,
-    onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
-      showNameConfirm({
-        title: '请输入集群名称确认删除',
-        expectedName: clusterName,
-        onConfirm: async () => {
-          await executeDeleteWithProgress({
-            title: `删除集群: ${clusterName}`,
-            apiEndpoint: `/clusters/${cluster.id}`,
-            cluster,
-            deleteDb,
-            deleteEdge,
-            nodeIds,
-            refreshFn: () => loadClusters(),
-          })
-        },
-      })
-    },
-  })
+const deleteCluster = (cluster: Cluster) => {
+  void deleteClusterWithConfirm(cluster, { refreshFn: () => loadClusters() })
 }
 
 // ── Cluster JSON backup / restore ──
 const backupDialogVisible = ref(false)
 const backupDialogMode = ref<'download' | 'import'>('download')
 const backupTargetCluster = ref<Cluster | null>(null)
+/** 导入完成闭环（cluster-ux-close-loop B5）：导入发生后关闭弹窗即刷新列表，新集群即时可见 */
+const backupImported = ref(false)
+
+function onBackupImported() {
+  backupImported.value = true
+}
+
+function onBackupDialogClose() {
+  backupDialogVisible.value = false
+  if (backupImported.value) {
+    backupImported.value = false
+    void loadClusters()
+  }
+}
 
 function openBackupDownload(cluster: Cluster) {
   backupTargetCluster.value = cluster
@@ -2178,56 +2074,6 @@ onMounted(async () => {
   padding-top: 0;
 }
 
-/* ── Detail modal ── */
-.detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.detail-table td {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-}
-.dt-label {
-  color: var(--muted);
-  font-weight: 500;
-  width: 100px;
-  vertical-align: top;
-}
-.dt-value {
-  color: var(--fg);
-  word-break: break-all;
-}
-.detail-section-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 16px 0 10px;
-  color: var(--fg);
-}
-.detail-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 12px;
-}
-.detail-stat-card {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  text-align: center;
-}
-.detail-stat-label {
-  font-size: 11px;
-  color: var(--muted);
-}
-.detail-stat-value {
-  font-family: monospace;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--fg);
-  margin-top: 2px;
-}
-
 /* ── Test connection ── */
 .test-nodes-list {
   max-height: 320px;
@@ -2262,6 +2108,26 @@ onMounted(async () => {
 }
 .test-log-row:last-child {
   border-bottom: none;
+}
+.test-log-row.success {
+  color: var(--success);
+}
+.test-log-row.error {
+  color: var(--danger);
+}
+.test-action-link {
+  border: none;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  text-decoration: underline;
+}
+.test-status-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .log-msg {
   font-family: monospace;

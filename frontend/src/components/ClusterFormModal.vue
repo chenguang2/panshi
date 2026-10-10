@@ -17,6 +17,9 @@
             @blur="validateName"
           />
           <span class="form-error" v-if="formErrors.name">{{ formErrors.name }}</span>
+          <span class="form-hint" v-else-if="editingCluster"
+            >集群名称是固定标识，创建后不可修改；如需调整对外名称请修改『显示名称』</span
+          >
           <span class="form-hint" v-else>小写字母、数字、中划线组成，中划线不能在首尾</span>
         </div>
         <div class="form-group">
@@ -32,7 +35,7 @@
         <div class="form-group">
           <label class="form-label">分组</label>
           <select class="form-input" v-model="form.group_name" @change="onGroupChange">
-            <option value="">未分类</option>
+            <option value="">未分组</option>
             <option v-for="g in allGroupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__new__">新建分组...</option>
           </select>
@@ -70,14 +73,18 @@
             <option value="">直连（无中继）</option>
             <option v-for="r in regionOptions" :key="r.code" :value="r.code">{{ r.name }}（{{ r.code }}）</option>
           </select>
-          <span class="form-hint">跨中心中继：挂接区域后，该集群节点经对应路局网关执行</span>
+          <span v-if="regionLoadError" class="form-hint" style="color: var(--warning)"
+            >区域列表加载失败，当前仅可直连</span
+          >
+          <span v-else class="form-hint">跨中心中继：挂接区域后，该集群节点经对应路局网关执行</span>
         </div>
         <div class="form-group" v-if="editingCluster">
           <label class="form-label">状态</label>
           <select class="form-input" v-model="form.status">
-            <option value="1">正常</option>
-            <option value="0">禁用</option>
+            <option value="1">已启用</option>
+            <option value="0">已禁用</option>
           </select>
+          <span class="form-hint">启用后集群可被发布与连接测试</span>
         </div>
       </div>
       <div class="modal-footer">
@@ -91,12 +98,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watchEffect, computed, nextTick, h } from 'vue'
+import { ref, reactive, watch, watchEffect, computed, nextTick, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import { listRelayGateways, type RelayGateway } from '@/api/relay'
+import { useFeaturesStore } from '@/stores/features'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 
 const props = defineProps<{
@@ -122,7 +130,7 @@ const pendingGroupName = ref('')
 /** Combined options: prop groupOptions + any newly created group */
 const allGroupOptions = computed(() => {
   const base = [...props.groupOptions]
-  // Remove empty string (represented by dedicated "未分类" option)
+  // Remove empty string (represented by dedicated "未分组" option)
   const filtered = base.filter((g) => g !== '')
   if (pendingGroupName.value && !filtered.includes(pendingGroupName.value)) {
     filtered.push(pendingGroupName.value)
@@ -141,7 +149,28 @@ const form = reactive({
   region_code: '',
 })
 
+/** 表单字段序列化（快照对比用，含新建分组暂存） */
+function formSnapshot(): string {
+  return JSON.stringify([
+    form.name,
+    form.display_name,
+    form.group_name,
+    form.description,
+    String(form.status),
+    form.admin_key,
+    form.region_code,
+    pendingGroupName.value,
+  ])
+}
+
+const initialFormSnapshot = ref('')
+/** 表单相对打开时是否有未保存修改 */
+const isDirty = computed(() => formSnapshot() !== initialFormSnapshot.value)
+
 const regionOptions = ref<RelayGateway[]>([])
+/** 区域下拉加载失败（cluster-ux-close-loop B6.3）：显式提示，不静默吞错 */
+const regionLoadError = ref(false)
+const featuresStore = useFeaturesStore()
 watchEffect(() => {
   if (props.visible && regionOptions.value.length === 0) {
     // 延迟到微任务：api mock 缺 get 时同步抛错也能被 catch 吞掉，不阻塞表单
@@ -151,7 +180,8 @@ watchEffect(() => {
         regionOptions.value = res.data
       })
       .catch(() => {
-        /* 区域接口失败不阻塞集群表单 */
+        // 中继未开启时区域接口本就不可用，不算加载失败（避免误导性告警）
+        regionLoadError.value = featuresStore.features.relay_gateway === true
       })
   }
 })
@@ -185,16 +215,22 @@ function initForm(cluster: Cluster | null) {
   showNewGroupInput.value = false
   newGroupError.value = ''
   pendingGroupName.value = ''
+  // 误关保护基线（cluster-ux-close-loop B6.1）：表单初始化完成即记录快照
+  initialFormSnapshot.value = formSnapshot()
 }
 
-// Use watchEffect to reactively init form when visible + editingCluster change.
-// watchEffect runs immediately on mount and then whenever deps change,
-// so even if the component is mounted with visible=true, the form is populated.
-watchEffect(() => {
-  if (props.visible) {
-    initForm(props.editingCluster)
-  }
-})
+// Use watch to reactively init form when visible + editingCluster change.
+// watch（非 watchEffect）：回调体不做依赖追踪——initForm 里的 formSnapshot() 读取
+// 若被追踪会让 effect 依赖全部表单字段，打字即重置表单（2026-10 B6 实测踩坑）。
+watch(
+  [() => props.visible, () => props.editingCluster],
+  ([visible]) => {
+    if (visible) {
+      initForm(props.editingCluster)
+    }
+  },
+  { immediate: true },
+)
 
 function onGroupChange() {
   if (form.group_name === '__new__') {
@@ -238,7 +274,20 @@ function validateName(): boolean {
 }
 
 function handleCancel() {
-  emit('close')
+  if (!isDirty.value) {
+    emit('close')
+    return
+  }
+  // 误关保护（cluster-ux-close-loop B6.1）：有未保存修改时经确认弹窗放弃
+  showOverlayModal({
+    title: '更改尚未保存，确定放弃？',
+    content: '关闭后未保存的修改将丢失。',
+    okText: '放弃修改',
+    cancelText: '继续编辑',
+    onOk: () => {
+      emit('close')
+    },
+  })
 }
 
 /**
@@ -259,6 +308,11 @@ function showRegionGuide(regionCode: string) {
         '绑定区域只改变平台路由，不会自动更新网关机上的节点白名单；未下发前该区域节点访问会返回 403，发布、节点任务等会失败。',
       ),
       h('p', { style: 'color: var(--muted); font-size: 12px' }, '请到「中继区域管理」对该区域执行一次「下发配置」。'),
+      h(
+        'p',
+        { style: 'color: var(--muted); font-size: 12px' },
+        '下发完成后，请回到集群卡片执行『连接测试』确认节点可达。',
+      ),
     ]),
     okText: '去下发配置',
     cancelText: '稍后',

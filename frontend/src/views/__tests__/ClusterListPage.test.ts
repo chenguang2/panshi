@@ -139,19 +139,19 @@ describe('ClusterList.vue - 经中继 / 直连 徽章', () => {
     expect(wrapper.find('.cl-route-badge').text()).toBe('经中继 · 上海局')
   })
 
-  it('区域为空 → 显示「直连」', async () => {
+  it('区域为空 → 不渲染路径徽章（cluster-ux-close-loop 3.4）', async () => {
     const wrapper = await mountWith([makeCluster('')])
-    expect(wrapper.find('.cl-route-badge').text()).toBe('直连')
+    expect(wrapper.find('.cl-route-badge').exists()).toBe(false)
   })
 
-  it('中继未启用（区域残留）→ 一律「直连」', async () => {
+  it('中继未启用（区域残留）→ 不渲染路径徽章', async () => {
     const wrapper = await mountWith([makeCluster('aoh')], { relayOn: false })
-    expect(wrapper.find('.cl-route-badge').text()).toBe('直连')
+    expect(wrapper.find('.cl-route-badge').exists()).toBe(false)
   })
 
-  it('listRelayGateways 失败 → 按未启用处理并显示「直连」', async () => {
+  it('listRelayGateways 失败 → 按未启用处理，不渲染路径徽章', async () => {
     const wrapper = await mountWith([makeCluster('aoh')], { relayFail: true })
-    expect(wrapper.find('.cl-route-badge').text()).toBe('直连')
+    expect(wrapper.find('.cl-route-badge').exists()).toBe(false)
   })
 
   it('取不到区域名 → 退化为显示 region_code', async () => {
@@ -322,5 +322,366 @@ describe('ClusterList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
     expect(wrapper.text()).toContain(payload)
     expect(wrapper.element.querySelectorAll('script')).toHaveLength(0)
     expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
+  })
+})
+
+// ── B2（cluster-ux-close-loop）：连接测试交互统一 ──────────────────────────
+describe('ClusterList.vue - 连接测试交互统一（B2）', () => {
+  const cluster = {
+    id: 1,
+    name: 'demo-cluster',
+    display_name: '演示集群',
+    group_name: '',
+    status: 1,
+    region_code: 'aoh',
+    node_count: 1,
+    healthy_node_count: 1,
+    upstream_count: 0,
+    route_count: 0,
+    plugin_config_count: 0,
+    global_rule_count: 0,
+    static_resource_count: 0,
+    plugin_metadata_count: 0,
+    nodes: [],
+  }
+
+  async function openTestModal(opts?: { role?: string; permissions?: string[] }) {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'u1', role: opts?.role ?? 'admin' }))
+    if (opts?.permissions) localStorage.setItem('permissions', JSON.stringify(opts.permissions))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my') return Promise.resolve({ data: { items: [cluster] } })
+      if (url.startsWith('/clusters/1/nodes')) {
+        return Promise.resolve({
+          data: { items: [{ id: 10, ip: '192.168.0.14', management_port: 16620, service_port: 16610, status: 1 }] },
+        })
+      }
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const ClusterList = (await import('@/views/ClusterList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Dashboard', component: { template: '<div />' } },
+        { path: '/relay-gateways', name: 'RelayGateways', component: { template: '<div />' } },
+      ],
+    })
+    const wrapper = mount(ClusterList, { global: { plugins: [router] } })
+    await flushPromises()
+    const openBtn = wrapper.findAll('button').find((b) => b.text().includes('连接测试'))
+    expect(openBtn).toBeTruthy()
+    await openBtn!.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return { wrapper, router }
+  }
+
+  async function runTest(results: unknown[], opts?: { postReject?: Error; role?: string; permissions?: string[] }) {
+    const ctx = await openTestModal(opts)
+    if (opts?.postReject) mockApiPost.mockRejectedValue(opts.postReject)
+    else mockApiPost.mockResolvedValue({ data: { results } })
+    const runBtn = ctx.wrapper.findAll('button').find((b) => b.text().trim() === '开始测试')
+    expect(runBtn).toBeTruthy()
+    await runBtn!.trigger('click')
+    await flushPromises()
+    await ctx.wrapper.vm.$nextTick()
+    return ctx
+  }
+
+  const lastRow = (wrapper: { findAll: (s: string) => any[] }) => {
+    const rows = wrapper.findAll('.test-log-row')
+    return rows[rows.length - 1]
+  }
+
+  it('引导文案为管理面语义且不出现「TCP 端口连接测试」', async () => {
+    const { wrapper } = await openTestModal()
+    const text = wrapper.text()
+    expect(text).toContain('将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：')
+    expect(text).not.toContain('TCP 端口连接测试')
+  })
+
+  it('全部成功 → 总结行绿色且无 ⚠ 提示', async () => {
+    const { wrapper } = await runTest([
+      { node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '', route: 'direct' },
+    ])
+    expect(lastRow(wrapper).classes()).toContain('success')
+    expect(wrapper.text()).not.toContain('⚠')
+  })
+
+  it('存在失败 → 总结行警示色并追加 ⚠ 失败节点提示', async () => {
+    const { wrapper } = await runTest([
+      { node_id: 10, ip: '192.168.0.14', port: 16620, ok: false, msg: 'Failed to connect', route: 'direct' },
+    ])
+    expect(lastRow(wrapper).classes()).toContain('error')
+    expect(wrapper.text()).toContain('⚠ 存在 1 个失败节点，请检查失败原因（白名单 403 需先下发网关配置）')
+  })
+
+  it('结果区静态提示「测试结果将更新节点的在线状态标记」', async () => {
+    const { wrapper } = await runTest([{ node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '' }])
+    expect(wrapper.text()).toContain('测试结果将更新节点的在线状态标记')
+  })
+
+  it('白名单 403 失败行下提供「去下发网关配置」快捷动作并跳转中继网关页（admin）', async () => {
+    const { wrapper, router } = await runTest([
+      {
+        node_id: 10,
+        ip: '192.168.0.14',
+        port: 16620,
+        ok: false,
+        msg: '目标不在该局网关白名单，请执行配置下发',
+        route: 'relay',
+      },
+    ])
+    const action = wrapper.findAll('button').find((b) => b.text().includes('去下发网关配置'))
+    expect(action).toBeTruthy()
+    await action!.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/relay-gateways')
+  })
+
+  it('无 relay_gateway 权限的用户不渲染「去下发网关配置」', async () => {
+    const { wrapper } = await runTest(
+      [
+        {
+          node_id: 10,
+          ip: '192.168.0.14',
+          port: 16620,
+          ok: false,
+          msg: '目标不在该局网关白名单，请执行配置下发',
+          route: 'relay',
+        },
+      ],
+      { role: 'user', permissions: [] },
+    )
+    const action = wrapper.findAll('button').find((b) => b.text().includes('去下发网关配置'))
+    expect(action).toBeFalsy()
+  })
+
+  it('异常终止 → 总结「测试异常终止，耗时 Xs」', async () => {
+    const { wrapper } = await runTest([{ node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '' }], {
+      postReject: Object.assign(new Error('boom'), { response: { data: { detail: '网络中断' } } }),
+    })
+    expect(lastRow(wrapper).text()).toMatch(/测试异常终止，耗时 [\d.]+s/)
+  })
+})
+
+// ── cluster-ux-close-loop B4：状态筛选器（集群启用位语义，非节点健康）──
+describe('ClusterList.vue - 状态筛选器（B4）', () => {
+  function statusCluster(id: number, status: number) {
+    return {
+      id,
+      name: `c${id}`,
+      display_name: `集群${id}`,
+      group_name: '',
+      status,
+      node_count: 1,
+      healthy_node_count: status === 1 ? 1 : 0,
+      upstream_count: 0,
+      route_count: 0,
+      plugin_config_count: 0,
+      global_rule_count: 0,
+      static_resource_count: 0,
+      plugin_metadata_count: 0,
+      nodes: [],
+    }
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters')
+        return Promise.resolve({
+          data: { items: [statusCluster(1, 1), statusCluster(2, 0)], total: 2 },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  async function mountPage() {
+    const ClusterList = (await import('@/views/ClusterList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+    const wrapper = mount(ClusterList, { global: { plugins: [router] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('提供 全部状态/已启用/已禁用 三项', async () => {
+    const wrapper = await mountPage()
+    const opts = wrapper.findAll('select').flatMap((s) => s.findAll('option'))
+    const texts = opts.map((o) => o.text())
+    expect(texts).toContain('全部状态')
+    expect(texts).toContain('已启用')
+    expect(texts).toContain('已禁用')
+    expect(texts).not.toContain('健康')
+    expect(texts).not.toContain('离线')
+  })
+
+  it('选择「已禁用」仅显示 status=0 集群', async () => {
+    const wrapper = await mountPage()
+    const statusSelect = wrapper.findAll('select').find((s) => s.findAll('option').some((o) => o.text() === '已禁用'))
+    await statusSelect!.setValue('disabled')
+    await flushPromises()
+    const names = wrapper.findAll('.cl-card-name').map((n) => n.text())
+    expect(names).toContain('集群2')
+    expect(names).not.toContain('集群1')
+  })
+})
+
+// ── cluster-ux-close-loop B6：空状态两分支 / actions 顺序 / 备份下载入口 ──
+describe('ClusterList.vue - 空状态与入口（B6）', () => {
+  async function mountPage() {
+    const ClusterList = (await import('../ClusterList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+    const wrapper = mount(ClusterList, { global: { plugins: [router] } })
+    await flushPromises()
+    await flushPromises()
+    return wrapper
+  }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my') return Promise.resolve({ data: { items: [], total: 0 } })
+      return Promise.resolve({ data: {} })
+    })
+  })
+
+  it('从未创建：空列表显示「还没有集群」+「新建集群」按钮', async () => {
+    const wrapper = await mountPage()
+    const text = wrapper.text()
+    expect(text).toContain('还没有集群')
+    expect(wrapper.findAll('button').some((b) => b.text() === '新建集群')).toBe(true)
+  })
+
+  it('筛选空：显示「没有符合筛选条件的集群」+「清除筛选」，点击后恢复列表', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my')
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                name: 'alpha',
+                display_name: '甲',
+                group_name: '',
+                status: 1,
+                node_count: 1,
+                healthy_node_count: 1,
+                upstream_count: 0,
+                route_count: 0,
+                plugin_config_count: 0,
+                global_rule_count: 0,
+                static_resource_count: 0,
+                plugin_metadata_count: 0,
+              },
+            ],
+            total: 1,
+          },
+        })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await mountPage()
+    const search = wrapper.find('.search-input-wrap input')
+    await search.setValue('不存在的集群')
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('没有符合筛选条件的集群')
+    expect(text).not.toContain('还没有集群')
+    const clearBtn = wrapper.findAll('button').find((b) => b.text() === '清除筛选')!
+    expect(clearBtn).toBeTruthy()
+    await clearBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('没有符合筛选条件的集群')
+    expect(wrapper.findAll('.cl-card-name').map((n) => n.text())).toContain('甲')
+  })
+
+  it('卡片 actions 统一顺序「详情 / 连接测试 / 编辑 / 删除」，删除为危险色最右', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my')
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                name: 'alpha',
+                display_name: '甲',
+                group_name: '',
+                status: 1,
+                node_count: 1,
+                healthy_node_count: 1,
+                upstream_count: 0,
+                route_count: 0,
+                plugin_config_count: 0,
+                global_rule_count: 0,
+                static_resource_count: 0,
+                plugin_metadata_count: 0,
+              },
+            ],
+            total: 1,
+          },
+        })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await mountPage()
+    await flushPromises()
+    const actionsRow = wrapper.find('.cl-card-actions')
+    expect(actionsRow.exists()).toBe(true)
+    const labels = actionsRow.findAll('button').map((b) => b.text())
+    expect(labels).toEqual(['详情', '连接测试', '编辑', '删除'])
+    const detailBtn = actionsRow.findAll('button')[0]
+    expect(detailBtn.classes()).toContain('btn-secondary')
+    const delBtn = actionsRow.findAll('button').at(-1)!
+    expect(delBtn.attributes('style') || '').toContain('--danger')
+  })
+
+  it('PageHeader 提供「备份下载」入口，点击打开共享备份弹窗', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my')
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                name: 'alpha',
+                display_name: '甲',
+                group_name: '',
+                status: 1,
+                node_count: 0,
+                healthy_node_count: 0,
+                upstream_count: 0,
+                route_count: 0,
+                plugin_config_count: 0,
+                global_rule_count: 0,
+                static_resource_count: 0,
+                plugin_metadata_count: 0,
+              },
+            ],
+            total: 1,
+          },
+        })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await mountPage()
+    const backupBtn = wrapper.findAll('button').find((b) => b.text() === '备份下载')
+    expect(backupBtn).toBeTruthy()
+    await backupBtn!.trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'ClusterBackupDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('download')
   })
 })

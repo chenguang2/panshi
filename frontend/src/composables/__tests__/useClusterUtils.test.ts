@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockApiDelete = vi.fn()
 const mockApiPost = vi.fn()
+const mockApiGet = vi.fn()
 vi.mock('@/api', () => ({
   default: {
-    get: vi.fn(),
+    get: (...args: any[]) => mockApiGet(...args),
     post: (...args: any[]) => mockApiPost(...args),
     put: vi.fn(),
     delete: (...args: any[]) => mockApiDelete(...args),
@@ -863,5 +864,146 @@ describe('经中继 / 直连 路径标签（删除进度）', () => {
     expect(text).toContain('数据库: 数据库已删除')
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
+  })
+})
+
+describe('删除集群编排 deleteClusterWithConfirm（cluster-ux-close-loop B1）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function primaryBtn(): HTMLButtonElement {
+    return document.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLButtonElement
+  }
+
+  it('节点/统计接口均失败：确认弹窗照常弹出，提示齐全，确认后仍执行真实删除', async () => {
+    const { deleteClusterWithConfirm } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((url: string) => Promise.reject(new Error(`down: ${url}`)))
+    mockApiDelete.mockResolvedValue({ data: { message: '集群已删除', results: [] } })
+    const refreshFn = vi.fn()
+
+    await deleteClusterWithConfirm({ id: 1, name: 'c1' }, { refreshFn })
+
+    const text = document.body.textContent || ''
+    // 清单区降级提示（spec cluster-delete-stats 场景2）
+    expect(text).toContain('资源统计加载失败，不影响删除')
+    // 节点明细不可用降级提示（spec cluster-delete-nodes 场景2）
+    expect(text).toContain('节点明细不可用，Edge 删除将由后端遍历全部活跃节点')
+    // 集群专属警示（黄底行，spec cluster-delete-confirm 场景2）
+    expect(text).toContain('删除集群将同时移除平台内该集群的全部资源记录与版本历史')
+    // 集群专属「仅删除平台记录」scope 文案
+    expect(text).toContain('仅删除平台记录：该集群及全部资源记录从平台移除')
+    expect(mockApiDelete).not.toHaveBeenCalled()
+
+    // 勾选「数据库」→ 确认删除 → 名称确认 → 真实删除请求发出
+    const dbCheckbox = document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement
+    dbCheckbox.click()
+    primaryBtn().click()
+    await vi.waitFor(() => expect(document.querySelector('.ant-modal input[type="text"]')).toBeTruthy())
+    const nameInput = document.querySelector('.ant-modal input[type="text"]') as HTMLInputElement
+    nameInput.value = 'c1'
+    nameInput.dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(primaryBtn().disabled).toBe(false))
+    primaryBtn().click()
+
+    await vi.waitFor(() =>
+      expect(mockApiDelete).toHaveBeenCalledWith(
+        '/clusters/1',
+        expect.objectContaining({ data: { delete_db: true, delete_edge: false, node_ids: undefined } }),
+      ),
+    )
+    expect(refreshFn).toHaveBeenCalled()
+  })
+
+  it('统计成功：清单显示中文「静态资源」标签与合计行', async () => {
+    const { deleteClusterWithConfirm } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/nodes')) return Promise.resolve({ data: { items: [] } })
+      if (url.includes('/stats'))
+        return Promise.resolve({
+          data: { nodes: 1, routes: 2, static_resources: 3, config_versions: 4 },
+        })
+      return Promise.reject(new Error(`unexpected: ${url}`))
+    })
+
+    await deleteClusterWithConfirm({ id: 1, name: 'c1' }, { refreshFn: vi.fn() })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('静态资源')
+    expect(text).toContain('配置版本历史')
+    expect(text).toContain('合计')
+    expect(text).toContain('10 条记录')
+    expect(text).not.toContain('static_resources')
+  })
+
+  it('节点明细不可用时勾选 Edge：可直接确认（delete_edge=true、node_ids 不传）', async () => {
+    const { deleteClusterWithConfirm } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((url: string) => Promise.reject(new Error(`down: ${url}`)))
+    mockApiDelete.mockResolvedValue({ data: { message: '集群已删除', results: [] } })
+
+    await deleteClusterWithConfirm({ id: 2, name: 'c2' }, { refreshFn: vi.fn() })
+
+    const edgeCheckbox = document.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement
+    edgeCheckbox.click()
+    await vi.waitFor(() => expect(primaryBtn().disabled).toBe(false))
+    primaryBtn().click()
+    await vi.waitFor(() => expect(document.querySelector('.ant-modal input[type="text"]')).toBeTruthy())
+    const nameInput = document.querySelector('.ant-modal input[type="text"]') as HTMLInputElement
+    nameInput.value = 'c2'
+    nameInput.dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(primaryBtn().disabled).toBe(false))
+    primaryBtn().click()
+
+    await vi.waitFor(() =>
+      expect(mockApiDelete).toHaveBeenCalledWith(
+        '/clusters/2',
+        expect.objectContaining({ data: { delete_db: false, delete_edge: true, node_ids: undefined } }),
+      ),
+    )
+  })
+
+  it('节点可用但未勾选任何节点：确认按钮禁用（存量语义不回归）', async () => {
+    const { deleteClusterWithConfirm } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/nodes'))
+        return Promise.resolve({ data: { items: [{ id: 7, ip: '10.0.0.7', management_port: 9180 }] } })
+      if (url.includes('/stats')) return Promise.resolve({ data: { nodes: 1 } })
+      return Promise.reject(new Error(`unexpected: ${url}`))
+    })
+
+    await deleteClusterWithConfirm({ id: 1, name: 'c1' }, { refreshFn: vi.fn() })
+
+    // 初始：未勾任何项 → 禁用
+    expect(primaryBtn().disabled).toBe(true)
+    // 勾选 Edge 但未勾节点 → 仍禁用
+    const edgeCheckbox = document.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement
+    edgeCheckbox.click()
+    expect(primaryBtn().disabled).toBe(true)
+    // 勾选节点 → 解禁
+    const nodeCheckbox = document.querySelectorAll('input[type="checkbox"]')[2] as HTMLInputElement
+    nodeCheckbox.click()
+    expect(primaryBtn().disabled).toBe(false)
+  })
+
+  it('名称确认以 display_name 优先：输入系统名不通过、输入显示名通过', async () => {
+    const { deleteClusterWithConfirm } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((url: string) => Promise.reject(new Error(`down: ${url}`)))
+
+    await deleteClusterWithConfirm({ id: 1, name: 'sys-c1', display_name: '显示名' }, { refreshFn: vi.fn() })
+
+    const dbCheckbox = document.querySelectorAll('input[type="checkbox"]')[0] as HTMLInputElement
+    dbCheckbox.click()
+    primaryBtn().click()
+    await vi.waitFor(() => expect(document.querySelector('.ant-modal input[type="text"]')).toBeTruthy())
+    const nameInput = document.querySelector('.ant-modal input[type="text"]') as HTMLInputElement
+
+    nameInput.value = 'sys-c1'
+    nameInput.dispatchEvent(new Event('input'))
+    expect(primaryBtn().disabled).toBe(true)
+
+    nameInput.value = '显示名'
+    nameInput.dispatchEvent(new Event('input'))
+    expect(primaryBtn().disabled).toBe(false)
   })
 })

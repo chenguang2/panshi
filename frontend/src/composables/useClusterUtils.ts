@@ -4,6 +4,7 @@ import api from '@/api'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 /** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连。字段缺失时返回空串（向后兼容）。 */
 export function routeLabel(route?: 'relay' | 'direct'): string {
@@ -45,6 +46,7 @@ export const resourceLabels: Record<string, string> = {
   plugin_metadata: '插件元数据',
   stream_proxies: '四层代理',
   ssl_certificates: 'SSL 证书',
+  static_resources: '静态资源',
   config_versions: '配置版本历史',
 }
 
@@ -57,6 +59,12 @@ export function showDeleteConfirm(opts: {
   nodes?: { id: number; ip: string; management_port: number }[]
   /** 批量删除专用（V1-A）：不展示逐节点选择，勾选 Edge 即删除全部在线节点 */
   noNodeSelection?: boolean
+  /** 集群根资源删除：显示集群专属警示行（黄底）与集群 scope 文案（cluster-ux-close-loop B1） */
+  isCluster?: boolean
+  /** 资源统计加载失败：清单区显示降级提示（不影响删除） */
+  statsLoadFailed?: boolean
+  /** 节点明细加载失败：Edge 删除退化为后端全量遍历（node_ids 不传） */
+  nodesLoadFailed?: boolean
 }) {
   let deleteDb = false
   let deleteEdge = false
@@ -70,12 +78,16 @@ export function showDeleteConfirm(opts: {
 
   /** 「仅删平台记录」风险提示的资源中文名：从 apiEndpoint 资源段推断，识别不了返回空（走通用文案）。 */
   const resourceLabel = inferDeleteResourceLabel(opts.apiEndpoint)
-  const platformOnlyHintText = resourceLabel
-    ? `仅删除平台记录，Edge 节点将继续运行该${resourceLabel}`
-    : '仅删除平台记录，Edge 节点将继续运行该资源'
+  const platformOnlyHintText = opts.isCluster
+    ? '仅删除平台记录：该集群及全部资源记录从平台移除，Edge 节点将继续按现有配置运行，但脱离平台管理（无法再发布与监控）'
+    : resourceLabel
+      ? `仅删除平台记录，Edge 节点将继续运行该${resourceLabel}`
+      : '仅删除平台记录，Edge 节点将继续运行该资源'
 
   const updateOkDisabled = () => {
-    okDisabled = !(deleteDb || (deleteEdge && (opts.noNodeSelection || selectedNodeIds.size > 0)))
+    // 节点明细不可用时 Edge 删除退化为后端全量遍历，勾选 Edge 即可确认
+    const edgeReady = opts.noNodeSelection || opts.nodesLoadFailed || selectedNodeIds.size > 0
+    okDisabled = !(deleteDb || (deleteEdge && edgeReady))
   }
 
   const close = () => {
@@ -84,8 +96,16 @@ export function showDeleteConfirm(opts: {
   }
 
   const renderModal = () => {
-    const statsSection =
-      opts.showResourceStats && opts.stats
+    const statsSection = opts.statsLoadFailed
+      ? h(
+          'div',
+          {
+            style:
+              'background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:8px 10px;margin-bottom:12px;font-size:12px;color:var(--muted);',
+          },
+          '资源统计加载失败，不影响删除',
+        )
+      : opts.showResourceStats && opts.stats
         ? h(
             'div',
             {
@@ -111,6 +131,18 @@ export function showDeleteConfirm(opts: {
             ],
           )
         : null
+
+    /** 集群专属警示行（黄底）：scope 区上方 */
+    const clusterWarning = opts.isCluster
+      ? h(
+          'div',
+          {
+            style:
+              'margin-bottom:12px;padding:8px 10px;background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-md);font-size:12px;color:var(--fg);',
+          },
+          '删除集群将同时移除平台内该集群的全部资源记录与版本历史',
+        )
+      : null
 
     const nodeSection =
       opts.nodes && opts.nodes.length > 0 && !opts.noNodeSelection
@@ -148,6 +180,18 @@ export function showDeleteConfirm(opts: {
           )
         : null
 
+    /** 节点明细不可用降级提示：勾选 Edge 删除时显示（Edge 删除由后端遍历全部活跃节点） */
+    const nodesUnavailableSection =
+      opts.nodesLoadFailed && opts.isCluster
+        ? h(
+            'div',
+            {
+              style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};font-size:12px;color:var(--muted);`,
+            },
+            '节点明细不可用，Edge 删除将由后端遍历全部活跃节点',
+          )
+        : null
+
     const vnode = h(
       AppModal,
       {
@@ -169,6 +213,7 @@ export function showDeleteConfirm(opts: {
           h('div', [
             h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
             statsSection,
+            clusterWarning,
             h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
               h(
                 'label',
@@ -215,6 +260,7 @@ export function showDeleteConfirm(opts: {
                 ],
               ),
               nodeSection,
+              nodesUnavailableSection,
               // 未勾选 Edge 删除时提示：平台记录删除不影响节点运行（upstream-ux-close-loop 4.7）
               deleteEdge
                 ? null
@@ -968,4 +1014,74 @@ export function showNameConfirm(opts: {
     render(vnode, container)
   }
   renderModal()
+}
+
+/** deleteClusterWithConfirm 的集群入参（结构性类型，两页直接传 Cluster 对象） */
+export interface DeleteClusterTarget {
+  id: number
+  name: string
+  display_name?: string | null
+}
+
+/**
+ * 删除集群的统一编排（ClusterList / CentralList 共用，cluster-ux-close-loop B1）：
+ * 拉取节点明细与资源统计（各自容错降级，失败不阻断删除）→ 范围确认弹窗（集群专属
+ * 警示行 + scope 文案）→ 名称确认 → 进度弹窗执行真实删除并刷新列表。
+ * 节点明细不可用时 Edge 删除退化为后端全量遍历（node_ids 不传）。
+ */
+export async function deleteClusterWithConfirm(
+  cluster: DeleteClusterTarget,
+  opts: { refreshFn: () => Promise<void> },
+): Promise<void> {
+  const clusterName = cluster.display_name || cluster.name
+
+  let nodes: { id: number; ip: string; management_port: number }[] = []
+  let nodesLoadFailed = false
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/nodes`, {
+      params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
+    })
+    nodes = res.data?.items || []
+  } catch (e) {
+    nodesLoadFailed = true
+    console.error('[删除集群] 节点明细加载失败（不阻断删除）:', e)
+  }
+
+  let stats: Record<string, number> = {}
+  let statsLoadFailed = false
+  try {
+    const res = await api.get(`/clusters/${cluster.id}/stats`)
+    stats = res.data || {}
+  } catch (e) {
+    statsLoadFailed = true
+    console.error('[删除集群] 资源统计加载失败（不阻断删除）:', e)
+  }
+
+  showDeleteConfirm({
+    title: `确定要删除集群 "${clusterName}" 吗？`,
+    apiEndpoint: `/clusters/${cluster.id}`,
+    isCluster: true,
+    showResourceStats: true,
+    stats,
+    statsLoadFailed,
+    nodes,
+    nodesLoadFailed,
+    onOk: (deleteDb, deleteEdge, nodeIds) => {
+      showNameConfirm({
+        title: '请输入集群名称确认删除',
+        expectedName: clusterName,
+        onConfirm: async () => {
+          await executeDeleteWithProgress({
+            title: `删除集群: ${clusterName}`,
+            apiEndpoint: `/clusters/${cluster.id}`,
+            cluster: { id: cluster.id, nodes },
+            deleteDb,
+            deleteEdge,
+            nodeIds,
+            refreshFn: opts.refreshFn,
+          })
+        },
+      })
+    },
+  })
 }

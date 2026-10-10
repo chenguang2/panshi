@@ -13,16 +13,27 @@ vi.mock('@/api', () => ({
 }))
 
 const mockShowOverlayModal = vi.hoisted(() => vi.fn())
-vi.mock('@/composables/useOverlayModal', () => ({
-  showOverlayModal: (...args: unknown[]) => mockShowOverlayModal(...args),
-}))
+vi.mock('@/composables/useOverlayModal', async (importOriginal) => {
+  // 默认透传真实实现：B6 误关保护用例需要真实确认弹窗；断言型用例仍可经 spy 断言调用
+  const actual = await importOriginal<typeof import('@/composables/useOverlayModal')>()
+  mockShowOverlayModal.mockImplementation((...args: Parameters<typeof actual.showOverlayModal>) =>
+    actual.showOverlayModal(...args),
+  )
+  return {
+    showOverlayModal: (...args: Parameters<typeof actual.showOverlayModal>) => mockShowOverlayModal(...args),
+  }
+})
 
 const mockRouterPush = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: mockRouterPush }) }))
+import { createPinia, setActivePinia } from 'pinia'
 
 // 区域下拉复用 regionOptions（listRelayGateways 返回值）；测试固定一个区域。
+const mockListRelayGateways = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve({ data: [{ id: 1, code: 'aoh', name: '上海局' }] })),
+)
 vi.mock('@/api/relay', () => ({
-  listRelayGateways: () => Promise.resolve({ data: [{ id: 1, code: 'aoh', name: '上海局' }] }),
+  listRelayGateways: (...args: unknown[]) => mockListRelayGateways(...args),
 }))
 
 describe('ClusterFormModal.vue - 新建分组', () => {
@@ -32,9 +43,12 @@ describe('ClusterFormModal.vue - 新建分组', () => {
   })
 
   function createWrapper(props = {}) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
     return mount(ClusterFormModal, {
       props: { visible: true, editingCluster: null, groupOptions: ['分组A', '分组B'], ...props },
       attachTo: document.body,
+      global: { plugins: [pinia] },
     })
   }
 
@@ -127,9 +141,12 @@ describe('ClusterFormModal.vue - 挂接区域后的下发引导', () => {
   })
 
   async function createWrapper(props = {}) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
     const w = mount(ClusterFormModal, {
       props: { visible: true, editingCluster: null, groupOptions: [], ...props },
       attachTo: document.body,
+      global: { plugins: [pinia] },
     })
     await flushPromises() // 等 regionOptions 拉取完成，区域下拉才有可选项
     return w
@@ -223,5 +240,103 @@ describe('ClusterFormModal.vue - 挂接区域后的下发引导', () => {
     await submit(w)
 
     expect(mockShowOverlayModal).not.toHaveBeenCalled()
+  })
+})
+
+// ── cluster-ux-close-loop B5：区域引导补测试闭环句 ──
+describe('ClusterFormModal.vue - 区域引导闭环句（B5）', () => {
+  it('引导正文含「下发完成后，请回到集群卡片执行『连接测试』确认节点可达」', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('src/components/ClusterFormModal.vue', 'utf-8')
+    expect(src).toContain('下发完成后，请回到集群卡片执行『连接测试』确认节点可达')
+  })
+})
+
+// ── cluster-ux-close-loop B6：误关保护 / 名称 hint / 区域加载失败提示 ──
+describe('ClusterFormModal.vue - 交互保护与提示（B6）', () => {
+  function createWrapper(props = {}) {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    return mount(ClusterFormModal, {
+      props: { visible: true, editingCluster: null, groupOptions: ['分组A', '分组B'], ...props },
+      attachTo: document.body,
+      global: { plugins: [pinia] },
+    })
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
+    mockApiPost.mockResolvedValue({ data: {} })
+  })
+
+  it('无修改：点取消直接关闭（无确认弹窗）', async () => {
+    const wrapper = createWrapper()
+    const cancelBtn = wrapper.findAll('button').find((b) => b.text() === '取消')!
+    await cancelBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeTruthy()
+    expect(document.body.textContent || '').not.toContain('更改尚未保存')
+  })
+
+  it('有修改：点取消弹「更改尚未保存，确定放弃？」，确认后才关闭', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('input[type="text"]').setValue('changed-name')
+    const cancelBtn = wrapper.findAll('button').find((b) => b.text() === '取消')!
+    await cancelBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    expect(document.body.textContent || '').toContain('更改尚未保存，确定放弃？')
+    const confirmBtn = Array.from(document.querySelectorAll('.modal-overlay .btn-primary')).at(-1) as HTMLButtonElement
+    expect(confirmBtn).toBeTruthy()
+    confirmBtn.click()
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeTruthy()
+  })
+
+  it('有修改：点 × 同样走放弃确认', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('input[type="text"]').setValue('changed-again')
+    const closeX = wrapper.find('.modal-close')
+    await closeX.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('close')).toBeFalsy()
+    expect(document.body.textContent || '').toContain('更改尚未保存，确定放弃？')
+  })
+
+  it('编辑模式：名称字段下显示「创建后不可修改」hint', async () => {
+    const wrapper = createWrapper({
+      editingCluster: {
+        id: 7,
+        name: 'demo',
+        display_name: '演示',
+        description: '',
+        group_name: '',
+        status: 1,
+        region_code: '',
+        admin_key: 'k',
+        current_version: 2,
+      },
+    })
+    const text = wrapper.text()
+    expect(text).toContain('集群名称是固定标识，创建后不可修改')
+    expect(text).toContain('如需调整对外名称请修改『显示名称』')
+  })
+
+  it('区域列表加载失败：显示「区域列表加载失败，当前仅可直连」', async () => {
+    mockListRelayGateways.mockRejectedValueOnce(new Error('down'))
+    const { useFeaturesStore } = await import('@/stores/features')
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const features = useFeaturesStore(pinia)
+    features.features = { relay_gateway: true }
+    const wrapper = mount(ClusterFormModal, {
+      props: { visible: true, editingCluster: null, groupOptions: ['分组A'] },
+      attachTo: document.body,
+      global: { plugins: [pinia] },
+    })
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(wrapper.text()).toContain('区域列表加载失败，当前仅可直连')
   })
 })

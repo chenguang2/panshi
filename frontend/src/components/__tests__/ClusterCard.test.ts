@@ -88,11 +88,11 @@ describe('ClusterCard - 主标题 / 副标题（回退式二显）', () => {
 })
 
 describe('ClusterCard - 状态徽章与路径徽章', () => {
-  it('status=1 → 运行中（badge-success）', () => {
+  it('status=1 → 已启用（badge-success）', () => {
     const w = mountCard(makeCluster({ status: 1 }))
     const badge = w.find('.cl-card-meta .badge')
     expect(badge.classes()).toContain('badge-success')
-    expect(badge.text()).toContain('运行中')
+    expect(badge.text()).toContain('已启用')
   })
 
   it('status≠1 → 已禁用（badge-danger）', () => {
@@ -289,5 +289,63 @@ describe('ClusterCard - 统计格点击接管（statClick prop · 方案 A）', 
   it('不传 statClick → 保持默认 router-link 行为（7 个 a 链接）', () => {
     const w = mountCard(makeCluster())
     expect(w.findAll('a.cl-stat-link').length).toBe(7)
+  })
+})
+
+describe('ClusterCard - 发布状态微标（cluster-ux-close-loop 3.2）', () => {
+  it('current_version 有值 → 「配置 vN」绿色微标', () => {
+    const w = mountCard(makeCluster({ current_version: 3 }))
+    const chip = w.find('.cl-version-chip')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toBe('配置 v3')
+    expect(chip.classes()).toContain('is-published')
+  })
+
+  it('current_version 空 → 「未发布」灰色微标', () => {
+    const w = mountCard(makeCluster({ current_version: null }))
+    const chip = w.find('.cl-version-chip')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toBe('未发布')
+    expect(chip.classes()).toContain('is-unpublished')
+    expect(chip.classes()).not.toContain('is-published')
+  })
+
+  it('微标 tooltip 固定为集群配置版本语义说明', () => {
+    const w = mountCard(makeCluster({ current_version: 7 }))
+    expect(w.find('.cl-version-chip').attributes('title')).toBe('集群配置（edge.env）版本；子资源发布不推进此版本')
+  })
+})
+
+describe('ClusterCard - 健康节点格分级着色（cluster-ux-close-loop 3.3）', () => {
+  function healthCell(w: ReturnType<typeof mountCard>) {
+    return w.findAll('.cl-stat-cell')[0]
+  }
+
+  it('健康数为 0 → 红色', () => {
+    const w = mountCard(makeCluster({ node_count: 2, healthy_node_count: 0 }))
+    expect(healthCell(w).classes()).toContain('is-danger')
+  })
+
+  it('健康数不足 → 橙色', () => {
+    const w = mountCard(makeCluster({ node_count: 5, healthy_node_count: 3 }))
+    expect(healthCell(w).classes()).toContain('is-warning')
+    expect(healthCell(w).classes()).not.toContain('is-danger')
+  })
+
+  it('全部健康 → 默认色（无分级类）', () => {
+    const w = mountCard(makeCluster({ node_count: 5, healthy_node_count: 5 }))
+    expect(healthCell(w).classes()).not.toContain('is-warning')
+    expect(healthCell(w).classes()).not.toContain('is-danger')
+  })
+})
+
+// ── cluster-ux-close-loop B4：状态术语统一（已启用/已禁用）──
+describe('ClusterCard 状态徽标术语（B4）', () => {
+  it('status=1 → 已启用（不再显示「运行中」）', () => {
+    const wrapper = mountCard(makeCluster({ status: 1 }))
+    const badge = wrapper.find('.cl-card-meta .badge')
+    expect(badge.text()).toContain('已启用')
+    expect(badge.text()).not.toContain('运行中')
+    expect(badge.classes()).toContain('badge-success')
   })
 })

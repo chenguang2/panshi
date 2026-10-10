@@ -199,6 +199,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 53. **openspec 归档合并的替换块必须取自当下读取的主 spec 现文** — MODIFIED 全块替换与 edit oldString 同理，不得凭记忆/归档样本/上下文压缩重建「原内容」（2026-10-04 两轮实测共 6 处漂移：既有场景集与记忆版完全不同是常态）；同批多份变更改同一需求块时按 created 日期顺序合并，后到者基于前份合并后的文本手工合成单一最终块。openspec CLI 本机挂起（Windows shim 跨 WSL 超时），建档/合并/归档走手工流（样本格式见 `changes/archive/`）。
 
 54. **全站列表分页统一标准（2026-10-06 收敛，5 项改造落地）** — 有分页 UI 的列表一律 a-table 内置 pagination + `usePagination.paginationProps` 工厂（默认 `PAGE_SIZE_TABLE`=20、选项 10/20/50/100、sizeChanger + 快速跳页 + showTotal「共 X {单位}」），机制默认后端分页（`page`/`page_size`）；后端 `page_size` 上限一律 `MAX_PAGE_SIZE=500`（db_backup/node_tasks 由 100、system 由手动 clamp 200 放宽统一，501 → 422）。合法例外白名单（不纳入统一）：卡片网格全量页（`PAGE_SIZE_CARD_GRID`=500、无 pager）、小表 `:pagination="false"`、metrics Top-N limit。集群子表列表胶水单点在 `useClusterResource.ts` 导出的 `useClusterListCore`（上游/路由/节点共用，节点 keys 为 nodes* 族），**禁止再复制 loadNodes/handleTableChange 同构实现**；组件测试挂 a-table 须用 `__tests__/helpers/aTableStub.ts` 桩（jsdom 无 matchMedia，真实 Table 会 Unhandled Rejection 连挂）。UserList 走真后端分页（users 端点支持 keyword/role/status），**禁回 allUsers+slice 内存切片**——后端默认只回 20 条，切片会让第 21+ 个用户静默消失（本次修复的原始 bug）。
+55. **watchEffect 回调内读取响应式字段 = 把这些字段纳入追踪，副作用会被输入触发** — 2026-10-10 实测（ClusterFormModal）：`watchEffect(() => { if (visible) initForm() })` 的 `initForm` 里新增了读取全部表单字段的快照语句，初始化 effect 因此追踪每个字段 → 用户每敲一个字 effect 重跑、表单被重置回初始值（v-model「打不上字」，症状极具迷惑性：DOM 正常、无报错、submit 时字段全空）。修法：把初始化逻辑放 `watch(source, cb, { immediate: true })`（watch 回调体**不追踪**），或把读取挪到 `nextTick` 等脱离 effect 的上下文。同型陷阱：任何「mount 时执行一次」语义的 watchEffect 内新增读取都会把一次性逻辑变成响应式重触发。
 
 ## 新增功能步骤
 

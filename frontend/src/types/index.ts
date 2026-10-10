@@ -39,6 +39,9 @@ export interface Cluster {
   group_name?: string
   status: number
   region_code?: string | null
+  /** 集群配置（edge.env）版本；子资源发布不推进此版本 */
+  current_version?: number | null
+  admin_key?: string
   created_at?: string
   node_count: number
   healthy_node_count: number
