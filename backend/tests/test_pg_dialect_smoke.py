@@ -207,3 +207,55 @@ def test_stream_proxy_timeout_dict_fields_round_trip(global_engine_client, clust
     assert listed.status_code == 200, listed.text
     item = next(p for p in listed.json()["items"] if p["id"] == proxy_id)
     assert item["timeout"] == {"connect": 6, "send": 11, "read": 31}, item.get("timeout")
+
+
+def test_upstream_publish_status_write_path(global_engine_client, cluster):
+    """上游 last_publish_status（VARCHAR(16)）发布写回 + pending_publish 时间推导。
+
+    upstream-ux-close-loop 新写库路径（约定 #31）：partial 写回是版本创建 commit 之后的
+    第二次 UPDATE，asyncpg 下 VARCHAR str 绑定与 naive datetime 比较/回读都必须成立。
+    """
+    from unittest.mock import MagicMock, patch
+
+    from app.services.edge_client import EdgeClient
+
+    created = _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/upstreams",
+            json={"name": "zz-pg-smoke-up-status", "targets": [{"target": "127.0.0.1:8080", "weight": 1}]},
+        ),
+        "建上游",
+    )
+    upstream_id = created["id"]
+    _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/nodes",
+            json={
+                "ip": "10.255.255.2",
+                "service_port": 80,
+                "management_port": 9091,
+                "edge_path": "/usr/local/edge",
+                "status": 1,
+            },
+        ),
+        "建节点",
+    )
+
+    def _publish():
+        with patch.object(EdgeClient, "update_upstream", return_value={"upstream_id": "x"}), \
+             patch("app.services.edge_sync.get_edge_logger", return_value=MagicMock()):
+            return global_engine_client.post(
+                f"/api/v1/clusters/{cluster}/upstreams/{upstream_id}/publish"
+            )
+
+    pub = _publish()
+    assert pub.status_code == 200, pub.text
+    assert pub.json()["status"] == "ok", pub.text
+
+    listed = global_engine_client.get(f"/api/v1/clusters/{cluster}/upstreams")
+    assert listed.status_code == 200, listed.text
+    item = next(u for u in listed.json()["items"] if u["id"] == upstream_id)
+    # 全部成功：无 partial、发布时间对齐 updated_at → 不待发布
+    assert item["last_publish_status"] is None, item.get("last_publish_status")
+    assert item["pending_publish"] is False, item.get("pending_publish")
+    assert item["published_at"], item.get("published_at")

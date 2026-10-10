@@ -24,7 +24,7 @@
         <option value="">全部算法</option>
         <option value="weighted_roundrobin">加权轮询</option>
         <option value="chash">一致性哈希</option>
-        <option value="ewma">EWMA</option>
+        <option value="ewma">延迟最小</option>
         <option value="least_conn">最少连接</option>
       </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
@@ -41,10 +41,7 @@
         class="upstream-table"
         @change="handleTableChange"
       >
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
-          </template>
+        <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'name'">
             <div class="cell-primary">{{ record.name }}</div>
             <div class="cell-secondary">{{ record.description || '-' }}</div>
@@ -64,39 +61,47 @@
           </template>
 
           <template v-if="column.key === 'scheme'">
-            <span class="text-mono text-sm">{{ record.scheme || 'http' }}</span>
+            <span class="text-mono text-sm">{{ record.scheme || '—' }}</span>
           </template>
 
-          <template v-if="column.key === 'version'">
-            <span class="text-mono text-sm" :class="{ 'text-muted': !record.current_version }">{{
-              record.current_version ? 'v' + record.current_version : '未发布'
-            }}</span>
-          </template>
-
-          <template v-if="column.key === 'created_at'">
-            <span class="cell-secondary">{{ formatDate(record.created_at) }}</span>
+          <template v-if="column.key === 'publish_status'">
+            <PublishStatusTag
+              :version="record.current_version"
+              :published-at="record.published_at"
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status"
+            />
           </template>
 
           <template v-if="column.key === 'actions'">
-            <a-dropdown :trigger="['click']">
-              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
-                  <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
-                  <a-menu-item @click="handleAction('publish', record)">发布</a-menu-item>
-                  <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
-                  <a-menu-item danger @click="handleAction('delete', record)">删除</a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
+            <div class="action-cell">
+              <a-button type="primary" size="small" @click="openPublishModal(record)">发布</a-button>
+              <a-dropdown :trigger="['click']">
+                <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
+                    <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
+                    <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
+                    <a-menu-item danger @click="handleAction('delete', record)">删除</a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
           </template>
         </template>
 
         <template #empty>
           <div class="empty-state">
             <div class="empty-state-icon">◎</div>
-            <p>暂无上游服务</p>
+            <template v-if="hasActiveFilters">
+              <p>没有符合筛选条件的上游</p>
+              <button class="btn btn-secondary" @click="clearFilters">清除筛选</button>
+            </template>
+            <template v-else>
+              <p>还没有上游</p>
+              <button class="btn btn-primary" @click="openCreateModal">新建上游</button>
+            </template>
           </div>
         </template>
       </a-table>
@@ -109,6 +114,7 @@
       :clusters="clusters"
       @close="closeFormModal"
       @saved="onSaved"
+      @publish-requested="onFormPublishRequested"
     />
 
     <VersionManagementModal
@@ -117,8 +123,10 @@
       :resource-id="vmResourceId"
       :cluster-id="vmClusterId"
       :resource-name="vmResourceName"
+      :can-publish="true"
       @version-change="loadUpstreams"
       @published="loadUpstreams"
+      @publish-requested="onVmPublishRequested"
     />
 
     <PublishConfirmModal
@@ -134,7 +142,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatDateOnly as formatDate } from '@/utils/format'
 import { message, Modal } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { listUpstreams } from '@/api/upstreams'
@@ -144,6 +151,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import UpstreamFormModal from '@/components/UpstreamFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
@@ -190,44 +198,34 @@ const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
 const columns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
-  {
-    title: '集群',
-    dataIndex: 'cluster_name',
-    key: 'cluster_name',
-    sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || ''),
-  },
-  {
-    title: '负载均衡',
-    key: 'load_balance',
-    sorter: (a: any, b: any) => (a.load_balance || '').localeCompare(b.load_balance || ''),
-  },
-  {
-    title: '目标节点',
-    key: 'targets',
-    sorter: (a: any, b: any) => (a.targets?.[0]?.target || '').localeCompare(b.targets?.[0]?.target || ''),
-  },
+  { title: '名称', dataIndex: 'name', key: 'name' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '负载均衡', key: 'load_balance' },
+  { title: '目标节点', key: 'targets' },
   { title: '协议', key: 'scheme' },
-  {
-    title: '版本',
-    key: 'version',
-    sorter: (a: any, b: any) => ((a.current_version || '') + '').localeCompare((b.current_version || '') + ''),
-  },
-  {
-    title: '创建时间',
-    dataIndex: 'created_at',
-    key: 'created_at',
-    sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''),
-  },
-  { title: '操作', key: 'actions', width: 80 },
+  { title: '发布状态', key: 'publish_status' },
+  { title: '操作', key: 'actions', width: 150 },
 ]
 
 const lbLabels: Record<string, string> = {
   weighted_roundrobin: '加权轮询',
   chash: '一致性哈希',
-  ewma: 'EWMA',
+  ewma: '延迟最小',
   least_conn: '最少连接',
+}
+
+// ── 4.6 空状态两分支：「从未创建」 vs 「筛选后为空」 ──
+const hasActiveFilters = computed(
+  () => !!searchText.value || !!clusterFilter.value || !!lbFilter.value || groupFilter.value !== '__all__',
+)
+
+function clearFilters() {
+  searchText.value = ''
+  clusterFilter.value = ''
+  lbFilter.value = ''
+  groupFilter.value = '__all__'
+  page.value = 1
+  loadUpstreams()
 }
 
 function handleAction(action: string, record: any) {
@@ -239,16 +237,32 @@ function handleAction(action: string, record: any) {
     editingUpstream.value = record
     copyingUpstream.value = false
     formModalVisible.value = true
-  } else if (action === 'publish') {
-    publishingRecord.value = record
-    publishClusterId.value = record.cluster_id
-    publishModalVisible.value = true
   } else if (action === 'version') {
     vmResourceId.value = record.id
     vmClusterId.value = record.cluster_id
     vmResourceName.value = record.name
     vmModalVisible.value = true
   } else if (action === 'delete') deleteUpstream(record)
+}
+
+function openPublishModal(record: any) {
+  publishingRecord.value = record
+  publishClusterId.value = record.cluster_id
+  publishModalVisible.value = true
+}
+
+// 1.3：版本管理弹窗恢复成功后的「立即发布恢复的配置」出口 → 同一行内发布的链路
+function onVmPublishRequested() {
+  vmModalVisible.value = false
+  const record = upstreams.value.find((u) => u.id === vmResourceId.value)
+  openPublishModal(record || { id: vmResourceId.value, cluster_id: vmClusterId.value, name: vmResourceName.value })
+}
+
+// 3.1/3.2：表单保存引导「立即发布」→ 打开该上游的发布弹窗（与行内发布同链路）
+function onFormPublishRequested(payload: { clusterId: number | string; upstreamId: number | null; name: string }) {
+  publishingRecord.value = { id: payload.upstreamId, cluster_id: payload.clusterId, name: payload.name }
+  publishClusterId.value = payload.clusterId as number
+  publishModalVisible.value = true
 }
 
 function onFilterChange() {
@@ -422,6 +436,12 @@ onUnmounted(() => {
   font-family: var(--font-mono);
   background: oklch(56% 0.16 210 / 8%);
   color: var(--accent);
+}
+
+.action-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .action-trigger-btn {

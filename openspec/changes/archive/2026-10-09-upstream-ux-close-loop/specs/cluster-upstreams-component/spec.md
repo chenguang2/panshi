@@ -1,10 +1,6 @@
-# cluster-upstreams-component
+# cluster-upstreams-component Delta
 
-## Purpose
-
-集群详情页上游 Tab 组件，渲染上游表格与工具栏（含批量删除交互）。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: ClusterUpstreams component
 The system SHALL provide a `ClusterUpstreams` component that renders the upstreams tab content.
@@ -33,6 +29,8 @@ The system SHALL provide a `ClusterUpstreams` component that renders the upstrea
 - **WHEN** `selectedUpstreamKeys.length === 0` and a single upstream is selected
 - **THEN** the delete button SHALL trigger the existing single-upstream delete flow
 - **AND** single-selection buttons (编辑/发布/版本管理) SHALL be disabled when `selectedUpstreamKeys.length >= 2` even if a row is clicked afterwards
+
+## ADDED Requirements
 
 ### Requirement: 集群内上游表单交互
 

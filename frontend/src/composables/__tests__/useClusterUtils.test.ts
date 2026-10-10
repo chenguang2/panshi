@@ -679,6 +679,140 @@ describe('发布/删除 长超时与 in-flight 锁（M7）', () => {
   })
 })
 
+describe('发布失败/部分成功「重新发布」出口（upstream-ux-close-loop 3.4）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function findRepublishButton(): HTMLButtonElement | undefined {
+    return Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('重新发布'))
+  }
+
+  it('partial 终态显示「重新发布」，点击后以相同参数重发且不双弹窗', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost
+      .mockResolvedValueOnce({
+        data: {
+          status: 'partial',
+          message: '部分节点发布失败',
+          version: 3,
+          results: [
+            { node: '10.0.0.1:9180', status: 'success' },
+            { node: '10.0.0.2:9180', status: 'failed', error: 'timeout' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ data: { status: 'ok', message: '发布完成', version: 4 } })
+    const refreshFn = vi.fn()
+
+    await executePublish({
+      title: '发布上游: u1',
+      apiEndpoint: '/clusters/1/upstreams/5/publish',
+      nodeIds: [1, 2],
+      refreshFn,
+    })
+
+    // 部分成功终态：「重新发布」按钮出现
+    const btn = findRepublishButton()
+    expect(btn).toBeTruthy()
+    expect(document.body.textContent || '').toContain('部分成功')
+
+    // 点击 → 关闭当前结果弹窗，以相同参数重发一次
+    btn!.click()
+    await vi.waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(2))
+
+    // URL + payload 感知（约定 #43）：两次调用参数完全一致
+    expect(mockApiPost.mock.calls[1][0]).toBe('/clusters/1/upstreams/5/publish')
+    expect(mockApiPost.mock.calls[1][1]).toEqual({ node_ids: [1, 2] })
+
+    // 重发全成功后：按钮消失，DOM 只剩一个弹窗（旧结果弹窗已关闭，无双弹窗）
+    await vi.waitFor(() => {
+      expect(findRepublishButton()).toBeUndefined()
+      expect(document.querySelectorAll('.ant-modal').length).toBe(1)
+    })
+  })
+
+  it('整体失败（请求异常）终态显示「重新发布」', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockRejectedValueOnce({ response: { data: { detail: '连接失败' } } })
+
+    await executePublish({
+      title: '发布上游: u1',
+      apiEndpoint: '/clusters/1/upstreams/5/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+
+    expect(findRepublishButton()).toBeTruthy()
+    expect(document.body.textContent || '').toContain('连接失败')
+  })
+
+  it('全部成功终态不显示「重新发布」', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({ data: { status: 'ok', message: '发布完成', version: 2 } })
+
+    await executePublish({
+      title: '发布上游: u1',
+      apiEndpoint: '/clusters/1/upstreams/5/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+
+    expect(findRepublishButton()).toBeUndefined()
+  })
+})
+
+describe('删除确认 scope 风险提示（upstream-ux-close-loop 4.7）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('未勾选 Edge 节点时提示「仅删除平台记录，Edge 节点将继续运行该上游」', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除上游 "u1" 吗？',
+      apiEndpoint: '/clusters/1/upstreams/5',
+      nodes: [{ id: 1, ip: '10.0.0.1', management_port: 9180 }],
+      onOk: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('仅删除平台记录，Edge 节点将继续运行该上游')
+  })
+
+  it('勾选 Edge 节点后提示消失', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除上游 "u1" 吗？',
+      apiEndpoint: '/clusters/1/upstreams/5',
+      nodes: [{ id: 1, ip: '10.0.0.1', management_port: 9180 }],
+      onOk: vi.fn(),
+    })
+
+    // checkbox 顺序：0=数据库 1=Edge 节点（节点子选择初始隐藏但也在 DOM）
+    const edgeCheckbox = document.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement
+    edgeCheckbox.click()
+
+    const text = document.body.textContent || ''
+    expect(text).not.toContain('仅删除平台记录')
+  })
+
+  it('资源类型未知时兜底通用文案', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除集群 "c1" 吗？',
+      apiEndpoint: '/clusters/1',
+      onOk: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('Edge 节点将继续运行该资源')
+    expect(text).not.toContain('该上游')
+  })
+})
+
 describe('经中继 / 直连 路径标签（删除进度）', () => {
   beforeEach(() => {
     vi.clearAllMocks()

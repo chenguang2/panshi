@@ -3,7 +3,7 @@
     <div class="modal modal-wide" style="max-width: 800px">
       <div class="modal-header">
         <h2>{{ copyingUpstream ? '复制上游' : editingUpstream ? '编辑上游' : '添加上游' }}</h2>
-        <button class="modal-close" @click="$emit('close')">&times;</button>
+        <button class="modal-close" @click="requestClose">&times;</button>
       </div>
 
       <!-- Tab Bar -->
@@ -65,6 +65,7 @@
               <div class="form-group">
                 <label class="form-label">Key <span class="required">*</span></label>
                 <input v-model="form.key" type="text" class="form-input" placeholder="请输入哈希 Key" />
+                <div class="form-hint">按哈希位置填写：header 填请求头名（如 X-User-Id），cookie 填 Cookie 名</div>
               </div>
             </div>
           </template>
@@ -172,7 +173,7 @@
                   type="number"
                   class="form-input"
                   min="0"
-                  placeholder="connect"
+                  placeholder="如 6"
                   style="height: 30px"
                   :disabled="!toggleTimeout"
                 />
@@ -190,7 +191,7 @@
                   type="number"
                   class="form-input"
                   min="0"
-                  placeholder="send"
+                  placeholder="如 6"
                   style="height: 30px"
                   :disabled="!toggleTimeout"
                 />
@@ -208,12 +209,13 @@
                   type="number"
                   class="form-input"
                   min="0"
-                  placeholder="read"
+                  placeholder="如 6"
                   style="height: 30px"
                   :disabled="!toggleTimeout"
                 />
               </div>
             </div>
+            <div class="form-hint">建立连接 / 发送请求 / 等待响应的最长等待时间</div>
             <div v-if="formErrors.timeout" class="form-error" style="margin-top: 6px">{{ formErrors.timeout }}</div>
           </div>
 
@@ -400,7 +402,7 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+        <button class="btn btn-secondary" @click="requestClose">取消</button>
         <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
           {{ submitting ? '提交中...' : '保存' }}
         </button>
@@ -410,10 +412,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watch, computed, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import HealthCheckForm from '@/components/HealthCheckForm.vue'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 
 const props = defineProps<{
   visible: boolean
@@ -425,6 +428,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   saved: []
+  /** 保存成功后引导「立即发布」→ 通知调用方打开该上游的发布确认弹窗（共享发布链路） */
+  'publish-requested': [payload: { clusterId: number | string; upstreamId: number | null; name: string }]
 }>()
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
@@ -488,6 +493,11 @@ const formErrors = reactive<Record<string, string>>({})
 const targetValidation = ref<Record<string, { host?: string; port?: string; weight?: string }>>({})
 let targetKey = 0
 
+// ── 4.4 误关保护：dirty 检测（任何字段变更置位；保存成功/表单重置清除） ──
+const isDirty = ref(false)
+/** populateForm 批量回填期间挂起 dirty 监听，避免打开即误判为已修改 */
+let suppressDirtyWatch = false
+
 // ── Individual toggle states ──
 const toggleChecks = ref(false)
 const toggleTimeout = ref(false)
@@ -549,6 +559,31 @@ watch(
   },
 )
 
+// ── 4.4 dirty 监听：表单字段（深） + 开关/单选状态 ──
+watch(
+  form,
+  () => {
+    if (!suppressDirtyWatch) isDirty.value = true
+  },
+  { deep: true },
+)
+watch(
+  () => [
+    toggleChecks.value,
+    toggleTimeout.value,
+    togglePool.value,
+    toggleRetries.value,
+    toggleRetryTimeout.value,
+    toggleHost.value,
+    toggleScheme.value,
+    retriesRadio.value,
+    checksMode.value,
+  ],
+  () => {
+    if (!suppressDirtyWatch) isDirty.value = true
+  },
+)
+
 // Populate form when visible changes
 watch(
   () => props.visible,
@@ -560,6 +595,8 @@ watch(
 )
 
 function populateForm() {
+  // 批量回填期间挂起 dirty 监听；监听 flush 发生在 nextTick 前，故在 nextTick 里解除并清脏
+  suppressDirtyWatch = true
   formErrors.name = ''
   formErrors.cluster_id = ''
   formErrors.targets = ''
@@ -659,6 +696,11 @@ function populateForm() {
     form.keepalive_pool = { size: 10, idle_timeout: 60, requests: 100 }
     form.checks = null
   }
+
+  nextTick(() => {
+    suppressDirtyWatch = false
+    isDirty.value = false
+  })
 }
 
 function addTarget() {
@@ -670,23 +712,34 @@ function removeTarget(index: number) {
 }
 
 function validateForm(): boolean {
+  // 4.3 校验失败自动切 Tab：首个出错字段所在 Tab（含提前返回路径，切换在 failAt 内完成）
+  let firstErrorTab: 'basic' | 'advanced' | null = null
+  const failAt = (tab: 'basic' | 'advanced'): false => {
+    if (!firstErrorTab) {
+      firstErrorTab = tab
+      activeTab.value = tab
+    }
+    return false
+  }
+
   formErrors.name = ''
   formErrors.cluster_id = ''
   targetValidation.value = {}
 
   if (!form.name.trim()) {
     formErrors.name = '请输入上游名称'
-    return false
+    return failAt('basic')
   }
   if (!form.cluster_id) {
     formErrors.cluster_id = '请选择所属集群'
-    return false
+    return failAt('basic')
   }
 
   let valid = true
   formErrors.targets = ''
   if (form.targets.length === 0) {
     formErrors.targets = '请至少添加一个节点'
+    failAt('basic')
     valid = false
   }
   const seen = new Set<string>()
@@ -694,26 +747,31 @@ function validateForm(): boolean {
     const errors: Record<string, string> = {}
     if (!t.host) {
       errors.host = '主机地址不能为空'
+      failAt('basic')
       valid = false
     } else {
       const hostResult = validateHost(t.host)
       if (!hostResult.valid) {
         errors.host = hostResult.error
+        failAt('basic')
         valid = false
       }
     }
     if (!t.port || t.port < 1 || t.port > 65535) {
       errors.port = '端口不合法'
+      failAt('basic')
       valid = false
     }
     if (!t.weight || t.weight < 1 || t.weight > 100) {
-      errors.weight = '权重不合法'
+      errors.weight = '权重需为 1-100 的整数'
+      failAt('basic')
       valid = false
     }
     if (t.host && t.port) {
       const key = `${t.host}:${t.port}`
       if (seen.has(key)) {
         errors.host = `主机和端口与第 ${[...seen].indexOf(key) + 1} 行重复`
+        failAt('basic')
         valid = false
       }
       seen.add(key)
@@ -730,6 +788,7 @@ function validateForm(): boolean {
   formErrors.pass_host = ''
   if (toggleChecks.value && !form.checks) {
     formErrors.checks = '健康检查配置不完整'
+    failAt('advanced')
     valid = false
   }
   if (toggleTimeout.value) {
@@ -746,6 +805,7 @@ function validateForm(): boolean {
       isNaN(t.read)
     ) {
       formErrors.timeout = '请填写完整的超时配置（连接、发送、读取）'
+      failAt('advanced')
       valid = false
     }
   }
@@ -753,27 +813,50 @@ function validateForm(): boolean {
     const k = form.keepalive_pool
     if (k.size === undefined || k.idle_timeout === undefined || k.requests === undefined) {
       formErrors.keepalive_pool = '请填写完整的连接池配置（大小、空闲超时、最大请求数）'
+      failAt('advanced')
       valid = false
     }
   }
   if (toggleRetryTimeout.value) {
     if (form.retry_timeout === undefined || form.retry_timeout === null || isNaN(form.retry_timeout)) {
       formErrors.retry_timeout = '请填写重试超时（0 = 不限制）'
+      failAt('advanced')
       valid = false
     }
   }
   if (toggleRetries.value && retriesRadio.value === 'custom') {
     if (form.retriesInput === undefined || form.retriesInput < 1) {
       formErrors.retries = '请输入大于 0 的重试次数'
+      failAt('advanced')
       valid = false
     }
   }
   if (toggleHost.value && form.pass_host === 'rewrite' && !form.upstream_host) {
     formErrors.pass_host = '请填写上游 Host'
+    failAt('advanced')
     valid = false
   }
 
   return valid
+}
+
+// ── 4.4 误关保护：× / 取消经 dirty 确认；无修改直接关闭 ──
+function requestClose() {
+  if (!isDirty.value) {
+    emit('close')
+    return
+  }
+  showOverlayModal({
+    title: '未保存的更改',
+    content: '更改尚未保存，确定放弃？',
+    okText: '放弃更改',
+    cancelText: '继续编辑',
+    okDanger: true,
+    onOk: () => {
+      isDirty.value = false
+      emit('close')
+    },
+  })
 }
 
 async function handleSubmit() {
@@ -817,15 +900,31 @@ async function handleSubmit() {
     submitData.scheme = toggleScheme.value ? form.scheme : null
 
     const clusterId = form.cluster_id
+    const savedName = form.name
+    let savedId: number | null = null
     if (props.editingUpstream && !props.copyingUpstream) {
+      savedId = props.editingUpstream.id ?? null
       await api.put(`/clusters/${clusterId}/upstreams/${props.editingUpstream.id}`, submitData)
-      message.success('上游已更新')
     } else {
-      await api.post(`/clusters/${clusterId}/upstreams`, submitData)
-      message.success('上游已创建')
+      const res = await api.post(`/clusters/${clusterId}/upstreams`, submitData)
+      savedId = res?.data?.id ?? null
     }
+    // 3.1：三处保存入口（新建/编辑/复制）统一文案——保存 ≠ 生效
+    message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    isDirty.value = false
     emit('saved')
     emit('close')
+    // 3.2 保存后发布引导：先关表单再弹引导（useOverlayModal 挂 body、z-index 2000，不叠遮罩）；
+    // 「立即发布」经 emit 交回调方打开 PublishConfirmModal，不自动发布
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        emit('publish-requested', { clusterId: clusterId, upstreamId: savedId, name: savedName })
+      },
+    })
   } catch (error: any) {
     const detail = error?.response?.data?.detail
     message.error(typeof detail === 'string' ? detail : '操作失败')

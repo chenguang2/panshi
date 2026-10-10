@@ -27,6 +27,10 @@
         </div>
 
         <div class="modal-body">
+          <div v-if="canPublish && restoredVersion !== null" class="restore-notice">
+            <span>已恢复到 v{{ restoredVersion }}（平台侧）。请发布以推送到 Edge 节点</span>
+            <button class="btn btn-sm btn-primary" @click="handlePublishRestored">立即发布恢复的配置</button>
+          </div>
           <div class="version-management">
             <div v-if="loading" class="loading-hint">加载中...</div>
 
@@ -101,7 +105,7 @@
                         {{ resourceType === 'edge_env' ? '复制 YAML' : '复制JSON' }}
                       </button>
                       <button class="btn btn-sm btn-primary" @click="handleRepublish">
-                        {{ resourceType === 'edge_env' ? '加载到编辑器' : '切换到此版本' }}
+                        {{ resourceType === 'edge_env' ? '加载到编辑器' : '恢复此版本配置（不会自动发布）' }}
                       </button>
                       <button
                         v-if="resourceType !== 'edge_env'"
@@ -109,7 +113,7 @@
                         @click="handleDelete"
                         :disabled="selectedVersionData.version === currentVersion"
                       >
-                        删除
+                        {{ selectedVersionData.version === currentVersion ? '删除' : '删除此版本记录' }}
                       </button>
                     </div>
                   </div>
@@ -137,6 +141,7 @@ import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { formatDate } from '@/utils/format'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 
 interface ConfigVersion {
   id: number
@@ -165,6 +170,8 @@ const props = defineProps<{
   clusterId: number | null
   resourceName: string
   edgeUuid?: string
+  /** 恢复成功后是否显示「立即发布恢复的配置」出口（默认 false；仅已接线发布链路的资源域传 true） */
+  canPublish?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -173,6 +180,7 @@ const emit = defineEmits<{
   'version-change': [data: { plugin_name: string; version: number; metadata: Record<string, any> }]
   published: [data: { plugin_name: string }]
   republish: [data: { content: string; version: number }]
+  'publish-requested': []
 }>()
 
 const visible = computed({
@@ -188,6 +196,13 @@ const selectedVersion = ref<number | null>(null)
 const compareMode = ref(false)
 const selectedVersions = ref<number[]>([])
 const currentVersion = ref<number | null>(null)
+/** 最近一次恢复成功的版本号（canPublish 时驱动「立即发布」出口条） */
+const restoredVersion = ref<number | null>(null)
+
+const handlePublishRestored = () => {
+  // 弹窗自身不发发布请求，只通知调用方接自家发布链路
+  emit('publish-requested')
+}
 
 const selectedVersionData = computed(() => {
   const sv = selectedVersion.value
@@ -252,6 +267,7 @@ watch(
       props.clusterId &&
       (props.resourceId || (props.resourceType === 'plugin_metadata' && props.resourceName))
     ) {
+      restoredVersion.value = null
       await loadHistory()
     }
   },
@@ -567,29 +583,9 @@ const escapeHtml = (str: string): string => {
 
 const handleRepublish = async () => {
   if (!selectedVersion.value) return
-  if (props.resourceType === 'plugin_metadata') {
-    if (!props.clusterId || !props.resourceName) return
-    const versionToSelect = selectedVersion.value
-    try {
-      await api.post(
-        `/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`,
-      )
-      message.success('已切换到版本 v' + selectedVersion.value)
-      emit('published', { plugin_name: props.resourceName })
-      await loadHistory()
-      if (versions.value.some((v) => v.version === versionToSelect)) {
-        selectedVersion.value = versionToSelect
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || '切换失败')
-    }
-    return
-  }
-  if (!props.clusterId || !props.resourceId) return
-  const versionToSelect = selectedVersion.value
-
-  // edge_env: load version content into editor instead of auto-publishing
+  // edge_env：仅把版本内容加载进编辑器，不涉及回滚，无需确认
   if (props.resourceType === 'edge_env') {
+    if (!props.clusterId || !props.resourceId) return
     const detailEndpoint = `/clusters/${props.clusterId}/edge-env/versions/${selectedVersionData.value?.id || selectedVersion.value}`
     try {
       const res = await api.get(detailEndpoint)
@@ -608,6 +604,39 @@ const handleRepublish = async () => {
     }
     return
   }
+  const version = selectedVersion.value
+  // 恢复不推送 Edge：先如实告知语义，确认后才调回滚 API
+  showOverlayModal({
+    title: '确认恢复配置',
+    content: `将把平台侧配置恢复到 v${version}，Edge 节点上的现有配置不受影响；如需下发请再执行发布`,
+    okText: '确认恢复',
+    onOk: () => performRollback(),
+  })
+}
+
+const performRollback = async () => {
+  if (!selectedVersion.value) return
+  if (props.resourceType === 'plugin_metadata') {
+    if (!props.clusterId || !props.resourceName) return
+    const versionToSelect = selectedVersion.value
+    try {
+      await api.post(
+        `/clusters/${props.clusterId}/plugin-metadata/${props.resourceName}/rollback/${selectedVersion.value}`,
+      )
+      message.success(`已恢复到 v${versionToSelect}（平台侧）。请发布以推送到 Edge 节点`)
+      restoredVersion.value = versionToSelect
+      emit('published', { plugin_name: props.resourceName })
+      await loadHistory()
+      if (versions.value.some((v) => v.version === versionToSelect)) {
+        selectedVersion.value = versionToSelect
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || '恢复失败')
+    }
+    return
+  }
+  if (!props.clusterId || !props.resourceId) return
+  const versionToSelect = selectedVersion.value
 
   try {
     const endpoint =
@@ -625,14 +654,15 @@ const handleRepublish = async () => {
                   ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
                   : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
-    message.success('已切换到版本 v' + selectedVersion.value)
+    message.success(`已恢复到 v${versionToSelect}（平台侧）。请发布以推送到 Edge 节点`)
+    restoredVersion.value = versionToSelect
     emit('published', { plugin_name: props.resourceName })
     await loadHistory()
     if (versions.value.some((v) => v.version === versionToSelect)) {
       selectedVersion.value = versionToSelect
     }
   } catch (error: any) {
-    message.error(error.response?.data?.detail || '切换失败')
+    message.error(error.response?.data?.detail || '恢复失败')
   }
 }
 
@@ -642,6 +672,19 @@ const handleDelete = async () => {
     message.warning('无法删除当前版本')
     return
   }
+  const version = selectedVersionData.value.version
+  // 版本历史是回滚的唯一锚点，删除属不可逆操作，先确认
+  showOverlayModal({
+    title: '确认删除版本记录',
+    content: `删除后无法再回滚到 v${version}，确定删除？`,
+    okText: '确定删除',
+    okDanger: true,
+    onOk: () => performDelete(),
+  })
+}
+
+const performDelete = async () => {
+  if (!props.clusterId || !selectedVersionData.value) return
   try {
     if (props.resourceType === 'plugin_metadata') {
       await api.delete(
@@ -698,6 +741,19 @@ const handleClose = () => {
   flex-direction: column;
 }
 .modal-footer {
+  flex-shrink: 0;
+}
+
+.restore-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg);
   flex-shrink: 0;
 }
 

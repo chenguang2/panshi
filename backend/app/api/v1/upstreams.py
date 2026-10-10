@@ -5,9 +5,10 @@ from sqlalchemy import select, func, or_
 import uuid
 
 from app.core.database import get_db
-from app.models.cluster import Cluster, Upstream, UpstreamTarget, ConfigVersion
+from app.models.cluster import Cluster, Upstream, UpstreamTarget
 from app.models.user import User, UserCluster
 from app.schemas.cluster import UpstreamWithTargets, UpstreamTargetSchema
+from app.services import edge_sync
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/upstreams", tags=["upstreams"])
@@ -90,20 +91,10 @@ async def list_all_upstreams(
             cluster_name_map[r[0]] = r[1] or r[2]
             cluster_group_map[r[0]] = r[3] or ""
 
-    # Batch load latest publish time
+    # Batch load latest publish time + pending 推导（published_at 回查与 pending
+    # 推导收敛在共享 helper，与集群子页端点口径单点一致）
     upstream_ids = [u.id for u in upstreams]
-    pub_map = {}
-    if upstream_ids:
-        pub_result = await db.execute(
-            select(
-                ConfigVersion.resource_id,
-                func.max(ConfigVersion.created_at).label("latest_ts")
-            ).where(
-                ConfigVersion.resource_type == "upstream",
-                ConfigVersion.resource_id.in_(upstream_ids)
-            ).group_by(ConfigVersion.resource_id)
-        )
-        pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()}
+    pub_map = await edge_sync.load_publish_time_map(db, "upstream", upstream_ids)
 
     items = []
     # 批量查询 targets（消除 N+1）
@@ -126,6 +117,12 @@ async def list_all_upstreams(
         item.current_version = u.current_version
         ts = pub_map.get(u.id)
         item.published_at = ts.isoformat() + "Z" if ts else None
+        item.pending_publish = edge_sync.derive_pending_publish(
+            current_version=u.current_version,
+            updated_at=u.updated_at,
+            published_at=ts,
+            last_publish_status=u.last_publish_status,
+        )
         # Attach cluster info
         item_dict = item.model_dump()
         item_dict["cluster_name"] = cluster_name_map.get(u.cluster_id, "")

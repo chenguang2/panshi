@@ -50,10 +50,16 @@ describe('M4 新建集群表单不含状态字段', () => {
 })
 
 describe('M6 上游版本空值显示未发布', () => {
-  it('版本列空值渲染「未发布」而非 v-', () => {
+  it('发布状态列经 PublishStatusTag 渲染（空版本由组件「未发布」分支承接）', () => {
     const s = src('views', 'UpstreamList.vue')
-    expect(s).toContain("record.current_version ? 'v' + record.current_version : '未发布'")
+    // upstream-ux-close-loop 2.6：版本列升级为 PublishStatusTag 四态；
+    // 空版本不得回退为裸文本三元/占位符，由组件「未发布」分支承接
+    expect(s).toContain('<PublishStatusTag')
+    expect(s).toContain(':version="record.current_version"')
+    expect(s).not.toContain("'v' + record.current_version")
     expect(s).not.toContain("v{{ record.current_version || '-' }}")
+    const tag = src('components', 'PublishStatusTag.vue')
+    expect(tag).toContain('未发布')
   })
 })
 

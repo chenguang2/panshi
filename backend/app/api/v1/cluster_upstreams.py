@@ -70,18 +70,9 @@ async def list_upstreams(
     result = await db.execute(query)
     upstreams = result.scalars().all()
 
-    # 批量查询最新发布时间
+    # 批量查询最新发布时间 + pending 推导（与全局 /upstreams 端点共用 edge_sync 单点）
     upstream_ids = [u.id for u in upstreams]
-    pub_result = await db.execute(
-        select(
-            ConfigVersion.resource_id,
-            func.max(ConfigVersion.created_at).label("latest_ts")
-        ).where(
-            ConfigVersion.resource_type == "upstream",
-            ConfigVersion.resource_id.in_(upstream_ids) if upstream_ids else False
-        ).group_by(ConfigVersion.resource_id)
-    )
-    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if upstream_ids else {}
+    pub_map = await edge_sync.load_publish_time_map(db, "upstream", upstream_ids)
 
     items = []
     # 批量查询 targets（消除 N+1：一次 IN 查询替代逐行 select）
@@ -101,6 +92,12 @@ async def list_upstreams(
         response.current_version = u.current_version
         ts = pub_map.get(u.id)
         response.published_at = ts.isoformat() + 'Z' if ts else None
+        response.pending_publish = edge_sync.derive_pending_publish(
+            current_version=u.current_version,
+            updated_at=u.updated_at,
+            published_at=ts,
+            last_publish_status=u.last_publish_status,
+        )
         items.append(response)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}

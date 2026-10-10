@@ -1,10 +1,12 @@
-import { ref, reactive, computed, watch, type Ref } from 'vue'
+import { ref, reactive, computed, watch, h, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route, HealthCheckConfig } from '@/types'
 import { useColumnConfig } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { showDeleteConfirm, buildDeleteProgressContent, publishStatusRender } from '@/composables/useClusterUtils'
+import { showOverlayModal } from '@/composables/useOverlayModal'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import { formatPublishDateTime } from '@/utils/format'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
@@ -213,7 +215,19 @@ export function useClusterUpstreams(options: {
   const loadUpstreams = core.load
   const handleUpstreamTableChange = core.handleTableChange
   const selectUpstream = core.selectOne
-  const selectUpstreams = core.selectMany
+  // 勾选同步单选（4.1/D8）：恰好 1 行且 rows[0] 存在时写 selectedUpstream（工具栏单选操作即时可用）；
+  // rows[0] 缺失（跨页勾选时 rows 可能只含当前页行）时**不写**单选——维持原值、单选按钮禁用；
+  // 0 或 ≥2 行清空单选。不用 core.selectMany：其对 rows[0] 缺失场景会误写 null。
+  const selectUpstreams = (cluster: Cluster, keys: Array<string | number>, rows: Upstream[]) => {
+    cluster.selectedUpstreamKeys = keys as number[]
+    if (keys.length === 1) {
+      if (rows.length > 0 && rows[0]) {
+        cluster.selectedUpstream = rows[0]
+      }
+    } else {
+      cluster.selectedUpstream = null
+    }
+  }
   const deleteUpstream = core.deleteSelected
   const deleteUpstreamByRecord = core.deleteByRecord
   const deleteUpstreams = core.deleteMany
@@ -233,6 +247,58 @@ export function useClusterUpstreams(options: {
 
   const targetValidation = ref<Record<string, { host?: string; port?: string; weight?: string }>>({})
   const formErrors = reactive<Record<string, string>>({})
+
+  // ── 表单 dirty 检测 + 误关保护（4.4/D9）──
+  // 打开表单（新建/编辑/复制）时拍快照；× / 取消经 closeUpstreamModal：
+  // 无修改直接关，有修改先经 useOverlayModal 确认「更改尚未保存，确定放弃？」。
+  let upstreamFormSnapshot = ''
+  const snapshotUpstreamForm = (): string =>
+    JSON.stringify({
+      name: upstreamForm.name,
+      load_balance: upstreamForm.load_balance,
+      description: upstreamForm.description,
+      hash_on: upstreamForm.hash_on,
+      key: upstreamForm.key,
+      targets: upstreamForm.targets.map((t) => ({ host: t.host, port: t.port, weight: t.weight })),
+      checks: upstreamForm.checks,
+      retriesInput: upstreamForm.retriesInput ?? null,
+      retry_timeout: upstreamForm.retry_timeout ?? null,
+      timeout: upstreamForm.timeout,
+      pass_host: upstreamForm.pass_host,
+      upstream_host: upstreamForm.upstream_host,
+      scheme: upstreamForm.scheme,
+      keepalive_pool: upstreamForm.keepalive_pool,
+      toggles: [
+        toggleChecks.value,
+        toggleTimeout.value,
+        togglePool.value,
+        toggleRetries.value,
+        toggleRetryTimeout.value,
+        toggleHost.value,
+        toggleScheme.value,
+      ],
+      retriesRadio: retriesRadio.value,
+      checksMode: checksMode.value,
+    })
+  const captureUpstreamFormSnapshot = () => {
+    upstreamFormSnapshot = snapshotUpstreamForm()
+  }
+  const isUpstreamFormDirty = (): boolean => snapshotUpstreamForm() !== upstreamFormSnapshot
+
+  const closeUpstreamModal = () => {
+    if (!upstreamModalVisible.value) return
+    if (!isUpstreamFormDirty()) {
+      upstreamModalVisible.value = false
+      return
+    }
+    showOverlayModal({
+      title: '未保存的更改',
+      content: '更改尚未保存，确定放弃？',
+      onOk: () => {
+        upstreamModalVisible.value = false
+      },
+    })
+  }
 
   // ── Individual toggle states ──
   const toggleChecks = ref(false)
@@ -292,20 +358,27 @@ export function useClusterUpstreams(options: {
       sorter: true,
       customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text),
     },
+    { title: '目标节点', key: 'targets', width: 220 },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true, sorter: true },
     {
       title: '发布状态',
       key: 'publish_status',
       width: 140,
       customRender: ({ record }: { record: Record<string, unknown> }) =>
-        publishStatusRender((record.current_version as number) ?? null, (record.published_at as string) ?? null),
+        // 四态标签：pending_publish/last_publish_status 由后端列表响应推导（2.7，前端不做本地推导）
+        h(PublishStatusTag, {
+          version: (record.current_version as number | undefined) ?? null,
+          publishedAt: (record.published_at as string | undefined) ?? null,
+          pending: record.pending_publish === true,
+          lastPublishStatus: (record.last_publish_status as string | null | undefined) ?? null,
+        }),
     },
     { title: '操作', key: 'actions', width: 340 },
   ]
 
   const upstreamCfg = useColumnConfig({
     key: 'upstream',
-    defaultColumns: ['name', 'load_balance', 'publish_status', 'description', 'actions'],
+    defaultColumns: ['name', 'load_balance', 'targets', 'publish_status', 'description', 'actions'],
     defaultSearchVisible: true,
     defaultActions: ['copy', 'edit', 'delete', 'publish', 'version'],
   })
@@ -409,7 +482,7 @@ export function useClusterUpstreams(options: {
         valid = false
       }
       if (!t.weight || t.weight < 1 || t.weight > 100) {
-        errors.weight = '权重不合法'
+        errors.weight = '权重需为 1-100 的整数'
         valid = false
       }
       // 检查重复 主机:端口
@@ -528,6 +601,7 @@ export function useClusterUpstreams(options: {
     Object.keys(formErrors).forEach((k) => (formErrors[k] = ''))
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
+    captureUpstreamFormSnapshot()
   }
 
   // ── Modal: edit upstream ──
@@ -640,6 +714,7 @@ export function useClusterUpstreams(options: {
     fillUpstreamForm(upstream)
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
+    captureUpstreamFormSnapshot()
   }
 
   const copyUpstreamByRecord = async (cluster: Cluster, upstream: Upstream) => {
@@ -653,6 +728,7 @@ export function useClusterUpstreams(options: {
     upstreamForm.name = `复制_${source.name}`
     upstreamModalVisible.value = true
     upstreamModalActiveTab.value = 'basic'
+    captureUpstreamFormSnapshot()
   }
 
   // ── Modal: submit upstream form ──
@@ -661,15 +737,20 @@ export function useClusterUpstreams(options: {
     try {
       await (upstreamFormRef.value as { validate: () => Promise<void> }).validate()
     } catch {
+      // 基础配置（名称/负载均衡/节点列表）校验失败：切回基础 Tab 让错误可见（4.3）
+      upstreamModalActiveTab.value = 'basic'
       return
     }
 
     if (!validateTargets()) {
+      upstreamModalActiveTab.value = 'basic'
       return
     }
 
     // Validate advanced fields
     if (!validateAdvancedFields()) {
+      // 高级配置校验失败：切到高级 Tab，避免表现为「点击保存无反应」（4.3）
+      upstreamModalActiveTab.value = 'advanced'
       return
     }
 
@@ -712,13 +793,19 @@ export function useClusterUpstreams(options: {
       submitData.upstream_host =
         toggleHost.value && upstreamForm.pass_host === 'rewrite' ? upstreamForm.upstream_host || null : null
       submitData.scheme = toggleScheme.value ? upstreamForm.scheme : null
+      let savedRecord: UpstreamFull | null = null
       if (editingUpstream.value) {
-        await api.put(`/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`, submitData)
-        message.success('上游已更新')
+        const res = await api.put(
+          `/clusters/${currentClusterId.value}/upstreams/${editingUpstream.value.id}`,
+          submitData,
+        )
+        savedRecord = (res?.data as UpstreamFull | undefined) ?? (editingUpstream.value as UpstreamFull)
       } else {
-        await api.post(`/clusters/${currentClusterId.value}/upstreams`, submitData)
-        message.success('上游已添加')
+        const res = await api.post(`/clusters/${currentClusterId.value}/upstreams`, submitData)
+        savedRecord = (res?.data as UpstreamFull | undefined) ?? null
       }
+      // 保存成功文案统一（3.1）：不再用「上游已更新/已添加」，显式表达未发布语义
+      message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
 
       // Refresh the cluster's upstream list so the table and re-edit show latest data
       upstreamModalVisible.value = false
@@ -728,11 +815,26 @@ export function useClusterUpstreams(options: {
         c.upstreams = res.data.items
         c.upstream_count = c.upstreams!.length
       }
+      showSavePublishGuide(c ?? null, savedRecord)
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } } }
       const detail = err.response?.data?.detail
       message.error(typeof detail === 'string' ? detail : '操作失败')
     }
+  }
+
+  // ── 保存后发布引导（3.1/D5）：轻确认 + 既有发布链路，不自动发布 ──
+  const showSavePublishGuide = (cluster: Cluster | null, record: UpstreamFull | null) => {
+    if (!cluster || !record) return
+    showOverlayModal({
+      title: '配置尚未发布',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        void publishUpstreamByRecord(cluster, record)
+      },
+    })
   }
 
   // ── Return everything ──
@@ -781,6 +883,8 @@ export function useClusterUpstreams(options: {
     copyUpstreamByRecord,
     copyingUpstream,
     handleUpstreamSubmit,
+    closeUpstreamModal,
+    isUpstreamFormDirty,
 
     // Delete
     deleteUpstream,

@@ -12,6 +12,30 @@ export function routeLabel(route?: 'relay' | 'direct'): string {
   return ''
 }
 
+/** 删除确认「仅删平台记录」提示的资源中文名：按 apiEndpoint 资源段映射（cluster 根端点等多资源场景识别不了，走通用文案）。 */
+const endpointResourceLabels: Record<string, string> = {
+  upstreams: '上游',
+  routes: '路由',
+  nodes: '节点',
+  plugin_configs: '插件组',
+  global_rules: '全局规则',
+  'plugin-metadata': '插件元数据',
+  'stream-proxies': '四层代理',
+  'static-resources': '静态资源',
+  ssl: 'SSL 证书',
+  'dns-proxies': 'DNS 代理',
+}
+
+function inferDeleteResourceLabel(apiEndpoint: string): string {
+  const segments = apiEndpoint.split('/').filter(Boolean)
+  // 资源段在倒数第一（批量端点）或倒数第二（单资源端点末尾是 id/名称）段
+  for (let i = segments.length - 1; i >= 0 && i >= segments.length - 2; i--) {
+    const label = endpointResourceLabels[segments[i]]
+    if (label) return label
+  }
+  return ''
+}
+
 export const resourceLabels: Record<string, string> = {
   nodes: 'Edge 节点',
   upstreams: '上游服务',
@@ -43,6 +67,12 @@ export function showDeleteConfirm(opts: {
   document.body.appendChild(container)
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
+
+  /** 「仅删平台记录」风险提示的资源中文名：从 apiEndpoint 资源段推断，识别不了返回空（走通用文案）。 */
+  const resourceLabel = inferDeleteResourceLabel(opts.apiEndpoint)
+  const platformOnlyHintText = resourceLabel
+    ? `仅删除平台记录，Edge 节点将继续运行该${resourceLabel}`
+    : '仅删除平台记录，Edge 节点将继续运行该资源'
 
   const updateOkDisabled = () => {
     okDisabled = !(deleteDb || (deleteEdge && (opts.noNodeSelection || selectedNodeIds.size > 0)))
@@ -185,6 +215,17 @@ export function showDeleteConfirm(opts: {
                 ],
               ),
               nodeSection,
+              // 未勾选 Edge 删除时提示：平台记录删除不影响节点运行（upstream-ux-close-loop 4.7）
+              deleteEdge
+                ? null
+                : h(
+                    'div',
+                    {
+                      style:
+                        'margin-top:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted);',
+                    },
+                    platformOnlyHintText,
+                  ),
             ]),
           ]),
       },
@@ -232,14 +273,36 @@ export function buildDeleteProgressContent(
   ])
 }
 
+/** 进度弹窗终态失败（percent>=100 且 status='exception'）时显示的操作按钮（如发布失败的「重新发布」）。 */
+interface ProgressTerminalAction {
+  label: string
+  onClick: () => void
+}
+
 /**
  * 创建本系统自定义 modal-overlay 风格的进度弹窗（与 showDeleteConfirm / EdgeEnv Alert Modal 一致）
  */
-function createProgressModal(title: string, progress: { percent: number; status: string }, logs: string[]) {
+function createProgressModal(
+  title: string,
+  progress: { percent: number; status: string },
+  logs: string[],
+  /** 传入时，失败/部分成功终态在日志区下方追加操作按钮（全部成功不显示） */
+  terminalAction?: ProgressTerminalAction,
+) {
   const container = document.createElement('div')
   document.body.appendChild(container)
+  const action = terminalAction
 
   const update = () => {
+    // 终态失败判定：进度走满且状态为 exception（partial/整体失败/请求异常都会置此状态）
+    const actionButton =
+      action && progress.percent >= 100 && progress.status === 'exception'
+        ? h(
+            'div',
+            { style: 'display:flex;justify-content:flex-end;margin-top:12px;' },
+            h('button', { class: 'btn btn-primary btn-sm', onClick: action.onClick }, action.label),
+          )
+        : null
     const vnode = h(
       AppModal,
       {
@@ -259,7 +322,13 @@ function createProgressModal(title: string, progress: { percent: number; status:
       },
       {
         default: () =>
-          buildDeleteProgressContent(progress as { percent: number; status: 'active' | 'success' | 'exception' }, logs),
+          h('div', [
+            buildDeleteProgressContent(
+              progress as { percent: number; status: 'active' | 'success' | 'exception' },
+              logs,
+            ),
+            actionButton,
+          ]),
       },
     )
     render(vnode, container)
@@ -500,6 +569,18 @@ const PROGRESS_TASK_TIMEOUT = 300_000
 /** 发布/删除进行中标志（共用一把锁）：进度弹窗期间禁止并发触发第二轮发布/删除。 */
 let progressTaskInFlight = false
 
+/**
+ * D10「重新发布」出口：以相同参数（endpoint/资源/节点选择）重发一次发布。
+ * 先等当前流程完全收尾（共享锁释放）再发起，避免被并发锁拒绝或产生双弹窗；
+ * 重试会先同步关闭当前结果弹窗（onClick 内 modal.close()），再进入此等待。
+ */
+async function republishWhenFree(opts: PublishOptions): Promise<void> {
+  while (progressTaskInFlight) {
+    await new Promise((r) => setTimeout(r, 30))
+  }
+  await executePublish(opts)
+}
+
 export async function executePublish(opts: PublishOptions): Promise<void> {
   if (progressTaskInFlight) {
     message.warning('已有发布/删除任务进行中，请稍候')
@@ -516,7 +597,13 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
       status: 'active',
     }
 
-    const modal = createProgressModal(opts.title, progress, logs)
+    const modal = createProgressModal(opts.title, progress, logs, {
+      label: '重新发布',
+      onClick: () => {
+        modal.close()
+        void republishWhenFree(opts)
+      },
+    })
 
     const updateContent = () => {
       modal.update()

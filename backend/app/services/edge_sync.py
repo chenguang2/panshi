@@ -7,10 +7,12 @@ that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 
 import asyncio
 import json
+from datetime import datetime
 from typing import Any, Awaitable, Optional, Callable
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case, inspect as sa_inspect
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.cluster import Cluster, Node, ConfigVersion, Upstream, Route, PluginConfig, GlobalRule, PluginMetadata
 from app.models.static_resource import StaticResource
@@ -134,7 +136,9 @@ async def publish_resource(
     - post_version_hook: 版本快照之后执行（ssl 的 CA 过期检查与证书链拼接）
     - post_publish_fn: 发布后的附加动作（plugin_metadata 的 reload_plugins）
     """
-    new_version = await create_config_version(db, resource_type, resource.id, cluster_id, config_data, resource)
+    new_version, publish_ts = await _create_config_version(
+        db, resource_type, resource.id, cluster_id, config_data, resource
+    )
 
     if post_version_hook is not None:
         await post_version_hook()
@@ -198,6 +202,21 @@ async def publish_resource(
         post_publish_fn=post_publish_fn,
         post_log_fn=post_log_fn,
     )
+
+    # partial 写回（upstream-publish-status spec / design D2）：任一节点失败 →
+    # 'partial'，全部成功 → 清 NULL。hasattr 能力探测——其他资源加同名列即可接入，
+    # 不逐资源复制。注意这是版本创建 commit 之后的第二次 UPDATE，会触发 onupdate
+    # 把 updated_at 刷到晚于发布时间戳 → pending 误变真，必须重钉 updated_at =
+    # 本次发布时间戳。陷阱：expire_on_commit=False 下重赋同值经值相等判定为「未变更」，
+    # updated_at 不进 SET、onupdate 照样覆盖——必须 flag_modified 强制该列进入 SET，
+    # 显式赋值才真正胜出。
+    if hasattr(resource, "last_publish_status"):
+        resource.last_publish_status = "partial" if fail_count else None
+        if publish_ts is not None and hasattr(resource, "updated_at"):
+            resource.updated_at = publish_ts
+            flag_modified(resource, "updated_at")
+        await db.commit()
+
     return build_publish_response(results, success_count, fail_count, len(active_nodes), display_name, new_version)
 
 
@@ -254,6 +273,95 @@ async def get_active_nodes(
     return list(result.scalars().all())
 
 
+def derive_pending_publish(
+    *,
+    current_version: Optional[int],
+    updated_at: Optional[datetime],
+    published_at: Optional[datetime],
+    last_publish_status: Optional[str] = None,
+) -> bool:
+    """pending_publish 推导单点（design D1 / upstream-publish-status spec）。
+
+    规则：current_version 非空 && published_at 可查 && updated_at > published_at。
+    published_at 为 None（版本历史被删光，publish-map 回查落空）时恒 False，
+    MUST NOT 对 None 执行时间比较（Python ``updated_at > None`` 会 TypeError）。
+    last_publish_status（'partial'）是前端四态判定的另一输入、与本布尔正交
+    （判定顺序：未发布 → 部分失败 → 待发布 → 已发布），此处仅作显式入参以
+    固定调用点上下文，不参与推导。两个上游列表端点 MUST 经本函数推导，
+    禁止各自实现（单一事实源）。
+    """
+    if not current_version or published_at is None or updated_at is None:
+        return False
+    return updated_at > published_at
+
+
+async def load_publish_time_map(
+    db: AsyncSession,
+    resource_type: str,
+    resource_ids: list,
+) -> dict:
+    """批量回查各资源最近发布时间（max(ConfigVersion.created_at)，publish-map 单点）。
+
+    返回 {resource_id: latest_created_at}；无任何版本记录的资源不在 map 中
+    （取用方 get 到 None，即「版本历史被删光」的守卫输入）。
+    """
+    if not resource_ids:
+        return {}
+    result = await db.execute(
+        select(
+            ConfigVersion.resource_id,
+            func.max(ConfigVersion.created_at).label("latest_ts"),
+        ).where(
+            ConfigVersion.resource_type == resource_type,
+            ConfigVersion.resource_id.in_(resource_ids),
+        ).group_by(ConfigVersion.resource_id)
+    )
+    return {r.resource_id: r.latest_ts for r in result.all()}
+
+
+async def _create_config_version(
+    db: AsyncSession,
+    resource_type: str,
+    resource_id: int,
+    cluster_id: int,
+    config_data: dict,
+    entity: Any,
+) -> tuple:
+    """创建版本记录，返回 (新版本号, 本次发布时间戳 created_at)。
+
+    created_at 在构造期显式生成（而非依赖 flush 期 default），同一时间戳同时用于：
+    - ConfigVersion.created_at（列表端点 published_at 回查源）；
+    - entity.updated_at 显式对齐（design D1：发布后 updated_at == 发布时间戳 →
+      pending_publish 恒 False；显式赋值优先于 onupdate；无 updated_at 列的模型
+      如 StreamProxy/SslCertificate 经 hasattr 跳过，MUST NOT 报错）；
+    - publish_resource 的 partial 写回重钉（一次发布动作只有一个发布时间戳）。
+    """
+    version_result = await db.execute(
+        select(func.max(ConfigVersion.version)).where(
+            ConfigVersion.resource_type == resource_type,
+            ConfigVersion.resource_id == resource_id,
+        )
+    )
+    latest_version = version_result.scalar() or 0
+    new_version = latest_version + 1
+
+    created_at = datetime.utcnow()
+    config_version = ConfigVersion(
+        cluster_id=cluster_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        version=new_version,
+        config=json.dumps(config_data, ensure_ascii=False),
+        created_at=created_at,
+    )
+    db.add(config_version)
+    entity.current_version = new_version
+    if hasattr(entity, "updated_at"):
+        entity.updated_at = created_at
+    await db.commit()
+    return new_version, created_at
+
+
 async def create_config_version(
     db: AsyncSession,
     resource_type: str,
@@ -275,25 +383,9 @@ async def create_config_version(
     Returns:
         The new version number.
     """
-    version_result = await db.execute(
-        select(func.max(ConfigVersion.version)).where(
-            ConfigVersion.resource_type == resource_type,
-            ConfigVersion.resource_id == resource_id,
-        )
+    new_version, _created_at = await _create_config_version(
+        db, resource_type, resource_id, cluster_id, config_data, entity
     )
-    latest_version = version_result.scalar() or 0
-    new_version = latest_version + 1
-
-    config_version = ConfigVersion(
-        cluster_id=cluster_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        version=new_version,
-        config=json.dumps(config_data, ensure_ascii=False),
-    )
-    db.add(config_version)
-    entity.current_version = new_version
-    await db.commit()
     return new_version
 
 

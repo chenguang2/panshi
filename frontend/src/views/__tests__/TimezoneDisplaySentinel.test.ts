@@ -101,14 +101,16 @@ describe('时间哨兵 · RouteList.vue', () => {
   })
 })
 
-// ── UpstreamList：formatDateOnly(created_at) ──
+// ── UpstreamList：PublishStatusTag（formatPublishDateTime(published_at)） ──
+// upstream-ux-close-loop 2.6：「创建时间」列已由「发布状态」列（PublishStatusTag）取代，
+// 时间哨兵随之迁移到最近发布时间 published_at 的渲染。
 
-describe('时间哨兵 · UpstreamList.vue', () => {
+describe('时间哨兵 · UpstreamList.vue（PublishStatusTag 发布时间）', () => {
   const stubs = {
     PageHeader: { template: '<div class="page-header" />', props: ['title', 'description'] },
     'a-table': {
       template:
-        '<div class="mock-table"><template v-for="item in dataSource"><slot name="bodyCell" :column="{ key: \'created_at\' }" :record="item" /></template></div>',
+        '<div class="mock-table"><template v-for="item in dataSource"><slot name="bodyCell" :column="{ key: \'publish_status\' }" :record="item" /></template></div>',
       props: ['columns', 'dataSource', 'loading', 'pagination', 'rowKey', 'size'],
     },
   }
@@ -129,6 +131,9 @@ describe('时间哨兵 · UpstreamList.vue', () => {
             load_balance: 'weighted_roundrobin',
             targets: [{ target: '10.0.0.1:8080', weight: 100 }],
             current_version: 3,
+            published_at: '2026-09-14T16:30:45Z',
+            pending_publish: false,
+            last_publish_status: null,
             created_at: NAIVE_UTC,
           },
         ],
@@ -137,14 +142,15 @@ describe('时间哨兵 · UpstreamList.vue', () => {
     responses.set('/clusters', { data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
   })
 
-  it('created_at 列按 Asia/Shanghai 渲染（naive UTC 跨日 +8）', async () => {
+  it('发布时间按 Asia/Shanghai 渲染（UTC 跨日 +8，含秒）', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const cell = wrapper.find('.mock-table .cell-secondary')
-    expect(cell.exists()).toBe(true)
-    expect(cell.text()).toBe(SHANGHAI_DATE_ONLY)
+    const dateEl = wrapper.find('.ps-date')
+    expect(dateEl.exists()).toBe(true)
+    expect(dateEl.text()).toBe(SHANGHAI_SLASH_FULL)
+    expect(dateEl.attributes('title')).toBe(`发布时间: ${SHANGHAI_SLASH_FULL}`)
   })
 })
 

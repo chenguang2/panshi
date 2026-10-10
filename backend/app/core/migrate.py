@@ -161,6 +161,7 @@ COLUMN_MIGRATIONS = [
     ("relay_gateways", "openresty_prefix", "VARCHAR(255)"),
     ("ps_db_backup_config", "source_name", "VARCHAR(64)"),
     ("ps_db_backup_config", "targets_migrated", "BOOLEAN DEFAULT FALSE"),
+    ("ps_upstream", "last_publish_status", "VARCHAR(16)"),
 ]
 
 

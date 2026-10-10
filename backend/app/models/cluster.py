@@ -56,6 +56,9 @@ class Upstream(Base):
     scheme = Column(String(20), nullable=True, default="http")
     keepalive_pool = Column(Text, nullable=True)  # JSON: {"size": N, "idle_timeout": N, "requests": N}
     current_version = Column(Integer, nullable=True)
+    # 上次发布结果：'partial'=部分/全部节点失败（design D2）；全部成功清 NULL。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
+    last_publish_status = Column(String(16), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
