@@ -124,6 +124,8 @@ describe('PluginConfigList.vue', () => {
     listUrl: '/plugin_configs',
     expectedGroups: ['线上', '预发'],
     groupParamAssert: 'defined',
+    // M2：插件组主列表「全部」选项指明「集群分组」语义，与其他列表页不同
+    allLabel: '全部集群分组',
   })
 
   it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
@@ -132,7 +134,7 @@ describe('PluginConfigList.vue', () => {
     await flushPromises()
     // Select a specific group
     const selects = wrapper.findAll('select')
-    const groupSelect = selects.find((s) => s.text().includes('全部分组'))
+    const groupSelect = selects.find((s) => s.text().includes('全部集群分组'))
     expect(groupSelect).toBeDefined()
     const selectEl = groupSelect!.element as HTMLSelectElement
     selectEl.value = '线上'

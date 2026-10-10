@@ -18,16 +18,21 @@ export interface GroupFilterSuiteOptions {
   listUrl?: string
   /** group_name 断言方式：'defined' = 每次调用都带该参数；'sentinel' = 首次调用传 '__all__' */
   groupParamAssert?: 'defined' | 'sentinel'
+  /** 分组下拉「全部」选项文案（缺省「全部分组」；插件组主列表为「全部集群分组」，plugin-group-ux-close-loop M2） */
+  allLabel?: string
 }
 
 export function itGroupFilterSuite(opts: GroupFilterSuiteOptions): void {
-  const { mountPage, expectedGroups, apiGet, listUrl, groupParamAssert } = opts
+  const { mountPage, expectedGroups, apiGet, listUrl, groupParamAssert, allLabel = '全部分组' } = opts
 
   it('renders group filter select before cluster filter', async () => {
     const wrapper = await mountPage()
     const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
+    // 集群筛选以下拉默认选项「全部集群」精确判定（分组下拉的「全部集群分组」含该子串，子串匹配会撞车）
+    const isClusterFilter = (s: { findAll: (sel: string) => { text: () => string }[] }) =>
+      s.findAll('option').some((o) => o.text() === '全部集群')
+    const groupIdx = selects.findIndex((s) => s.text().includes(allLabel))
+    const clusterIdx = selects.findIndex(isClusterFilter)
     expect(groupIdx).toBeGreaterThanOrEqual(0)
     expect(clusterIdx).toBeGreaterThanOrEqual(0)
     expect(groupIdx).toBeLessThan(clusterIdx)
@@ -35,7 +40,7 @@ export function itGroupFilterSuite(opts: GroupFilterSuiteOptions): void {
 
   it('populates group filter options from cluster group_names', async () => {
     const wrapper = await mountPage()
-    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
+    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes(allLabel))
     expect(groupSelect).toBeDefined()
     const optionTexts = groupSelect!.findAll('option').map((o) => o.text())
     for (const group of expectedGroups) {

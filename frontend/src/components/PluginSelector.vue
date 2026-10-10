@@ -91,7 +91,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="empty-hint">点击左侧插件添加到路由</div>
+        <div v-else class="empty-hint">点击左侧插件添加</div>
       </div>
     </div>
 

@@ -415,9 +415,14 @@ class PluginConfigResponse(BaseModel):
     plugins: Optional[Dict[str, Any]] = None
     current_version: Optional[int] = None
     published_at: Optional[str] = None
+    # 发布状态语义由后端单点推导（edge_sync.derive_pending_publish），前端不本地推导
+    pending_publish: bool = False
+    # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 None
+    last_publish_status: Optional[str] = None
+    updated_at: Optional[str] = None
     created_at: Optional[str] = None
 
-    @field_validator('created_at', mode='before')
+    @field_validator('created_at', 'updated_at', mode='before')
     @classmethod
     def convert_datetime(cls, v):
         if isinstance(v, datetime):

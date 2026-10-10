@@ -5,6 +5,8 @@ import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { showOverlayModal } from './useOverlayModal'
+import { getPluginConfigReferences, type PluginConfigReferences } from '@/api/pluginConfigs'
 
 /** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连。字段缺失时返回空串（向后兼容）。 */
 export function routeLabel(route?: 'relay' | 'direct'): string {
@@ -25,6 +27,27 @@ const endpointResourceLabels: Record<string, string> = {
   'static-resources': '静态资源',
   ssl: 'SSL 证书',
   'dns-proxies': 'DNS 代理',
+}
+
+/**
+ * 发布/删除进度日志状态值中文映射（plugin-group-ux-close-loop L5）。
+ * 取值以 edge_sync 真实产出为准：逐节点 pending → success/failed；无活跃节点 → skipped；
+ * 顶层无活跃节点 → error（route 域可覆盖 ok）；数据库腿 → success。仅展示层，不改 results 数据结构；
+ * 用词与终态汇总既有映射（成功/失败/部分成功/跳过）对齐。未知枚举原样回显（向后兼容）。
+ */
+const RESULT_STATUS_LABELS: Record<string, string> = {
+  success: '成功',
+  failed: '失败',
+  skipped: '跳过',
+  pending: '执行中',
+  ok: '成功',
+  error: '失败',
+  partial: '部分成功',
+}
+
+export function resultStatusLabel(status?: string | null): string {
+  if (!status) return ''
+  return RESULT_STATUS_LABELS[status] || status
 }
 
 function inferDeleteResourceLabel(apiEndpoint: string): string {
@@ -673,7 +696,7 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
       if (opts.handleResult) {
         opts.handleResult(data, addLog, progress)
       } else {
-        addLog(`状态: ${data.status}`)
+        addLog(`状态: ${resultStatusLabel(data.status)}`)
         addLog(`消息: ${data.message}`)
         if (data.version !== undefined) addLog(`版本: v${data.version}`)
 
@@ -682,7 +705,9 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
           addLog('节点同步结果:')
           for (const r of data.results) {
             const rl = routeLabel(r.route)
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
+            addLog(
+              `  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`,
+            )
           }
         }
 
@@ -859,7 +884,7 @@ function logBatchDeleteResults(
         )
       }
     }
-    if (parts.length === 0) parts.push(r.status || '')
+    if (parts.length === 0) parts.push(resultStatusLabel(r.status))
     if (r.error) parts.push(r.error)
     addLog(`删除${label} ${r[nameField] || r.id}: ${parts.join(' / ')}`)
     if (r.status === 'failed' || (r.results || []).some((sub) => sub.status === 'failed')) {
@@ -909,11 +934,22 @@ function logSingleDeleteResults(
   }
   addLog('')
 
-  const edgeResults = data.results?.filter((r) => r.scope === 'edge') || []
-  if (edgeResults.length > 0) {
+  // Edge 段分两类（plugin-group-ux-close-loop 渲染修复）：带 node 字段的节点行 vs
+  // status=skipped 且无 node 的提示条目（如 delete_on_nodes 无活跃节点时的整体提示）。
+  // 提示条目渲染为提示行（显示其 message），不计入节点数/成功/失败统计；终态判定只看节点行。
+  const allEdgeResults = data.results?.filter((r) => r.scope === 'edge') || []
+  const edgeNotices = allEdgeResults.filter((r) => !r.node && r.status === 'skipped')
+  const edgeResults = allEdgeResults.filter((r) => r.node || r.status !== 'skipped')
+  if (allEdgeResults.length > 0) {
     addLog('正在从 Edge 节点同步删除...')
     progress.percent = 80
+  }
 
+  for (const n of edgeNotices) {
+    addLog(n.message || 'Edge 侧无待执行操作')
+  }
+
+  if (edgeResults.length > 0) {
     addLog('Edge 节点同步删除结果:')
     let successCount = 0
     let failCount = 0
@@ -934,12 +970,12 @@ function logSingleDeleteResults(
       }
       const rl = routeLabel(r.route)
       addLog(
-        `  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${detail}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
+        `  ${r.node ?? '未知节点'}: ${r.status === 'success' ? '✅' : '❌'}${detail}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
       )
     }
     addLog('')
     addLog(`总计: ${edgeResults.length} 个节点, 成功 ${successCount} 个, 失败 ${failCount} 个`)
-  } else if (opts.deleteEdge) {
+  } else if (opts.deleteEdge && allEdgeResults.length === 0) {
     addLog('集群中没有活跃的 Edge 节点')
   }
 
@@ -1084,4 +1120,68 @@ export async function deleteClusterWithConfirm(
       })
     },
   })
+}
+
+// ── 插件组删除前置引用检查（plugin-group-ux-close-loop 决策 A/B）─────────────────
+// 共享删除确认弹窗不支持禁用勾选，被引用时不弹共享确认，改 useOverlayModal 阻断提示；
+// 主页面调用点与集群子页（useClusterPluginEntity deps 包装）共用本实现，保证两页行为一致。
+
+/** 被引用阻断提示：列出引用路由名（超 3 条折叠「等」），无任何删除入口，操作仅「我知道了」。 */
+function showReferencedDeleteBlock(refs: PluginConfigReferences): void {
+  const total = refs.referenced_by.length
+  const shownNames = refs.referenced_by.slice(0, 3).map((r) => r.route_name)
+  const content = h('div', { style: 'font-size:13px;line-height:1.7;' }, [
+    h(
+      'div',
+      { style: 'color:var(--danger);font-weight:500;margin-bottom:8px;' },
+      `插件组「${refs.name}」仍被 ${total} 条路由引用，需先在路由中解除引用后才能删除：`,
+    ),
+    h(
+      'ul',
+      { style: 'margin:0 0 8px;padding-left:20px;color:var(--fg);' },
+      shownNames.map((n) => h('li', n)),
+    ),
+    total > 3 ? h('div', { style: 'color:var(--muted);' }, `等 ${total} 条路由`) : null,
+    h('div', { style: 'color:var(--muted);margin-top:8px;' }, '网关侧与平台侧均不允许删除，需先在路由中解除引用。'),
+  ])
+  showOverlayModal({
+    title: '无法删除：插件组仍被路由引用',
+    content,
+    okText: '我知道了',
+    showCancel: false,
+  })
+}
+
+export interface PluginConfigRefCheckOptions {
+  /** 删除端点 /clusters/{cluster_id}/plugin_configs/{config_id}（引用查询端点由它派生） */
+  apiEndpoint: string
+  /** 无引用（或引用查询失败走兜底）：既有共享删除确认全流程，行为与现状一致 */
+  onUnreferenced: () => void
+}
+
+/**
+ * 插件组删除前置引用检查：拉取 references 端点后分流——
+ * 引用非空 → 阻断提示（无任何删除入口，不弹共享删除确认）；无引用/查询失败 → 既有流程不变。
+ * 后端 PLG-07 删除守卫（400，覆盖任意删除组合）仍是竞态/绕过前的最终兜底，本检查不替代守卫。
+ */
+export async function deletePluginConfigWithReferenceCheck(opts: PluginConfigRefCheckOptions): Promise<void> {
+  let refs: PluginConfigReferences | null
+  try {
+    refs = await fetchReferences(opts.apiEndpoint)
+  } catch {
+    refs = null
+  }
+  if (refs && refs.referenced_by.length > 0) {
+    showReferencedDeleteBlock(refs)
+    return
+  }
+  opts.onUnreferenced()
+}
+
+/** 经删除端点派生引用查询端点（apiEndpoint 形如 /clusters/1/plugin_configs/5；URL 构造单点在 api 模块） */
+async function fetchReferences(apiEndpoint: string): Promise<PluginConfigReferences | null> {
+  const m = /^\/clusters\/(\d+)\/plugin_configs\/(\d+)$/.exec(apiEndpoint)
+  if (!m) return null
+  const res = await getPluginConfigReferences(Number(m[1]), Number(m[2]))
+  return res.data
 }

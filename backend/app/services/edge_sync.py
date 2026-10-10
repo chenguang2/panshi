@@ -97,6 +97,13 @@ async def rollback_resource(
             await result
 
     resource.current_version = version
+    # plugin-group-ux-close-loop D6：回滚清除上次发布状态（'partial' 不再掩盖
+    # 「待发布」——四态判定顺序 partial 优先于 pending，回滚后用户恰恰需要被
+    # 提示重新发布）。能力探测：无此列的资源不受影响（route/global_rule 等）。
+    # updated_at 的 onupdate 随本次 commit 自然置位 → pending_publish 自然为真，
+    # 回滚路径不特判 pending 输入（与 D1 正交）。
+    if hasattr(resource, "last_publish_status"):
+        resource.last_publish_status = None
     await db.commit()
     return resource
 

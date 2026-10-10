@@ -16,8 +16,15 @@ export interface VersionModalState {
   edgeUuid: Ref<string>
 }
 
+/** 发布确认弹窗可选附加说明（plugin-group-ux-close-loop M5：向后兼容的可选参数） */
+export interface PublishModalOptions {
+  /** 当前已发布版本号：非空时弹窗显示「本次发布将创建新版本 v(N+1)」；未发布不传 */
+  currentVersion?: number | null
+}
+
 export interface ResourceCoreDeps {
-  openPublishModal: (title: string, clusterId: number) => Promise<number[]>
+  /** 第三参为可选发布说明（M5），既有实现按原签名注入仍兼容（少参函数可赋值） */
+  openPublishModal: (title: string, clusterId: number, opts?: PublishModalOptions) => Promise<number[]>
   showDeleteConfirm: (opts: {
     title: string
     apiEndpoint: string
@@ -29,13 +36,17 @@ export interface ResourceCoreDeps {
   versionModal: VersionModalState
 }
 
-interface ResourceCoreConfig<T extends { id: number; name: string; edge_uuid?: string }> {
+interface ResourceCoreConfig<
+  T extends { id: number; name: string; edge_uuid?: string; current_version?: number | null },
+> {
   /** 资源中文名，如 '路由' / '上游' / '插件组'（用于所有提示与确认文案） */
   noun: string
   /** API 端点段，如 'routes' / 'plugin_configs' */
   endpoint: string
   /** 版本管理弹窗的 resource_type */
   versionType: VersionResourceType
+  /** 发布确认弹窗是否显示「将创建新版本 v(N+1)」提示（M5 可选能力，默认关闭＝其余资源行为不变） */
+  publishVersionHint?: boolean
   /** 当前选中项（单选）——各工厂按自己的状态位置实现 */
   getSelected: (cluster: Cluster) => T | null
   setSelected: (cluster: Cluster, item: T | null) => void
@@ -63,10 +74,9 @@ interface ResourceCoreConfig<T extends { id: number; name: string; edge_uuid?: s
  * 十件套中，删除/发布/版本管理完全同构，仅状态位置不同——通过 selection
  * 访问器参数化收敛为单一实现；各工厂保留负载/表单/抽屉等真实差异。
  */
-export function useClusterResourceCore<T extends { id: number; name: string; edge_uuid?: string }>(
-  config: ResourceCoreConfig<T>,
-  deps: ResourceCoreDeps,
-) {
+export function useClusterResourceCore<
+  T extends { id: number; name: string; edge_uuid?: string; current_version?: number | null },
+>(config: ResourceCoreConfig<T>, deps: ResourceCoreDeps) {
   const { noun, endpoint, versionType } = config
   const { openPublishModal, showDeleteConfirm } = deps
   const versionModal = deps.versionModal
@@ -190,7 +200,20 @@ export function useClusterResourceCore<T extends { id: number; name: string; edg
   // ── 发布 ───────────────────────────────────────────────────────────
 
   async function publishByRecord(cluster: Cluster, record: T) {
+    // M5：opt-in 资源（插件组）在发布确认弹窗说明「将创建新版本 v(N+1)」；未发布（无版本）不传。
+    // 未开启 hint 的资源保持两参调用不变（openPublishModal 注入方按原签名断言，不引入第三实参）
+    if (config.publishVersionHint) {
+      const nodeIds = await openPublishModal(`发布${noun}: ${record.name}`, cluster.id, {
+        currentVersion: record.current_version,
+      })
+      await publishToNodes(cluster, record, nodeIds)
+      return
+    }
     const nodeIds = await openPublishModal(`发布${noun}: ${record.name}`, cluster.id)
+    await publishToNodes(cluster, record, nodeIds)
+  }
+
+  async function publishToNodes(cluster: Cluster, record: T, nodeIds: number[]) {
     if (!nodeIds.length) return
 
     await executePublish({

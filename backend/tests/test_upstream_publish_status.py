@@ -272,6 +272,57 @@ class TestListPendingPublish:
             assert m["zz-st-guard"]["last_publish_status"] is None
 
 
+    @pytest.mark.asyncio
+    async def test_rollback_clears_partial_status(self, test_db):
+        """D6 共享单点回归（upstream 路径）：partial 后回滚 → last_publish_status 清 NULL。
+
+        回滚后用户恰恰需要被提示重新发布；四态判定顺序 partial 优先于 pending，
+        不清除会以「⚠ 发布未完全生效」掩盖「待发布」。能力探测在共享单点
+        rollback_resource 内（无此列资源不受影响）。
+        """
+        up = await _seed_two_nodes_upstream(test_db)
+
+        calls = {"n": 0}
+
+        def flaky_publish(client):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise EdgeConnectionError("connection refused")
+            return FAKE_EDGE_OK
+
+        with patch("app.services.edge_sync.get_edge_logger", return_value=MagicMock()):
+            first = await edge_sync.publish_resource(
+                test_db, publish_fn=flaky_publish, **_publish_kwargs(up)
+            )
+        assert first["status"] == "partial"
+        await test_db.refresh(up)
+        assert up.last_publish_status == "partial"
+
+        async def _restore(_db, upstream, cfg):
+            upstream.load_balance = cfg.get("load_balance", upstream.load_balance)
+            upstream.hash_on = cfg.get("hash_on")
+            upstream.key = cfg.get("key")
+
+        await edge_sync.rollback_resource(
+            test_db, Upstream, resource_type="upstream",
+            resource_id=up.id, version=1,
+            not_found_detail="上游服务不存在", cluster_id=1, restore_fn=_restore,
+        )
+
+        cvs = (
+            await test_db.execute(
+                select(ConfigVersion).where(
+                    ConfigVersion.resource_type == "upstream",
+                    ConfigVersion.resource_id == up.id,
+                )
+            )
+        ).scalars().all()
+        await test_db.refresh(up)
+        assert up.last_publish_status is None
+        # pending 输入自然为真：onupdate 把 updated_at 刷到晚于最近发布时间
+        assert up.updated_at > max(v.created_at for v in cvs)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 2.3 partial 持久化（publish_resource 共享实现单点）
 # ═══════════════════════════════════════════════════════════════════

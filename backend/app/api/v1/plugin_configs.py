@@ -5,9 +5,10 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
-from app.models.cluster import Cluster, PluginConfig, ConfigVersion
+from app.models.cluster import Cluster, PluginConfig
 from app.models.user import User, UserCluster
 from app.schemas.cluster import PluginConfigResponse
+from app.services import edge_sync
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/plugin_configs", tags=["plugin_configs"])
@@ -71,21 +72,21 @@ async def list_all_plugin_configs(
             cluster_name_map[r[0]] = r[1] or r[2]
             cluster_group_map[r[0]] = r[3] or ""
 
-    pc_ids = [c.id for c in configs]
-    pub_map = {}
-    if pc_ids:
-        pub_result = await db.execute(
-            select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
-            .where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id.in_(pc_ids))
-            .group_by(ConfigVersion.resource_id)
-        )
-        pub_map = {r.resource_id: r.ts for r in pub_result.all()}
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending
+    # 推导收敛在 edge_sync 共享单点，与集群子页端点同口径，禁止各自实现）
+    pub_map = await edge_sync.load_publish_time_map(db, "plugin_config", [c.id for c in configs])
 
     items = []
     for c in configs:
         r = PluginConfigResponse.model_validate(c)
         ts = pub_map.get(c.id)
         r.published_at = ts.isoformat() + "Z" if ts else None
+        r.pending_publish = edge_sync.derive_pending_publish(
+            current_version=c.current_version,
+            updated_at=c.updated_at,
+            published_at=ts,
+            last_publish_status=c.last_publish_status,
+        )
         item = r.model_dump()
         item["cluster_name"] = cluster_name_map.get(c.cluster_id, "")
         item["cluster_group_name"] = cluster_group_map.get(c.cluster_id, "")

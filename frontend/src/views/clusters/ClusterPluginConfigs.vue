@@ -4,7 +4,7 @@
       <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
     </div>
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
       <div
         v-for="pc in cluster.plugin_configs"
         :key="pc.id"
@@ -16,12 +16,12 @@
           <strong class="pcc-title">{{ pc.name }}</strong>
           <div class="pcc-meta">
             <div class="pcc-status-row">
-              <a-tag v-if="pc.current_version" color="green" size="small">已发布</a-tag>
-              <a-tag v-else color="orange" size="small">未发布</a-tag>
-            </div>
-            <div class="pcc-version">
-              <template v-if="pc.current_version"><PublishStatusTag :version="pc.current_version" :published-at="pc.published_at" /></template>
-              <template v-else>&nbsp;</template>
+              <PublishStatusTag
+                :version="pc.current_version"
+                :published-at="pc.published_at"
+                :pending="pc.pending_publish === true"
+                :last-publish-status="pc.last_publish_status"
+              />
             </div>
           </div>
         </div>
@@ -41,51 +41,55 @@
         <div class="pcc-actions">
           <a-button size="small" @click.stop="viewPluginConfig(pc)" title="查看"><EyeOutlined /></a-button>
           <a-button size="small" @click.stop="editPluginConfig(cluster, pc)" title="编辑"><EditOutlined /></a-button>
-          <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger title="删除"><DeleteOutlined /></a-button>
-          <span style="flex:1"></span>
+          <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger title="删除"
+            ><DeleteOutlined
+          /></a-button>
+          <span style="flex: 1"></span>
           <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
           <a-button size="small" @click.stop="openPluginConfigVersionManagement(cluster, pc)">版本管理</a-button>
         </div>
       </div>
-      <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%; text-align: center; padding: 40px; color: #999;">
+      <div
+        v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0"
+        style="width: 100%; text-align: center; padding: 40px; color: #999"
+      >
         暂无插件组，点击"添加插件组"创建
       </div>
     </div>
 
     <!-- Plugin Config Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width:800px;">
-        <div class="modal-header">
-          <h2>{{ pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组' }}</h2>
-          <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <a-tabs v-model:activeKey="pluginConfigActiveTab">
-            <a-tab-pane key="basic" tab="基础配置">
-              <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
-                  <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
-                </a-form-item>
-                <a-form-item label="描述" name="description">
-                  <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
-                </a-form-item>
-              </a-form>
-            </a-tab-pane>
-            <a-tab-pane key="plugins" tab="插件配置">
-              <PluginSelector
-                v-model="pluginConfigFormData.selectedPlugins"
-                :plugins="availablePlugins"
-              />
-            </a-tab-pane>
-          </a-tabs>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="pluginConfigModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handlePluginConfigSubmit">{{ pluginConfigFormMode === 'add' ? '创建' : '保存' }}</button>
+      <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }">
+        <div class="modal" style="max-width: 800px">
+          <div class="modal-header">
+            <h2>{{ pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组' }}</h2>
+            <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <a-tabs v-model:activeKey="pluginConfigActiveTab">
+              <a-tab-pane key="basic" tab="基础配置">
+                <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                  <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
+                    <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
+                  </a-form-item>
+                  <a-form-item label="描述" name="description">
+                    <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
+                  </a-form-item>
+                </a-form>
+              </a-tab-pane>
+              <a-tab-pane key="plugins" tab="插件配置">
+                <PluginSelector v-model="pluginConfigFormData.selectedPlugins" :plugins="availablePlugins" />
+              </a-tab-pane>
+            </a-tabs>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="pluginConfigModalVisible = false">取消</button>
+            <button class="btn btn-primary" @click="handlePluginConfigSubmit">
+              {{ pluginConfigFormMode === 'add' ? '创建' : '保存' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
     <!-- View Plugin Config Drawer -->
@@ -101,7 +105,6 @@
       :edge-uuid="versionModalEdgeUuid"
       @published="onVersionPublished"
     />
-
   </div>
 </template>
 
@@ -174,7 +177,6 @@ const {
 function onVersionPublished() {
   emit('refresh')
 }
-
 </script>
 
 <style scoped>
@@ -243,11 +245,6 @@ function onVersionPublished() {
   margin-bottom: 2px;
 }
 
-.pcc-version {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .pcc-desc {
   font-size: 12px;
   color: var(--muted);
@@ -275,5 +272,10 @@ function onVersionPublished() {
   gap: 4px;
   align-items: center;
 }
-.loading-state { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
+.loading-state {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 </style>

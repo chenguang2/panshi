@@ -151,7 +151,7 @@
         <!-- ── 插件组 ── -->
         <div v-show="activeTab === 'pluginGroups'">
           <div v-if="clusterPluginGroups.length === 0" class="advanced-disabled-hint">
-            暂无插件组，请在"插件组"Tab 中创建
+            暂无插件组，请先在左侧菜单「插件组」页面创建
           </div>
           <div v-else>
             <div class="form-hint" style="margin-bottom: 12px">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
@@ -171,7 +171,9 @@
                     @click.stop="togglePluginGroup(pg)"
                   />
                   <strong class="pg-item-name">{{ pg.name }}</strong>
-                  <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
+                  <!-- M3：未发布不显示 v0（系统中不存在 v0 版本），显示「未发布」标签 -->
+                  <span v-if="pg.current_version" class="pg-item-version">v{{ pg.current_version }}</span>
+                  <span v-else class="pg-item-version pg-item-unpublished">未发布</span>
                 </div>
                 <div class="pg-item-plugins">
                   <span v-for="(pcfg, pname) in pg.plugins" :key="pname" class="pg-item-tag">{{ pname }}</span>
@@ -611,6 +613,9 @@ async function handleSubmit() {
   color: var(--muted);
   font-family: var(--font-mono);
   margin-left: auto;
+}
+.pg-item-unpublished {
+  color: #fa8c16;
 }
 .pg-item-plugins {
   display: flex;

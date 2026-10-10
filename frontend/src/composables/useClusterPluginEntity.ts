@@ -2,7 +2,7 @@ import { ref, reactive, h, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Plugin, GlobalRule, PluginConfig } from '@/types'
-import { showDeleteConfirm } from './useClusterUtils'
+import { showDeleteConfirm, deletePluginConfigWithReferenceCheck } from './useClusterUtils'
 import { getApiErrorMessage } from '@/utils/error'
 import { useClusterResourceCore, type VersionModalState } from './useClusterResourceCore'
 import { showOverlayModal } from './useOverlayModal'
@@ -21,6 +21,8 @@ interface PluginEntityConfig {
   clusterProp: 'plugin_configs' | 'global_rules'
   /** Version modal resource type */
   versionType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'
+  /** 发布确认弹窗显示「将创建新版本 v(N+1)」提示（M5，插件组开启；全局规则等默认关闭） */
+  publishVersionHint?: boolean
 }
 
 export interface PluginEntityDeps {
@@ -46,6 +48,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       noun: displayName,
       endpoint: apiEndpoint,
       versionType,
+      publishVersionHint: config.publishVersionHint,
       getSelected: (c) => (c.selectedPluginConfig as PluginEntityItem | null) ?? null,
       setSelected: (c, item) => {
         c.selectedPluginConfig = item as PluginEntityItem | null
@@ -54,7 +57,23 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       setSelectedKeys: () => {},
       refresh: (c) => loadItems(c),
     },
-    { openPublishModal, showDeleteConfirm, versionModal },
+    // 插件组删除前置引用检查（决策 B）：在 core 的 deps 注入点包装共享确认——
+    // 引用非空时不弹共享确认，改 useOverlayModal 阻断提示（无任何删除入口，
+    // 网关侧与平台侧均不允许删除）；无引用/查询失败走原流程不变。
+    // 仅插件组端点启用（引用端点只存在于 plugin_configs），全局规则链路原样透传。
+    {
+      openPublishModal,
+      showDeleteConfirm:
+        apiEndpoint === 'plugin_configs'
+          ? (opts) => {
+              void deletePluginConfigWithReferenceCheck({
+                apiEndpoint: opts.apiEndpoint,
+                onUnreferenced: () => showDeleteConfirm(opts),
+              })
+            }
+          : showDeleteConfirm,
+      versionModal,
+    },
   )
 
   const modalVisible = ref(false)
@@ -135,12 +154,14 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
 
     try {
       const payload = { name: formData.name, description: formData.description, plugins }
+      // 保存 ≠ 生效：两条分支统一文案（对齐上游先例），保存后下方 loadItems 立即刷新出「待发布」
+      const savedToast = `${displayName}已保存。配置尚未发布，需发布后才会在 Edge 节点生效`
       if (editingId.value) {
         await api.put(`/clusters/${editingClusterId.value}/${apiEndpoint}/${editingId.value}`, payload)
-        message.success(`${displayName}已更新`)
+        message.success(savedToast)
       } else {
         await api.post(`/clusters/${editingClusterId.value}/${apiEndpoint}`, payload)
-        message.success(`${displayName}已添加`)
+        message.success(savedToast)
       }
 
       modalVisible.value = false

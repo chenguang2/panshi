@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal modal-wide" style="max-width:600px;">
+    <div class="modal modal-wide" style="max-width: 600px">
       <div class="modal-header">
         <h2>{{ title }}</h2>
         <button class="modal-close" @click="handleCancel">&times;</button>
@@ -21,6 +21,8 @@
 
         <!-- Node list -->
         <template v-else>
+          <!-- M5：当前已有版本时说明本次发布将创建新版本（可选参数，未传/未发布不显示该行） -->
+          <div v-if="versionHintText" class="version-hint">{{ versionHintText }}</div>
           <div class="selection-bar">
             <span class="selection-links">
               <a class="action-link" @click="selectAll">全选</a>
@@ -31,18 +33,14 @@
           </div>
 
           <div class="node-list">
-            <div
-              v-for="node in nodes"
-              :key="node.id"
-              :class="['node-row', { 'node-row--offline': node.status !== 1 }]"
-            >
+            <div v-for="node in nodes" :key="node.id" :class="['node-row', { 'node-row--offline': node.status !== 1 }]">
               <label class="checkbox-label">
                 <input
                   type="checkbox"
                   :checked="isSelected(node.id)"
                   :disabled="node.status !== 1"
                   @change="toggleNode(node.id)"
-                >
+                />
                 <span class="node-address">{{ node.ip }}:{{ node.management_port }}</span>
                 <span
                   class="node-status-tag"
@@ -57,25 +55,22 @@
             </div>
           </div>
 
-          <div
-            v-if="selectedNodeIds.length === 0 && nodes.length > 0"
-            class="hint-text"
-          >
-            请至少选择 1 个节点
-          </div>
+          <div v-if="selectedNodeIds.length === 0 && nodes.length > 0" class="hint-text">请至少选择 1 个节点</div>
         </template>
       </div>
 
       <div class="modal-footer">
         <button class="btn btn-secondary" @click="handleCancel">取消</button>
-        <button class="btn btn-primary" :disabled="selectedNodeIds.length === 0" @click="handleConfirm">确认发布</button>
+        <button class="btn btn-primary" :disabled="selectedNodeIds.length === 0" @click="handleConfirm">
+          确认发布
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import api from '@/api'
 
 interface NodeItem {
@@ -96,6 +91,8 @@ const props = defineProps<{
   visible: boolean
   title: string
   clusterId: number
+  /** 当前已发布版本号：非空正数时显示「本次发布将创建新版本 v(N+1)」；未发布不传/传 null（M5 可选参数） */
+  currentVersion?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -109,13 +106,20 @@ const selectedNodeIds = ref<number[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-watch(() => props.visible, (newVal) => {
-  if (newVal) {
-    selectedNodeIds.value = []
-    error.value = null
-    fetchNodes()
-  }
-})
+const versionHintText = computed(() =>
+  props.currentVersion && props.currentVersion > 0 ? `本次发布将创建新版本 v${props.currentVersion + 1}` : '',
+)
+
+watch(
+  () => props.visible,
+  (newVal) => {
+    if (newVal) {
+      selectedNodeIds.value = []
+      error.value = null
+      fetchNodes()
+    }
+  },
+)
 
 const fetchNodes = async (): Promise<void> => {
   loading.value = true
@@ -145,9 +149,7 @@ const toggleNode = (nodeId: number): void => {
 }
 
 const selectAll = (): void => {
-  selectedNodeIds.value = nodes.value
-    .filter(n => n.status === 1)
-    .map(n => n.id)
+  selectedNodeIds.value = nodes.value.filter((n) => n.status === 1).map((n) => n.id)
 }
 
 const clearAll = (): void => {
@@ -186,11 +188,27 @@ const handleOpenChange = (open: boolean): void => {
   font-family: var(--font-body);
   line-height: 1.5;
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
-.btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+.btn-secondary {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 /* ── Loading/Error state ── */
 .modal-state {
@@ -223,9 +241,23 @@ const handleOpenChange = (open: boolean): void => {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* ── Selection bar ── */
+.version-hint {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--fg);
+}
+
 .selection-bar {
   display: flex;
   align-items: center;
@@ -298,7 +330,7 @@ const handleOpenChange = (open: boolean): void => {
   cursor: pointer;
   flex: 1;
 }
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 16px;
   height: 16px;
   accent-color: var(--accent);

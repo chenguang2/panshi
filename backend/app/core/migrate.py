@@ -162,6 +162,7 @@ COLUMN_MIGRATIONS = [
     ("ps_db_backup_config", "source_name", "VARCHAR(64)"),
     ("ps_db_backup_config", "targets_migrated", "BOOLEAN DEFAULT FALSE"),
     ("ps_upstream", "last_publish_status", "VARCHAR(16)"),
+    ("ps_plugin_config", "last_publish_status", "VARCHAR(16)"),
 ]
 
 

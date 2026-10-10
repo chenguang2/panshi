@@ -21,6 +21,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/clusters/1/upstreams"),
     ("get", "/api/v1/clusters/1/nodes"),
     ("get", "/api/v1/clusters/1/plugin_configs"),
+    # 插件组删除前置引用查询（2026-10-10 plugin-group-ux-close-loop，rule #19）
+    ("get", "/api/v1/clusters/1/plugin_configs/1/references"),
     ("get", "/api/v1/clusters/1/global_rules"),
     ("get", "/api/v1/clusters/1/plugin-metadata"),
     ("get", "/api/v1/clusters/1/static-resources"),

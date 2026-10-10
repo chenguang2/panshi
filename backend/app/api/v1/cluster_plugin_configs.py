@@ -20,23 +20,43 @@ from app.core.deps import require_permission
 router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(require_permission('clusters'))])
 
 
+def _find_referencing_routes(routes: list[Route], edge_uuid: str) -> list[Route]:
+    """遍历路由，返回引用了该插件组 edge_uuid 的路由清单（PLG-07 判定单点）。
+
+    比对键是 Route.plugin_config_ids（JSON TEXT，存插件组 edge_uuid 而非 id，
+    约定见 models/cluster.py）；畸形 JSON 按「不含引用」处理（与 cluster_backup
+    导入期的清理语义一致），不报错阻断。删除守卫与 GET .../references 端点
+    共用本判定，保证提示展示的引用清单与后端删除拦截永远同语义。
+    """
+    referencing: list[Route] = []
+    for r in routes:
+        try:
+            refs = json.loads(r.plugin_config_ids) if r.plugin_config_ids else []
+        except (json.JSONDecodeError, TypeError):
+            refs = []
+        if isinstance(refs, list) and edge_uuid in refs:
+            referencing.append(r)
+    return referencing
+
+
 @router.get("/{cluster_id}/plugin_configs", response_model=dict)
 async def list_plugin_configs(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(PluginConfig).where(PluginConfig.cluster_id == cluster_id).order_by(PluginConfig.id))
     configs = result.scalars().all()
-    # 批量查询最新发布时间
-    pc_ids = [c.id for c in configs]
-    pub = await db.execute(
-        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
-        .where(ConfigVersion.resource_type == "plugin_config", ConfigVersion.resource_id.in_(pc_ids) if pc_ids else False)
-        .group_by(ConfigVersion.resource_id)
-    ) if pc_ids else None
-    pub_map = {r.resource_id: r.ts for r in pub.all()} if pub else {}
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending 推导收敛在
+    # edge_sync 共享单点，与全局 /plugin_configs 端点同口径，禁止各自实现）
+    pub_map = await edge_sync.load_publish_time_map(db, "plugin_config", [c.id for c in configs])
     response = []
     for c in configs:
         r = PluginConfigResponse.model_validate(c)
         ts = pub_map.get(c.id)
         r.published_at = ts.isoformat() + 'Z' if ts else None
+        r.pending_publish = edge_sync.derive_pending_publish(
+            current_version=c.current_version,
+            updated_at=c.updated_at,
+            published_at=ts,
+            last_publish_status=c.last_publish_status,
+        )
         response.append(r)
     return {"total": len(response), "items": response}
 
@@ -90,26 +110,18 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
     if audit is not None:
         audit.detail = f"删除插件配置 {config.name}"
 
-    # PLG-07 前置校验（与 SSL CA 删除守卫行为对齐）：仍有路由引用时不允许
-    # 删除数据库记录，否则路由发布将携带失效引用。plugin_config_ids 存的是
-    # 插件组 edge_uuid（约定见 models/cluster.py）；畸形 JSON 按「不含引用」
-    # 处理（与 cluster_backup 导入期的清理语义一致），不阻断删除。
-    if body.delete_db:
-        routes = (await db.execute(select(Route).where(Route.cluster_id == cluster_id))).scalars().all()
-        referencing: list[str] = []
-        for r in routes:
-            try:
-                refs = json.loads(r.plugin_config_ids) if r.plugin_config_ids else []
-            except (json.JSONDecodeError, TypeError):
-                refs = []
-            if isinstance(refs, list) and config.edge_uuid in refs:
-                referencing.append(r.name)
-        if referencing:
-            shown = ", ".join(referencing[:3]) + ("等" if len(referencing) > 3 else "")
-            raise HTTPException(
-                status_code=400,
-                detail=f"插件组被 {len(referencing)} 条路由引用（{shown}），请先解除引用后再删除插件组",
-            )
+    # PLG-07 前置校验（无条件下，2026-10-10 语义裁定）：仍有路由引用时不允许任何
+    # 删除（含仅 Edge 侧）——网关上路由的插件引用会随 Edge-only 删除悬空。判定收敛
+    # 在共享 helper _find_referencing_routes（与 GET .../references 端点同语义单点）。
+    routes = (await db.execute(select(Route).where(Route.cluster_id == cluster_id))).scalars().all()
+    referencing = _find_referencing_routes(routes, config.edge_uuid)
+    if referencing:
+        names = [r.name for r in referencing]
+        shown = ", ".join(names[:3]) + ("等" if len(names) > 3 else "")
+        raise HTTPException(
+            status_code=400,
+            detail=f"插件组被 {len(names)} 条路由引用（{shown}），请先解除引用后再删除插件组",
+        )
 
     results = []
 
@@ -128,6 +140,22 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
         results.extend(edge_results)
 
     return {"message": "插件组已删除", "results": results}
+
+
+@router.get("/{cluster_id}/plugin_configs/{config_id}/references")
+async def get_plugin_config_references(cluster_id: int, config_id: int, db: AsyncSession = Depends(get_db)):
+    """删除前置引用查询（只读）：列出引用该插件组的同集群路由。
+
+    判定与 PLG-07 删除守卫共用 _find_referencing_routes 单点——前端在删除
+    确认前拉取本端点做阻断式提示，展示的引用清单与后端删除拦截永远同语义。
+    """
+    config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
+    routes = (await db.execute(select(Route).where(Route.cluster_id == cluster_id))).scalars().all()
+    referencing = _find_referencing_routes(routes, config.edge_uuid)
+    return {
+        "name": config.name,
+        "referenced_by": [{"route_id": r.id, "route_name": r.name} for r in referencing],
+    }
 
 
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")

@@ -14,8 +14,8 @@
         <input v-model="searchText" type="text" placeholder="搜索插件组名称..." class="form-input" @input="onSearch" />
         <span class="search-icon">🔍</span>
       </div>
-      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
+      <select v-model="groupFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="onGroupChange">
+        <option value="__all__">全部集群分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
@@ -27,9 +27,18 @@
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
+    <!-- L3 空态两分支：无数据给行动入口，有筛选无结果给清空筛选 -->
     <div v-else-if="displayedConfigs.length === 0" class="pc-empty">
-      <div class="pc-empty-icon">▣</div>
-      <div class="pc-empty-text">暂无插件组</div>
+      <template v-if="hasActiveFilters">
+        <div class="pc-empty-icon">◎</div>
+        <div class="pc-empty-text">无匹配结果</div>
+        <button class="btn btn-secondary pc-empty-action" @click="clearFilters">清空筛选</button>
+      </template>
+      <template v-else>
+        <div class="pc-empty-icon">▣</div>
+        <div class="pc-empty-text">暂无插件组</div>
+        <button class="btn btn-primary pc-empty-action" @click="openCreateModal">+ 添加插件组</button>
+      </template>
     </div>
     <div v-else class="pc-grid">
       <div
@@ -48,15 +57,12 @@
             <div v-if="pc.description" class="pc-card-desc">{{ pc.description }}</div>
           </div>
           <div class="pc-card-meta">
-            <span v-if="pc.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="pc-version-text">
-              <template v-if="pc.current_version"
-                ><PublishStatusTag :version="pc.current_version" :published-at="pc.published_at"
-              /></template>
-            </div>
+            <PublishStatusTag
+              :version="pc.current_version"
+              :published-at="pc.published_at"
+              :pending="pc.pending_publish === true"
+              :last-publish-status="pc.last_publish_status"
+            />
           </div>
         </div>
         <div class="pc-card-plugins">
@@ -99,8 +105,9 @@
 
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布插件组"
+      :title="publishTitle"
       :cluster-id="publishClusterId"
+      :current-version="publishingRecord?.current_version ?? null"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -110,11 +117,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatDateTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import { listPluginConfigs } from '@/api/pluginConfigs'
 import { listClusters, getClusterNodes } from '@/api/clusters'
@@ -123,7 +129,12 @@ import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import {
+  executePublish,
+  showDeleteConfirm,
+  executeDeleteWithProgress,
+  deletePluginConfigWithReferenceCheck,
+} from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
@@ -151,6 +162,15 @@ function onGroupChange() {
   loadConfigs()
 }
 
+/** L3 空态两分支判定：搜索词或集群筛选任一生效即为「有匹配条件」 */
+const hasActiveFilters = computed(() => searchText.value.trim() !== '' || clusterFilter.value !== '')
+
+function clearFilters() {
+  searchText.value = ''
+  clusterFilter.value = ''
+  loadConfigs()
+}
+
 const displayedConfigs = computed(() => {
   return [...configs.value].sort((a, b) => {
     const ga = a.cluster_group_name || ''
@@ -172,6 +192,11 @@ const viewingPc = ref<any | null>(null)
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+
+/** M5：发布确认弹窗标题携带资源名 */
+const publishTitle = computed(() =>
+  publishingRecord.value ? `发布插件组: ${publishingRecord.value.name}` : '发布插件组',
+)
 
 function onSearch() {
   onDebouncedSearch(() => {
@@ -235,20 +260,29 @@ async function deleteConfig(pc: any) {
     /* ignore */
   }
 
-  showDeleteConfirm({
-    title: `确定要删除插件组 "${pc.name}" 吗？`,
-    apiEndpoint: `/clusters/${pc.cluster_id}/plugin_configs/${pc.id}`,
-    nodes,
-    onOk: async (deleteDb, deleteEdge, nodeIds) => {
-      await executeDeleteWithProgress({
-        title: `删除插件组: ${pc.name}`,
-        apiEndpoint: `/clusters/${pc.cluster_id}/plugin_configs/${pc.id}`,
-        cluster: { id: pc.cluster_id, nodes },
-        deleteDb,
-        deleteEdge,
-        nodeIds,
-        refreshFn: loadConfigs,
-        clearSelectedFn: () => {},
+  const apiEndpoint = `/clusters/${pc.cluster_id}/plugin_configs/${pc.id}`
+  // H4 删除前置引用检查（决策 A）：被引用时不弹共享删除确认，改阻断提示
+  // （无任何删除入口，网关侧与平台侧均不允许删除）；无引用/查询失败 → 既有
+  // 共享确认全流程不变；后端 PLG-07 守卫（任意删除组合均 400）仍是最终兜底
+  await deletePluginConfigWithReferenceCheck({
+    apiEndpoint,
+    onUnreferenced: () => {
+      showDeleteConfirm({
+        title: `确定要删除插件组 "${pc.name}" 吗？`,
+        apiEndpoint,
+        nodes,
+        onOk: async (deleteDb, deleteEdge, nodeIds) => {
+          await executeDeleteWithProgress({
+            title: `删除插件组: ${pc.name}`,
+            apiEndpoint,
+            cluster: { id: pc.cluster_id, nodes },
+            deleteDb,
+            deleteEdge,
+            nodeIds,
+            refreshFn: loadConfigs,
+            clearSelectedFn: () => {},
+          })
+        },
       })
     },
   })
@@ -322,6 +356,9 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--muted);
 }
+.pc-empty-action {
+  margin-top: 12px;
+}
 .pc-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -391,13 +428,6 @@ onUnmounted(() => {
   text-align: right;
   flex-shrink: 0;
   margin-left: 12px;
-}
-.pc-version-text {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-family: var(--font-mono);
 }
 .pc-card-plugins {
   display: flex;

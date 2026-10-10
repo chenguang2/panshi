@@ -2,8 +2,10 @@
 
 现场（2026-10-01 缺口批次核验）：`DELETE /clusters/{id}/plugin_configs/{cid}`
 不扫描同集群路由的 `plugin_config_ids` 引用即删库删版本 → 被引用后路由发布
-携带失效引用。契约：delete_db 腿前置校验，被引用 → 400 + 中文错误（含引用
-计数与路由名提示）；无引用照常删除；路由 JSON 畸形按「不含引用」处理不 500。
+携带失效引用。契约：被引用时**无条件** 400 + 中文错误（含引用计数与路由名
+提示），覆盖任意 delete_db/delete_edge 组合——含仅 Edge 侧（2026-10-10 语义
+裁定：网关上路由的插件引用会随 Edge-only 删除悬空）；无引用照常删除；路由
+JSON 畸形按「不含引用」处理不 500。
 """
 
 async def _create_group(client, name):
@@ -50,6 +52,26 @@ class TestDeleteReferencedPluginConfigBlocked:
         assert got.status_code == 200
         refs = (await async_authed_client.get("/api/v1/clusters/1/routes")).json()
         assert refs["total"] == 1
+
+    async def test_delete_edge_only_referenced_group_rejected_400(self, async_authed_client):
+        """仅 Edge 侧删除同样 400（2026-10-10 语义裁定）：网关上路由的插件引用会悬空。"""
+        group = await _create_group(async_authed_client, "plg07-edge-only")
+        await _create_route(async_authed_client, "plg07-route-eo", [group["edge_uuid"]])
+
+        resp = await async_authed_client.request(
+            "DELETE",
+            f"/api/v1/clusters/1/plugin_configs/{group['id']}",
+            json={"delete_db": False, "delete_edge": True},
+        )
+        assert resp.status_code == 400, resp.text
+        detail = resp.json()["detail"]
+        assert "引用" in detail
+        assert "plg07-route-eo" in detail  # 错误须指明引用路由
+
+        # 阻断后组仍存在、未被 Edge 侧触碰
+        got = await async_authed_client.get(
+            f"/api/v1/clusters/1/plugin_configs/{group['id']}")
+        assert got.status_code == 200
 
     async def test_delete_group_without_reference_allowed(self, async_authed_client):
         """对照组：无引用的插件组照常删除。"""

@@ -865,6 +865,27 @@ describe('经中继 / 直连 路径标签（删除进度）', () => {
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
   })
+
+  it('edge 段 skipped 提示条目（无 node 字段）：渲染提示文案，不计入节点统计、无 undefined', async () => {
+    // 后端 delete_on_nodes 无活跃节点时返回 scope=edge + status=skipped + message（无 node 字段）
+    const text = await runDelete([{ scope: 'edge', status: 'skipped', message: '集群中没有活跃的 Edge 节点' }])
+    expect(text).toContain('集群中没有活跃的 Edge 节点')
+    // 提示条目不是节点行：不得出现 undefined 节点名，也不输出「总计」节点统计行
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('总计')
+    expect(text).not.toContain('❌')
+  })
+
+  it('edge 段 skipped 提示与真实节点行混合：提示行 + 节点行 + 统计各自正确', async () => {
+    const text = await runDelete([
+      { scope: 'edge', status: 'skipped', message: '集群中没有活跃的 Edge 节点' },
+      { scope: 'edge', node: '10.0.0.1:9180', status: 'success' },
+    ])
+    expect(text).toContain('集群中没有活跃的 Edge 节点')
+    expect(text).toContain('10.0.0.1:9180: ✅')
+    expect(text).not.toContain('undefined')
+    expect(text).toContain('总计: 1 个节点, 成功 1 个, 失败 0 个')
+  })
 })
 
 describe('删除集群编排 deleteClusterWithConfirm（cluster-ux-close-loop B1）', () => {
@@ -1005,5 +1026,189 @@ describe('删除集群编排 deleteClusterWithConfirm（cluster-ux-close-loop B1
     nameInput.value = '显示名'
     nameInput.dispatchEvent(new Event('input'))
     expect(primaryBtn().disabled).toBe(false)
+  })
+})
+
+// ── 状态值中文映射（plugin-group-ux-close-loop L5，仅展示层）────────────────────
+
+describe('发布/删除进度状态值中文映射（L5，以 edge_sync 真实产出为准）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('逐节点 success/failed/skipped/pending → 成功/失败/跳过/执行中', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({
+      data: {
+        status: 'ok',
+        message: '发布完成',
+        results: [
+          { node: '10.0.0.1:9180', status: 'success' },
+          { node: '10.0.0.2:9180', status: 'failed', error: 'connect timeout' },
+          { node: '10.0.0.3:9180', status: 'skipped' },
+          { node: '10.0.0.4:9180', status: 'pending' },
+        ],
+      },
+    })
+
+    await executePublish({
+      title: '发布插件组',
+      apiEndpoint: '/clusters/1/plugin_configs/5/publish',
+      nodeIds: [1, 2, 3, 4],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('10.0.0.1:9180: 成功')
+    expect(text).toContain('10.0.0.2:9180: 失败 - connect timeout')
+    expect(text).toContain('10.0.0.3:9180: 跳过')
+    expect(text).toContain('10.0.0.4:9180: 执行中')
+    // 原始英文枚举不再直出
+    expect(text).not.toContain(': success')
+    expect(text).not.toContain(': failed')
+  })
+
+  it('顶层无活跃节点 error/ok → 状态: 失败/成功', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({ data: { status: 'error', message: '无可发布节点' } })
+
+    await executePublish({
+      title: '发布插件组',
+      apiEndpoint: '/clusters/1/plugin_configs/5/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+    let text = document.body.textContent || ''
+    expect(text).toContain('状态: 失败')
+
+    document.body.innerHTML = ''
+    mockApiPost.mockResolvedValue({ data: { status: 'ok', message: '发布完成' } })
+    await executePublish({
+      title: '发布插件组',
+      apiEndpoint: '/clusters/1/plugin_configs/5/publish',
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+    text = document.body.textContent || ''
+    expect(text).toContain('状态: 成功')
+  })
+
+  it('删除批量腿：顶层枚举映射中文（success→成功/failed→失败），未知枚举原样回显', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({
+      data: {
+        message: '批量删除完成',
+        results: [
+          { id: 1, route_name: 'route-a', status: 'success' },
+          { id: 2, route_name: 'route-b', status: 'failed', error: 'db locked' },
+          { id: 3, route_name: 'route-c', status: 'exotic_status' },
+        ],
+      },
+    })
+
+    await executeDeleteWithProgress({
+      title: '批量删除路由',
+      apiEndpoint: '/clusters/1/routes',
+      routeIds: [1, 2, 3],
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('删除路由 route-a: 成功')
+    expect(text).toContain('删除路由 route-b: 失败 / db locked')
+    // 未知枚举不在映射表 → 原样回显，不吞信息
+    expect(text).toContain('删除路由 route-c: exotic_status')
+  })
+})
+
+// ── 插件组删除前置引用检查（决策 A/B，主页面与集群子页共享实现）──────────────────
+
+describe('deletePluginConfigWithReferenceCheck（插件组删除引用分流）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('引用非空：阻断提示列出路由名，无任何删除入口，操作仅「我知道了」', async () => {
+    const { deletePluginConfigWithReferenceCheck } = await import('../useClusterUtils')
+    mockApiGet.mockResolvedValue({
+      data: {
+        name: 'rate-limit',
+        referenced_by: [
+          { route_id: 1, route_name: 'route-a' },
+          { route_id: 2, route_name: 'route-b' },
+          { route_id: 3, route_name: 'route-c' },
+          { route_id: 4, route_name: 'route-d' },
+          { route_id: 5, route_name: 'route-e' },
+        ],
+      },
+    })
+    const onUnreferenced = vi.fn()
+
+    await deletePluginConfigWithReferenceCheck({
+      apiEndpoint: '/clusters/1/plugin_configs/5',
+      onUnreferenced,
+    })
+
+    expect(onUnreferenced).not.toHaveBeenCalled()
+    const overlay = Array.from(document.body.querySelectorAll('.modal-overlay')).find((el) =>
+      (el.textContent || '').includes('仍被 5 条路由引用'),
+    )
+    expect(overlay).toBeTruthy()
+    const text = overlay!.textContent || ''
+    expect(text).toContain('插件组「rate-limit」')
+    expect(text).toContain('route-a')
+    expect(text).toContain('route-c')
+    // 超 3 条折叠「等」
+    expect(text).toContain('等 5 条路由')
+    expect(text).not.toContain('route-d')
+    // 网关侧与平台侧均不允许删除（防路由插件引用悬空）
+    expect(text).toContain('网关侧与平台侧均不允许删除')
+    // 无任何删除入口：操作仅「我知道了」（× 关闭钮除外），无「取消」
+    const actionButtons = Array.from(overlay!.querySelectorAll('button'))
+      .filter((b) => !b.className.includes('modal-close'))
+      .map((b) => b.textContent || '')
+    expect(actionButtons).toEqual(['我知道了'])
+
+    // 点击「我知道了」仅关闭提示：不走任何删除流程
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('我知道了'),
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await vi.waitFor(() => expect(document.body.querySelector('.modal-overlay')).toBeNull())
+    expect(onUnreferenced).not.toHaveBeenCalled()
+    expect(mockApiDelete).not.toHaveBeenCalled()
+  })
+
+  it('无引用：走既有流程（onUnreferenced）', async () => {
+    const { deletePluginConfigWithReferenceCheck } = await import('../useClusterUtils')
+    mockApiGet.mockResolvedValue({ data: { name: 'free-pg', referenced_by: [] } })
+    const onUnreferenced = vi.fn()
+
+    await deletePluginConfigWithReferenceCheck({
+      apiEndpoint: '/clusters/1/plugin_configs/5',
+      onUnreferenced,
+    })
+
+    expect(onUnreferenced).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector('.modal-overlay')).toBeNull()
+  })
+
+  it('引用查询失败：兜底走既有流程（后端 PLG-07 守卫仍是最终防线）', async () => {
+    const { deletePluginConfigWithReferenceCheck } = await import('../useClusterUtils')
+    mockApiGet.mockRejectedValue(new Error('boom'))
+    const onUnreferenced = vi.fn()
+
+    await deletePluginConfigWithReferenceCheck({
+      apiEndpoint: '/clusters/1/plugin_configs/5',
+      onUnreferenced,
+    })
+
+    expect(onUnreferenced).toHaveBeenCalledTimes(1)
   })
 })

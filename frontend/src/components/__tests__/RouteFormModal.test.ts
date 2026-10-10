@@ -192,3 +192,55 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(mockApiPut).toHaveBeenCalledWith('/clusters/1/routes/5/plugins', { plugins: [] })
   })
 })
+
+describe('RouteFormModal.vue — 插件组 Tab 空态与未发布标注（M2/M3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      if (url.includes('/upstreams')) return Promise.resolve({ data: { items: [{ id: 7, name: 'up-1' }] } })
+      if (url.includes('/plugin_configs')) return Promise.resolve({ data: { items: [] } })
+      if (url.endsWith('/plugins')) return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/routes') return Promise.resolve({ data: { id: 99 } })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+    mockApiPut.mockImplementation((url: string) => {
+      if (/^\/clusters\/1\/routes\/\d+(\/plugins)?$/.test(url)) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected PUT: ' + url))
+    })
+  })
+
+  async function mountModal(extraProps: Record<string, unknown> = {}) {
+    const RouteFormModal = (await import('../RouteFormModal.vue')).default
+    const wrapper = mount(RouteFormModal, {
+      props: { visible: false, editingRoute: null, clusters: [{ id: 1, name: 'c1' }], ...extraProps },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('空插件组：空态指向左侧菜单「插件组」页面（不再指向已下线的 Tab）', async () => {
+    const w = await mountModal()
+    expect(w.text()).toContain('请先在左侧菜单「插件组」页面创建')
+    expect(w.text()).not.toContain('请在"插件组"Tab')
+  })
+
+  it('未发布插件组（无版本）：显示「未发布」标签，不再显示 v0', async () => {
+    const w = await mountModal()
+    const vm: any = w.vm
+    vm.clusterPluginGroups = [
+      { id: 1, name: 'pg-unpublished', edge_uuid: 'u-1', current_version: null, plugins: { cors: {} } },
+      { id: 2, name: 'pg-v3', edge_uuid: 'u-2', current_version: 3, plugins: { jwt: {} } },
+    ]
+    await flushPromises()
+
+    expect(w.text()).toContain('未发布')
+    expect(w.text()).toContain('v3')
+    expect(w.text()).not.toContain('v0')
+  })
+})

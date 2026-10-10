@@ -497,6 +497,7 @@
       v-model:visible="publishModalVisible"
       :title="publishModalTitle"
       :cluster-id="publishModalClusterId"
+      :current-version="publishModalCurrentVersion"
       @confirm="handlePublishConfirm"
       @cancel="handlePublishCancel"
     />
@@ -621,11 +622,18 @@ const { routeBadge } = useClusterRouteBadge(clusters)
 const publishModalVisible = ref(false)
 const publishModalTitle = ref('')
 const publishModalClusterId = ref(0)
+// M5：发布确认弹窗「将创建新版本 v(N+1)」说明（opt-in 资源经第三参传入；其余资源 undefined 不显示）
+const publishModalCurrentVersion = ref<number | null>(null)
 let publishModalResolve: ((nodeIds: number[]) => void) | null = null
 
-function openPublishModal(title: string, clusterId: number): Promise<number[]> {
+function openPublishModal(
+  title: string,
+  clusterId: number,
+  opts?: { currentVersion?: number | null },
+): Promise<number[]> {
   publishModalTitle.value = title
   publishModalClusterId.value = clusterId
+  publishModalCurrentVersion.value = opts?.currentVersion ?? null
   publishModalVisible.value = true
   return new Promise((resolve) => {
     publishModalResolve = resolve

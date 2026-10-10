@@ -174,6 +174,10 @@ class PluginConfig(Base):
     description = Column(Text, nullable=True)
     plugins = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)
+    # 上次发布结果：'partial'=部分/全部节点失败（plugin-config-publish-status spec D2）；
+    # 全部成功清 NULL。publish_resource/rollback_resource 经 hasattr 能力探测写回/清除，
+    # 加列即自动接入。须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
+    last_publish_status = Column(String(16), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -204,8 +204,15 @@ export interface PluginConfig {
   description?: string
   plugins: Record<string, unknown>
   edge_uuid?: string
+  cluster_id?: number
   current_version?: number | null
   published_at?: string | null
+  /** 配置最近更新时间（后端 isoformat UTC；pending_publish 推导依据，前端不本地推导） */
+  updated_at?: string | null
+  /** 待发布（后端经 edge_sync.derive_pending_publish 统一推导，单一事实源） */
+  pending_publish?: boolean
+  /** 上次发布状态（'partial' = 发布未完全生效；NULL = 全部成功/未发布） */
+  last_publish_status?: string | null
 }
 
 /** 全局规则（global_rules 资源） */

@@ -5,34 +5,45 @@
       <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
       <a-button size="small" @click="copyRoute(cluster)" :disabled="!singleOpEnabled">复制路由</a-button>
       <a-button size="small" @click="editRoute(cluster)" :disabled="!singleOpEnabled">编辑路由</a-button>
-      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick">删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button>
+      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
+        >删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
+      >
       <a-divider type="vertical" />
       <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled">发布</a-button>
-      <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled">版本管理</a-button>
+      <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled"
+        >版本管理</a-button
+      >
       <a-divider type="vertical" />
       <ColumnConfigPopover
-          v-model:open="routeColumnPopoverVisible"
-          :all-columns="allRouteColumns"
-          v-model:columns="routeColumnsSelected"
-          :all-actions="allActionButtons"
-          v-model:actions="routeActionsSelected"
-          v-model:search="routeSearchVisible"
-        />
+        v-model:open="routeColumnPopoverVisible"
+        :all-columns="allRouteColumns"
+        v-model:columns="routeColumnsSelected"
+        :all-actions="allActionButtons"
+        v-model:actions="routeActionsSelected"
+        v-model:search="routeSearchVisible"
+      />
 
       <div class="toolbar-right">
         <template v-if="routeSearchVisible">
           <a-input-search
             v-model:value="cluster.routesSearch"
             placeholder="搜索路由"
-            style="width: 150px;"
-            @search="() => { cluster.routesPagination!.page = 1; cluster.selectedRouteKeys = []; cluster.selectedRoute = null; loadRoutes(cluster) }"
+            style="width: 150px"
+            @search="
+              () => {
+                cluster.routesPagination!.page = 1
+                cluster.selectedRouteKeys = []
+                cluster.selectedRoute = null
+                loadRoutes(cluster)
+              }
+            "
             allow-clear
             size="small"
           />
           <a-select
             v-model:value="cluster.routesSearchField"
             placeholder="字段"
-            style="width: 90px;"
+            style="width: 90px"
             allow-clear
             size="small"
           >
@@ -56,7 +67,13 @@
         getCheckboxProps: (record: any) => ({ disabled: isDnsRoute(record) }),
         onChange: (keys: any, rows: any) => selectRoutes(cluster, keys, rows),
       }"
-      :custom-row="(record: any) => ({ onClick: () => { cluster.selectedRoute = record } })"
+      :custom-row="
+        (record: any) => ({
+          onClick: () => {
+            cluster.selectedRoute = record
+          },
+        })
+      "
       :showSorterTooltip="false"
       size="small"
       row-key="id"
@@ -73,7 +90,10 @@
           </a-tag>
         </template>
         <template v-if="column.key === 'status'">
-          <BadgeStatus :text="record.status === 1 ? '正常' : '禁用'" :status="record.status === 1 ? 'online' : 'offline'" />
+          <BadgeStatus
+            :text="record.status === 1 ? '正常' : '禁用'"
+            :status="record.status === 1 ? 'online' : 'offline'"
+          />
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in routeActionsSelected" :key="btnKey">
@@ -88,139 +108,159 @@
 
     <!-- Route add/edit modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width:800px;">
-        <div class="modal-header">
-          <h2>{{ copyingRoute ? '复制路由' : (editingRoute ? '编辑路由' : '添加路由') }}</h2>
-          <button class="modal-close" @click="routeModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
-            <!-- Basic config tab -->
-            <a-tab-pane key="basic" tab="基础配置">
-              <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
-                  <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
-                </a-form-item>
-                <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
-                  <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
-                </a-form-item>
-                <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-                  <a-select v-model:value="routeForm.methods" mode="multiple" placeholder="可选多个方法" style="width: 300px">
-                    <a-select-option value="GET">GET</a-select-option>
-                    <a-select-option value="POST">POST</a-select-option>
-                    <a-select-option value="PUT">PUT</a-select-option>
-                    <a-select-option value="DELETE">DELETE</a-select-option>
-                    <a-select-option value="PATCH">PATCH</a-select-option>
-                    <a-select-option value="HEAD">HEAD</a-select-option>
-                  <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-                  <a-select-option value="CONNECT">CONNECT</a-select-option>
-                  <a-select-option value="TRACE">TRACE</a-select-option>
-                </a-select>
-                <a style="margin-left:8px;font-size:12px;cursor:pointer;white-space:nowrap" @click="toggleAllMethods">
-                  {{ allMethodsSelected ? '取消全选' : '全选' }}
-                </a>
-                </a-form-item>
-                <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
-                  <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
-                    <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{ u.name }}</a-select-option>
-                  </a-select>
-                </a-form-item>
-                <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
-                  <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
-                </a-form-item>
-                <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-                  <a-select v-model:value="routeForm.status">
-                    <a-select-option :value="1">正常</a-select-option>
-                    <a-select-option :value="0">禁用</a-select-option>
-                  </a-select>
-                </a-form-item>
-                <a-form-item label="描述" name="description">
-                  <a-textarea v-model:value="routeForm.description" :rows="2" />
-                </a-form-item>
-                <a-form-item label="功能开关">
-                  <div style="display:flex;gap:24px;flex-wrap:wrap;">
-                    <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;">
-                      <input type="checkbox" :checked="routeForm.advancedMatchEnabled" @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled" />
-                      <span>开启高级匹配</span>
-                    </label>
-                    <label class="checkbox-label" style="display:flex;align-items:center;gap:6px;">
-                      <input type="checkbox" v-model="routeForm.enableWebsocket" />
-                      <span>启用 WebSocket</span>
-                    </label>
-                  </div>
-                </a-form-item>
-              </a-form>
-            </a-tab-pane>
-
-            <!-- Advanced match tab -->
-            <a-tab-pane key="advanced" tab="高级匹配">
-              <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
-                <RouteAdvancedMatch
-                  :enabled="routeForm.advancedMatchEnabled"
-                  :model-value="{ vars: routeForm.advancedMatch.vars }"
-                  @update:model-value="(val: { vars?: (string | string[])[][] }) => { routeForm.advancedMatch.vars = val.vars || []; }"
-                />
-              </div>
-              <div v-else class="advanced-disabled-hint">
-                <WarningOutlined style="color: #faad14; margin-right: 8px;" />
-                高级匹配未启用，请在"基础配置"中开启
-              </div>
-            </a-tab-pane>
-
-            <!-- Plugin management tab -->
-            <a-tab-pane key="plugins" tab="插件管理">
-              <PluginSelector
-                v-model="routeForm.plugins"
-                :plugins="availablePlugins"
-                :upstreams="upstreamOptions"
-              />
-            </a-tab-pane>
-
-            <!-- Plugin groups tab (permission gated) -->
-            <a-tab-pane v-if="hasPluginGroupsPermission()" key="pluginGroups" tab="插件组">
-              <div v-if="clusterPluginGroups.length === 0" class="pg-empty">
-                暂无插件组，请在"插件组"Tab 中创建
-              </div>
-              <div v-else>
-                <div class="pg-desc">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
-                <div class="pg-list">
-                  <div
-                    v-for="pg in clusterPluginGroups"
-                    :key="pg.id"
-                    class="plugin-config-card"
-                    :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
-                    @click="togglePluginGroup(pg)"
-                  >
-                    <div class="pg-item-header">
-                      <a-checkbox :checked="isPluginGroupSelected(pg.edge_uuid || '')" @click.stop="togglePluginGroup(pg)" />
-                      <strong class="pg-item-name">{{ pg.name }}</strong>
-                      <span class="pg-item-version">v{{ pg.current_version || 0 }}</span>
+      <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }">
+        <div class="modal" style="max-width: 800px">
+          <div class="modal-header">
+            <h2>{{ copyingRoute ? '复制路由' : editingRoute ? '编辑路由' : '添加路由' }}</h2>
+            <button class="modal-close" @click="routeModalVisible = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
+              <!-- Basic config tab -->
+              <a-tab-pane key="basic" tab="基础配置">
+                <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+                  <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
+                    <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
+                  </a-form-item>
+                  <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
+                    <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
+                  </a-form-item>
+                  <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
+                    <a-select
+                      v-model:value="routeForm.methods"
+                      mode="multiple"
+                      placeholder="可选多个方法"
+                      style="width: 300px"
+                    >
+                      <a-select-option value="GET">GET</a-select-option>
+                      <a-select-option value="POST">POST</a-select-option>
+                      <a-select-option value="PUT">PUT</a-select-option>
+                      <a-select-option value="DELETE">DELETE</a-select-option>
+                      <a-select-option value="PATCH">PATCH</a-select-option>
+                      <a-select-option value="HEAD">HEAD</a-select-option>
+                      <a-select-option value="OPTIONS">OPTIONS</a-select-option>
+                      <a-select-option value="CONNECT">CONNECT</a-select-option>
+                      <a-select-option value="TRACE">TRACE</a-select-option>
+                    </a-select>
+                    <a
+                      style="margin-left: 8px; font-size: 12px; cursor: pointer; white-space: nowrap"
+                      @click="toggleAllMethods"
+                    >
+                      {{ allMethodsSelected ? '取消全选' : '全选' }}
+                    </a>
+                  </a-form-item>
+                  <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
+                    <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
+                      <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{
+                        u.name
+                      }}</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                  <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
+                    <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
+                  </a-form-item>
+                  <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
+                    <a-select v-model:value="routeForm.status">
+                      <a-select-option :value="1">正常</a-select-option>
+                      <a-select-option :value="0">禁用</a-select-option>
+                    </a-select>
+                  </a-form-item>
+                  <a-form-item label="描述" name="description">
+                    <a-textarea v-model:value="routeForm.description" :rows="2" />
+                  </a-form-item>
+                  <a-form-item label="功能开关">
+                    <div style="display: flex; gap: 24px; flex-wrap: wrap">
+                      <label class="checkbox-label" style="display: flex; align-items: center; gap: 6px">
+                        <input
+                          type="checkbox"
+                          :checked="routeForm.advancedMatchEnabled"
+                          @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled"
+                        />
+                        <span>开启高级匹配</span>
+                      </label>
+                      <label class="checkbox-label" style="display: flex; align-items: center; gap: 6px">
+                        <input type="checkbox" v-model="routeForm.enableWebsocket" />
+                        <span>启用 WebSocket</span>
+                      </label>
                     </div>
-                    <div class="pg-item-plugins">
-                      <a-tag
-                        v-for="(pcfg, pname) in pg.plugins"
-                        :key="pname"
-                        color="var(--accent)"
-                        style="font-size: 11px; cursor: pointer;"
-                        @click.stop="viewPluginConfigDetail(pg, pname as string, pcfg)"
-                      >
-                        {{ pname }}
-                      </a-tag>
+                  </a-form-item>
+                </a-form>
+              </a-tab-pane>
+
+              <!-- Advanced match tab -->
+              <a-tab-pane key="advanced" tab="高级匹配">
+                <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
+                  <RouteAdvancedMatch
+                    :enabled="routeForm.advancedMatchEnabled"
+                    :model-value="{ vars: routeForm.advancedMatch.vars }"
+                    @update:model-value="
+                      (val: { vars?: (string | string[])[][] }) => {
+                        routeForm.advancedMatch.vars = val.vars || []
+                      }
+                    "
+                  />
+                </div>
+                <div v-else class="advanced-disabled-hint">
+                  <WarningOutlined style="color: #faad14; margin-right: 8px" />
+                  高级匹配未启用，请在"基础配置"中开启
+                </div>
+              </a-tab-pane>
+
+              <!-- Plugin management tab -->
+              <a-tab-pane key="plugins" tab="插件管理">
+                <PluginSelector v-model="routeForm.plugins" :plugins="availablePlugins" :upstreams="upstreamOptions" />
+              </a-tab-pane>
+
+              <!-- Plugin groups tab (permission gated) -->
+              <a-tab-pane v-if="hasPluginGroupsPermission()" key="pluginGroups" tab="插件组">
+                <div v-if="clusterPluginGroups.length === 0" class="pg-empty">
+                  暂无插件组，请先在左侧菜单「插件组」页面创建
+                </div>
+                <div v-else>
+                  <div class="pg-desc">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
+                  <div class="pg-list">
+                    <div
+                      v-for="pg in clusterPluginGroups"
+                      :key="pg.id"
+                      class="plugin-config-card"
+                      :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
+                      @click="togglePluginGroup(pg)"
+                    >
+                      <div class="pg-item-header">
+                        <a-checkbox
+                          :checked="isPluginGroupSelected(pg.edge_uuid || '')"
+                          @click.stop="togglePluginGroup(pg)"
+                        />
+                        <strong class="pg-item-name">{{ pg.name }}</strong>
+                        <span v-if="pg.current_version" class="pg-item-version">v{{ pg.current_version }}</span>
+                        <span v-else class="pg-item-version pg-item-unpublished">未发布</span>
+                      </div>
+                      <div class="pg-item-plugins">
+                        <a-tag
+                          v-for="(pcfg, pname) in pg.plugins"
+                          :key="pname"
+                          color="var(--accent)"
+                          style="font-size: 11px; cursor: pointer"
+                          @click.stop="viewPluginConfigDetail(pg, pname as string, pcfg)"
+                        >
+                          {{ pname }}
+                        </a-tag>
+                      </div>
+                      <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
                     </div>
-                    <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
                   </div>
                 </div>
-              </div>
-            </a-tab-pane>
-          </a-tabs>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="routeModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleRouteSubmit">{{ copyingRoute ? '复制' : (editingRoute ? '保存' : '创建') }}</button>
+              </a-tab-pane>
+            </a-tabs>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="routeModalVisible = false">取消</button>
+            <button class="btn btn-primary" @click="handleRouteSubmit">
+              {{ copyingRoute ? '复制' : editingRoute ? '保存' : '创建' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
     <!-- Version management modal -->
@@ -330,13 +370,15 @@ const {
 // ── Upstream options for traffic_split plugin dropdown ────────────
 const upstreamOptions = computed(() => {
   const upstreams = getClusterUpstreams()
-  return upstreams.map(u => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
+  return upstreams.map((u) => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
 })
 
 // ── batch delete selection state ───────────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedRouteKeys || []).length)
-const singleOpEnabled = computed(() => batchCount.value <= 1 && (!!props.cluster.selectedRoute || batchCount.value === 1))
-const deleteCount = computed(() => batchCount.value > 0 ? batchCount.value : (props.cluster.selectedRoute ? 1 : 0))
+const singleOpEnabled = computed(
+  () => batchCount.value <= 1 && (!!props.cluster.selectedRoute || batchCount.value === 1),
+)
+const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedRoute ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
 
 function handleDeleteClick() {
@@ -352,7 +394,6 @@ function onVersionPublished() {
   loadRoutes(props.cluster)
 }
 </script>
-
 
 <style scoped>
 .tab-content {
@@ -385,7 +426,7 @@ function onVersionPublished() {
 .advanced-disabled-hint {
   padding: 40px 0;
   text-align: center;
-  color: rgba(255,255,255,0.35);
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .plugin-config-card {
@@ -444,6 +485,9 @@ function onVersionPublished() {
 .pg-item-version {
   font-size: 11px;
   color: var(--muted);
+}
+.pg-item-unpublished {
+  color: #fa8c16;
 }
 .pg-item-plugins {
   display: flex;
