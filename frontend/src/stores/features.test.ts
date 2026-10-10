@@ -43,6 +43,29 @@ describe('features store', () => {
     expect(store.enabledPlugins).toEqual(['proxy_rewrite'])
   })
 
+  it('load() parses global_rule_plugins list (8.2 新 key)', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], global_rule_plugins: ['traceid', 'monitor'] })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.globalRulePlugins).toEqual(['traceid', 'monitor'])
+  })
+
+  it('global_rule_plugins 缺失时默认 []（空/未配置 = 不限制，向后兼容）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.globalRulePlugins).toEqual([])
+  })
+
+  it('global_rule_plugins 未加载前为 []（fail-open）', () => {
+    const store = useFeaturesStore()
+    expect(store.globalRulePlugins).toEqual([])
+  })
+
   it('load() does not re-fetch if already loaded', async () => {
     mockFeaturesGet({ features: {}, enabled_plugins: [] })
 

@@ -814,6 +814,78 @@ describe('删除确认 scope 风险提示（upstream-ux-close-loop 4.7）', () =
   })
 })
 
+describe('删除确认通用附加警示行 extraWarning（global-rule-ux-close-loop 3.1）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function findExtraWarningDiv(): HTMLElement | undefined {
+    return Array.from(document.querySelectorAll('div')).find(
+      (el) =>
+        (el.getAttribute('style') || '').includes('var(--warning-bg)') && (el.textContent || '').includes('作用于集群'),
+    )
+  }
+
+  it('传入 extraWarning：黄底警示行渲染完整文案，置于 scope 勾选区上方', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除全局规则 "gr1" 吗？',
+      apiEndpoint: '/clusters/1/global_rules/5',
+      extraWarning: '全局规则作用于集群「c1」的全部路由；勾选 Edge 删除并执行后，所有路由将立即失去这组插件配置',
+      onOk: vi.fn(),
+    })
+
+    const warningDiv = findExtraWarningDiv()
+    expect(warningDiv, 'extraWarning 警示行必须渲染').toBeTruthy()
+    // 样式复刻既有 isCluster 集群警示行（黄底）；jsdom 会规范化 style 空格，两侧均去空白后比对
+    const style = (warningDiv!.getAttribute('style') || '').replace(/\s/g, '')
+    expect(style).toContain('background:var(--warning-bg)')
+    expect(style).toContain('border:1pxsolidvar(--warning)')
+    expect(warningDiv!.textContent).toContain('所有路由将立即失去这组插件配置')
+
+    // 置于 scope 区（数据库/Edge 勾选区）上方
+    const scopeDiv = Array.from(document.querySelectorAll('div')).find((el) =>
+      (el.textContent || '').trim().startsWith('数据库'),
+    )
+    expect(scopeDiv, 'scope 勾选区应存在').toBeTruthy()
+    expect(warningDiv!.compareDocumentPosition(scopeDiv!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('extraWarning 未传或为空串：完全不渲染（既有资源默认行为不变，向后兼容）', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+
+    showDeleteConfirm({
+      title: '确定要删除上游 "u1" 吗？',
+      apiEndpoint: '/clusters/1/upstreams/5',
+      onOk: vi.fn(),
+    })
+    expect(findExtraWarningDiv()).toBeUndefined()
+
+    document.body.innerHTML = ''
+    showDeleteConfirm({
+      title: '确定要删除上游 "u2" 吗？',
+      apiEndpoint: '/clusters/1/upstreams/6',
+      extraWarning: '',
+      onOk: vi.fn(),
+    })
+    expect(findExtraWarningDiv()).toBeUndefined()
+  })
+
+  it('isCluster 既有硬编码警示行不受 extraWarning 引入影响（回归）', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除集群 "c1" 吗？',
+      apiEndpoint: '/clusters/1',
+      isCluster: true,
+      onOk: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('删除集群将同时移除平台内该集群的全部资源记录与版本历史')
+  })
+})
+
 describe('经中继 / 直连 路径标签（删除进度）', () => {
   beforeEach(() => {
     vi.clearAllMocks()

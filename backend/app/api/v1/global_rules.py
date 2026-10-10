@@ -5,9 +5,10 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
-from app.models.cluster import Cluster, GlobalRule, ConfigVersion
+from app.models.cluster import Cluster, GlobalRule
 from app.models.user import User, UserCluster
 from app.schemas.cluster import GlobalRuleResponse
+from app.services import edge_sync
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/global_rules", tags=["global_rules"])
@@ -72,20 +73,21 @@ async def list_all_global_rules(
             cluster_group_map[row[0]] = row[3] or ""
 
     gr_ids = [r.id for r in rules]
-    pub_map = {}
-    if gr_ids:
-        pub_result = await db.execute(
-            select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
-            .where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id.in_(gr_ids))
-            .group_by(ConfigVersion.resource_id)
-        )
-        pub_map = {row.resource_id: row.ts for row in pub_result.all()}
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending
+    # 推导收敛在 edge_sync 共享单点，与集群子页端点同口径，禁止各自实现）
+    pub_map = await edge_sync.load_publish_time_map(db, "global_rule", gr_ids)
 
     items = []
     for r in rules:
         item = GlobalRuleResponse.model_validate(r)
         ts = pub_map.get(r.id)
         item.published_at = ts.isoformat() + "Z" if ts else None
+        item.pending_publish = edge_sync.derive_pending_publish(
+            current_version=r.current_version,
+            updated_at=r.updated_at,
+            published_at=ts,
+            last_publish_status=r.last_publish_status,
+        )
         d = item.model_dump()
         d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
         d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")

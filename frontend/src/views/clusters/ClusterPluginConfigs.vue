@@ -3,8 +3,13 @@
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
     </div>
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
+    <!-- A3 失败态（global-rule-ux-close-loop 连带修复）：接口失败显式可重试，MUST NOT 吞成空态 -->
+    <div v-if="loadError" class="load-error-state">
+      <span class="load-error-text">加载失败：{{ loadError }}</span>
+      <a-button size="small" @click="retryLoad">重试</a-button>
+    </div>
+    <div v-else-if="loading" class="loading-state">加载中...</div>
+    <div v-else style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
       <div
         v-for="pc in cluster.plugin_configs"
         :key="pc.id"
@@ -166,6 +171,7 @@ const {
   publishPluginConfig,
   openPluginConfigVersionManagement,
   viewPluginConfigDetail,
+  loadPluginConfigs,
 } = useClusterPluginConfigs({
   clusters: computed(() => props.clusters),
   versionModal,
@@ -173,6 +179,13 @@ const {
   loadAvailablePlugins: props.loadAvailablePlugins,
   openPublishModal: props.openPublishModal,
 })
+
+// ── A3 失败态：原因由 useClusterPluginEntity.loadItems 写在 cluster 对象上（父页面 loadPluginConfigs 同一载体） ──
+const loadError = computed(() => props.cluster.pluginConfigsLoadError || '')
+
+function retryLoad() {
+  return loadPluginConfigs(props.cluster)
+}
 
 function onVersionPublished() {
   emit('refresh')
@@ -189,6 +202,20 @@ function onVersionPublished() {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+/* A3 失败态（黄底警示，与共享删除确认警示行同族样式） */
+.load-error-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 8px 0 4px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--fg);
 }
 
 .config-preview {

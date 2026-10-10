@@ -42,6 +42,8 @@ const PLUGIN_HISTORY_URL = '/clusters/1/plugin-metadata/demo-plugin/versions'
 const PLUGIN_ROLLBACK_V2_URL = '/clusters/1/plugin-metadata/demo-plugin/rollback/2'
 const EDGE_ENV_HISTORY_URL = '/clusters/1/edge-env/versions'
 const EDGE_ENV_DETAIL_V2_URL = '/clusters/1/edge-env/versions/2'
+const GLOBAL_RULE_HISTORY_URL = '/clusters/1/global_rules/9/history'
+const PLUGIN_CONFIG_HISTORY_URL = '/clusters/1/plugin_configs/9/history'
 
 const versionsFixture = [
   { id: 1, version: 1, config: { nodes: [{ host: 'a' }] }, created_at: '2026-05-01T10:00:00Z' },
@@ -53,6 +55,10 @@ function setupApi() {
   mockApiGet.mockImplementation((url: string) => {
     if (url === HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
     if (url === PLUGIN_HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+    if (url === GLOBAL_RULE_HISTORY_URL)
+      return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+    if (url === PLUGIN_CONFIG_HISTORY_URL)
+      return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
     if (url === EDGE_ENV_HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
     if (url === EDGE_ENV_DETAIL_V2_URL) return Promise.resolve({ data: { config: JSON.stringify({ yaml: 'a: 1\n' }) } })
     return Promise.reject(new Error('unexpected GET: ' + url))
@@ -260,5 +266,29 @@ describe('VersionManagementModal.vue - 删除版本记录确认（task 1.5）', 
     expect(mockShowOverlayModal).not.toHaveBeenCalled()
     expect(mockApiDelete).not.toHaveBeenCalled()
     expect(mockMessageWarning).toHaveBeenCalledWith('无法删除当前版本')
+  })
+})
+
+describe('VersionManagementModal.vue - 资源名词表与 edge_uuid（global-rule-ux-close-loop 4.1-4.3）', () => {
+  it('4.1 global_rule 标题显示「全局规则」', async () => {
+    const w = await mountModal({ resourceType: 'global_rule', resourceId: 9, resourceName: 'demo-rule' })
+    expect(w.find('.modal-header h2').text()).toBe('版本管理 - 全局规则: demo-rule')
+  })
+
+  it('4.1 plugin_config 标题显示「插件组」（不再兜底「插件」）', async () => {
+    const w = await mountModal({ resourceType: 'plugin_config', resourceId: 9, resourceName: 'demo-pg' })
+    expect(w.find('.modal-header h2').text()).toBe('版本管理 - 插件组: demo-pg')
+  })
+
+  it('4.1 既有资源名词不变（回归：upstream→上游）', async () => {
+    const w = await mountModal()
+    expect(w.find('.modal-header h2').text()).toBe('版本管理 - 上游: demo-upstream')
+  })
+
+  it('4.2 标题不再拼接 edge_uuid（传入也不显示，两入口统一不携带）', async () => {
+    const w = await mountModal({ edgeUuid: 'edge-abc-123' })
+    const title = w.find('.modal-header h2').text()
+    expect(title).toBe('版本管理 - 上游: demo-upstream')
+    expect(title).not.toContain('edge-abc-123')
   })
 })

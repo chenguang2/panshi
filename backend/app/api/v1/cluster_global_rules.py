@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from app.core.database import get_db
 from app.models.cluster import GlobalRule, ConfigVersion, Node
@@ -24,19 +24,20 @@ router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(
 async def list_global_rules(cluster_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(GlobalRule).where(GlobalRule.cluster_id == cluster_id).order_by(GlobalRule.id))
     rules = result.scalars().all()
-    # 批量查询最新发布时间
-    gr_ids = [g.id for g in rules]
-    pub = await db.execute(
-        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("ts"))
-        .where(ConfigVersion.resource_type == "global_rule", ConfigVersion.resource_id.in_(gr_ids) if gr_ids else False)
-        .group_by(ConfigVersion.resource_id)
-    ) if gr_ids else None
-    pub_map = {r.resource_id: r.ts for r in pub.all()} if pub else {}
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending
+    # 推导收敛在 edge_sync 共享单点，与全局 /global_rules 端点同口径，禁止各自实现）
+    pub_map = await edge_sync.load_publish_time_map(db, "global_rule", [g.id for g in rules])
     response = []
     for g in rules:
         r = GlobalRuleResponse.model_validate(g)
         ts = pub_map.get(g.id)
         r.published_at = ts.isoformat() + 'Z' if ts else None
+        r.pending_publish = edge_sync.derive_pending_publish(
+            current_version=g.current_version,
+            updated_at=g.updated_at,
+            published_at=ts,
+            last_publish_status=g.last_publish_status,
+        )
         response.append(r)
     return {"total": len(response), "items": response}
 

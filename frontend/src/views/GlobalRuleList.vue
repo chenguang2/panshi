@@ -1,9 +1,6 @@
 <template>
   <div class="gr-page">
-    <PageHeader
-      title="全局规则"
-      description="管理集群级的全局规则配置。全局规则是一组可复用的插件配置集合，可被多个路由引用。"
-    >
+    <PageHeader title="全局规则" description="全局规则对所属集群的全部路由生效，修改后需发布才会在 Edge 节点生效">
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 添加全局规则</button>
       </template>
@@ -18,7 +15,9 @@
           class="form-input"
           @input="onSearch"
         />
-        <span class="search-icon">🔍</span>
+        <!-- 7.5：图标字体替换 emoji；有输入时提供一键清空（allow-clear 语义） -->
+        <button v-if="searchText" class="search-clear" title="清空搜索" @click="clearSearch">&times;</button>
+        <SearchOutlined v-else class="search-icon" />
       </div>
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
@@ -29,13 +28,28 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个全局规则</span>
+      <!-- 2.5：未发布/待发布由列表数据本地统计（D9），超 500 截断时基于已加载数据 -->
+      <span class="text-sm text-muted"
+        >共 {{ totalCount }} 个 · 未发布 {{ unpublishedCount }} · 待发布 {{ pendingCount }}</span
+      >
     </div>
 
+    <!-- 7.5：超卡片网格单次取数上限截断提示（Dashboard 先例） -->
+    <div v-if="rulesTruncated" class="gr-truncate-notice">仅显示前 500 条，请用筛选缩小范围</div>
+
     <div v-if="loading" class="loading-state">加载中...</div>
+    <!-- 7.6 空态两分支：无数据给行动入口，有筛选无结果给清空筛选 -->
     <div v-else-if="displayedRules.length === 0" class="gr-empty">
-      <div class="gr-empty-icon">▣</div>
-      <div class="gr-empty-text">暂无全局规则</div>
+      <template v-if="hasActiveFilters">
+        <div class="gr-empty-icon">◎</div>
+        <div class="gr-empty-text">无匹配结果</div>
+        <button class="btn btn-secondary gr-empty-action" @click="clearFilters">清空筛选</button>
+      </template>
+      <template v-else>
+        <div class="gr-empty-icon">▣</div>
+        <div class="gr-empty-text">暂无全局规则</div>
+        <button class="btn btn-primary gr-empty-action" @click="openCreateModal">+ 添加全局规则</button>
+      </template>
     </div>
     <div v-else class="gr-grid">
       <div v-for="pc in displayedRules" :key="pc.id" class="gr-card" :style="getCardBorderStyle(pc.cluster_group_name)">
@@ -49,20 +63,24 @@
             <div v-if="pc.description" class="gr-card-desc">{{ pc.description }}</div>
           </div>
           <div class="gr-card-meta">
-            <span v-if="pc.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="gr-version-text">
-              <template v-if="pc.current_version"
-                ><PublishStatusTag :version="pc.current_version" :published-at="pc.published_at"
-              /></template>
-            </div>
+            <!-- 2.2：PublishStatusTag 四态单一表达，移除「badge + tag」双显 -->
+            <PublishStatusTag
+              :version="pc.current_version"
+              :published-at="pc.published_at"
+              :pending="pc.pending_publish === true"
+              :last-publish-status="pc.last_publish_status"
+            />
           </div>
         </div>
         <div class="gr-card-plugins">
           <span v-for="(pcfg, pname) in pc.plugins" :key="pname" class="gr-plugin-tag">{{ pname }}</span>
-          <span v-if="!pc.plugins || Object.keys(pc.plugins).length === 0" class="gr-no-plugins">无插件</span>
+          <span
+            v-if="!pc.plugins || Object.keys(pc.plugins).length === 0"
+            class="gr-no-plugins"
+            title="发布时将下发空插件集"
+          >
+            未选择插件
+          </span>
         </div>
         <div class="gr-card-actions">
           <button class="btn btn-ghost btn-sm gr-action-btn" @click="viewRule(pc)">查看</button>
@@ -100,7 +118,7 @@
 
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布全局规则"
+      :title="publishTitle"
       :cluster-id="publishClusterId"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
@@ -111,12 +129,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatDateTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-import { message, Modal } from 'ant-design-vue'
-import { PAGE_SIZE_CARD_GRID } from '@/constants'
+import { message } from 'ant-design-vue'
+import { SearchOutlined } from '@ant-design/icons-vue'
+import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 import { listGlobalRules } from '@/api/globalRules'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
@@ -125,7 +143,9 @@ import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { globalRuleDeleteWarning } from '@/composables/useClusterPluginEntity'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
+import { getApiErrorMessage } from '@/utils/error'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const rules = ref<any[]>([])
@@ -162,6 +182,30 @@ const displayedRules = computed(() => {
   })
 })
 
+// ── 2.5 工具栏计数（D9：本地统计，不发新请求；截断时基于已加载数据） ──
+const unpublishedCount = computed(() => rules.value.filter((r) => !r.current_version).length)
+const pendingCount = computed(() => rules.value.filter((r) => r.pending_publish === true).length)
+/** 7.5 截断提示：列表达到卡片网格单次取数上限（软措辞兜住恰好 500 的假阳性，Dashboard 先例） */
+const rulesTruncated = computed(() => rules.value.length >= PAGE_SIZE_CARD_GRID)
+
+/** 7.6 空态两分支判定：搜索词 / 分组 / 集群任一筛选生效即为「有匹配条件」 */
+const hasActiveFilters = computed(
+  () => searchText.value.trim() !== '' || clusterFilter.value !== '' || groupFilter.value !== '__all__',
+)
+
+function clearFilters() {
+  searchText.value = ''
+  clusterFilter.value = ''
+  groupFilter.value = '__all__'
+  loadRules()
+}
+
+/** 7.5 搜索一键清空（allow-clear 语义）：清词并立即重载 */
+function clearSearch() {
+  searchText.value = ''
+  loadRules()
+}
+
 const formVisible = ref(false)
 const editingConfig = ref<any | null>(null)
 const vmVisible = ref(false)
@@ -173,6 +217,11 @@ const viewingGr = ref<any | null>(null)
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+
+/** 7.1：发布确认弹窗标题携带资源名 */
+const publishTitle = computed(() =>
+  publishingRecord.value ? `发布全局规则: ${publishingRecord.value.name}` : '发布全局规则',
+)
 
 function onSearch() {
   onDebouncedSearch(() => {
@@ -189,8 +238,9 @@ async function loadRules() {
     const res = await listGlobalRules(params)
     rules.value = res.data.items || []
     totalCount.value = res.data.total || 0
-  } catch {
-    message.error('加载全局规则失败')
+  } catch (error: unknown) {
+    // 7.2：错误经 getApiErrorMessage 透出后端原因
+    message.error(`加载全局规则失败：${getApiErrorMessage(error)}`)
   } finally {
     loading.value = false
   }
@@ -228,9 +278,10 @@ function viewRule(pc: any) {
 }
 
 async function deleteRule(pc: any) {
+  // 5.1（M4）：删除链路节点取数显式全量（对齐删集群先例 page_size=PAGE_SIZE_DROPDOWN）
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
-    const res = await getClusterNodes(pc.cluster_id)
+    const res = await getClusterNodes(pc.cluster_id, { page: 1, page_size: PAGE_SIZE_DROPDOWN })
     nodes = res.data?.items || []
   } catch {
     /* ignore */
@@ -240,6 +291,8 @@ async function deleteRule(pc: any) {
     title: `确定要删除全局规则 "${pc.name}" 吗？`,
     apiEndpoint: `/clusters/${pc.cluster_id}/global_rules/${pc.id}`,
     nodes,
+    // 3.2（H4）：集群级警示行，文案与集群子页共用 globalRuleDeleteWarning 单点
+    extraWarning: pc.cluster_name ? globalRuleDeleteWarning(pc.cluster_name) : undefined,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
         title: `删除全局规则: ${pc.name}`,
@@ -300,6 +353,29 @@ onUnmounted(() => {
   margin-bottom: 20px;
   flex-wrap: nowrap;
 }
+/* 7.5 搜索一键清空按钮（原生 input 的 allow-clear 语义） */
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+}
+.search-clear:hover {
+  color: var(--fg);
+}
+/* 7.5 超量截断提示 */
+.gr-truncate-notice {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -8px 0 12px;
+}
 .loading-state {
   text-align: center;
   padding: 60px 0;
@@ -323,9 +399,13 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--muted);
 }
+.gr-empty-action {
+  margin-top: 12px;
+}
 .gr-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 7.5：卡片网格自适应列数（中屏不再固定 3 列留大量空白） */
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 16px;
 }
 .gr-card {
@@ -369,13 +449,6 @@ onUnmounted(() => {
   text-align: right;
   flex-shrink: 0;
   margin-left: 12px;
-}
-.gr-version-text {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-family: var(--font-mono);
 }
 .gr-card-topbar {
   padding: 4px 16px;

@@ -37,6 +37,12 @@ enabled_plugins:
   - monitor
   - dns_upstream
   - redirect
+# 全局规则两入口可用插件清单（与 enabled_plugins 同级；空/未配置 = 不限制，
+# 目录全量可选）。后续调整只改本清单，mtime 热加载、免改代码免重启。
+global_rule_plugins:
+  - traceid
+  - monitor
+  - redirect  
 # 并发参数：batch_action 为前端批量节点操作并发，max_playbooks 为后端全局
 # ansible 并发上限。前端实际并发为 min(batch_action, max_playbooks)，建议两值联动。
 concurrency:

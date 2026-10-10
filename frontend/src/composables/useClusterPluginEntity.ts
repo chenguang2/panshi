@@ -34,6 +34,14 @@ export interface PluginEntityDeps {
 }
 
 /**
+ * H4 删除集群级警示行文案（global-rule-ux-close-loop 3.2）。
+ * 单点导出：共享确认 wrap（本文件）与主页面 GlobalRuleList 调用点同源，保证两入口一致。
+ */
+export function globalRuleDeleteWarning(clusterName: string): string {
+  return `全局规则作用于集群「${clusterName}」的全部路由；勾选 Edge 删除并执行后，所有路由将立即失去这组插件配置`
+}
+
+/**
  * Shared composable for plugin-config and global-rule CRUD.
  *
  * 删除/发布/版本管理由 useClusterResourceCore 共享实现（Phase 4 合并）；
@@ -60,7 +68,8 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     // 插件组删除前置引用检查（决策 B）：在 core 的 deps 注入点包装共享确认——
     // 引用非空时不弹共享确认，改 useOverlayModal 阻断提示（无任何删除入口，
     // 网关侧与平台侧均不允许删除）；无引用/查询失败走原流程不变。
-    // 仅插件组端点启用（引用端点只存在于 plugin_configs），全局规则链路原样透传。
+    // 全局规则链路（H4）：注入集群级 extraWarning 警示行（集群名经 apiEndpoint 反查 clusters，
+    // 与主页面 GlobalRuleList 调用点共用 globalRuleDeleteWarning 单点文案）。
     {
       openPublishModal,
       showDeleteConfirm:
@@ -71,7 +80,17 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
                 onUnreferenced: () => showDeleteConfirm(opts),
               })
             }
-          : showDeleteConfirm,
+          : apiEndpoint === 'global_rules'
+            ? (opts) => {
+                const cid = Number(/\/clusters\/(\d+)\//.exec(opts.apiEndpoint)?.[1])
+                const target = clusters.value.find((c) => c.id === cid)
+                const clusterName = target ? target.display_name || target.name : ''
+                showDeleteConfirm({
+                  ...opts,
+                  extraWarning: clusterName ? globalRuleDeleteWarning(clusterName) : undefined,
+                })
+              }
+            : showDeleteConfirm,
       versionModal,
     },
   )
@@ -91,12 +110,25 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   const viewDrawerVisible = ref(false)
   const viewingItem = ref<PluginEntityItem | null>(null)
 
+  /**
+   * A3 失败态契约（global-rule-ux-close-loop 6.2）：加载失败不再吞成空数组——
+   * 失败原因写入 cluster 对象（globalRulesLoadError / pluginConfigsLoadError），
+   * 父页面 loadXxx（CentralList Tab 切换触发）与子页 Tab 组件共享同一状态载体，
+   * 子页据此渲染「加载失败：{原因}」+ 重试。
+   */
+  const writeLoadError = (cluster: Cluster, reason: string | null) => {
+    if (clusterProp === 'global_rules') cluster.globalRulesLoadError = reason
+    else cluster.pluginConfigsLoadError = reason
+  }
+
   const loadItems = async (cluster: Cluster) => {
+    writeLoadError(cluster, null)
     try {
       const res = await api.get(`/clusters/${cluster.id}/${apiEndpoint}`)
       cluster[clusterProp] = res.data.items || res.data || []
-    } catch {
+    } catch (error: unknown) {
       cluster[clusterProp] = []
+      writeLoadError(cluster, getApiErrorMessage(error))
     }
   }
 

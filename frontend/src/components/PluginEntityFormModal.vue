@@ -19,7 +19,14 @@
         <div v-show="activeTab === 'basic'">
           <div class="form-group">
             <label class="form-label">名称 <span class="required">*</span></label>
-            <input v-model="form.name" type="text" class="form-input" :placeholder="'请输入' + displayName + '名称'" />
+            <!-- 7.4：maxlength=100 对齐后端约束，超长错误不以后端英文校验信息暴露 -->
+            <input
+              v-model="form.name"
+              type="text"
+              class="form-input"
+              maxlength="100"
+              :placeholder="'请输入' + displayName + '名称'"
+            />
             <div v-if="formErrors.name" class="form-error">{{ formErrors.name }}</div>
           </div>
           <div class="form-group">
@@ -37,7 +44,7 @@
         </div>
 
         <div v-show="activeTab === 'plugins'">
-          <PluginSelector v-model="form.selectedPlugins" :plugins="availablePlugins" />
+          <PluginSelector v-model="form.selectedPlugins" :plugins="catalogPlugins" />
         </div>
       </div>
 
@@ -52,12 +59,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, nextTick } from 'vue'
+import { ref, reactive, watch, nextTick, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import PluginSelector from '@/components/PluginSelector.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { getApiErrorMessage } from '@/utils/error'
+import { useFeaturesStore } from '@/stores/features'
 
 const props = defineProps<{
   visible: boolean
@@ -71,10 +79,25 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const displayName = props.resourceType === 'plugin_config' ? '插件组' : '全局规则'
 const apiEndpoint = props.resourceType === 'plugin_config' ? 'plugin_configs' : 'global_rules'
 
+const featuresStore = useFeaturesStore()
+
 const activeTab = ref('basic')
 const submitting = ref(false)
 const formErrors = reactive<Record<string, string>>({})
 const availablePlugins = ref<any[]>([])
+
+/**
+ * H2（A1 二次修订，8.3 两入口单点）：global_rule 资源按 features.yaml 专用清单
+ * global_rule_plugins 过滤插件目录——清单空/未配置 = 不限制（目录全量），
+ * enabled_plugins 已在 /plugins/builtin 目录层作为平台硬上限并行生效，
+ * 最终可见集 = 目录 ∩ 清单。plugin_config 资源不受清单约束。
+ */
+const catalogPlugins = computed(() => {
+  if (props.resourceType !== 'global_rule') return availablePlugins.value
+  const allowed = featuresStore.globalRulePlugins
+  if (!allowed || allowed.length === 0) return availablePlugins.value
+  return availablePlugins.value.filter((p) => allowed.includes(p.name))
+})
 
 const form = reactive({
   name: '',
@@ -110,6 +133,8 @@ async function populateForm() {
   suppressDirtyWatch = true
   formErrors.name = ''
   formErrors.cluster_id = ''
+  // features 清单兜底加载（main.ts 启动时已预载；此处仅覆盖未加载的边角，失败静默 = 不限制）
+  featuresStore.load().catch(() => {})
   try {
     const res = await api.get('/plugins/builtin')
     availablePlugins.value = res.data.plugins || []

@@ -1,81 +1,77 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddGlobalRule(cluster)">添加全局规则</a-button>
+      <a-button size="small" type="primary" @click="openCreateModal">添加全局规则</a-button>
     </div>
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
-      <div
-        v-for="gr in cluster.global_rules"
-        :key="gr.id"
-        class="plugin-config-card"
-        :class="{ selected: cluster.selectedGlobalRule?.id === gr.id }"
-        @click="cluster.selectedGlobalRule = gr"
-      >
+    <!-- A3 失败态：接口失败显式可重试，MUST NOT 吞成「暂无全局规则」空态（与插件组集群子页同款） -->
+    <div v-if="loadError" class="load-error-state">
+      <span class="load-error-text">加载失败：{{ loadError }}</span>
+      <a-button size="small" @click="retryLoad">重试</a-button>
+    </div>
+    <div v-else-if="loading" class="loading-state">加载中...</div>
+    <div v-else style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
+      <div v-for="gr in cluster.global_rules" :key="gr.id" class="plugin-config-card">
         <div class="pcc-header">
           <strong class="pcc-title">{{ gr.name }}</strong>
           <div class="pcc-meta">
             <div class="pcc-status-row">
-              <a-tag v-if="gr.current_version" color="green" size="small">已发布</a-tag>
-              <a-tag v-else color="orange" size="small">未发布</a-tag>
-            </div>
-            <div class="pcc-version">
-              <template v-if="gr.current_version"><PublishStatusTag :version="gr.current_version" :published-at="gr.published_at" /></template>
-              <template v-else>&nbsp;</template>
+              <!-- 2.3：四态单一表达（未发布/待发布/⚠ partial/已发布 vX+时间），与主页面同源 -->
+              <PublishStatusTag
+                :version="gr.current_version"
+                :published-at="gr.published_at"
+                :pending="gr.pending_publish === true"
+                :last-publish-status="gr.last_publish_status"
+              />
             </div>
           </div>
         </div>
         <div v-if="gr.description" class="pcc-desc">{{ gr.description }}</div>
         <div class="pcc-plugins">
-          <a-tag v-for="(cfg, pname) in gr.plugins" :key="pname" color="var(--accent)" class="pcc-plugin-tag" @click.stop="viewGlobalRulePluginConfig(gr, pname as string, cfg)">{{ pname }}</a-tag>
-          <span v-if="!gr.plugins || Object.keys(gr.plugins).length === 0" class="pcc-no-plugins">无插件</span>
+          <a-tag
+            v-for="(cfg, pname) in gr.plugins"
+            :key="pname"
+            color="var(--accent)"
+            class="pcc-plugin-tag"
+            @click.stop="viewGlobalRulePluginConfig(gr, pname as string, cfg)"
+            >{{ pname }}</a-tag
+          >
+          <span
+            v-if="!gr.plugins || Object.keys(gr.plugins).length === 0"
+            class="pcc-no-plugins"
+            title="发布时将下发空插件集"
+          >
+            未选择插件
+          </span>
         </div>
         <div class="pcc-actions">
           <a-button size="small" @click.stop="viewGlobalRule(gr)" title="查看"><EyeOutlined /></a-button>
-          <a-button size="small" @click.stop="editGlobalRule(cluster, gr)" title="编辑"><EditOutlined /></a-button>
-          <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger title="删除"><DeleteOutlined /></a-button>
-          <span style="flex:1"></span>
+          <a-button size="small" @click.stop="editRule(gr)" title="编辑"><EditOutlined /></a-button>
+          <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger title="删除"
+            ><DeleteOutlined
+          /></a-button>
+          <span style="flex: 1"></span>
           <a-button size="small" @click.stop="publishGlobalRule(cluster, gr)">发布</a-button>
           <a-button size="small" @click.stop="openGlobalRuleVersionManagement(cluster, gr)">版本管理</a-button>
         </div>
       </div>
+      <!-- 6.3 空态行动引导（集群子页无筛选器，仅「无数据」分支，清空筛选分支属主页面） -->
       <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" class="empty-hint">
-        暂无全局规则，点击"添加全局规则"创建
+        <div class="empty-hint-text">暂无全局规则</div>
+        <a-button size="small" type="primary" @click="openCreateModal">+ 添加全局规则</a-button>
       </div>
     </div>
 
-    <!-- Global Rule Modal -->
-    <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: globalRuleModalVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width:800px;">
-        <div class="modal-header">
-          <h2>{{ globalRuleFormMode === 'add' ? '添加全局规则' : '编辑全局规则' }}</h2>
-          <button class="modal-close" @click="globalRuleModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <a-tabs v-model:activeKey="globalRuleActiveTab">
-            <a-tab-pane key="basic" tab="基础配置">
-              <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入名称' }]">
-                  <a-input v-model:value="globalRuleFormData.name" placeholder="请输入名称" />
-                </a-form-item>
-                <a-form-item label="描述" name="description">
-                  <a-textarea v-model:value="globalRuleFormData.description" :rows="2" placeholder="可选描述" />
-                </a-form-item>
-              </a-form>
-            </a-tab-pane>
-            <a-tab-pane key="plugins" tab="插件配置">
-              <PluginSelector v-model="globalRuleFormData.selectedPlugins" :plugins="availablePlugins.filter(p => ['traceid', 'monitor'].includes(p.name))" />
-            </a-tab-pane>
-          </a-tabs>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="globalRuleModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleGlobalRuleSubmit">{{ globalRuleFormMode === 'add' ? '创建' : '保存' }}</button>
-        </div>
-      </div>
-    </div>
-    </Teleport>
+    <!-- 6.1（D6）：创建/编辑表单统一走共享 PluginEntityFormModal（两入口单点），
+         误关保护/跨 Tab 校验/统一保存 toast/插件清单过滤自动继承；
+         编辑态禁选集群为组件既有逻辑（editingConfig 非空时 select disabled） -->
+    <PluginEntityFormModal
+      :visible="formVisible"
+      :editing-config="editingGr"
+      :clusters="[props.cluster]"
+      resource-type="global_rule"
+      @close="closeForm"
+      @saved="onFormSaved"
+    />
 
     <!-- View Global Rule Drawer -->
     <a-drawer
@@ -89,40 +85,42 @@
           <a-descriptions-item label="名称">{{ viewingGr.name }}</a-descriptions-item>
           <a-descriptions-item label="描述">{{ viewingGr.description || '-' }}</a-descriptions-item>
           <a-descriptions-item label="状态">
-            <a-tag v-if="viewingGr.current_version" color="green">已发布</a-tag>
-            <a-tag v-else color="orange">未发布</a-tag>
+            <PublishStatusTag
+              :version="viewingGr.current_version"
+              :published-at="viewingGr.published_at"
+              :pending="viewingGr.pending_publish === true"
+              :last-publish-status="viewingGr.last_publish_status"
+            />
           </a-descriptions-item>
-          <a-descriptions-item label="版本" v-if="viewingGr.current_version">v{{ viewingGr.current_version }}</a-descriptions-item>
+          <a-descriptions-item label="版本" v-if="viewingGr.current_version"
+            >v{{ viewingGr.current_version }}</a-descriptions-item
+          >
         </a-descriptions>
         <a-divider>插件配置</a-divider>
         <pre class="config-preview">{{ JSON.stringify(viewingGr.plugins, null, 2) }}</pre>
       </div>
     </a-drawer>
 
-    <!-- Version Management Modal -->
+    <!-- Version Management Modal（edge_uuid 两入口统一去掉，弹窗侧不再渲染） -->
     <VersionManagementModal
       v-model:open="versionModalVisible"
       :resource-type="versionModalType"
       :resource-id="versionModalResourceId"
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
-      :edge-uuid="versionModalEdgeUuid"
       @published="onVersionPublished"
     />
-
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
-import api from '@/api'
-import type { Cluster, Plugin } from '@/types'
-import PluginSelector from '@/components/PluginSelector.vue'
+import type { Cluster, GlobalRule, Plugin } from '@/types'
+import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate } from '@/utils/format'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const props = defineProps<{
@@ -156,20 +154,14 @@ const versionModal: VersionModalState = {
 }
 
 const {
-  globalRuleModalVisible,
-  globalRuleActiveTab,
-  globalRuleFormMode,
-  globalRuleFormData,
   viewGrDrawerVisible,
   viewingGr,
-  showAddGlobalRule,
   viewGlobalRule,
-  editGlobalRule,
-  handleGlobalRuleSubmit,
   deleteGlobalRule,
   publishGlobalRule,
   openGlobalRuleVersionManagement,
   viewGlobalRulePluginConfig,
+  loadGlobalRules,
 } = useClusterGlobalRules({
   clusters: computed(() => props.clusters),
   versionModal,
@@ -178,10 +170,42 @@ const {
   openPublishModal: props.openPublishModal,
 })
 
+// ── 6.1 表单状态（共享 PluginEntityFormModal；原手写 modal 及其死代码已移除） ──
+const formVisible = ref(false)
+const editingGr = ref<GlobalRule | null>(null)
+
+function openCreateModal() {
+  editingGr.value = null
+  formVisible.value = true
+}
+
+function editRule(gr: GlobalRule) {
+  editingGr.value = gr
+  formVisible.value = true
+}
+
+function closeForm() {
+  formVisible.value = false
+  editingGr.value = null
+}
+
+/** 2.3：保存成功后刷新列表，使「待发布」标签立即可见 */
+async function onFormSaved() {
+  closeForm()
+  await loadGlobalRules(props.cluster)
+}
+
+// ── 6.2 失败态：原因由 useClusterPluginEntity.loadItems 写在 cluster 对象上 ──
+// （父页面 Tab 切换触发的 loadGlobalRules 与本组件共享同一状态载体）
+const loadError = computed(() => props.cluster.globalRulesLoadError || '')
+
+function retryLoad() {
+  return loadGlobalRules(props.cluster)
+}
+
 function onVersionPublished() {
   emit('refresh')
 }
-
 </script>
 
 <style scoped>
@@ -194,6 +218,20 @@ function onVersionPublished() {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+/* A3 失败态（黄底警示，与共享删除确认警示行同族样式） */
+.load-error-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin: 8px 0 4px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--fg);
 }
 
 .config-preview {
@@ -213,7 +251,6 @@ function onVersionPublished() {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
-  cursor: pointer;
   transition: all 0.2s;
   background: var(--surface);
 }
@@ -221,12 +258,6 @@ function onVersionPublished() {
 .plugin-config-card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--accent);
-}
-
-.plugin-config-card.selected {
-  border-color: var(--accent);
-  box-shadow: 0 2px 12px var(--shadow-sm);
-  background: oklch(56% 0.16 210 / 10%);
 }
 
 .pcc-header {
@@ -248,11 +279,6 @@ function onVersionPublished() {
 
 .pcc-status-row {
   margin-bottom: 2px;
-}
-
-.pcc-version {
-  font-size: 12px;
-  color: var(--muted);
 }
 
 .pcc-desc {
@@ -282,5 +308,23 @@ function onVersionPublished() {
   gap: 4px;
   align-items: center;
 }
-.loading-state { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
+
+/* 6.3 空态行动引导 */
+.empty-hint {
+  width: 100%;
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.empty-hint-text {
+  margin-bottom: 12px;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
 </style>

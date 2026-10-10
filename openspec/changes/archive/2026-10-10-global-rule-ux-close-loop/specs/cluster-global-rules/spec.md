@@ -1,31 +1,6 @@
-## Purpose
+# cluster-global-rules Delta
 
-
-集群全局规则能力：全局规则的卡片详情、CRUD 与发布，规则在集群范围内统一生效。
-## Requirements
-### Requirement: 全局规则卡片提供查看详情功能
-
-系统 SHALL 在全局规则卡片操作栏提供"查看"按钮，点击后以只读抽屉展示全局规则详情。
-
-#### Scenario: 查看全局规则详情
-- **WHEN** 用户点击全局规则卡片的"查看"按钮（EyeOutlined 图标）
-- **THEN** 系统 SHALL 打开抽屉展示全局规则信息
-- **AND** 展示名称、描述、发布状态、版本号
-- **AND** 展示该全局规则包含的所有插件配置 JSON
-
-### Requirement: 全局规则 CRUD
-系统 SHALL 支持对全局规则进行增删改查操作。
-
-#### Scenario: 创建全局规则
-- **WHEN** 用户填写名称、描述，并选择插件
-- **THEN** 系统 SHALL 保存到本地数据库
-
-### Requirement: 全局规则发布
-系统 SHALL 支持将全局规则发布到集群 Edge 节点。
-
-#### Scenario: 发布全局规则
-- **WHEN** 用户点击发布
-- **THEN** 系统 SHALL 调用 PUT /edge/admin/global_rules/{uuid}
+## ADDED Requirements
 
 ### Requirement: 全局规则删除确认展示集群级影响警示
 
@@ -46,7 +21,7 @@
 
 #### Scenario: 两入口同源
 - **WHEN** 主页面与集群子页渲染全局规则表单的插件选择器
-- **THEN** 可选插件集合 SHALL 由共享表单按 `global_rule_plugins` 清单过滤同一目录端点得出，MUST NOT 出现前端第二份入口级白名单（集群子页历史硬编码 `['traceid','monitor']` 已删除）
+- **THEN** 可选插件集合 SHALL 由共享表单按 `global_rule_plugins` 清单过滤同一目录端点得出，MUST NOT 出现前端第二份入口级白名单（现状集群子页硬编码 `['traceid','monitor']` SHALL 删除）
 
 #### Scenario: 清单调整
 - **WHEN** 部署管理员调整 features.yaml `global_rule_plugins`

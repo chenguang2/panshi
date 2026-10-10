@@ -11,24 +11,19 @@ const CONFIG = {
   versionType: 'global_rule',
 } as const
 
+/**
+ * 全局规则集群子域（D6 收敛后）：创建/编辑表单已统一走共享 PluginEntityFormModal
+ * （两入口单点），本工厂仅保留查看抽屉/删除/发布/版本管理与列表加载。
+ */
 export function useClusterGlobalRules(deps: GlobalRuleDeps) {
   const entity = useClusterPluginEntity(CONFIG, deps)
 
   return {
-    globalRuleModalVisible: entity.modalVisible,
-    globalRuleActiveTab: entity.activeTab,
-    globalRuleFormMode: entity.formMode,
-    globalRuleEditingClusterId: entity.editingClusterId,
-    globalRuleEditingId: entity.editingId,
-    globalRuleFormData: entity.formData,
     viewGrDrawerVisible: entity.viewDrawerVisible,
     viewingGr: entity.viewingItem,
 
     loadGlobalRules: entity.loadItems,
-    showAddGlobalRule: entity.showAdd,
     viewGlobalRule: entity.viewItem,
-    editGlobalRule: entity.editItem,
-    handleGlobalRuleSubmit: entity.handleSubmit,
     deleteGlobalRule: entity.deleteItem,
     publishGlobalRule: entity.publishItem,
     openGlobalRuleVersionManagement: entity.openVersionManagement,

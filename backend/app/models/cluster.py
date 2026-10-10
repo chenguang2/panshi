@@ -195,6 +195,9 @@ class GlobalRule(Base):
     description = Column(Text, nullable=True)
     plugins = Column(Text, nullable=True)
     current_version = Column(Integer, nullable=True)
+    # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 NULL
+    # （publish_resource 既有 hasattr 能力探测单点写回，加列即自动接入）
+    last_publish_status = Column(String(16), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

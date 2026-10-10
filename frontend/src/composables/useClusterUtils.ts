@@ -84,6 +84,8 @@ export function showDeleteConfirm(opts: {
   noNodeSelection?: boolean
   /** 集群根资源删除：显示集群专属警示行（黄底）与集群 scope 文案（cluster-ux-close-loop B1） */
   isCluster?: boolean
+  /** 通用附加警示行（黄底，global-rule-ux-close-loop 3.1）：置于 scope 区上方，空/未传不渲染（向后兼容） */
+  extraWarning?: string
   /** 资源统计加载失败：清单区显示降级提示（不影响删除） */
   statsLoadFailed?: boolean
   /** 节点明细加载失败：Edge 删除退化为后端全量遍历（node_ids 不传） */
@@ -167,6 +169,18 @@ export function showDeleteConfirm(opts: {
         )
       : null
 
+    /** 通用附加警示行（黄底）：样式/位置复刻集群警示行，extraWarning 为空/未传则完全不渲染 */
+    const extraWarningRow = opts.extraWarning
+      ? h(
+          'div',
+          {
+            style:
+              'margin-bottom:12px;padding:8px 10px;background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius-md);font-size:12px;color:var(--fg);',
+          },
+          opts.extraWarning,
+        )
+      : null
+
     const nodeSection =
       opts.nodes && opts.nodes.length > 0 && !opts.noNodeSelection
         ? h(
@@ -237,6 +251,7 @@ export function showDeleteConfirm(opts: {
             h('div', { style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;' }, opts.title),
             statsSection,
             clusterWarning,
+            extraWarningRow,
             h('div', { style: 'border-top:1px solid var(--border);padding-top:12px;' }, [
               h(
                 'label',

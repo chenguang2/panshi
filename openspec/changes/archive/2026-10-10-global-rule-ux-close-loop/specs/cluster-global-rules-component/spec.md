@@ -1,15 +1,6 @@
-## Purpose
+# cluster-global-rules-component Delta
 
-
-集群全局规则 Vue 组件（ClusterGlobalRules）：承载全局规则列表、编辑与删除交互，供集群详情页复用。
-## Requirements
-### Requirement: ClusterGlobalRules component
-The system SHALL provide a `ClusterGlobalRules` component that renders the global rules tab content.
-
-#### Scenario: Component renders global rule list
-- **WHEN** `ClusterGlobalRules` receives `cluster` prop
-- **THEN** it SHALL render global rule cards with description, plugins, actions
-- **THEN** it SHALL emit `refresh` when global rules are modified
+## ADDED Requirements
 
 ### Requirement: 集群子页表单统一共享实现
 
@@ -40,4 +31,4 @@ The system SHALL provide a `ClusterGlobalRules` component that renders the globa
 
 #### Scenario: 移除误导性选中
 - **WHEN** 用户点击集群子页的全局规则卡片
-- **THEN** 卡片 MUST NOT 进入对任何操作无影响的选中高亮态
+- **THEN** 卡片 MUST NOT 进入对任何操作无影响的选中高亮态（当前 `selectedGlobalRule` 高亮无消费方，属视觉误导）

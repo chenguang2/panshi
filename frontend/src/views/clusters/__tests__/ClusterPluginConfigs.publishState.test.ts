@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 
 const mockApiGet = vi.fn()
 
@@ -155,5 +156,55 @@ describe('ClusterPluginConfigs.vue — 发布状态四态接线（2.3，与主�
     const card = cardByName(w, 'pg-published')!
     expect(card.text()).toContain('v7')
     expect(card.text()).toContain('2026/01/15')
+  })
+})
+
+// ── A3 共享修连带回归（global-rule-ux-close-loop 6.2）：插件组集群子页失败态 UI ──
+describe('ClusterPluginConfigs.vue — 加载失败态与重试（A3，与全局规则子页同款契约）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters/1/plugin_configs') return Promise.resolve({ data: { items: FOUR_STATE_ITEMS } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  /** cluster 用 reactive 包裹（对齐真实父页面 ref 深响应），loadItems 的失败态写入才能驱动视图更新 */
+  async function mountClusterTab(cluster: Cluster) {
+    const w = mount(ClusterPluginConfigs, {
+      props: {
+        cluster,
+        clusters: [cluster],
+        openPublishModal: vi.fn().mockResolvedValue([]),
+        availablePlugins: [],
+        loadAvailablePlugins: vi.fn().mockResolvedValue(undefined),
+      },
+      global: { stubs },
+    })
+    await flushPromises()
+    return w
+  }
+
+  it('失败态：「加载失败：{原因}」+「重试」，MUST NOT 吞成「暂无插件组」空态', async () => {
+    const cluster = reactive(makeCluster([]))
+    cluster.pluginConfigsLoadError = '数据库不可用'
+    const w = await mountClusterTab(cluster)
+
+    expect(w.find('.load-error-state').text()).toContain('加载失败：数据库不可用')
+    expect(w.text()).not.toContain('暂无插件组')
+  })
+
+  it('失败态重试：点击「重试」重新加载，成功后错误清空、卡片渲染', async () => {
+    const cluster = reactive(makeCluster([]))
+    cluster.pluginConfigsLoadError = '数据库不可用'
+    const w = await mountClusterTab(cluster)
+
+    const retryBtn = w.findAll('.load-error-state button').find((b: any) => b.text() === '重试')!
+    await retryBtn.trigger('click')
+    await flushPromises()
+
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/plugin_configs')
+    expect(w.find('.load-error-state').exists()).toBe(false)
+    expect(w.findAll('.plugin-config-card').length).toBe(FOUR_STATE_ITEMS.length)
   })
 })

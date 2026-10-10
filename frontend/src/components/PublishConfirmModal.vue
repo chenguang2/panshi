@@ -23,39 +23,49 @@
         <template v-else>
           <!-- M5：当前已有版本时说明本次发布将创建新版本（可选参数，未传/未发布不显示该行） -->
           <div v-if="versionHintText" class="version-hint">{{ versionHintText }}</div>
-          <div class="selection-bar">
-            <span class="selection-links">
-              <a class="action-link" @click="selectAll">全选</a>
-              <span class="divider-vertical">|</span>
-              <a class="action-link" @click="clearAll">取消全选</a>
-            </span>
-            <span class="selection-count">已选择 {{ selectedNodeIds.length }} / {{ nodes.length }} 个节点</span>
+          <!-- global-rule-ux-close-loop 5.2：全量取数成功但集群无节点 → 指路文案（不再只留空列表 + 永久禁用确认键） -->
+          <div v-if="nodes.length === 0" class="modal-state">
+            <p class="state-text">该集群暂无节点，无法发布；请先在「节点管理」添加节点</p>
           </div>
-
-          <div class="node-list">
-            <div v-for="node in nodes" :key="node.id" :class="['node-row', { 'node-row--offline': node.status !== 1 }]">
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  :checked="isSelected(node.id)"
-                  :disabled="node.status !== 1"
-                  @change="toggleNode(node.id)"
-                />
-                <span class="node-address">{{ node.ip }}:{{ node.management_port }}</span>
-                <span
-                  class="node-status-tag"
-                  :style="{
-                    color: node.status === 1 ? '#52c41a' : '#999',
-                    borderColor: node.status === 1 ? '#52c41a' : '#d9d9d9',
-                  }"
-                >
-                  {{ node.status === 1 ? '在线' : '离线' }}
-                </span>
-              </label>
+          <template v-else>
+            <div class="selection-bar">
+              <span class="selection-links">
+                <a class="action-link" @click="selectAll">全选</a>
+                <span class="divider-vertical">|</span>
+                <a class="action-link" @click="clearAll">取消全选</a>
+              </span>
+              <span class="selection-count">已选择 {{ selectedNodeIds.length }} / {{ nodes.length }} 个节点</span>
             </div>
-          </div>
 
-          <div v-if="selectedNodeIds.length === 0 && nodes.length > 0" class="hint-text">请至少选择 1 个节点</div>
+            <div class="node-list">
+              <div
+                v-for="node in nodes"
+                :key="node.id"
+                :class="['node-row', { 'node-row--offline': node.status !== 1 }]"
+              >
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    :checked="isSelected(node.id)"
+                    :disabled="node.status !== 1"
+                    @change="toggleNode(node.id)"
+                  />
+                  <span class="node-address">{{ node.ip }}:{{ node.management_port }}</span>
+                  <span
+                    class="node-status-tag"
+                    :style="{
+                      color: node.status === 1 ? '#52c41a' : '#999',
+                      borderColor: node.status === 1 ? '#52c41a' : '#d9d9d9',
+                    }"
+                  >
+                    {{ node.status === 1 ? '在线' : '离线' }}
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <div v-if="selectedNodeIds.length === 0 && nodes.length > 0" class="hint-text">请至少选择 1 个节点</div>
+          </template>
         </template>
       </div>
 
@@ -72,6 +82,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 interface NodeItem {
   id: number
@@ -125,7 +136,11 @@ const fetchNodes = async (): Promise<void> => {
   loading.value = true
   error.value = null
   try {
-    const res = await api.get<NodeListResponse>(`/clusters/${props.clusterId}/nodes`)
+    // 全量取数（global-rule-ux-close-loop 5.1，对齐删集群先例 useClusterUtils.deleteClusterWithConfirm）：
+    // 后端默认 page_size=20 会静默截断节点列表；PAGE_SIZE_DROPDOWN(500) 对齐后端 MAX_PAGE_SIZE
+    const res = await api.get<NodeListResponse>(`/clusters/${props.clusterId}/nodes`, {
+      params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
+    })
     nodes.value = res.data.items || []
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } }; message?: string }

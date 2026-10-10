@@ -3,26 +3,7 @@
     <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
       <div class="modal modal-wide" style="max-width: 1000px">
         <div class="modal-header">
-          <h2>
-            版本管理 -
-            {{
-              resourceType === 'upstream'
-                ? '上游'
-                : resourceType === 'route'
-                  ? '路由'
-                  : resourceType === 'static_resource'
-                    ? '静态资源'
-                    : resourceType === 'edge_env'
-                      ? 'edge.env'
-                      : resourceType === 'stream_proxy'
-                        ? '四层代理'
-                        : resourceType === 'dns_proxy'
-                          ? 'DNS 代理'
-                          : resourceType === 'ssl'
-                            ? 'SSL 证书'
-                            : '插件'
-            }}: {{ resourceName }}{{ edgeUuid ? ` (${edgeUuid})` : '' }}
-          </h2>
+          <h2>版本管理 - {{ resourceTypeLabel }}: {{ resourceName }}</h2>
           <button class="modal-close" @click="handleClose">&times;</button>
         </div>
 
@@ -169,6 +150,7 @@ const props = defineProps<{
   resourceId: number | null
   clusterId: number | null
   resourceName: string
+  /** @deprecated 标题不再拼接 edge_uuid（global-rule-ux-close-loop 4.2，两入口统一不携带）；保留可选声明兼容未迁移的调用侧 */
   edgeUuid?: string
   /** 恢复成功后是否显示「立即发布恢复的配置」出口（默认 false；仅已接线发布链路的资源域传 true） */
   canPublish?: boolean
@@ -188,7 +170,25 @@ const visible = computed({
   set: (val) => emit('update:open', val),
 })
 
-const edgeUuid = computed(() => props.edgeUuid || '')
+/**
+ * 版本弹窗资源中文名（global-rule-ux-close-loop 4.1）：常量映射，对齐 useClusterUtils 既有 resourceLabels 范本。
+ * 键为弹窗 resourceType 单数域（与 resourceLabels 的复数统计键不同域，无法直接复用同一张表）；
+ * 未知类型原样回显 resourceType，MUST NOT 再以「插件」兜底。
+ */
+const RESOURCE_TYPE_LABELS: Record<string, string> = {
+  upstream: '上游',
+  route: '路由',
+  plugin_metadata: '插件元数据',
+  plugin_config: '插件组',
+  global_rule: '全局规则',
+  static_resource: '静态资源',
+  edge_env: 'edge.env',
+  stream_proxy: '四层代理',
+  dns_proxy: 'DNS 代理',
+  ssl: 'SSL 证书',
+}
+
+const resourceTypeLabel = computed(() => RESOURCE_TYPE_LABELS[props.resourceType] || props.resourceType)
 
 const loading = ref(false)
 const versions = ref<ConfigVersion[]>([])

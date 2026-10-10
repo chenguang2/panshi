@@ -85,6 +85,15 @@ def get_enabled_plugins() -> list[str]:
     return get_features().get("enabled_plugins", [])
 
 
+def get_global_rule_plugins() -> list[str]:
+    """Return the global-rule plugin whitelist (empty list = no restriction).
+
+    专用清单（global-rule-ux-close-loop D8）：约束全局规则两入口的可用插件
+    选择，不承担 enabled_plugins 的部署级全平台启用语义。空/未配置 = 不限制。
+    """
+    return get_features().get("global_rule_plugins", [])
+
+
 def get_concurrency(name: str, default: int) -> int:
     """Return a concurrency parameter value (default when not configured)."""
     return get_features().get("concurrency", {}).get(name, default)
@@ -159,6 +168,16 @@ def _validate(config: dict) -> None:
         config["enabled_plugins"] = []
     elif not isinstance(plugins, list):
         print("错误: features.yaml 中 'enabled_plugins' 必须是列表", file=sys.stderr)
+        sys.exit(1)
+
+    # 顶层专用清单 key（global-rule-ux-close-loop D8）：与 enabled_plugins 同级，
+    # 非列表显式报错退出；未配置/None 归一为 []（= 不限制）。
+    # 顶层未知 key 不拒绝（concurrency 先例：unknown 检查仅作用于 features 映射内部）。
+    global_rule_plugins = config.get("global_rule_plugins", [])
+    if global_rule_plugins is None:
+        config["global_rule_plugins"] = []
+    elif not isinstance(global_rule_plugins, list):
+        print("错误: features.yaml 中 'global_rule_plugins' 必须是列表", file=sys.stderr)
         sys.exit(1)
 
 
