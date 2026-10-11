@@ -108,7 +108,9 @@
       :resource-id="versionModalResourceId"
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
+      :can-publish="true"
       @published="onVersionPublished"
+      @publish-requested="handleVmPublishRequested"
     />
   </div>
 </template>
@@ -204,7 +206,24 @@ function retryLoad() {
 }
 
 function onVersionPublished() {
-  emit('refresh')
+  // 版本发布/恢复后面板局部刷新（原地更新 cluster 对象）。不走 emit('refresh')：父页 loadClusters
+  // 会重建 cluster 并把 activeTab 重置回 'nodes'，导致用户被踢出当前 Tab、版本弹窗随面板卸载（出口条丢失）。
+  loadGlobalRules(props.cluster)
+}
+
+// 4.x：版本恢复出口条 → 以版本弹窗上下文资源（composable 写入的镜像 ref）复用既有发布链路
+// （publishByRecord：内置发布确认/executePublish/列表刷新）；返回后重开版本弹窗——
+// 重开触发组件既有 open watch 重载版本列表并复位出口条。链路为 promise 单出口（取消也正常
+// resolve），取消时同样回到版本弹窗（恢复本身已落库，不丢失）。
+const handleVmPublishRequested = async () => {
+  const resourceId = versionModalResourceId.value
+  const resourceName = versionModalResourceName.value
+  if (resourceId == null || !resourceName) return
+  versionModalVisible.value = false
+  const item = (props.cluster.global_rules || []).find((gr) => gr.id === resourceId)
+  if (!item) return
+  await publishGlobalRule(props.cluster, item)
+  versionModalVisible.value = true
 }
 </script>
 

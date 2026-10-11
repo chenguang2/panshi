@@ -112,8 +112,10 @@
       :resource-id="vmId"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :can-publish="true"
       @version-change="loadRules"
       @published="loadRules"
+      @publish-requested="onVmPublishRequested"
     />
 
     <PublishConfirmModal
@@ -217,6 +219,8 @@ const viewingGr = ref<any | null>(null)
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+/** 本次发布完成后的刷新动作：卡片发布刷新列表；版本弹窗出口条发布额外重开弹窗重载版本列表 */
+const publishRefreshFn = ref<() => Promise<void>>(loadRules)
 
 /** 7.1：发布确认弹窗标题携带资源名 */
 const publishTitle = computed(() =>
@@ -311,6 +315,7 @@ async function deleteRule(pc: any) {
 function publishRule(pc: any) {
   publishingRecord.value = pc
   publishClusterId.value = pc.cluster_id
+  publishRefreshFn.value = loadRules
   publishVisible.value = true
 }
 
@@ -322,8 +327,23 @@ async function onPublishConfirm(nodeIds: number[]) {
     title: `发布全局规则: ${pc.name}`,
     apiEndpoint: `/clusters/${pc.cluster_id}/global_rules/${pc.id}/publish`,
     nodeIds,
-    refreshFn: loadRules,
+    refreshFn: publishRefreshFn.value,
   })
+  publishRefreshFn.value = loadRules
+}
+
+// 4.x：版本恢复出口条 → 以版本弹窗上下文资源（调用侧镜像 ref）复用既有发布链路；
+// 发布成功后刷新列表并重开版本弹窗（重开触发组件既有 open watch → 重载版本列表并复位出口条）
+function onVmPublishRequested() {
+  if (vmId.value == null || vmClusterId.value == null || !vmName.value) return
+  publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, name: vmName.value }
+  publishClusterId.value = vmClusterId.value
+  publishRefreshFn.value = async () => {
+    await loadRules()
+    vmVisible.value = true
+  }
+  vmVisible.value = false
+  publishVisible.value = true
 }
 
 function openVersionManagement(pc: any) {

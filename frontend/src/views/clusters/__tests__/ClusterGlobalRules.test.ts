@@ -24,7 +24,7 @@ vi.mock('@/composables/useClusterUtils', () => ({
 }))
 
 import ClusterGlobalRules from '../ClusterGlobalRules.vue'
-import { showDeleteConfirm } from '@/composables/useClusterUtils'
+import { executePublish, showDeleteConfirm } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 
 function makeCluster(globalRules: unknown[]): Cluster {
@@ -94,7 +94,12 @@ const stubs = {
       '<div class="mock-form-modal" :data-visible="visible ? \'1\' : \'0\'" :data-resource="resourceType" :data-clusters="clusters.length" />',
     props: ['visible', 'editingConfig', 'clusters', 'resourceType'],
   },
-  VersionManagementModal: { template: '<div class="mock-version-modal" />', props: ['open'] },
+  VersionManagementModal: {
+    name: 'MockVersionManagementModal',
+    template: '<div class="mock-version-modal" v-if="open" />',
+    props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'canPublish'],
+    emits: ['update:open', 'version-change', 'published', 'publish-requested'],
+  },
   ADrawer: { template: '<div class="mock-drawer"><slot /></div>', props: ['open', 'title'] },
   ADescriptions: { template: '<div class="mock-desc"><slot /></div>', props: ['column', 'bordered'] },
   ADescriptionsItem: { template: '<div class="mock-desc-item"><slot /></div>', props: ['label'] },
@@ -282,5 +287,73 @@ describe('ClusterGlobalRules.vue — 源码守卫（D6 收敛 / H2 白名单删�
   it('手写 modal（Teleport + PluginSelector 直挂）已移除', () => {
     expect(SRC).not.toContain('Teleport')
     expect(SRC).not.toContain('PluginSelector')
+  })
+})
+
+// ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路 publishByRecord） ──
+describe('ClusterGlobalRules.vue — 版本管理恢复出口条（canPublish → 既有发布链路）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters/1/global_rules') return Promise.resolve({ data: { items: FOUR_STATE_ITEMS } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  /** 发布链路入口由父页面注入（openPublishModal prop），此处直接捕获该 mock 以断言上下文 */
+  async function mountTabWithPublish(publishResult: number[]) {
+    const openPublishModal = vi.fn().mockResolvedValue(publishResult)
+    const w = mount(ClusterGlobalRules, {
+      props: {
+        cluster: reactive(makeCluster([FOUR_STATE_ITEMS[3]])),
+        clusters: [makeCluster([FOUR_STATE_ITEMS[3]])],
+        openPublishModal,
+        availablePlugins: [],
+        loadAvailablePlugins: vi.fn().mockResolvedValue(undefined),
+      },
+      global: { stubs },
+    })
+    await flushPromises()
+    return { w, openPublishModal }
+  }
+
+  async function openVersionModal(w: any) {
+    const vmBtn = w.findAll('.plugin-config-card button').find((b: any) => b.text() === '版本管理')!
+    await vmBtn.trigger('click')
+    await flushPromises()
+    return w.findComponent({ name: 'MockVersionManagementModal' })
+  }
+
+  it('版本管理弹窗收到 can-publish=true（恢复出口条可见）', async () => {
+    const { w } = await mountTabWithPublish([])
+    const vmModal = await openVersionModal(w)
+    expect(vmModal.exists()).toBe(true)
+    expect(vmModal.props('canPublish')).toBe(true)
+    w.unmount()
+  })
+
+  it('出口条 publish-requested → 以版本弹窗上下文复用既有发布链路；完成后刷新列表并重开版本弹窗', async () => {
+    vi.mocked(executePublish).mockImplementationOnce(async (opts: any) => {
+      await opts.refreshFn()
+    })
+    const { w, openPublishModal } = await mountTabWithPublish([7])
+    const vmModal = await openVersionModal(w)
+
+    vmModal.vm.$emit('publish-requested')
+    await flushPromises()
+
+    // 复用既有链路：发布确认（父页面注入）收到版本弹窗上下文（gr-published @ cluster 1，全局规则无 M5 提示行）
+    expect(openPublishModal).toHaveBeenCalledWith('发布全局规则: gr-published', 1)
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布全局规则: gr-published',
+        apiEndpoint: '/clusters/1/global_rules/4/publish',
+        nodeIds: [7],
+      }),
+    )
+    // 链路内置刷新（refreshFn → loadItems）+ 重开版本弹窗（重开触发 open watch 重载版本列表并复位出口条）
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/global_rules')
+    expect(w.find('.mock-version-modal').exists()).toBe(true)
+    w.unmount()
   })
 })

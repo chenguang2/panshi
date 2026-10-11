@@ -2,11 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
+import { executePublish } from '@/composables/useClusterUtils'
 
 const mockApiGet = vi.fn()
 
 vi.mock('@/api', () => ({
   default: { get: (...args: any[]) => mockApiGet(...args) },
+}))
+
+// 出口条接线测试：executePublish 打桩即可断言「复用既有发布链路」；本文件其余用例不触及删除链路
+vi.mock('@/composables/useClusterUtils', () => ({
+  executePublish: vi.fn().mockResolvedValue(undefined),
+  showDeleteConfirm: vi.fn(),
+  executeDeleteWithProgress: vi.fn().mockResolvedValue(undefined),
+  deletePluginConfigWithReferenceCheck: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -21,7 +30,18 @@ const stubs = {
     template: '<div class="mock-form-modal" />',
     props: ['visible', 'editingConfig', 'clusters'],
   },
-  VersionManagementModal: { template: '<div class="mock-version-modal" />' },
+  VersionManagementModal: {
+    name: 'MockVersionManagementModal',
+    template: '<div class="mock-version-modal" v-if="open" />',
+    props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'canPublish'],
+    emits: ['update:open', 'version-change', 'published', 'publish-requested'],
+  },
+  PublishConfirmModal: {
+    name: 'MockPublishConfirmModal',
+    template: '<div class="mock-publish-modal" v-if="visible" />',
+    props: ['visible', 'title', 'clusterId', 'currentVersion'],
+    emits: ['confirm', 'cancel', 'update:visible'],
+  },
 }
 
 const MOCK_DATA = {
@@ -145,5 +165,64 @@ describe('PluginConfigList.vue', () => {
     expect(countSpan).toBeDefined()
     // Should show server totalCount (99), not items.length (1)
     expect(countSpan!.text()).toContain('99')
+  })
+
+  // ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路） ──
+
+  async function mountList() {
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  async function openVersionModal(wrapper: any) {
+    const card = wrapper.findAll('.pc-card').find((c: any) => c.text().includes('rate-limit-config'))
+    const vmBtn = card.findAll('button').find((b: any) => b.text() === '版本管理')
+    await vmBtn.trigger('click')
+    await flushPromises()
+    return wrapper.findComponent({ name: 'MockVersionManagementModal' })
+  }
+
+  it('版本管理弹窗收到 can-publish=true（恢复出口条可见）', async () => {
+    const w = await mountList()
+    const vmModal = await openVersionModal(w)
+    expect(vmModal.exists()).toBe(true)
+    expect(vmModal.props('canPublish')).toBe(true)
+    w.unmount()
+  })
+
+  it('出口条 publish-requested → 以版本弹窗上下文走既有发布链路；成功后刷新列表并重开版本弹窗', async () => {
+    vi.mocked(executePublish).mockImplementationOnce(async (opts: any) => {
+      await opts.refreshFn()
+    })
+    const w = await mountList()
+    const vmModal = await openVersionModal(w)
+
+    vmModal.vm.$emit('publish-requested')
+    await flushPromises()
+
+    // 版本弹窗让位给发布确认弹窗，发布上下文 = 弹窗资源（rate-limit-config @ cluster 1）
+    expect(w.find('.mock-publish-modal').exists()).toBe(true)
+    const vm: any = w.vm
+    expect(vm.publishTitle).toBe('发布插件组: rate-limit-config')
+    expect(vm.publishClusterId).toBe(1)
+
+    w.findComponent({ name: 'MockPublishConfirmModal' }).vm.$emit('confirm', [7])
+    await flushPromises()
+
+    expect(executePublish).toHaveBeenCalledTimes(1)
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布插件组: rate-limit-config',
+        apiEndpoint: '/clusters/1/plugin_configs/1/publish',
+        nodeIds: [7],
+      }),
+    )
+    // refreshFn：列表已刷新 + 版本弹窗重开（重开触发既有 open watch 重载版本列表）
+    const listLoads = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/plugin_configs').length
+    expect(listLoads).toBeGreaterThanOrEqual(2)
+    expect(w.find('.mock-version-modal').exists()).toBe(true)
+    w.unmount()
   })
 })

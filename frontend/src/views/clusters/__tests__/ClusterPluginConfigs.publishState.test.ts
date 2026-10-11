@@ -16,7 +16,16 @@ vi.mock('@/api', () => ({
 // 集群子页四态接入（M1/M4）与主页面共用 PublishStatusTag（pending 为显式 prop），
 // 这里钉住 ClusterPluginConfigs 的 props 接线：后端新字段必须透传到组件
 import ClusterPluginConfigs from '../ClusterPluginConfigs.vue'
+import { executePublish } from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
+
+// 发布链路打桩：出口条接线测试断言「复用既有发布链路（publishByRecord → executePublish）」
+vi.mock('@/composables/useClusterUtils', () => ({
+  executePublish: vi.fn().mockResolvedValue(undefined),
+  showDeleteConfirm: vi.fn(),
+  executeDeleteWithProgress: vi.fn().mockResolvedValue(undefined),
+  deletePluginConfigWithReferenceCheck: vi.fn(),
+}))
 
 function makeCluster(pluginConfigs: unknown[]): Cluster {
   return {
@@ -80,7 +89,12 @@ const FOUR_STATE_ITEMS = [
 
 const stubs = {
   PluginConfigViewDrawer: { template: '<div class="mock-view-drawer" />', props: ['visible'] },
-  VersionManagementModal: { template: '<div class="mock-version-modal" />' },
+  VersionManagementModal: {
+    name: 'MockVersionManagementModal',
+    template: '<div class="mock-version-modal" v-if="open" />',
+    props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'canPublish'],
+    emits: ['update:open', 'version-change', 'published', 'publish-requested'],
+  },
   PluginSelector: { template: '<div class="plugin-selector-stub" />', props: ['modelValue', 'plugins'] },
   AModal: { template: '<div class="mock-amodal"><slot /><slot name="footer" /></div>', props: ['open', 'title'] },
   ATabs: { template: '<div class="mock-tabs"><slot /></div>', props: ['activeKey'] },
@@ -96,13 +110,14 @@ const stubs = {
     props: ['value', 'rows'],
   },
   AButton: {
-    template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>',
+    // 透传原生事件：模板 @click.stop 修饰符需要真实 Event 对象（与 ClusterGlobalRules.test.ts 同款桩）
+    template: '<button class="mock-btn" @click="$emit(\'click\', $event)"><slot /></button>',
     props: ['type', 'size', 'danger', 'loading'],
   },
   ATag: { template: '<span class="mock-atag"><slot /></span>', props: ['color'] },
-  EyeOutlined: { template: '<i class="i-eye" />' },
-  EditOutlined: { template: '<i class="i-edit" />' },
-  DeleteOutlined: { template: '<i class="i-delete" />' },
+  EyeOutlined: { template: '<i class="i-eye" />', props: [] },
+  EditOutlined: { template: '<i class="i-edit" />', props: [] },
+  DeleteOutlined: { template: '<i class="i-delete" />', props: [] },
 }
 
 describe('ClusterPluginConfigs.vue — 发布状态四态接线（2.3，与主页面共用 PublishStatusTag）', () => {
@@ -206,5 +221,73 @@ describe('ClusterPluginConfigs.vue — 加载失败态与重试（A3，与全局
     expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/plugin_configs')
     expect(w.find('.load-error-state').exists()).toBe(false)
     expect(w.findAll('.plugin-config-card').length).toBe(FOUR_STATE_ITEMS.length)
+  })
+})
+
+// ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路 publishByRecord） ──
+describe('ClusterPluginConfigs.vue — 版本管理恢复出口条（canPublish → 既有发布链路）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters/1/plugin_configs') return Promise.resolve({ data: { items: FOUR_STATE_ITEMS } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  /** 发布链路入口由父页面注入（openPublishModal prop），此处直接捕获该 mock 以断言上下文 */
+  async function mountTabWithPublish(publishResult: number[]) {
+    const openPublishModal = vi.fn().mockResolvedValue(publishResult)
+    const w = mount(ClusterPluginConfigs, {
+      props: {
+        cluster: reactive(makeCluster([FOUR_STATE_ITEMS[3]])),
+        clusters: [makeCluster([FOUR_STATE_ITEMS[3]])],
+        openPublishModal,
+        availablePlugins: [],
+        loadAvailablePlugins: vi.fn().mockResolvedValue(undefined),
+      },
+      global: { stubs },
+    })
+    await flushPromises()
+    return { w, openPublishModal }
+  }
+
+  async function openVersionModal(w: any) {
+    const vmBtn = w.findAll('.plugin-config-card button').find((b: any) => b.text() === '版本管理')!
+    await vmBtn.trigger('click')
+    await flushPromises()
+    return w.findComponent({ name: 'MockVersionManagementModal' })
+  }
+
+  it('版本管理弹窗收到 can-publish=true（恢复出口条可见）', async () => {
+    const { w } = await mountTabWithPublish([])
+    const vmModal = await openVersionModal(w)
+    expect(vmModal.exists()).toBe(true)
+    expect(vmModal.props('canPublish')).toBe(true)
+    w.unmount()
+  })
+
+  it('出口条 publish-requested → 以版本弹窗上下文复用既有发布链路；完成后刷新列表并重开版本弹窗', async () => {
+    vi.mocked(executePublish).mockImplementationOnce(async (opts: any) => {
+      await opts.refreshFn()
+    })
+    const { w, openPublishModal } = await mountTabWithPublish([7])
+    const vmModal = await openVersionModal(w)
+
+    vmModal.vm.$emit('publish-requested')
+    await flushPromises()
+
+    // 复用既有链路：发布确认（父页面注入）收到版本弹窗上下文（pg-published @ cluster 1，M5 版本提示）
+    expect(openPublishModal).toHaveBeenCalledWith('发布插件组: pg-published', 1, { currentVersion: 7 })
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布插件组: pg-published',
+        apiEndpoint: '/clusters/1/plugin_configs/4/publish',
+        nodeIds: [7],
+      }),
+    )
+    // 链路内置刷新（refreshFn → loadItems）+ 重开版本弹窗（重开触发 open watch 重载版本列表并复位出口条）
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/plugin_configs')
+    expect(w.find('.mock-version-modal').exists()).toBe(true)
+    w.unmount()
   })
 })

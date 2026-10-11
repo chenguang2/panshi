@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
-import { showDeleteConfirm } from '@/composables/useClusterUtils'
+import { executePublish, showDeleteConfirm } from '@/composables/useClusterUtils'
 import { message } from 'ant-design-vue'
 
 const mockApiGet = vi.fn()
@@ -37,8 +37,18 @@ const stubs = {
     props: ['visible', 'editingConfig', 'clusters', 'resourceType'],
   },
   GlobalRuleViewDrawer: { template: '<div class="mock-view-drawer" />', props: ['visible'] },
-  VersionManagementModal: { template: '<div class="mock-version-modal" />', props: ['open', 'title'] },
-  PublishConfirmModal: { template: '<div class="mock-publish-modal" />', props: ['visible', 'title'] },
+  VersionManagementModal: {
+    name: 'MockVersionManagementModal',
+    template: '<div class="mock-version-modal" v-if="open" />',
+    props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'canPublish'],
+    emits: ['update:open', 'version-change', 'published', 'publish-requested'],
+  },
+  PublishConfirmModal: {
+    name: 'MockPublishConfirmModal',
+    template: '<div class="mock-publish-modal" v-if="visible" />',
+    props: ['visible', 'title', 'clusterId'],
+    emits: ['confirm', 'cancel', 'update:visible'],
+  },
 }
 
 const MOCK_DATA = {
@@ -383,5 +393,57 @@ describe('GlobalRuleList.vue', () => {
           '全局规则作用于集群「生产集群」的全部路由；勾选 Edge 删除并执行后，所有路由将立即失去这组插件配置',
       }),
     )
+  })
+
+  // ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路） ──
+
+  async function openVersionModal(wrapper: any) {
+    const card = cardByName(wrapper, 'global-rate-limit')!
+    const vmBtn = card.findAll('button').find((b: any) => b.text() === '版本管理')!
+    await vmBtn.trigger('click')
+    await flushPromises()
+    return wrapper.findComponent({ name: 'MockVersionManagementModal' })
+  }
+
+  it('版本管理弹窗收到 can-publish=true（恢复出口条可见）', async () => {
+    const w = await mountWithItems(MOCK_DATA.items)
+    const vmModal = await openVersionModal(w)
+    expect(vmModal.exists()).toBe(true)
+    expect(vmModal.props('canPublish')).toBe(true)
+    w.unmount()
+  })
+
+  it('出口条 publish-requested → 以版本弹窗上下文走既有发布链路；成功后刷新列表并重开版本弹窗', async () => {
+    vi.mocked(executePublish).mockImplementationOnce(async (opts: any) => {
+      await opts.refreshFn()
+    })
+    const w = await mountWithItems(MOCK_DATA.items)
+    const vmModal = await openVersionModal(w)
+
+    vmModal.vm.$emit('publish-requested')
+    await flushPromises()
+
+    // 版本弹窗让位给发布确认弹窗，发布上下文 = 弹窗资源（global-rate-limit @ cluster 1）
+    expect(w.find('.mock-publish-modal').exists()).toBe(true)
+    const vm: any = w.vm
+    expect(vm.publishTitle).toBe('发布全局规则: global-rate-limit')
+    expect(vm.publishClusterId).toBe(1)
+
+    w.findComponent({ name: 'MockPublishConfirmModal' }).vm.$emit('confirm', [7])
+    await flushPromises()
+
+    expect(executePublish).toHaveBeenCalledTimes(1)
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布全局规则: global-rate-limit',
+        apiEndpoint: '/clusters/1/global_rules/1/publish',
+        nodeIds: [7],
+      }),
+    )
+    // refreshFn：列表已刷新 + 版本弹窗重开（重开触发既有 open watch 重载版本列表）
+    const listLoads = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/global_rules').length
+    expect(listLoads).toBeGreaterThanOrEqual(2)
+    expect(w.find('.mock-version-modal').exists()).toBe(true)
+    w.unmount()
   })
 })

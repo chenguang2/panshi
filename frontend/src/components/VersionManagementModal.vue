@@ -85,7 +85,12 @@
                       <button class="btn btn-sm btn-ghost" @click="copyConfig">
                         {{ resourceType === 'edge_env' ? '复制 YAML' : '复制JSON' }}
                       </button>
-                      <button class="btn btn-sm btn-primary" @click="handleRepublish">
+                      <button
+                        class="btn btn-sm btn-primary"
+                        @click="handleRepublish"
+                        :disabled="selectedVersionData.version === currentVersion"
+                        :title="selectedVersionData.version === currentVersion ? '当前版本无需恢复' : ''"
+                      >
                         {{ resourceType === 'edge_env' ? '加载到编辑器' : '恢复此版本配置（不会自动发布）' }}
                       </button>
                       <button
