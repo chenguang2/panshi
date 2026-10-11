@@ -164,6 +164,7 @@ COLUMN_MIGRATIONS = [
     ("ps_upstream", "last_publish_status", "VARCHAR(16)"),
     ("ps_plugin_config", "last_publish_status", "VARCHAR(16)"),
     ("ps_global_rule", "last_publish_status", "VARCHAR(16)"),
+    ("ps_plugin_metadata", "last_publish_status", "VARCHAR(16)"),
 ]
 
 

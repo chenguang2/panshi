@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -41,12 +42,17 @@ vi.mock('@/composables/useClusterUtils', () => ({
 
 const stubs = {
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
-  VersionManagementModal: { template: '<div class="mock-version-modal" />' },
+  VersionManagementModal: {
+    name: 'MockVersionManagementModal',
+    template: '<div class="mock-version-modal" v-if="open" />',
+    props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'canPublish'],
+    emits: ['update:open', 'version-change', 'published', 'publish-requested'],
+  },
   PublishConfirmModal: {
     name: 'PublishConfirmModal',
     template: '<div class="mock-publish-modal" v-if="visible" />',
     props: ['visible', 'title', 'clusterId'],
-    emits: ['confirm', 'update:visible'],
+    emits: ['confirm', 'cancel', 'update:visible'],
   },
   'a-modal': {
     template: '<div v-if="open"><slot /><slot name="footer" /></div>',
@@ -66,18 +72,28 @@ const MOCK_DATA = {
       plugin_name: 'jwt-auth',
       cluster_id: 1,
       cluster_name: '生产集群',
+      cluster_group_name: '',
       config_data: { secret: 'abc' },
       current_version: 3,
+      created_at: '2024-12-31T00:00:00Z',
       updated_at: '2025-01-01T00:00:00Z',
+      published_at: '2025-01-02T03:04:05Z',
+      pending_publish: false,
+      last_publish_status: null,
     },
     {
       id: 2,
       plugin_name: 'key-auth',
       cluster_id: 2,
       cluster_name: '测试集群',
+      cluster_group_name: '',
       config_data: {},
       current_version: null,
+      created_at: '2024-12-31T00:00:00Z',
       updated_at: null,
+      published_at: null,
+      pending_publish: false,
+      last_publish_status: null,
     },
   ],
 }
@@ -327,6 +343,122 @@ describe('PluginMetadataList.vue 卡片操作 → composable 接线', () => {
       }),
     )
     expect((wrapper.vm as any).publishVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  // ── 2.1 状态展示收敛：PublishStatusTag 四态单一表达 ──
+
+  it('卡片状态为 PublishStatusTag 单一表达：publishedAt 用后端回查值（非 updated_at），pending/lastPublishStatus 显式传入', async () => {
+    const wrapper = await mountPage()
+    const tags = wrapper.findAllComponents(PublishStatusTag)
+    expect(tags.length).toBe(2)
+    expect(tags[0].props('version')).toBe(3)
+    // 回查值 2025-01-02T03:04:05Z，不是 updated_at 2025-01-01T00:00:00Z
+    expect(tags[0].props('publishedAt')).toBe('2025-01-02T03:04:05Z')
+    expect(tags[0].props('pending')).toBe(false)
+    expect(tags[0].props('lastPublishStatus')).toBe(null)
+    // 无 badge 与状态标签双显
+    expect(wrapper.find('.pml-card .badge').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('待发布/部分失败卡片：pending 与 lastPublishStatus 原样透传（四态判定由共享组件承载）', async () => {
+    responses.set('/plugin_metadata', {
+      data: {
+        total: 1,
+        page: 1,
+        page_size: 500,
+        items: [
+          {
+            id: 9,
+            plugin_name: 'jwt-auth',
+            cluster_id: 1,
+            cluster_name: '生产集群',
+            cluster_group_name: '',
+            config_data: {},
+            current_version: 2,
+            created_at: '2024-12-31T00:00:00Z',
+            updated_at: '2025-01-06T00:00:00Z',
+            published_at: '2025-01-05T06:07:08Z',
+            pending_publish: true,
+            last_publish_status: 'partial',
+          },
+        ],
+      },
+    })
+    const wrapper = await mountPage()
+    const tags = wrapper.findAllComponents(PublishStatusTag)
+    expect(tags.length).toBe(1)
+    expect(tags[0].props('publishedAt')).toBe('2025-01-05T06:07:08Z')
+    expect(tags[0].props('pending')).toBe(true)
+    expect(tags[0].props('lastPublishStatus')).toBe('partial')
+    expect(wrapper.text()).toContain('发布未完全生效')
+    wrapper.unmount()
+  })
+
+  // ── 2.3 「v未发布」修复 ──
+
+  it('查看抽屉版本行：无发布版本显示「未发布」，不渲染「v未发布」拼接串', async () => {
+    const wrapper = await mountPage()
+    const card = wrapper.findAll('.pml-card')[1] // key-auth：current_version=null
+    const viewBtn = card.findAll('button').find((b) => b.text().trim() === '查看')
+    expect(viewBtn).toBeTruthy()
+    await viewBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain('v未发布')
+    expect(wrapper.text()).toContain('未发布')
+    wrapper.unmount()
+  })
+
+  // ── 4.1/4.2 版本恢复出口条接线 ──
+
+  it('版本管理弹窗传 can-publish=true；出口条 publish-requested → 打开该元数据的发布确认弹窗（弹窗上下文资源）', async () => {
+    const wrapper = await mountPage()
+    await cardButton(wrapper, '版本管理').trigger('click')
+    await wrapper.vm.$nextTick()
+    const vmModal = wrapper.findComponent({ name: 'MockVersionManagementModal' })
+    expect(vmModal.exists()).toBe(true)
+    expect(vmModal.props('canPublish')).toBe(true)
+    expect(vmModal.props('clusterId')).toBe(1)
+    expect(vmModal.props('resourceName')).toBe('jwt-auth')
+
+    vmModal.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+    // 版本弹窗让位给发布确认弹窗（同层 overlay，UpstreamList 同款先例）
+    expect(wrapper.find('.mock-version-modal').exists()).toBe(false)
+    expect(wrapper.find('.mock-publish-modal').exists()).toBe(true)
+    expect((wrapper.vm as any).publishTitle).toBe('发布插件元数据: jwt-auth')
+    expect((wrapper.vm as any).publishClusterId).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('出口条发布 confirm → executePublish 既有链路；成功后刷新页面列表并重开版本弹窗重载版本列表', async () => {
+    mockExecutePublish.mockImplementationOnce(async (opts: any) => {
+      await opts.refreshFn()
+    })
+    const wrapper = await mountPage()
+    await cardButton(wrapper, '版本管理').trigger('click')
+    await wrapper.vm.$nextTick()
+    const vmModal = wrapper.findComponent({ name: 'MockVersionManagementModal' })
+    vmModal.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+
+    wrapper.findComponent({ name: 'PublishConfirmModal' }).vm.$emit('confirm', [10, 11])
+    await flushPromises()
+
+    expect(mockExecutePublish).toHaveBeenCalledTimes(1)
+    expect(mockExecutePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布插件元数据: jwt-auth',
+        apiEndpoint: '/clusters/1/plugin-metadata/jwt-auth/publish',
+        nodeIds: [10, 11],
+      }),
+    )
+    // refreshFn：页面列表已刷新（挂载 1 次 + 发布后 ≥1 次）
+    const listLoads = mockApiGet.mock.calls.filter((args) => args[0] === '/plugin_metadata').length
+    expect(listLoads).toBeGreaterThanOrEqual(2)
+    // 版本弹窗已重开（重设 open 触发既有 watch → loadHistory 重载版本列表）
+    expect(wrapper.find('.mock-version-modal').exists()).toBe(true)
     wrapper.unmount()
   })
 })

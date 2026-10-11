@@ -22,18 +22,30 @@ async def list_plugin_metadata(cluster_id: int, db: AsyncSession = Depends(get_d
         select(PluginMetadata).where(PluginMetadata.cluster_id == cluster_id).order_by(PluginMetadata.id)
     )
     items = result.scalars().all()
-    return {
-        "total": len(items),
-        "items": [{
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending 推导收敛在
+    # edge_sync 共享单点，与跨集群 /plugin_metadata 端点同口径，禁止各自实现）
+    pub_map = await edge_sync.load_publish_time_map(db, "plugin_metadata", [i.id for i in items])
+    resp_items = []
+    for item in items:
+        ts = pub_map.get(item.id)
+        resp_items.append({
             "id": item.id,
             "cluster_id": item.cluster_id,
             "plugin_name": item.plugin_name,
             "metadata": json.loads(item.config_data) if item.config_data else {},
             "current_version": item.current_version,
             "created_at": item.created_at.isoformat() + 'Z' if item.created_at else None,
-            "updated_at": item.updated_at.isoformat() + 'Z' if item.updated_at else None
-        } for item in items]
-    }
+            "updated_at": item.updated_at.isoformat() + 'Z' if item.updated_at else None,
+            "published_at": ts.isoformat() + 'Z' if ts else None,
+            "pending_publish": edge_sync.derive_pending_publish(
+                current_version=item.current_version,
+                updated_at=item.updated_at,
+                published_at=ts,
+                last_publish_status=item.last_publish_status,
+            ),
+            "last_publish_status": item.last_publish_status,
+        })
+    return {"total": len(items), "items": resp_items}
 
 
 # ─── 创建 ────────────────────────────────────────────
@@ -227,21 +239,17 @@ async def rollback_plugin_metadata(
 ):
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
-    cv_result = await db.execute(
-        select(ConfigVersion).where(
-            ConfigVersion.resource_type == "plugin_metadata",
-            ConfigVersion.resource_id == item.id,
-            ConfigVersion.version == version
-        )
-    )
-    cv = cv_result.scalar_one_or_none()
-    if not cv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="指定版本不存在")
+    async def _restore(_db, meta, cfg):
+        # 版本快照 config 是发布载荷 {"plugin_name", "config_data"} 包装，恢复取
+        # 内层 config_data（用与创建/更新端点一致的 json.dumps 默认序列化，保证
+        # 「回滚到当前版本」时 config_data 同文不产生脏属性 → no-op 语义成立）。
+        # partial 清除由 rollback_resource 共享单点能力探测完成（不在此特判）。
+        inner = cfg.get("config_data") if isinstance(cfg, dict) else None
+        meta.config_data = json.dumps(inner if inner is not None else cfg)
 
-    item.config_data = cv.config
-    item.current_version = version
-    await db.commit()
-
+    await edge_sync.rollback_resource(
+        db, PluginMetadata, resource_type="plugin_metadata", resource_id=item.id, version=version,
+        not_found_detail="插件配置不存在", cluster_id=cluster_id, restore_fn=_restore)
     return {"message": f"插件 {plugin_name} 已回滚到版本 v{version}", "version": version}
 
 
@@ -255,19 +263,23 @@ async def delete_plugin_metadata_version(
 ):
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
-    cv_result = await db.execute(
-        select(ConfigVersion).where(
-            ConfigVersion.id == version_id,
-            ConfigVersion.resource_type == "plugin_metadata",
-            ConfigVersion.resource_id == item.id
-        )
-    )
-    cv = cv_result.scalar_one_or_none()
-    if not cv:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="版本不存在")
-    if item.current_version == cv.version:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法删除当前版本")
+    # 守卫：无法删除当前版本（共享 delete_config_version 只管存在性 404 + 删除，
+    # 资源级守卫在调用方保留既有语义：400 无法删除当前版本 / 404 版本不存在）
+    if item.current_version is not None:
+        is_current = (
+            await db.execute(
+                select(ConfigVersion.id).where(
+                    ConfigVersion.id == version_id,
+                    ConfigVersion.version == item.current_version,
+                    ConfigVersion.resource_type == "plugin_metadata",
+                    ConfigVersion.resource_id == item.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if is_current is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法删除当前版本")
 
-    await db.delete(cv)
-    await db.commit()
+    await edge_sync.delete_config_version(
+        db, resource_type="plugin_metadata", resource_id=item.id,
+        history_id=version_id, detail="版本不存在")
     return {"message": "版本已删除"}

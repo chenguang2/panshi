@@ -43,21 +43,12 @@
             <div class="plugin-info">
               <div class="plugin-name">{{ item.plugin_name }}</div>
               <div class="plugin-right">
-                <div>
-                  <span v-if="item.current_version" class="badge badge-success"
-                    ><span class="status-dot online"></span>已发布</span
-                  >
-                  <span v-else class="badge badge-neutral">未发布</span>
-                </div>
-                <div class="plugin-meta" :style="{ color: item.current_version ? 'var(--success)' : 'var(--muted)' }">
-                  {{
-                    item.current_version && item.updated_at
-                      ? `v${item.current_version} · ${formatDate(item.updated_at)}`
-                      : item.current_version
-                        ? `v${item.current_version} · 未同步`
-                        : ''
-                  }}
-                </div>
+                <PublishStatusTag
+                  :version="item.current_version"
+                  :published-at="item.published_at"
+                  :pending="item.pending_publish"
+                  :last-publish-status="item.last_publish_status"
+                />
               </div>
             </div>
             <div class="plugin-actions">
@@ -83,7 +74,10 @@
       <div v-if="viewingPlugin" class="plugin-detail">
         <a-descriptions :column="1" bordered>
           <a-descriptions-item label="插件名称">{{ viewingPlugin.plugin_name }}</a-descriptions-item>
-          <a-descriptions-item label="版本">v{{ viewingPlugin.current_version || '未发布' }}</a-descriptions-item>
+          <a-descriptions-item label="版本">
+            <span v-if="viewingPlugin.current_version">v{{ viewingPlugin.current_version }}</span>
+            <span v-else style="color: var(--muted)">未发布</span>
+          </a-descriptions-item>
           <a-descriptions-item label="状态">
             <span v-if="viewingPlugin.is_published" class="badge badge-success"
               ><span class="status-dot online"></span>已发布</span
@@ -112,9 +106,11 @@
       :resource-id="null"
       :cluster-id="clusterId"
       :resource-name="versionModalPluginName"
+      :can-publish="true"
       @edit="handleVersionManagementEdit"
       @version-change="handleVersionChange"
       @published="handleVersionPublished"
+      @publish-requested="handleVmPublishRequested"
     />
 
     <PublishConfirmModal
@@ -128,7 +124,6 @@
 </template>
 
 <script setup lang="ts">
-import { showOverlayModal } from '@/composables/useOverlayModal'
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { EyeOutlined, EditOutlined, DeleteOutlined, CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
@@ -136,13 +131,10 @@ import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
+import PublishStatusTag from './PublishStatusTag.vue'
 import { formatDate } from '@/utils/format'
-import {
-  showDeleteConfirm,
-  buildDeleteProgressContent,
-  executePublish,
-  routeLabel,
-} from '@/composables/useClusterUtils'
+import type { PluginMetadata } from '@/types'
+import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 
 interface Plugin {
   name: string
@@ -153,16 +145,9 @@ interface Plugin {
   schema: Record<string, any>
 }
 
-interface ConfiguredPlugin {
-  id: number
-  cluster_id: number
-  plugin_name: string
-  metadata: Record<string, any>
-  version: number
-  current_version: number | null
+interface ConfiguredPlugin extends PluginMetadata {
+  version: number | null
   is_published: boolean
-  created_at: string
-  updated_at: string
 }
 
 const props = defineProps<{
@@ -362,85 +347,21 @@ const deletePlugin = (item: ConfiguredPlugin) => {
     apiEndpoint: `/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`,
     nodes: props.nodes,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
-      const logs: string[] = []
-      const addLog = (text: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      const progress: { percent: number; status: 'active' | 'success' | 'exception' } = { percent: 0, status: 'active' }
-
-      const modal = showOverlayModal({
+      await executeDeleteWithProgress({
         title: `删除插件元数据: ${item.plugin_name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okDisabled: true,
-        showCancel: false,
-      })
-
-      const update = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-      addLog(`开始删除插件元数据: ${item.plugin_name}`)
-      progress.percent = 20
-      update()
-      await new Promise((r) => setTimeout(r, 400))
-
-      try {
-        const response = await api.delete(`/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`, {
-          data: { delete_db: deleteDb, delete_edge: deleteEdge, node_ids: nodeIds.length > 0 ? nodeIds : undefined },
-        })
-        const data = response.data
-        progress.percent = 60
-        const dbResult = data.results?.find((r: any) => r.scope === 'database')
-        if (dbResult) {
-          addLog('正在从数据库删除...')
-          addLog(`数据库: ${dbResult.message || '已删除'}`)
-        }
-        addLog('')
-        update()
-
-        const edgeResults = data.results?.filter((r: any) => r.scope === 'edge') || []
-        if (edgeResults.length > 0) {
-          addLog('正在从 Edge 节点同步删除...')
-          progress.percent = 80
-          update()
-          addLog('Edge 节点同步删除结果:')
-          let ok = 0,
-            fail = 0
-          for (const r of edgeResults) {
-            if (r.status === 'success') ok++
-            else fail++
-            const rl = routeLabel(r.route)
-            addLog(
-              `  ${r.node}: ${r.status === 'success' ? '✅' : '❌'}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
-            )
+        apiEndpoint: `/clusters/${props.clusterId}/plugin-metadata/${item.plugin_name}`,
+        deleteDb,
+        deleteEdge,
+        nodeIds,
+        refreshFn: async () => {
+          await Promise.all([loadConfiguredPlugins(), loadPlugins()])
+        },
+        afterDelete: async () => {
+          if (viewingPlugin.value?.plugin_name === item.plugin_name) {
+            viewingPlugin.value = null
           }
-          addLog(`总计: ${edgeResults.length} 节点, 成功 ${ok}, 失败 ${fail}`)
-        } else if (deleteEdge) {
-          addLog('集群中没有活跃的 Edge 节点')
-        }
-
-        progress.percent = 100
-        if (edgeResults.some((r: any) => r.status === 'failed')) {
-          progress.status = 'exception'
-          addLog('')
-          addLog(`⚠️ 部分节点删除失败${deleteDb ? '（数据库已删除）' : ''}，请手动清理`)
-        } else {
-          progress.status = 'success'
-          addLog('')
-          addLog('✅ 删除完成!')
-        }
-        update()
-        modal.update({ okDisabled: false })
-
-        if (viewingPlugin.value?.plugin_name === item.plugin_name) {
-          viewingPlugin.value = null
-        }
-        await Promise.all([loadConfiguredPlugins(), loadPlugins()])
-      } catch (error: any) {
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 删除失败: ${error.response?.data?.detail || error.message || '未知错误'}`)
-        update()
-        modal.update({ okDisabled: false })
-      }
+        },
+      })
     },
   })
 }
@@ -462,6 +383,27 @@ const openVersionManagement = (item: ConfiguredPlugin) => {
   versionModalVisible.value = true
 }
 
+// 4.2 版本恢复出口条：以版本弹窗上下文资源（调用侧镜像 ref）复用既有发布链路；
+// 发布成功后刷新列表并重开版本弹窗（重设 open 触发既有 watch → loadHistory 重载版本列表）
+const handleVmPublishRequested = async () => {
+  const name = versionModalPluginName.value
+  if (!name) return
+  versionModalVisible.value = false
+  const nodeIds = await openPublishModal(`发布插件元数据: ${name}`)
+  if (!nodeIds.length) return
+  await executePublish({
+    title: `发布插件元数据: ${name}`,
+    apiEndpoint: `/clusters/${props.clusterId}/plugin-metadata/${name}/publish`,
+    nodeIds,
+    refreshFn: async () => {
+      await loadConfiguredPlugins()
+      if (versionModalPluginName.value === name) {
+        versionModalVisible.value = true
+      }
+    },
+  })
+}
+
 watch(
   () => props.clusterId,
   () => {
@@ -470,6 +412,7 @@ watch(
       viewDrawerVisible.value = false
       editorDrawerVisible.value = false
       versionModalVisible.value = false
+      versionModalPluginName.value = ''
       publishModalVisible.value = false
       loadPlugins()
       loadConfiguredPlugins()
@@ -770,34 +713,6 @@ watch(
   font-size: 12px;
   color: var(--muted);
   margin-top: 4px;
-}
-.plugin-meta {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-.plugin-right {
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.plugin-name {
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.plugin-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-.plugin-meta {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-  min-height: 18px;
 }
 
 .plugin-actions {

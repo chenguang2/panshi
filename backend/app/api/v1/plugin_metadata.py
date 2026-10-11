@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import PluginMetadata, Cluster
 from app.models.user import User, UserCluster
+from app.services import edge_sync
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/plugin_metadata", tags=["plugin_metadata"])
@@ -71,8 +72,14 @@ async def list_all_plugin_metadata(
             cluster_name_map[row[0]] = row[1] or row[2]
             cluster_group_map[row[0]] = row[3] or ""
 
+    # 批量回查最新发布时间 + pending 推导（published_at 回查与 pending 推导收敛在
+    # edge_sync 共享单点，与集群子页端点同口径，禁止各自实现；publish-map 按
+    # resource_id 主键聚合，无跨集群碰撞——键位口径对照 plugin_configs 全局端点先例）
+    pub_map = await edge_sync.load_publish_time_map(db, "plugin_metadata", [r.id for r in items])
+
     resp_items = []
     for r in items:
+        ts = pub_map.get(r.id)
         resp_items.append({
             "id": r.id,
             "cluster_id": r.cluster_id,
@@ -83,6 +90,14 @@ async def list_all_plugin_metadata(
             "current_version": r.current_version,
             "created_at": r.created_at.isoformat() + "Z" if r.created_at else None,
             "updated_at": r.updated_at.isoformat() + "Z" if r.updated_at else None,
+            "published_at": ts.isoformat() + "Z" if ts else None,
+            "pending_publish": edge_sync.derive_pending_publish(
+                current_version=r.current_version,
+                updated_at=r.updated_at,
+                published_at=ts,
+                last_publish_status=r.last_publish_status,
+            ),
+            "last_publish_status": r.last_publish_status,
         })
 
     return {"total": total, "page": page, "page_size": page_size, "items": resp_items}

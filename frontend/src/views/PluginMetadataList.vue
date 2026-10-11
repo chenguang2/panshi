@@ -49,15 +49,12 @@
             <div class="pml-card-name">{{ item.plugin_name }}</div>
           </div>
           <div class="pml-card-meta">
-            <span v-if="item.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="pml-version-text">
-              <template v-if="item.current_version"
-                ><PublishStatusTag :version="item.current_version" :published-at="item.updated_at"
-              /></template>
-            </div>
+            <PublishStatusTag
+              :version="item.current_version"
+              :published-at="item.published_at"
+              :pending="item.pending_publish"
+              :last-publish-status="item.last_publish_status"
+            />
           </div>
         </div>
         <div class="pml-card-actions">
@@ -129,7 +126,10 @@
         <a-descriptions :column="1" bordered size="small">
           <a-descriptions-item label="插件名称">{{ viewingItem.plugin_name }}</a-descriptions-item>
           <a-descriptions-item label="所属集群">{{ viewingItem.cluster_name }}</a-descriptions-item>
-          <a-descriptions-item label="版本">v{{ viewingItem.current_version || '未发布' }}</a-descriptions-item>
+          <a-descriptions-item label="版本">
+            <span v-if="viewingItem.current_version">v{{ viewingItem.current_version }}</span>
+            <span v-else style="color: var(--muted)">未发布</span>
+          </a-descriptions-item>
           <a-descriptions-item label="状态">
             <span v-if="viewingItem.current_version" class="badge badge-success"
               ><span class="status-dot online"></span>已发布</span
@@ -158,8 +158,10 @@
       :resource-id="null"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :can-publish="true"
       @version-change="loadItems"
       @published="loadItems"
+      @publish-requested="onVmPublishRequested"
     />
 
     <PublishConfirmModal
@@ -175,7 +177,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatMonthDayTime as formatDate } from '@/utils/format'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -255,6 +256,8 @@ const publishVisible = ref(false)
 const publishTitle = ref('')
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+/** 本次发布完成后的刷新动作：卡片发布刷新页面列表；版本弹窗出口条发布额外重开弹窗重载版本列表 */
+const publishRefreshFn = ref<() => Promise<void>>(loadItems)
 
 // ——— Version management state ———
 const vmVisible = ref(false)
@@ -416,6 +419,7 @@ function publishItem(item: any) {
   publishingRecord.value = item
   publishClusterId.value = item.cluster_id
   publishTitle.value = `发布插件元数据: ${item.plugin_name}`
+  publishRefreshFn.value = loadItems
   publishVisible.value = true
 }
 
@@ -424,11 +428,12 @@ async function onPublishConfirm(nodeIds: number[]) {
   const item = publishingRecord.value
   if (!item) return
   await executePublish({
-    title: `发布插件元数据: ${item.plugin_name}`,
+    title: publishTitle.value,
     apiEndpoint: `/clusters/${item.cluster_id}/plugin-metadata/${item.plugin_name}/publish`,
     nodeIds,
-    refreshFn: loadItems,
+    refreshFn: publishRefreshFn.value,
   })
+  publishRefreshFn.value = loadItems
 }
 
 // ——— Version management ———
@@ -437,6 +442,24 @@ function openVersionManagement(item: any) {
   vmClusterId.value = item.cluster_id
   vmName.value = item.plugin_name
   vmVisible.value = true
+}
+
+// 4.2 版本恢复出口条：以版本弹窗上下文资源（调用侧镜像 ref）复用既有发布链路；
+// 发布成功后刷新页面列表并重开版本弹窗（重设 open 触发既有 watch → loadHistory 重载版本列表）
+function onVmPublishRequested() {
+  if (!vmName.value || !vmClusterId.value) return
+  const name = vmName.value
+  publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, plugin_name: name }
+  publishClusterId.value = vmClusterId.value
+  publishTitle.value = `发布插件元数据: ${name}`
+  publishRefreshFn.value = async () => {
+    await loadItems()
+    if (vmName.value === name) {
+      vmVisible.value = true
+    }
+  }
+  vmVisible.value = false
+  publishVisible.value = true
 }
 
 onMounted(() => {
@@ -540,13 +563,6 @@ onUnmounted(() => {
   text-align: right;
   flex-shrink: 0;
   margin-left: 12px;
-}
-.pml-version-text {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-family: var(--font-mono);
 }
 .pml-card-actions {
   display: flex;

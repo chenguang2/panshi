@@ -236,6 +236,29 @@ export interface GlobalRule {
   last_publish_status?: string | null
 }
 
+/** 插件元数据（plugin_metadata 资源；集群端点与跨集群 /plugin_metadata 列表共用形状） */
+export interface PluginMetadata {
+  id: number
+  cluster_id?: number
+  cluster_name?: string
+  cluster_group_name?: string
+  plugin_name: string
+  /** 集群端点返回键（跨集群端点同名语义为 config_data） */
+  metadata?: Record<string, unknown>
+  config_data?: Record<string, unknown>
+  current_version?: number | null
+  created_at?: string | null
+  /** 配置最近更新时间（后端 isoformat UTC；pending_publish 推导依据，前端不本地推导） */
+  updated_at?: string | null
+  /** 最近发布时间（后端经 ConfigVersion 历史回查，非 updated_at） */
+  published_at?: string | null
+  /** 待发布（后端经 edge_sync.derive_pending_publish 统一推导，单一事实源） */
+  pending_publish?: boolean
+  /** 上次发布状态（'partial' = 发布未完全生效；NULL = 全部成功/未发布） */
+  last_publish_status?: string | null
+  is_published?: boolean
+}
+
 /** 静态资源（static_resources 资源） */
 export interface StaticResource {
   id: number
