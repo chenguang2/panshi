@@ -74,15 +74,23 @@
 
 ### Requirement: 搜索节点
 
-页面 SHALL 提供搜索输入框，支持按 IP 地址和名称搜索节点。
+页面 SHALL 提供搜索输入框，仅支持按 IP 地址搜索节点（Node 模型无 name 列）。
 
 #### Scenario: 按IP搜索
 - **WHEN** 用户在搜索框输入 IP 地址
 - **THEN** 系统筛选出 IP 匹配的节点
 
-#### Scenario: 按名称搜索
-- **WHEN** 用户在搜索框输入节点名称
-- **THEN** 系统筛选出名称匹配的节点
+#### Scenario: 搜索占位文案如实
+- **WHEN** 独立节点管理页渲染搜索输入框
+- **THEN** 占位文案 SHALL 为「搜索 IP...」（不含「名称」）
+
+#### Scenario: Tab 搜索字段不含名称
+- **WHEN** 统一管理集群节点 Tab 渲染搜索字段下拉
+- **THEN** 选项 SHALL NOT 包含「名称」
+
+#### Scenario: 后端搜索字段声明收敛
+- **WHEN** 处理 `GET /nodes?search=` 请求
+- **THEN** 后端允许的搜索字段 SHALL 仅含 `ip`（`ALLOWED_SEARCH_FIELDS` 不含 `name`）
 
 ### Requirement: 添加节点
 
@@ -178,14 +186,32 @@
 - **THEN** 弹出编辑节点弹窗，预填当前节点信息
 - **AND** 用户修改后提交，系统更新节点并刷新列表
 
-#### Scenario: 删除节点
-- **WHEN** 用户在更多菜单点击"删除"
-- **THEN** 弹出删除确认对话框，包含数据库和 Edge 节点删除选项
-- **AND** 确认后执行删除
+#### Scenario: 删除节点（如实告知单语义确认）
+- **WHEN** 用户在独立节点管理页或统一管理集群节点 Tab 点击"删除"
+- **THEN** 弹出共享的节点删除确认弹窗（无勾选项，确认按钮为危险色），正文如实告知三层后果：
+- **AND** 平台管理记录将被删除（不可恢复，如需恢复须重新添加节点）
+- **AND** 节点机上的 Edge/OpenResty 进程不受影响，将继续运行（脱离平台监控）
+- **AND** 该节点将从下次发布与中继网关白名单中移除
+- **AND** 正文提示「如需先停止流量，请先执行『停止』操作」
+- **AND** 确认后走共享删除进度弹窗执行删除，请求语义为删除平台记录（`delete_db=true, delete_edge=false`）
 
 #### Scenario: 数据库对比
 - **WHEN** 用户在更多菜单点击"数据库对比"
 - **THEN** 打开配置对比 Drawer，展示该节点上配置与本地数据库的差异
+
+#### Scenario: 执行日志不含结构化事件原文
+- **WHEN** SSE 流推送无 line 字段的结构化事件（如 node_start/complete）
+- **THEN** 执行日志展示区 SHALL NOT 显示该事件的 JSON 原文
+- **AND** 依赖该事件的业务状态判定（如 complete）SHALL 不受影响
+
+#### Scenario: 非安装类流式操作展示动作摘要
+- **WHEN** 用户执行「关联新 OpenResty」「添加版本包」「切换版本」等非安装类流式操作并打开结果抽屉
+- **THEN** 抽屉 SHALL 展示动作类摘要（SHALL NOT 套用安装成功/失败徽标与 Nginx 进程卡片的安装态解读）
+
+#### Scenario: 操作失败提示包含具体原因
+- **WHEN** 节点操作或列表加载请求失败且后端返回结构化 detail（含 Pydantic 校验数组）
+- **THEN** 错误提示 SHALL 展示字段定位与原因（统一走 `getApiErrorMessage`）
+- **AND** SHALL NOT 统一显示「操作失败」兜底文案
 
 ### Requirement: 分页
 

@@ -381,3 +381,175 @@ describe('NodeList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
     expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
   })
 })
+
+// ── node-management-ux-batch1 快修行为测试（1.3 / 2.1 / 2.2 / 2.5 / 2.6）────────
+// mock 数据形状沿用本文件 MOCK_NODES（真实 /nodes 响应结构）。
+describe('NodeList.vue batch1 快修', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: MOCK_NODES })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      if (url.startsWith('/clusters/') && url.endsWith('/stats')) {
+        return Promise.resolve({ data: { routes: 20, upstreams: 10, plugin_configs: 5, global_rules: 2 } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  async function mountPage() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('搜索占位文案如实：只提 IP（后端 search 仅按 IP 过滤，spec node-management 搜索节点）', async () => {
+    const wrapper = await mountPage()
+    const input = wrapper.findAll('input').find((i) => i.attributes('placeholder')?.includes('搜索'))
+    expect(input?.attributes('placeholder')).toBe('搜索 IP...')
+    wrapper.unmount()
+  })
+
+  it('删除：确认弹窗为节点专用三层后果形态，确认后走共享进度删除链路（1.3）', async () => {
+    mockApiDelete.mockResolvedValue({
+      data: { message: '节点已删除', results: [{ scope: 'database', status: 'success', message: '记录已删除' }] },
+    })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.handleDelete({
+      id: 1,
+      cluster_id: 1,
+      ip: '10.0.0.1',
+      service_port: 80,
+      management_port: 9180,
+      edge_path: '/usr/local/edge',
+      status: 1,
+    })
+    await wrapper.vm.$nextTick()
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('删除节点 10.0.0.1')
+    expect(text).toContain('节点机上的 Edge/OpenResty 进程不受影响，将继续运行（脱离平台监控）')
+    expect(text).toContain('该节点将从下次发布与中继网关白名单中移除')
+    // 无 scope 勾选框（删除数据库固定为是）
+    expect(document.body.querySelectorAll('input[type="checkbox"]').length).toBe(0)
+
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').replace(/\s/g, '').includes('确认删除'),
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await vi.waitFor(() => expect(mockApiDelete).toHaveBeenCalled(), { timeout: 8000 })
+    // 固定载荷：delete_db=true / delete_edge=false（D2：Edge 不联动删除）
+    expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/nodes/1', {
+      data: { delete_db: true, delete_edge: false, node_ids: undefined },
+      timeout: 300_000,
+    })
+    await vi.waitFor(() => expect(document.body.textContent || '').not.toContain('删除节点 10.0.0.1'), {
+      timeout: 8000,
+    })
+    wrapper.unmount()
+  })
+
+  it('编辑打开时清空全部表单校验错误（2.1：openresty_path 错误不再残留）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openAddModal()
+    vm.handleFormSubmit()
+    await wrapper.vm.$nextTick()
+    expect(Object.keys(vm.formErrors).length, '空表单提交应有校验错误').toBeGreaterThan(0)
+
+    vm.handleEdit({
+      id: 1,
+      cluster_id: 1,
+      ip: '10.0.0.1',
+      service_port: 80,
+      management_port: 9180,
+      edge_path: '/usr/local/edge',
+      openresty_path: '/usr/local/nginx',
+      status: 1,
+    })
+    await wrapper.vm.$nextTick()
+    const residual = Object.keys(vm.formErrors).filter((k: string) => vm.formErrors[k])
+    expect(residual, `编辑打开后不应残留校验错误: ${residual.join(', ')}`).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('表单校验文案对齐模型术语：OpenResty 安装路径（2.3）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openAddModal()
+    vm.handleFormSubmit()
+    await wrapper.vm.$nextTick()
+    expect(vm.formErrors.openresty_path).toBe('请输入 OpenResty 安装路径')
+    wrapper.unmount()
+  })
+
+  it('Pydantic 数组 detail 转成「字段: 原因」中文提示（2.2 / getApiErrorMessage）', async () => {
+    const message = (await import('ant-design-vue')).message
+    const errorSpy = vi.spyOn(message, 'error')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') {
+        return Promise.reject({
+          response: {
+            status: 422,
+            data: { detail: [{ loc: ['body', 'ip'], msg: 'Field required', type: 'missing' }] },
+          },
+        })
+      }
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    await mountPage()
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('ip: Field required'))
+    const calls = errorSpy.mock.calls.map((c) => String(c[0]))
+    expect(calls.join('\n'), '不得出现 [object Object] 或裸 axios 消息').not.toMatch(
+      /object Object|Request failed with status/,
+    )
+    errorSpy.mockRestore()
+  })
+
+  it('双计数收敛：未筛选时筛选栏无计数，状态筛选时显示「筛出 X 个」（2.5）', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.text(), '未筛选时不应在筛选栏显示总数（showTotal 已有）').not.toContain('个节点')
+
+    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
+    expect(statusSelect).toBeDefined()
+    const selectEl = statusSelect!.element as HTMLSelectElement
+    selectEl.value = '1'
+    selectEl.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('筛出 1 个')
+    expect(wrapper.text()).not.toContain('筛出 2 个')
+    wrapper.unmount()
+  })
+
+  it('命令预览无开发机硬编码：无 jboss@ 账号 / id_rsa 密钥，ssh 为最小通用形态（2.6 / D3）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    const cmd = vm.buildInstallCommand(
+      { ip: '10.0.0.1', ssh_port: 22, edge_path: '/usr/local/edge', openresty_path: '/usr/local/nginx' },
+      'install_openresty',
+      { prefix: '/usr/local/nginx' },
+    )
+    expect(cmd).not.toContain('jboss@')
+    expect(cmd).not.toContain('id_rsa')
+    expect(cmd).toContain('ssh -p 22 10.0.0.1')
+    wrapper.unmount()
+  })
+
+  it('动作执行失败回退的本地命令用相对 inventory，无 /home/qcg 绝对路径（2.6）', async () => {
+    mockApiPost.mockResolvedValue({ data: { rc: 0 } })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.executeAction({ id: 1, cluster_id: 1, ip: '10.0.0.1', management_port: 9180 }, 'start', '启动')
+    await flushPromises()
+    await vi.waitFor(() => expect(vm.execResult).toBeTruthy(), { timeout: 5000 })
+    expect(vm.execResult.command).toContain('-i inventory')
+    expect(vm.execResult.command).not.toContain('/home/qcg')
+    wrapper.unmount()
+  })
+})

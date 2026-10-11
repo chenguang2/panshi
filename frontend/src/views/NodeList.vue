@@ -8,14 +8,8 @@
 
     <div class="node-filter-bar">
       <div class="search-input-wrap">
-        <input
-          v-model="searchText"
-          type="text"
-          placeholder="搜索 IP 或名称..."
-          class="form-input"
-          @input="onSearchInput"
-        />
-        <span class="search-icon">🔍</span>
+        <input v-model="searchText" type="text" placeholder="搜索 IP..." class="form-input" @input="onSearchInput" />
+        <span class="search-icon"><SearchOutlined /></span>
       </div>
       <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
@@ -31,8 +25,8 @@
         <option :value="1">运行中</option>
         <option :value="0">已停止</option>
       </select>
-      <span class="text-muted text-sm"
-        >共 {{ statusFilter !== '' && statusFilter !== undefined ? displayedNodes.length : totalCount }} 个节点</span
+      <span v-if="statusFilter !== '' && statusFilter !== undefined" class="text-muted text-sm"
+        >筛出 {{ displayedNodes.length }} 个</span
       >
     </div>
 
@@ -87,12 +81,12 @@
 
           <template v-if="column.key === 'actions'">
             <div class="node-actions-wrap">
-              <button class="btn btn-ghost btn-sm" @click="handleStart(record)">▶ 启动</button>
-              <button class="btn btn-ghost btn-sm" @click="handleStop(record)">⏹ 停止</button>
-              <button class="btn btn-ghost btn-sm" @click="handleReload(record)">⟳ reload</button>
+              <button class="btn btn-ghost btn-sm" @click="handleStart(record)"><PlayCircleOutlined /> 启动</button>
+              <button class="btn btn-ghost btn-sm" @click="handleStop(record)"><PauseCircleOutlined /> 停止</button>
+              <button class="btn btn-ghost btn-sm" @click="handleReload(record)"><ReloadOutlined /> reload</button>
               <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
               <a-dropdown :trigger="['click']">
-                <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                <a-button type="text" size="small" class="action-trigger-btn"><MoreOutlined /></a-button>
                 <template #overlay>
                   <a-menu>
                     <a-menu-item @click="viewDetail(record)">ⓘ 详情</a-menu-item>
@@ -118,11 +112,6 @@
                 </template>
               </a-dropdown>
             </div>
-            <div
-              class="operation-log"
-              :class="{ visible: opLogVisible === record.id }"
-              :id="'opLog-' + record.id"
-            ></div>
           </template>
         </template>
 
@@ -317,6 +306,7 @@
     <NodeExecutionResultDrawer
       :visible="execDrawerVisible"
       :title="execDrawerTitle"
+      :mode="execDrawerMode"
       :progress="execProgress"
       :logs="execLogs"
       :elapsed="execElapsed"
@@ -383,7 +373,17 @@ import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
-import { listNodes, createNode, updateNode, deleteNode } from '@/api/nodes'
+import { listNodes, createNode, updateNode } from '@/api/nodes'
+import { showNodeDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { getApiErrorMessage } from '@/utils/error'
+import { isStructuredSseEvent } from '@/utils/sse'
+import {
+  SearchOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  ReloadOutlined,
+  MoreOutlined,
+} from '@ant-design/icons-vue'
 
 import { useRoute } from 'vue-router'
 
@@ -426,7 +426,6 @@ const displayedNodes = computed(() => {
   }
   return list
 })
-const opLogVisible = ref<number | null>(null)
 
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
@@ -456,6 +455,9 @@ const detailTitle = computed(() => (detailNode.value ? `节点详情 — ${detai
 // Execution drawer
 const execDrawerVisible = ref(false)
 const execDrawerTitle = ref('')
+/** 结果抽屉摘要形态（batch1 3.2 / design D5）：install=安装摘要、action=动作摘要（无 nginx 进程卡）、
+ *  auto=按标题回退（安装 → 安装摘要，其余 → nginx 操作摘要，兼容启动/停止/reload）。 */
+const execDrawerMode = ref<'install' | 'action' | 'auto'>('auto')
 const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
 const execLogs = ref<string[]>([])
 const execElapsed = ref<number | null>(null)
@@ -532,10 +534,8 @@ async function loadNodes() {
     })
     nodes.value = res.data.items || []
     totalCount.value = loadAll ? nodes.value.length : res.data.total || 0
-  } catch (error: any) {
-    const detail = error.response?.data?.detail
-    const msg = typeof detail === 'string' ? detail : detail?.msg || error.message || '未知错误'
-    message.error('加载节点列表失败: ' + msg)
+  } catch (error: unknown) {
+    message.error('加载节点列表失败: ' + getApiErrorMessage(error))
   } finally {
     loading.value = false
   }
@@ -582,6 +582,11 @@ function onSearchInput() {
 
 // ── Form Modal ──
 
+/** 重置全部校验错误（遍历所有 key，避免逐字段列举遗漏——batch1 2.1） */
+function resetFormErrors() {
+  for (const key of Object.keys(formErrors)) delete formErrors[key]
+}
+
 function openAddModal() {
   editingNode.value = null
   formData.cluster_id = ''
@@ -592,12 +597,7 @@ function openAddModal() {
   formData.edge_path = ''
   formData.openresty_path = ''
   formData.statusCheck = true
-  formErrors.cluster_id = ''
-  formErrors.ip = ''
-  formErrors.service_port = ''
-  formErrors.management_port = ''
-  formErrors.edge_path = ''
-  formErrors.openresty_path = ''
+  resetFormErrors()
   formModalVisible.value = true
 }
 
@@ -611,11 +611,7 @@ function handleEdit(record: any) {
   formData.edge_path = record.edge_path || ''
   formData.openresty_path = record.openresty_path || ''
   formData.statusCheck = record.status === 1
-  formErrors.cluster_id = ''
-  formErrors.ip = ''
-  formErrors.service_port = ''
-  formErrors.management_port = ''
-  formErrors.edge_path = ''
+  resetFormErrors()
   formModalVisible.value = true
 }
 
@@ -625,12 +621,7 @@ function closeFormModal() {
 }
 
 async function handleFormSubmit() {
-  formErrors.cluster_id = ''
-  formErrors.ip = ''
-  formErrors.service_port = ''
-  formErrors.management_port = ''
-  formErrors.edge_path = ''
-  formErrors.openresty_path = ''
+  resetFormErrors()
   let valid = true
   if (!formData.cluster_id) {
     formErrors.cluster_id = '请选择所属集群'
@@ -662,7 +653,7 @@ async function handleFormSubmit() {
     valid = false
   }
   if (!formData.openresty_path) {
-    formErrors.openresty_path = '请输入 Nginx 安装路径'
+    formErrors.openresty_path = '请输入 OpenResty 安装路径'
     valid = false
   } else if (!formData.openresty_path.startsWith('/')) {
     formErrors.openresty_path = '路径必须以 / 开头'
@@ -694,9 +685,8 @@ async function handleFormSubmit() {
     }
     formModalVisible.value = false
     loadNodes()
-  } catch (error: any) {
-    const detail = error.response?.data?.detail || error.message
-    message.error(typeof detail === 'string' ? detail : '操作失败')
+  } catch (error: unknown) {
+    message.error(getApiErrorMessage(error))
   } finally {
     formSubmitting.value = false
   }
@@ -733,6 +723,7 @@ function stopElapsedTimer() {
 
 async function executeAction(record: any, action: string, actionLabel: string) {
   execDrawerTitle.value = `节点 ${actionLabel}`
+  execDrawerMode.value = 'auto'
   execProgress.percent = 0
   execProgress.status = 'active'
   execLogs.value = []
@@ -753,7 +744,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   const nginxCmd = nginxCmdMap[action] || action
   const tag = nginxCmd === 'edge_statistic' ? 'edge_statistic' : 'nginx_cmd_run'
   const ev = JSON.stringify({ prefix: record.edge_path || '', ports: String(record.management_port), ips: record.ip })
-  const pendingCommand = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  const pendingCommand = `ansible-playbook -i inventory -e @env/extravars -e '${ev}' --tags ${tag} edge.yml`
 
   const addLog = (text: string) => {
     execLogs.value.push(`[${new Date().toLocaleTimeString()}] ${text}`)
@@ -813,11 +804,11 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     execStatistics.value = data.statistic ? { ...data.statistic } : null
     execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: finalCommand, rc: data.rc }
     loadNodes()
-  } catch (error: any) {
+  } catch (error: unknown) {
     stopElapsedTimer()
     execProgress.status = 'exception'
     execProgress.percent = 100
-    const errMsg = error.response?.data?.detail || error.message || '未知错误'
+    const errMsg = getApiErrorMessage(error)
     addLog(`❌ 操作失败: ${errMsg}`)
     execHighlights.value = []
     execStatistics.value = null
@@ -865,30 +856,25 @@ const installTargetNode = ref<any>(null)
 const installStream = useInstallStream()
 const { installing: installInstalling, error: installError, status: installStatus } = installStream
 
+/** 消费侧过滤（batch1 3.1 / design D4）：结构化 SSE 事件（可 JSON.parse 且含 type 字段）
+ *  不再以裸 JSON 行混入执行日志展示，业务分支（onProgress/onComplete）照常处理；
+ *  useInstallStream 转发契约不动。 */
+function appendStreamLine(line: string) {
+  if (isStructuredSseEvent(line)) return
+  execLogs.value = [...execLogs.value, line]
+}
+
 function buildInstallCommand(record: any, tag: string, extravars: Record<string, string>) {
   const ev = JSON.stringify({ ...extravars, ips: record.ip })
-  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
+  const ansibleCmd = `ansible-playbook -i inventory -e @env/extravars -e '${ev}' --tags ${tag} edge.yml`
   // install-edge 只走 Ansible, 不执行 SSH; install-openresty 才走 Ansible + SSH 两阶段
   if (tag === 'install_edge') {
     return `# Ansible 命令:\n${ansibleCmd}`
   }
   const prefix = extravars.prefix || record.edge_path || ''
   const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-  const sshCmd = [
-    'ssh',
-    '-i',
-    '~/.ssh/id_rsa',
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=30',
-    '-o',
-    'StrictHostKeyChecking=no',
-    '-o',
-    'UserKnownHostsFile=/dev/null',
-    `jboss@${record.ip}`,
-    `"source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`,
-  ].join(' ')
+  // 最小通用形态（batch1 2.6 / design D3）：不虚构账号与密钥，ssh_port 缺省 22
+  const sshCmd = `ssh -p ${record.ssh_port || 22} ${record.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
   return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
 }
 
@@ -906,6 +892,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   const record = payload.node
   execTargetNode.value = record
   execDrawerTitle.value = `安装 OpenResty - ${record.ip}`
+  execDrawerMode.value = 'install'
   execDrawerVisible.value = true
   execLogs.value = []
   execProgress.percent = 0
@@ -920,7 +907,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
     { prefix, openresty_file: payload.openrestyFile },
     {
       onLine: (line: string) => {
-        execLogs.value = [...execLogs.value, line]
+        appendStreamLine(line)
       },
       onProgress: (percent: number) => {
         if (percent > execProgress.percent) execProgress.percent = percent
@@ -947,6 +934,7 @@ function handleInstallEdge(record: any) {
     async () => {
       execTargetNode.value = record
       execDrawerTitle.value = `\u5b89\u88c5 Edge - ${record.ip}`
+      execDrawerMode.value = 'install'
       execDrawerVisible.value = true
       execLogs.value = []
       execProgress.percent = 0
@@ -961,7 +949,7 @@ function handleInstallEdge(record: any) {
         { prefix },
         {
           onLine: (line: string) => {
-            execLogs.value = [...execLogs.value, line]
+            appendStreamLine(line)
           },
           onProgress: (percent: number) => {
             if (percent > execProgress.percent) execProgress.percent = percent
@@ -991,6 +979,7 @@ function handleAssociateNewOpenresty(record: any) {
     async () => {
       execTargetNode.value = record
       execDrawerTitle.value = `关联新OpenResty - ${record.ip}`
+      execDrawerMode.value = 'action'
       execDrawerVisible.value = true
       execLogs.value = []
       execProgress.percent = 0
@@ -1004,7 +993,7 @@ function handleAssociateNewOpenresty(record: any) {
         {},
         {
           onLine: (line: string) => {
-            execLogs.value = [...execLogs.value, line]
+            appendStreamLine(line)
           },
           onProgress: (percent: number) => {
             if (percent > execProgress.percent) execProgress.percent = percent
@@ -1085,9 +1074,8 @@ function handleCancelInstall() {
           command: data.steps.map((s: any) => `# ${s.command}\n${s.stdout || ''}`).join('\n\n'),
           rc: 0,
         }
-      } catch (error: any) {
-        const err = error as { response?: { data?: { detail?: string } }; message?: string }
-        const detail = err.response?.data?.detail || err.message || '取消失败'
+      } catch (error: unknown) {
+        const detail = getApiErrorMessage(error)
         execLogs.value.push(`❌ ${detail}`)
         execProgress.percent = 100
         execProgress.status = 'exception'
@@ -1124,10 +1112,22 @@ async function executeConfirm() {
 // ── Delete ──
 
 function handleDelete(record: any) {
-  showConfirm('确认删除', `确定要删除节点 ${record.ip}（${record.cluster_name || ''}）吗？`, '确认删除', async () => {
-    await deleteNode(record.cluster_id, record.id, { delete_db: true, delete_edge: false })
-    message.success('节点已删除')
-    loadNodes()
+  // 删除流程统一（batch1 1.3 / 约定 #25 三层制）：节点专用确认变体 + 共享进度删除。
+  // 固定语义 delete_db=true / delete_edge=false（D2：节点机上的进程不联动删除，
+  // 后端 delete_edge skipped 语义保留）。
+  showNodeDeleteConfirm({
+    ip: record.ip,
+    onOk: async (_deleteDb: boolean, _deleteEdge: boolean, _nodeIds: number[]) => {
+      await executeDeleteWithProgress({
+        title: `删除节点: ${record.ip}`,
+        apiEndpoint: `/clusters/${record.cluster_id}/nodes/${record.id}`,
+        cluster: { id: record.cluster_id },
+        deleteDb: true,
+        deleteEdge: false,
+        nodeIds: [],
+        refreshFn: loadNodes,
+      })
+    },
   })
 }
 
@@ -1170,6 +1170,7 @@ onUnmounted(() => {
 function streamEdgeAction(record: any, title: string, url: string, body: Record<string, any>) {
   execTargetNode.value = record
   execDrawerTitle.value = title
+  execDrawerMode.value = 'action'
   execDrawerVisible.value = true
   execLogs.value = []
   execProgress.percent = 0
@@ -1179,7 +1180,7 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
 
   installStream.start(url, body, {
     onLine: (line: string) => {
-      execLogs.value = [...execLogs.value, line]
+      appendStreamLine(line)
     },
     onProgress: (percent: number) => {
       if (percent > execProgress.percent) execProgress.percent = percent
@@ -1229,7 +1230,7 @@ function onEdgePackRebase(e: Event) {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .text-mono {
@@ -1263,22 +1264,6 @@ function onEdgePackRebase(e: Event) {
 .empty-state-icon {
   font-size: 32px;
   margin-bottom: 8px;
-}
-
-.operation-log {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  margin-top: 12px;
-  max-height: 200px;
-  overflow-y: auto;
-  font-size: 12px;
-  display: none;
-}
-
-.operation-log.visible {
-  display: block;
 }
 
 /* ── Modal ── */

@@ -16,6 +16,7 @@ interface ExecCommandResult {
 }
 import {
   showDeleteConfirm,
+  showNodeDeleteConfirm,
   executeDeleteWithProgress,
   buildDeleteProgressContent,
   showBatchResultModal,
@@ -404,9 +405,10 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
       message.warning('请先选择一个节点')
       return
     }
-    showDeleteConfirm({
-      title: `确定要删除节点 "${target.ip}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/nodes/${target.id}`,
+    // 节点专用确认变体（batch1 1.4）：三层后果前置、无 scope 勾选；D2——delete_edge 恒 false
+    //（后端 delete_edge skipped 语义保留，节点机进程不联动删除）
+    showNodeDeleteConfirm({
+      ip: target.ip,
       onOk: async (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => {
         await executeDeleteWithProgress({
           title: `删除节点: ${target.ip}`,

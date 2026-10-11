@@ -321,6 +321,71 @@ export function showDeleteConfirm(opts: {
   renderModal()
 }
 
+/**
+ * 节点删除确认变体（node-management-ux-batch1 1.2）：与 showDeleteConfirm 同款 AppModal
+ * 形态（约定 #25，禁止第三份手写 overlay），但语义固定——
+ * 「删除数据库」必选、无任何 scope 勾选框（Edge/OpenResty 进程不受影响是「告知」不是
+ * 「选项」，用户无法产生「删了平台记录还能继续管理」的错误预期），三层后果前置：
+ * 平台记录不可恢复 → 进程不受影响 → 从下次发布与中继白名单移除。
+ * onOk 固定收到 (true, false, [])（保留 showDeleteConfirm 同构签名，调用方零改动映射），
+ * 与 executeDeleteWithProgress 的固定载荷对齐。
+ */
+export function showNodeDeleteConfirm(opts: {
+  ip: string
+  onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
+}) {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const close = () => {
+    render(null, container)
+    container.remove()
+  }
+
+  const vnode = h(
+    AppModal,
+    {
+      open: true,
+      title: `删除节点 ${opts.ip}`,
+      width: 520,
+      okText: '确认删除',
+      okDanger: true,
+      onOk: () => {
+        opts.onOk(true, false, [])
+        close()
+      },
+      onCancel: close,
+      onClose: close,
+    },
+    {
+      default: () =>
+        h('div', [
+          h(
+            'div',
+            {
+              style: 'font-size:14px;color:var(--danger);margin-bottom:12px;font-weight:500;line-height:1.6;',
+            },
+            [
+              h('div', '平台管理记录将被删除，不可恢复，如需恢复须重新添加节点'),
+              h('div', '节点机上的 Edge/OpenResty 进程不受影响，将继续运行（脱离平台监控）'),
+              h('div', '该节点将从下次发布与中继网关白名单中移除'),
+            ],
+          ),
+          h(
+            'div',
+            {
+              style:
+                'padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted);',
+            },
+            '如需先停止流量，请先执行『停止』操作',
+          ),
+        ]),
+    },
+  )
+
+  render(vnode, container)
+}
+
 export function buildDeleteProgressContent(
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
   logs: string[],

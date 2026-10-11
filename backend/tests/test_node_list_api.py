@@ -144,6 +144,22 @@ class TestGlobalNodeListAPI:
         assert data["total"] == 1
         assert [item["ip"] for item in data["items"]] == ["10.1.0.12"]
 
+    async def test_list_nodes_search_is_ip_only(self, async_isolated_client, isolated_session):
+        """search 只按 IP 过滤：集群显示名/分组名命中 0 条（Node 无 name 列，spec node-management 搜索节点）。"""
+        headers = await self._login(async_isolated_client)
+        await self._seed_nodes(isolated_session)
+        for term in ("武清", "成都集群", GROUP_WUQING):
+            response = await async_isolated_client.get("/api/v1/nodes", headers=headers,
+                params={"search": term, "page_size": 200})
+            assert response.status_code == 200
+            assert response.json()["total"] == 0, f"search={term} 不应命中任何节点"
+
+    def test_allowed_search_fields_declares_ip_only(self):
+        """ALLOWED_SEARCH_FIELDS 声明收敛为仅 ip（node-management-ux-batch1 D6：消除误导性 name 声明）。"""
+        from app.api.v1.nodes import ALLOWED_SEARCH_FIELDS
+
+        assert ALLOWED_SEARCH_FIELDS == {"ip"}
+
     async def test_find_node_by_ip_port_backward_compat(self, async_isolated_client, isolated_session):
         """Existing ?ip=&management_port= lookup should return the seeded node（有种子防空转）。"""
         headers = await self._login(async_isolated_client)

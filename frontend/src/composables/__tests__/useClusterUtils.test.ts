@@ -1284,3 +1284,78 @@ describe('deletePluginConfigWithReferenceCheck（插件组删除引用分流）'
     expect(onUnreferenced).toHaveBeenCalledTimes(1)
   })
 })
+
+// ── 节点删除确认变体 showNodeDeleteConfirm（node-management-ux-batch1 1.2）──────────
+// 与通用 showDeleteConfirm 同款 AppModal 形态，但语义固定：删除数据库必选、无任何
+// scope 勾选框（Edge/OpenResty 进程不受影响是「告知」不是「选项」），三层后果前置。
+
+describe('showNodeDeleteConfirm（节点删除确认变体）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function modalText(): string {
+    return document.body.textContent || ''
+  }
+
+  it('标题「删除节点 {ip}」，三层后果文案完整前置', async () => {
+    const { showNodeDeleteConfirm } = await import('../useClusterUtils')
+    showNodeDeleteConfirm({ ip: '10.0.0.5', onOk: vi.fn() })
+
+    const text = modalText()
+    expect(text).toContain('删除节点 10.0.0.5')
+    // 三层后果：平台记录 / 进程不受影响 / 白名单与发布
+    expect(text).toContain('平台管理记录将被删除，不可恢复，如需恢复须重新添加节点')
+    expect(text).toContain('节点机上的 Edge/OpenResty 进程不受影响，将继续运行（脱离平台监控）')
+    expect(text).toContain('该节点将从下次发布与中继网关白名单中移除')
+    // 引导文案：先停流量再删除
+    expect(text).toContain('如需先停止流量，请先执行『停止』操作')
+  })
+
+  it('复用 AppModal 形态（约定 #25）：danger 确认按钮、可取消关闭', async () => {
+    const { showNodeDeleteConfirm } = await import('../useClusterUtils')
+    showNodeDeleteConfirm({ ip: '10.0.0.5', onOk: vi.fn() })
+
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认删除'),
+    )
+    expect(okBtn, 'AppModal 底部应有 danger 确认按钮').toBeTruthy()
+    expect(okBtn!.className).toContain('ant-btn-dangerous')
+
+    const cancelBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').replace(/\s/g, '').includes('取消'),
+    )
+    expect(cancelBtn, 'AppModal 底部应有取消按钮').toBeTruthy()
+  })
+
+  it('无任何勾选框：删除数据库固定为是，确认即可执行（不依赖勾选）', async () => {
+    const { showNodeDeleteConfirm } = await import('../useClusterUtils')
+    const onOk = vi.fn()
+    showNodeDeleteConfirm({ ip: '10.0.0.5', onOk })
+
+    expect(document.body.querySelectorAll('input[type="checkbox"]').length).toBe(0)
+
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认删除'),
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await vi.waitFor(() => expect(onOk).toHaveBeenCalledTimes(1))
+    // 固定语义：删除数据库=是，删除 Edge=否
+    expect(onOk).toHaveBeenCalledWith(true, false, [])
+    await vi.waitFor(() => expect(document.body.textContent || '').not.toContain('删除节点 10.0.0.5'))
+  })
+
+  it('点击取消：仅关闭，onOk 不触发', async () => {
+    const { showNodeDeleteConfirm } = await import('../useClusterUtils')
+    const onOk = vi.fn()
+    showNodeDeleteConfirm({ ip: '10.0.0.5', onOk })
+
+    const cancelBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').replace(/\s/g, '').includes('取消'),
+    ) as HTMLButtonElement
+    cancelBtn!.click()
+    await vi.waitFor(() => expect(document.body.textContent || '').not.toContain('删除节点 10.0.0.5'))
+    expect(onOk).not.toHaveBeenCalled()
+  })
+})

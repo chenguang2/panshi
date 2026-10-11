@@ -77,7 +77,7 @@
               <!-- Summary tab -->
               <div v-show="activeTab === 'summary'" class="tab-body">
                 <!-- Install operation summary -->
-                <template v-if="title && title.startsWith('安装')">
+                <template v-if="summaryMode === 'install'">
                   <div v-if="result && result.rc !== null" style="margin-bottom: 12px">
                     <div v-if="result.rc === 0" class="result-badge result-success">✅ 安装成功</div>
                     <div v-else class="result-badge result-fail">❌ 安装失败 (rc: {{ result.rc }})</div>
@@ -100,9 +100,9 @@
                     {{ result.stderr }}
                   </div>
 
-                  <!-- Nginx status card -->
+                  <!-- Nginx status card（仅 auto 回退的 nginx 操作摘要渲染；动作类摘要不含进程卡） -->
                   <div
-                    v-if="showNginxStatus !== false && nginxStatus.known"
+                    v-if="summaryMode === 'nginx' && showNginxStatus !== false && nginxStatus.known"
                     class="ner-card"
                     :class="nginxStatus.running ? 'card-success' : 'card-fail'"
                   >
@@ -115,7 +115,13 @@
                     <div v-if="nginxStatus.pid" class="ner-card-detail">PID: {{ nginxStatus.pid }}</div>
                   </div>
                   <div
-                    v-else-if="showNginxStatus !== false && result && result.rc !== null && result.rc !== 0"
+                    v-else-if="
+                      summaryMode === 'nginx' &&
+                      showNginxStatus !== false &&
+                      result &&
+                      result.rc !== null &&
+                      result.rc !== 0
+                    "
                     class="ner-card card-warn"
                   >
                     <div class="ner-card-title">
@@ -226,6 +232,9 @@ const props = defineProps<{
   streamError?: string | null
   streamStatus?: string
   showNginxStatus?: boolean
+  /** 摘要形态（batch1 3.2 / design D5）：install=安装摘要、action=动作摘要（无 Nginx 进程卡）、
+   *  auto=按标题回退（缺省兜底，防既有调用方行为变化） */
+  mode?: 'install' | 'action' | 'auto'
 }>()
 
 const emit = defineEmits<{
@@ -235,6 +244,13 @@ const emit = defineEmits<{
 
 const activeTab = ref('summary')
 const stdoutLogBox = ref<HTMLElement | null>(null)
+
+/** 摘要形态分流（batch1 3.2 / design D5）：显式 mode 优先；auto 按标题回退
+ *  （「安装」前缀 → 安装摘要，其余 → nginx 操作摘要，兼容启动/停止/reload 既有调用方）。 */
+const summaryMode = computed<'install' | 'nginx' | 'action'>(() => {
+  if (props.mode && props.mode !== 'auto') return props.mode
+  return props.title && props.title.startsWith('安装') ? 'install' : 'nginx'
+})
 
 function allLines(): string[] {
   const lines = [...props.highlights]

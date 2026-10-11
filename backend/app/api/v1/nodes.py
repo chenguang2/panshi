@@ -14,7 +14,8 @@ from app.services.ansible_service import ip_sort_key
 
 router = APIRouter(prefix="/nodes", tags=["nodes"])
 
-ALLOWED_SEARCH_FIELDS = {"ip", "name"}
+# search 白名单：仅 ip（Node 无 name 列，hasattr 会静默过滤，声明收敛消除误导）
+ALLOWED_SEARCH_FIELDS = {"ip"}
 
 
 @router.get("", response_model=dict)

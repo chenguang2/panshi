@@ -57,7 +57,8 @@ describe('parseIpList', () => {
 
 describe('parseNodeCsv', () => {
   it('parses rows with english headers', () => {
-    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n10.0.0.2,8080,9181,/edge/n2,/opt/edge,1'
+    const csv =
+      'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n10.0.0.2,8080,9181,/edge/n2,/opt/edge,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0]).toMatchObject({
@@ -86,7 +87,8 @@ describe('parseNodeCsv', () => {
   })
 
   it('flags invalid rows with line number and error', () => {
-    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\nbad-ip,80,9180,/edge/n2,,1'
+    const csv =
+      'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\nbad-ip,80,9180,/edge/n2,,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0].valid).toBe(true)
@@ -96,7 +98,8 @@ describe('parseNodeCsv', () => {
   })
 
   it('keeps original line numbers when blank rows present', () => {
-    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n\nbad-ip,80,9180,/edge/n2,,1'
+    const csv =
+      'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,1\n\nbad-ip,80,9180,/edge/n2,,1'
     const rows = parseNodeCsv(csv)
     expect(rows).toHaveLength(2)
     expect(rows[0].line).toBe(2)
@@ -105,7 +108,8 @@ describe('parseNodeCsv', () => {
   })
 
   it('flags invalid status values', () => {
-    const csv = 'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,5\n10.0.0.2,80,9180,/edge/n2,,abc'
+    const csv =
+      'ip,service_port,management_port,edge_path,openresty_path,status\n10.0.0.1,80,9180,/edge/n1,,5\n10.0.0.2,80,9180,/edge/n2,,abc'
     const rows = parseNodeCsv(csv)
     expect(rows[0].valid).toBe(false)
     expect(rows[0].error).toContain('状态')
@@ -154,5 +158,21 @@ describe('isDuplicateIp', () => {
       { ip: '10.0.0.1', valid: false },
     ]
     expect(isDuplicateIp(rows, rows[1], 1)).toBe(false)
+  })
+})
+
+// ── 批量导入预览行校验（node-management-ux-batch1 4.1）──────────────────────────
+// 对齐单表单必填决策：openresty_path 为空的行必须标红报错（默认值预填行为不变）。
+describe('validateNodeImportRow', () => {
+  it('openresty_path 为空或纯空白 → 返回必填错误', async () => {
+    const { validateNodeImportRow } = await import('../nodeImport')
+    expect(validateNodeImportRow({ valid: true, openresty_path: '' })).toBe('OpenResty 安装路径为空（必填）')
+    expect(validateNodeImportRow({ valid: true, openresty_path: '   ' })).toBe('OpenResty 安装路径为空（必填）')
+  })
+
+  it('解析期无效行透传原始 error，正常行返回 undefined', async () => {
+    const { validateNodeImportRow } = await import('../nodeImport')
+    expect(validateNodeImportRow({ valid: false, error: 'IP 格式不正确', openresty_path: '' })).toBe('IP 格式不正确')
+    expect(validateNodeImportRow({ valid: true, openresty_path: '/usr/local/nginx' })).toBeUndefined()
   })
 })

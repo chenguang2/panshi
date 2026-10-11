@@ -124,6 +124,20 @@ export async function consumeSSEDataLines(response: Response, onData: (raw: stri
 }
 
 /**
+ * 判断一行 SSE `data: ` 载荷是否为结构化事件（node-management-ux-batch1 3.1 / design D4）：
+ * 能被 JSON.parse 且解析结果为含 string 型 `type` 字段的对象。仅用于「消费侧展示过滤」——
+ * 结构化事件不再以裸 JSON 行混入执行日志（业务分支照常处理），转发契约不受影响。
+ */
+export function isStructuredSseEvent(raw: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed !== null && typeof (parsed as { type?: unknown }).type === 'string'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 从非 2xx 响应体提取中文 detail（与既有实现的共同语义一致）：
  * 优先 JSON `detail` 字段，否则返回 `请求失败 (status)`。
  */

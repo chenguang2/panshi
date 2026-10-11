@@ -106,7 +106,6 @@
             size="small"
           >
             <a-select-option value="">全部</a-select-option>
-            <a-select-option value="name">名称</a-select-option>
             <a-select-option value="ip">IP</a-select-option>
           </a-select>
         </template>
@@ -392,7 +391,9 @@
                             <option :value="0">禁用</option>
                           </select>
                         </td>
-                        <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">{{ row.error || '' }}</td>
+                        <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">
+                          {{ importRowError(row) || '' }}
+                        </td>
                         <td style="padding: 4px 8px">
                           <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
                         </td>
@@ -495,6 +496,7 @@ import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
+import { validateNodeImportRow } from '@/utils/nodeImport'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
@@ -604,7 +606,12 @@ function handleDeleteClick() {
 }
 
 // ── Node batch import helpers ────────────────────────────────
-const validImportCount = computed(() => nodeImportRows.value.filter((r) => r.valid).length)
+/** 行实时校验（batch1 4.1）：解析期错误 + 可编辑字段联动（openresty_path 必填，对齐单表单决策） */
+function importRowError(row: { valid: boolean; error?: string; openresty_path?: string }): string | undefined {
+  return validateNodeImportRow(row)
+}
+
+const validImportCount = computed(() => nodeImportRows.value.filter((r) => !importRowError(r)).length)
 
 function parseTextToRows() {
   const parsed = parseIpList(nodeImportText.value)
@@ -655,11 +662,12 @@ function removeImportRow(index: number) {
   nodeImportRows.value.splice(index, 1)
 }
 
-function rowStyle(row: { ip: string; valid: boolean; error?: string }, idx: number) {
-  const duplicateIp = !row.valid
+function rowStyle(row: { ip: string; valid: boolean; error?: string; openresty_path?: string }, idx: number) {
+  const liveError = importRowError(row)
+  const duplicateIp = liveError
     ? false
     : nodeImportRows.value.some((other, otherIdx) => otherIdx !== idx && other.ip === row.ip)
-  if (!row.valid) return 'background:color-mix(in srgb, var(--danger) 12%, transparent);'
+  if (liveError) return 'background:color-mix(in srgb, var(--danger) 12%, transparent);'
   if (duplicateIp) return 'background:color-mix(in srgb, var(--warning) 15%, transparent);'
   return ''
 }
@@ -667,7 +675,9 @@ function rowStyle(row: { ip: string; valid: boolean; error?: string }, idx: numb
 async function handleImportSubmit() {
   const cluster = clusters.value.find((c) => c.id === currentClusterId?.value)
   if (!cluster) return
-  await importNodes(cluster, nodeImportRows.value)
+  // 提交前按实时校验过滤（openresty_path 为空的行不提交，batch1 4.1）
+  const submitRows = nodeImportRows.value.filter((r) => !importRowError(r)).map((r) => ({ ...r, valid: true }))
+  await importNodes(cluster, submitRows)
 }
 
 // ── Custom Confirm (matches NodeList.vue pattern) ──

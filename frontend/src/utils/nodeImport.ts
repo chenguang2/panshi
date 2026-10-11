@@ -217,3 +217,17 @@ export function isDuplicateIp<T extends { ip: string; valid: boolean }>(rows: T[
   if (!row.valid) return false
   return rows.some((other, otherIdx) => otherIdx !== index && other.ip === row.ip)
 }
+
+/**
+ * 批量导入预览行实时校验（node-management-ux-batch1 4.1）：解析期错误优先透传；
+ * openresty_path 必填对齐单表单决策——默认值预填行为不变，用户在预览表清空后行即标红报错。
+ */
+export function validateNodeImportRow(row: {
+  valid: boolean
+  error?: string
+  openresty_path?: string
+}): string | undefined {
+  if (!row.valid) return row.error
+  if (!(row.openresty_path || '').trim()) return 'OpenResty 安装路径为空（必填）'
+  return undefined
+}

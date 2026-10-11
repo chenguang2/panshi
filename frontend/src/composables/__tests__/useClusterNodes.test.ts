@@ -11,6 +11,7 @@ const mockMessageError = vi.fn()
 const mockShowBatchResultModal = vi.fn()
 const mockShowBatchStatusModal = vi.fn()
 const mockShowDeleteConfirm = vi.fn()
+const mockShowNodeDeleteConfirm = vi.fn()
 const mockExecuteDeleteWithProgress = vi.fn()
 const mockConcurrencyOf = vi.fn((name: string, defaultVal: number) => defaultVal)
 
@@ -41,6 +42,7 @@ vi.mock('ant-design-vue', () => ({
 
 vi.mock('@/composables/useClusterUtils', () => ({
   showDeleteConfirm: (...args: any[]) => mockShowDeleteConfirm(...args),
+  showNodeDeleteConfirm: (...args: any[]) => mockShowNodeDeleteConfirm(...args),
   executeDeleteWithProgress: (...args: any[]) => mockExecuteDeleteWithProgress(...args),
   buildDeleteProgressContent: () => '',
   showBatchResultModal: (...args: any[]) => mockShowBatchResultModal(...args),
@@ -396,6 +398,38 @@ describe('useClusterNodes batch import', () => {
         nameField: 'node_ip',
         keys: [1, 2],
       })
+    })
+  })
+
+  // ── 单节点删除走节点专用确认变体（node-management-ux-batch1 1.4 / design D1-D2）──
+
+  describe('deleteNode（单节点）', () => {
+    it('走 showNodeDeleteConfirm 节点专用变体，不再用通用 showDeleteConfirm', async () => {
+      const cluster = makeCluster()
+      const { deleteNode } = await makeComposable(cluster)
+      deleteNode(cluster, makeNode({ id: 7, ip: '10.0.0.7' }))
+
+      expect(mockShowNodeDeleteConfirm).toHaveBeenCalledTimes(1)
+      expect(mockShowDeleteConfirm).not.toHaveBeenCalled()
+      const opts = mockShowNodeDeleteConfirm.mock.calls[0][0]
+      expect(opts.ip).toBe('10.0.0.7')
+    })
+
+    it('onOk 固定 delete_db=true / delete_edge=false（D2：Edge 不联动删除，后端 skipped 语义保留）', async () => {
+      const cluster = makeCluster()
+      const { deleteNode } = await makeComposable(cluster)
+      deleteNode(cluster, makeNode({ id: 7, ip: '10.0.0.7' }))
+
+      const opts = mockShowNodeDeleteConfirm.mock.calls[0][0]
+      await opts.onOk(true, false, [])
+      expect(mockExecuteDeleteWithProgress).toHaveBeenCalledTimes(1)
+      const progressOpts = mockExecuteDeleteWithProgress.mock.calls[0][0]
+      expect(progressOpts.title).toBe('删除节点: 10.0.0.7')
+      expect(progressOpts.apiEndpoint).toBe('/clusters/1/nodes/7')
+      expect(progressOpts.deleteDb).toBe(true)
+      expect(progressOpts.deleteEdge).toBe(false)
+      expect(progressOpts.nodeIds).toEqual([])
+      expect(progressOpts.resourceKey).toBeUndefined()
     })
   })
 
