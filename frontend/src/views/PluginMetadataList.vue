@@ -236,7 +236,7 @@ function onGroupChange() {
 // ——— Create modal state ———
 const createVisible = ref(false)
 const createClusterId = ref<number | string>('')
-const createPluginName = ref<string | null>(null)
+const createPluginName = ref<string>('')
 const configuredNamesInCluster = ref<Set<string>>(new Set())
 const builtinPlugins = ref<any[]>([])
 
@@ -321,13 +321,13 @@ async function loadBuiltinPlugins() {
 // ——— Create ———
 function openCreateModal() {
   createClusterId.value = ''
-  createPluginName.value = null
+  createPluginName.value = ''
   configuredNamesInCluster.value = new Set()
   createVisible.value = true
 }
 
 async function onCreateClusterChange() {
-  createPluginName.value = null
+  createPluginName.value = ''
   if (createClusterId.value) {
     try {
       const res = await listClusterPluginMetadata(Number(createClusterId.value))

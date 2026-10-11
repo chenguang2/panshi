@@ -1006,9 +1006,9 @@ import {
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
-const selectedClusterId = ref<string | null>(null)
+const selectedClusterId = ref<string>('')
 const clusterNodes = ref<any[]>([])
-const selectedNode = ref<string | null>(null)
+const selectedNode = ref<string>('')
 const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
@@ -1174,7 +1174,7 @@ const loadClusters = async () => {
 }
 
 const onClusterChange = async () => {
-  selectedNode.value = null
+  selectedNode.value = ''
   clusterNodes.value = []
 
   if (!selectedClusterId.value) return
@@ -2168,7 +2168,7 @@ watch(selectedClusterId, async (newClusterId, oldClusterId) => {
   // Skip if this is the initial load (oldClusterId is undefined)
   if (oldClusterId === undefined) return
   // This fires on user manual cluster change, not on initial auto-selection
-  selectedNode.value = null
+  selectedNode.value = ''
   clusterNodes.value = []
   try {
     const res = await api.get(`/clusters/${newClusterId}/nodes`)

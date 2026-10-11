@@ -145,6 +145,25 @@ describe('PluginMetadataList.vue', () => {
     expect(wrapper.text()).toContain('jwt-auth')
   })
 
+  // 添加弹窗打开时插件下拉必须显示占位「请选择插件」：v-model 初值须为 ''（匹配 value="" 占位
+  // option），初值 null 会被 select 渲染器判为无匹配 option → selectedIndex=-1 → 下拉框空白
+  it('create modal shows plugin select placeholder (selectedIndex=0, not blank)', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('添加插件元数据'))!
+      .trigger('click')
+    await wrapper.vm.$nextTick()
+    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('添加插件元数据'))!
+    const selects = overlay.findAll('select')
+    expect(selects.length).toBe(2)
+    const pluginSelect = selects[1]
+    expect(pluginSelect.element.selectedIndex).toBe(0)
+    expect((pluginSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择插件')
+  })
+
   // ── Group Filter Tests ──
 
   itGroupFilterSuite({
