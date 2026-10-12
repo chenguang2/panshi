@@ -6,8 +6,8 @@ if [ -z "$BASH_VERSION" ]; then
 fi
 # 停止开发环境（后端 12344 / 前端 12345）。
 # 身份守卫（spec: start-stop-scripts）：只终止 cmdline 可确认属于本项目的进程；
-# 逐 PID 读取 /proc/$PID/cmdline 校验，多 PID 共享端口（reloader + worker）逐个击杀；
-# 端口清扫后做仓库路径限定的 cmdline 孤儿清扫（捕获漂移端口进程）。
+# 逐 PID 读取进程 cmdline 校验（Linux /proc/$PID/cmdline；macOS ps），多 PID 共享端口
+# （reloader + worker）逐个击杀；端口清扫后做仓库路径限定的 cmdline 孤儿清扫（捕获漂移端口进程）。
 # 可测性：端口 / pid 文件 / 项目根锚点均可被环境变量覆盖，缺省行为不变。
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,26 +21,52 @@ FRONTEND_PID_FILE="${PANSHI_FRONTEND_PID_FILE:-/tmp/panshi_frontend.pid}"
 
 echo "Stopping Panshi Admin..."
 
-# /proc 身份校验（两重）：
+# 进程身份校验（两重）：
 # ① 身份模式：后端 `app.main:app|spawn_main`（uvicorn --reload 的 spawn worker cmdline
 #    只含 spawn_main 引导串、不含 app.main:app，而端口 fd 恰由 worker 持有——2026-10-02 实测）；
-# ② 路径锚点：cmdline 含本项目 backend/frontend 路径，或 /proc/PID/cwd 指向其下——
+# ② 路径锚点：cmdline 含本项目 backend/frontend 路径，或进程 cwd 指向其下——
 #    防误杀其他项目同名/同形态进程。
+# 跨平台（2026-10-12）：Linux 读 /proc；macOS 无 /proc，回退 `ps`（cmdline）与
+# `lsof -d cwd`（工作目录）。任一读取失败即返回非零，调用方按「不可确认 → 跳过」处理。
+_proc_cmdline() {
+    local pid="$1" out
+    if [ -f "/proc/$pid/cmdline" ]; then
+        out=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
+        printf '%s' "$out"
+        return 0
+    fi
+    out=$(ps -p "$pid" -o command= 2>/dev/null) || return 1
+    [ -n "$out" ] || return 1
+    printf '%s' "$out"
+}
+
+_proc_cwd() {
+    local pid="$1" path
+    if [ -L "/proc/$pid/cwd" ]; then
+        path=$(readlink "/proc/$pid/cwd" 2>/dev/null) || return 1
+        printf '%s' "$path"
+        return 0
+    fi
+    path=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1)
+    [ -n "$path" ] || return 1
+    printf '%s' "$path"
+}
+
 _pid_is_project_svc() {
     local pid="$1" pattern="$2" anchor="$3"
     local cmdline cwd
-    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
+    cmdline=$(_proc_cmdline "$pid") || return 1
     echo "$cmdline" | grep -Eq "$pattern" || return 1
     case "$cmdline" in *"$anchor"*) return 0 ;; esac
-    cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null) || return 1
+    cwd=$(_proc_cwd "$pid") || return 1
     case "$cwd" in "$anchor"|"$anchor"/*) return 0 ;; esac
     return 1
 }
 
-# /proc cmdline 子串校验（固定串，用于仓库路径锚点防误杀）
+# cmdline 子串校验（固定串，用于仓库路径锚点防误杀）
 _cmdline_contains() {
     local pid="$1" needle="$2"
-    tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -qF -- "$needle"
+    _proc_cmdline "$pid" 2>/dev/null | grep -qF -- "$needle"
 }
 
 BACKEND_IDENTITY='app\.main:app|spawn_main'
