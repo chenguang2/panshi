@@ -9,6 +9,21 @@ function src(): string {
   return readFileSync(resolve(process.cwd(), 'src/views/clusters/ClusterNodes.vue'), 'utf-8')
 }
 
+// ── batch3 5.1 / F3：Tab 全部动作确认走共享 showDangerConfirm，手写确认机制清零 ──
+describe('ClusterNodes 动作确认收敛守卫（batch3 5.1）', () => {
+  it('confirmState/showConfirm/executeConfirm 与手写确认模板零残留', () => {
+    const s = src()
+    expect(s).not.toContain('confirmState')
+    expect(s).not.toContain('executeConfirm')
+    expect(s).not.toContain('showConfirm')
+  })
+
+  it('动作确认统一 showDangerConfirm（全危险红语义）', () => {
+    expect(src()).toContain('showDangerConfirm')
+  })
+})
+
+// ── 措辞守卫（batch2 1.4 / design D9）：节点语境 = 启用/禁用（「正常」废弃）──
 describe('ClusterNodes 措辞守卫（batch2 1.4 / D9）', () => {
   it('表单 a-select 与批量导入 select 状态选项为「启用/禁用」', () => {
     const s = src()

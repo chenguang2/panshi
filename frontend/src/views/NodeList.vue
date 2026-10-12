@@ -7,7 +7,7 @@
     </PageHeader>
 
     <div class="node-filter-bar">
-      <div class="search-input-wrap">
+      <div v-if="nodeSearchVisible" class="search-input-wrap">
         <input v-model="searchText" type="text" placeholder="搜索 IP..." class="form-input" @input="onSearchInput" />
         <span class="search-icon"><SearchOutlined /></span>
       </div>
@@ -27,14 +27,61 @@
         <option value="unchecked">未检测</option>
       </select>
       <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
+      <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
+        <template #content>
+          <div style="min-width: 400px">
+            <div style="font-weight: 500; margin-bottom: 8px">列选择</div>
+            <a-checkbox-group v-model:value="nodeColumnsSelected">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <div v-for="col in columns" :key="col.key" style="margin-bottom: 4px">
+                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                </div>
+              </div>
+            </a-checkbox-group>
+            <a-divider style="margin: 12px 0" />
+            <div style="font-weight: 500; margin-bottom: 8px">操作按钮</div>
+            <a-checkbox-group v-model:value="nodeActionsSelected">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <div v-for="btn in inlineNodeActionOptions" :key="btn.key" style="margin-bottom: 4px">
+                  <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
+                </div>
+              </div>
+            </a-checkbox-group>
+            <a-divider style="margin: 12px 0" />
+            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+            <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
+          </div>
+        </template>
+        <button class="btn btn-secondary btn-sm">列配置</button>
+      </a-popover>
       <button class="btn btn-secondary btn-sm refresh-btn" @click="loadNodes"><ReloadOutlined /> 刷新</button>
+    </div>
+
+    <!-- 批量工具栏（batch3 2.1 / D5）：动作集与 Tab 默认一致，跨集群节点勾选后按集群分组执行 -->
+    <div class="node-batch-bar">
+      <span class="batch-count">已选 {{ selectedNodeKeys.length }} 项</span>
+      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStart">
+        <PlayCircleOutlined /> 批量启动
+      </button>
+      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStop">
+        <PauseCircleOutlined /> 批量停止
+      </button>
+      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchReload">
+        <ReloadOutlined /> 批量reload
+      </button>
+      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStatus">
+        批量状态查询
+      </button>
+      <span class="batch-bar-spacer"></span>
+      <button class="btn btn-secondary btn-sm" @click="openBatchImport">批量导入</button>
     </div>
 
     <div class="table-container">
       <a-table
         :data-source="displayedNodes"
-        :columns="columns"
+        :columns="visibleNodeColumns"
         :row-key="(record: any) => record.id"
+        :row-selection="rowSelection"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '个节点')"
         :loading="loading"
         size="middle"
@@ -86,18 +133,27 @@
 
           <template v-if="column.key === 'actions'">
             <div class="node-actions-wrap">
-              <button class="btn btn-ghost btn-sm" @click="handleStart(record)"><PlayCircleOutlined /> 启动</button>
-              <button class="btn btn-ghost btn-sm" @click="handleStop(record)"><PauseCircleOutlined /> 停止</button>
+              <!-- 动作钮集（batch3 4.1 / D8）：共享 allNodeActionButtons 配置化（行内勾选 start/stop/status） -->
+              <template v-for="btnKey in rowActionKeys" :key="btnKey">
+                <button class="btn btn-ghost btn-sm" @click="handleConfiguredAction(record, btnKey)">
+                  <PlayCircleOutlined v-if="btnKey === 'start'" />
+                  <PauseCircleOutlined v-else-if="btnKey === 'stop'" />
+                  {{ getActionButtonTitle(btnKey) }}
+                </button>
+              </template>
               <button class="btn btn-ghost btn-sm" @click="handleReload(record)"><ReloadOutlined /> reload</button>
-              <button class="btn btn-ghost btn-sm" @click="handleStatus(record)">✓ 状态</button>
               <a-dropdown :trigger="['click']">
                 <a-button type="text" size="small" class="action-trigger-btn"><MoreOutlined /></a-button>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="viewDetail(record)">ⓘ 详情</a-menu-item>
-                    <a-menu-item @click="handleEdit(record)">编辑</a-menu-item>
-                    <a-menu-item danger @click="handleDelete(record)">删除</a-menu-item>
-                    <a-menu-item @click="handleDiff(record)">数据库对比</a-menu-item>
+                    <a-menu-item @click="viewDetail(record)">详情</a-menu-item>
+                    <a-menu-item
+                      v-for="btn in unselectedSharedActions"
+                      :key="btn.key"
+                      @click="handleConfiguredAction(record, btn.key)"
+                    >
+                      {{ btn.title }}
+                    </a-menu-item>
                     <a-menu-divider
                       v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')"
                     />
@@ -350,6 +406,103 @@
       :node="edgePackDialogNode"
       :cluster-id="edgePackDialogNode?.cluster_id ?? 0"
     />
+
+    <!-- 批量动作进度弹窗（batch3 1.4 / D4：与 Tab 渲染同一组件、状态来自共享工厂） -->
+    <BatchActionProgressModal
+      v-model:visible="batchProgressVisible"
+      :title="batchProgressTitle"
+      :items="batchProgressItems"
+      :expanded-ip="batchProgressExpandedIp"
+      @toggle-expand="
+        (ip: string) => {
+          batchProgressExpandedIp = batchProgressExpandedIp === ip ? null : ip
+        }
+      "
+    />
+
+    <!-- 批量导入弹窗（batch3 3.2 / D7：粘贴/CSV 双 tab，与 Tab 同一 parse/validate/submit 机制） -->
+    <div class="modal-overlay" :style="{ display: importModalVisible ? 'flex' : 'none' }">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>批量导入节点</h2>
+          <button class="modal-close" @click="closeImportModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">所属集群</label>
+            <!-- #204：占位 option value="" ↔ 模型初值/重置 importClusterId='' 精确匹配 -->
+            <select v-model="importClusterId" class="form-input">
+              <option value="">请选择集群</option>
+              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+            </select>
+          </div>
+          <div class="import-toolbar">
+            <button
+              class="btn btn-sm"
+              :class="importTab === 'text' ? 'btn-primary' : 'btn-secondary'"
+              @click="importTab = 'text'"
+            >
+              粘贴 IP 列表
+            </button>
+            <button
+              class="btn btn-sm"
+              :class="importTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
+              @click="importTab = 'csv'"
+            >
+              CSV 上传
+            </button>
+          </div>
+          <div v-if="importTab === 'text'" class="import-pane">
+            <textarea
+              v-model="importText"
+              class="form-input import-textarea"
+              rows="5"
+              placeholder="每行一个 IP，支持 # 注释"
+            ></textarea>
+            <button class="btn btn-secondary btn-sm" @click="parseImportText">解析</button>
+          </div>
+          <div v-else class="import-pane">
+            <input type="file" accept=".csv" @change="onImportCsvChange" style="font-size: 12px" />
+            <button class="btn btn-secondary btn-sm" @click="downloadImportTemplate">下载模板</button>
+          </div>
+          <div v-if="importRows.length" class="import-preview">
+            <div class="text-sm text-muted">
+              共 {{ importRows.length }} 行，有效 {{ importValidCount }} 行（默认值：服务端口
+              {{ importDefaults.service_port }}、管理端口 {{ importDefaults.management_port }}、Edge 路径
+              {{ importDefaults.edge_path }}）
+            </div>
+            <table class="import-table">
+              <thead>
+                <tr>
+                  <th>IP</th>
+                  <th>服务端口</th>
+                  <th>管理端口</th>
+                  <th>Edge 路径</th>
+                  <th>原因</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in importRows" :key="idx" :class="{ 'import-row-invalid': importRowError(row) }">
+                  <td class="text-mono">{{ row.ip }}</td>
+                  <td>{{ row.service_port }}</td>
+                  <td>{{ row.management_port }}</td>
+                  <td>{{ row.edge_path }}</td>
+                  <td class="import-error-cell">{{ importRowError(row) || '' }}</td>
+                  <td><button class="btn btn-ghost btn-sm" @click="importRows.splice(idx, 1)">移除</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeImportModal">取消</button>
+          <button class="btn btn-primary" :disabled="importSubmitDisabled" @click="submitImport">
+            提交（{{ importValidCount }}）
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -360,21 +513,39 @@ import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
-import { showOverlayModal } from '@/composables/useOverlayModal'
+import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
+import { useColumnConfig } from '@/composables/useColumnConfig'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode } from '@/api/nodes'
-import { nginxState } from '@/composables/useClusterNodes'
-import { showNodeDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import {
+  nginxState,
+  createCancelNodeInstallHandler,
+  submitNodeBatchImport,
+  allNodeActionButtons,
+  type NodeImportRow,
+} from '@/composables/useClusterNodes'
+import { showNodeDeleteConfirm, executeDeleteWithProgress, showBatchStatusModal } from '@/composables/useClusterUtils'
+import {
+  runClusterGroupedBatchAction,
+  runBatchNodeStatus,
+  formatClusterBatchSummary,
+  createBatchProgressState,
+  warnNoNodesSelected,
+  type BatchProgressState,
+} from '@/composables/useBatchNodeAction'
+import { parseIpList, parseNodeCsv, buildNodeCsvTemplate, validateNodeImportRow } from '@/utils/nodeImport'
 import { getApiErrorMessage } from '@/utils/error'
+import { buildNodeInstallCommand } from '@/utils/nodeInstallCommand'
 import { isStructuredSseEvent } from '@/utils/sse'
 import {
   SearchOutlined,
@@ -471,12 +642,202 @@ const execStatistics = ref<Record<string, string> | null>(null)
 const execTargetNode = ref<any | null>(null)
 const cancelling = ref(false)
 
-// batch2 4.2 / D7：动作确认收敛到共享 useOverlayModal（页内手写确认机制已删，删除流程走共享 showNodeDeleteConfirm）。
-// 危险色语义保持原视觉：动作确认按钮一律危险红（okDanger: true）；onOk 为 Promise 期间
-// 由 okLoading 展示「处理中…」并禁用（弹窗关闭时机移至动作完成后）。
-function showDangerConfirm(title: string, content: string, okText: string, onOk: () => Promise<void>) {
-  showOverlayModal({ title, content, okText, okDanger: true, onOk })
+// ── 批量动作（batch3 2.1-2.3 / D5：共享进度状态 + 集群分组执行）──
+const batchProgress: BatchProgressState = createBatchProgressState()
+const {
+  visible: batchProgressVisible,
+  title: batchProgressTitle,
+  items: batchProgressItems,
+  expandedIp: batchProgressExpandedIp,
+} = batchProgress
+const selectedNodeKeys = ref<number[]>([])
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedNodeKeys.value,
+  onChange: (keys: number[]) => {
+    selectedNodeKeys.value = keys
+  },
+}))
+const batchSelectedNodes = computed(() => nodes.value.filter((n) => selectedNodeKeys.value.includes(n.id)))
+
+function clearBatchSelection() {
+  selectedNodeKeys.value = []
 }
+
+function groupNodesByCluster(list: Array<{ id: number; ip: string; cluster_id: number; cluster_name?: string }>) {
+  const groups = new Map<number, { clusterId: number; clusterName: string; nodes: Array<{ id: number; ip: string }> }>()
+  for (const n of list) {
+    const g = groups.get(n.cluster_id)
+    const node = { id: n.id, ip: n.ip }
+    if (g) g.nodes.push(node)
+    else
+      groups.set(n.cluster_id, {
+        clusterId: n.cluster_id,
+        clusterName: n.cluster_name || `集群 ${n.cluster_id}`,
+        nodes: [node],
+      })
+  }
+  return Array.from(groups.values())
+}
+
+async function executeBatchAction(
+  list: Array<{ id: number; ip: string; cluster_id: number; cluster_name?: string }>,
+  action: 'start' | 'stop' | 'reload',
+  label: string,
+) {
+  // F1：动作类按 cluster_id 分组逐集群调批量端点；集群级失败不中断整体（F4）
+  const summary = await runClusterGroupedBatchAction(groupNodesByCluster(list), action, label, {
+    progress: batchProgress,
+  })
+  message.info(formatClusterBatchSummary(summary))
+  clearBatchSelection()
+  await loadNodes()
+}
+
+function confirmBatchAction(action: 'start' | 'stop' | 'reload', label: string) {
+  const list = batchSelectedNodes.value
+  if (list.length === 0) {
+    warnNoNodesSelected()
+    return
+  }
+  showDangerConfirm(
+    `确认批量${label}节点`,
+    `将对 ${list.length} 个节点执行 ${label} 操作，涉及 ${groupNodesByCluster(list).length} 个集群。确认？`,
+    `确认${label}`,
+    () => executeBatchAction(list, action, label),
+  )
+}
+
+function handleBatchStart() {
+  confirmBatchAction('start', '启动')
+}
+function handleBatchStop() {
+  confirmBatchAction('stop', '停止')
+}
+function handleBatchReload() {
+  confirmBatchAction('reload', 'reload')
+}
+
+// F1：批量状态查询不走批量端点，逐节点 statistic（与 Tab batchNodeStatus 同款路径）
+async function handleBatchStatus() {
+  const list = batchSelectedNodes.value
+  if (list.length === 0) {
+    warnNoNodesSelected('查询')
+    return
+  }
+  const rows = await runBatchNodeStatus(list, { progress: batchProgress })
+  showBatchStatusModal('批量状态查询', rows)
+  clearBatchSelection()
+  await loadNodes()
+}
+
+// ── 复制节点（batch3 3.1 / D6：预填行配置、IP 清空、清 formErrors）──
+function handleCopy(record: any) {
+  editingNode.value = null
+  formData.cluster_id = record.cluster_id
+  formData.ip = ''
+  formData.service_port = record.service_port
+  formData.management_port = record.management_port
+  formData.ssh_port = record.ssh_port ?? 22
+  formData.edge_path = record.edge_path || ''
+  formData.openresty_path = record.openresty_path || ''
+  formData.statusCheck = record.status === 1
+  resetFormErrors()
+  formModalVisible.value = true
+}
+
+// ── 批量导入弹窗（batch3 3.2 / D7：与 Tab 同一 parse/validate/submit 机制）──
+const importModalVisible = ref(false)
+const importClusterId = ref<number | string>('')
+const importTab = ref<'text' | 'csv'>('text')
+const importText = ref('')
+const importRows = ref<NodeImportRow[]>([])
+const importDefaults = reactive({
+  service_port: 80,
+  management_port: 9180,
+  status: 1,
+  edge_path: '/edge',
+  openresty_path: '/usr/local/nginx',
+})
+const importCluster = computed(() => clusters.value.find((c) => c.id === Number(importClusterId.value)))
+const importValidCount = computed(() => importRows.value.filter((r) => !validateNodeImportRow(r)).length)
+const importSubmitDisabled = computed(() => !importClusterId.value || importValidCount.value === 0)
+
+function openBatchImport() {
+  importClusterId.value = ''
+  importTab.value = 'text'
+  importText.value = ''
+  importRows.value = []
+  importModalVisible.value = true
+}
+
+function closeImportModal() {
+  importModalVisible.value = false
+}
+
+function parseImportText() {
+  const parsed = parseIpList(importText.value)
+  // 透传 parse 层有效性判定（验收缺陷修复）：非法行 valid=false + error 进预览原因列，
+  // importValidCount 不计无效行，submitNodeBatchImport 按 valid 过滤（非法 IP 不入提交体）
+  importRows.value = parsed.map((row) => ({
+    ip: row.ip,
+    service_port: importDefaults.service_port,
+    management_port: importDefaults.management_port,
+    edge_path: importDefaults.edge_path,
+    openresty_path: importDefaults.openresty_path,
+    status: importDefaults.status,
+    valid: row.valid,
+    error: row.error,
+  }))
+}
+
+function onImportCsvChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const rows = parseNodeCsv(String(reader.result || ''))
+    importRows.value = rows.map((r) => ({
+      ip: r.ip,
+      service_port: r.service_port,
+      management_port: r.management_port,
+      edge_path: r.edge_path || importDefaults.edge_path,
+      openresty_path: r.openresty_path || importDefaults.openresty_path,
+      status: r.status,
+      valid: r.valid,
+      error: r.error,
+    }))
+  }
+  reader.readAsText(file)
+  input.value = ''
+}
+
+function downloadImportTemplate() {
+  const blob = new Blob([buildNodeCsvTemplate()], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'node-import-template.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function importRowError(row: NodeImportRow): string | undefined {
+  return validateNodeImportRow(row)
+}
+
+async function submitImport() {
+  if (!importCluster.value || importSubmitDisabled.value) return
+  const ok = await submitNodeBatchImport(importCluster.value, importRows.value)
+  if (!ok) return
+  importModalVisible.value = false
+  importRows.value = []
+  importText.value = ''
+  await loadNodes()
+}
+
+// batch3 1.3 / D3：危险红确认上移为 useOverlayModal 具名导出，本视图改直接引用（原本地包装已删）。
+// 危险色语义：动作确认按钮一律危险红；onOk 为 Promise 期间由 okLoading 展示「处理中…」并禁用。
 
 // Config diff drawer
 const diffDrawerVisible = ref(false)
@@ -497,6 +858,64 @@ const columns = [
   { title: 'Edge 版本', key: 'edge_version' },
   { title: '操作', key: 'actions', width: 320 },
 ]
+
+// ── 列/按钮/搜索个性化（batch3 4.1 / D8）──
+// 独立 storage key「node_standalone」，与 Tab 的 useColumnConfig('node') 互不影响。
+// 行内可调动作 = start/stop/status（reload 为本页特有动作，固定展示）；
+// 编辑/复制/删除/数据库对比 恒驻「更多」菜单（D6），不作为 popover 勾选项。
+const NODE_ROW_ACTION_KEYS = ['start', 'stop', 'status']
+const {
+  popoverVisible: nodeColumnPopoverVisible,
+  columnsSelected: nodeColumnsSelected,
+  searchVisible: nodeSearchVisible,
+  actionsSelected: nodeActionsSelected,
+} = useColumnConfig({
+  key: 'node_standalone',
+  defaultColumns: columns.map((c) => c.key),
+  defaultActions: [...NODE_ROW_ACTION_KEYS],
+  defaultSearchVisible: true,
+})
+const inlineNodeActionOptions = allNodeActionButtons.filter((b) => NODE_ROW_ACTION_KEYS.includes(b.key))
+const visibleNodeColumns = computed(() => {
+  const selected = new Set(nodeColumnsSelected.value)
+  return columns.filter((c) => selected.has(c.key))
+})
+// 行内常驻动作 = 勾选的 start/stop/status 子集
+const rowActionKeys = computed(() => NODE_ROW_ACTION_KEYS.filter((k) => nodeActionsSelected.value.includes(k)))
+// 更多菜单 = 恒驻四钮 + 未勾选的行内动作（非行内钮不受勾选态影响，防止残留配置吞菜单项）
+const unselectedSharedActions = computed(() =>
+  allNodeActionButtons.filter(
+    (b) => !NODE_ROW_ACTION_KEYS.includes(b.key) || !nodeActionsSelected.value.includes(b.key),
+  ),
+)
+function getActionButtonTitle(key: string) {
+  return allNodeActionButtons.find((b) => b.key === key)?.title ?? key
+}
+function handleConfiguredAction(record: any, key: string) {
+  switch (key) {
+    case 'edit':
+      handleEdit(record)
+      break
+    case 'copy':
+      handleCopy(record)
+      break
+    case 'delete':
+      handleDelete(record)
+      break
+    case 'start':
+      handleStart(record)
+      break
+    case 'stop':
+      handleStop(record)
+      break
+    case 'status':
+      handleStatus(record)
+      break
+    case 'diff':
+      handleDiff(record)
+      break
+  }
+}
 
 // ── Data Loading ──
 
@@ -852,19 +1271,8 @@ function appendStreamLine(line: string) {
   execLogs.value = [...execLogs.value, line]
 }
 
-function buildInstallCommand(record: any, tag: string, extravars: Record<string, string>) {
-  const ev = JSON.stringify({ ...extravars, ips: record.ip })
-  const ansibleCmd = `ansible-playbook -i inventory -e @env/extravars -e '${ev}' --tags ${tag} edge.yml`
-  // install-edge 只走 Ansible, 不执行 SSH; install-openresty 才走 Ansible + SSH 两阶段
-  if (tag === 'install_edge') {
-    return `# Ansible 命令:\n${ansibleCmd}`
-  }
-  const prefix = extravars.prefix || record.edge_path || ''
-  const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-  // 最小通用形态（batch1 2.6 / design D3）：不虚构账号与密钥，ssh_port 缺省 22
-  const sshCmd = `ssh -p ${record.ssh_port || 22} ${record.ip} "source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`
-  return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
-}
+// batch3 1.1 / D1：命令构建收敛到 utils/nodeInstallCommand 共享纯函数（本视图原实现即基线形态），
+// 调用点直引 buildNodeInstallCommand，不再保留本地包装。
 
 function handleInstallOpenresty(record: any) {
   installTargetNode.value = record
@@ -928,7 +1336,7 @@ function handleInstallEdge(record: any) {
       execProgress.percent = 0
       execProgress.status = 'active'
       const prefix = record.openresty_path || record.edge_path
-      const pendingCommand = buildInstallCommand(record, 'install_edge', { prefix })
+      const pendingCommand = buildNodeInstallCommand(record, 'install_edge', { prefix })
       execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
       startElapsedTimer()
 
@@ -1012,75 +1420,15 @@ function handleEdgePackManagement(record: any) {
   edgePackDialogVisible.value = true
 }
 
-function handleCancelInstall() {
-  const record = execTargetNode.value
-  if (!record || cancelling.value) return
-
-  showDangerConfirm(
-    '确认取消安装',
-    `即将取消节点 ${record.ip} 的安装操作，终止正在编译的进程。确认？`,
-    '确认取消',
-    async () => {
-      cancelling.value = true
-      try {
-        execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
-        // batch2 5.2 / D8：取消过程为不确定态（原 60% 为假进度）
-        execProgress.percent = 0
-        execProgress.status = 'active'
-        execProgress.indeterminate = true
-
-        const res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/cancel-install`)
-        const data = res.data
-
-        execLogs.value.push('')
-        execLogs.value.push('═══════════════════════════════════════════')
-        execLogs.value.push('取消安装结果:')
-
-        for (const step of data.steps) {
-          const icon = step.status === 'success' ? '✓' : step.status === 'skipped' ? '−' : '✗'
-          execLogs.value.push('')
-          execLogs.value.push(` ${icon} ${step.command}`)
-          if (step.stdout) {
-            for (const line of step.stdout.split('\n')) {
-              execLogs.value.push(`   ${line}`)
-            }
-          }
-          if (step.stderr) {
-            execLogs.value.push(`   stderr: ${step.stderr}`)
-          }
-        }
-
-        const allOk = data.steps.every((s: any) => s.status === 'success' || s.status === 'skipped')
-        execLogs.value.push('')
-        execLogs.value.push('═══════════════════════════════════════════')
-        execLogs.value.push(
-          data.status === 'skipped' ? '⚠️ 没有运行中的安装进程' : allOk ? '✅ 安装已取消' : '⚠️ 取消过程部分异常',
-        )
-
-        execProgress.percent = 100
-        execProgress.status = 'success'
-        execProgress.indeterminate = false
-
-        execResult.value = {
-          stdout: execLogs.value.join('\n'),
-          stderr: '',
-          command: data.steps.map((s: any) => `# ${s.command}\n${s.stdout || ''}`).join('\n\n'),
-          rc: 0,
-        }
-      } catch (error: unknown) {
-        const detail = getApiErrorMessage(error)
-        execLogs.value.push(`❌ ${detail}`)
-        execProgress.percent = 100
-        execProgress.status = 'exception'
-        execProgress.indeterminate = false
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
-      } finally {
-        cancelling.value = false
-        installStream.cancel()
-      }
-    },
-  )
-}
+// batch3 1.2 / D2：取消安装收敛到共享工厂（确认机制 showDangerConfirm、失败提取 getApiErrorMessage）
+const handleCancelInstall = createCancelNodeInstallHandler({
+  execTargetNode,
+  cancelling,
+  execLogs,
+  execProgress,
+  execResult,
+  installStream,
+})
 
 // ── Delete ──
 
@@ -1197,6 +1545,59 @@ function onEdgePackRebase(e: Event) {
 </script>
 
 <style scoped>
+/* 批量工具栏（batch3 2.1） */
+.node-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.node-batch-bar .batch-count {
+  color: var(--muted);
+  font-size: 13px;
+  margin-right: 4px;
+}
+.node-batch-bar .batch-bar-spacer {
+  flex: 1;
+}
+/* 批量导入弹窗（batch3 3.2） */
+.import-toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0;
+}
+.import-pane {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.import-textarea {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.import-preview {
+  margin-top: 10px;
+}
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.import-table th,
+.import-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.import-row-invalid td {
+  background: rgba(255, 77, 79, 0.08);
+}
+.import-error-cell {
+  color: var(--danger);
+}
+
 .node-filter-bar {
   display: flex;
   align-items: center;

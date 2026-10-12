@@ -456,26 +456,7 @@
       @toggle-expand="batchProgressExpandedIp = batchProgressExpandedIp === $event ? null : $event"
     />
 
-    <!-- Custom Confirm Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
-        <div class="modal" style="max-width: 420px">
-          <div class="modal-header">
-            <h2>{{ confirmState.title }}</h2>
-            <button class="modal-close" @click="confirmState.visible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmState.content }}</p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
-            <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
-              {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- 动作确认弹窗（batch3 5.1 / F3）：统一走共享 showDangerConfirm（useOverlayModal），无本页手写确认模板 -->
 
     <InstallOpenrestyDialog
       :visible="installDialogVisible"
@@ -507,7 +488,15 @@ import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vu
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
 import { validateNodeImportRow } from '@/utils/nodeImport'
-import { useClusterNodes, allNodeColumns, allNodeActionButtons, nginxState } from '@/composables/useClusterNodes'
+import { buildNodeInstallCommand } from '@/utils/nodeInstallCommand'
+import {
+  useClusterNodes,
+  allNodeColumns,
+  allNodeActionButtons,
+  nginxState,
+  createCancelNodeInstallHandler,
+} from '@/composables/useClusterNodes'
+import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
@@ -679,34 +668,6 @@ async function handleImportSubmit() {
 }
 
 // ── Custom Confirm (matches NodeList.vue pattern) ──
-const confirmState = reactive({
-  visible: false,
-  title: '',
-  content: '',
-  confirmText: '',
-  loading: false,
-  onConfirm: null as (() => Promise<void>) | null,
-})
-
-function showConfirm(title: string, content: string, confirmText: string, onConfirm: () => Promise<void>) {
-  confirmState.title = title
-  confirmState.content = content
-  confirmState.confirmText = confirmText
-  confirmState.loading = false
-  confirmState.onConfirm = onConfirm
-  confirmState.visible = true
-}
-
-async function executeConfirm() {
-  if (!confirmState.onConfirm) return
-  confirmState.visible = false
-  try {
-    await confirmState.onConfirm()
-  } finally {
-    confirmState.loading = false
-  }
-}
-
 function selectedNodeIps(): string[] {
   const keys = props.cluster.selectedNodeKeys || []
   return (props.cluster.nodes || []).filter((n) => keys.includes(n.id)).map((n) => n.ip)
@@ -722,13 +683,13 @@ function handleNodeStart() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm('确认批量启动节点', confirmTitle(batchCount.value, ips), `确认启动(${batchCount.value})`, () =>
+    showDangerConfirm('确认批量启动节点', confirmTitle(batchCount.value, ips), `确认启动(${batchCount.value})`, () =>
       batchNodeAction(props.cluster, 'start', '启动'),
     )
     return
   }
   if (!node) return
-  showConfirm('确认启动节点', `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
+  showDangerConfirm('确认启动节点', `即将对节点 ${node.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
     executeNodeAction(node, 'start', '启动'),
   )
 }
@@ -737,7 +698,7 @@ function handleNodeStop() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm(
+    showDangerConfirm(
       '确认批量停止节点',
       `${confirmTitle(batchCount.value, ips)}。停止后所有选中节点上的流量将中断，请确认操作无误。`,
       `确认停止(${batchCount.value})`,
@@ -746,7 +707,7 @@ function handleNodeStop() {
     return
   }
   if (!node) return
-  showConfirm(
+  showDangerConfirm(
     '确认停止节点',
     `即将对节点 ${node.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
@@ -758,13 +719,16 @@ function handleNodeReload() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm('确认批量 reload 节点', confirmTitle(batchCount.value, ips), `确认reload(${batchCount.value})`, () =>
-      batchNodeAction(props.cluster, 'reload', 'reload'),
+    showDangerConfirm(
+      '确认批量 reload 节点',
+      confirmTitle(batchCount.value, ips),
+      `确认reload(${batchCount.value})`,
+      () => batchNodeAction(props.cluster, 'reload', 'reload'),
     )
     return
   }
   if (!node) return
-  showConfirm(
+  showDangerConfirm(
     '确认重新加载节点',
     `即将对节点 ${node.ip} 执行"reload"操作，重新加载配置，确认继续？`,
     '确认reload',
@@ -775,7 +739,7 @@ function handleNodeReload() {
 function handleNodeStatusQuery() {
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showConfirm('确认批量状态查询', confirmTitle(batchCount.value, ips), `确认查询(${batchCount.value})`, () =>
+    showDangerConfirm('确认批量状态查询', confirmTitle(batchCount.value, ips), `确认查询(${batchCount.value})`, () =>
       batchNodeStatus(props.cluster),
     )
     return
@@ -786,11 +750,11 @@ function handleNodeStatusQuery() {
 
 function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: string) {
   if (btnKey === 'start') {
-    showConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
+    showDangerConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
       executeNodeAction(record, 'start', '启动'),
     )
   } else if (btnKey === 'stop') {
-    showConfirm(
+    showDangerConfirm(
       '确认停止节点',
       `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
       '确认停止',
@@ -819,33 +783,8 @@ function clearInstallTimer() {
   }
 }
 
-function buildInstallCommand(node: any, tag: string, extravars: Record<string, string>) {
-  const ev = JSON.stringify({ ...extravars, ips: node.ip })
-  const ansibleCmd = `ansible-playbook -i /home/qcg/panshi/backend/ansible/inventory -e @/home/qcg/panshi/backend/ansible/env/extravars -e '${ev}' --tags ${tag} edge.yml`
-  // install-edge 只走 Ansible, 不执行 SSH; install-openresty 才走 Ansible + SSH 两阶段
-  if (tag === 'install_edge') {
-    return `# Ansible 命令:\n${ansibleCmd}`
-  }
-  const prefix = extravars.prefix || node.edge_path || ''
-  const destpath = prefix.replace(/\/[^/]+$/, '') + '/'
-  const sshUser = 'jboss'
-  const sshCmd = [
-    'ssh',
-    '-i',
-    '~/.ssh/id_rsa',
-    '-o',
-    'BatchMode=yes',
-    '-o',
-    'ConnectTimeout=30',
-    '-o',
-    'StrictHostKeyChecking=no',
-    '-o',
-    'UserKnownHostsFile=/dev/null',
-    `${sshUser}@${node.ip}`,
-    `"source /etc/profile; cd ${destpath}soft/install-edge/ && ./install-edge.sh ${prefix}; wait"`,
-  ].join(' ')
-  return `# Ansible 命令:\n${ansibleCmd}\n\n# SSH 编译命令:\n${sshCmd}`
-}
+// batch3 1.1 / D1：命令构建收敛到 utils/nodeInstallCommand 共享纯函数
+// （原本地实现仍输出批 1 已清理的硬编码绝对路径与硬编码账号，属活缺陷，已修复）
 
 function handleInstallOpenresty() {
   const node = props.cluster.selectedNode
@@ -904,14 +843,14 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
 function handleInstallEdge() {
   const node = props.cluster.selectedNode
   if (!node) return
-  showConfirm(
+  showDangerConfirm(
     '\u786e\u8ba4\u5b89\u88c5 Edge',
     `\u5373\u5c06\u5728\u8282\u70b9 ${node.ip} \u4e0a\u5b89\u88c5 Edge\uff08${node.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
     '\u786e\u8ba4\u5b89\u88c5',
     async () => {
       execTargetNode.value = node
       const installPrefix = node.openresty_path || node.edge_path
-      const pendingCommand = buildInstallCommand(node, 'install_edge', { prefix: installPrefix || '' })
+      const pendingCommand = buildNodeInstallCommand(node, 'install_edge', { prefix: installPrefix || '' })
       execDrawerVisible.value = true
       execDrawerTitle.value = `\u5b89\u88c5 Edge - ${node.ip}`
       execLogs.value = []
@@ -952,76 +891,15 @@ function handleInstallEdge() {
   )
 }
 
-function handleCancelInstall() {
-  const node = execTargetNode.value
-  if (!node || cancelling.value) return
-
-  showConfirm(
-    '确认取消安装',
-    `即将取消节点 ${node.ip} 的安装操作，终止正在编译的进程。确认？`,
-    '确认取消',
-    async () => {
-      cancelling.value = true
-      try {
-        execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
-        // batch2 5.3 / D8：取消过程为不确定态（原 60% 为假进度）
-        execProgress.percent = 0
-        execProgress.status = 'active'
-        execProgress.indeterminate = true
-
-        const res = await api.post(`/clusters/${node.cluster_id}/nodes/${node.id}/cancel-install`)
-        const data = res.data
-
-        execLogs.value.push('')
-        execLogs.value.push('═══════════════════════════════════════════')
-        execLogs.value.push('取消安装结果:')
-
-        for (const step of data.steps) {
-          const icon = step.status === 'success' ? '✓' : step.status === 'skipped' ? '−' : '✗'
-          execLogs.value.push('')
-          execLogs.value.push(` ${icon} ${step.command}`)
-          if (step.stdout) {
-            for (const line of step.stdout.split('\n')) {
-              execLogs.value.push(`   ${line}`)
-            }
-          }
-          if (step.stderr) {
-            execLogs.value.push(`   stderr: ${step.stderr}`)
-          }
-        }
-
-        const allOk = data.steps.every((s: any) => s.status === 'success' || s.status === 'skipped')
-        execLogs.value.push('')
-        execLogs.value.push('═══════════════════════════════════════════')
-        execLogs.value.push(
-          data.status === 'skipped' ? '⚠️ 没有运行中的安装进程' : allOk ? '✅ 安装已取消' : '⚠️ 取消过程部分异常',
-        )
-
-        execProgress.percent = 100
-        execProgress.status = 'success'
-        execProgress.indeterminate = false
-
-        execResult.value = {
-          stdout: execLogs.value.join('\n'),
-          stderr: '',
-          command: data.steps.map((s: any) => `# ${s.command}\n${s.stdout || ''}`).join('\n\n'),
-          rc: 0,
-        }
-      } catch (error: any) {
-        const err = error as { response?: { data?: { detail?: string } }; message?: string }
-        const detail = err.response?.data?.detail || err.message || '取消失败'
-        execLogs.value.push(`❌ ${detail}`)
-        execProgress.percent = 100
-        execProgress.status = 'exception'
-        execProgress.indeterminate = false
-        execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
-      } finally {
-        cancelling.value = false
-        installStream.cancel()
-      }
-    },
-  )
-}
+// batch3 1.2 / D2：取消安装收敛到共享工厂（差异裁决见工厂注释：确认走 showDangerConfirm、失败提取 getApiErrorMessage）
+const handleCancelInstall = createCancelNodeInstallHandler({
+  execTargetNode,
+  cancelling,
+  execLogs,
+  execProgress,
+  execResult,
+  installStream,
+})
 
 // ── 关联新OpenResty ──
 
@@ -1029,7 +907,7 @@ function handleAssociateNewOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
   const prefix = node.openresty_path || ''
-  showConfirm(
+  showDangerConfirm(
     '关联新OpenResty',
     `即将把节点 ${node.ip} 的 Edge（${node.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,
     '确认关联',

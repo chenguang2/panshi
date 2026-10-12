@@ -22,6 +22,20 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'NodeList', query: {} }),
 }))
 
+// mock antd message：真实 message 容器为模块级缓存 + 异步挂载，全文件连跑时偶发不渲染（batch3 实测）。
+// 其余导出保持原样（AppModal 等组件仍依赖真实 Modal）。
+const mockMessageInfo = vi.fn()
+vi.mock('ant-design-vue', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ant-design-vue')>()
+  return {
+    ...actual,
+    message: {
+      ...actual.message,
+      info: (...args: any[]) => mockMessageInfo(...args),
+    },
+  }
+})
+
 const stubs = {
   'a-table': {
     template:
@@ -546,10 +560,9 @@ describe('NodeList.vue batch1 快修', () => {
     wrapper.unmount()
   })
 
-  it('命令预览无开发机硬编码：无 jboss@ 账号 / id_rsa 密钥，ssh 为最小通用形态（2.6 / D3）', async () => {
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    const cmd = vm.buildInstallCommand(
+  it('命令预览无开发机硬编码：无 jboss@ 账号 / id_rsa 密钥，ssh 为最小通用形态（2.6 / D3；batch3 1.1 起走共享纯函数）', async () => {
+    const { buildNodeInstallCommand } = await import('@/utils/nodeInstallCommand')
+    const cmd = buildNodeInstallCommand(
       { ip: '10.0.0.1', ssh_port: 22, edge_path: '/usr/local/edge', openresty_path: '/usr/local/nginx' },
       'install_openresty',
       { prefix: '/usr/local/nginx' },
@@ -557,7 +570,6 @@ describe('NodeList.vue batch1 快修', () => {
     expect(cmd).not.toContain('jboss@')
     expect(cmd).not.toContain('id_rsa')
     expect(cmd).toContain('ssh -p 22 10.0.0.1')
-    wrapper.unmount()
   })
 
   it('动作执行失败回退的本地命令用相对 inventory，无 /home/qcg 绝对路径（2.6）', async () => {
@@ -998,5 +1010,497 @@ describe('NodeList.vue batch2 详情统计归属', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('（集群级）')
     wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch3 2.1-2.3 / D5：批量工具栏 + 集群分组执行 ─────────
+// mock 形状取自真实后端：批量端点 POST /clusters/{cid}/nodes/action（cluster_nodes.py:486）
+// 返回 { action, results: [{ node_id, ip, status, rc, stdout, stderr, command, detail? }] }。
+describe('NodeList.vue batch3 批量动作（工具栏 + 分组执行）', () => {
+  const batchNodes = {
+    total: 3,
+    page: 1,
+    page_size: 500,
+    items: [
+      {
+        id: 1,
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        ip: '10.0.0.1',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/1',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+      {
+        id: 2,
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        ip: '10.0.0.2',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/2',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+      {
+        id: 3,
+        cluster_id: 2,
+        cluster_name: '预发集群',
+        ip: '10.0.0.3',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/3',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+    ],
+  }
+
+  const batchResult = (nodes: Array<{ id: number; ip: string }>) => ({
+    action: 'start',
+    results: nodes.map((n) => ({
+      node_id: n.id,
+      ip: n.ip,
+      status: 'success',
+      rc: 0,
+      stdout: 'ok',
+      stderr: '',
+      command: 'cmd',
+    })),
+  })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: batchNodes })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 3, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    mockApiPost.mockResolvedValue({ data: batchResult([]) })
+  })
+
+  async function mountBatch() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('2.1 工具栏含批量启动/批量停止/批量reload/状态查询，未勾选时禁用', async () => {
+    const wrapper = await mountBatch()
+    const btn = (text: string) => wrapper.findAll('button').find((b) => b.text().includes(text))
+    for (const label of ['批量启动', '批量停止', '批量reload', '批量状态查询']) {
+      const b = btn(label)
+      expect(b, `应有 ${label} 按钮`).toBeDefined()
+      expect(b!.attributes('disabled')).toBeDefined()
+    }
+    // 勾选后启用
+    ;(wrapper.vm as any).selectedNodeKeys = [1]
+    await wrapper.vm.$nextTick()
+    expect(btn('批量启动')!.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('2.2 勾选跨集群节点批量启动：按 cluster_id 分组逐集群调批量端点，items 合并、汇总提示', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/nodes/action')
+        return Promise.resolve({ data: batchResult([batchNodes.items[0], batchNodes.items[1]]) })
+      if (url === '/clusters/2/nodes/action') return Promise.resolve({ data: batchResult([batchNodes.items[2]]) })
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    const wrapper = await mountBatch()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1, 2, 3]
+    await wrapper.vm.$nextTick()
+    vm.handleBatchStart()
+    await wrapper.vm.$nextTick()
+    // 危险红确认
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认启动'),
+    ) as HTMLButtonElement
+    expect(okBtn).toBeDefined()
+    expect(okBtn.className).toContain('btn-danger')
+    okBtn.click()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/action', { action: 'start', node_ids: [1, 2] })
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/2/nodes/action', { action: 'start', node_ids: [3] })
+    // 批量进度弹窗可见且 items 合并三个节点
+    expect(vm.batchProgress.visible.value).toBe(true)
+    expect(vm.batchProgress.items.value).toHaveLength(3)
+    expect(vm.batchProgress.items.value.every((i: { status: string }) => i.status === 'success')).toBe(true)
+    // 汇总提示
+    expect(mockMessageInfo).toHaveBeenCalledTimes(1)
+    const summaryText = String(mockMessageInfo.mock.calls[0][0])
+    expect(summaryText).toContain('集群 生产集群：2 成功')
+    expect(summaryText).toContain('集群 预发集群：1 成功')
+    // 选中态清理
+    expect(vm.selectedNodeKeys).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('2.3 集群级失败不中断整体：失败集群节点项标失败并记「集群级失败（原因）」', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/nodes/action') return Promise.reject({ response: { data: { detail: '网关不可达' } } })
+      if (url === '/clusters/2/nodes/action') return Promise.resolve({ data: batchResult([batchNodes.items[2]]) })
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    const wrapper = await mountBatch()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1, 2, 3]
+    await wrapper.vm.$nextTick()
+    vm.handleBatchStart()
+    await wrapper.vm.$nextTick()
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认启动'),
+    ) as HTMLButtonElement
+    okBtn.click()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    const items = vm.batchProgress.items.value
+    expect(items[0].status).toBe('error')
+    expect(items[1].status).toBe('error')
+    expect(items[0].logs.join('')).toContain('集群级失败（网关不可达）')
+    expect(items[2].status).toBe('success')
+    wrapper.unmount()
+  })
+
+  it('2.2 状态查询：逐节点 statistic（不走批量端点，F1），结果表格弹出', async () => {
+    mockApiPost.mockImplementation((url: string) => {
+      if (url.endsWith('/1/statistic') || url.endsWith('/3/statistic')) {
+        return Promise.resolve({
+          data: { rc: 0, statistic: { edge_version: 'v1.2.3' }, stdout: 's', stderr: '', command: 'c' },
+        })
+      }
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    const wrapper = await mountBatch()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1, 3]
+    await wrapper.vm.$nextTick()
+    vm.handleBatchStatus()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    // 逐节点 SSE 同款路径：单节点 statistic 端点
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/statistic', { ports: '9180' })
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/2/nodes/3/statistic', { ports: '9180' })
+    // 不应有批量端点调用
+    expect(mockApiPost.mock.calls.some((c) => String(c[0]).endsWith('/nodes/action'))).toBe(false)
+    // 结果表格（共享 showBatchStatusModal 渲染到 body）
+    expect(document.body.textContent).toContain('批量状态查询')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch3 3.1 / D6：复制节点 ─────────────────────────────
+describe('NodeList.vue batch3 复制节点', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 3, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('handleCopy 预填行配置、IP 清空、清 formErrors、进入新建态', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // 先制造脏 formErrors
+    vm.formErrors.ip = '请输入IP地址'
+    vm.handleCopy({
+      cluster_id: 2,
+      ip: '10.0.0.9',
+      service_port: 81,
+      management_port: 9181,
+      ssh_port: 2222,
+      edge_path: '/e/copy',
+      openresty_path: '/or/copy',
+      status: 0,
+    })
+    await wrapper.vm.$nextTick()
+    expect(vm.formModalVisible).toBe(true)
+    expect(vm.editingNode).toBeNull()
+    expect(vm.formData.ip).toBe('')
+    expect(vm.formData.cluster_id).toBe(2)
+    expect(vm.formData.service_port).toBe(81)
+    expect(vm.formData.management_port).toBe(9181)
+    expect(vm.formData.ssh_port).toBe(2222)
+    expect(vm.formData.edge_path).toBe('/e/copy')
+    expect(vm.formData.openresty_path).toBe('/or/copy')
+    expect(vm.formData.statusCheck).toBe(false)
+    expect(vm.formErrors.ip || '').toBe('')
+    wrapper.unmount()
+  })
+
+  it('「更多」菜单含「复制」且位于「编辑」之后（D6 源码守卫：顺序由共享 allNodeActionButtons 钉死）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    expect(s).toContain('handleCopy')
+    // 配置化后菜单顺序 = allNodeActionButtons 顺序（edit 在 copy 前 → 更多里「复制」在「编辑」后）
+    const { allNodeActionButtons } = await import('@/composables/useClusterNodes')
+    const keys = allNodeActionButtons.map((b: { key: string }) => b.key)
+    expect(keys.indexOf('copy')).toBeGreaterThan(keys.indexOf('edit'))
+  })
+})
+
+// ── node-management-ux-batch3 3.2 / D7：批量导入弹窗（独立页）────────────────
+describe('NodeList.vue batch3 批量导入', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 3, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    mockApiPost.mockResolvedValue({ data: { message: '成功创建 1 条节点', results: [] } })
+  })
+
+  async function openImport() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.openBatchImport()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('工具栏含「批量导入」按钮，弹窗集群下拉占位与模型空串精确匹配（#204）', async () => {
+    const wrapper = await openImport()
+    const vm = wrapper.vm as any
+    expect(vm.importModalVisible).toBe(true)
+    expect(vm.importClusterId).toBe('')
+    const select = wrapper.findAll('select').find((s) => s.text().includes('请选择集群'))
+    expect(select).toBeDefined()
+    const firstOption = select!.findAll('option')[0]
+    expect(firstOption.element.getAttribute('value')).toBe('')
+    expect((select!.element as HTMLSelectElement).value).toBe('')
+    expect(select!.element.selectedIndex).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('未选集群或无有效行时提交禁用', async () => {
+    const wrapper = await openImport()
+    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
+    expect(submit).toBeDefined()
+    expect(submit!.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('粘贴解析 → 提交走 submitNodeBatchImport 同款端点，成功后关弹窗并重载', async () => {
+    const wrapper = await openImport()
+    const vm = wrapper.vm as any
+    vm.importClusterId = 2
+    vm.importText = '10.1.1.5\n10.1.1.6'
+    await wrapper.vm.$nextTick()
+    vm.parseImportText()
+    await wrapper.vm.$nextTick()
+    expect(vm.importRows).toHaveLength(2)
+    expect(vm.importRows[0]).toMatchObject({ ip: '10.1.1.5', service_port: 80, management_port: 9180 })
+    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
+    expect(submit!.attributes('disabled')).toBeUndefined()
+    await submit!.trigger('click')
+    await flushPromises()
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/2/nodes/batch', {
+      nodes: [
+        {
+          ip: '10.1.1.5',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge',
+          openresty_path: '/usr/local/nginx',
+          status: 1,
+        },
+        {
+          ip: '10.1.1.6',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/edge',
+          openresty_path: '/usr/local/nginx',
+          status: 1,
+        },
+      ],
+    })
+    expect(vm.importModalVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('缺陷修复：文本解析保留 parse 层有效性判定（非法行计无效、原因列显示、提交剔除）', async () => {
+    mockApiPost.mockResolvedValue({ data: { message: '成功创建 1 条节点', results: [] } })
+    const wrapper = await openImport()
+    const vm = wrapper.vm as any
+    vm.importClusterId = 2
+    // mock 形状取自真实 parseIpList 返回（utils/nodeImport.ts）：非法行 { valid: false, error: '不是合法的 IP 地址' }
+    vm.importText = '10.1.1.5\n999.1.1.1'
+    await wrapper.vm.$nextTick()
+    vm.parseImportText()
+    await wrapper.vm.$nextTick()
+    expect(vm.importRows).toHaveLength(2)
+    expect(vm.importRows[1]).toMatchObject({ ip: '999.1.1.1', valid: false, error: '不是合法的 IP 地址' })
+    // 预览头「有效」计数不含无效行
+    expect(wrapper.text()).toContain('有效 1 行')
+    // 预览表「原因」列出现解析层错误
+    expect(vm.importRowError(vm.importRows[1])).toBe('不是合法的 IP 地址')
+    // 提交请求体不含非法行
+    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
+    expect(submit!.attributes('disabled')).toBeUndefined()
+    await submit!.trigger('click')
+    await flushPromises()
+    const call = mockApiPost.mock.calls.find((c) => String(c[0]) === '/clusters/2/nodes/batch')
+    expect(call).toBeDefined()
+    const body = call![1] as { nodes: Array<{ ip: string }> }
+    expect(body.nodes.some((n) => n.ip === '999.1.1.1')).toBe(false)
+    expect(body.nodes.some((n) => n.ip === '10.1.1.5')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('CSV 模板下载与 CSV 上传解析（F2 双 tab）', async () => {
+    const wrapper = await openImport()
+    // CSV tab 切换后：文件选择 + 模板下载按钮（同 Tab 双 tab 结构）
+    const csvTab = wrapper.findAll('button').find((b) => b.text().includes('CSV 上传'))
+    expect(csvTab).toBeDefined()
+    await csvTab!.trigger('click')
+    await wrapper.vm.$nextTick()
+    const fileInput = wrapper.find('input[type="file"]')
+    expect(fileInput.exists()).toBe(true)
+    const tplBtn = wrapper.findAll('button').find((b) => b.text().includes('下载模板'))
+    expect(tplBtn).toBeDefined()
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch3 4.1 / D8：列配置 popover + 独立 storage key ────
+describe('NodeList.vue batch3 列配置', () => {
+  const cfgNode = {
+    id: 1,
+    cluster_id: 1,
+    cluster_name: '生产集群',
+    ip: '10.0.0.1',
+    service_port: 80,
+    management_port: 9180,
+    edge_path: '/e',
+    openresty_path: '/or',
+    status: 1,
+    status_detail: { nginx: { nginx_running: true } },
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 1, items: [cfgNode] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 3, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  async function mountPage() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('独立 storage key「node_standalone」，与 Tab 的 node 配置互不影响（D8 源码守卫）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    expect(s).toContain("key: 'node_standalone'")
+    expect(s).toContain(':columns="visibleNodeColumns"')
+    expect(s).toContain(':row-selection="rowSelection"')
+  })
+
+  it('默认动作集 = start/stop/status；编辑/复制/删除/数据库对比恒驻「更多」菜单（D6 可见性修复）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    expect([...vm.nodeActionsSelected].sort()).toEqual(['start', 'status', 'stop'])
+    const menuKeys = vm.unselectedSharedActions.map((b: { key: string }) => b.key)
+    expect(menuKeys).toEqual(['edit', 'copy', 'delete', 'diff'])
+    // 行内只可能渲染 start/stop/status 子集；即使残留配置勾了非行内钮，菜单也不吞掉它们
+    vm.nodeActionsSelected = ['start', 'copy', 'delete']
+    await wrapper.vm.$nextTick()
+    const menuKeys2 = vm.unselectedSharedActions.map((b: { key: string }) => b.key)
+    expect(menuKeys2).toEqual(expect.arrayContaining(['edit', 'copy', 'delete', 'diff', 'stop', 'status']))
+    wrapper.unmount()
+  })
+
+  it('列配置 popover 操作按钮仅列行内可调三钮（D6 源码守卫：非行内钮不作为勾选项）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    const actionGroup = s.slice(s.indexOf('操作按钮'), s.indexOf('显示搜索框'))
+    expect(actionGroup).toContain('inlineNodeActionOptions')
+    expect(actionGroup).not.toContain('allNodeActionButtons')
+  })
+
+  it('取消「显示搜索框」→ 搜索输入隐藏；勾选恢复', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    expect(wrapper.find('.search-input-wrap').exists()).toBe(true)
+    vm.nodeSearchVisible = false
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.search-input-wrap').exists()).toBe(false)
+    vm.nodeSearchVisible = true
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.search-input-wrap').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('动作钮集按 nodeActionsSelected 过滤：仅勾 start 时行内只剩「启动」', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.nodeActionsSelected = ['start']
+    await wrapper.vm.$nextTick()
+    const rowBtnTexts = wrapper.findAll('.mock-a-table button').map((b) => b.text())
+    expect(rowBtnTexts.some((t) => t.includes('启动'))).toBe(true)
+    expect(rowBtnTexts.some((t) => t.includes('停止'))).toBe(false)
+    expect(rowBtnTexts.some((t) => t.includes('状态查询'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('列选择驱动 visibleNodeColumns 并持久化到 node_standalone_cfg_*', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.nodeColumnsSelected = ['ip', 'actions']
+    await wrapper.vm.$nextTick()
+    expect(vm.visibleNodeColumns.map((c: { key: string }) => c.key)).toEqual(['ip', 'actions'])
+    // useAuthStore 无登录态 → guest 键
+    const raw = localStorage.getItem('node_standalone_cfg_guest')
+    expect(raw).not.toBeNull()
+    expect(JSON.parse(raw!).columns).toEqual(['ip', 'actions'])
+    wrapper.unmount()
+  })
+
+  it('F5 emoji 清零（✓/ⓘ 源码守卫）+ 共享动作钮集接入', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    expect(s).not.toContain('✓ 状态')
+    expect(s).not.toContain('ⓘ 详情')
+    expect(s).toContain('状态查询')
+    expect(s).toContain('allNodeActionButtons')
   })
 })

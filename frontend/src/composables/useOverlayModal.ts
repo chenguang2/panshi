@@ -134,3 +134,17 @@ export function showOverlayModal(opts: OverlayModalOptions): OverlayModalHandle 
     },
   }
 }
+
+/**
+ * 危险操作确认（node-management-ux-batch3 1.3 / design D3）：showOverlayModal 的危险红薄封装，
+ * 全站动作确认统一入口（NodeList 动作/批量、ClusterNodes 动作、取消安装共用）。
+ * 继承 okLoading：onOk 为 Promise 期间确定钮禁用并显示「处理中…」，完成关闭、异常恢复可点。
+ */
+export function showDangerConfirm(
+  title: string,
+  content: string,
+  okText: string,
+  onOk: () => void | Promise<void>,
+): OverlayModalHandle {
+  return showOverlayModal({ title, content, okText, okDanger: true, onOk })
+}

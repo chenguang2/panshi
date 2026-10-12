@@ -68,3 +68,37 @@ describe('useOverlayModal okLoading（batch2 4.1）', () => {
     expect(findButton('处理中…')).toBeUndefined()
   })
 })
+
+// ── node-management-ux-batch3 1.3 / D3：showDangerConfirm 上移为具名导出 ──
+describe('showDangerConfirm（batch3 1.3）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('确认按钮为危险红（btn-danger），onOk 完成后关闭', async () => {
+    const { showDangerConfirm } = await import('../useOverlayModal')
+    const onOk = vi.fn(() => Promise.resolve())
+    showDangerConfirm('确认操作', '该操作有风险，确认？', '确认执行', onOk)
+    const okBtn = findButton('确认执行')!
+    expect(okBtn).toBeDefined()
+    expect(okBtn.className).toContain('btn-danger')
+    okBtn.click()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(onOk).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+  })
+
+  it('onOk 为 Promise 期间继承 okLoading（禁用 + 「处理中…」）', async () => {
+    const { showDangerConfirm } = await import('../useOverlayModal')
+    let resolveOk!: () => void
+    showDangerConfirm('确认操作', '内容', '确认执行', () => new Promise<void>((r) => (resolveOk = r)))
+    findButton('确认执行')!.click()
+    await Promise.resolve()
+    const loadingBtn = findButton('处理中…')
+    expect(loadingBtn).toBeDefined()
+    expect(loadingBtn!.disabled).toBe(true)
+    resolveOk()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+  })
+})

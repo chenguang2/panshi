@@ -8,6 +8,8 @@ const mockDeleteNodes = vi.fn()
 const mockSelectNodes = vi.fn()
 const mockBatchNodeAction = vi.fn()
 const mockBatchNodeStatus = vi.fn()
+// 可控的 parseIpList（文本导入解析有效性回归用；mock 形状取自真实 utils/nodeImport.ts 返回）
+const mockParseIpList = vi.fn(() => [] as Array<{ ip: string; valid: boolean; error?: string }>)
 
 vi.mock('@/composables/useClusterNodes', () => ({
   useClusterNodes: () => ({
@@ -40,9 +42,16 @@ vi.mock('@/composables/useClusterNodes', () => ({
     nodeImportTab: ref('text'),
     nodeImportText: ref(''),
     nodeImportRows: ref([]),
-    nodeImportDefaults: ref({ service_port: 80, management_port: 9180, status: 1, edge_path: '/edge', openresty_path: '/usr/local/nginx' }),
+    // 真实实现为 reactive 对象（非 ref）：脚本层 nodeImportDefaults.openresty_path 直读属性
+    nodeImportDefaults: {
+      service_port: 80,
+      management_port: 9180,
+      status: 1,
+      edge_path: '/edge',
+      openresty_path: '/usr/local/nginx',
+    },
     currentClusterId: ref(1),
-    parseIpList: () => [],
+    parseIpList: (t: string) => mockParseIpList(t),
     parseNodeCsv: () => [],
     buildNodeCsvTemplate: () => '',
     deleteNode: (c: any) => mockDeleteNode(c),
@@ -62,6 +71,11 @@ vi.mock('@/composables/useClusterNodes', () => ({
     execStatistics: ref(null),
     execElapsed: ref(null),
   }),
+  // 模块级导出（batch3 1.2 / D8：Tab setup 引用）
+  createCancelNodeInstallHandler: () => vi.fn(),
+  nginxState: () => 'unchecked',
+  allNodeColumns: [],
+  allNodeActionButtons: [],
 }))
 
 vi.mock('@/composables/useClusterUtils', () => ({
@@ -78,9 +92,14 @@ vi.mock('@/stores/features', () => ({
 vi.mock('@/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
 
 const stubs = {
-  AButton: { template: '<button class="mock-btn" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>', props: ['disabled'] },
+  AButton: {
+    template: '<button class="mock-btn" :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
+    props: ['disabled'],
+  },
   ADivider: { template: '<hr />' },
-  ADropdown: { template: '<div class="mock-dropdown"><slot /><template #overlay><slot name="overlay" /></template></div>' },
+  ADropdown: {
+    template: '<div class="mock-dropdown"><slot /><template #overlay><slot name="overlay" /></template></div>',
+  },
   AMenu: { template: '<div class="mock-menu"><slot /></div>' },
   AMenuItem: { template: '<div class="mock-menuitem" @click="$emit(\'click\')"><slot /></div>' },
   APopover: { template: '<div class="mock-popover"><slot /></div>' },
@@ -100,7 +119,10 @@ const stubs = {
   AInput: { template: '<input class="mock-input" />' },
   DownOutlined: { template: '<span class="mock-down" />' },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
-  InstallOpenrestyDialog: { template: '<div class="mock-install-dialog" v-if="visible">dialog</div>', props: ['visible', 'node', 'clusterId'] },
+  InstallOpenrestyDialog: {
+    template: '<div class="mock-install-dialog" v-if="visible">dialog</div>',
+    props: ['visible', 'node', 'clusterId'],
+  },
   EdgePackManagementDialog: { template: '<div class="mock-edge-pack" v-if="visible">pack</div>', props: ['visible'] },
   ConfigDiff: { template: '<div class="mock-config-diff" />' },
   NodeExecutionResultDrawer: { template: '<div class="mock-exec-drawer" />' },
@@ -164,7 +186,10 @@ describe('ClusterNodes.vue batch delete', () => {
   })
 
   it('calls deleteNode (single) when no batch keys', async () => {
-    const cluster = makeCluster({ selectedNodeKeys: [], selectedNode: { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' } })
+    const cluster = makeCluster({
+      selectedNodeKeys: [],
+      selectedNode: { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' },
+    })
     const wrapper = await mountClusterNodes(cluster)
     const buttons = wrapper.findAll('.mock-btn')
     const deleteBtn = buttons.find((b) => b.text().includes('删除'))
@@ -173,7 +198,10 @@ describe('ClusterNodes.vue batch delete', () => {
   })
 
   it('disables single-selection buttons when 2+ rows checked', async () => {
-    const cluster = makeCluster({ selectedNodeKeys: [1, 2], selectedNode: { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' } })
+    const cluster = makeCluster({
+      selectedNodeKeys: [1, 2],
+      selectedNode: { id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' },
+    })
     const wrapper = await mountClusterNodes(cluster)
     const buttons = wrapper.findAll('.mock-btn')
     const editBtn = buttons.find((b) => b.text().includes('编辑'))
@@ -212,9 +240,10 @@ describe('ClusterNodes.vue batch delete', () => {
     expect(startBtn?.attributes('disabled')).toBeUndefined()
     await startBtn?.trigger('click')
     await wrapper.vm.$nextTick()
-    const vm = wrapper.vm as any
-    expect(vm.confirmState?.visible).toBe(true)
-    expect(vm.confirmState?.title).toContain('确认批量启动节点')
+    // batch3 5.1：确认弹窗走共享 showDangerConfirm（渲染进 body，不再有页内 confirmState）
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay).not.toBeNull()
+    expect(document.body.textContent).toContain('确认批量启动节点')
   })
 
   it('status query button opens batch status confirm dialog in batch mode', async () => {
@@ -231,8 +260,37 @@ describe('ClusterNodes.vue batch delete', () => {
     const statusBtn = buttons.find((b) => b.text().includes('状态查询'))
     await statusBtn?.trigger('click')
     await wrapper.vm.$nextTick()
+    // batch3 5.1：确认弹窗走共享 showDangerConfirm
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay).not.toBeNull()
+    expect(document.body.textContent).toContain('确认批量状态查询')
+  })
+})
+
+// ── 批3 验收缺陷修复回归：文本导入解析保留 parse 层有效性判定（Tab 侧钉死）──
+// 真实 parseIpList 对非法行返回 { valid: false, error: '不是合法的 IP 地址' }（utils/nodeImport.ts），
+// parseTextToRows 必须原样透传 valid/error——预览「有效」计数与原因列依赖它，
+// 共享 submitNodeBatchImport 按 r.valid 过滤（非法行不得进入提交体）。
+describe('ClusterNodes.vue 文本导入解析有效性', () => {
+  it('parseTextToRows 透传 parse 层 valid/error，无效行计入原因列且不计有效数', async () => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    mockParseIpList.mockReturnValue([
+      { ip: '10.0.0.9', valid: true },
+      { ip: 'not-an-ip', valid: false, error: '不是合法的 IP 地址' },
+    ])
+    const cluster = makeCluster({ nodes: [{ id: 1, ip: '10.0.0.1', cluster_id: 1, edge_path: '/edge/n1' }] })
+    const wrapper = await mountClusterNodes(cluster)
     const vm = wrapper.vm as any
-    expect(vm.confirmState?.visible).toBe(true)
-    expect(vm.confirmState?.title).toContain('确认批量状态查询')
+    vm.parseTextToRows()
+    await wrapper.vm.$nextTick()
+    // script-setup 绑定经 test-utils vm 访问时 ref 自动解包，nodeImportRows 直接是数组
+    const rows = vm.nodeImportRows as Array<{ ip: string; valid: boolean; error?: string }>
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toMatchObject({ ip: 'not-an-ip', valid: false, error: '不是合法的 IP 地址' })
+    expect(vm.importRowError(rows[1])).toBe('不是合法的 IP 地址')
+    expect(vm.importRowError(rows[0])).toBeUndefined()
+    expect(vm.validImportCount).toBe(1)
+    wrapper.unmount()
   })
 })

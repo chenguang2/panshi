@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Cluster, Node } from '@/types'
 
@@ -982,5 +982,109 @@ describe('useClusterNodes validateIP（真实实现非法输入分支）', () =>
     // 合法时以无参形式 callback()（不携带错误信息）
     expect(cb).toHaveBeenCalledTimes(1)
     expect(cb.mock.calls[0]).toEqual([])
+  })
+})
+
+// ── node-management-ux-batch3 1.2 / D2：取消安装共享工厂 ──────────────────────
+describe('createCancelNodeInstallHandler（batch3 1.2）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function makeDeps() {
+    const execTargetNode = ref<{ id: number; cluster_id: number; ip: string } | null>({
+      id: 1,
+      cluster_id: 1,
+      ip: '10.0.0.1',
+    })
+    const cancelling = ref(false)
+    const execLogs = ref<string[]>([])
+    const execProgress = reactive<{
+      percent: number
+      status: 'active' | 'success' | 'exception'
+      indeterminate: boolean
+    }>({ percent: 0, status: 'active', indeterminate: false })
+    const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
+    const installStream = { cancel: vi.fn() }
+    return { execTargetNode, cancelling, execLogs, execProgress, execResult, installStream }
+  }
+
+  async function clickConfirmCancel() {
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认取消'),
+    ) as HTMLButtonElement
+    expect(okBtn, '应弹出危险红确认').toBeDefined()
+    expect(okBtn!.className).toContain('btn-danger')
+    okBtn!.click()
+  }
+
+  it('确认后 POST cancel-install，渲染步骤日志与终态，finally 复位 cancelling 并 cancel 流', async () => {
+    mockApiPost.mockResolvedValue({
+      data: {
+        status: 'ok',
+        steps: [
+          { command: 'pkill -f install-edge', status: 'success', stdout: 'killed', stderr: '' },
+          { command: 'rm -f /tmp/lock', status: 'skipped', stdout: '', stderr: '' },
+        ],
+      },
+    })
+    const deps = makeDeps()
+    const { createCancelNodeInstallHandler } = await import('../useClusterNodes')
+    const handler = createCancelNodeInstallHandler(deps)
+    handler()
+    await clickConfirmCancel()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/cancel-install')
+    const logs = deps.execLogs.value.join('\n')
+    expect(logs).toContain('取消安装结果')
+    expect(logs).toContain('pkill -f install-edge')
+    expect(logs).toContain('✅ 安装已取消')
+    expect(deps.execProgress.percent).toBe(100)
+    expect(deps.execProgress.status).toBe('success')
+    expect(deps.execProgress.indeterminate).toBe(false)
+    expect(deps.execResult.value!.rc).toBe(0)
+    expect(deps.cancelling.value).toBe(false)
+    expect(deps.installStream.cancel).toHaveBeenCalled()
+    // 弹窗在 onOk 完成后关闭
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+  })
+
+  it('status=skipped 时提示「没有运行中的安装进程」', async () => {
+    mockApiPost.mockResolvedValue({ data: { status: 'skipped', steps: [] } })
+    const deps = makeDeps()
+    const { createCancelNodeInstallHandler } = await import('../useClusterNodes')
+    createCancelNodeInstallHandler(deps)()
+    await clickConfirmCancel()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(deps.execLogs.value.join('\n')).toContain('没有运行中的安装进程')
+  })
+
+  it('失败路径：detail 进日志、终态 exception、rc=-1', async () => {
+    mockApiPost.mockRejectedValue({ response: { data: { detail: 'SSH 连接失败' } } })
+    const deps = makeDeps()
+    const { createCancelNodeInstallHandler } = await import('../useClusterNodes')
+    createCancelNodeInstallHandler(deps)()
+    await clickConfirmCancel()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(deps.execLogs.value.join('\n')).toContain('❌ SSH 连接失败')
+    expect(deps.execProgress.status).toBe('exception')
+    expect(deps.execResult.value!.rc).toBe(-1)
+    expect(deps.cancelling.value).toBe(false)
+  })
+
+  it('无目标节点或正在取消时不弹确认', async () => {
+    const deps = makeDeps()
+    deps.execTargetNode.value = null
+    const { createCancelNodeInstallHandler } = await import('../useClusterNodes')
+    createCancelNodeInstallHandler(deps)()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+    expect(mockApiPost).not.toHaveBeenCalled()
   })
 })

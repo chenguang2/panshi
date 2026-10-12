@@ -38,24 +38,27 @@ describe('batch2 3.2 假排序守卫', () => {
   })
 })
 
-describe('batch2 4.2 确认弹窗收敛守卫', () => {
-  it('confirmState/executeConfirm/手写确认模板零残留，动作确认统一 showOverlayModal', () => {
+describe('batch2 4.2 确认弹窗收敛守卫（batch3 1.3 起统一入口为 showDangerConfirm）', () => {
+  it('confirmState/executeConfirm/手写确认模板零残留，动作确认统一 showDangerConfirm', () => {
     const s = src()
     expect(s, 'confirmState 应删除').not.toContain('confirmState')
     expect(s, 'executeConfirm 应删除').not.toContain('executeConfirm')
     expect(s, '页内 showConfirm 函数应删除（删除确认走共享 showNodeDeleteConfirm）').not.toContain(
       'function showConfirm',
     )
-    expect(s, '动作确认应走共享 showOverlayModal').toContain('showOverlayModal')
+    expect(s, '动作确认应走共享 showDangerConfirm（batch3 1.3 上移后的统一入口）').toContain('showDangerConfirm')
+    expect(s, '视图内不应再有本地危险红包装（okDanger 细节归 useOverlayModal）').not.toContain('okDanger')
   })
 
-  it('启动/停止/reload/取消安装确认保留危险色语义与按钮文案', () => {
+  it('启动/停止/reload 确认保留危险色语义与按钮文案；取消安装走共享工厂（batch3 1.2）', () => {
     const s = src()
-    for (const text of ['确认启动', '确认停止', '确认reload', '确认取消安装']) {
+    for (const text of ['确认启动', '确认停止', '确认reload']) {
       expect(s, `应保留文案 ${text}`).toContain(text)
     }
-    // okDanger: true 出现在动作确认（原视觉：确认按钮一律危险红）
-    expect(s).toContain('okDanger: true')
+    // 取消安装确认已收敛到 createCancelNodeInstallHandler（文案在工厂内钉死）
+    expect(s, '取消安装应走共享工厂').toContain('createCancelNodeInstallHandler')
+    // 危险红语义由共享 showDangerConfirm 承载（useOverlayModal.test.ts 钉死 btn-danger）
+    expect(s).toContain('showDangerConfirm')
   })
 })
 
@@ -97,10 +100,12 @@ describe('batch1：命令页签与命令预览（2.6）', () => {
     expect(s).not.toContain('jboss@')
     expect(s).not.toContain('id_rsa')
   })
-  it('本地回退命令用相对 -i inventory，ssh 预览为最小通用形态（D3）', () => {
+  it('本地回退命令用相对 -i inventory；ssh 预览形态由共享 buildNodeInstallCommand 承载（D3；batch3 1.1 收敛）', () => {
     const s = src()
     expect(s).toContain('-i inventory')
-    expect(s).toMatch(/ssh -p \$\{/)
+    // ssh 最小通用形态（ssh -p ${port}）已收敛进 utils/nodeInstallCommand（该文件内钉死），
+    // 视图级只守引用关系与无硬编码回潮。
+    expect(s).toContain('buildNodeInstallCommand')
   })
 })
 

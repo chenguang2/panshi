@@ -1,10 +1,10 @@
 import { ref, reactive, computed, watch, type Ref } from 'vue'
-import { showOverlayModal } from './useOverlayModal'
+import { showOverlayModal, showDangerConfirm } from './useOverlayModal'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
-import { useFeaturesStore } from '@/stores/features'
 import { useColumnConfig } from './useColumnConfig'
+import { getApiErrorMessage } from '@/utils/error'
 
 /** 节点命令执行结果（/clusters/{id}/nodes/{nid}/{action} 响应） */
 interface ExecCommandResult {
@@ -26,26 +26,17 @@ import {
 import { stripAnsi } from '@/utils/ansi'
 import { parseIpList, parseNodeCsv, buildNodeCsvTemplate } from '@/utils/nodeImport'
 import { useClusterListCore } from './useClusterResource'
+import {
+  runBatchNodeAction,
+  runBatchNodeStatus,
+  createBatchProgressState,
+  warnNoNodesSelected,
+} from './useBatchNodeAction'
 
 const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
-const BATCH_ACTION_CONCURRENCY = 5
-
-async function runWithConcurrency<T>(
-  items: T[],
-  limit: number,
-  task: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-  let nextIndex = 0
-  const worker = async () => {
-    while (nextIndex < items.length) {
-      const i = nextIndex++
-      await task(items[i], i)
-    }
-  }
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker())
-  await Promise.all(workers)
-}
+// batch3 1.4 / D4：批量并发引擎（BATCH_ACTION_CONCURRENCY/runWithConcurrency/batchActionConcurrency）
+// 已收敛进 composables/useBatchNodeAction.ts，本文件只保留薄适配。
 
 export const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
@@ -80,17 +71,152 @@ export function nginxState(node: Pick<Node, 'status_detail' | 'status'> | null |
   return 'unchecked'
 }
 
+/** 取消安装共享工厂的视图态依赖（node-management-ux-batch3 1.2 / design D2） */
+export interface CancelNodeInstallDeps {
+  execTargetNode: Ref<{ id: number; cluster_id: number; ip: string } | null>
+  cancelling: Ref<boolean>
+  execLogs: Ref<string[]>
+  execProgress: { percent: number; status: 'active' | 'success' | 'exception'; indeterminate: boolean }
+  execResult: Ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>
+  installStream: { cancel: () => void }
+}
+
+/**
+ * 取消安装处理器共享工厂（node-management-ux-batch3 1.2 / design D2）：
+ * 以 NodeList/ClusterNodes 两份现文为基线合并的单实现，两视图工厂实例化。
+ * 行为差异裁决（F7，以更完备方为准）：
+ * - 确认机制取 showDangerConfirm（NodeList 批 2 形态；ClusterNodes 原为手写 confirmState，已随 D9 迁移）；
+ * - 失败原因提取取 getApiErrorMessage（NodeList 形态，覆盖更多错误形状；
+ *   ClusterNodes 原为内联 response.data.detail || message || '取消失败'）。
+ */
+export function createCancelNodeInstallHandler(deps: CancelNodeInstallDeps): () => void {
+  const { execTargetNode, cancelling, execLogs, execProgress, execResult, installStream } = deps
+  return () => {
+    const record = execTargetNode.value
+    if (!record || cancelling.value) return
+
+    showDangerConfirm(
+      '确认取消安装',
+      `即将取消节点 ${record.ip} 的安装操作，终止正在编译的进程。确认？`,
+      '确认取消',
+      async () => {
+        cancelling.value = true
+        try {
+          execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
+          // batch2 5.2 / D8：取消过程为不确定态
+          execProgress.percent = 0
+          execProgress.status = 'active'
+          execProgress.indeterminate = true
+
+          const res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/cancel-install`)
+          const data = res.data
+
+          execLogs.value.push('')
+          execLogs.value.push('═══════════════════════════════════════════')
+          execLogs.value.push('取消安装结果:')
+
+          for (const step of data.steps) {
+            const icon = step.status === 'success' ? '✓' : step.status === 'skipped' ? '−' : '✗'
+            execLogs.value.push('')
+            execLogs.value.push(` ${icon} ${step.command}`)
+            if (step.stdout) {
+              for (const line of step.stdout.split('\n')) {
+                execLogs.value.push(`   ${line}`)
+              }
+            }
+            if (step.stderr) {
+              execLogs.value.push(`   stderr: ${step.stderr}`)
+            }
+          }
+
+          const allOk = data.steps.every((s: { status: string }) => s.status === 'success' || s.status === 'skipped')
+          execLogs.value.push('')
+          execLogs.value.push('═══════════════════════════════════════════')
+          execLogs.value.push(
+            data.status === 'skipped' ? '⚠️ 没有运行中的安装进程' : allOk ? '✅ 安装已取消' : '⚠️ 取消过程部分异常',
+          )
+
+          execProgress.percent = 100
+          execProgress.status = 'success'
+          execProgress.indeterminate = false
+
+          execResult.value = {
+            stdout: execLogs.value.join('\n'),
+            stderr: '',
+            command: data.steps
+              .map((s: { command: string; stdout: string }) => `# ${s.command}\n${s.stdout || ''}`)
+              .join('\n\n'),
+            rc: 0,
+          }
+        } catch (error: unknown) {
+          const detail = getApiErrorMessage(error)
+          execLogs.value.push(`❌ ${detail}`)
+          execProgress.percent = 100
+          execProgress.status = 'exception'
+          execProgress.indeterminate = false
+          execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
+        } finally {
+          cancelling.value = false
+          installStream.cancel()
+        }
+      },
+    )
+  }
+}
+
+/** 批量导入行（解析产物形状，与 Tab/独立页共用） */
+export interface NodeImportRow {
+  ip: string
+  service_port: number
+  management_port: number
+  edge_path: string
+  openresty_path: string
+  status: number
+  valid: boolean
+}
+
+/**
+ * 批量导入提交共享实现（node-management-ux-batch3 3.2 / design D7）：
+ * 过滤有效行 → POST /clusters/{id}/nodes/batch → 部分失败弹结果表/全部成功 message。
+ * 返回是否成功（调用方据此做各自的弹窗态清理与列表重载）。
+ */
+export async function submitNodeBatchImport(cluster: Pick<Cluster, 'id'>, rows: NodeImportRow[]): Promise<boolean> {
+  const validRows = rows.filter((r) => r.valid)
+  if (validRows.length === 0) {
+    message.warning('没有有效的节点可创建')
+    return false
+  }
+  try {
+    const res = await api.post(`/clusters/${cluster.id}/nodes/batch`, {
+      nodes: validRows.map((r) => ({
+        ip: r.ip,
+        service_port: r.service_port,
+        management_port: r.management_port,
+        edge_path: r.edge_path,
+        openresty_path: r.openresty_path,
+        status: r.status,
+      })),
+    })
+    const data = res.data
+    const results: BatchResultItem[] = data?.results || []
+    const hasFailure = results.some((r) => r.status !== 'success')
+    if (hasFailure) {
+      showBatchResultModal(data?.message || '批量创建结果', results)
+    } else {
+      message.success(data?.message || `成功创建 ${validRows.length} 条节点`)
+    }
+    return true
+  } catch (error: unknown) {
+    const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+    message.error(typeof detail === 'string' ? detail : '批量创建失败')
+    return false
+  }
+}
+
 export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?: () => void | Promise<void> }) {
   const { clusters, onRefresh } = options
 
-  const featuresStore = useFeaturesStore()
-
-  function batchActionConcurrency(): number {
-    return Math.min(
-      featuresStore.concurrencyOf('batch_action', BATCH_ACTION_CONCURRENCY),
-      featuresStore.concurrencyOf('max_playbooks', BATCH_ACTION_CONCURRENCY),
-    )
-  }
+  // batch3 1.4 / D4：批量执行引擎在共享模块（batchActionConcurrency 随迁），featuresStore 消费点随之迁出
 
   const nodeModalVisible = ref(false)
   const editingNode = ref<Node | null>(null)
@@ -120,18 +246,12 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
   const execStatistics = ref<Record<string, string> | null>(null)
   const execElapsed = ref<number | null>(null)
 
-  // ── Batch action progress state ─────────────────────────────
-  const batchProgressVisible = ref(false)
-  const batchProgressTitle = ref('')
-  const batchProgressItems = ref<
-    Array<{
-      ip: string
-      status: 'pending' | 'running' | 'success' | 'error'
-      logs: string[]
-      rc?: number
-    }>
-  >([])
-  const batchProgressExpandedIp = ref<string | null>(null)
+  // ── Batch action progress state（batch3 1.4 / D4：状态形状收敛到共享工厂）──
+  const batchProgress = createBatchProgressState()
+  const batchProgressVisible = batchProgress.visible
+  const batchProgressTitle = batchProgress.title
+  const batchProgressItems = batchProgress.items
+  const batchProgressExpandedIp = batchProgress.expandedIp
 
   let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
@@ -371,41 +491,17 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
       valid: boolean
     }>,
   ) => {
-    const validRows = rows.filter((r) => r.valid)
-    if (validRows.length === 0) {
-      message.warning('没有有效的节点可创建')
-      return
-    }
-    try {
-      const res = await api.post(`/clusters/${cluster.id}/nodes/batch`, {
-        nodes: validRows.map((r) => ({
-          ip: r.ip,
-          service_port: r.service_port,
-          management_port: r.management_port,
-          edge_path: r.edge_path,
-          openresty_path: r.openresty_path,
-          status: r.status,
-        })),
-      })
-      const data = res.data
-      const results: BatchResultItem[] = data?.results || []
-      const hasFailure = results.some((r) => r.status !== 'success')
-      if (hasFailure) {
-        showBatchResultModal(data?.message || '批量创建结果', results)
-      } else {
-        message.success(data?.message || `成功创建 ${validRows.length} 条节点`)
-      }
-      nodeModalVisible.value = false
-      nodeImportRows.value = []
-      nodeImportText.value = ''
-      const nodeRes = await api.get(`/clusters/${cluster.id}/nodes`)
-      cluster.nodes = nodeRes.data.items
-      cluster.node_count = cluster.nodes!.length
-      onRefresh?.()
-    } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-      message.error(typeof detail === 'string' ? detail : '批量创建失败')
-    }
+    // batch3 3.2 / D7：提交与结果反馈收敛到共享 submitNodeBatchImport（NodeList 独立页同款机制），
+    // 本适配只负责 Tab 弹窗态清理与 cluster.nodes 就地刷新。
+    const ok = await submitNodeBatchImport(cluster, rows)
+    if (!ok) return
+    nodeModalVisible.value = false
+    nodeImportRows.value = []
+    nodeImportText.value = ''
+    const nodeRes = await api.get(`/clusters/${cluster.id}/nodes`)
+    cluster.nodes = nodeRes.data.items
+    cluster.node_count = cluster.nodes!.length
+    onRefresh?.()
   }
 
   const deleteNode = (cluster: Cluster, node?: Node) => {
@@ -472,121 +568,30 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
   const batchNodeAction = async (cluster: Cluster, action: 'start' | 'stop' | 'reload', label: string) => {
     const keys = cluster.selectedNodeKeys || []
     if (keys.length === 0) {
-      message.warning('请先勾选要操作的节点')
+      warnNoNodesSelected()
       return
     }
     const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
     cluster.selectedNodeKeys = []
     cluster.selectedNode = null
 
-    batchProgressTitle.value = `批量${label}节点`
-    batchProgressItems.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
-    batchProgressVisible.value = true
-
-    const concurrency = batchActionConcurrency()
-    await runWithConcurrency(nodes, concurrency, async (node, i) => {
-      batchProgressItems.value[i].status = 'running'
-      batchProgressItems.value[i].logs = [`开始对节点 ${node.ip} 执行 ${label} 操作...`]
-      try {
-        const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
-        const data = res.data || {}
-        const rc = data.rc
-        const logs: string[] = []
-        if (data.command) logs.push(`执行命令: ${data.command}`)
-        logs.push(`返回码 (rc): ${rc}`)
-        if (data.stdout) logs.push('--- stdout ---', data.stdout)
-        if (data.stderr) logs.push('--- stderr ---', data.stderr)
-        logs.push(rc === 0 ? `✅ 节点 ${label} 成功` : `❌ 节点 ${label} 失败`)
-        batchProgressItems.value[i] = {
-          ip: node.ip,
-          status: rc === 0 ? 'success' : 'error',
-          logs,
-          rc,
-        }
-      } catch (error: unknown) {
-        const err = error as { response?: { data?: { detail?: string } }; message?: string }
-        const detail = err.response?.data?.detail || err.message || '未知错误'
-        batchProgressItems.value[i] = {
-          ip: node.ip,
-          status: 'error',
-          logs: [...batchProgressItems.value[i].logs, `❌ ${label}失败: ${detail}`],
-        }
-      }
-    })
+    // batch3 1.4 / D4：执行引擎收敛到共享核心，本适配只管选中态清理与列表重载
+    await runBatchNodeAction(nodes, action, label, { progress: batchProgress })
     await loadNodes(cluster)
   }
 
   const batchNodeStatus = async (cluster: Cluster) => {
     const keys = cluster.selectedNodeKeys || []
     if (keys.length === 0) {
-      message.warning('请先勾选要查询的节点')
+      warnNoNodesSelected('查询')
       return
     }
     const nodes = (cluster.nodes || []).filter((n) => keys.includes(n.id))
     cluster.selectedNodeKeys = []
     cluster.selectedNode = null
 
-    batchProgressTitle.value = '批量状态查询节点'
-    batchProgressItems.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
-    batchProgressVisible.value = true
-
-    const rows: Array<{
-      ip: string
-      status: string
-      version: string
-      healthy?: boolean
-      detail: string
-      command?: string
-      stdout?: string
-      stderr?: string
-    }> = []
-    const concurrency = batchActionConcurrency()
-    await runWithConcurrency(nodes, concurrency, async (node, i) => {
-      batchProgressItems.value[i].status = 'running'
-      batchProgressItems.value[i].logs = [`开始查询节点 ${node.ip} 状态...`]
-      try {
-        const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, {
-          ports: String(node.management_port),
-        })
-        const data = res.data || {}
-        const rc = data.rc
-        const logs: string[] = []
-        if (data.command) logs.push(`执行命令: ${data.command}`)
-        logs.push(`返回码 (rc): ${rc}`)
-        if (data.stdout) logs.push('--- stdout ---', data.stdout)
-        if (data.stderr) logs.push('--- stderr ---', data.stderr)
-        logs.push(rc === 0 ? '✅ 节点状态查询成功' : '❌ 节点状态查询失败')
-        batchProgressItems.value[i] = { ip: node.ip, status: rc === 0 ? 'success' : 'error', logs, rc }
-        let detail = ''
-        if (rc !== 0) {
-          const errText = data.stderr || data.stdout || ''
-          const errLines = errText
-            .split('\n')
-            .filter((l: string) => /error|failed|refused|timeout|unreachable|fatal/i.test(l))
-          detail = errLines.slice(0, 2).join(' | ') || `返回码非 0 (rc=${rc})`
-        }
-        rows.push({
-          ip: node.ip,
-          status: rc === 0 ? 'success' : 'error',
-          version: data.statistic?.edge_version || '',
-          healthy: rc === 0 ? node.status === 1 : false,
-          detail,
-          command: data.command || '',
-          stdout: data.stdout || '',
-          stderr: data.stderr || '',
-        })
-      } catch (error: unknown) {
-        const err = error as { response?: { data?: { detail?: string } }; message?: string }
-        const detail = err.response?.data?.detail || err.message || '查询失败'
-        batchProgressItems.value[i] = {
-          ip: node.ip,
-          status: 'error',
-          logs: [...batchProgressItems.value[i].logs, `❌ 状态查询失败: ${detail}`],
-        }
-        rows.push({ ip: node.ip, status: 'error', version: '', healthy: false, detail })
-      }
-    })
-    batchProgressVisible.value = false
+    // batch3 1.4 / D4：查询引擎收敛到共享核心（逐节点 statistic + 结果行）
+    const rows = await runBatchNodeStatus(nodes, { progress: batchProgress })
     showBatchStatusModal('批量状态查询', rows)
     await loadNodes(cluster)
     await onRefresh?.()
